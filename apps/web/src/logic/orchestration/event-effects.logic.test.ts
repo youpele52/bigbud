@@ -42,6 +42,7 @@ describe("deriveOrchestrationBatchEffects", () => {
   it("targets draft promotion and terminal cleanup from thread lifecycle events", () => {
     const createdThreadId = ThreadId.makeUnsafe("thread-created");
     const deletedThreadId = ThreadId.makeUnsafe("thread-deleted");
+    const deletedDescendantThreadId = ThreadId.makeUnsafe("thread-deleted-descendant");
     const archivedThreadId = ThreadId.makeUnsafe("thread-archived");
 
     const effects = deriveOrchestrationBatchEffects([
@@ -59,6 +60,7 @@ describe("deriveOrchestrationBatchEffects", () => {
       }),
       makeEvent("thread.deleted", {
         threadId: deletedThreadId,
+        threadIds: [deletedThreadId, deletedDescendantThreadId],
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
       makeEvent("thread.archived", {
@@ -69,10 +71,14 @@ describe("deriveOrchestrationBatchEffects", () => {
     ]);
 
     expect(effects.clearPromotedDraftThreadIds).toEqual([createdThreadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId]);
+    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId, deletedDescendantThreadId]);
     expect(effects.clearDeletedProjectIds).toEqual([]);
-    expect(effects.removeSelectedThreadIds).toEqual([deletedThreadId]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([deletedThreadId, archivedThreadId]);
+    expect(effects.removeSelectedThreadIds).toEqual([deletedThreadId, deletedDescendantThreadId]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([
+      deletedThreadId,
+      deletedDescendantThreadId,
+      archivedThreadId,
+    ]);
     expect(effects.needsProviderInvalidation).toBe(false);
   });
 

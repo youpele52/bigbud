@@ -24,7 +24,10 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
   function* (input: {
     readonly command: ThreadSessionCommand;
     readonly readModel: OrchestrationReadModel;
-  }): Effect.fn.Return<Omit<OrchestrationEvent, "sequence">, OrchestrationCommandInvariantError> {
+  }): Effect.fn.Return<
+    Omit<OrchestrationEvent, "sequence"> | ReadonlyArray<Omit<OrchestrationEvent, "sequence">>,
+    OrchestrationCommandInvariantError
+  > {
     const { command, readModel } = input;
     const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
     switch (command.type) {
@@ -121,6 +124,12 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           payload: { threadId: command.threadId, createdAt: command.createdAt },
         };
       case "thread.session.set":
+        if (
+          command.expectedActiveTurnId !== undefined &&
+          thread.session?.activeTurnId !== command.expectedActiveTurnId
+        ) {
+          return [];
+        }
         if (command.session.status !== "stopped" || thread.deletedAt !== null) {
           yield* requireThreadReadyForMutation({ thread, command });
         }

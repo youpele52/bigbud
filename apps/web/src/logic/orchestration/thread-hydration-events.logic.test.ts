@@ -56,4 +56,25 @@ describe("thread hydration event buffer", () => {
     expect(buffer.finish(threadA, superseded, 21)).toBeNull();
     expect(buffer.finish(threadA, current, 21)).toEqual([]);
   });
+
+  it("buffers a deleted subtree for every actively hydrated descendant", () => {
+    const buffer = createThreadHydrationEventBuffer();
+    const rootThreadId = ThreadId.makeUnsafe("thread-root");
+    const descendantThreadId = ThreadId.makeUnsafe("thread-descendant");
+    const rootToken = buffer.begin(rootThreadId);
+    const descendantToken = buffer.begin(descendantThreadId);
+    const event = makeEvent(
+      "thread.deleted",
+      {
+        threadId: rootThreadId,
+        threadIds: [rootThreadId, descendantThreadId],
+        deletedAt: "2026-07-30T00:00:00.000Z",
+      },
+      { sequence: 12 },
+    );
+
+    expect(buffer.bufferEvent(event)).toBe(true);
+    expect(buffer.finish(rootThreadId, rootToken, 11)).toEqual([event]);
+    expect(buffer.finish(descendantThreadId, descendantToken, 11)).toEqual([event]);
+  });
 });

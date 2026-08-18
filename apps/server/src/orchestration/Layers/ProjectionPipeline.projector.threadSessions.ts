@@ -1,5 +1,5 @@
 /**
- * ThreadSessions projector — handles session-set events.
+ * ThreadSessions projector — handles session lifecycle events.
  *
  * @module ProjectionPipeline.projector.threadSessions
  */
@@ -38,6 +38,26 @@ export function makeThreadSessionsProjector(
         reason: event.payload.session.reason ?? null,
         lastError: event.payload.session.lastError,
         updatedAt: event.payload.session.updatedAt,
+      });
+      return;
+    }
+
+    if (event.type === "thread.turn-start-requested") {
+      const thread = yield* projectionThreadRepository.getById({
+        threadId: event.payload.threadId,
+      });
+      if (Option.isNone(thread)) {
+        return;
+      }
+      yield* projectionThreadSessionRepository.upsert({
+        threadId: event.payload.threadId,
+        status: "starting",
+        providerName: thread.value.modelSelection.provider,
+        runtimeMode: thread.value.runtimeMode,
+        activeTurnId: null,
+        reason: null,
+        lastError: null,
+        updatedAt: event.payload.createdAt,
       });
       return;
     }

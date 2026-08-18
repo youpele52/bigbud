@@ -1,4 +1,10 @@
-import { EventId, ThreadId, TurnId, type ThinkingActivityDeltaEvent } from "@bigbud/contracts";
+import {
+  EventId,
+  ThreadId,
+  TurnId,
+  type OrchestrationEvent,
+  type ThinkingActivityDeltaEvent,
+} from "@bigbud/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useThinkingStreamStore } from "./thinkingStream.store";
@@ -44,5 +50,43 @@ describe("thinkingStream store", () => {
     expect(typeof detail === "string" ? detail.length : 0).toBeLessThan(20_010);
     expect(detail).toContain("[... truncated ...]");
     expect(detail).toMatch(/b{10}$/);
+  });
+
+  it("clears thinking state for a deleted thread subtree", () => {
+    const descendantThreadId = ThreadId.makeUnsafe("thread-thinking-descendant");
+    const retainedThreadId = ThreadId.makeUnsafe("thread-thinking-retained");
+    useThinkingStreamStore.getState().applyThinkingDelta(makeDelta("root"));
+    useThinkingStreamStore.getState().applyThinkingDelta({
+      ...makeDelta("descendant"),
+      threadId: descendantThreadId,
+    });
+    useThinkingStreamStore.getState().applyThinkingDelta({
+      ...makeDelta("retained"),
+      threadId: retainedThreadId,
+    });
+
+    useThinkingStreamStore.getState().reconcilePersistedActivities([
+      {
+        type: "thread.deleted",
+        eventId: EventId.makeUnsafe("event-thread-deleted"),
+        sequence: 1,
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: "2026-05-14T00:00:00.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        payload: {
+          threadId,
+          threadIds: [threadId, descendantThreadId],
+          deletedAt: "2026-05-14T00:00:00.000Z",
+        },
+      } satisfies OrchestrationEvent,
+    ]);
+
+    expect(useThinkingStreamStore.getState().activitiesByThreadId).toEqual({
+      [retainedThreadId]: expect.any(Object),
+    });
   });
 });

@@ -36,6 +36,7 @@ const resetData = Effect.fn("resetRetentionTestData")(function* () {
   yield* sql`DELETE FROM thread_delegations`;
   yield* sql`DELETE FROM automation_runs`;
   yield* sql`DELETE FROM automation_schedules`;
+  yield* sql`DELETE FROM purge_jobs`;
   yield* sql`DELETE FROM projection_threads`;
   yield* sql`DELETE FROM projection_projects`;
 });
@@ -109,6 +110,49 @@ layer("ThreadRetentionRepository", (it) => {
       });
       assert.equal(second[0]?.threadId, "thread-b");
       assert.equal(second[0]?.lastActivityAt, cutoffAt);
+    }),
+  );
+
+  it.effect("does not exclude eligible threads because of an incomplete purge job", () =>
+    Effect.gen(function* () {
+      yield* resetData();
+      yield* seedProject();
+      yield* seedThread("purge-backlog-independent");
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO purge_jobs (
+          job_id, entity_kind, entity_id, phase, status, resource_manifest_json, created_at, updated_at
+        ) VALUES (
+          'failed-historical-purge', 'thread', 'purge-backlog-independent',
+          'files', 'failed', '{}', ${oldAt}, ${now}
+        )
+      `;
+      const repository = yield* ThreadRetentionRepository;
+      assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), [
+        { threadId: ThreadId.makeUnsafe("purge-backlog-independent"), lastActivityAt: oldAt },
+      ]);
+    }),
+  );
+
+  it.effect("protects an old root when a descendant has newer activity", () =>
+    Effect.gen(function* () {
+      yield* resetData();
+      yield* seedProject();
+      yield* seedThread("old-root");
+      yield* seedThread("new-child", oldAt);
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        UPDATE projection_threads
+        SET parent_thread_id = 'old-root', parent_thread_title = 'old-root',
+          parent_thread_project_id = ${projectId}
+        WHERE thread_id = 'new-child'
+      `;
+      yield* sql`
+        UPDATE projection_threads SET last_activity_at = ${now}, updated_at = ${now}
+        WHERE thread_id = 'new-child'
+      `;
+      const repository = yield* ThreadRetentionRepository;
+      assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), []);
     }),
   );
 

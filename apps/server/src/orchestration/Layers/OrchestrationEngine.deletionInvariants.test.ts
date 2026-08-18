@@ -148,7 +148,7 @@ describe("OrchestrationEngine deletion lifecycle invariants", () => {
               threadId,
               createdAt,
             });
-      await expect(system.run(dispatched)).rejects.toThrow("already been deleted");
+      await expect(system.run(dispatched)).rejects.toThrow("does not exist");
     }
 
     await system.run(createThread("resurrect-thread"));

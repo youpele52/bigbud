@@ -12,12 +12,16 @@ export const verifyCanonicalPurgeProof = Effect.fn("EntityPurge.verifyCanonicalP
   }) {
     const proof = (yield* input.queries.readCanonicalProof(input))[0] ?? {
       coveredByBaselineSequence: null,
+      coveredMarkerCount: 0,
       deletionSequence: null,
+      markerCount: 0,
       maxCanonicalSequence: 0,
     };
     if (
       proof.coveredByBaselineSequence === null ||
       proof.deletionSequence === null ||
+      proof.markerCount === 0 ||
+      proof.coveredMarkerCount !== proof.markerCount ||
       proof.deletionSequence > proof.coveredByBaselineSequence ||
       proof.maxCanonicalSequence > proof.coveredByBaselineSequence
     ) {

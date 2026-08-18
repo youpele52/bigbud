@@ -303,12 +303,56 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     readonly entityKind: "project" | "thread";
     readonly entityId: ProjectId | ThreadId;
   }) =>
-    sql<{
-      readonly canonicalCount: number;
-      readonly coveredByBaselineSequence: number | null;
-      readonly deletionSequence: number | null;
-      readonly maxCanonicalSequence: number;
-    }>`
+    input.entityKind === "thread"
+      ? sql<{
+          readonly canonicalCount: number;
+          readonly coveredByBaselineSequence: number | null;
+          readonly deletionSequence: number | null;
+          readonly markerCount: number;
+          readonly coveredMarkerCount: number;
+          readonly maxCanonicalSequence: number;
+        }>`
+          WITH root AS (
+            SELECT deletion_sequence, covered_by_baseline_sequence
+            FROM orchestration_deletion_markers
+            WHERE entity_kind = 'thread' AND entity_id = ${input.entityId}
+          ), subtree AS (
+            SELECT entity_id FROM orchestration_deletion_markers
+            WHERE entity_kind = 'thread'
+              AND deletion_sequence = (SELECT deletion_sequence FROM root)
+          )
+          SELECT
+            ((SELECT COUNT(*) FROM orchestration_events
+              WHERE aggregate_kind = 'thread' AND stream_id IN (SELECT entity_id FROM subtree)) +
+             (SELECT COUNT(*) FROM orchestration_command_receipts
+              WHERE aggregate_kind = 'thread'
+                AND aggregate_id IN (SELECT entity_id FROM subtree))) AS "canonicalCount",
+            (SELECT covered_by_baseline_sequence FROM root) AS "coveredByBaselineSequence",
+            (SELECT deletion_sequence FROM root) AS "deletionSequence",
+            (SELECT COUNT(*) FROM subtree) AS "markerCount",
+            (SELECT COUNT(*) FROM orchestration_deletion_markers AS marker
+              JOIN projection_baselines AS baseline
+                ON baseline.sequence = marker.covered_by_baseline_sequence
+               AND baseline.verification_status = 'verified'
+              WHERE marker.entity_kind = 'thread'
+                AND marker.entity_id IN (SELECT entity_id FROM subtree)) AS "coveredMarkerCount",
+            MAX(
+              COALESCE((SELECT MAX(sequence) FROM orchestration_events
+                WHERE aggregate_kind = 'thread'
+                  AND stream_id IN (SELECT entity_id FROM subtree)), 0),
+              COALESCE((SELECT MAX(result_sequence) FROM orchestration_command_receipts
+                WHERE aggregate_kind = 'thread'
+                  AND aggregate_id IN (SELECT entity_id FROM subtree)), 0)
+            ) AS "maxCanonicalSequence"
+        `
+      : sql<{
+          readonly canonicalCount: number;
+          readonly coveredByBaselineSequence: number | null;
+          readonly deletionSequence: number | null;
+          readonly markerCount: number;
+          readonly coveredMarkerCount: number;
+          readonly maxCanonicalSequence: number;
+        }>`
       SELECT
         ((SELECT COUNT(*) FROM orchestration_events
           WHERE aggregate_kind = ${input.entityKind} AND stream_id = ${input.entityId}) +
@@ -320,11 +364,20 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
           JOIN projection_baselines AS baseline
             ON baseline.sequence = marker.covered_by_baseline_sequence
            AND baseline.verification_status = 'verified'
-          WHERE marker.entity_kind = ${input.entityKind} AND marker.entity_id = ${input.entityId})
-          AS "coveredByBaselineSequence",
+         WHERE marker.entity_kind = ${input.entityKind} AND marker.entity_id = ${input.entityId})
+           AS "coveredByBaselineSequence",
         (SELECT deletion_sequence FROM orchestration_deletion_markers
+         WHERE entity_kind = ${input.entityKind} AND entity_id = ${input.entityId})
+           AS "deletionSequence",
+        (SELECT COUNT(*) FROM orchestration_deletion_markers
           WHERE entity_kind = ${input.entityKind} AND entity_id = ${input.entityId})
-          AS "deletionSequence",
+          AS "markerCount",
+        (SELECT COUNT(*) FROM orchestration_deletion_markers AS marker
+          JOIN projection_baselines AS baseline
+            ON baseline.sequence = marker.covered_by_baseline_sequence
+           AND baseline.verification_status = 'verified'
+          WHERE marker.entity_kind = ${input.entityKind} AND marker.entity_id = ${input.entityId})
+          AS "coveredMarkerCount",
         MAX(
           COALESCE((SELECT MAX(sequence) FROM orchestration_events
             WHERE aggregate_kind = ${input.entityKind} AND stream_id = ${input.entityId}), 0),
@@ -348,7 +401,20 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     readonly entityKind: "project" | "thread";
     readonly entityId: ProjectId | ThreadId;
   }) =>
-    sql`
+    (input.entityKind === "thread"
+      ? sql`
+        WITH root AS (
+          SELECT deletion_sequence FROM orchestration_deletion_markers
+          WHERE entity_kind = 'thread' AND entity_id = ${input.entityId}
+        )
+        DELETE FROM orchestration_command_receipts
+        WHERE aggregate_kind = 'thread' AND aggregate_id IN (
+          SELECT entity_id FROM orchestration_deletion_markers
+          WHERE entity_kind = 'thread'
+            AND deletion_sequence = (SELECT deletion_sequence FROM root)
+        )
+      `
+      : sql`
       DELETE FROM orchestration_command_receipts
       WHERE aggregate_kind = ${input.entityKind} AND aggregate_id = ${input.entityId}
         AND EXISTS (
@@ -359,7 +425,65 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
           WHERE marker.entity_kind = ${input.entityKind} AND marker.entity_id = ${input.entityId}
             AND orchestration_command_receipts.result_sequence <= marker.covered_by_baseline_sequence
         )
-    `.pipe(Effect.asVoid);
+    `
+    ).pipe(Effect.asVoid);
+
+  const deleteProvenThreadCanonical = ({ threadId }: { readonly threadId: ThreadId }) =>
+    sql.withTransaction(
+      Effect.all(
+        [
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            DELETE FROM orchestration_event_ids
+            WHERE sequence IN (
+              SELECT sequence FROM orchestration_events
+              WHERE aggregate_kind = 'thread' AND stream_id IN (
+                SELECT entity_id FROM orchestration_deletion_markers
+                WHERE entity_kind = 'thread'
+                  AND deletion_sequence = (SELECT deletion_sequence FROM root)
+              )
+            )
+          `,
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            DELETE FROM orchestration_stream_state
+            WHERE aggregate_kind = 'thread' AND stream_id IN (
+              SELECT entity_id FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread'
+                AND deletion_sequence = (SELECT deletion_sequence FROM root)
+            )
+          `,
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            DELETE FROM orchestration_events
+            WHERE aggregate_kind = 'thread' AND stream_id IN (
+              SELECT entity_id FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread'
+                AND deletion_sequence = (SELECT deletion_sequence FROM root)
+            )
+          `,
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            DELETE FROM orchestration_deletion_markers
+            WHERE entity_kind = 'thread'
+              AND deletion_sequence = (SELECT deletion_sequence FROM root)
+          `,
+        ],
+        { concurrency: 1, discard: true },
+      ),
+    );
 
   return {
     readThreadAssets,
@@ -379,6 +503,7 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     readCanonicalProof,
     readDeletionMarker,
     deleteProvenReceipts,
+    deleteProvenThreadCanonical,
     ...checkpointQueries,
     deleteThreadRoot: ({ threadId }: { readonly threadId: ThreadId }) =>
       sql`DELETE FROM projection_threads WHERE thread_id = ${threadId}`.pipe(Effect.asVoid),

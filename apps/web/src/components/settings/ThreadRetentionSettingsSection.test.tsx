@@ -29,8 +29,8 @@ describe("ThreadRetentionSettingsSection", () => {
 
     expect(markup).toContain("Automatic thread cleanup");
     expect(markup).toContain("Automatically delete old threads");
-    expect(markup).toContain("Checks thresholds daily");
-    expect(markup).toContain("takes priority over scheduled cleanup");
+    expect(markup).toContain("Checks daily using fixed");
+    expect(markup).toContain("Eligible root thread subtrees are deleted immediately");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
     expect(markup).toContain("cannot be undone");
@@ -107,19 +107,7 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("This is an estimate.");
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
-    expect(markup).toContain(
-      "Cleanup is waiting for safety or recovery work to finish before this request can start.",
-    );
-    for (const phrase of [
-      "pinned",
-      "active or running",
-      "queued",
-      "waiting for approval or input",
-      "watched",
-      "delegated parent or child task",
-      "project folders",
-      "other files",
-    ]) {
+    for (const phrase of ["Pinned", "active or running", "project folders", "other files"]) {
       expect(markup).toContain(phrase);
     }
   });

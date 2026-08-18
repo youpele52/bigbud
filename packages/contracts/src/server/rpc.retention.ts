@@ -12,6 +12,7 @@ import {
   ServerStartThreadRetentionInput,
   ServerThreadRetentionError,
   ServerThreadRetentionPreview,
+  ServerThreadRetentionResult,
   ServerThreadRetentionRun,
 } from "./threadRetention";
 
@@ -28,7 +29,7 @@ export const WsServerPreviewThreadRetentionRpc = Rpc.make(WS_METHODS.serverPrevi
 
 export const WsServerStartThreadRetentionRpc = Rpc.make(WS_METHODS.serverStartThreadRetention, {
   payload: ServerStartThreadRetentionInput,
-  success: ServerThreadRetentionRun,
+  success: ServerThreadRetentionResult,
   error: ServerThreadRetentionError,
 }).middleware(ThreadRetentionMutationAuthorization);
 

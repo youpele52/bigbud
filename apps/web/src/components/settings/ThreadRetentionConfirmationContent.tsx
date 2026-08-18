@@ -8,7 +8,6 @@ import {
   formatRetentionBytes,
   formatRetentionCutoff,
   formatRetentionExclusionReason,
-  getRetentionMaintenanceMessage,
 } from "./ThreadRetentionSettingsSection.logic";
 
 interface ThreadRetentionConfirmationContentProps {
@@ -41,7 +40,7 @@ export function ThreadRetentionConfirmationContent({
               <strong className="text-foreground">{preview.eligibleCount}</strong> threads have been
               inactive since {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible
               for deletion. Before deleting, bigbud checks each thread again for safety, so the
-              final number may be lower.
+              final safety checks may skip a subtree that became active.
             </p>
           )}
           <div>
@@ -57,9 +56,8 @@ export function ThreadRetentionConfirmationContent({
               Always preserved
             </p>
             <p>
-              Threads are never deleted if they are pinned, active or running, queued, waiting for
-              approval or input, watched, or part of a delegated parent or child task. Your project
-              folders, source files, and other files outside bigbud-managed storage are also kept.
+              Pinned and active or running thread subtrees are never deleted. Your project folders,
+              source files, and other files outside bigbud-managed storage are also kept.
             </p>
           </div>
           <div aria-label="Preview estimates">
@@ -101,11 +99,6 @@ export function ThreadRetentionConfirmationContent({
               <p>No counted exclusions were returned. Final safety checks still apply.</p>
             )}
           </div>
-          {getRetentionMaintenanceMessage(preview.maintenanceState) ? (
-            <p className="font-medium text-foreground">
-              {getRetentionMaintenanceMessage(preview.maintenanceState)}
-            </p>
-          ) : null}
           {preview.warnings.length > 0 ? (
             <div role="alert" className="font-medium text-foreground">
               <p>Preview warnings</p>

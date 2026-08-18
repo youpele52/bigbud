@@ -7,46 +7,40 @@ import {
   runThreadRetentionScheduledTick,
 } from "./ThreadRetention.scheduler.ts";
 
-it.effect("Never performs recovery but no retention selection", () =>
+it.effect("does not run when the policy is never", () =>
   Effect.gen(function* () {
     const events = yield* Ref.make<ReadonlyArray<string>>([]);
     yield* runThreadRetentionScheduledTick({
-      auditAndResume: Ref.update(events, (current) => [...current, "recovery"]),
       getPolicy: Effect.succeed("never"),
-      enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
+      run: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
     });
-    assert.deepEqual(yield* Ref.get(events), ["recovery"]);
+    assert.deepEqual(yield* Ref.get(events), []);
   }),
 );
 
-it.effect("prioritizes purge recovery before scheduling retention", () =>
+it.effect("runs finite policies immediately", () =>
   Effect.gen(function* () {
     const events = yield* Ref.make<ReadonlyArray<string>>([]);
     yield* runThreadRetentionScheduledTick({
-      auditAndResume: Ref.update(events, (current) => [...current, "recovery"]),
       getPolicy: Effect.succeed("7-days"),
-      enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
+      run: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
     });
-    assert.deepEqual(yield* Ref.get(events), ["recovery", "selection"]);
+    assert.deepEqual(yield* Ref.get(events), ["selection"]);
   }),
 );
 
-it.effect("rechecks the kill switch after recovery", () =>
+it.effect("does not run when disabled", () =>
   Effect.gen(function* () {
     const events = yield* Ref.make<ReadonlyArray<string>>([]);
-    let disabled = false;
+    const disabled = true;
     yield* runThreadRetentionScheduledTick({
-      auditAndResume: Ref.update(events, (current) => {
-        disabled = true;
-        return [...current, "recovery"];
-      }),
       getPolicy: Effect.succeed("7-days"),
-      enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
+      run: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => disabled,
     });
-    assert.deepEqual(yield* Ref.get(events), ["recovery"]);
+    assert.deepEqual(yield* Ref.get(events), []);
   }),
 );
 
@@ -54,12 +48,11 @@ it.effect("schedules finite policies without an internal rollout gate", () =>
   Effect.gen(function* () {
     const events = yield* Ref.make<ReadonlyArray<string>>([]);
     yield* runThreadRetentionScheduledTick({
-      auditAndResume: Ref.update(events, (current) => [...current, "recovery"]),
       getPolicy: Effect.succeed("7-days"),
-      enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
+      run: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
     });
-    assert.deepEqual(yield* Ref.get(events), ["recovery", "selection"]);
+    assert.deepEqual(yield* Ref.get(events), ["selection"]);
   }),
 );
 

@@ -7,6 +7,7 @@ import {
 } from "@bigbud/contracts/core/settings.threadRetention";
 import type {
   ServerThreadRetentionPreview,
+  ServerThreadRetentionResult,
   ThreadRetentionConsentTrigger,
 } from "@bigbud/contracts/server/threadRetention";
 import { Trash2Icon } from "lucide-react";
@@ -22,8 +23,6 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
-import { ThreadRetentionRunStatus } from "./ThreadRetentionRunStatus";
-import { useThreadRetentionRun } from "./useThreadRetentionRun";
 
 export function ThreadRetentionSettingsSection() {
   const policy = useSettings().threadRetentionPolicy;
@@ -38,8 +37,7 @@ export function ThreadRetentionSettingsSection() {
   const [preview, setPreview] = useState<ServerThreadRetentionPreview | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
-  const { latestRun, pollingError, availability, acceptRun, retryPolling } =
-    useThreadRetentionRun();
+  const [result, setResult] = useState<ServerThreadRetentionResult | null>(null);
   const busy = previewBusy || actionBusy;
 
   useEffect(() => {
@@ -128,7 +126,7 @@ export function ThreadRetentionSettingsSection() {
         const run = await ensureNativeApi().server.startThreadRetention({
           challengeToken: preview.challenge.token,
         });
-        acceptRun(run);
+        setResult(run);
       }
       closeDialog();
     } catch (error) {
@@ -136,7 +134,7 @@ export function ThreadRetentionSettingsSection() {
     } finally {
       if (mountedRef.current) setActionBusy(false);
     }
-  }, [acceptRun, closeDialog, dialogTrigger, preview, requestPreview, showError]);
+  }, [closeDialog, dialogTrigger, preview, requestPreview, showError]);
 
   const selectedLabel = THREAD_RETENTION_POLICY_LABELS[policy];
   const dialogTitle =
@@ -149,21 +147,21 @@ export function ThreadRetentionSettingsSection() {
       <SettingsSection title="Automatic thread cleanup">
         <SettingsRow
           title="Automatically delete old threads"
-          description="Checks thresholds daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Manual cleanup takes priority over scheduled cleanup at safe checkpoints, while a different manual cleanup is never interrupted. Pinned, active, queued, waiting, watched, and delegated threads are preserved."
+          description="Checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are deleted immediately. Pinned and active threads are preserved."
           layout="three-quarter-control"
           statusPlacement="below"
           status={
-            <ThreadRetentionRunStatus
-              run={latestRun}
-              pollingError={pollingError}
-              availability={availability}
-              onRetry={retryPolling}
-            />
+            result ? (
+              <p className="text-xs text-muted-foreground">
+                Latest cleanup deleted {result.deletedCount} threads and skipped{" "}
+                {result.skippedCount}.
+              </p>
+            ) : null
           }
           control={
             <Select
               value={policy}
-              disabled={busy || availability === "loading"}
+              disabled={busy}
               onValueChange={(value) => {
                 if (
                   typeof value === "string" &&
@@ -192,13 +190,13 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Deletes eligible threads across all projects using a one-off cleanup period you choose and cannot be undone. Manual requests take priority over scheduled cleanup at safe checkpoints."
+          description="Immediately deletes eligible root thread subtrees across all projects using a one-off cleanup period you choose. This cannot be undone."
           control={
             <Button
               ref={actionButtonRef}
               variant="destructive-outline"
               size="sm"
-              disabled={busy || availability !== "available"}
+              disabled={busy}
               onClick={() => {
                 const nextPolicy = policy === "never" ? "7-days" : policy;
                 setManualPolicy(nextPolicy);

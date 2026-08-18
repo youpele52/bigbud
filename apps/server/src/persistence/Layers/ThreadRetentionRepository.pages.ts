@@ -14,14 +14,34 @@ const OUTSTANDING_STATUSES = ["selected", "deletion_requested", "prepared", "pur
 const clampLimit = (limit: number) => Math.max(1, Math.min(250, Math.floor(limit)));
 
 export const retentionCandidateSelectSql = `
-  SELECT t.thread_id AS "threadId", t.last_activity_at AS "lastActivityAt"
+  WITH RECURSIVE thread_subtree(root_thread_id, thread_id) AS (
+    SELECT t.thread_id, t.thread_id
+    FROM projection_threads AS t
+    WHERE t.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM projection_threads AS parent
+        WHERE parent.thread_id = t.parent_thread_id AND parent.deleted_at IS NULL
+      )
+    UNION ALL
+    SELECT subtree.root_thread_id, child.thread_id
+    FROM thread_subtree AS subtree
+    JOIN projection_threads AS child ON child.parent_thread_id = subtree.thread_id
+    WHERE child.deleted_at IS NULL
+  ), subtree_activity AS (
+    SELECT subtree.root_thread_id, MAX(thread.last_activity_at) AS last_activity_at
+    FROM thread_subtree AS subtree
+    JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
+    GROUP BY subtree.root_thread_id
+  )
+  SELECT t.thread_id AS "threadId", activity.last_activity_at AS "lastActivityAt"
   FROM projection_threads AS t
+  JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
   WHERE t.deleted_at IS NULL AND t.deleting_at IS NULL AND t.pinned_at IS NULL
-    AND t.last_activity_at <= ?
-    AND (? IS NULL OR t.last_activity_at > ?
-      OR (t.last_activity_at = ? AND t.thread_id > ?))
+    AND activity.last_activity_at <= ?
+    AND (? IS NULL OR activity.last_activity_at > ?
+      OR (activity.last_activity_at = ? AND t.thread_id > ?))
     AND (${retentionExclusionCaseSql}) IS NULL
-  ORDER BY t.last_activity_at ASC, t.thread_id ASC LIMIT ?
+  ORDER BY activity.last_activity_at ASC, t.thread_id ASC LIMIT ?
 `;
 
 export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {

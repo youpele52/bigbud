@@ -7,42 +7,8 @@ import {
   makeThreadRetentionPreview,
 } from "./ThreadRetention.preview.ts";
 
-const scheduled = { trigger: "scheduled" as const, status: "selecting" };
-const manual = { trigger: "manual" as const, status: "purging" };
-
-it("derives explicit retention preview maintenance states", () => {
-  assert.equal(
-    deriveThreadRetentionMaintenanceState({ purgeBacklog: 0, purgeBacklogLimit: 100 }),
-    "available",
-  );
-  assert.equal(
-    deriveThreadRetentionMaintenanceState({
-      activeRun: scheduled,
-      purgeBacklog: 0,
-      purgeBacklogLimit: 100,
-    }),
-    "scheduled_active",
-  );
-  assert.equal(
-    deriveThreadRetentionMaintenanceState({
-      activeRun: manual,
-      purgeBacklog: 0,
-      purgeBacklogLimit: 100,
-    }),
-    "manual_active",
-  );
-  assert.equal(
-    deriveThreadRetentionMaintenanceState({
-      activeRun: { ...scheduled, status: "deferred" },
-      purgeBacklog: 0,
-      purgeBacklogLimit: 100,
-    }),
-    "safety_deferred",
-  );
-  assert.equal(
-    deriveThreadRetentionMaintenanceState({ purgeBacklog: 100, purgeBacklogLimit: 100 }),
-    "safety_deferred",
-  );
+it("reports immediate cleanup availability", () => {
+  assert.equal(deriveThreadRetentionMaintenanceState(), "available");
 });
 
 it.effect("allows manual previews to choose any finite policy independently", () =>
@@ -69,11 +35,9 @@ it.effect("allows manual previews to choose any finite policy independently", ()
         readonly issuedAt: string;
         readonly expiresAt: string;
       }) => Effect.succeed({ ...input, token: "preview-token" }),
-      listRecoverableRuns: () => Effect.succeed([]),
     } as unknown as ThreadRetentionRepositoryShape;
     const preview = makeThreadRetentionPreview({
       repository,
-      purgeJobs: { countIncomplete: () => Effect.succeed(0) },
     });
 
     for (const policy of ["7-days", "90-days"] as const) {

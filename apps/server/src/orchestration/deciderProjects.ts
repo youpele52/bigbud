@@ -217,8 +217,13 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
           return thread.deletedAt === null;
         },
       );
+      const activeThreadIds = new Set(activeThreads.map((thread) => thread.id));
+      const rootThreads = activeThreads.filter(
+        (thread) =>
+          thread.parentThread === undefined || !activeThreadIds.has(thread.parentThread.threadId),
+      );
       return [
-        ...activeThreads
+        ...rootThreads
           .filter((thread) => thread.deletingAt === null || thread.deletingAt === undefined)
           .map((thread) =>
             Object.assign(

@@ -1,5 +1,7 @@
 import type { OrchestrationEvent, ProjectId, ThreadId } from "@bigbud/contracts";
 
+import { getDeletedThreadIds } from "./thread-deletion.logic";
+
 export interface OrchestrationBatchEffects {
   clearPromotedDraftThreadIds: ThreadId[];
   clearDeletedThreadIds: ThreadId[];
@@ -40,11 +42,13 @@ export function deriveOrchestrationBatchEffects(
       }
 
       case "thread.deleted": {
-        threadLifecycleEffects.set(event.payload.threadId, {
-          clearPromotedDraft: false,
-          clearDeletedThread: true,
-          removeTerminalState: true,
-        });
+        for (const threadId of getDeletedThreadIds(event.payload)) {
+          threadLifecycleEffects.set(threadId, {
+            clearPromotedDraft: false,
+            clearDeletedThread: true,
+            removeTerminalState: true,
+          });
+        }
         break;
       }
 

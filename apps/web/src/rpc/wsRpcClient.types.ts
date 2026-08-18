@@ -79,6 +79,7 @@ import type {
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
   ServerThreadRetentionPreview,
+  ServerThreadRetentionResult,
   ServerThreadRetentionRun,
 } from "@bigbud/contracts/server/threadRetention";
 
@@ -229,7 +230,7 @@ export interface WsRpcClient {
     ) => Promise<ServerThreadRetentionPreview>;
     readonly startThreadRetention: (
       input: ServerStartThreadRetentionInput,
-    ) => Promise<ServerThreadRetentionRun>;
+    ) => Promise<ServerThreadRetentionResult>;
     readonly getThreadRetentionRun: (
       input: ServerGetThreadRetentionRunInput,
     ) => Promise<ServerThreadRetentionRun>;

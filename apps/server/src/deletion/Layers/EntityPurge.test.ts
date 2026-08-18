@@ -270,6 +270,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
     Effect.gen(function* () {
       const purge = yield* EntityPurge;
       const sql = yield* SqlClient.SqlClient;
+      yield* sql`PRAGMA foreign_keys = OFF`;
       yield* sql`
         INSERT INTO projection_thread_messages (
           message_id, thread_id, role, text, is_streaming, created_at, updated_at
@@ -278,6 +279,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
           '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z'
         )
       `;
+      yield* sql`PRAGMA foreign_keys = ON`;
 
       yield* purge.auditAndResume(10);
 
@@ -372,15 +374,24 @@ it.layer(testLayer)("EntityPurge", (it) => {
       yield* purge.run(job);
       const finalized = yield* sql<{
         readonly events: number;
+        readonly eventIds: number;
+        readonly identities: number;
+        readonly streams: number;
         readonly receipts: number;
         readonly markers: number;
       }>`
         SELECT
           (SELECT COUNT(*) FROM orchestration_events WHERE stream_id = ${threadId}) AS events,
+          (SELECT COUNT(*) FROM orchestration_event_ids WHERE sequence = 1) AS "eventIds",
+          (SELECT COUNT(*) FROM orchestration_thread_identity WHERE thread_id = ${threadId}) AS identities,
+          (SELECT COUNT(*) FROM orchestration_stream_state
+            WHERE aggregate_kind = 'thread' AND stream_id = ${threadId}) AS streams,
           (SELECT COUNT(*) FROM orchestration_command_receipts WHERE aggregate_id = ${threadId}) AS receipts,
           (SELECT COUNT(*) FROM orchestration_deletion_markers WHERE entity_id = ${threadId}) AS markers
       `;
-      assert.deepEqual(finalized, [{ events: 1, receipts: 0, markers: 1 }]);
+      assert.deepEqual(finalized, [
+        { events: 0, eventIds: 0, identities: 0, streams: 0, receipts: 0, markers: 0 },
+      ]);
     }),
   );
 });

@@ -2,10 +2,7 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 export const retentionExclusionCaseSql = `
     CASE
-      WHEN t.deleting_at IS NOT NULL OR t.deleted_at IS NOT NULL OR EXISTS (
-        SELECT 1 FROM purge_jobs AS purge
-        WHERE purge.entity_kind = 'thread' AND purge.entity_id = t.thread_id AND purge.status <> 'completed'
-      ) THEN 'deleting'
+      WHEN t.deleting_at IS NOT NULL OR t.deleted_at IS NOT NULL THEN 'deleting'
       WHEN t.pinned_at IS NOT NULL THEN 'pinned'
       WHEN NOT EXISTS (
         SELECT 1 FROM projection_projects AS project
@@ -14,9 +11,6 @@ export const retentionExclusionCaseSql = `
       WHEN EXISTS (
         SELECT 1 FROM projection_projects AS project
         WHERE project.project_id = t.project_id AND project.deleting_at IS NOT NULL
-      ) OR EXISTS (
-        SELECT 1 FROM purge_jobs AS purge
-        WHERE purge.entity_kind = 'project' AND purge.entity_id = t.project_id AND purge.status <> 'completed'
       ) THEN 'project_deleting'
       WHEN t.provider_runtime_execution_target_id <> 'local'
         OR t.workspace_execution_target_id <> 'local'

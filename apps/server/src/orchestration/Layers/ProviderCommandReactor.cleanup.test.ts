@@ -102,9 +102,7 @@ describe("ProviderCommandReactor", () => {
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.deletingAt).toBeNull();
-    expect(thread?.deletedAt).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
+    expect(thread).toBeUndefined();
   });
 
   it("aborts thread deletion when cleanup fails and leaves the thread undeleted", async () => {
@@ -223,7 +221,6 @@ describe("ProviderCommandReactor", () => {
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(project?.deletedAt).not.toBeNull();
     expect(project?.deletingAt).toBeNull();
-    expect(thread?.deletedAt).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
+    expect(thread).toBeUndefined();
   });
 });

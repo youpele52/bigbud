@@ -218,6 +218,24 @@ const makeEventStore = Effect.gen(function* () {
               ON CONFLICT (thread_id) DO NOTHING
             `;
           }
+          if (persisted.type === "thread.deleted" && "threadIds" in event.payload) {
+            const threadIds = (event.payload as { readonly threadIds?: ReadonlyArray<ThreadId> })
+              .threadIds;
+            yield* Effect.forEach(
+              threadIds ?? [],
+              (threadId) =>
+                sql`
+                INSERT INTO orchestration_deletion_markers (
+                  entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+                ) VALUES ('thread', ${threadId}, ${persisted.sequence}, ${persisted.occurredAt}, NULL)
+                ON CONFLICT (entity_kind, entity_id) DO UPDATE SET
+                  deletion_sequence = excluded.deletion_sequence,
+                  deleted_at = excluded.deleted_at,
+                  covered_by_baseline_sequence = NULL
+              `,
+              { discard: true },
+            );
+          }
           return persisted;
         }),
       )

@@ -33,6 +33,9 @@ export interface SessionOpServices {
     readonly session: OrchestrationSession;
     readonly createdAt: string;
   }) => Effect.Effect<void, OrchestrationDispatchError>;
+  readonly assertRuntimeStartAllowed: (
+    threadId: ThreadId,
+  ) => Effect.Effect<void, OrchestrationDispatchError>;
   readonly resolveThread: (threadId: ThreadId) => Effect.Effect<OrchestrationThread | undefined>;
 }
 

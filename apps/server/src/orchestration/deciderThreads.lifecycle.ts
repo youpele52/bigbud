@@ -215,6 +215,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         type: "thread.deleted",
         payload: {
           threadId: command.threadId,
+          ...(command.threadIds !== undefined ? { threadIds: command.threadIds } : {}),
           deletedAt: occurredAt,
         },
       };

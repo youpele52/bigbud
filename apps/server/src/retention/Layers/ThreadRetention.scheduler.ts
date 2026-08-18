@@ -2,17 +2,15 @@ import type { ThreadRetentionPolicy } from "@bigbud/contracts/core/settings.thre
 import { Effect, Schedule } from "effect";
 
 export const runThreadRetentionScheduledTick = Effect.fn("ThreadRetention.runScheduledTick")(
-  function* <EA, EP, EE>(input: {
-    readonly auditAndResume: Effect.Effect<void, EA>;
+  function* <EP, EE>(input: {
     readonly getPolicy: Effect.Effect<ThreadRetentionPolicy, EP>;
-    readonly enqueue: (policy: Exclude<ThreadRetentionPolicy, "never">) => Effect.Effect<void, EE>;
+    readonly run: (policy: Exclude<ThreadRetentionPolicy, "never">) => Effect.Effect<void, EE>;
     readonly isDisabled: () => boolean;
   }) {
-    yield* input.auditAndResume;
     if (input.isDisabled()) return;
     const policy = yield* input.getPolicy;
     if (policy === "never") return;
-    yield* input.enqueue(policy);
+    yield* input.run(policy);
   },
 );
 

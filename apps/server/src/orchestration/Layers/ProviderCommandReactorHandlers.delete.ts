@@ -15,6 +15,8 @@ import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { EntityPurge } from "../../deletion/Services/EntityPurge.ts";
+import { ThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
+import type { DiscoveredThreadDeletionFiles } from "../../deletion/Layers/ThreadDeletion.files.ts";
 import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
 import {
@@ -129,6 +131,131 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
       event.commandId && retention
         ? yield* retention.findItemByDeletionCommandId(event.commandId)
         : Option.none();
+
+    if (Option.isNone(retentionItem)) {
+      let discoveredFiles: DiscoveredThreadDeletionFiles | undefined;
+      let purgeJob: import("../../persistence/Services/PurgeJobRepository.ts").PurgeJob | undefined;
+      const outcome = yield* orchestrationEngine.threadDeletion!.deleteNow({
+        rootThreadId: thread.id,
+        fenceAlreadyHeld: true,
+        resolveThreads: () =>
+          orchestrationEngine.getReadModel().pipe(Effect.map((model) => model.threads)),
+        preflight: (threads) =>
+          Effect.gen(function* () {
+            if (threads.some((candidate) => candidate.pinnedAt !== null)) return "pinned" as const;
+            const liveSessions = yield* providerService.listSessions();
+            const hasActiveRuntime = threads.some(
+              (candidate) =>
+                candidate.session?.status === "starting" ||
+                candidate.session?.status === "running" ||
+                candidate.latestTurn?.state === "running" ||
+                liveSessions.some(
+                  (session) =>
+                    session.threadId === candidate.id &&
+                    (session.status === "connecting" || session.status === "running"),
+                ),
+            );
+            return hasActiveRuntime ? ("active" as const) : undefined;
+          }).pipe(
+            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+          ),
+        teardown: (candidate) =>
+          Effect.gen(function* () {
+            const liveSessions = yield* providerService.listSessions();
+            const liveSession = liveSessions.find((session) => session.threadId === candidate.id);
+            const providerCleanup =
+              liveSession !== undefined
+                ? providerService.stopSession({ threadId: candidate.id }).pipe(
+                    Effect.andThen(
+                      deps.setThreadSession({
+                        threadId: candidate.id,
+                        session: makeStoppedSession({
+                          threadId: candidate.id,
+                          occurredAt: event.occurredAt,
+                          threadSession: candidate.session,
+                          liveSession,
+                        }),
+                        createdAt: event.occurredAt,
+                      }),
+                    ),
+                  )
+                : candidate.session && candidate.session.status !== "stopped"
+                  ? deps.setThreadSession({
+                      threadId: candidate.id,
+                      session: makeStoppedSession({
+                        threadId: candidate.id,
+                        occurredAt: event.occurredAt,
+                        threadSession: candidate.session,
+                        liveSession: undefined,
+                      }),
+                      createdAt: event.occurredAt,
+                    })
+                  : Effect.void;
+            const results = yield* Effect.all(
+              [
+                runCleanupStep("provider", providerCleanup),
+                runCleanupStep("browser", browser.close(candidate.id)),
+                runCleanupStep(
+                  "terminal",
+                  terminal.close({ threadId: candidate.id, deleteHistory: false }),
+                ),
+                runCleanupStep(
+                  "shell",
+                  Option.isSome(shell) ? shell.value.closeThread(candidate.id) : Effect.void,
+                ),
+              ],
+              { concurrency: 1 },
+            );
+            const failures = results.filter((result) => !result.ok);
+            if (failures.length > 0) {
+              return yield* Effect.fail(
+                new Error(`Runtime cleanup failed: ${describeFailures(failures)}.`),
+              );
+            }
+          }).pipe(
+            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+          ),
+        finalize: (threadIds) =>
+          Effect.gen(function* () {
+            discoveredFiles = yield* orchestrationEngine.threadDeletion!.discoverFiles({
+              rootThreadId: thread.id,
+              threadIds,
+            });
+            purgeJob = yield* entityPurge.requestThread(thread.id);
+            yield* orchestrationEngine.dispatch({
+              type: "thread.delete.finalize",
+              commandId: serverCommandId("thread-delete-finalize"),
+              threadId: thread.id,
+              threadIds,
+              createdAt: new Date().toISOString(),
+            });
+          }).pipe(
+            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+          ),
+      });
+
+      if (outcome.type !== "deleted") {
+        const createdAt = new Date().toISOString();
+        yield* orchestrationEngine.dispatch({
+          type: "thread.delete.abort",
+          commandId: serverCommandId("thread-delete-abort"),
+          threadId: thread.id,
+          createdAt,
+        });
+        if (outcome.type === "failed") {
+          yield* appendDeletionFailureActivity({
+            threadId: thread.id,
+            createdAt,
+            detail: outcome.detail,
+          }).pipe(Effect.asVoid);
+        }
+        return;
+      }
+
+      if (discoveredFiles) yield* orchestrationEngine.threadDeletion!.cleanupFiles(discoveredFiles);
+      if (purgeJob) yield* entityPurge.run(purgeJob);
+      return;
+    }
 
     const liveSessions = yield* providerService.listSessions();
     const liveSession = liveSessions.find((session) => session.threadId === thread.id);

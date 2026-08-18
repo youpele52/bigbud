@@ -16,9 +16,10 @@ import {
   updateProject,
 } from "./helpers.store";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { prependSidebarRecentThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
+import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
 import type { Project } from "../../models/types";
+import { getDeletedThreadIds } from "../../logic/orchestration/thread-deletion.logic";
 
 function recordProjectEventSequence(state: AppState, projectId: string, sequence: number) {
   return {
@@ -298,24 +299,43 @@ export function applyProjectEvent(
     }
 
     case "thread.deleted": {
-      const threads = state.threads.filter((thread) => thread.id !== event.payload.threadId);
-      const hadHydration = Object.hasOwn(state.threadHydrationById, event.payload.threadId);
-      if (threads.length === state.threads.length && !hadHydration) {
+      const deletedThreadIds = new Set(getDeletedThreadIds(event.payload));
+      const threads = state.threads.filter((thread) => !deletedThreadIds.has(thread.id));
+      const hasCachedThread = [...deletedThreadIds].some(
+        (threadId) =>
+          Object.hasOwn(state.sidebarThreadsById, threadId) ||
+          Object.hasOwn(state.threadHydrationById, threadId) ||
+          state.sidebarRecentThreadIds.includes(threadId) ||
+          state.sidebarPinnedThreadIds.includes(threadId) ||
+          Object.values(state.threadIdsByProjectId).some((threadIds) =>
+            threadIds.includes(threadId),
+          ),
+      );
+      if (threads.length === state.threads.length && !hasCachedThread) {
         return state;
       }
-      const deletedThread = state.threads.find((thread) => thread.id === event.payload.threadId);
-      const projects = applyActiveThreadCountTransition(state.projects, deletedThread, undefined);
+      let projects = state.projects;
+      for (const deletedThread of state.threads) {
+        if (deletedThreadIds.has(deletedThread.id)) {
+          projects = applyActiveThreadCountTransition(projects, deletedThread, undefined);
+        }
+      }
       const sidebarThreadsById = { ...state.sidebarThreadsById };
-      delete sidebarThreadsById[event.payload.threadId];
       const threadHydrationById = { ...state.threadHydrationById };
-      delete threadHydrationById[event.payload.threadId];
-      const threadIdsByProjectId = deletedThread
-        ? removeThreadIdByProjectId(
-            state.threadIdsByProjectId,
-            deletedThread.projectId,
-            deletedThread.id,
-          )
-        : state.threadIdsByProjectId;
+      let threadIdsByProjectId = state.threadIdsByProjectId;
+      for (const threadId of deletedThreadIds) {
+        delete sidebarThreadsById[threadId];
+        delete threadHydrationById[threadId];
+        for (const [projectId, threadIds] of Object.entries(threadIdsByProjectId)) {
+          if (threadIds.includes(threadId)) {
+            threadIdsByProjectId = removeThreadIdByProjectId(
+              threadIdsByProjectId,
+              projectId as Project["id"],
+              threadId,
+            );
+          }
+        }
+      }
       return {
         ...state,
         projects,
@@ -323,13 +343,11 @@ export function applyProjectEvent(
         sidebarThreadsById,
         threadIdsByProjectId,
         threadHydrationById,
-        sidebarRecentThreadIds: removeSidebarThreadId(
-          state.sidebarRecentThreadIds,
-          event.payload.threadId,
+        sidebarRecentThreadIds: state.sidebarRecentThreadIds.filter(
+          (threadId) => !deletedThreadIds.has(threadId),
         ),
-        sidebarPinnedThreadIds: removeSidebarThreadId(
-          state.sidebarPinnedThreadIds,
-          event.payload.threadId,
+        sidebarPinnedThreadIds: state.sidebarPinnedThreadIds.filter(
+          (threadId) => !deletedThreadIds.has(threadId),
         ),
       };
     }

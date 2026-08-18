@@ -93,6 +93,17 @@ export const ServerThreadRetentionRun = Schema.Struct({
 });
 export type ServerThreadRetentionRun = typeof ServerThreadRetentionRun.Type;
 
+export const ServerThreadRetentionResult = Schema.Struct({
+  trigger: Schema.Literals(["manual", "scheduled"]),
+  policy: FiniteThreadRetentionPolicy,
+  cutoffAt: IsoDateTime,
+  eligibleCount: NonNegativeInt,
+  deletedCount: NonNegativeInt,
+  skippedCount: NonNegativeInt,
+  completedAt: IsoDateTime,
+});
+export type ServerThreadRetentionResult = typeof ServerThreadRetentionResult.Type;
+
 export const ServerStartThreadRetentionInput = Schema.Struct({
   challengeToken: TrimmedNonEmptyString,
 });
