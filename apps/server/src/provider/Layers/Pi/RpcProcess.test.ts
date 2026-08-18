@@ -32,14 +32,14 @@ function createFakeChildProcess() {
   stdout.setEncoding = vi.fn();
   const stderr = new EventEmitter() as EventEmitter & { setEncoding: ReturnType<typeof vi.fn> };
   stderr.setEncoding = vi.fn();
-  const stdin = {
+  const stdin = Object.assign(new EventEmitter(), {
     writable: true,
     end: vi.fn(),
     write: vi.fn((_data: string, callback?: (error?: Error | null) => void) => {
       callback?.(null);
       return true;
     }),
-  };
+  });
   const child = new EventEmitter() as EventEmitter & {
     stdout: typeof stdout;
     stderr: typeof stderr;

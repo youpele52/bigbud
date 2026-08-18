@@ -68,7 +68,7 @@ describe("isPromptQueueTurnInProgress", () => {
     ).toBe(false);
   });
 
-  it("does not queue while provider session health is unconfirmed", () => {
+  it("queues while provider session health is unconfirmed", () => {
     expect(
       isPromptQueueTurnInProgress({
         activeSessionTurnRunning: true,
@@ -77,6 +77,6 @@ describe("isPromptQueueTurnInProgress", () => {
         latestTurnSettled: false,
         sessionHealthUnconfirmed: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

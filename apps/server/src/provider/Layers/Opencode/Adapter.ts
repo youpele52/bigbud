@@ -48,6 +48,11 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
 
   const nextEventId = makeNextEventId();
   const makeEventStamp = makeEventStampFactory(nextEventId);
+  const inspectActiveTurn = makeActiveTurnInspection({ sessions });
+  const inspectActiveTurnForRecovery = makeActiveTurnInspection({
+    sessions,
+    settleCompleted: false,
+  });
 
   const deps: SessionMethodDeps = {
     provider: PROVIDER,
@@ -65,6 +70,15 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
     makeEventStamp,
     nativeEventLogger,
     services,
+    reconcileActiveTurn: async (session) => {
+      if (!session.activeTurnId) return;
+      await inspectActiveTurnForRecovery(session.threadId, session.activeTurnId).pipe(
+        Effect.timeoutOption(10_000),
+        Effect.asVoid,
+        Effect.catch(() => Effect.void),
+        Effect.runPromiseWith(services),
+      );
+    },
   };
 
   const sessionMethods = makeSessionMethods(deps);
@@ -75,7 +89,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
       sessionModelSwitch: "in-session",
     },
     ...sessionMethods,
-    inspectActiveTurn: makeActiveTurnInspection({ sessions }),
+    inspectActiveTurn,
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },

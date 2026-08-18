@@ -39,7 +39,7 @@ export function isPromptQueueTurnInProgress(input: {
   sessionHealthUnconfirmed?: boolean;
 }) {
   if (input.sessionHealthUnconfirmed) {
-    return input.isSendBusy || input.isRevertingCheckpoint;
+    return true;
   }
   return (
     input.activeSessionTurnRunning ||

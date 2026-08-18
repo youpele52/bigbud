@@ -52,7 +52,7 @@ export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
 }): ThreadStatusPill | null {
   const { thread } = input;
-  if (isSessionHealthChecking(thread.session)) {
+  if (isSessionHealthChecking(thread.session) && !hasActiveProviderProgress(thread)) {
     return status("Checking", "text-warning", "bg-warning");
   }
   if (isSessionRecovering(thread.session)) {
@@ -63,7 +63,7 @@ export function resolveThreadStatusPill(input: {
   }
   if (thread.hasPendingApprovals) return status("Pending Approval");
   if (thread.hasPendingUserInput) return status("Awaiting Input");
-  if (thread.session?.status === "running") {
+  if (thread.session?.status === "running" || hasActiveProviderProgress(thread)) {
     return isSessionCompacting(thread.session)
       ? status("Compacting", "text-warning", "bg-warning", true)
       : status("Working", "text-primary", "bg-primary", true);
@@ -80,6 +80,16 @@ export function resolveThreadStatusPill(input: {
     return status("Plan Ready");
   }
   return isThreadCompletedStatus(thread) ? status("Completed") : null;
+}
+
+/** A matching streaming turn is stronger evidence than a legacy health-only projection. */
+function hasActiveProviderProgress(thread: ThreadStatusInput): boolean {
+  return (
+    thread.session?.activeTurnId !== undefined &&
+    thread.session.activeTurnId === thread.latestTurn?.turnId &&
+    thread.latestTurn.state === "running" &&
+    thread.latestTurn.completedAt === null
+  );
 }
 
 function status(

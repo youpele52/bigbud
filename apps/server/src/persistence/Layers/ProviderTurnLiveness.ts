@@ -74,8 +74,10 @@ const make = Effect.gen(function* () {
   const recordInspection: ProviderTurnLivenessRepositoryShape["recordInspection"] = (input) =>
     sql`UPDATE provider_turn_liveness SET
         last_inspection_at = ${input.observedAt}, inspection_status = ${input.status},
-        consecutive_inspection_failures = CASE WHEN ${input.failed ? 1 : 0} = 1
-          THEN consecutive_inspection_failures + 1 ELSE 0 END
+        consecutive_inspection_failures = CASE
+          WHEN ${input.status} IN ('checking', 'unavailable') THEN consecutive_inspection_failures
+          WHEN ${input.failed ? 1 : 0} = 1 THEN consecutive_inspection_failures + 1
+          ELSE 0 END
       WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId} AND terminal_at IS NULL`.pipe(
       Effect.asVoid,
       Effect.mapError(toPersistenceSqlError("ProviderTurnLiveness.recordInspection")),

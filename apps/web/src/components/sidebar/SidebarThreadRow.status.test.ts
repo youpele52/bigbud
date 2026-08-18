@@ -88,6 +88,15 @@ describe("SidebarThreadRow.status", () => {
     expect(
       providerIconPresentationClass({
         isCompleted: false,
+        isCompacting: false,
+        isConnecting: false,
+        isError: false,
+        isRunning: true,
+      }),
+    ).toBe("text-info-foreground");
+    expect(
+      providerIconPresentationClass({
+        isCompleted: false,
         isCompacting: true,
         isConnecting: false,
         isError: false,

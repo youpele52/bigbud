@@ -18,6 +18,7 @@ import {
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
 import { isStaleRunningSessionUpdate } from "./events.store.threads.runtime.logic";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
+import { PROVIDER_CHECKING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 
 export function applyThreadRuntimeEvent(
@@ -41,6 +42,25 @@ export function applyThreadRuntimeEvent(
           updatedAt: event.payload.updatedAt,
         });
         const messages = upsertThreadMessage(thread, message, event);
+        const currentSession = thread.session;
+        const session =
+          currentSession !== null &&
+          message.role === "assistant" &&
+          message.streaming &&
+          message.turnId !== null &&
+          currentSession.activeTurnId === message.turnId &&
+          currentSession.reason === PROVIDER_CHECKING_SESSION_REASON
+            ? {
+                provider: currentSession.provider,
+                status: "running" as const,
+                orchestrationStatus: "running" as const,
+                ...(currentSession.activeTurnId !== undefined
+                  ? { activeTurnId: currentSession.activeTurnId }
+                  : {}),
+                createdAt: currentSession.createdAt,
+                updatedAt: event.payload.updatedAt,
+              }
+            : currentSession;
         const turnDiffSummaries =
           event.payload.role === "assistant" && event.payload.turnId !== null
             ? rebindTurnDiffSummariesForAssistantMessage(
@@ -52,6 +72,7 @@ export function applyThreadRuntimeEvent(
         const latestTurn = buildThreadMessageLatestTurn(thread, event);
         return {
           ...thread,
+          session,
           messages,
           turnDiffSummaries,
           latestTurn,

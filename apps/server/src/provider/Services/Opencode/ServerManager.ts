@@ -7,10 +7,14 @@ export interface OpencodeServerHandle {
   readonly client: OpencodeClient;
   /** The URL the server is listening on. */
   readonly url: string;
+  /** Monotonically increasing identity for the managed server instance. */
+  readonly generation?: number;
   /** Release this handle. The warm shared server stops when the manager shuts down. */
   release(): void;
   /** Release and discard an unhealthy shared server so the next acquisition starts a fresh one. */
   invalidate(): void;
+  /** Observes an unexpected loss of this server generation. */
+  onInvalidated?(listener: () => void): () => void;
 }
 
 export interface OpencodeServerAcquireInput {

@@ -97,6 +97,20 @@ describe("OpenCode active turn inspection", () => {
     expect(recordValue.wasRetrying).toBe(false);
   });
 
+  it("can inspect native completion without settling local recovery state", async () => {
+    const clientValue = client({ statuses: { [SESSION_ID]: { type: "idle" } } });
+    const recordValue = record(clientValue);
+    const inspection = makeActiveTurnInspection({
+      sessions: new Map([[THREAD_ID, recordValue]]),
+      settleCompleted: false,
+    });
+
+    const result = await Effect.runPromise(inspection(THREAD_ID, TURN_ID));
+
+    expect(result).toMatchObject({ status: "completed" });
+    expect(recordValue.activeTurnId).toBe(TURN_ID);
+  });
+
   it("does not settle an unexpected native status as completed", async () => {
     const clientValue = client({ statuses: { [SESSION_ID]: { type: "future-status" } } });
     const recordValue = record(clientValue);
@@ -119,17 +133,20 @@ describe("OpenCode active turn inspection", () => {
     expect(result).toMatchObject({ status: "waiting-for-user" });
   });
 
-  it("treats an absent status entry with a verified native session as completed", async () => {
+  it("treats an absent status entry with a verified native session as inconclusive", async () => {
     const clientValue = client();
     const recordValue = record(clientValue);
 
     const result = await Effect.runPromise(inspectionFor(recordValue)(THREAD_ID, TURN_ID));
 
-    expect(result).toMatchObject({ status: "completed" });
+    expect(result).toMatchObject({
+      status: "unavailable",
+      errorEvidence: { source: "opencode.session.get" },
+    });
     expect(clientValue.session.get).toHaveBeenCalledWith({ sessionID: SESSION_ID });
-    expect(recordValue.activeTurnId).toBeUndefined();
-    expect(recordValue.wasRetrying).toBe(false);
-    expect(recordValue.updatedAt).not.toBe("2026-08-18T00:00:00.000Z");
+    expect(recordValue.activeTurnId).toBe(TURN_ID);
+    expect(recordValue.wasRetrying).toBe(true);
+    expect(recordValue.updatedAt).toBe("2026-08-18T00:00:00.000Z");
   });
 
   it("maps a native session.get not-found response to missing", async () => {
@@ -212,5 +229,25 @@ describe("OpenCode active turn inspection", () => {
 
     expect(result).toMatchObject({ status: "unavailable" });
     expect(recordValue.activeTurnId).toBe(NEXT_TURN_ID);
+  });
+
+  it("does not settle a replacement session record with the same local turn id", async () => {
+    const clientValue = client({
+      get: async () => response({ id: SESSION_ID }),
+    });
+    const original = record(clientValue);
+    const replacement = record(clientValue);
+    const sessions = new Map([[THREAD_ID, original]]);
+    const inspection = makeActiveTurnInspection({ sessions });
+    clientValue.session.get.mockImplementationOnce(async () => {
+      sessions.set(THREAD_ID, replacement);
+      return response({ id: SESSION_ID });
+    });
+
+    const result = await Effect.runPromise(inspection(THREAD_ID, TURN_ID));
+
+    expect(result).toMatchObject({ status: "unavailable" });
+    expect(original.activeTurnId).toBe(TURN_ID);
+    expect(replacement.activeTurnId).toBe(TURN_ID);
   });
 });

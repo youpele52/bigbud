@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
 
 const REPLY_EXCERPT_MAX_CHARS = 240;
 const TERMINAL_CONTEXT_BLOCK_REGEX = /\n*<terminal_context>\n[\s\S]*?\n<\/terminal_context>\s*/g;
@@ -66,6 +67,12 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     threadId: command.threadId,
   });
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
+  if (isThreadTurnDispatchBlocked(targetThread)) {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail: `Thread '${targetThread.id}' has an unresolved turn and cannot start another.`,
+    });
+  }
   const sourceProposedPlan = command.sourceProposedPlan;
   const sourceThread = sourceProposedPlan
     ? yield* requireThread({

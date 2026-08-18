@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
-  buildUnconfirmedSessionSendToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
@@ -70,16 +69,6 @@ describe("deriveComposerSendState", () => {
     });
 
     expect(state.hasSendableContent).toBe(true);
-  });
-});
-
-describe("buildUnconfirmedSessionSendToastCopy", () => {
-  it("explains that send starts a new turn and may overlap", () => {
-    expect(buildUnconfirmedSessionSendToastCopy()).toEqual({
-      title: "Starting a new turn",
-      description:
-        "Provider status isn't confirmed yet, so this send starts a new turn now instead of waiting. You can keep going — if the last turn is still running, you might see both for a moment.",
-    });
   });
 });
 

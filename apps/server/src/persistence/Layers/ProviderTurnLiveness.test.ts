@@ -69,4 +69,41 @@ it.layer(layer)("provider turn liveness repository", (it) => {
       assert.deepEqual(yield* repository.listActive(), []);
     }),
   );
+
+  it.effect("does not change the failure streak for checking or unavailable inspections", () =>
+    Effect.gen(function* () {
+      const repository = yield* ProviderTurnLivenessRepository;
+      const checkingThreadId = ThreadId.makeUnsafe("checking-liveness-thread");
+      const checkingTurnId = TurnId.makeUnsafe("checking-liveness-turn");
+      yield* repository.startTurn({
+        threadId: checkingThreadId,
+        turnId: checkingTurnId,
+        provider: "codex",
+        startedAt,
+      });
+      yield* repository.recordInspection({
+        threadId: checkingThreadId,
+        turnId: checkingTurnId,
+        observedAt: startedAt,
+        status: "timed-out",
+        failed: true,
+      });
+      yield* repository.recordInspection({
+        threadId: checkingThreadId,
+        turnId: checkingTurnId,
+        observedAt: "2026-08-13T00:01:00.000Z",
+        status: "checking",
+        failed: false,
+      });
+      yield* repository.recordInspection({
+        threadId: checkingThreadId,
+        turnId: checkingTurnId,
+        observedAt: "2026-08-13T00:02:00.000Z",
+        status: "unavailable",
+        failed: false,
+      });
+
+      assert.strictEqual((yield* repository.listActive())[0]?.consecutiveInspectionFailures, 1);
+    }),
+  );
 });

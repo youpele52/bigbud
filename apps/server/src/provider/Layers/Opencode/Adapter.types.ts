@@ -58,6 +58,9 @@ export interface ActiveOpencodeSession {
   readonly pendingUserInputs: Map<string, PendingUserInputRequest>;
   readonly turns: Array<MutableTurnSnapshot>;
   sseAbortController: AbortController | null;
+  /** Stops the sole SSE recovery owner for this session, if it was started. */
+  stopEventStream?: (() => void) | undefined;
+  unsubscribeServerInvalidation?: (() => void) | undefined;
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;

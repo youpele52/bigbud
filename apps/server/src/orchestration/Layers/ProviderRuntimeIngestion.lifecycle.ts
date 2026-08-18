@@ -4,6 +4,7 @@ import type {
   ProviderSession,
   TurnId,
 } from "@bigbud/contracts";
+import { PROVIDER_RECOVERING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 
 import { STRICT_PROVIDER_LIFECYCLE_GUARD, sameId } from "./ProviderRuntimeIngestion.helpers.ts";
 
@@ -49,8 +50,22 @@ export function resolveProviderLifecycleGuard(input: {
     input.liveSession?.activeTurnId != null && input.eventTurnId === undefined;
   const providerConflictsWithLiveSession =
     input.liveSession !== undefined && input.liveSession.provider !== input.event.provider;
+  const isRecoveryStateChangedEvent =
+    input.event.type === "session.state.changed" &&
+    input.event.payload.reason === PROVIDER_RECOVERING_SESSION_REASON;
+  const recoveryTurnMismatch =
+    isRecoveryStateChangedEvent &&
+    ((input.eventTurnId === undefined &&
+      (input.activeTurnId !== null || input.liveSession?.activeTurnId != null)) ||
+      (input.eventTurnId !== undefined &&
+        input.activeTurnId === null &&
+        input.liveSession?.activeTurnId == null) ||
+      conflictsWithActiveTurn ||
+      missingTurnForActiveTurn ||
+      conflictsWithLiveTurn ||
+      missingTurnForLiveTurn);
 
-  if (!STRICT_PROVIDER_LIFECYCLE_GUARD) {
+  if (!STRICT_PROVIDER_LIFECYCLE_GUARD && !isRecoveryStateChangedEvent) {
     return {
       shouldApply: true,
       providerConflictsWithLiveSession,
@@ -62,6 +77,7 @@ export function resolveProviderLifecycleGuard(input: {
 
   const rejected =
     providerConflictsWithLiveSession ||
+    recoveryTurnMismatch ||
     (input.event.type === "turn.started" && conflictsWithActiveTurn) ||
     (input.event.type === "session.exited" && (conflictsWithLiveTurn || missingTurnForLiveTurn)) ||
     (input.event.type === "turn.completed" &&

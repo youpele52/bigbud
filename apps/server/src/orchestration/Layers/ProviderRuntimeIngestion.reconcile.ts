@@ -84,21 +84,29 @@ function toReconciledSession(input: {
       currentSession !== undefined &&
       currentSession.activeTurnId === liveSession.activeTurnId &&
       PROVIDER_HEALTH_REASONS.has(currentReason ?? "");
+    const healLegacyChecking =
+      preserveSupervisorState &&
+      currentReason === PROVIDER_CHECKING_SESSION_REASON &&
+      status === "running";
     const nextSession: OrchestrationSession = {
       threadId: thread.id,
-      status: preserveSupervisorState ? currentSession.status : status,
+      status: preserveSupervisorState && !healLegacyChecking ? currentSession.status : status,
       providerName: liveSession.provider,
       runtimeMode: thread.runtimeMode ?? liveSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       activeTurnId: liveSession.activeTurnId ?? null,
-      reason: preserveSupervisorState
-        ? currentReason
-        : status === "running" || status === "starting"
+      reason: healLegacyChecking
+        ? null
+        : preserveSupervisorState
           ? currentReason
-          : null,
-      lastError: preserveSupervisorState
-        ? currentSession.lastError
-        : (liveSession.lastError ??
-          (status === "error" ? (currentSession?.lastError ?? null) : null)),
+          : status === "running" || status === "starting"
+            ? currentReason
+            : null,
+      lastError: healLegacyChecking
+        ? null
+        : preserveSupervisorState
+          ? currentSession.lastError
+          : (liveSession.lastError ??
+            (status === "error" ? (currentSession?.lastError ?? null) : null)),
       updatedAt: liveSession.updatedAt,
     };
     return areSessionsEqual(currentSession, nextSession) ? null : nextSession;

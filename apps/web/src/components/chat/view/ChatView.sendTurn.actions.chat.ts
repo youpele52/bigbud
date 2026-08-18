@@ -7,11 +7,9 @@ import type { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecu
 import { newCommandId, newMessageId } from "~/lib/utils";
 import { toastManager } from "../../ui/toast";
 
-import { isSessionHealthUnconfirmed } from "../../../logic/session";
 import {
   appendBrowserAnnotationsToPrompt,
   buildExpiredTerminalContextToastCopy,
-  buildUnconfirmedSessionSendToastCopy,
   deriveComposerSendState,
   formatOutgoingPrompt,
   revokeUserMessagePreviewUrls,
@@ -152,15 +150,6 @@ export async function sendChatTurn({
 
   input.sendInFlightRef.current = true;
   input.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
-  if (isSessionHealthUnconfirmed(thread.session)) {
-    const toastCopy = buildUnconfirmedSessionSendToastCopy();
-    toastManager.add({
-      type: "warning",
-      title: toastCopy.title,
-      description: toastCopy.description,
-      data: { hideCopyButton: true },
-    });
-  }
 
   const composerImagesSnapshot = [...composerImages];
   const composerFilesSnapshot = [...composerFiles];

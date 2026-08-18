@@ -7,11 +7,7 @@ import {
   serializeThreadContextDragPayload,
 } from "./threadPanel.dnd";
 
-import {
-  useIsThreadCompacting,
-  useIsThreadRunning,
-  useSidebarThreadSummaryById,
-} from "../../stores/main";
+import { useIsThreadCompacting, useSidebarThreadSummaryById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { selectThreadTerminalState } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -61,9 +57,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       return mergeRunningTerminalIds(drawerRunningTerminalIds, panelRunningTerminalIds);
     }),
   );
-  // Global selector: true when session.status === "running" with an active turn.
-  // Matches the same signal used by the chat view spinner.
-  const isThreadRunning = useIsThreadRunning(props.threadId);
   const isThreadCompacting = useIsThreadCompacting(props.threadId);
 
   const swipeReveal = useSwipeRevealAction<HTMLAnchorElement>({
@@ -128,6 +121,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   }
 
   const isThreadCompleted = threadStatus?.label === "Completed";
+  const isWorkingPresentation = threadStatus?.label === "Working";
   const connectingStartedAt =
     thread.session?.status === "connecting" ? thread.session.updatedAt : null;
   const isConnectingPresentation = shouldShowThreadConnectingPresentation(
@@ -142,12 +136,12 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     isCompleted: isThreadCompleted,
     isCompacting: isThreadCompacting,
     isConnecting: isConnectingPresentation,
-    isError: thread.session?.status === "error",
-    isRunning: isThreadRunning,
+    isError: thread.session?.status === "error" && !isWorkingPresentation,
+    isRunning: isWorkingPresentation,
   });
   const providerIconAnimationClass = shouldAnimateProviderIcon({
     isConnecting: isConnectingPresentation,
-    isRunning: isThreadRunning,
+    isRunning: isWorkingPresentation,
   })
     ? "animate-breathe motion-reduce:animate-none"
     : "";

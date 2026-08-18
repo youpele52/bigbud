@@ -8,6 +8,8 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 interface ActiveTurnInspectionDeps {
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
+  /** Recovery probes must not settle local state; the supervisor owns settlement. */
+  readonly settleCompleted?: boolean;
 }
 
 function unavailable(): ProviderActiveTurnInspection {
@@ -85,9 +87,11 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         }
 
         if (nativeStatusType === "idle") {
-          record.activeTurnId = undefined;
-          record.updatedAt = observedAt;
-          record.wasRetrying = false;
+          if (deps.settleCompleted !== false) {
+            record.activeTurnId = undefined;
+            record.updatedAt = observedAt;
+            record.wasRetrying = false;
+          }
           return {
             status: "completed",
             observedAt,
@@ -130,13 +134,13 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         if (record.activeTurnId !== turnId || deps.sessions.get(threadId) !== record) {
           return unavailable();
         }
-        record.activeTurnId = undefined;
-        record.updatedAt = observedAt;
-        record.wasRetrying = false;
         return {
-          status: "completed",
+          status: "unavailable",
           observedAt,
-          completionEvidence: { source: "opencode.session.status" },
+          errorEvidence: {
+            source: "opencode.session.get",
+            detail: "The native session exists, but its current turn state is unavailable.",
+          },
         };
       },
       catch: (cause) =>

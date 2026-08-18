@@ -20,7 +20,7 @@ const deletingThread = {
 } as import("@bigbud/contracts").OrchestrationThread;
 
 describe("provider startup reconciliation", () => {
-  it("preserves a supervisor health projection while the provider still reports the turn", () => {
+  it("preserves stalled supervisor health while the provider still reports the turn", () => {
     const threadId = ThreadId.makeUnsafe("stalled-projection-thread");
     const turnId = TurnId.makeUnsafe("stalled-projection-turn");
     const thread = {
@@ -54,6 +54,44 @@ describe("provider startup reconciliation", () => {
     });
 
     expect(command).toBeNull();
+  });
+
+  it("heals a legacy checking projection from a matching running provider session", () => {
+    const threadId = ThreadId.makeUnsafe("checking-projection-thread");
+    const turnId = TurnId.makeUnsafe("checking-projection-turn");
+    const command = buildThreadReconciliationCommand({
+      thread: {
+        id: threadId,
+        deletedAt: null,
+        deletingAt: null,
+        runtimeMode: "full-access",
+        session: {
+          threadId,
+          status: "error",
+          providerName: "codex",
+          runtimeMode: "full-access",
+          activeTurnId: turnId,
+          reason: "provider.checking",
+          lastError: "Status cannot be confirmed",
+          updatedAt: occurredAt,
+        },
+      } as unknown as import("@bigbud/contracts").OrchestrationThread,
+      liveSession: {
+        threadId,
+        provider: "codex",
+        status: "running",
+        runtimeMode: "full-access",
+        activeTurnId: turnId,
+        createdAt: occurredAt,
+        updatedAt: occurredAt,
+      },
+      occurredAt,
+    });
+
+    expect(command).toMatchObject({
+      type: "thread.session.set",
+      session: { status: "running", activeTurnId: turnId, reason: null, lastError: null },
+    });
   });
 
   it("contains one dispatch failure so later reconciliation commands still run", async () => {
