@@ -1,9 +1,14 @@
 import { ipcMain, type App } from "electron";
 
+import { createCompactLinkHandoffCoordinator } from "./main.compactLinkHandoff";
 import { desktopIpcChannels } from "./main.channels";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
 import type { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
+import {
+  isCompactChatLinkHandoff,
+  isDesktopRendererReadyAction,
+} from "./window/menuAction.validation";
 
 interface RegisterFloatingAssistantIpcOptions {
   readonly appInstance: Pick<App, "quit" | "relaunch">;
@@ -28,6 +33,35 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
   ipcMain.removeAllListeners(channels.getWindowRole);
   ipcMain.on(channels.getWindowRole, (event) => {
     event.returnValue = windowRegistry.getRole(event.sender);
+  });
+  const compactLinkHandoff = createCompactLinkHandoffCoordinator({
+    getMainWindow: () => windowRegistry.get("main"),
+    openMainWindow: () => {
+      openMainWindow();
+      const mainWindow = windowRegistry.get("main");
+      if (!mainWindow) {
+        console.error("[desktop] compact link handoff could not open the main window");
+      }
+      return mainWindow;
+    },
+    menuActionChannel: channels.menuAction,
+  });
+  ipcMain.removeAllListeners(channels.menuAction);
+  ipcMain.on(channels.menuAction, (event, action: unknown) => {
+    const senderRole = windowRegistry.getRole(event.sender);
+    if (senderRole === "compact-chat" && isCompactChatLinkHandoff(action)) {
+      compactLinkHandoff.request(action);
+      return;
+    }
+
+    if (senderRole !== "main" || !isDesktopRendererReadyAction(action)) {
+      return;
+    }
+
+    const mainWindow = windowRegistry.get("main");
+    if (mainWindow?.webContents === event.sender) {
+      compactLinkHandoff.markRendererReady(mainWindow);
+    }
   });
   const register = (channel: string, handler: (value?: unknown) => unknown) => {
     ipcMain.removeHandler(channel);

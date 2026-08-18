@@ -6,6 +6,7 @@ import {
   CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
 } from "./window/certificateChallenge.channels";
+import { isDesktopMenuAction } from "./window/menuAction.validation";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -135,7 +136,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
-      if (typeof action !== "string") return;
+      if (!isDesktopMenuAction(action)) return;
       listener(action);
     };
 
@@ -143,6 +144,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     return () => {
       ipcRenderer.removeListener(MENU_ACTION_CHANNEL, wrappedListener);
     };
+  },
+  sendMenuAction: (action) => {
+    ipcRenderer.send(MENU_ACTION_CHANNEL, action);
   },
   getUpdateState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),
   checkForUpdate: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),

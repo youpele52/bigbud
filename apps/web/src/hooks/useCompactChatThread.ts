@@ -17,7 +17,7 @@ import {
   isCompactChatModelPreferenceAvailable,
 } from "~/models/compactChatModelPreference";
 import { getNewestRecentlyUsedModel } from "~/models/recentlyUsedModels";
-import { useServerProviders } from "~/rpc/serverState";
+import { useDefaultChatCwd, useServerProviders } from "~/rpc/serverState";
 
 const COMPACT_THREAD_STORAGE_KEY = "bigbud:compact-chat:state:v1";
 
@@ -66,6 +66,7 @@ export function useCompactChatThread() {
   const setDraftThreadContext = useComposerDraftStore((state) => state.setDraftThreadContext);
   const setModelSelection = useComposerDraftStore((state) => state.setModelSelection);
   const clearDraftThread = useComposerDraftStore((state) => state.clearDraftThread);
+  const defaultChatCwd = useDefaultChatCwd();
   const providers = useServerProviders() ?? [];
   const [initialSelection, setInitialSelection] = useState(getInitialSelection);
   const [projectLoadAttempt, setProjectLoadAttempt] = useState(0);
@@ -296,5 +297,6 @@ export function useCompactChatThread() {
     threadSyncError,
     threadTitle: serverThread?.title ?? null,
     threadId,
+    workspaceRoot: serverThread?.worktreePath ?? compactProject?.cwd ?? defaultChatCwd ?? undefined,
   };
 }

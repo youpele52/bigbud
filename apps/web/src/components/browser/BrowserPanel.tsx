@@ -264,6 +264,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     }
 
     const unsubscribe = onMenuAction((action) => {
+      if (typeof action !== "string") return;
       const contextMenuCommand = planDesktopBrowserContextMenu({
         action,
         browserVisible: visible,

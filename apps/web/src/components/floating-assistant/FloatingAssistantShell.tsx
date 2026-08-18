@@ -1,6 +1,9 @@
-import type { FloatingAssistantCaller } from "@bigbud/contracts/server/ipc.ts";
+import type {
+  CompactChatLinkHandoff,
+  FloatingAssistantCaller,
+} from "@bigbud/contracts/server/ipc.ts";
 import { PlusIcon, SquareArrowOutUpRightIcon, XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
 import { ThreadComposerSurface } from "~/components/chat/view/ThreadComposerSurface";
@@ -156,7 +159,23 @@ export function CompactChatShell({
     threadSyncError,
     threadId,
     threadTitle,
+    workspaceRoot,
   } = compactChat;
+  const canSendCompactLinkHandoff = typeof bridge?.sendMenuAction === "function";
+  const onMarkdownAnchorClick = useCallback(
+    ({ href }: { href: string }) => {
+      if (typeof bridge?.sendMenuAction !== "function") return;
+      const action: CompactChatLinkHandoff = {
+        type: "compact-chat-link",
+        threadId,
+        href,
+        workspaceRoot: workspaceRoot ?? null,
+      };
+      void bridge?.openMainWindow?.();
+      bridge.sendMenuAction(action);
+    },
+    [bridge, threadId, workspaceRoot],
+  );
 
   if (preparing) {
     return <BigbudLoader />;
@@ -224,7 +243,8 @@ export function CompactChatShell({
               {...context}
               composerClassName="max-w-[calc(52rem*2/3)]"
               projectPicker={<CompactChatPicker compactChat={compactChat} />}
-              workspaceRoot={undefined}
+              workspaceRoot={workspaceRoot}
+              onMarkdownAnchorClick={canSendCompactLinkHandoff ? onMarkdownAnchorClick : undefined}
             />
           )}
         </ThreadComposerSurface>

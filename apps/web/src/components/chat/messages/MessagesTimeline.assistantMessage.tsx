@@ -19,6 +19,7 @@ import { useSettings } from "../../../hooks/useSettings";
 import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypography";
 import { cn } from "~/lib/utils";
 import { deriveAutomationAssistantDisplayState } from "~/lib/automation";
+import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 import { MessagesTimelineAutomationRequest } from "./MessagesTimeline.automationRequest";
@@ -42,6 +43,7 @@ interface AssistantMessageBodyProps {
   onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   markdownCwd: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
   resolvedTheme: "light" | "dark";
   nowIso: string;
   timestampFormat: TimestampFormat;
@@ -99,6 +101,7 @@ export function AssistantMessageBody({
   onSetChangedFilesExpanded,
   onOpenTurnDiff,
   markdownCwd,
+  onMarkdownAnchorClick,
   resolvedTheme,
   nowIso,
   timestampFormat,
@@ -157,6 +160,7 @@ export function AssistantMessageBody({
               text={renderedMessageText}
               cwd={markdownCwd}
               isStreaming={Boolean(row.message.streaming)}
+              onAnchorClick={onMarkdownAnchorClick}
             />
             {automationDisplay.request ? (
               <MessagesTimelineAutomationRequest

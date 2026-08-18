@@ -1,6 +1,6 @@
 import { memo } from "react";
 
-import { BaseMarkdown } from "../../common/BaseMarkdown";
+import { BaseMarkdown, type MarkdownAnchorClick } from "../../common/BaseMarkdown";
 import {
   ChatFileTargetContextMenu,
   useChatFileTargetContextMenu,
@@ -11,9 +11,16 @@ interface ChatMarkdownProps {
   cwd: string | undefined;
   isStreaming?: boolean;
   className?: string;
+  onAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
 }
 
-function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdownProps) {
+function ChatMarkdown({
+  text,
+  cwd,
+  isStreaming = false,
+  className,
+  onAnchorClick,
+}: ChatMarkdownProps) {
   const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
 
   return (
@@ -24,6 +31,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
         isStreaming={isStreaming}
         className={className}
         onFileContextMenu={showContextMenu}
+        onAnchorClick={onAnchorClick}
       />
       <ChatFileTargetContextMenu contextMenuState={contextMenuState} onClose={hideContextMenu} />
     </>

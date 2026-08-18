@@ -3,6 +3,7 @@ import { MessageCirclePlus, MinusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
+import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
 import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
 import { WorkingIndicator } from "~/components/chat/common/WorkingIndicator";
 import {
@@ -53,11 +54,13 @@ export function CompactThreadConversation({
   composerClassName,
   projectPicker,
   workspaceRoot,
+  onMarkdownAnchorClick,
   ...context
 }: ThreadComposerSurfaceContext & {
   composerClassName?: string;
   projectPicker?: ReactNode;
   workspaceRoot: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
 }) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const [timelineContent, setTimelineContent] = useState<HTMLDivElement | null>(null);
@@ -112,6 +115,7 @@ export function CompactThreadConversation({
               resolvedTheme={context.base.resolvedTheme}
               timestampFormat={context.base.timestampFormat}
               workspaceRoot={workspaceRoot}
+              onMarkdownAnchorClick={onMarkdownAnchorClick}
               workspaceExecutionTargetId={workspaceExecutionTargetId}
             />
           </div>

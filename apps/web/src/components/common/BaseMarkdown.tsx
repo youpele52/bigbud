@@ -26,6 +26,11 @@ import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
 
+export interface MarkdownAnchorClick {
+  href: string;
+  workspaceRoot: string | undefined;
+}
+
 interface BaseMarkdownProps {
   text: string;
   cwd: string | undefined;
@@ -39,6 +44,7 @@ interface BaseMarkdownProps {
     x: number;
     y: number;
   }) => void;
+  onAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
 }
 
 const CODE_FENCE_LANGUAGE_REGEX = /(?:^|\s)language-([^\s]+)/;
@@ -147,6 +153,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
   className,
   preserveLineBreaks = false,
   onFileContextMenu,
+  onAnchorClick,
 }: BaseMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
@@ -176,6 +183,10 @@ export const BaseMarkdown = memo(function BaseMarkdown({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                if (onAnchorClick) {
+                  onAnchorClick({ href, workspaceRoot: cwd });
+                  return;
+                }
                 openBrowserPanel({ url: href });
               }}
             />
@@ -191,6 +202,10 @@ export const BaseMarkdown = memo(function BaseMarkdown({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (onAnchorClick) {
+                onAnchorClick({ href, workspaceRoot: cwd });
+                return;
+              }
               openChatFileTarget(targetPath, cwd);
             }}
             onContextMenu={
@@ -285,7 +300,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         );
       },
     }),
-    [cwd, diffThemeName, isStreaming, onFileContextMenu, resolvedTheme],
+    [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],
   );
 
   return (

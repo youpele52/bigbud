@@ -25,6 +25,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     }
 
     const unsubscribe = onMenuAction((action) => {
+      if (typeof action !== "string") return;
       if (action === "open-settings") {
         void navigate({ to: "/settings" });
         return;

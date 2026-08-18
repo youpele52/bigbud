@@ -52,6 +52,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
     nowIso,
     timestampFormat,
     workspaceRoot,
+    onMarkdownAnchorClick,
     workspaceExecutionTargetId,
     isWorking,
     onTimelineImageLoad,
@@ -126,7 +127,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             </div>
           );
         })()}
-
       {row.kind === "message" &&
         row.message.role === "user" &&
         (() => {
@@ -312,7 +312,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             </div>
           );
         })()}
-
       {row.kind === "message" && row.message.role === "assistant" && (
         <AssistantMessageBody
           row={row as AssistantMessageRow}
@@ -322,6 +321,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           onSetChangedFilesExpanded={onSetChangedFilesExpanded}
           onOpenTurnDiff={onOpenTurnDiff}
           markdownCwd={markdownCwd}
+          onMarkdownAnchorClick={onMarkdownAnchorClick}
           resolvedTheme={resolvedTheme}
           nowIso={nowIso}
           timestampFormat={timestampFormat}
@@ -331,21 +331,21 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           onBranchThread={onBranchThread}
         />
       )}
-
       {row.kind === "thinking" && (
         <ThinkingMessageBody
           row={row}
           markdownCwd={markdownCwd}
+          onMarkdownAnchorClick={onMarkdownAnchorClick}
           timestampFormat={timestampFormat}
         />
       )}
-
       {row.kind === "proposed-plan" && (
         <div className="min-w-0 px-1 py-0.5">
           <ProposedPlanCard
             planMarkdown={row.proposedPlan.planMarkdown}
             cwd={markdownCwd}
             workspaceRoot={workspaceRoot}
+            onMarkdownAnchorClick={onMarkdownAnchorClick}
             workspaceExecutionTargetId={workspaceExecutionTargetId}
           />
         </div>
