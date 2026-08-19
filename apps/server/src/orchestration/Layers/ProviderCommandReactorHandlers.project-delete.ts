@@ -1,6 +1,11 @@
 import { type OrchestrationProject, type OrchestrationThread, ProjectId } from "@bigbud/contracts";
 import { Duration, Effect } from "effect";
 
+import {
+  cleanupDiscoveredProjectDeletionFiles,
+  discoverProjectDeletionFiles,
+} from "../../deletion/Layers/ProjectDeletion.files.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
@@ -24,6 +29,7 @@ const PROJECT_DELETE_POLL_INTERVAL = Duration.millis(100);
 
 export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
+  const config = yield* ServerConfig;
   const waitForProjectThreadsToSettle = Effect.fn("waitForProjectThreadsToSettle")(function* (
     deps: ProjectDeletionDeps,
     projectId: ProjectId,
@@ -85,11 +91,39 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
       return;
     }
 
+    const files = yield* discoverProjectDeletionFiles(event.payload.projectId).pipe(
+      Effect.provideService(ServerConfig, config),
+      Effect.catch((error) =>
+        Effect.logWarning("project deletion resource capture failed", {
+          projectId: event.payload.projectId,
+          detail: String(error),
+        }).pipe(Effect.as(undefined)),
+      ),
+    );
+    if (files === undefined) {
+      yield* orchestrationEngine.dispatch({
+        type: "project.delete.abort",
+        commandId: serverCommandId("project-delete-abort"),
+        projectId: event.payload.projectId,
+        createdAt,
+      });
+      return;
+    }
+
     yield* orchestrationEngine.dispatch({
       type: "project.delete.finalize",
       commandId: serverCommandId("project-delete-finalize"),
       projectId: event.payload.projectId,
       createdAt,
     });
+    const orphanedResources = yield* cleanupDiscoveredProjectDeletionFiles(files).pipe(
+      Effect.provideService(ServerConfig, config),
+    );
+    if (orphanedResources.length > 0) {
+      yield* Effect.logWarning("project deletion orphan resource cleanup required", {
+        projectId: event.payload.projectId,
+        orphanedResources,
+      });
+    }
   });
 });

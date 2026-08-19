@@ -1,18 +1,7 @@
-/**
- * MigrationsLive - Migration runner with inline loader
- *
- * Uses Migrator.make with fromRecord to define migrations inline.
- * All migrations are statically imported - no dynamic file system loading.
- *
- * Migrations run automatically when the MigrationLayer is provided,
- * ensuring the database schema is always up-to-date before the application starts.
- */
-
-import * as Migrator from "effect/unstable/sql/Migrator";
-import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Migrator from "effect/unstable/sql/Migrator";
 
-// Import all migrations statically
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
 import Migration0002 from "./Migrations/002_OrchestrationCommandReceipts.ts";
 import Migration0003 from "./Migrations/003_CheckpointDiffBlobs.ts";
@@ -90,17 +79,25 @@ import Migration0074 from "./Migrations/074_ThreadRetentionQueuedRuns.ts";
 import Migration0076 from "./Migrations/076_ThreadRetentionItemRetries.ts";
 import Migration0077 from "./Migrations/077_AutomationOwnedThreads.ts";
 import Migration0078 from "./Migrations/078_BackfillDeletionMarkers.ts";
+import Migration0079 from "./Migrations/079_RetireIncompletePurgeJobs.ts";
+import Migration0080 from "./Migrations/080_OrchestrationEventGaps.ts";
+import Migration0081 from "./Migrations/081_ProjectionThreadOwnership.ts";
+import Migration0082 from "./Migrations/082_ProjectionThreadTasksOwnership.ts";
+import Migration0083 from "./Migrations/083_ProjectionThreadStateOwnership.ts";
+import Migration0084 from "./Migrations/084_ProjectionThreadAttachmentOwnership.ts";
+import Migration0085 from "./Migrations/085_ProjectionTurnsOwnership.ts";
+import Migration0086 from "./Migrations/086_ThreadRuntimeOwnership.ts";
+import Migration0087 from "./Migrations/087_ThreadAuxiliaryOwnership.ts";
+import Migration0088 from "./Migrations/088_ProjectionThreadWatchesOwnership.ts";
+import Migration0089 from "./Migrations/089_ThreadDelegationsOwnership.ts";
+import Migration0090 from "./Migrations/090_ThreadLeaseAndLivenessOwnership.ts";
+import Migration0091 from "./Migrations/091_ProviderTurnLivenessOwnership.ts";
+import Migration0092 from "./Migrations/092_AutomationThreadOwnership.ts";
+import Migration0093 from "./Migrations/093_ThreadIdentityOwnership.ts";
+import Migration0094 from "./Migrations/094_RepairProjectionThreadSessionIdentity.ts";
+import Migration0095 from "./Migrations/095_RepairProjectionThreadProposedPlanImplementation.ts";
+import Migration0096 from "./Migrations/096_RepairOrchestrationThreadIdentityIndependence.ts";
 
-/**
- * Migration loader with all migrations defined inline.
- *
- * Key format: "{id}_{name}" where:
- * - id: numeric migration ID (determines execution order)
- * - name: descriptive name for the migration
- *
- * Uses Migrator.fromRecord which parses the key format and
- * returns migrations sorted by ID.
- */
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
   [2, "OrchestrationCommandReceipts", Migration0002],
@@ -179,10 +176,27 @@ export const migrationEntries = [
   [76, "ThreadRetentionItemRetries", Migration0076],
   [77, "AutomationOwnedThreads", Migration0077],
   [78, "BackfillDeletionMarkers", Migration0078],
+  [79, "RetireIncompletePurgeJobs", Migration0079],
+  [80, "OrchestrationEventGaps", Migration0080],
+  [81, "ProjectionThreadOwnership", Migration0081],
+  [82, "ProjectionThreadTasksOwnership", Migration0082],
+  [83, "ProjectionThreadStateOwnership", Migration0083],
+  [84, "ProjectionThreadAttachmentOwnership", Migration0084],
+  [85, "ProjectionTurnsOwnership", Migration0085],
+  [86, "ThreadRuntimeOwnership", Migration0086],
+  [87, "ThreadAuxiliaryOwnership", Migration0087],
+  [88, "ProjectionThreadWatchesOwnership", Migration0088],
+  [89, "ThreadDelegationsOwnership", Migration0089],
+  [90, "ThreadLeaseAndLivenessOwnership", Migration0090],
+  [91, "ProviderTurnLivenessOwnership", Migration0091],
+  [92, "AutomationThreadOwnership", Migration0092],
+  [93, "ThreadIdentityOwnership", Migration0093],
+  [94, "RepairProjectionThreadSessionIdentity", Migration0094],
+  [95, "RepairProjectionThreadProposedPlanImplementation", Migration0095],
+  [96, "RepairOrchestrationThreadIdentityIndependence", Migration0096],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
-
 export const makeMigrationLoader = (throughId?: number) =>
   Migrator.fromRecord(
     Object.fromEntries(
@@ -191,27 +205,10 @@ export const makeMigrationLoader = (throughId?: number) =>
         .map(([id, name, migration]) => [`${id}_${name}`, migration]),
     ),
   );
-
-/**
- * Migrator run function - no schema dumping needed
- * Uses the base Migrator.make without platform dependencies
- */
 const run = Migrator.make({});
-
 export interface RunMigrationsOptions {
   readonly toMigrationInclusive?: number | undefined;
 }
-
-/**
- * Run all pending migrations.
- *
- * Creates the migrations tracking table (effect_sql_migrations) if it doesn't exist,
- * then runs any migrations with ID greater than the latest recorded migration.
- *
- * Returns array of [id, name] tuples for migrations that were run.
- *
- * @returns Effect containing array of executed migrations
- */
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
@@ -226,22 +223,4 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
   );
   return executedMigrations;
 });
-
-/**
- * Layer that runs migrations when the layer is built.
- *
- * Use this to ensure migrations run before your application starts.
- * Migrations are run automatically - no separate script is needed.
- *
- * @example
- * ```typescript
- * import { MigrationsLive } from "@acme/db/Migrations"
- * import * as SqliteClient from "@acme/db/SqliteClient"
- *
- * // Migrations run automatically when SqliteClient is provided
- * const AppLayer = MigrationsLive.pipe(
- *   Layer.provideMerge(SqliteClient.layer({ filename: "database.sqlite" }))
- * )
- * ```
- */
 export const MigrationsLive = Layer.effectDiscard(runMigrations());

@@ -1,3 +1,5 @@
+import * as nodeFs from "node:fs/promises";
+
 import { ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -18,6 +20,11 @@ import { ServerConfig } from "../../startup/config.ts";
 export interface DiscoveredThreadDeletionFiles {
   readonly resources: ReadonlyArray<PurgeResource>;
   readonly rootThreadId: ThreadId;
+}
+
+export interface ThreadDeletionOrphanedResource {
+  readonly resource: string;
+  readonly detail: string;
 }
 
 const captureResource = Effect.fn("ThreadDeletion.captureResource")(function* (
@@ -79,7 +86,9 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
         action: shared === 1 ? "retain-shared" : "delete",
       });
     }
-    for (const worktreePath of new Set(rows.flatMap((row) => row.worktreePath ?? []))) {
+    for (const worktreePath of new Set(
+      rows.flatMap((row) => (row.worktreePath === null ? [] : [row.worktreePath])),
+    )) {
       const relativePath = managedRelativePath(config.worktreesDir, worktreePath);
       if (!relativePath)
         return yield* Effect.fail(new Error("thread worktree is outside the managed root"));
@@ -135,20 +144,31 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
 export const cleanupDiscoveredThreadDeletionFiles = Effect.fn("ThreadDeletion.cleanupFiles")(
   function* (files: DiscoveredThreadDeletionFiles) {
     const config = yield* ServerConfig;
-    yield* Effect.forEach(
+    const results = yield* Effect.forEach(
       files.resources,
       (resource) =>
         resource.action === "retain-shared"
           ? Effect.void
-          : Effect.tryPromise(() =>
-              deleteResourceAtomically({
-                jobId: `thread-delete:${files.rootThreadId}`,
-                resolved: resolvePurgeResource(config, resource),
-                resource,
-              }),
-            ).pipe(Effect.catch(() => Effect.logWarning("thread deletion file cleanup failed"))),
-      { concurrency: 1, discard: true },
+          : Effect.exit(
+              Effect.tryPromise(() =>
+                deleteResourceAtomically({
+                  jobId: `thread-delete:${files.rootThreadId}`,
+                  resolved: resolvePurgeResource(config, resource),
+                  resource,
+                }),
+              ),
+            ).pipe(
+              Effect.map((exit) =>
+                exit._tag === "Failure"
+                  ? ({
+                      resource: `${resource.kind}:${resource.relativePath}`,
+                      detail: String(exit.cause),
+                    } satisfies ThreadDeletionOrphanedResource)
+                  : undefined,
+              ),
+            ),
+      { concurrency: 1 },
     );
+    return results.flatMap((result) => (result === undefined ? [] : [result]));
   },
 );
-import * as nodeFs from "node:fs/promises";

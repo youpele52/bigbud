@@ -1,8 +1,20 @@
 import { APP_SERVER_NAME } from "@bigbud/contracts";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 
 import { ServerConfig, RuntimeMode } from "../startup/config";
+import {
+  CANONICAL_THREAD_CLEANUP_LIMIT,
+  runDeferredCanonicalThreadCleanup,
+} from "../deletion/Layers/CanonicalThreadCleanup.ts";
+import { runLegacyPurgeManifestRecovery } from "../deletion/Layers/LegacyPurgeManifestRecovery.ts";
+import { OrchestrationProjectionPipelineLive } from "../orchestration/Layers/ProjectionPipeline.ts";
+import { OrchestrationEventStoreLive } from "../persistence/Layers/OrchestrationEventStore.ts";
+import {
+  layerConfig as SqlitePersistenceLayerLive,
+  makeSqliteReadOnlyPersistenceLive,
+} from "../persistence/Layers/Sqlite.ts";
+import { PurgeJobRepositoryLive } from "../persistence/Layers/PurgeJobRepository.ts";
 import { PortSchema, resolveServerConfig } from "./cli.config.ts";
 import { runServer } from "../server";
 import { writeStartupStatus } from "../startup/startupStatus";
@@ -58,6 +70,12 @@ const logWebSocketEventsFlag = Flag.boolean("log-websocket-events").pipe(
   Flag.withAlias("log-ws-events"),
   Flag.optional,
 );
+const cleanupLimitFlag = Flag.integer("limit").pipe(
+  Flag.withSchema(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: CANONICAL_THREAD_CLEANUP_LIMIT })),
+  ),
+  Flag.withDescription("Maximum number of deferred roots to inspect or clean up."),
+);
 
 const commandFlags = {
   mode: modeFlag,
@@ -78,6 +96,100 @@ const commandFlags = {
   logWebSocketEvents: logWebSocketEventsFlag,
 } as const;
 
+const canonicalThreadCleanupCommand = Command.make("canonical-thread-cleanup", {
+  ...commandFlags,
+  limit: cleanupLimitFlag,
+  apply: Flag.boolean("apply").pipe(
+    Flag.optional,
+    Flag.withDescription("Apply canonical cleanup. Without this flag, the command is read-only."),
+  ),
+  serverStopped: Flag.boolean("server-stopped").pipe(
+    Flag.optional,
+    Flag.withDescription("Confirm the bigbud desktop app and server are stopped before applying."),
+  ),
+}).pipe(
+  Command.withDescription(
+    "Inspect or finalize bounded deferred thread canonical cleanup. Dry-run is the default.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const apply = Option.getOrElse(flags.apply, () => false);
+      const serverStopped = Option.getOrElse(flags.serverStopped, () => false);
+      if (apply && !serverStopped) {
+        return yield* Effect.fail(
+          new Error(
+            "--apply requires --server-stopped after stopping the bigbud desktop app and server.",
+          ),
+        );
+      }
+      const logLevel = yield* GlobalFlag.LogLevel;
+      const config = yield* resolveServerConfig(flags, logLevel);
+      const persistenceLayer = apply
+        ? SqlitePersistenceLayerLive
+        : makeSqliteReadOnlyPersistenceLive(config.dbPath);
+      const recoveryLayer = Layer.mergeAll(
+        OrchestrationEventStoreLive,
+        OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
+      ).pipe(Layer.provideMerge(persistenceLayer));
+      const result = yield* runDeferredCanonicalThreadCleanup(apply, flags.limit).pipe(
+        Effect.provide(recoveryLayer),
+        Effect.provideService(ServerConfig, config),
+      );
+      yield* Effect.logInfo("canonical thread cleanup recovery completed", {
+        mode: apply ? "apply" : "dry-run",
+        cleanedCount: result.cleanedCount,
+        skippedCount: result.skippedCount,
+        failedCount: result.failedCount,
+        candidates: result.candidates,
+      });
+    }),
+  ),
+);
+
+const legacyOrphanRecoveryCommand = Command.make("legacy-orphan-recovery", {
+  ...commandFlags,
+  apply: Flag.boolean("apply").pipe(
+    Flag.optional,
+    Flag.withDescription(
+      "Apply manifest-recorded orphan cleanup. Without this flag, the command is read-only.",
+    ),
+  ),
+  serverStopped: Flag.boolean("server-stopped").pipe(
+    Flag.optional,
+    Flag.withDescription("Confirm the bigbud desktop app and server are stopped before applying."),
+  ),
+}).pipe(
+  Command.withDescription(
+    "Inspect or remove bounded resources recorded by retired legacy purge manifests.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const apply = Option.getOrElse(flags.apply, () => false);
+      const serverStopped = Option.getOrElse(flags.serverStopped, () => false);
+      if (apply && !serverStopped) {
+        return yield* Effect.fail(
+          new Error(
+            "--apply requires --server-stopped after stopping the bigbud desktop app and server.",
+          ),
+        );
+      }
+      const logLevel = yield* GlobalFlag.LogLevel;
+      const config = yield* resolveServerConfig(flags, logLevel);
+      const persistenceLayer = apply
+        ? SqlitePersistenceLayerLive
+        : makeSqliteReadOnlyPersistenceLive(config.dbPath);
+      const result = yield* runLegacyPurgeManifestRecovery(apply).pipe(
+        Effect.provide(PurgeJobRepositoryLive.pipe(Layer.provideMerge(persistenceLayer))),
+        Effect.provideService(ServerConfig, config),
+      );
+      yield* Effect.logInfo("legacy purge manifest orphan recovery completed", {
+        mode: apply ? "apply" : "dry-run",
+        ...result,
+      });
+    }),
+  ),
+);
+
 const rootCommand = Command.make("bigbud", commandFlags).pipe(
   Command.withDescription(`Run the ${APP_SERVER_NAME}.`),
   Command.withHandler((flags) =>
@@ -89,6 +201,7 @@ const rootCommand = Command.make("bigbud", commandFlags).pipe(
       Effect.tapError(() => Effect.sync(() => writeStartupStatus("error", "bootstrap_failed"))),
     ),
   ),
+  Command.withSubcommands([canonicalThreadCleanupCommand, legacyOrphanRecoveryCommand]),
 );
 
 export const cli = rootCommand;

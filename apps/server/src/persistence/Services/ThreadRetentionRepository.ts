@@ -247,6 +247,9 @@ export type ConsumeRetentionChallengeResult =
 export type ConsumeChallengeAndCreateRunResult =
   | { readonly consumed: true; readonly run: ThreadRetentionRun; readonly created: boolean }
   | { readonly consumed: false; readonly result: ConsumeRetentionChallengeResult };
+export type ConsumeManualChallengeResult =
+  | { readonly consumed: true; readonly policy: typeof FiniteThreadRetentionPolicy.Type }
+  | { readonly consumed: false; readonly result: ConsumeRetentionChallengeResult };
 export type ThreadRetentionPolicyAuthority = {
   readonly policy: ThreadRetentionPolicy;
   readonly source: "explicit" | "rollout-automatic" | "rollout-protected" | "rollout-staged";
@@ -389,6 +392,10 @@ export interface ThreadRetentionRepositoryShape {
     readonly runId: string;
     readonly consumedAt: string;
   }) => Effect.Effect<ConsumeChallengeAndCreateRunResult, ProjectionRepositoryError>;
+  readonly consumeManualChallenge: (input: {
+    readonly token: string;
+    readonly consumedAt: string;
+  }) => Effect.Effect<ConsumeManualChallengeResult, ProjectionRepositoryError>;
   readonly getPolicyAuthority: () => Effect.Effect<
     Option.Option<ThreadRetentionPolicyAuthority>,
     ProjectionRepositoryError

@@ -3,6 +3,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 
 import {
   ProjectionThreadSession,
@@ -80,7 +81,10 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionThreadSessionRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadSessionRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertProjectionThreadSessionRow(row);
+    }).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadSessionRepository.upsert:query")),
     );
 

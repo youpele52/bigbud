@@ -32,14 +32,56 @@ export class PersistenceDecodeError extends Schema.TaggedErrorClass<PersistenceD
   }
 }
 
+function persistenceCauseMessage(cause: unknown): string {
+  const seen = new Set<unknown>();
+  let current: unknown = cause;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current === "object") {
+      const record = current as {
+        message?: unknown;
+        cause?: unknown;
+        reason?: { cause?: unknown; message?: unknown };
+      };
+      if (record.reason?.cause !== undefined && !seen.has(record.reason.cause)) {
+        current = record.reason.cause;
+        continue;
+      }
+      if (typeof record.reason?.message === "string" && record.reason.message.trim() !== "") {
+        return record.reason.message;
+      }
+      if (record.cause !== undefined && record.cause !== current) {
+        current = record.cause;
+        continue;
+      }
+      if (
+        typeof record.message === "string" &&
+        record.message.trim() !== "" &&
+        record.message !== "Failed to execute statement"
+      ) {
+        return record.message;
+      }
+    }
+    if (current instanceof Error && current.message.trim() !== "") {
+      return current.message;
+    }
+    break;
+  }
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 export function toPersistenceSqlError(operation: string) {
   return (cause: unknown): PersistenceSqlError => {
-    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    const causeMessage = persistenceCauseMessage(cause);
     return new PersistenceSqlError({
       operation,
       detail: causeMessage.includes("thread endpoint is deleting")
         ? "The thread is being deleted and cannot accept new related work."
-        : `Failed to execute ${operation}`,
+        : causeMessage.includes("database is locked") || causeMessage.includes("SQLITE_BUSY")
+          ? "The database is busy. Retry the action in a moment."
+          : causeMessage.trim() === "" || causeMessage === `Failed to execute ${operation}`
+            ? `Failed to execute ${operation}`
+            : causeMessage,
       cause,
     });
   };

@@ -34,4 +34,49 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
       assert.equal(error.value, "Debug");
     }),
   );
+
+  it.effect("parses canonical cleanup dry-run and apply safety flags", () =>
+    Effect.gen(function* () {
+      yield* Command.runWith(cli, { version: "0.0.0" })([
+        "canonical-thread-cleanup",
+        "--help",
+        "--limit",
+        "1",
+      ]).pipe(Effect.provide(CliRuntimeLayer));
+
+      const error = yield* Command.runWith(cli, { version: "0.0.0" })([
+        "canonical-thread-cleanup",
+        "--limit",
+        "1",
+        "--apply",
+      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
+      assert.match(String(error), /--apply requires --server-stopped/);
+    }),
+  );
+
+  it.effect("requires a cleanup limit", () =>
+    Command.runWith(cli, { version: "0.0.0" })(["canonical-thread-cleanup"]).pipe(
+      Effect.provide(CliRuntimeLayer),
+      Effect.flip,
+      Effect.tap((error) => Effect.sync(() => assert.match(String(error), /limit/))),
+    ),
+  );
+
+  it.effect("rejects a cleanup limit outside the bounded range", () =>
+    Command.runWith(cli, { version: "0.0.0" })(["canonical-thread-cleanup", "--limit", "51"]).pipe(
+      Effect.provide(CliRuntimeLayer),
+      Effect.flip,
+      Effect.tap((error) => Effect.sync(() => assert.match(String(error), /limit/))),
+    ),
+  );
+
+  it.effect("requires server shutdown confirmation for legacy orphan recovery", () =>
+    Effect.gen(function* () {
+      const error = yield* Command.runWith(cli, { version: "0.0.0" })([
+        "legacy-orphan-recovery",
+        "--apply",
+      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
+      assert.match(String(error), /--apply requires --server-stopped/);
+    }),
+  );
 });

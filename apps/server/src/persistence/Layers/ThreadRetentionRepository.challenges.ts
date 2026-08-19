@@ -153,6 +153,29 @@ export function makeThreadRetentionChallenges<E, R>(input: {
       }),
     );
 
+  const consumeManualChallenge = (request: {
+    readonly token: string;
+    readonly consumedAt: string;
+  }) =>
+    input.sql.withTransaction(
+      Effect.gen(function* () {
+        const challenge = yield* readChallenge(request.token);
+        if (Option.isNone(challenge) || challenge.value.trigger !== "manual") {
+          return { consumed: false, result: "invalid" } as const;
+        }
+        const result = yield* consumeChallenge({
+          token: request.token,
+          trigger: "manual",
+          policy: challenge.value.policy,
+          cutoffAt: challenge.value.cutoffAt,
+          consumedAt: request.consumedAt,
+        });
+        return result === "consumed"
+          ? ({ consumed: true, policy: challenge.value.policy } as const)
+          : ({ consumed: false, result } as const);
+      }),
+    );
+
   const consumePolicyChallenge = (request: {
     readonly token: string;
     readonly policy: RetentionChallenge["policy"];
@@ -185,6 +208,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
     consumeChallenge,
     readChallenge,
     consumeChallengeAndCreateRun,
+    consumeManualChallenge,
     consumePolicyChallenge,
   };
 }

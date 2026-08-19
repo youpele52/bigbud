@@ -159,4 +159,63 @@ describe("OrchestrationEngine deletion lifecycle invariants", () => {
     ).toMatchObject({ title: "resurrect-thread", deletedAt: null });
     await system.dispose();
   });
+
+  it("retries delete after a stuck deletingAt once the fence is released", async () => {
+    const system = await createOrchestrationSystem();
+    const projectId = asProjectId("stuck-delete-project");
+    const threadId = ThreadId.makeUnsafe("stuck-delete-thread");
+    const createdAt = now();
+    try {
+      await system.run(
+        system.engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe("create-stuck-delete-project"),
+          projectId,
+          title: "Project",
+          workspaceRoot: "/tmp/stuck-delete",
+          defaultModelSelection: modelSelection,
+          createdAt,
+        }),
+      );
+      await system.run(
+        system.engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.makeUnsafe("create-stuck-delete-thread"),
+          threadId,
+          projectId,
+          title: "Stuck",
+          modelSelection,
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+        }),
+      );
+      await system.run(
+        system.engine.dispatch({
+          type: "thread.delete",
+          commandId: CommandId.makeUnsafe("first-stuck-delete"),
+          threadId,
+        }),
+      );
+      expect(
+        (await system.run(system.engine.getReadModel())).threads.find(
+          (thread) => thread.id === threadId,
+        )?.deletingAt,
+      ).not.toBeNull();
+      await system.run(system.engine.threadDeletion!.releaseFence(threadId));
+      await expect(
+        system.run(
+          system.engine.dispatch({
+            type: "thread.delete",
+            commandId: CommandId.makeUnsafe("retry-stuck-delete"),
+            threadId,
+          }),
+        ),
+      ).resolves.toBeDefined();
+    } finally {
+      await system.dispose();
+    }
+  });
 });

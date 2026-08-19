@@ -23,6 +23,7 @@ import {
 import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
@@ -31,6 +32,11 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
       const now = new Date().toISOString();
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        createdAt: now,
+      });
 
       yield* eventStore.append({
         type: "project.created",
@@ -157,6 +163,11 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-repl
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
         const now = new Date().toISOString();
+        yield* insertProjectionThreadParent({
+          sql,
+          threadId: ThreadId.makeUnsafe("thread-replies"),
+          createdAt: now,
+        });
 
         yield* eventStore.append({
           type: "thread.message-sent",

@@ -83,6 +83,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
       WHERE entity_kind = ${input.entityKind}
         AND entity_id = ${input.entityId}
         AND status <> 'completed' AND auto_resume_disabled = 0
+        AND last_error IS NOT 'manual_recovery_required'
       LIMIT 1
     `,
   });
@@ -117,6 +118,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
         completed_at AS "completedAt"
       FROM purge_jobs
       WHERE status <> 'completed' AND auto_resume_disabled = 0
+        AND last_error IS NOT 'manual_recovery_required'
         AND updated_at <= ${dueAt}
         AND (attempt_count < ${PURGE_MAX_ATTEMPTS} OR EXISTS (
           SELECT 1 FROM orchestration_deletion_markers AS marker
@@ -148,6 +150,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
         resource_manifest_digest = ${purgeManifestDigest(input.resourceManifest)},
         updated_at = ${input.updatedAt}
       WHERE job_id = ${input.jobId} AND status <> 'completed' AND auto_resume_disabled = 0
+        AND last_error IS NOT 'manual_recovery_required'
         AND phase IN ('awaiting-finalization', 'baseline')
         AND resource_manifest_json = ${input.expectedManifestJson}
         AND updated_at = ${input.expectedUpdatedAt}
@@ -229,6 +232,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
       WHERE job_id = ${input.jobId}
         AND phase = ${input.phase}
         AND status <> 'completed' AND auto_resume_disabled = 0
+        AND last_error IS NOT 'manual_recovery_required'
       RETURNING job_id AS "jobId"
     `,
   });
@@ -243,6 +247,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
       WHERE job_id = ${input.jobId}
         AND phase = ${input.expectedPhase}
         AND status <> 'completed' AND auto_resume_disabled = 0
+        AND last_error IS NOT 'manual_recovery_required'
       RETURNING job_id AS "jobId"
     `,
   });
@@ -259,6 +264,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
         updated_at = ${input.completedAt}
         WHERE job_id = ${input.jobId} AND phase = 'root'
           AND status <> 'completed' AND auto_resume_disabled = 0
+          AND last_error IS NOT 'manual_recovery_required'
         AND manifest_sealed_at IS NOT NULL AND resource_manifest_digest IS NOT NULL
       RETURNING job_id AS "jobId"
     `,
@@ -300,6 +306,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
       sql<{ count: number }>`
         SELECT COUNT(*) AS count FROM purge_jobs
         WHERE status <> 'completed' AND auto_resume_disabled = 0
+          AND last_error IS NOT 'manual_recovery_required'
           AND attempt_count < ${PURGE_MAX_ATTEMPTS}
       `.pipe(
         Effect.map((rows) => rows[0]?.count ?? 0),
@@ -310,6 +317,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
         UPDATE purge_jobs SET execution_lease_id = ${input.leaseId},
           execution_lease_expires_at = ${input.expiresAt}
         WHERE job_id = ${input.jobId} AND status <> 'completed' AND auto_resume_disabled = 0
+          AND last_error IS NOT 'manual_recovery_required'
           AND (execution_lease_id IS NULL OR execution_lease_expires_at <= ${input.claimedAt})
         RETURNING job_id
       `.pipe(

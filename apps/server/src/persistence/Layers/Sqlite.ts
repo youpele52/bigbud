@@ -4,9 +4,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { runMigrations } from "../Migrations.ts";
 import { ensureProjectionThreadsElevatorSummaryColumns } from "../Migrations/ProjectionThreadsElevatorSummary.columns.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { installTestProjectionThreadParentTriggers } from "./Sqlite.testParentThreads.ts";
 
 type RuntimeSqliteLayerConfig = {
   readonly filename: string;
+  readonly readonly?: boolean;
   readonly spanAttributes?: Record<string, unknown>;
 };
 
@@ -33,8 +35,10 @@ const makeSetup = () =>
       const sql = yield* SqlClient.SqlClient;
       yield* sql`PRAGMA journal_mode = WAL;`;
       yield* sql`PRAGMA foreign_keys = ON;`;
+      yield* sql`PRAGMA busy_timeout = 5000;`;
       yield* runMigrations();
       yield* ensureProjectionThreadsElevatorSummaryColumns(sql);
+      yield* installTestProjectionThreadParentTriggers();
     }),
   );
 
@@ -56,6 +60,9 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
     }),
   );
 }, Layer.unwrap);
+
+export const makeSqliteReadOnlyPersistenceLive = (dbPath: string) =>
+  makeRuntimeSqliteLayer({ filename: dbPath, readonly: true });
 
 export const SqlitePersistenceMemory = Layer.provideMerge(
   makeSetup(),

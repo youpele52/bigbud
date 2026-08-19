@@ -174,29 +174,10 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     Result: RemainingRow,
     execute: ({ threadId }) => sql`
       SELECT (
-         (SELECT COUNT(*) FROM projection_thread_messages WHERE thread_id = ${threadId}) +
-         (SELECT COUNT(*) FROM projection_thread_activities WHERE thread_id = ${threadId}) +
-         (SELECT COUNT(*) FROM projection_thread_attachment_refs WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_thread_proposed_plans WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_thread_tasks WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_thread_sessions WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_turns WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_pending_approvals WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_pending_user_inputs WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_usage_contributions WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM provider_session_runtime WHERE thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM worktree_runtime_leases WHERE thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM thread_activity_leases WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM checkpoint_diff_blobs WHERE thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM automation_runs WHERE thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM automation_schedules WHERE target_thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM learning_jobs WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM skill_change_proposals WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM orchestration_thread_identity WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM projection_thread_watches
-          WHERE watcher_thread_id = ${threadId} OR watched_thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM thread_delegations
-          WHERE caller_thread_id = ${threadId} OR child_thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM projection_threads WHERE parent_thread_id = ${threadId}) +
         (SELECT COUNT(*) FROM projection_turns WHERE source_proposed_plan_thread_id = ${threadId})
       ) AS count
@@ -227,29 +208,11 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
           }
           yield* Effect.all(
             [
-              sql`DELETE FROM automation_runs WHERE thread_id = ${threadId}`,
               sql`DELETE FROM automation_schedules WHERE target_thread_id = ${threadId}`,
-              sql`DELETE FROM projection_thread_watches WHERE watcher_thread_id = ${threadId} OR watched_thread_id = ${threadId}`,
-              sql`DELETE FROM thread_delegations WHERE caller_thread_id = ${threadId} OR child_thread_id = ${threadId}`,
               sql`UPDATE projection_threads
                 SET parent_thread_id = NULL, parent_thread_title = NULL, parent_thread_project_id = NULL
                 WHERE parent_thread_id = ${threadId}`,
               sql`UPDATE projection_turns SET source_proposed_plan_thread_id = NULL, source_proposed_plan_id = NULL WHERE source_proposed_plan_thread_id = ${threadId}`,
-              sql`DELETE FROM learning_jobs WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM skill_change_proposals WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM checkpoint_diff_blobs WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_usage_contributions WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_pending_approvals WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_pending_user_inputs WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_turns WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_thread_sessions WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM provider_session_runtime
-            WHERE thread_id = ${threadId} AND status NOT IN ('starting', 'running')`,
-              sql`DELETE FROM projection_thread_tasks WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_thread_proposed_plans WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_thread_activities WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM projection_thread_messages WHERE thread_id = ${threadId}`,
-              sql`DELETE FROM orchestration_thread_identity WHERE thread_id = ${threadId}`,
             ],
             { concurrency: 1, discard: true },
           );
@@ -266,7 +229,6 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
       sql.withTransaction(
         Effect.all(
           [
-            sql`DELETE FROM automation_runs WHERE automation_id IN (SELECT automation_id FROM automation_schedules WHERE project_id = ${projectId})`,
             sql`DELETE FROM automation_schedules WHERE project_id = ${projectId}`,
             sql`DELETE FROM projection_notes WHERE project_id = ${projectId}`,
             sql`DELETE FROM thread_delegations WHERE target_project_id = ${projectId} OR created_project_id = ${projectId}`,
@@ -280,19 +242,6 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     sql.withTransaction(
       Effect.all(
         [
-          sql`DELETE FROM projection_thread_messages WHERE rowid IN (SELECT rowid FROM projection_thread_messages WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_thread_messages.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_thread_activities WHERE rowid IN (SELECT rowid FROM projection_thread_activities WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_thread_activities.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_thread_proposed_plans WHERE rowid IN (SELECT rowid FROM projection_thread_proposed_plans WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_thread_proposed_plans.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_thread_tasks WHERE rowid IN (SELECT rowid FROM projection_thread_tasks WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_thread_tasks.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_thread_sessions WHERE rowid IN (SELECT rowid FROM projection_thread_sessions WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_thread_sessions.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_turns WHERE rowid IN (SELECT rowid FROM projection_turns WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_turns.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_pending_approvals WHERE rowid IN (SELECT rowid FROM projection_pending_approvals WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_pending_approvals.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_pending_user_inputs WHERE rowid IN (SELECT rowid FROM projection_pending_user_inputs WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_pending_user_inputs.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM projection_usage_contributions WHERE rowid IN (SELECT rowid FROM projection_usage_contributions WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = projection_usage_contributions.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM provider_session_runtime WHERE rowid IN (SELECT rowid FROM provider_session_runtime WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = provider_session_runtime.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM worktree_runtime_leases WHERE rowid IN (SELECT rowid FROM worktree_runtime_leases WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = worktree_runtime_leases.thread_id) AND NOT EXISTS (SELECT 1 FROM provider_session_runtime WHERE provider_session_runtime.thread_id = worktree_runtime_leases.thread_id AND provider_session_runtime.status IN ('starting', 'running')) LIMIT ${limit})`,
-          sql`DELETE FROM thread_activity_leases WHERE rowid IN (SELECT rowid FROM thread_activity_leases WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = thread_activity_leases.thread_id) LIMIT ${limit})`,
-          sql`DELETE FROM checkpoint_diff_blobs WHERE rowid IN (SELECT rowid FROM checkpoint_diff_blobs WHERE NOT EXISTS (SELECT 1 FROM projection_threads WHERE projection_threads.thread_id = checkpoint_diff_blobs.thread_id) LIMIT ${limit})`,
           sql`DELETE FROM projection_notes WHERE rowid IN (SELECT rowid FROM projection_notes WHERE project_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM projection_projects WHERE projection_projects.project_id = projection_notes.project_id) LIMIT ${limit})`,
         ],
         { concurrency: 1, discard: true },
@@ -432,6 +381,33 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     sql.withTransaction(
       Effect.all(
         [
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            INSERT INTO orchestration_event_gaps (sequence, event_id, created_at)
+            SELECT sequence, event_id, ${new Date().toISOString()}
+            FROM orchestration_events
+            WHERE aggregate_kind = 'thread' AND stream_id IN (
+              SELECT entity_id FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread'
+                AND deletion_sequence = (SELECT deletion_sequence FROM root)
+            )
+            ON CONFLICT (sequence) DO NOTHING
+          `,
+          sql`
+            WITH root AS (
+              SELECT deletion_sequence FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread' AND entity_id = ${threadId}
+            )
+            DELETE FROM orchestration_thread_identity
+            WHERE thread_id IN (
+              SELECT entity_id FROM orchestration_deletion_markers
+              WHERE entity_kind = 'thread'
+                AND deletion_sequence = (SELECT deletion_sequence FROM root)
+            )
+          `,
           sql`
             WITH root AS (
               SELECT deletion_sequence FROM orchestration_deletion_markers

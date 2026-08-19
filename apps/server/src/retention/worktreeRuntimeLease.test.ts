@@ -1,8 +1,10 @@
+import { ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import { insertProjectionThreadParent } from "../persistence/Layers/ProjectionThread.test.helpers.ts";
 import {
   captureWorktreePathIdentity,
   reconcileWorktreeRuntimeLeases,
@@ -40,6 +42,10 @@ it.layer(SqlitePersistenceMemory)("worktree runtime lease startup reconciliation
           ["pending-process", null],
           ["terminated-process", 2_147_483_647],
         ] as const) {
+          yield* insertProjectionThreadParent({
+            sql,
+            threadId: ThreadId.makeUnsafe(leaseId),
+          });
           yield* sql`
           INSERT INTO worktree_runtime_leases (
             lease_id, thread_id, runtime_kind, canonical_path, device, inode,

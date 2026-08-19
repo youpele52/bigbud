@@ -388,8 +388,6 @@ const makeEntityPurge = Effect.gen(function* () {
     mapError: mapPurgeError,
     projectionPipeline,
     queries,
-    requestProject,
-    requestThread,
     runInternal,
   });
 

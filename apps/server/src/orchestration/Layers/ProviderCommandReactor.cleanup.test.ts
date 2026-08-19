@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { CommandId, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
@@ -171,6 +174,15 @@ describe("ProviderCommandReactor", () => {
   it("reacts to project.delete by deleting live child threads before final project delete", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
+    const projectDirectories = [
+      path.join(harness.stateDir, "memory", "projects", "project-1"),
+      path.join(harness.stateDir, "notes", "project-1"),
+      path.join(harness.stateDir, "kanban", "project-1"),
+    ];
+    for (const directory of projectDirectories) {
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, "delete.txt"), "delete");
+    }
 
     await Effect.runPromise(
       harness.startSession(ThreadId.makeUnsafe("thread-1"), {
@@ -222,5 +234,6 @@ describe("ProviderCommandReactor", () => {
     expect(project?.deletedAt).not.toBeNull();
     expect(project?.deletingAt).toBeNull();
     expect(thread).toBeUndefined();
+    await waitFor(() => projectDirectories.every((directory) => !fs.existsSync(directory)));
   });
 });

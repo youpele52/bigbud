@@ -156,6 +156,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       baselines: projectionBaselineRepository,
       compact: baselineOperations.compact(),
     });
+    const ensureVerifiedBaselineThroughWithoutCompaction = yield* makeProjectionBaselineCoordinator(
+      {
+        baselines: projectionBaselineRepository,
+        compact: baselineOperations.verifyThrough(),
+      },
+    );
 
     const bootstrapProjector = (projector: ProjectorDefinition) =>
       projectionStateRepository
@@ -263,6 +269,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       bootstrap,
       backfillUsageContributions,
       ensureVerifiedBaselineThrough,
+      ensureVerifiedBaselineThroughWithoutCompaction,
       compactVerifiedPrefix,
       projectEvent,
     } satisfies OrchestrationProjectionPipelineShape;

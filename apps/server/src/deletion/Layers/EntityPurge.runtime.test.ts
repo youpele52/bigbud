@@ -136,11 +136,21 @@ it.layer(testLayer)("EntityPurge runtime quiescence", (it) => {
           message_id, thread_id, role, text, is_streaming, created_at, updated_at
         ) VALUES ('runtime-race-message', ${threadId}, 'user', 'retain', 0, ${NOW}, ${NOW})
       `;
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id, project_id, title, model_selection_json, runtime_mode,
+          interaction_mode, parent_thread_id, created_at, updated_at
+        ) VALUES (
+          ${`${threadId}-child`}, ${`project-${threadId}`}, 'Child',
+          '{"provider":"codex","model":"test"}', 'full-access', 'default',
+          ${threadId}, ${NOW}, ${NOW}
+        )
+      `;
       yield* sql`DROP TRIGGER IF EXISTS thread_retention_guard_provider_runtime_insert`;
       yield* sql.unsafe(`
         CREATE TRIGGER runtime_appears_during_cleanup
-        BEFORE DELETE ON projection_thread_messages
-        WHEN OLD.thread_id = '${threadId}'
+        BEFORE UPDATE ON projection_threads
+        WHEN OLD.parent_thread_id = '${threadId}'
         BEGIN
           INSERT INTO provider_session_runtime (
             thread_id, provider_name, adapter_key, execution_target_id, runtime_mode,

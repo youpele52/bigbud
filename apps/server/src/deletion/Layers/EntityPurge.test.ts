@@ -182,7 +182,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
         yield* fs.writeFileString(`${directory}/delete.txt`, "delete");
       }
 
-      yield* purge.auditAndResume();
+      yield* purge.run(yield* purge.requestProject(projectId));
 
       const projects = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count FROM projection_projects WHERE project_id = ${projectId}
@@ -270,23 +270,21 @@ it.layer(testLayer)("EntityPurge", (it) => {
     Effect.gen(function* () {
       const purge = yield* EntityPurge;
       const sql = yield* SqlClient.SqlClient;
-      yield* sql`PRAGMA foreign_keys = OFF`;
       yield* sql`
-        INSERT INTO projection_thread_messages (
-          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        INSERT INTO projection_notes (
+          note_id, project_id, title, content, created_at, updated_at
         ) VALUES (
-          'orphan-message', 'missing-thread', 'user', 'delete', 0,
+          'orphan-note', 'missing-project', 'Orphan', 'delete',
           '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z'
         )
       `;
-      yield* sql`PRAGMA foreign_keys = ON`;
 
       yield* purge.auditAndResume(10);
 
       const rows = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count
-        FROM projection_thread_messages
-        WHERE thread_id = 'missing-thread'
+        FROM projection_notes
+        WHERE note_id = 'orphan-note'
       `;
       assert.deepStrictEqual(rows, [{ count: 0 }]);
     }),

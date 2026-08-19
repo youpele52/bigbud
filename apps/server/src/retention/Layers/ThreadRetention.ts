@@ -10,7 +10,6 @@ import { makeThreadRetentionPreview } from "./ThreadRetention.preview.ts";
 import { makeSetThreadRetentionPolicy } from "./ThreadRetention.policy.ts";
 import { runDirectThreadRetention } from "./ThreadRetention.direct.ts";
 import { runThreadRetentionSchedule } from "./ThreadRetention.scheduler.ts";
-import { toPublicThreadRetentionRun } from "./ThreadRetention.logic.ts";
 
 const retentionError = (code: ServerThreadRetentionError["code"], message: string) =>
   new ServerThreadRetentionError({ code, message });
@@ -41,10 +40,8 @@ const makeThreadRetention = Effect.gen(function* () {
           "Thread retention is disabled by the server administrator.",
         );
       }
-      const accepted = yield* repository.consumeChallengeAndCreateRun({
+      const accepted = yield* repository.consumeManualChallenge({
         token: challengeToken,
-        trigger: "manual",
-        runId: crypto.randomUUID(),
         consumedAt: new Date().toISOString(),
       });
       if (!accepted.consumed) {
@@ -57,7 +54,7 @@ const makeThreadRetention = Effect.gen(function* () {
           return yield* retentionError("challenge_consumed", "The confirmation was already used.");
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
-      return yield* run(accepted.run.policy, "manual");
+      return yield* run(accepted.policy, "manual");
     }).pipe(
       Effect.mapError((error) =>
         Schema.is(ServerThreadRetentionError)(error)
@@ -81,31 +78,6 @@ const makeThreadRetention = Effect.gen(function* () {
   return {
     preview,
     enqueue,
-    getRun: (runId) =>
-      repository.getRun(runId).pipe(
-        Effect.flatMap((run) =>
-          Option.match(run, {
-            onNone: () => Effect.fail(retentionError("not_found", "Retention run was not found.")),
-            onSome: (value) => Effect.succeed(toPublicThreadRetentionRun(value)),
-          }),
-        ),
-        Effect.mapError((error) =>
-          Schema.is(ServerThreadRetentionError)(error)
-            ? error
-            : retentionError("failed", "Failed to load the retention run."),
-        ),
-      ),
-    listRuns: (limit = 20) =>
-      repository.listRecentRuns(Math.max(1, Math.min(20, limit))).pipe(
-        Effect.map((runs) => ({
-          runs: runs.map(toPublicThreadRetentionRun),
-          availability:
-            process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1"
-              ? ("disabled" as const)
-              : ("available" as const),
-        })),
-        Effect.mapError(() => retentionError("failed", "Failed to list retention runs.")),
-      ),
     setPolicy: makeSetThreadRetentionPolicy({
       repository,
       settings,

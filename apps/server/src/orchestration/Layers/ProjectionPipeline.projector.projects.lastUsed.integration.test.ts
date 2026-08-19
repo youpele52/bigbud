@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { BaseTestLayer } from "./ProjectionPipeline.test.helpers.ts";
@@ -19,6 +20,8 @@ layer("project last-used projection", (it) => {
       const threadId = ThreadId.makeUnsafe("thread-last-used");
       const createdAt = "2026-01-01T00:00:00.000Z";
       const usedAt = "2026-01-03T00:00:00.000Z";
+
+      yield* insertProjectionThreadParent({ sql, threadId, projectId });
 
       yield* eventStore.append({
         type: "project.created",
@@ -105,6 +108,8 @@ layer("project last-used projection", (it) => {
       const threadId = ThreadId.makeUnsafe("thread-last-used-restart");
       const createdAt = "2026-01-01T00:00:00.000Z";
       const usedAt = "2026-01-03T00:00:00.000Z";
+
+      yield* insertProjectionThreadParent({ sql, threadId, projectId });
 
       const projectCreated = yield* eventStore.append({
         type: "project.created",

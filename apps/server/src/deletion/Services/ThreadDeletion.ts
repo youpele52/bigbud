@@ -97,7 +97,9 @@ export interface ThreadDeletionShape {
     readonly rootThreadId: ThreadId;
     readonly threadIds: ReadonlyArray<ThreadId>;
   }) => Effect.Effect<DiscoveredThreadDeletionFiles>;
-  readonly cleanupFiles: (files: DiscoveredThreadDeletionFiles) => Effect.Effect<void>;
+  readonly cleanupFiles: (
+    files: DiscoveredThreadDeletionFiles,
+  ) => Effect.Effect<ReadonlyArray<{ readonly resource: string; readonly detail: string }>>;
 }
 
 export class ThreadDeletion extends ServiceMap.Service<ThreadDeletion, ThreadDeletionShape>()(
@@ -198,7 +200,7 @@ const makeThreadDeletion = Effect.gen(function* () {
       ? (cleanupDiscoveredThreadDeletionFiles(files).pipe(
           Effect.provideService(ServerConfig, config.value),
           Effect.orDie,
-        ) as Effect.Effect<void>)
+        ) as Effect.Effect<ReadonlyArray<{ readonly resource: string; readonly detail: string }>>)
       : Effect.die("thread deletion file services are unavailable");
 
   return {

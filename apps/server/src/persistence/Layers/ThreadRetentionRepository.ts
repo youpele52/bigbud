@@ -357,6 +357,8 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       challenges
         .consumeChallengeAndCreateRun(input)
         .pipe(mapPersistenceError("consumeChallengeAndCreateRun")),
+    consumeManualChallenge: (input) =>
+      challenges.consumeManualChallenge(input).pipe(mapPersistenceError("consumeManualChallenge")),
     getPolicyAuthority: () =>
       sql<import("../Services/ThreadRetentionRepository.ts").ThreadRetentionPolicyAuthority>`
         SELECT policy, source, updated_at AS "updatedAt"

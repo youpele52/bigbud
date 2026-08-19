@@ -97,7 +97,6 @@ import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillCha
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
-import { EntityPurgeLive } from "./deletion/Layers/EntityPurge";
 import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
 import { VisibleBrowserControlLive } from "./browser/Layers/VisibleBrowserControl.ts";
 import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
@@ -145,7 +144,6 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationEventInfrastructureLayerLive,
   AutomationInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
-  EntityPurgeLive.pipe(Layer.provide(OrchestrationProjectionPipelineLayerLive)),
   ThreadRetentionRepositoryLive,
   PurgeJobRepositoryLive,
 );

@@ -20,6 +20,7 @@ import { AutomationScheduleRepository } from "../../persistence/Services/Automat
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { createEmptyReadModel } from "../projectorReadModel.ts";
 import {
@@ -193,6 +194,10 @@ reconcileTestLayer("SchedulerReactor reconciliation", (it) => {
         runId,
         dispatchedAt: new Date().toISOString(),
       });
+      yield* insertProjectionThreadParent({
+        sql: yield* SqlClient.SqlClient,
+        threadId,
+      });
       yield* projectionTurnRepository.upsertByTurnId({
         turnId,
         threadId,
@@ -263,6 +268,10 @@ reconcileTestLayer("SchedulerReactor reconciliation", (it) => {
       yield* repository.recordRunDispatched({
         runId,
         dispatchedAt: new Date().toISOString(),
+      });
+      yield* insertProjectionThreadParent({
+        sql: yield* SqlClient.SqlClient,
+        threadId,
       });
       yield* projectionTurnRepository.upsertByTurnId({
         turnId,
@@ -335,6 +344,10 @@ reconcileTestLayer("SchedulerReactor reconciliation", (it) => {
       yield* repository.recordRunDispatched({
         runId: AutomationRunId.makeUnsafe("run-message-sent"),
         dispatchedAt: "2026-06-16T10:00:01.000Z",
+      });
+      yield* insertProjectionThreadParent({
+        sql: yield* SqlClient.SqlClient,
+        threadId,
       });
       yield* projectionTurnRepository.upsertByTurnId({
         turnId,

@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema, Struct } from "effect";
 import { ChatAttachment, OrchestrationMessageReply } from "@bigbud/contracts";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   GetProjectionThreadMessageInput,
   ProjectionThreadMessageRepository,
@@ -161,7 +162,10 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionThreadMessageRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadMessageRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertProjectionThreadMessageRow(row);
+    }).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadMessageRepository.upsert:query")),
     );
 

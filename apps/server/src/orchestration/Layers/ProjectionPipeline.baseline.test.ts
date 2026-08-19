@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -9,6 +10,7 @@ import { OrchestrationEventStore } from "../../persistence/Services/Orchestratio
 import { ProjectionBaselineRepository } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionBaselineRepositoryLive } from "../../persistence/Layers/ProjectionBaselines.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { makeProjectionPipelinePrefixedTestLayer } from "./ProjectionPipeline.test.helpers.ts";
 
@@ -139,6 +141,15 @@ baselineRepositoryLayer("ProjectionBaselineRepository", (it) => {
       const baselines = yield* ProjectionBaselineRepository;
       const sql = yield* SqlClient.SqlClient;
       const createdAt = "2026-07-30T00:00:00.000Z";
+
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("watcher-baseline"),
+      });
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("watched-baseline"),
+      });
 
       yield* sql`
         INSERT INTO projection_thread_watches (

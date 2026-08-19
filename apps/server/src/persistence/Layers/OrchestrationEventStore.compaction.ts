@@ -45,6 +45,10 @@ export function makeCompactVerifiedPrefix(
                   updated_at = ${updatedAt}
                 WHERE singleton_id = 1
               `;
+              yield* sql`
+                DELETE FROM orchestration_event_gaps
+                WHERE sequence <= ${state.compactThroughSequence}
+              `;
             }
             return {
               ...state,
