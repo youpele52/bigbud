@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { ThreadBehaviorSettingsRows } from "./ThreadRetentionSettingsSection.behavior";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
 import {
   formatRetentionCleanupResult,
@@ -41,6 +42,7 @@ export function ThreadRetentionSettingsSection() {
   const [dialogTrigger, setDialogTrigger] = useState<ThreadRetentionConsentTrigger | null>(null);
   const [dialogPolicy, setDialogPolicy] = useState<FiniteThreadRetentionPolicy>("7-days");
   const [preview, setPreview] = useState<ServerThreadRetentionPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [result, setResult] = useState<ServerThreadRetentionResult | null>(null);
@@ -66,6 +68,7 @@ export function ThreadRetentionSettingsSection() {
     previewSequenceRef.current += 1;
     setDialogTrigger(null);
     setPreview(null);
+    setPreviewError(null);
     setPreviewBusy(false);
   }, []);
 
@@ -76,6 +79,7 @@ export function ThreadRetentionSettingsSection() {
       setDialogTrigger(trigger);
       setDialogPolicy(nextPolicy);
       setPreview(null);
+      setPreviewError(null);
       setPreviewBusy(true);
       try {
         const result = await ensureNativeApi().server.previewThreadRetention({
@@ -86,13 +90,14 @@ export function ThreadRetentionSettingsSection() {
         setPreview(result);
       } catch (error) {
         if (!mountedRef.current || sequence !== previewSequenceRef.current) return;
-        closeDialog();
-        showError("Unable to preview thread cleanup", error);
+        setPreviewError(
+          error instanceof Error ? error.message : "Failed to preview thread retention.",
+        );
       } finally {
         if (mountedRef.current && sequence === previewSequenceRef.current) setPreviewBusy(false);
       }
     },
-    [closeDialog, showError],
+    [],
   );
 
   const handlePolicyChange = useCallback(
@@ -161,9 +166,11 @@ export function ThreadRetentionSettingsSection() {
 
   return (
     <>
-      <SettingsSection title="Automatic thread cleanup">
+      <SettingsSection title="Threads">
+        <ThreadBehaviorSettingsRows />
         <SettingsRow
           title="Automatically delete old threads"
+          searchTerms={["Automatic thread cleanup"]}
           description="The server checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are cleaned up together. Pinned and active subtrees are skipped."
           layout="three-quarter-control"
           statusPlacement="below"
@@ -206,45 +213,22 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Runs now across all projects using the one-off period on this row. Automatic cleanup above is separate. Eligible root thread subtrees and their descendants are cleaned up together."
+          description="Runs now across all projects. Choose the cutoff in the confirmation dialog. Automatic cleanup above is separate. Eligible root thread subtrees and their descendants are cleaned up together."
+          layout="three-quarter-control"
           control={
-            <div className="flex w-full flex-col gap-2">
-              <Select
-                value={manualPolicy}
-                disabled={busy}
-                onValueChange={(value) => {
-                  if (
-                    typeof value === "string" &&
-                    (FINITE_THREAD_RETENTION_POLICIES as readonly string[]).includes(value)
-                  ) {
-                    setManualPolicy(value as FiniteThreadRetentionPolicy);
-                  }
-                }}
-              >
-                <SelectTrigger aria-label="One-off cleanup period" className="w-full">
-                  <SelectValue>{THREAD_RETENTION_POLICY_LABELS[manualPolicy]}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {FINITE_THREAD_RETENTION_POLICIES.map((value) => (
-                    <SelectItem hideIndicator key={value} value={value}>
-                      {THREAD_RETENTION_POLICY_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-              <Button
-                ref={actionButtonRef}
-                variant="destructive-outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  void requestPreview("manual", manualPolicy);
-                }}
-              >
-                <Trash2Icon />
-                Delete eligible threads now
-              </Button>
-            </div>
+            <Button
+              ref={actionButtonRef}
+              variant="destructive-outline"
+              size="sm"
+              className="w-full"
+              disabled={busy}
+              onClick={() => {
+                void requestPreview("manual", manualPolicy);
+              }}
+            >
+              <Trash2Icon />
+              Delete now
+            </Button>
           }
         />
       </SettingsSection>
@@ -313,7 +297,11 @@ export function ThreadRetentionSettingsSection() {
                     </Select>
                   </div>
                 ) : null}
-                <ThreadRetentionConfirmationContent preview={preview} trigger={dialogTrigger} />
+                <ThreadRetentionConfirmationContent
+                  preview={preview}
+                  previewError={previewError}
+                  trigger={dialogTrigger}
+                />
               </div>
             }
           />

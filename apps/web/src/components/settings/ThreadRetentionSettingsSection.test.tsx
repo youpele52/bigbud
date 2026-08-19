@@ -4,10 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const mockSettings = vi.hoisted(() => ({
   threadRetentionPolicy: "never" as const,
+  defaultThreadEnvMode: "local" as const,
+  confirmThreadArchive: false,
+  confirmThreadDelete: true,
 }));
 
 vi.mock("../../hooks/useSettings", () => ({
   useSettings: () => mockSettings,
+  useUpdateSettings: () => ({ updateSettings: vi.fn() }),
 }));
 
 vi.mock("../../rpc/nativeApi", () => ({
@@ -26,14 +30,19 @@ describe("ThreadRetentionSettingsSection", () => {
   it("renders the server-owned daily policy and immediate cleanup action", () => {
     const markup = renderToStaticMarkup(<ThreadRetentionSettingsSection />);
 
-    expect(markup).toContain("Automatic thread cleanup");
+    expect(markup).toContain("Threads");
+    expect(markup).toContain("New threads");
+    expect(markup).toContain("Archive confirmation");
+    expect(markup).toContain("Delete confirmation");
     expect(markup).toContain("Automatically delete old threads");
     expect(markup).toContain("The server checks daily");
     expect(markup).toContain("Eligible root thread subtrees are cleaned up together");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
+    expect(markup).toContain("Delete now");
     expect(markup).toContain("Automatic cleanup above is separate");
-    expect(markup).toContain("One-off cleanup period");
+    expect(markup).toContain("Choose the cutoff in the confirmation dialog");
+    expect(markup).not.toContain("using the one-off period on this row");
     expect(markup).toContain(
       "Eligible root thread subtrees and their descendants are cleaned up together",
     );
@@ -59,7 +68,13 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(SETTINGS_SEARCH_ITEMS).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          label: "New threads",
+          section: "Threads",
+          to: "/settings/general",
+        }),
+        expect.objectContaining({
           label: "Automatic thread cleanup",
+          section: "Threads",
           to: "/settings/general",
         }),
         expect.objectContaining({
@@ -158,5 +173,17 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("3");
     expect(markup).toContain("currently eligible for future cleanup");
     expect(markup).toContain("Export or back up anything you need");
+  });
+
+  it("shows a preview failure in the confirmation body", () => {
+    const markup = renderToStaticMarkup(
+      <ThreadRetentionConfirmationContent
+        trigger="manual"
+        preview={null}
+        previewError="Failed to preview thread retention."
+      />,
+    );
+    expect(markup).toContain("Failed to preview thread retention.");
+    expect(markup).not.toContain("Preparing a server-authoritative preview");
   });
 });

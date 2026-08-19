@@ -88,6 +88,19 @@ body:has([data-floating-assistant-mascot])::after {
   display: none;
 }
 
+[data-floating-assistant-mascot] *:focus,
+[data-floating-assistant-mascot] *:focus-visible,
+[data-floating-assistant-mascot] *:active {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-floating-assistant-mascot] img {
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
 @font-face {
   font-family: "MesloLGL Nerd Font Mono";
   src: url("/fonts/MesloLGLNerdFontMono-Regular.ttf") format("truetype");

@@ -80,7 +80,7 @@ export function MascotShell() {
         className={
           caller === "logo"
             ? "flex size-28 cursor-pointer items-center justify-center rounded-[36px] border border-white/15 bg-gradient-to-br from-neutral-700 via-neutral-900 to-neutral-950 p-0 text-white shadow-[0_8px_16px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.16)] transition-transform hover:scale-[1.03] active:scale-95"
-            : "flex size-36 cursor-grab touch-none select-none items-center justify-center bg-transparent p-0 text-foreground transition-opacity hover:opacity-80 active:cursor-grabbing"
+            : "flex size-36 cursor-grab touch-none select-none items-center justify-center border-0 bg-transparent p-0 text-foreground outline-none ring-0 transition-opacity hover:opacity-80 focus:outline-none focus-visible:outline-none focus-visible:ring-0 active:cursor-grabbing active:outline-none"
         }
         draggable={false}
         onDragStart={(event) => event.preventDefault()}

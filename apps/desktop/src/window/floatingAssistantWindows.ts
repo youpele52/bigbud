@@ -120,6 +120,7 @@ export class FloatingAssistantWindows {
       backgroundColor: "#00000000",
       frame: false,
       hasShadow: false,
+      roundedCorners: false,
       transparent: process.platform !== "linux",
       show: false,
       focusable: true,

@@ -58,12 +58,15 @@ export function LearningProjectsSettingsSection() {
         control={
           <Button
             variant="outline"
-            className="w-full justify-start gap-2 sm:w-64"
+            size="sm"
+            className="w-full justify-start gap-1.5 sm:w-64"
             aria-label="Open learning projects folder"
             onClick={() => void openPath(learningRootPath)}
           >
-            <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-sm">{learningRootPath}</span>
+            <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
+            <span className="truncate font-mono text-xs">
+              {learningRootPath}
+            </span>
           </Button>
         }
       />

@@ -96,13 +96,16 @@ export function FileAccessSettingsSection() {
         control={
           <Button
             variant="outline"
-            className="w-full justify-start gap-2 sm:w-64"
+            size="sm"
+            className="w-full justify-start gap-1.5 sm:w-64"
             aria-label="Default chat folder"
             disabled={isPickingFolder}
             onClick={() => void handlePickDefaultChatFolder()}
           >
-            <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-sm">{settings.defaultChatCwd}</span>
+            <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
+            <span className="truncate font-mono text-xs">
+              {settings.defaultChatCwd}
+            </span>
           </Button>
         }
       />

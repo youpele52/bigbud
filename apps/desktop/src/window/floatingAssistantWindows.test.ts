@@ -145,6 +145,7 @@ describe("FloatingAssistantWindows", () => {
       backgroundColor: "#00000000",
       frame: false,
       hasShadow: false,
+      roundedCorners: false,
       height: 160,
       width: 160,
     });
