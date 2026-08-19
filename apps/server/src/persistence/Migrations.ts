@@ -97,6 +97,7 @@ import Migration0093 from "./Migrations/093_ThreadIdentityOwnership.ts";
 import Migration0094 from "./Migrations/094_RepairProjectionThreadSessionIdentity.ts";
 import Migration0095 from "./Migrations/095_RepairProjectionThreadProposedPlanImplementation.ts";
 import Migration0096 from "./Migrations/096_RepairOrchestrationThreadIdentityIndependence.ts";
+import Migration0097 from "./Migrations/097_ThreadRetentionFinitePolicies.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -194,6 +195,7 @@ export const migrationEntries = [
   [94, "RepairProjectionThreadSessionIdentity", Migration0094],
   [95, "RepairProjectionThreadProposedPlanImplementation", Migration0095],
   [96, "RepairOrchestrationThreadIdentityIndependence", Migration0096],
+  [97, "ThreadRetentionFinitePolicies", Migration0097],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
