@@ -1,6 +1,6 @@
 import type { FiniteThreadRetentionPolicy } from "@bigbud/contracts/core/settings.threadRetention.ts";
 import type { ServerThreadRetentionResult } from "@bigbud/contracts/server/threadRetention.ts";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Ref } from "effect";
 
 import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
 import type { OrchestrationDispatchError } from "../../orchestration/Errors.ts";
@@ -11,29 +11,42 @@ import {
   type ThreadRetentionRepositoryShape,
 } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { serverCommandId } from "../../orchestration/Layers/ProviderCommandReactorHelpers.ts";
+import { waitForReadModelCondition } from "../../orchestration/Layers/readModelSettle.ts";
 import { cutoffForRetentionPolicy } from "./ThreadRetention.logic.ts";
 
 const SELECTION_PAGE_SIZE = 250;
 const DELETE_SETTLE_TIMEOUT_MS = 120_000;
-const DELETE_SETTLE_POLL_INTERVAL = Duration.millis(25);
 
 function settleRetentionDelete(input: {
   readonly threadId: import("@bigbud/contracts").ThreadId;
   readonly orchestration: OrchestrationEngineShape;
-  readonly now: () => number;
   readonly timeoutMs: number;
 }) {
   return Effect.gen(function* () {
-    const deadline = input.now() + input.timeoutMs;
-    while (input.now() < deadline) {
-      const state = yield* input.orchestration
-        .getReadModel()
-        .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === input.threadId)));
-      if (!state || state.deletedAt !== null) return "deleted" as const;
-      if (state.deletingAt === null) return "skipped" as const;
-      yield* Effect.sleep(DELETE_SETTLE_POLL_INTERVAL);
-    }
-    return "pending" as const;
+    const seenPending = yield* Ref.make(false);
+    return yield* waitForReadModelCondition({
+      check: input.orchestration.getReadModel().pipe(
+        Effect.flatMap((model) =>
+          Effect.gen(function* () {
+            const thread = model.threads.find((candidate) => candidate.id === input.threadId);
+            if (!thread || thread.deletedAt !== null) {
+              return { done: true as const, value: "deleted" as const };
+            }
+            if (thread.deletingAt !== null) {
+              yield* Ref.set(seenPending, true);
+              return { done: false as const };
+            }
+            if (yield* Ref.get(seenPending)) {
+              return { done: true as const, value: "skipped" as const };
+            }
+            return { done: false as const };
+          }),
+        ),
+      ),
+      events: input.orchestration.streamDomainEvents,
+      timeout: Duration.millis(input.timeoutMs),
+      onTimeout: "pending" as const,
+    });
   });
 }
 
@@ -113,7 +126,6 @@ export function runDirectThreadRetention(input: {
         const settled = yield* settleRetentionDelete({
           threadId: candidate.threadId,
           orchestration: input.orchestration,
-          now,
           timeoutMs: settleTimeoutMs,
         });
         if (settled === "deleted") deletedCount += Math.max(1, threadCount);

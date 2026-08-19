@@ -170,6 +170,21 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.failedDeleteThreadIds).toEqual([]);
   });
 
+  it("does not treat deletion-requested as a completed delete", () => {
+    const threadId = ThreadId.makeUnsafe("thread-deleting");
+    const effects = deriveOrchestrationBatchEffects([
+      makeEvent("thread.deletion-requested", {
+        threadId,
+        deletingAt: "2026-02-27T00:00:01.000Z",
+      }),
+    ]);
+
+    expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.removeSelectedThreadIds).toEqual([]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
+  });
+
   it("treats a later deletion failure as a restore, not a completed delete", () => {
     const threadId = ThreadId.makeUnsafe("thread-restored");
     const effects = deriveOrchestrationBatchEffects([

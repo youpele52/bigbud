@@ -12,7 +12,11 @@ const mockState = vi.hoisted(() => ({
   navigate: vi.fn(async () => undefined),
   routeThreadId: "thread-1",
   threads: [] as Thread[],
+  listeners: [] as Array<(state: { threads: Thread[] }) => void>,
   useMutation: vi.fn(),
+  waitForThreadDeletionToSettle: vi.fn(
+    async (): Promise<"deleted" | "aborted" | "timeout"> => "deleted",
+  ),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -35,6 +39,12 @@ vi.mock("../rpc/nativeApi", () => ({
 vi.mock("../stores/main", () => ({
   useStore: {
     getState: () => ({ threads: mockState.threads }),
+    subscribe: (listener: (state: { threads: Thread[] }) => void) => {
+      mockState.listeners.push(listener);
+      return () => {
+        mockState.listeners = mockState.listeners.filter((entry) => entry !== listener);
+      };
+    },
   },
 }));
 
@@ -44,6 +54,11 @@ vi.mock("./useSettings", () => ({
 
 vi.mock("./useHandleNewThread", () => ({
   useHandleNewThread: () => ({ handleNewThread: vi.fn() }),
+}));
+
+vi.mock("../components/chat/view/ChatView.logic", () => ({
+  waitForThreadDeletionToSettle: () => mockState.waitForThreadDeletionToSettle(),
+  waitForThreadToExist: vi.fn(async () => true),
 }));
 
 vi.mock("../lib/utils", () => ({
@@ -90,6 +105,8 @@ describe("useThreadActions", () => {
     mockState.navigate.mockClear();
     mockState.routeThreadId = "thread-1";
     mockState.useMutation.mockClear();
+    mockState.waitForThreadDeletionToSettle.mockReset();
+    mockState.waitForThreadDeletionToSettle.mockResolvedValue("deleted");
     mockState.threads = [
       makeThread({
         id: ThreadId.makeUnsafe("thread-1"),
@@ -127,5 +144,23 @@ describe("useThreadActions", () => {
     });
     expect(mockState.confirm).not.toHaveBeenCalled();
     expect(mockState.useMutation).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate away when deletion is aborted", async () => {
+    let actions: ReturnType<typeof useThreadActions> | undefined;
+
+    function ThreadActionsCapture() {
+      actions = useThreadActions();
+      return null;
+    }
+
+    renderToStaticMarkup(createElement(ThreadActionsCapture));
+
+    mockState.waitForThreadDeletionToSettle.mockResolvedValue("aborted");
+
+    await actions!.deleteThread(ThreadId.makeUnsafe("thread-1"));
+
+    expect(mockState.dispatchCommand).toHaveBeenCalled();
+    expect(mockState.navigate).not.toHaveBeenCalled();
   });
 });

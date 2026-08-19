@@ -44,13 +44,8 @@ export function deriveOrchestrationBatchEffects(
         break;
       }
 
-      case "thread.deletion-requested":
       case "thread.deleted": {
-        const threadIds =
-          event.type === "thread.deleted"
-            ? getDeletedThreadIds(event.payload)
-            : [event.payload.threadId];
-        for (const threadId of threadIds) {
+        for (const threadId of getDeletedThreadIds(event.payload)) {
           threadLifecycleEffects.set(threadId, {
             clearPromotedDraft: false,
             clearDeletedThread: true,

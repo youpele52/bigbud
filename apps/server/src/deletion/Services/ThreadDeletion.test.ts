@@ -3,7 +3,12 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { createEmptyReadModel } from "../../orchestration/projectorReadModel.ts";
-import { ThreadDeletion, ThreadDeletionLive, resolveThreadSubtree } from "./ThreadDeletion.ts";
+import {
+  ThreadDeletion,
+  ThreadDeletionLive,
+  ThreadDeletionOperationError,
+  resolveThreadSubtree,
+} from "./ThreadDeletion.ts";
 
 const thread = (id: string, parentThreadId?: string) =>
   ({
@@ -88,5 +93,26 @@ describe("ThreadDeletion", () => {
     expect(result.type).toBe("skipped_active");
     expect(result.threadIds.toSorted()).toEqual(["child", "late-child", "root"]);
     expect(finalized).toEqual([]);
+  });
+
+  it("keeps the last known subtree ids when teardown fails", async () => {
+    const deletion = await Effect.runPromise(
+      Effect.service(ThreadDeletion).pipe(Effect.provide(ThreadDeletionLive)),
+    );
+    const threads = [thread("root"), thread("child", "root")];
+
+    const result = await Effect.runPromise(
+      deletion.deleteNow({
+        rootThreadId: ThreadId.makeUnsafe("root"),
+        resolveThreads: () => Effect.succeed(threads),
+        preflight: () => Effect.void,
+        teardown: () =>
+          Effect.fail(new ThreadDeletionOperationError({ detail: "provider stop failed" })),
+        finalize: () => Effect.void,
+      }),
+    );
+
+    expect(result.type).toBe("failed");
+    expect(result.threadIds.toSorted()).toEqual(["child", "root"]);
   });
 });

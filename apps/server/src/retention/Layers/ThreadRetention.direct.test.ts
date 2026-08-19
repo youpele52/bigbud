@@ -1,5 +1,5 @@
 import { ThreadId } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { runDirectThreadRetention } from "./ThreadRetention.direct.ts";
@@ -38,6 +38,7 @@ describe("runDirectThreadRetention", () => {
         } as never,
         orchestration: {
           dispatch,
+          streamDomainEvents: Stream.empty,
           getReadModel: () =>
             Effect.succeed({
               threads: deleted ? [] : [{ id: threadId, deletedAt: null, parentThread: undefined }],
@@ -101,6 +102,7 @@ describe("runDirectThreadRetention", () => {
         } as never,
         orchestration: {
           dispatch: () => Effect.succeed({ sequence: 1 }),
+          streamDomainEvents: Stream.empty,
           getReadModel: () =>
             Effect.succeed({
               threads: [
@@ -145,6 +147,7 @@ describe("runDirectThreadRetention", () => {
         } as never,
         orchestration: {
           dispatch: () => Effect.succeed({ sequence: 1 }),
+          streamDomainEvents: Stream.empty,
           getReadModel: () =>
             Effect.succeed({
               threads: [
@@ -166,5 +169,93 @@ describe("runDirectThreadRetention", () => {
     expect(transitionRun).toHaveBeenCalledWith(
       expect.objectContaining({ nextStatus: "completed_with_failures" }),
     );
+  });
+
+  it("does not treat a not-yet-requested delete as skipped", async () => {
+    const threadId = ThreadId.makeUnsafe("retention-idle-thread");
+    let page = 0;
+
+    const result = await Effect.runPromise(
+      runDirectThreadRetention({
+        policy: "1-day",
+        trigger: "manual",
+        now: () => Date.parse("2026-08-18T00:00:00.000Z"),
+        settleTimeoutMs: 0,
+        repository: {
+          createOrGetActiveRun: () => Effect.succeed(retentionRun),
+          insertSelectedItems: () => Effect.succeed(1),
+          transitionRun: () => Effect.succeed(true),
+          selectNextPage: () =>
+            Effect.succeed(
+              page++ === 0 ? [{ threadId, lastActivityAt: "2026-08-16T00:00:00.000Z" }] : [],
+            ),
+        } as never,
+        orchestration: {
+          dispatch: () => Effect.succeed({ sequence: 1 }),
+          streamDomainEvents: Stream.empty,
+          getReadModel: () =>
+            Effect.succeed({
+              threads: [
+                {
+                  id: threadId,
+                  deletedAt: null,
+                  deletingAt: null,
+                  parentThread: undefined,
+                },
+              ],
+            } as never),
+        } as never,
+      }),
+    );
+
+    expect(result.deletedCount).toBe(0);
+    expect(result.skippedCount).toBe(0);
+    expect(result.pendingCount).toBe(1);
+  });
+
+  it("counts a delete as skipped after deletingAt clears", async () => {
+    const threadId = ThreadId.makeUnsafe("retention-skipped-thread");
+    let page = 0;
+    let reads = 0;
+
+    const result = await Effect.runPromise(
+      runDirectThreadRetention({
+        policy: "1-day",
+        trigger: "manual",
+        now: () => Date.parse("2026-08-18T00:00:00.000Z"),
+        settleTimeoutMs: 1_000,
+        repository: {
+          createOrGetActiveRun: () => Effect.succeed(retentionRun),
+          insertSelectedItems: () => Effect.succeed(1),
+          transitionRun: () => Effect.succeed(true),
+          selectNextPage: () =>
+            Effect.succeed(
+              page++ === 0 ? [{ threadId, lastActivityAt: "2026-08-16T00:00:00.000Z" }] : [],
+            ),
+        } as never,
+        orchestration: {
+          dispatch: () => Effect.succeed({ sequence: 1 }),
+          streamDomainEvents: Stream.succeed({ type: "thread.deletion-failed" } as never),
+          getReadModel: () =>
+            Effect.sync(() => {
+              reads += 1;
+              return {
+                threads: [
+                  {
+                    id: threadId,
+                    deletedAt: null,
+                    deletingAt: reads <= 2 ? "2026-08-18T00:00:00.000Z" : null,
+                    parentThread: undefined,
+                  },
+                ],
+              };
+            }) as never,
+        } as never,
+      }),
+    );
+
+    expect(result.deletedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+    expect(result.pendingCount).toBe(0);
   });
 });

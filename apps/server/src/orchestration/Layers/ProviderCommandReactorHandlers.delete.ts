@@ -224,7 +224,30 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
               }),
             ),
           );
-          const orphanedResources = yield* orchestrationEngine.threadDeletion!.cleanupFiles(files);
+          yield* Effect.forEach(
+            threadIds,
+            (threadId) =>
+              terminal.close({ threadId, deleteHistory: true }).pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning("thread deletion terminal history cleanup deferred", {
+                    rootThreadId: thread.id,
+                    threadId,
+                    detail: String(error),
+                  }),
+                ),
+              ),
+            { concurrency: 1, discard: true },
+          );
+          const orphanedResources = yield* orchestrationEngine
+            .threadDeletion!.cleanupFiles(files)
+            .pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("thread deletion file cleanup deferred", {
+                  rootThreadId: thread.id,
+                  detail: String(error),
+                }).pipe(Effect.as([{ resource: "files", detail: String(error) }])),
+              ),
+            );
           if (orphanedResources.length > 0) {
             yield* Effect.logWarning("thread deletion orphan resource cleanup required", {
               rootThreadId: thread.id,

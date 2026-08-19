@@ -96,10 +96,13 @@ export interface ThreadDeletionShape {
   readonly discoverFiles: (input: {
     readonly rootThreadId: ThreadId;
     readonly threadIds: ReadonlyArray<ThreadId>;
-  }) => Effect.Effect<DiscoveredThreadDeletionFiles>;
+  }) => Effect.Effect<DiscoveredThreadDeletionFiles, ThreadDeletionOperationError>;
   readonly cleanupFiles: (
     files: DiscoveredThreadDeletionFiles,
-  ) => Effect.Effect<ReadonlyArray<{ readonly resource: string; readonly detail: string }>>;
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly resource: string; readonly detail: string }>,
+    ThreadDeletionOperationError
+  >;
 }
 
 export class ThreadDeletion extends ServiceMap.Service<ThreadDeletion, ThreadDeletionShape>()(
@@ -147,9 +150,11 @@ const makeThreadDeletion = Effect.gen(function* () {
         };
       }
 
+      let knownThreadIds: ReadonlyArray<ThreadId> = [input.rootThreadId];
       return yield* Effect.gen(function* () {
         const initial = resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
         const initialIds = initial.map((thread) => thread.id);
+        knownThreadIds = initialIds;
         const firstPreflight = yield* input.preflight(initial);
         if (firstPreflight === "active")
           return { type: "skipped_active" as const, threadIds: initialIds };
@@ -158,6 +163,7 @@ const makeThreadDeletion = Effect.gen(function* () {
 
         const current = resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
         const currentIds = current.map((thread) => thread.id);
+        knownThreadIds = currentIds;
         if (
           initialIds.length !== currentIds.length ||
           initialIds.some((id) => !currentIds.includes(id))
@@ -177,7 +183,7 @@ const makeThreadDeletion = Effect.gen(function* () {
         Effect.catchCause((cause) =>
           Effect.succeed({
             type: "failed" as const,
-            threadIds: [],
+            threadIds: knownThreadIds,
             detail: Cause.pretty(cause),
           }),
         ),
@@ -187,21 +193,24 @@ const makeThreadDeletion = Effect.gen(function* () {
       );
     });
 
+  const unavailableFiles = new ThreadDeletionOperationError({
+    detail: "thread deletion file services are unavailable",
+  });
   const discoverFiles: ThreadDeletionShape["discoverFiles"] = (input) =>
     Option.isSome(sql) && Option.isSome(config)
-      ? (discoverThreadDeletionFiles(input).pipe(
+      ? discoverThreadDeletionFiles(input).pipe(
           Effect.provideService(SqlClient.SqlClient, sql.value),
           Effect.provideService(ServerConfig, config.value),
-          Effect.orDie,
-        ) as Effect.Effect<DiscoveredThreadDeletionFiles>)
-      : Effect.die("thread deletion file services are unavailable");
+          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+        )
+      : Effect.fail(unavailableFiles);
   const cleanupFiles: ThreadDeletionShape["cleanupFiles"] = (files) =>
     Option.isSome(config)
-      ? (cleanupDiscoveredThreadDeletionFiles(files).pipe(
+      ? cleanupDiscoveredThreadDeletionFiles(files).pipe(
           Effect.provideService(ServerConfig, config.value),
-          Effect.orDie,
-        ) as Effect.Effect<ReadonlyArray<{ readonly resource: string; readonly detail: string }>>)
-      : Effect.die("thread deletion file services are unavailable");
+          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+        )
+      : Effect.succeed([]);
 
   return {
     acquireFence,

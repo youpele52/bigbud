@@ -9,6 +9,7 @@ import { ServerConfig } from "../../startup/config.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
+import { waitForReadModelCondition, type ReadModelSettleCheck } from "./readModelSettle.ts";
 
 type ProjectDeletionRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -25,7 +26,48 @@ interface ProjectDeletionDeps {
 }
 
 const PROJECT_DELETE_TIMEOUT = Duration.seconds(30);
-const PROJECT_DELETE_POLL_INTERVAL = Duration.millis(100);
+
+type ProjectThreadSettleResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly detail: string };
+
+function isActiveInDeletingSubtree(
+  thread: OrchestrationThread,
+  threadsById: ReadonlyMap<OrchestrationThread["id"], OrchestrationThread>,
+): boolean {
+  let current: OrchestrationThread | undefined = thread;
+  const seen = new Set<OrchestrationThread["id"]>();
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    if (current.deletedAt !== null) return false;
+    if (current.deletingAt != null) return true;
+    const parentId: OrchestrationThread["id"] | undefined = current.parentThread?.threadId;
+    current = parentId ? threadsById.get(parentId) : undefined;
+  }
+  return false;
+}
+
+export function evaluateProjectThreadSettle(
+  threads: ReadonlyArray<OrchestrationThread>,
+  projectId: ProjectId,
+): ReadModelSettleCheck<ProjectThreadSettleResult> {
+  const activeThreads = threads.filter((thread) => thread.deletedAt === null);
+  if (activeThreads.length === 0) {
+    return { done: true, value: { ok: true } };
+  }
+  const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
+  const stranded = activeThreads.find((thread) => !isActiveInDeletingSubtree(thread, threadsById));
+  if (stranded) {
+    return {
+      done: true,
+      value: {
+        ok: false,
+        detail: `Thread '${stranded.id}' deletion failed while deleting project '${projectId}'.`,
+      },
+    };
+  }
+  return { done: false };
+}
 
 export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -33,36 +75,19 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const waitForProjectThreadsToSettle = Effect.fn("waitForProjectThreadsToSettle")(function* (
     deps: ProjectDeletionDeps,
     projectId: ProjectId,
-  ): Effect.fn.Return<{ readonly ok: true } | { readonly ok: false; readonly detail: string }> {
-    const startedAt = Date.now();
-
-    while (true) {
-      const threads = yield* deps.resolveThreadsByProject(projectId);
-      const activeThreads = threads.filter((thread) => thread.deletedAt === null);
-
-      if (activeThreads.length === 0) {
-        return { ok: true } as const;
-      }
-
-      const failedThread = activeThreads.find(
-        (thread) => thread.deletingAt === null || thread.deletingAt === undefined,
-      );
-      if (failedThread) {
-        return {
-          ok: false,
-          detail: `Thread '${failedThread.id}' deletion failed while deleting project '${projectId}'.`,
-        } as const;
-      }
-
-      if (Date.now() - startedAt >= Duration.toMillis(PROJECT_DELETE_TIMEOUT)) {
-        return {
-          ok: false,
-          detail: `Timed out waiting for threads in project '${projectId}' to delete.`,
-        } as const;
-      }
-
-      yield* Effect.sleep(PROJECT_DELETE_POLL_INTERVAL);
-    }
+  ): Effect.fn.Return<ProjectThreadSettleResult> {
+    const evaluate = deps
+      .resolveThreadsByProject(projectId)
+      .pipe(Effect.map((threads) => evaluateProjectThreadSettle(threads, projectId)));
+    return yield* waitForReadModelCondition({
+      check: evaluate,
+      events: orchestrationEngine.streamDomainEvents,
+      timeout: PROJECT_DELETE_TIMEOUT,
+      onTimeout: {
+        ok: false as const,
+        detail: `Timed out waiting for threads in project '${projectId}' to delete.`,
+      },
+    });
   });
 
   return Effect.fn("processProjectDeletionRequested")(function* (

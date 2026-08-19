@@ -94,7 +94,9 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.stopSession.mock.calls.length === 1);
     await waitFor(() => harness.browserClose.mock.calls.length === 1);
-    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(() =>
+      harness.terminalClose.mock.calls.some((call) => call[0]?.deleteHistory === true),
+    );
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
       return (

@@ -16,7 +16,10 @@ import {
   ThreadBranchError,
   type SeedMessageOutput,
 } from "../lib/threadBranch";
-import { waitForThreadToExist } from "../components/chat/view/ChatView.logic";
+import {
+  waitForThreadDeletionToSettle,
+  waitForThreadToExist,
+} from "../components/chat/view/ChatView.logic";
 
 const BRANCH_TITLE_SUFFIX_PATTERN = /\s+\(([A-Z]+)\)$/;
 
@@ -137,7 +140,8 @@ export function useThreadActions() {
         threadId,
       });
 
-      if (shouldNavigateToFallback) {
+      const outcome = await waitForThreadDeletionToSettle(threadId);
+      if (shouldNavigateToFallback && outcome === "deleted") {
         if (fallbackThreadId) {
           await navigate({
             to: "/$threadId",
