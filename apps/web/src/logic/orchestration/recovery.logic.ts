@@ -190,6 +190,7 @@ export function createOrchestrationRecoveryCoordinator() {
 
     failSnapshotRecovery(): void {
       state.inFlight = null;
+      state.bootstrapped = true;
     },
 
     beginReplayRecovery(reason: OrchestrationRecoveryReason): boolean {

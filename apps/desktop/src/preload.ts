@@ -6,6 +6,7 @@ import {
   CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
 } from "./window/certificateChallenge.channels";
+import { isDesktopMenuAction } from "./window/menuAction.validation";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -44,6 +45,7 @@ const HIDE_COMPACT_CHAT_CHANNEL = "desktop:hide-compact-chat";
 const HIDE_MASCOT_CHANNEL = "desktop:hide-mascot";
 const DISABLE_FLOATING_ASSISTANT_CHANNEL = "desktop:disable-floating-assistant";
 const QUIT_APPLICATION_CHANNEL = "desktop:quit-application";
+const RESTART_APPLICATION_CHANNEL = "desktop:restart-application";
 const GET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:get-floating-assistant-enabled";
 const SET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:set-floating-assistant-enabled";
 const GET_FLOATING_ASSISTANT_CALLER_CHANNEL = "desktop:get-floating-assistant-caller";
@@ -66,6 +68,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   hideMascot: () => ipcRenderer.invoke(HIDE_MASCOT_CHANNEL),
   disableFloatingAssistant: () => ipcRenderer.invoke(DISABLE_FLOATING_ASSISTANT_CHANNEL),
   quitApplication: () => ipcRenderer.invoke(QUIT_APPLICATION_CHANNEL),
+  restartApplication: () => ipcRenderer.invoke(RESTART_APPLICATION_CHANNEL),
   getFloatingAssistantEnabled: () => ipcRenderer.invoke(GET_FLOATING_ASSISTANT_ENABLED_CHANNEL),
   setFloatingAssistantEnabled: (enabled) =>
     ipcRenderer.invoke(SET_FLOATING_ASSISTANT_ENABLED_CHANNEL, enabled),
@@ -74,7 +77,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(SET_FLOATING_ASSISTANT_CALLER_CHANNEL, caller),
   onFloatingAssistantCallerChange: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, caller: unknown) => {
-      if (caller === "logo" || caller === "mascot") listener(caller);
+      if (caller === "chrome" || caller === "logo" || caller === "matte") listener(caller);
     };
     ipcRenderer.on(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
     return () =>
@@ -133,7 +136,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
-      if (typeof action !== "string") return;
+      if (!isDesktopMenuAction(action)) return;
       listener(action);
     };
 
@@ -141,6 +144,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     return () => {
       ipcRenderer.removeListener(MENU_ACTION_CHANNEL, wrappedListener);
     };
+  },
+  sendMenuAction: (action) => {
+    ipcRenderer.send(MENU_ACTION_CHANNEL, action);
   },
   getUpdateState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),
   checkForUpdate: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),

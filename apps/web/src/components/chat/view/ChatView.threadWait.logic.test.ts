@@ -2,7 +2,10 @@ import { ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../../../stores/main";
 
-import { waitForStartedServerThread } from "./ChatView.threadWait.logic";
+import {
+  waitForStartedServerThread,
+  waitForThreadDeletionToSettle,
+} from "./ChatView.threadWait.logic";
 
 const makeThread = (input?: {
   id?: ThreadId;
@@ -148,5 +151,27 @@ describe("waitForStartedServerThread", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     await expect(promise).resolves.toBe(false);
+  });
+});
+
+describe("waitForThreadDeletionToSettle", () => {
+  it("resolves deleted when the thread is already gone", async () => {
+    await expect(
+      waitForThreadDeletionToSettle(ThreadId.makeUnsafe("missing-thread")),
+    ).resolves.toBe("deleted");
+  });
+
+  it("resolves aborted after deletingAt clears", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-abort");
+    useStore.setState((state) => ({
+      ...state,
+      threads: [{ ...makeThread({ id: threadId }), deletingAt: "2026-03-29T00:00:01.000Z" }],
+    }));
+    const promise = waitForThreadDeletionToSettle(threadId, 500);
+    useStore.setState((state) => ({
+      ...state,
+      threads: [{ ...makeThread({ id: threadId }), deletingAt: null }],
+    }));
+    await expect(promise).resolves.toBe("aborted");
   });
 });

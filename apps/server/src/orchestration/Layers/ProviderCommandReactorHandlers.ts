@@ -45,6 +45,7 @@ import {
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import { OrchestrationCommandInvariantError } from "../Errors.ts";
 import {
   createEffectiveCapabilityCatalog,
   setEffectiveCapabilityCatalog,
@@ -111,6 +112,16 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
   const { resolveProject, resolveThreadsByProject } =
     makeProviderCommandProjectResolvers(orchestrationEngine);
+  const assertRuntimeStartAllowed = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const readModel = yield* orchestrationEngine.getReadModel();
+      if (yield* orchestrationEngine.threadDeletion!.isFenced({ threadId, readModel })) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: "thread.session.start",
+          detail: `Thread '${threadId}' or an ancestor is being deleted.`,
+        });
+      }
+    });
 
   const sessionOpServices: SessionOpServices = {
     orchestrationEngine,
@@ -123,6 +134,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     threadModelSelections,
     capabilityContextStates,
     setThreadSession,
+    assertRuntimeStartAllowed,
     resolveThread,
   };
   const processDeletionRequested = yield* makeProcessDeletionRequested;

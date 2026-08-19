@@ -152,8 +152,6 @@ export function createWsNativeApi(): NativeApi {
       updateSettings: rpcClient.server.updateSettings,
       previewThreadRetention: rpcClient.server.previewThreadRetention,
       startThreadRetention: rpcClient.server.startThreadRetention,
-      getThreadRetentionRun: rpcClient.server.getThreadRetentionRun,
-      listThreadRetentionRuns: rpcClient.server.listThreadRetentionRuns,
       setThreadRetentionPolicy: rpcClient.server.setThreadRetentionPolicy,
       setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,

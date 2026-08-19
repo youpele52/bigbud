@@ -179,6 +179,84 @@ describe("OpencodeServerManager lifecycle", () => {
     await shutdown;
     expect(shutdownCompleted).toBe(true);
   });
+
+  it("notifies each active handle once when a shared child dies and replaces it", async () => {
+    let starts = 0;
+    let notifyDeath: (() => void) | undefined;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => {
+        starts += 1;
+        return {
+          url: `http://127.0.0.1:${4320 + starts}`,
+          onUnexpectedDeath(listener) {
+            notifyDeath = listener;
+            return () => undefined;
+          },
+          close() {},
+        };
+      },
+    });
+    const first = await manager.acquire();
+    const second = await manager.acquire();
+    let firstInvalidations = 0;
+    let secondInvalidations = 0;
+    first.onInvalidated?.(() => (firstInvalidations += 1));
+    second.onInvalidated?.(() => (secondInvalidations += 1));
+
+    notifyDeath?.();
+    notifyDeath?.();
+
+    expect(firstInvalidations).toBe(1);
+    expect(secondInvalidations).toBe(1);
+    const replacement = await manager.acquire();
+    expect(replacement.url).not.toBe(first.url);
+    expect(starts).toBe(2);
+    first.release();
+    second.release();
+    replacement.release();
+    await manager.closeAll();
+  });
+
+  it("does not notify active handles while the manager stops intentionally", async () => {
+    let notifyDeath: (() => void) | undefined;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => ({
+        url: "http://127.0.0.1:4321",
+        onUnexpectedDeath(listener) {
+          notifyDeath = listener;
+          return () => undefined;
+        },
+        close() {},
+      }),
+    });
+    const handle = await manager.acquire();
+    let invalidations = 0;
+    handle.onInvalidated?.(() => (invalidations += 1));
+
+    await manager.closeAll();
+    notifyDeath?.();
+
+    expect(invalidations).toBe(0);
+  });
+
+  it("does not return a handle when the child dies during readiness handoff", async () => {
+    let closes = 0;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => ({
+        url: "http://127.0.0.1:4321",
+        onUnexpectedDeath(listener) {
+          listener();
+          return () => undefined;
+        },
+        close() {
+          closes += 1;
+        },
+      }),
+    });
+
+    await expect(manager.acquire()).rejects.toThrow("superseded");
+    expect(closes).toBe(1);
+  });
 });
 
 describe("readManagedServerListeningUrl", () => {

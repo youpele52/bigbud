@@ -7,6 +7,7 @@ import { formatTimestamp } from "../../../utils/timestamp";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { Button } from "../../ui/button";
 import { cn } from "~/lib/utils";
+import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 
 type ThinkingRow = Extract<MessagesTimelineRow, { kind: "thinking" }>;
 
@@ -15,12 +16,14 @@ const THINKING_COLLAPSE_THRESHOLD = 320;
 interface ThinkingMessageBodyProps {
   row: ThinkingRow;
   markdownCwd: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
   timestampFormat: TimestampFormat;
 }
 
 export function ThinkingMessageBody({
   row,
   markdownCwd,
+  onMarkdownAnchorClick,
   timestampFormat,
 }: ThinkingMessageBodyProps) {
   const detail = row.entry.detail?.trim() || row.entry.label;
@@ -53,6 +56,7 @@ export function ThinkingMessageBody({
             text={renderedDetail}
             cwd={markdownCwd}
             isStreaming={row.streaming}
+            onAnchorClick={onMarkdownAnchorClick}
             className="thinking-markdown text-xs leading-[1.55] text-muted-foreground/68"
           />
           {shouldCollapse && !expanded && (

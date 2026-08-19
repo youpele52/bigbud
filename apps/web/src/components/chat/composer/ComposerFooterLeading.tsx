@@ -24,6 +24,7 @@ interface ComposerFooterLeadingProps {
   planCardLabel: string;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  compact?: boolean;
   providerTraitsMenuContent: ReactNode;
   onOpenOrchestra: () => void;
   onOpenSideChat?: (() => void) | undefined;
@@ -49,6 +50,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       planCardLabel,
       interactionMode,
       runtimeMode,
+      compact = false,
       providerTraitsMenuContent,
       onOpenOrchestra,
       onOpenSideChat,
@@ -76,6 +78,14 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           providers={providerStatuses}
           modelOptionsByProvider={modelOptionsByProvider}
           enableRecentlyUsed
+          {...(compact
+            ? {
+                menuItemClassName: "text-xs",
+                modelListGroupLabelClassName: "text-xs",
+                modelListItemClassName: "text-xs",
+                modelListItemLabelClassName: "text-xs",
+              }
+            : {})}
           {...(composerProviderState.modelPickerIconClassName
             ? { activeProviderIconClassName: composerProviderState.modelPickerIconClassName }
             : {})}

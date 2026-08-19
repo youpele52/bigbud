@@ -83,6 +83,8 @@ export type ElectronWebview = HTMLElement & {
   getURL(): string;
   getTitle(): string;
   getWebContentsId(): number;
+  loadURL?(url: string): Promise<void>;
+  stop?(): void;
   executeJavaScript<T = unknown>(code: string, userGesture?: boolean): Promise<T>;
   capturePage(): Promise<{ toDataURL(): string }>;
 };

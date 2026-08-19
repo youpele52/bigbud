@@ -1,6 +1,5 @@
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 import type {
-  ServerListThreadRetentionRunsInput,
   ServerPreviewThreadRetentionInput,
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
@@ -26,18 +25,6 @@ export function makeThreadRetentionWsRpcHandlers(context: WsRpcContext) {
         {
           "rpc.aggregate": "server",
         },
-      ),
-    [WS_METHODS.serverGetThreadRetentionRun]: (input: { readonly runId: string }) =>
-      observeRpcEffect(
-        WS_METHODS.serverGetThreadRetentionRun,
-        context.threadRetention.getRun(input.runId),
-        { "rpc.aggregate": "server" },
-      ),
-    [WS_METHODS.serverListThreadRetentionRuns]: (input: ServerListThreadRetentionRunsInput) =>
-      observeRpcEffect(
-        WS_METHODS.serverListThreadRetentionRuns,
-        context.threadRetention.listRuns(input.limit),
-        { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverSetThreadRetentionPolicy]: (input: ServerSetThreadRetentionPolicyInput) =>
       observeRpcEffect(

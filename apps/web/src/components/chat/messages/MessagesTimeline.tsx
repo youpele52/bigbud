@@ -43,6 +43,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  onMarkdownAnchorClick,
   workspaceExecutionTargetId,
   focusMessageId = null,
   onReplyToMessage = () => {},
@@ -352,6 +353,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             nowIso={nowIso}
             timestampFormat={timestampFormat}
             workspaceRoot={workspaceRoot}
+            onMarkdownAnchorClick={onMarkdownAnchorClick}
             workspaceExecutionTargetId={workspaceExecutionTargetId}
             focusedMessageId={focusedMessageId}
             onReplyToMessage={onReplyToMessage}
@@ -381,6 +383,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         nowIso={nowIso}
         timestampFormat={timestampFormat}
         workspaceRoot={workspaceRoot}
+        onMarkdownAnchorClick={onMarkdownAnchorClick}
         workspaceExecutionTargetId={workspaceExecutionTargetId}
         focusedMessageId={focusedMessageId}
         onReplyToMessage={onReplyToMessage}

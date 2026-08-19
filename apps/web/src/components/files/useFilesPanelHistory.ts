@@ -35,6 +35,7 @@ export function useFilesPanelAuxNavigation(
     if (typeof onMenuAction !== "function") return;
 
     const unsubscribe = onMenuAction((action) => {
+      if (typeof action !== "string") return;
       const direction = filesPanelAppCommandDirection(action);
       if (direction === null || panelRef.current?.closest("[inert]")) return;
       if (canNavigate(direction)) navigate(direction);

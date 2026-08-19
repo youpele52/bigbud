@@ -7,6 +7,7 @@ import { runUsageContributionBackfill } from "../../orchestration/Layers/Project
 import { ProjectionThreadActivityRepositoryLive } from "./ProjectionThreadActivities.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ProjectionThreadActivityRepository } from "../Services/ProjectionThreadActivities.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const usageContributionLayer = it.layer(
   ProjectionThreadActivityRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -40,6 +41,10 @@ usageContributionLayer("Projection usage contributions", (it) => {
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadActivityRepository;
       const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-reverted"),
+      });
 
       yield* repository.upsert({
         activityId: EventId.makeUnsafe("activity-reverted"),
@@ -81,6 +86,10 @@ usageContributionLayer("Projection usage contributions", (it) => {
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadActivityRepository;
       const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-1"),
+      });
 
       yield* repository.upsertUsageContribution(
         contribution({

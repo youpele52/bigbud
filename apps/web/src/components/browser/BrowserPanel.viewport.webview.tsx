@@ -34,6 +34,7 @@ import {
   type PendingPdfAnnotation,
 } from "./BrowserPanel.viewport.webview.annotation";
 import { executeWebviewAgentAction } from "./BrowserPanel.viewport.webview.agent";
+import { navigateElectronWebview } from "./BrowserPanel.viewport.webview.navigate";
 import { makeWebviewCertificateChallengeController } from "./BrowserPanel.certificateChallenge.webview";
 
 export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
@@ -69,6 +70,8 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     const [pendingPdfAnnotation, setPendingPdfAnnotation] = useState<PendingPdfAnnotation | null>(
       null,
     );
+    const urlRef = useRef(url);
+    urlRef.current = url;
 
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
@@ -183,6 +186,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
       webviewRef.current = webview;
       containerRef.current.appendChild(webview);
+      navigateElectronWebview(webview, urlRef.current);
       const certificateChallengeController = makeWebviewCertificateChallengeController({
         bridge: window.desktopBridge,
         webview,
@@ -298,6 +302,9 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         if (failedLoadRef.current) return;
         onLoadSuccessRef.current?.();
       };
+      const handleAttach = () => {
+        navigateElectronWebview(webview, urlRef.current);
+      };
 
       const handleContextMenu = (event: ContextMenuEvent) => {
         const params = event.params;
@@ -322,6 +329,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         }
       };
 
+      webview.addEventListener("did-attach", handleAttach);
       webview.addEventListener("did-navigate", handleNavigate as EventListener);
       webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
       webview.addEventListener("dom-ready", updateNavState);
@@ -336,6 +344,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
       return () => {
         certificateChallengeController.unsubscribe();
+        webview.removeEventListener("did-attach", handleAttach);
         webview.removeEventListener("did-navigate", handleNavigate as EventListener);
         webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
         webview.removeEventListener("dom-ready", updateNavState);
@@ -364,14 +373,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     useEffect(() => {
       const webview = webviewRef.current;
       if (!webview) return;
-      const currentSrc = webview.getAttribute("src");
-      if (currentSrc !== url) {
-        try {
-          webview.setAttribute("src", url);
-        } catch {
-          // Guest frame may be navigating or detached; ignore transient errors.
-        }
-      }
+      navigateElectronWebview(webview, url);
     }, [url]);
 
     return (

@@ -84,6 +84,20 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     `,
   });
 
+  const listAllThreadMessageRows = SqlSchema.findAll({
+    Request: ThreadRequest,
+    Result: ProjectionThreadMessageDbRowSchema,
+    execute: ({ threadId }) => sql`
+      SELECT
+        message_id AS "messageId", thread_id AS "threadId", turn_id AS "turnId", role, text,
+        attachments_json AS attachments, reply_to_json AS "replyTo",
+        is_streaming AS "isStreaming", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM projection_thread_messages
+      WHERE thread_id = ${threadId}
+      ORDER BY created_at ASC, message_id ASC
+    `,
+  });
+
   const listThreadActivityRows = SqlSchema.findAll({
     Request: ThreadWindowRequest,
     Result: ProjectionThreadActivityDbRowSchema,
@@ -102,6 +116,21 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
       ORDER BY
         CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,
         sequence ASC, "createdAt" ASC, "activityId" ASC
+    `,
+  });
+
+  const listAllThreadActivityRows = SqlSchema.findAll({
+    Request: ThreadRequest,
+    Result: ProjectionThreadActivityDbRowSchema,
+    execute: ({ threadId }) => sql`
+      SELECT
+        activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
+        tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+      FROM projection_thread_activities
+      WHERE thread_id = ${threadId}
+      ORDER BY
+        CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,
+        sequence ASC, created_at ASC, activity_id ASC
     `,
   });
 
@@ -203,7 +232,9 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     listProjectRows,
     listThreadRows,
     listThreadMessageRows,
+    listAllThreadMessageRows,
     listThreadActivityRows,
+    listAllThreadActivityRows,
     listThreadProposedPlanRows,
     listThreadTaskRows,
     listThreadSessionRows,

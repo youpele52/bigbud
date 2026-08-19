@@ -45,21 +45,7 @@ export function applyThreadMetaEvent(
         deletingAt: event.payload.deletingAt,
         updatedAt: event.payload.deletingAt,
       }));
-      return applyLifecycleThreadUpdate(
-        state,
-        {
-          ...nextState,
-          sidebarRecentThreadIds: removeSidebarThreadId(
-            nextState.sidebarRecentThreadIds,
-            event.payload.threadId,
-          ),
-          sidebarPinnedThreadIds: removeSidebarThreadId(
-            nextState.sidebarPinnedThreadIds,
-            event.payload.threadId,
-          ),
-        },
-        event.payload.threadId,
-      );
+      return applyLifecycleThreadUpdate(state, nextState, event.payload.threadId);
     }
 
     case "thread.deletion-failed": {

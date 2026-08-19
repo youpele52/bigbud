@@ -15,6 +15,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { AutomationScheduleRepositoryLive } from "./AutomationScheduleRepository.ts";
 import { AutomationScheduleRepository } from "../Services/AutomationScheduleRepository.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const baseLayer = Layer.mergeAll(NodeServices.layer, SqlitePersistenceMemory);
 const repositoryLayer = AutomationScheduleRepositoryLive.pipe(Layer.provideMerge(baseLayer));
@@ -27,6 +28,12 @@ const clearAutomationTables = Effect.gen(function* () {
   yield* sql`DELETE FROM automation_schedules`;
 });
 
+const ensureTargetThread = (threadId: ThreadId) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* insertProjectionThreadParent({ sql, threadId });
+  });
+
 repositoryTestLayer("AutomationScheduleRepository", (it) => {
   it.effect("creates and retrieves a schedule", () =>
     Effect.gen(function* () {
@@ -34,6 +41,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const repository = yield* AutomationScheduleRepository;
       const automationId = AutomationId.makeUnsafe("auto-1");
       const threadId = ThreadId.makeUnsafe("thread-1");
+      yield* ensureTargetThread(threadId);
 
       yield* repository.create({
         automationId,
@@ -63,6 +71,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const repository = yield* AutomationScheduleRepository;
       const projectId = ProjectId.makeUnsafe("project-2");
       const threadId = ThreadId.makeUnsafe("thread-2");
+      yield* ensureTargetThread(threadId);
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-2a"),
@@ -111,6 +120,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const projectA = ProjectId.makeUnsafe("project-a");
       const projectB = ProjectId.makeUnsafe("project-b");
       const threadId = ThreadId.makeUnsafe("thread-all");
+      yield* ensureTargetThread(threadId);
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-all-a"),
@@ -158,6 +168,11 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const repository = yield* AutomationScheduleRepository;
       const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("thread-null-project");
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId,
+        projectId: BUILT_IN_CHATS_PROJECT_ID,
+      });
 
       yield* sql`
         INSERT INTO automation_schedules (
@@ -213,6 +228,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const repository = yield* AutomationScheduleRepository;
       const automationId = AutomationId.makeUnsafe("auto-3");
       const threadId = ThreadId.makeUnsafe("thread-3");
+      yield* ensureTargetThread(threadId);
 
       yield* repository.create({
         automationId,
@@ -263,6 +279,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       yield* clearAutomationTables;
       const repository = yield* AutomationScheduleRepository;
 
+      yield* ensureTargetThread(ThreadId.makeUnsafe("thread-paused"));
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-paused"),
         projectId: ProjectId.makeUnsafe("project-paused"),
@@ -282,6 +299,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
         updatedAt: "2026-06-16T09:00:00.000Z",
       });
 
+      yield* ensureTargetThread(ThreadId.makeUnsafe("thread-deleted"));
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-deleted"),
         projectId: ProjectId.makeUnsafe("project-deleted"),
@@ -316,6 +334,7 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
       const repository = yield* AutomationScheduleRepository;
       const automationId = AutomationId.makeUnsafe("auto-4");
       const threadId = ThreadId.makeUnsafe("thread-4");
+      yield* ensureTargetThread(threadId);
 
       yield* repository.create({
         automationId,

@@ -34,6 +34,10 @@ it("keeps retention eligibility metric labels low-cardinality", () => {
     outcome: "excluded",
     reason: "pinned",
   });
+  assert.deepEqual(threadRetentionEligibilityMetricAttributes("already_deleted"), {
+    outcome: "excluded",
+    reason: "already_deleted",
+  });
   assert.deepEqual(threadRetentionEligibilityMetricAttributes("thread-id:/secret/path"), {
     outcome: "excluded",
     reason: "unknown",

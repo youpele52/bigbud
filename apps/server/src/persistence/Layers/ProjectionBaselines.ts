@@ -185,6 +185,23 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
             const restoredThreadIds = new Set(
               (payload.tables.projection_threads ?? []).map((row) => row.thread_id),
             );
+            const activeWatches = yield* sql<{
+              readonly watchId: string;
+              readonly watcherThreadId: string;
+              readonly watchedThreadId: string;
+              readonly watchedThreadTitle: string;
+              readonly sourceMessageId: string;
+              readonly status: string;
+              readonly createdAt: string;
+              readonly triggeredAt: string | null;
+            }>`
+              SELECT watch_id AS "watchId", watcher_thread_id AS "watcherThreadId",
+                watched_thread_id AS "watchedThreadId", watched_thread_title AS "watchedThreadTitle",
+                source_message_id AS "sourceMessageId", status, created_at AS "createdAt",
+                triggered_at AS "triggeredAt"
+              FROM projection_thread_watches
+              WHERE status = 'active'
+            `;
             for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
               yield* sql.unsafe(
                 table === "projection_projects"
@@ -238,6 +255,22 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
               yield* sql`
                 INSERT INTO projection_state (projector, last_applied_sequence, updated_at)
                 VALUES (${projector}, ${sequence}, ${updatedAt})
+              `;
+            }
+            for (const watch of activeWatches) {
+              yield* sql`
+                INSERT INTO projection_thread_watches (
+                  watch_id, watcher_thread_id, watched_thread_id, watched_thread_title,
+                  source_message_id, status, created_at, triggered_at
+                )
+                SELECT ${watch.watchId}, ${watch.watcherThreadId}, ${watch.watchedThreadId},
+                  ${watch.watchedThreadTitle}, ${watch.sourceMessageId}, ${watch.status},
+                  ${watch.createdAt}, ${watch.triggeredAt}
+                WHERE EXISTS (
+                  SELECT 1 FROM projection_threads WHERE thread_id = ${watch.watcherThreadId}
+                ) AND EXISTS (
+                  SELECT 1 FROM projection_threads WHERE thread_id = ${watch.watchedThreadId}
+                )
               `;
             }
           }),

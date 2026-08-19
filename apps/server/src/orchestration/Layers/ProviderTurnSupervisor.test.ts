@@ -49,6 +49,7 @@ function thread(): OrchestrationThread {
 function harness(input: {
   row: ProviderTurnLiveness;
   inspection: ProviderServiceShape["inspectActiveTurn"];
+  threads?: () => ReadonlyArray<OrchestrationThread>;
 }) {
   const commands: unknown[] = [];
   const recordTurnInspection = vi.fn(() => Effect.void);
@@ -60,7 +61,7 @@ function harness(input: {
     claimTurnTerminal,
   } as unknown as ProviderServiceShape;
   const orchestrationEngine = {
-    getReadModel: () => Effect.succeed({ threads: [thread()] }),
+    getReadModel: () => Effect.succeed({ threads: input.threads?.() ?? [thread()] }),
     dispatch: (command: unknown) =>
       Effect.sync(() => {
         commands.push(command);
@@ -100,20 +101,89 @@ describe("provider turn supervisor", () => {
     await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
     expect(setup.commands.at(-1)).toMatchObject({
       type: "thread.session.set",
+      expectedActiveTurnId: turnId,
       session: { status: "ready", activeTurnId: null },
     });
     expect(setup.commands.at(-1)).not.toHaveProperty("suppressQueuedPromptFlush");
   });
 
-  it("projects stalled only after bounded unavailable inspections", async () => {
+  it("keeps inspection start and unavailable capability results out of the session projection", async () => {
     const setup = harness({
       row: liveness({ consecutiveInspectionFailures: 2 }),
       inspection: () => Effect.succeed({ status: "unavailable", observedAt: now.toISOString() }),
     });
     await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
+    expect(setup.commands).toEqual([]);
+    expect(setup.recordTurnInspection).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        status: "checking",
+        failed: false,
+      }),
+    );
+    expect(setup.recordTurnInspection).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        status: "unavailable",
+        failed: false,
+      }),
+    );
+  });
+
+  it("projects stalled after the bounded transient inspection failure threshold", async () => {
+    const setup = harness({
+      row: liveness({ consecutiveInspectionFailures: 2 }),
+      inspection: () => Effect.fail(new Error("inspection transport failed")) as never,
+    });
+    await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
     expect(setup.commands.at(-1)).toMatchObject({
       session: { status: "error", reason: "provider.stalled", activeTurnId: turnId },
     });
+  });
+
+  it.each([
+    ["provider.checking", "running"],
+    ["provider.recovering", "waiting-for-user"],
+  ] as const)("heals a %s projection when inspection confirms %s", async (reason, status) => {
+    const checkingThread = {
+      ...thread(),
+      session: {
+        ...thread().session!,
+        status: "error" as const,
+        reason,
+        lastError: "Status cannot be confirmed",
+      },
+    };
+    const setup = harness({
+      row: liveness(),
+      inspection: () => Effect.succeed({ status, observedAt: now.toISOString() }),
+      threads: () => [checkingThread],
+    });
+    await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
+    expect(setup.commands.at(-1)).toMatchObject({
+      session: { status: "running", activeTurnId: turnId, reason: null, lastError: null },
+    });
+  });
+
+  it("does not overwrite a newer terminal session after inspection", async () => {
+    let reads = 0;
+    const setup = harness({
+      row: liveness(),
+      inspection: () => Effect.succeed({ status: "running", observedAt: now.toISOString() }),
+      threads: () => {
+        reads += 1;
+        return reads === 1
+          ? [thread()]
+          : [
+              {
+                ...thread(),
+                session: { ...thread().session!, status: "ready", activeTurnId: null },
+              },
+            ];
+      },
+    });
+    await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
+    expect(setup.commands).toEqual([]);
   });
 
   it("continued meaningful progress prevents inspection", async () => {

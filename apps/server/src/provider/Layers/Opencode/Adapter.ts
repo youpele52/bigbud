@@ -17,8 +17,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { OpencodeAdapter, type OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
-import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { PROVIDER, type ActiveOpencodeSession } from "./Adapter.types.ts";
+import { makeActiveTurnInspection } from "./Adapter.activeTurnInspection.ts";
 import { makeNextEventId, makeEventStampFactory } from "./Adapter.stream.ts";
 import { makeSessionMethods, type SessionMethodDeps } from "./Adapter.session.ts";
 
@@ -48,6 +48,11 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
 
   const nextEventId = makeNextEventId();
   const makeEventStamp = makeEventStampFactory(nextEventId);
+  const inspectActiveTurn = makeActiveTurnInspection({ sessions });
+  const inspectActiveTurnForRecovery = makeActiveTurnInspection({
+    sessions,
+    settleCompleted: false,
+  });
 
   const deps: SessionMethodDeps = {
     provider: PROVIDER,
@@ -65,6 +70,15 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
     makeEventStamp,
     nativeEventLogger,
     services,
+    reconcileActiveTurn: async (session) => {
+      if (!session.activeTurnId) return;
+      await inspectActiveTurnForRecovery(session.threadId, session.activeTurnId).pipe(
+        Effect.timeoutOption(10_000),
+        Effect.asVoid,
+        Effect.catch(() => Effect.void),
+        Effect.runPromiseWith(services),
+      );
+    },
   };
 
   const sessionMethods = makeSessionMethods(deps);
@@ -75,7 +89,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
       sessionModelSwitch: "in-session",
     },
     ...sessionMethods,
-    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
+    inspectActiveTurn,
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },

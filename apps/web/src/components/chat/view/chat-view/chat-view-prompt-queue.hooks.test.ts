@@ -67,4 +67,16 @@ describe("isPromptQueueTurnInProgress", () => {
       }),
     ).toBe(false);
   });
+
+  it("queues while provider session health is unconfirmed", () => {
+    expect(
+      isPromptQueueTurnInProgress({
+        activeSessionTurnRunning: true,
+        isSendBusy: false,
+        isRevertingCheckpoint: false,
+        latestTurnSettled: false,
+        sessionHealthUnconfirmed: true,
+      }),
+    ).toBe(true);
+  });
 });

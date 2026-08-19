@@ -1,7 +1,6 @@
 node_modules
 .bun
 .turbo
-.DS_Store
 *.log
 *.tsbuildinfo
 apps/*/dist
@@ -32,5 +31,6 @@ build-certs/
 .bigbud/*
 !.bigbud/skills/
 !.bigbud/skills/**
+.DS_Store
 .opencode/
 /.firecrawl/

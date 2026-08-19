@@ -161,7 +161,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.delete": {
-      yield* requireThreadNotDeleting({
+      yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
@@ -215,6 +215,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         type: "thread.deleted",
         payload: {
           threadId: command.threadId,
+          ...(command.threadIds !== undefined ? { threadIds: command.threadIds } : {}),
           deletedAt: occurredAt,
         },
       };

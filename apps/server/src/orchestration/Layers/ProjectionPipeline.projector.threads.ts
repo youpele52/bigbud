@@ -261,9 +261,9 @@ export function makeThreadsProjector(
       }
 
       case "thread.deleted": {
-        yield* projectionThreadRepository.deleteById({
-          threadId: event.payload.threadId,
-        });
+        yield* Effect.forEach(event.payload.threadIds ?? [event.payload.threadId], (threadId) =>
+          projectionThreadRepository.deleteById({ threadId }),
+        );
         return;
       }
 

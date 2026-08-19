@@ -10,6 +10,7 @@ import {
   registerProviderCommandReactorTestCleanup,
   waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
+import { settleActiveTurn } from "./ProviderCommandReactor.test.settleTurn.ts";
 
 describe("ProviderCommandReactor", () => {
   registerProviderCommandReactorTestCleanup();
@@ -215,6 +216,8 @@ describe("ProviderCommandReactor", () => {
     );
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await settleActiveTurn(harness.engine, "cmd-session-set-reply-parent-settled", now);
 
     await Effect.runPromise(
       harness.engine.dispatch({

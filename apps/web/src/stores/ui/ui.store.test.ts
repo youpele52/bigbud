@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   clearThreadUi,
   markThreadUnread,
+  markThreadVisited,
   reorderProjects,
+  sanitizePersistedThreadLastVisitedAt,
   setFavouritesExpanded,
   setProjectExpanded,
   setThreadChangedFilesExpanded,
@@ -250,5 +252,39 @@ describe("uiStateStore pure functions", () => {
     const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
 
     expect(next.threadChangedFilesExpandedById).toEqual({});
+  });
+
+  it("markThreadVisited keeps the later visit when merging another window", () => {
+    const thread1 = ThreadId.makeUnsafe("thread-1");
+    const thread2 = ThreadId.makeUnsafe("thread-2");
+    const initialState = makeUiState({
+      threadLastVisitedAtById: {
+        [thread1]: "2026-08-19T00:05:00.000Z",
+      },
+    });
+
+    const next = markThreadVisited(
+      markThreadVisited(initialState, thread1, "2026-08-19T00:04:00.000Z"),
+      thread2,
+      "2026-08-19T00:06:00.000Z",
+    );
+
+    expect(next.threadLastVisitedAtById).toEqual({
+      [thread1]: "2026-08-19T00:05:00.000Z",
+      [thread2]: "2026-08-19T00:06:00.000Z",
+    });
+  });
+
+  it("sanitizePersistedThreadLastVisitedAt keeps valid ISO timestamps", () => {
+    const thread1 = ThreadId.makeUnsafe("thread-1");
+
+    expect(
+      sanitizePersistedThreadLastVisitedAt({
+        [thread1]: "2026-08-19T00:06:00.000Z",
+        "bad-thread": "not-a-date",
+      }),
+    ).toEqual({
+      [thread1]: "2026-08-19T00:06:00.000Z",
+    });
   });
 });

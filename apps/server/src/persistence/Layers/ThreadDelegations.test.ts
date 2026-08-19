@@ -1,10 +1,12 @@
 import { MessageId, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ThreadDelegationRepository } from "../Services/ThreadDelegations.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ThreadDelegationRepositoryLive } from "./ThreadDelegations.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = it.layer(
   ThreadDelegationRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -32,6 +34,15 @@ layer("ThreadDelegationRepository", (it) => {
   it.effect("reserves idempotently and persists delegation progress", () =>
     Effect.gen(function* () {
       const repository = yield* ThreadDelegationRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: reservation.callerThreadId,
+      });
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: reservation.childThreadId,
+      });
       const created = yield* repository.reserve(reservation);
       const existing = yield* repository.reserve({
         ...reservation,

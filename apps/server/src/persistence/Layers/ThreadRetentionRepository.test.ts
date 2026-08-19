@@ -36,6 +36,7 @@ const resetData = Effect.fn("resetRetentionTestData")(function* () {
   yield* sql`DELETE FROM thread_delegations`;
   yield* sql`DELETE FROM automation_runs`;
   yield* sql`DELETE FROM automation_schedules`;
+  yield* sql`DELETE FROM purge_jobs`;
   yield* sql`DELETE FROM projection_threads`;
   yield* sql`DELETE FROM projection_projects`;
 });
@@ -77,7 +78,7 @@ const seedThread = Effect.fn("seedRetentionThread")(function* (id: string, lastA
     worktreePath: null,
     latestTurnId: null,
     queuedPrompts: [],
-    createdAt: oldAt,
+    createdAt: lastActivityAt,
     updatedAt: lastActivityAt,
     lastActivityAt,
     archivedAt: null,
@@ -112,6 +113,47 @@ layer("ThreadRetentionRepository", (it) => {
     }),
   );
 
+  it.effect("does not exclude eligible threads because of an incomplete purge job", () =>
+    Effect.gen(function* () {
+      yield* resetData();
+      yield* seedProject();
+      yield* seedThread("purge-backlog-independent");
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO purge_jobs (
+          job_id, entity_kind, entity_id, phase, status, resource_manifest_json, created_at, updated_at
+        ) VALUES (
+          'failed-historical-purge', 'thread', 'purge-backlog-independent',
+          'files', 'failed', '{}', ${oldAt}, ${now}
+        )
+      `;
+      const repository = yield* ThreadRetentionRepository;
+      assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), [
+        { threadId: ThreadId.makeUnsafe("purge-backlog-independent"), lastActivityAt: oldAt },
+      ]);
+    }),
+  );
+
+  it.effect("protects an old root when a descendant has newer activity", () =>
+    Effect.gen(function* () {
+      yield* resetData();
+      yield* seedProject();
+      yield* seedThread("old-root");
+      yield* seedThread("new-child", oldAt);
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        UPDATE projection_threads
+        SET parent_thread_id = 'old-root', parent_thread_title = 'old-root',
+          parent_thread_project_id = ${projectId},
+          created_at = ${now}, updated_at = ${now}, last_activity_at = ${now}
+        WHERE thread_id = 'new-child'
+      `;
+      const repository = yield* ThreadRetentionRepository;
+      assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), []);
+      assert.equal((yield* repository.preview(cutoffAt)).eligibleCount, 0);
+    }),
+  );
+
   it.effect("reports deterministic exclusive exclusions", () =>
     Effect.gen(function* () {
       yield* resetData();
@@ -126,8 +168,12 @@ layer("ThreadRetentionRepository", (it) => {
       yield* seedThread("delegated");
       yield* seedThread("scheduled");
       yield* seedThread("owned");
+      yield* seedThread("already-deleted");
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE projection_threads SET pinned_at = ${now} WHERE thread_id = 'pinned'`;
+      yield* sql`
+        UPDATE projection_threads SET deleted_at = ${now} WHERE thread_id = 'already-deleted'
+      `;
       yield* sql`
         UPDATE projection_threads
         SET queued_prompts_json = '[{"id":"queued-message"}]' WHERE thread_id = 'queued'
@@ -174,6 +220,7 @@ layer("ThreadRetentionRepository", (it) => {
       assert.equal(preview.eligibleCount, 3);
       assert.deepEqual(preview.exclusionCounts, [
         { reason: "active_task", count: 1 },
+        { reason: "already_deleted", count: 1 },
         { reason: "automation_owned", count: 1 },
         { reason: "pending_work", count: 1 },
         { reason: "pinned", count: 1 },
@@ -289,7 +336,6 @@ layer("ThreadRetentionRepository", (it) => {
       yield* seedProject();
       yield* seedThread("changed");
       const repository = yield* ThreadRetentionRepository;
-      const threads = yield* ProjectionThreadRepository;
       yield* repository.createOrGetActiveRun({
         runId: "run-changed",
         trigger: "manual",
@@ -317,7 +363,12 @@ layer("ThreadRetentionRepository", (it) => {
         expectedCursor: null,
         nextCursor: { threadId: ThreadId.makeUnsafe("changed"), lastActivityAt: oldAt },
       });
-      yield* threads.touchActivity({ threadId: ThreadId.makeUnsafe("changed"), occurredAt: now });
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('changed-user', 'changed', 'user', 'later', 0, ${now}, ${now})
+      `;
       assert.deepEqual(
         yield* repository.recheckAndClaimItem({
           runId: "run-changed",

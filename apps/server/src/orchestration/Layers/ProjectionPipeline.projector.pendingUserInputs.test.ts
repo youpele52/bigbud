@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { BaseTestLayer } from "./ProjectionPipeline.test.helpers.ts";
@@ -19,6 +20,7 @@ layer("pending user-input projector", (it) => {
       const pipeline = yield* OrchestrationProjectionPipeline;
       const sql = yield* SqlClient.SqlClient;
       const requestedAt = "2026-01-01T00:00:00.000Z";
+      yield* insertProjectionThreadParent({ sql, threadId, createdAt: requestedAt });
       const request = yield* eventStore.append({
         type: "thread.activity-appended",
         eventId: EventId.makeUnsafe("pending-input-event-requested"),
@@ -159,6 +161,7 @@ layer("pending user-input projector", (it) => {
       const eventStore = yield* OrchestrationEventStore;
       const pipeline = yield* OrchestrationProjectionPipeline;
       const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({ sql, threadId: failureThreadId });
       yield* sql`
         INSERT INTO projection_pending_user_inputs (
           request_id, thread_id, status, questions_json, created_at

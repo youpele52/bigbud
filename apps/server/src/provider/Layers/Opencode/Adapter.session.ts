@@ -78,6 +78,7 @@ export interface SessionMethodDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
   readonly services: ServiceMap.ServiceMap<never>;
+  readonly reconcileActiveTurn?: (session: ActiveOpencodeSession) => Promise<void>;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     makeEventStamp,
     nativeEventLogger,
     services,
+    reconcileActiveTurn = async () => undefined,
   } = deps;
 
   const emitFn = (events: ReadonlyArray<ProviderRuntimeEvent>) =>
@@ -122,8 +124,10 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     stopSessionRecord(record).pipe(
       Effect.catch(() =>
         Effect.sync(() => {
-          record.sseAbortController?.abort();
-          record.sseAbortController = null;
+          record.stopEventStream?.();
+          delete record.stopEventStream;
+          record.unsubscribeServerInvalidation?.();
+          delete record.unsubscribeServerInvalidation;
           record.pendingPermissions.clear();
           record.pendingUserInputs.clear();
           sessions.delete(record.threadId);
@@ -222,6 +226,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     handleEventFn,
     syntheticEventFn,
     services,
+    reconcileActiveTurn,
   });
 
   // ── Compose all methods ───────────────────────────────────────────

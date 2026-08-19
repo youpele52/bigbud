@@ -1,9 +1,10 @@
 import { type ProviderKind } from "@bigbud/contracts";
+import type { FloatingAssistantCaller } from "@bigbud/contracts/server/ipc.ts";
 import { useEffect, useMemo, useState } from "react";
 
 import { ProviderModelPicker } from "~/components/chat/provider/ProviderModelPicker";
 import { PROVIDER_DESCRIPTORS } from "~/components/chat/provider/providerDescriptors";
-import thumbsUpMascot from "~/assets/mascot/bigbud-hand/thumbs-up.webp";
+import { MASCOT_ANIMATIONS } from "~/components/floating-assistant/mascotAssets";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Radio, RadioGroup } from "~/components/ui/radio-group";
 import { getProviderModels } from "~/models/provider";
@@ -22,8 +23,8 @@ const EMPTY_PROVIDERS: ReturnType<typeof useServerProviders> = [];
 
 export function FloatingAssistantSettingsSection() {
   const bridge = window.desktopBridge;
-  const [enabled, setEnabled] = useState(false);
-  const [caller, setCaller] = useState<"logo" | "mascot">("mascot");
+  const [enabled, setEnabled] = useState(true);
+  const [caller, setCaller] = useState<FloatingAssistantCaller>("matte");
   const providers = useServerProviders() ?? EMPTY_PROVIDERS;
   const [modelPreference, setModelPreference] = useLocalStorage(
     COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY,
@@ -111,13 +112,13 @@ export function FloatingAssistantSettingsSection() {
       />
       <SettingsRow
         title="Floating chat caller"
-        description="Choose the button that opens floating chat. More mascot actions will be added here."
+        description="Choose the button that opens floating chat. Matte black is the default."
       >
         <RadioGroup
           value={caller}
-          className="mt-3 grid gap-2 sm:grid-cols-2"
+          className="mt-3 grid gap-2 sm:grid-cols-3"
           onValueChange={(value) => {
-            if (value !== "logo" && value !== "mascot") return;
+            if (value !== "chrome" && value !== "logo" && value !== "matte") return;
             const update = bridge?.setFloatingAssistantCaller;
             if (!update) return;
             const previous = caller;
@@ -133,9 +134,14 @@ export function FloatingAssistantSettingsSection() {
             <span className="text-sm font-medium">bigbud logo</span>
           </label>
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
-            <Radio value="mascot" />
-            <img src={thumbsUpMascot} alt="" className="size-8 object-contain" />
-            <span className="text-sm font-medium">Hand mascot</span>
+            <Radio value="matte" />
+            <img src={MASCOT_ANIMATIONS.matte.okay} alt="" className="size-8 object-contain" />
+            <span className="text-sm font-medium">Matte black</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
+            <Radio value="chrome" />
+            <img src={MASCOT_ANIMATIONS.chrome.okay} alt="" className="size-8 object-contain" />
+            <span className="text-sm font-medium">Chrome</span>
           </label>
         </RadioGroup>
       </SettingsRow>

@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { asProjectId, createOrchestrationSystem, now } from "./OrchestrationEngine.test.helpers.ts";
 
 describe("OrchestrationEngine", () => {
-  it("deletes a project's active threads before deleting the project", async () => {
+  it("requests deletion for each project root subtree before deleting the project", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;
     const createdAt = now();
@@ -62,6 +62,11 @@ describe("OrchestrationEngine", () => {
         runtimeMode: "approval-required",
         branch: null,
         worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-cascade-1"),
+          projectId: asProjectId("project-cascade"),
+          title: "Cascade Thread 1",
+        },
         createdAt,
       }),
     );
@@ -84,7 +89,6 @@ describe("OrchestrationEngine", () => {
       "thread.created",
       "thread.created",
       "thread.deletion-requested",
-      "thread.deletion-requested",
       "project.deletion-requested",
     ]);
 
@@ -98,10 +102,13 @@ describe("OrchestrationEngine", () => {
         ?.deletedAt,
     ).toBeNull();
     expect(
-      readModel.threads
-        .filter((thread) => thread.projectId === asProjectId("project-cascade"))
-        .every((thread) => thread.deletingAt !== null && thread.deletedAt === null),
-    ).toBe(true);
+      readModel.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-cascade-1"))
+        ?.deletingAt,
+    ).not.toBeNull();
+    expect(
+      readModel.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-cascade-2"))
+        ?.deletingAt,
+    ).toBeNull();
 
     await system.dispose();
   });

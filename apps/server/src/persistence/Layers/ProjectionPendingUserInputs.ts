@@ -4,6 +4,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   DeleteProjectionPendingUserInputsByProjectInput,
   DeleteProjectionPendingUserInputsByThreadInput,
@@ -62,7 +63,10 @@ const makeProjectionPendingUserInputRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionPendingUserInputRepositoryShape["upsert"] = (row) =>
-    upsertRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertRow(row);
+    }).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionPendingUserInputRepository.upsert:query")),
     );
   const getByRequestId: ProjectionPendingUserInputRepositoryShape["getByRequestId"] = (input) =>

@@ -3,6 +3,8 @@ import { MessageCirclePlus, MinusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
+import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
+import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
 import { WorkingIndicator } from "~/components/chat/common/WorkingIndicator";
 import {
   ThreadActivityDots,
@@ -49,12 +51,20 @@ function SidecarHeaderAction(props: {
 }
 
 export function CompactThreadConversation({
+  composerClassName,
+  projectPicker,
   workspaceRoot,
+  onMarkdownAnchorClick,
   ...context
-}: ThreadComposerSurfaceContext & { workspaceRoot: string | undefined }) {
+}: ThreadComposerSurfaceContext & {
+  composerClassName?: string;
+  projectPicker?: ReactNode;
+  workspaceRoot: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
+}) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const [timelineContent, setTimelineContent] = useState<HTMLDivElement | null>(null);
-  const { onScroll } = useSideChatAutoScroll({
+  const { onScroll, scrollToBottom, showScrollToBottom } = useSideChatAutoScroll({
     contentElement: timelineContent,
     contentVersion: context.timeline.timelineEntries,
     isWorking: context.thread.isWorking,
@@ -105,6 +115,7 @@ export function CompactThreadConversation({
               resolvedTheme={context.base.resolvedTheme}
               timestampFormat={context.base.timestampFormat}
               workspaceRoot={workspaceRoot}
+              onMarkdownAnchorClick={onMarkdownAnchorClick}
               workspaceExecutionTargetId={workspaceExecutionTargetId}
             />
           </div>
@@ -116,20 +127,26 @@ export function CompactThreadConversation({
             nowIso={context.thread.nowIso}
           />
         ) : null}
+        {showScrollToBottom ? <ScrollToBottomPill onScrollToBottom={scrollToBottom} /> : null}
       </div>
       <div className="px-3 py-2">
         <ChatViewComposer
           base={context.base}
-          className="max-w-none"
           compact
           composer={context.composer}
           thread={context.thread}
           runtime={context.runtime}
           interactions={context.interactions}
+          {...(composerClassName ? { className: composerClassName } : {})}
           onOpenOrchestra={() => undefined}
           onOpenReplySource={() => undefined}
         />
       </div>
+      {projectPicker ? (
+        <div className="px-3 pb-2">
+          <div className="mx-auto w-full max-w-[calc(52rem*2/3)] ps-3">{projectPicker}</div>
+        </div>
+      ) : null}
     </>
   );
 }

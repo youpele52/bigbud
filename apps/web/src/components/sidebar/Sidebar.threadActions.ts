@@ -318,7 +318,8 @@ export function useSidebarThreadActions({
       if (appSettings.confirmThreadDelete) {
         setPendingDeleteConfirmation({
           title: `Delete ${count} thread${count === 1 ? "" : "s"}?`,
-          description: "This permanently clears conversation history for these threads.",
+          description:
+            "This deletes the selected threads and any child threads from bigbud's local views and cleans up associated bigbud-managed local resources.",
           threadIds: ids,
         });
         return;

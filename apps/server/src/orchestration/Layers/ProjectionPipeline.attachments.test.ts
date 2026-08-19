@@ -9,6 +9,7 @@ import {
   BaseTestLayer,
   makeProjectionPipelinePrefixedTestLayer,
 } from "./ProjectionPipeline.test.helpers.ts";
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
   "OrchestrationProjectionPipeline",
@@ -19,6 +20,11 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
         const now = new Date().toISOString();
+        yield* insertProjectionThreadParent({
+          sql,
+          threadId: ThreadId.makeUnsafe("thread-attachments"),
+          createdAt: now,
+        });
 
         yield* eventStore.append({
           type: "thread.message-sent",
@@ -85,6 +91,11 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
         const now = new Date().toISOString();
+        yield* insertProjectionThreadParent({
+          sql,
+          threadId: ThreadId.makeUnsafe("thread-attachments-safe"),
+          createdAt: now,
+        });
 
         yield* eventStore.append({
           type: "thread.message-sent",
@@ -166,6 +177,11 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         const sql = yield* SqlClient.SqlClient;
         const now = new Date().toISOString();
         const later = new Date(Date.now() + 1_000).toISOString();
+        yield* insertProjectionThreadParent({
+          sql,
+          threadId: ThreadId.makeUnsafe("thread-clear-attachments"),
+          createdAt: now,
+        });
 
         yield* eventStore.append({
           type: "project.created",

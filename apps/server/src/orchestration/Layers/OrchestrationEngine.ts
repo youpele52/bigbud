@@ -55,6 +55,7 @@ import { ThreadDelegationRepositoryLive } from "../../persistence/Layers/ThreadD
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../../persistence/Layers/ProjectionThreadWatches.ts";
 import { ThreadRetentionRepositoryLive } from "../../persistence/Layers/ThreadRetentionRepository.ts";
+import { ThreadDeletion, ThreadDeletionLive } from "../../deletion/Services/ThreadDeletion.ts";
 import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
 import { makeQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
@@ -63,6 +64,7 @@ import {
   type CommandEnvelope,
   makeCommandProcessor,
 } from "./OrchestrationEngine.commandProcessing.ts";
+import { makeDeletionFence } from "./OrchestrationEngine.deletionFence.ts";
 
 const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
@@ -80,6 +82,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const threadWatchRepository = yield* ProjectionThreadWatchRepository;
   const notes = yield* Effect.serviceOption(ProjectionNoteRepository);
   const kanban = yield* Effect.serviceOption(ProjectionKanbanRepository);
+  const threadDeletion = yield* ThreadDeletion;
 
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
@@ -147,6 +150,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     });
   };
 
+  const deletionFence = makeDeletionFence({
+    threadDeletion,
+    readModel: () => readModel,
+  });
+
   yield* projectionPipeline.bootstrap;
   readModel = Option.isSome(operationalQueryOption)
     ? yield* operationalQueryOption.value.getStartupOperationalState()
@@ -174,16 +182,36 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       Effect.flatMap((envelope) =>
         commandSemaphore.withPermits(1)(
           prepareCommandState(envelope.command).pipe(
-            Effect.andThen(processEnvelope(envelope)),
-            Effect.catch((error) =>
-              Deferred.fail(
-                envelope.result,
-                new OrchestrationCommandInvariantError({
-                  commandType: envelope.command.type,
-                  detail: error instanceof Error ? error.message : String(error),
-                }),
-              ).pipe(Effect.asVoid),
-            ),
+            Effect.andThen(deletionFence.assertAllows(envelope.command)),
+            Effect.matchEffect({
+              onFailure: (error) =>
+                Deferred.fail(
+                  envelope.result,
+                  new OrchestrationCommandInvariantError({
+                    commandType: envelope.command.type,
+                    detail: error instanceof Error ? error.message : String(error),
+                  }),
+                ).pipe(Effect.asVoid),
+              onSuccess: () =>
+                deletionFence.acquire(envelope.command).pipe(
+                  Effect.flatMap((acquired) =>
+                    !acquired
+                      ? Deferred.fail(
+                          envelope.result,
+                          new OrchestrationCommandInvariantError({
+                            commandType: envelope.command.type,
+                            detail: "A thread subtree is already being deleted.",
+                          }),
+                        ).pipe(Effect.asVoid)
+                      : processEnvelope(envelope).pipe(
+                          Effect.tap((accepted) =>
+                            deletionFence.releaseAfterProcess(envelope.command, accepted),
+                          ),
+                          Effect.asVoid,
+                        ),
+                  ),
+                ),
+            }),
           ),
         ),
       ),
@@ -221,6 +249,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     });
 
   const engine: OrchestrationEngineShape = {
+    threadDeletion,
     getReadModel,
     readEvents,
     readEventsByCommandId,
@@ -375,4 +404,5 @@ export const OrchestrationEngineLive = Layer.effect(
   Layer.provide(ThreadDelegationRepositoryLive),
   Layer.provide(ProjectionThreadWatchRepositoryLive),
   Layer.provide(ThreadRetentionRepositoryLive),
+  Layer.provide(ThreadDeletionLive),
 );

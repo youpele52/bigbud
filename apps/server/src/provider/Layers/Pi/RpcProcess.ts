@@ -20,6 +20,7 @@ import {
   isRemoteWorkspaceTarget,
 } from "../../../workspace-target/workspaceTarget.ts";
 import { describePiExit } from "./RpcProcess.errors.ts";
+import { createPiRpcProcessLifecycle, type PiRpcProcessLifecycle } from "./RpcProcess.lifecycle.ts";
 import { isPiRpcResponse } from "./RpcProcess.message.ts";
 import type {
   PiRpcCommand,
@@ -84,12 +85,6 @@ async function preparePiRpcProcessBridge(
   return createPiRemoteWorkspaceBridge(options.workspaceTarget);
 }
 
-interface PendingResponse {
-  readonly timeout: ReturnType<typeof setTimeout>;
-  readonly resolve: (response: PiRpcResponse) => void;
-  readonly reject: (error: Error) => void;
-}
-
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const STDERR_TAIL_MAX_CHARS = 4_096;
 
@@ -100,21 +95,37 @@ function nextStderrTail(previous: string, chunk: string): string {
 
 function writeJsonLine(
   child: ChildProcessWithoutNullStreams,
+  lifecycle: PiRpcProcessLifecycle,
   command: PiRpcCommand,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const terminalError = lifecycle.terminalError();
+    if (terminalError) {
+      reject(terminalError);
+      return;
+    }
+    const untrackWrite = lifecycle.trackWrite(reject);
     if (!child.stdin.writable) {
-      reject(new Error("Pi RPC stdin is no longer writable."));
+      const error = lifecycle.fail(new Error("Pi RPC stdin is no longer writable."));
+      untrackWrite();
+      reject(error);
       return;
     }
 
-    child.stdin.write(`${JSON.stringify(command)}\n`, (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
+    try {
+      child.stdin.write(`${JSON.stringify(command)}\n`, (error) => {
+        if (error) {
+          untrackWrite();
+          reject(lifecycle.fail(error));
+          return;
+        }
+        untrackWrite();
+        resolve();
+      });
+    } catch (error) {
+      untrackWrite();
+      reject(lifecycle.fail(error));
+    }
   });
 }
 
@@ -158,11 +169,9 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     }
 
     const listeners = new Set<(message: PiRpcStdoutMessage) => void>();
-    const pending = new Map<string, PendingResponse>();
     const decoder = new StringDecoder("utf8");
     let stdoutBuffer = "";
     let stderrTail = "";
-    let closed = false;
     let exitPromise: Promise<void> | undefined;
     let cleanedUp = false;
 
@@ -179,19 +188,12 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       void cleanupBridge().catch(() => undefined);
     };
 
-    const rejectAllPending = (error: Error) => {
-      for (const [id, entry] of pending) {
-        clearTimeout(entry.timeout);
-        entry.reject(error);
-        pending.delete(id);
-      }
-    };
+    let lifecycle: PiRpcProcessLifecycle;
 
     const handleMessage = (message: PiRpcStdoutMessage) => {
       if (isPiRpcResponse(message) && typeof message.id === "string") {
-        const entry = pending.get(message.id);
+        const entry = lifecycle.removePending(message.id);
         if (entry) {
-          pending.delete(message.id);
           clearTimeout(entry.timeout);
           if (message.success) {
             entry.resolve(message);
@@ -220,6 +222,29 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       }
     };
 
+    const flushStdout = () => {
+      stdoutBuffer += decoder.end();
+      if (stdoutBuffer.length > 0) {
+        handleLine(stdoutBuffer);
+        stdoutBuffer = "";
+      }
+    };
+
+    lifecycle = createPiRpcProcessLifecycle({
+      child,
+      cleanup: cleanupBridgeOnce,
+      describeExit: (code, signal) =>
+        describePiExit({
+          command: invocation.command,
+          binaryPath: options.binaryPath,
+          executionTargetId,
+          code,
+          signal,
+          stderrTail,
+        }),
+      flushStdout,
+    });
+
     child.stdout.on("data", (chunk: Buffer | string) => {
       stdoutBuffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
 
@@ -236,73 +261,56 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     });
 
     child.stdout.on("end", () => {
-      stdoutBuffer += decoder.end();
-      if (stdoutBuffer.length > 0) {
-        handleLine(stdoutBuffer);
-        stdoutBuffer = "";
-      }
+      flushStdout();
     });
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderrTail = nextStderrTail(stderrTail, chunk);
     });
-
-    child.once("error", (error) => {
-      closed = true;
-      cleanupBridgeOnce();
-      rejectAllPending(error instanceof Error ? error : new Error(String(error)));
-    });
-
-    child.once("exit", (code, signal) => {
-      closed = true;
-      cleanupBridgeOnce();
-      rejectAllPending(
-        describePiExit({
-          command: invocation.command,
-          binaryPath: options.binaryPath,
-          executionTargetId,
-          code,
-          signal,
-          stderrTail,
-        }),
-      );
+    child.stderr.on("error", (error) => {
+      stderrTail = nextStderrTail(stderrTail, `[Pi RPC stderr stream error: ${String(error)}]`);
     });
 
     const request = async <TData = unknown>(
       command: PiRpcRequestCommand,
       timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     ): Promise<PiRpcResponse<TData>> => {
-      if (closed || child.exitCode !== null) {
-        throw describePiExit({
-          command: invocation.command,
-          binaryPath: options.binaryPath,
-          executionTargetId,
-          code: child.exitCode,
-          signal: null,
-          stderrTail,
-        });
+      const terminalError = lifecycle.terminalError();
+      if (terminalError) {
+        throw terminalError;
+      }
+      if (child.exitCode !== null) {
+        throw lifecycle.fail(
+          describePiExit({
+            command: invocation.command,
+            binaryPath: options.binaryPath,
+            executionTargetId,
+            code: child.exitCode,
+            signal: null,
+            stderrTail,
+          }),
+        );
       }
 
       const id = `pi-${randomUUID()}`;
       const response = await new Promise<PiRpcResponse>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          pending.delete(id);
+          lifecycle.removePending(id);
           reject(new Error(`Timed out waiting for Pi RPC response to '${command.type}'.`));
         }, timeoutMs);
 
-        pending.set(id, {
+        lifecycle.addPending(id, {
           timeout,
           resolve,
           reject,
         });
 
-        void writeJsonLine(child, { ...command, id }).catch((error) => {
-          const entry = pending.get(id);
+        void writeJsonLine(child, lifecycle, { ...command, id }).catch((error) => {
+          const entry = lifecycle.removePending(id);
           if (!entry) {
             return;
           }
-          pending.delete(id);
           clearTimeout(entry.timeout);
           reject(error instanceof Error ? error : new Error(String(error)));
         });
@@ -311,7 +319,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       return response as PiRpcResponse<TData>;
     };
 
-    const write = (command: PiRpcCommand) => writeJsonLine(child, command);
+    const write = (command: PiRpcCommand) => writeJsonLine(child, lifecycle, command);
 
     const subscribe = (listener: (message: PiRpcStdoutMessage) => void) => {
       listeners.add(listener);
@@ -338,16 +346,18 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       }
 
       exitPromise = new Promise<void>((resolve) => {
-        if (closed || child.exitCode !== null) {
+        if (lifecycle.processEnded() || child.exitCode !== null) {
           cleanupBridgeOnce();
           resolve();
           return;
         }
 
-        child.once("exit", () => {
+        const settleStop = () => {
           cleanupBridgeOnce();
           resolve();
-        });
+        };
+        child.once("exit", settleStop);
+        child.once("close", settleStop);
 
         const sigkillTimer = setTimeout(() => {
           if (child.exitCode === null) {
@@ -355,6 +365,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
           }
         }, 1_000);
         child.once("exit", () => clearTimeout(sigkillTimer));
+        child.once("close", () => clearTimeout(sigkillTimer));
 
         killPiChild("SIGTERM");
       });

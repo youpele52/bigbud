@@ -78,6 +78,7 @@ export const ThreadQueuedPromptsFlushedPayload = Schema.Struct({
 
 export const ThreadDeletedPayload = Schema.Struct({
   threadId: ThreadId,
+  threadIds: Schema.optional(Schema.Array(ThreadId)),
   deletedAt: IsoDateTime,
 });
 

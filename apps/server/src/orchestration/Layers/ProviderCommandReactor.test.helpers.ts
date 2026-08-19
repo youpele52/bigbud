@@ -21,6 +21,7 @@ import {
 } from "@bigbud/contracts";
 import { TextGenerationError } from "@bigbud/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterEach, vi } from "vitest";
 
 import type { DeepPartial } from "@bigbud/shared/Struct";
@@ -54,6 +55,7 @@ import {
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { EntityPurgeLive } from "../../deletion/Layers/EntityPurge.ts";
@@ -413,7 +415,7 @@ export async function createHarness(input?: {
     Layer.provideMerge(Layer.succeed(BrowserManager, browserService)),
     Layer.provideMerge(Layer.succeed(TerminalManager, terminalService)),
     Layer.provideMerge(EntityPurgeLive),
-    Layer.provide(
+    Layer.provideMerge(
       OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
     ),
     Layer.provideMerge(ServerSettingsService.layerTest(input?.serverSettingsOverrides ?? {})),
@@ -433,7 +435,11 @@ export async function createHarness(input?: {
   });
 
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
+  const projectionPipeline = await runtime.runPromise(
+    Effect.service(OrchestrationProjectionPipeline),
+  );
   const reactor = await runtime.runPromise(Effect.service(ProviderCommandReactor));
+  const sql = await runtime.runPromise(Effect.service(SqlClient.SqlClient));
   scope = await Effect.runPromise(Scope.make("sequential"));
   await Effect.runPromise(reactor.start().pipe(Scope.provide(scope)));
   const drain = () => Effect.runPromise(reactor.drain);
@@ -467,6 +473,8 @@ export async function createHarness(input?: {
 
   return {
     engine,
+    projectionPipeline,
+    sql,
     startSession,
     sendTurn,
     interruptTurn,

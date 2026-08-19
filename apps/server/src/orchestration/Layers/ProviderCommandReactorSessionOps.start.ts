@@ -10,7 +10,10 @@ import { resolveProviderSessionExecutionTargets } from "../../provider/providerS
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 export function startProviderSession(input: {
-  readonly services: Pick<SessionOpServices, "providerService" | "setThreadSession">;
+  readonly services: Pick<
+    SessionOpServices,
+    "providerService" | "setThreadSession" | "assertRuntimeStartAllowed"
+  >;
   readonly thread: OrchestrationThread;
   readonly threadId: ThreadId;
   readonly createdAt: string;
@@ -39,21 +42,24 @@ export function startProviderSession(input: {
     },
     createdAt: input.createdAt,
   });
-  const startSession = (
-    input.fresh
+  const startSession = Effect.suspend(() =>
+    (input.fresh
       ? input.services.providerService.startSessionFresh
-      : input.services.providerService.startSession
-  )(input.threadId, {
-    threadId: input.threadId,
-    provider: input.provider,
-    ...executionTargets,
-    ...(input.cwd ? { cwd: input.cwd } : {}),
-    modelSelection: input.modelSelection,
-    ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-    runtimeMode: input.thread.runtimeMode,
-  });
+      : input.services.providerService.startSession)(input.threadId, {
+      threadId: input.threadId,
+      provider: input.provider,
+      ...executionTargets,
+      ...(input.cwd ? { cwd: input.cwd } : {}),
+      modelSelection: input.modelSelection,
+      ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+      runtimeMode: input.thread.runtimeMode,
+    }),
+  );
 
   return input.preserveExistingBinding
-    ? startSession
-    : markSessionStarting.pipe(Effect.andThen(startSession));
+    ? input.services.assertRuntimeStartAllowed(input.threadId).pipe(Effect.andThen(startSession))
+    : markSessionStarting.pipe(
+        Effect.andThen(input.services.assertRuntimeStartAllowed(input.threadId)),
+        Effect.andThen(startSession),
+      );
 }

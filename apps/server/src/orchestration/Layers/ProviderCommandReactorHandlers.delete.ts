@@ -7,22 +7,19 @@ import {
   type ProviderSession,
 } from "@bigbud/contracts";
 import { Cause, Duration, Effect, Option } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
+import { finalizeThreadCanonicalHistory } from "../../deletion/Layers/CanonicalThreadCleanup.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
-import { EntityPurge } from "../../deletion/Services/EntityPurge.ts";
-import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
+import { ThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
+import { threadSubtreeHasLiveActiveRuntime } from "../../deletion/Services/ThreadDeletion.preflight.ts";
 import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
-import {
-  persistRequiredBaselineSequence,
-  retentionFinalizeCommandId,
-  retentionRetryDelayMs,
-} from "../../retention/Layers/ThreadRetention.coordinator.helpers.ts";
-import { increment, threadRetentionItemsTotal } from "../../observability/Metrics.ts";
 
 type DeleteRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -54,11 +51,9 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const browser = yield* BrowserManager;
   const terminal = yield* TerminalManager;
-  const entityPurge = yield* EntityPurge;
-  const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
-  const retention = Option.getOrUndefined(retentionRepository);
   const shell = yield* Effect.serviceOption(ThreadShellRunner);
-
+  const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  const sql = yield* SqlClient.SqlClient;
   const appendDeletionFailureActivity = (input: {
     readonly threadId: ThreadId;
     readonly createdAt: string;
@@ -98,7 +93,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
     updatedAt: input.occurredAt,
   });
 
-  const runCleanupStep = <A, E, R>(
+  const runCleanupStepOnce = <A, E, R>(
     step: "provider" | "browser" | "terminal" | "shell",
     effect: Effect.Effect<A, E, R>,
   ) =>
@@ -115,6 +110,15 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
           : { ok: true as const, step },
       ),
     );
+  const runCleanupStep = <A, E, R>(
+    step: "provider" | "browser" | "terminal" | "shell",
+    effect: () => Effect.Effect<A, E, R>,
+  ) =>
+    runCleanupStepOnce(step, effect()).pipe(
+      Effect.flatMap((first) =>
+        first.ok ? Effect.succeed(first) : runCleanupStepOnce(step, effect()),
+      ),
+    );
 
   return Effect.fn("processDeletionRequested")(function* (
     deps: DeletionDeps,
@@ -125,139 +129,151 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
       return;
     }
 
-    const retentionItem =
-      event.commandId && retention
-        ? yield* retention.findItemByDeletionCommandId(event.commandId)
-        : Option.none();
-
-    const liveSessions = yield* providerService.listSessions();
-    const liveSession = liveSessions.find((session) => session.threadId === thread.id);
-    const runtimeBecameActive =
-      thread.session?.status === "starting" ||
-      thread.session?.status === "running" ||
-      liveSession?.status === "connecting" ||
-      liveSession?.status === "running";
-    if (Option.isSome(retentionItem) && runtimeBecameActive) {
-      const createdAt = new Date().toISOString();
-      yield* retention!.transitionItem({
-        runId: retentionItem.value.runId,
-        threadId: thread.id,
-        expectedStatuses: ["deletion_requested"],
-        nextStatus: "skipped",
-        exclusionReason: "running",
-        updatedAt: createdAt,
-      });
-      yield* orchestrationEngine.dispatch({
-        type: "thread.delete.abort",
-        commandId: serverCommandId("thread-retention-delete-abort"),
-        threadId: thread.id,
-        createdAt,
-      });
-      return;
-    }
-
-    const providerCleanup =
-      liveSession !== undefined
-        ? providerService.stopSession({ threadId: thread.id }).pipe(
-            Effect.andThen(
-              deps.setThreadSession({
-                threadId: thread.id,
-                session: makeStoppedSession({
-                  threadId: thread.id,
-                  occurredAt: event.occurredAt,
-                  threadSession: thread.session,
-                  liveSession,
-                }),
-                createdAt: event.occurredAt,
+    const outcome = yield* orchestrationEngine.threadDeletion!.deleteNow({
+      rootThreadId: thread.id,
+      fenceAlreadyHeld: true,
+      resolveThreads: () =>
+        orchestrationEngine.getReadModel().pipe(Effect.map((model) => model.threads)),
+      preflight: (threads) =>
+        Effect.gen(function* () {
+          if (threads.some((candidate) => candidate.pinnedAt !== null)) return "pinned" as const;
+          const liveSessions = yield* providerService.listSessions();
+          return threadSubtreeHasLiveActiveRuntime({ threads, liveSessions })
+            ? ("active" as const)
+            : undefined;
+        }).pipe(
+          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+        ),
+      teardown: (candidate) =>
+        Effect.gen(function* () {
+          const liveSessions = yield* providerService.listSessions();
+          const liveSession = liveSessions.find((session) => session.threadId === candidate.id);
+          const providerCleanup =
+            liveSession !== undefined
+              ? providerService.stopSession({ threadId: candidate.id }).pipe(
+                  Effect.andThen(
+                    deps.setThreadSession({
+                      threadId: candidate.id,
+                      session: makeStoppedSession({
+                        threadId: candidate.id,
+                        occurredAt: event.occurredAt,
+                        threadSession: candidate.session,
+                        liveSession,
+                      }),
+                      createdAt: event.occurredAt,
+                    }),
+                  ),
+                )
+              : candidate.session && candidate.session.status !== "stopped"
+                ? deps.setThreadSession({
+                    threadId: candidate.id,
+                    session: makeStoppedSession({
+                      threadId: candidate.id,
+                      occurredAt: event.occurredAt,
+                      threadSession: candidate.session,
+                      liveSession: undefined,
+                    }),
+                    createdAt: event.occurredAt,
+                  })
+                : Effect.void;
+          const results = yield* Effect.all(
+            [
+              runCleanupStep("provider", () => providerCleanup),
+              runCleanupStep("browser", () => browser.close(candidate.id)),
+              runCleanupStep("terminal", () =>
+                terminal.close({ threadId: candidate.id, deleteHistory: false }),
+              ),
+              runCleanupStep("shell", () =>
+                Option.isSome(shell) ? shell.value.closeThread(candidate.id) : Effect.void,
+              ),
+            ],
+            { concurrency: 1 },
+          );
+          const failures = results.filter((result) => !result.ok);
+          if (failures.length > 0) {
+            return yield* Effect.fail(
+              new Error(`Runtime cleanup failed: ${describeFailures(failures)}.`),
+            );
+          }
+        }).pipe(
+          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+        ),
+      finalize: (threadIds) =>
+        Effect.gen(function* () {
+          const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
+            rootThreadId: thread.id,
+            threadIds,
+          });
+          const finalized = yield* orchestrationEngine.dispatch({
+            type: "thread.delete.finalize",
+            commandId: serverCommandId("thread-delete-finalize"),
+            threadId: thread.id,
+            threadIds,
+            createdAt: new Date().toISOString(),
+          });
+          yield* finalizeThreadCanonicalHistory({
+            projectionPipeline,
+            sql,
+            threadId: thread.id,
+            deletionSequence: finalized.sequence,
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("thread canonical history cleanup deferred", {
+                rootThreadId: thread.id,
+                detail: String(error),
               }),
             ),
-          )
-        : thread.session && thread.session.status !== "stopped"
-          ? deps.setThreadSession({
-              threadId: thread.id,
-              session: makeStoppedSession({
-                threadId: thread.id,
-                occurredAt: event.occurredAt,
-                threadSession: thread.session,
-                liveSession: undefined,
-              }),
-              createdAt: event.occurredAt,
-            })
-          : Effect.void;
-
-    const results = yield* Effect.all(
-      [
-        runCleanupStep("provider", providerCleanup),
-        runCleanupStep("browser", browser.close(thread.id)),
-        runCleanupStep("terminal", terminal.close({ threadId: thread.id, deleteHistory: false })),
-        runCleanupStep(
-          "shell",
-          Option.isSome(shell) ? shell.value.closeThread(thread.id) : Effect.void,
+          );
+          yield* Effect.forEach(
+            threadIds,
+            (threadId) =>
+              terminal.close({ threadId, deleteHistory: true }).pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning("thread deletion terminal history cleanup deferred", {
+                    rootThreadId: thread.id,
+                    threadId,
+                    detail: String(error),
+                  }),
+                ),
+              ),
+            { concurrency: 1, discard: true },
+          );
+          const orphanedResources = yield* orchestrationEngine
+            .threadDeletion!.cleanupFiles(files)
+            .pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("thread deletion file cleanup deferred", {
+                  rootThreadId: thread.id,
+                  detail: String(error),
+                }).pipe(Effect.as([{ resource: "files", detail: String(error) }])),
+              ),
+            );
+          if (orphanedResources.length > 0) {
+            yield* Effect.logWarning("thread deletion orphan resource cleanup required", {
+              rootThreadId: thread.id,
+              orphanedResources,
+            });
+          }
+        }).pipe(
+          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
         ),
-      ],
-      { concurrency: 1 },
-    );
+    });
 
-    const failures = results.filter((result) => !result.ok);
-    if (failures.length > 0) {
-      const failedSteps = describeFailures(failures);
+    if (outcome.type !== "deleted") {
       const createdAt = new Date().toISOString();
-      yield* Effect.logWarning("thread deletion runtime cleanup failed", {
-        failedSteps,
-      });
-      if (Option.isSome(retentionItem)) {
-        yield* retention!.recordItemRetry({
-          runId: retentionItem.value.runId,
-          threadId: thread.id,
-          expectedStatuses: ["deletion_requested"],
-          lastErrorCode: "cleanup_failed",
-          nextAttemptAt: new Date(
-            Date.parse(createdAt) + retentionRetryDelayMs(retentionItem.value.attemptCount + 1),
-          ).toISOString(),
-          updatedAt: createdAt,
-        });
-        return;
-      }
       yield* orchestrationEngine.dispatch({
         type: "thread.delete.abort",
         commandId: serverCommandId("thread-delete-abort"),
         threadId: thread.id,
         createdAt,
       });
-      yield* appendDeletionFailureActivity({
-        threadId: thread.id,
-        createdAt,
-        detail: "One or more runtime cleanup steps failed.",
-      }).pipe(Effect.asVoid);
-      return;
+      if (outcome.type === "failed") {
+        yield* appendDeletionFailureActivity({
+          threadId: thread.id,
+          createdAt,
+          detail: outcome.detail,
+        }).pipe(Effect.asVoid);
+      }
     }
-
-    const createdAt = new Date().toISOString();
-    const purgeJob = yield* entityPurge.requestThread(thread.id);
-    const finalized = yield* orchestrationEngine.dispatch({
-      type: "thread.delete.finalize",
-      commandId: Option.isSome(retentionItem)
-        ? retentionFinalizeCommandId(retentionItem.value.runId, thread.id)
-        : serverCommandId("thread-delete-finalize"),
-      threadId: thread.id,
-      createdAt,
-    });
-    if (Option.isSome(retentionItem)) {
-      yield* persistRequiredBaselineSequence(
-        retention!,
-        retentionItem.value.runId,
-        finalized.sequence,
-        createdAt,
-      );
-      const prepared = yield* retention!.markPrepared({
-        runId: retentionItem.value.runId,
-        threadId: thread.id,
-        purgeJobId: purgeJob.jobId,
-        updatedAt: createdAt,
-      });
-      if (prepared) yield* increment(threadRetentionItemsTotal, { outcome: "prepared" });
-      return;
-    }
-    yield* entityPurge.run(purgeJob);
   });
 });

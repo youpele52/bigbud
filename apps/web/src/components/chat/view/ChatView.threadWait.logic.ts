@@ -133,3 +133,48 @@ export async function waitForThreadToDisappear(
     }, timeoutMs);
   });
 }
+
+export async function waitForThreadDeletionToSettle(
+  threadId: ThreadId,
+  timeoutMs = 60_000,
+): Promise<"deleted" | "aborted" | "timeout"> {
+  const snapshot = (): "deleted" | "pending" | "idle" => {
+    const thread = useStore.getState().threads.find((entry) => entry.id === threadId);
+    if (!thread) return "deleted";
+    if (thread.deletingAt != null) return "pending";
+    return "idle";
+  };
+
+  let seenPending = snapshot() === "pending";
+  if (snapshot() === "deleted") return "deleted";
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const finish = (result: "deleted" | "aborted" | "timeout") => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
+      unsubscribe();
+      resolve(result);
+    };
+
+    const consider = () => {
+      const next = snapshot();
+      if (next === "pending") seenPending = true;
+      if (next === "deleted") finish("deleted");
+      else if (next === "idle" && seenPending) finish("aborted");
+    };
+
+    const unsubscribe = useStore.subscribe(() => {
+      consider();
+    });
+
+    consider();
+    if (settled) return;
+
+    timeoutId = globalThis.setTimeout(() => {
+      finish("timeout");
+    }, timeoutMs);
+  });
+}

@@ -56,6 +56,7 @@ export function ComposerPromptEditorInner({
   disabled,
   placeholder,
   className,
+  compact = false,
   onRemoveTerminalContext,
   onChange,
   onCommandKeyDown,
@@ -277,12 +278,17 @@ export function ComposerPromptEditorInner({
 
   return (
     <ComposerTerminalContextActionsContext.Provider value={terminalContextActions}>
-      <div className="relative">
+      <div
+        className={cn(
+          "relative",
+          compact ? "text-xs leading-5" : "text-sm leading-relaxed sm:text-[13px]",
+        )}
+      >
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
               className={cn(
-                "block max-h-[200px] min-h-17.5 w-full touch-pan-y overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-sm leading-relaxed text-foreground focus:outline-none sm:text-[13px]",
+                "block max-h-[200px] min-h-17.5 w-full touch-pan-y overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-inherit leading-[inherit] text-foreground focus:outline-none",
                 className,
               )}
               data-testid="composer-editor"
@@ -293,7 +299,7 @@ export function ComposerPromptEditorInner({
           }
           placeholder={
             terminalContexts.length > 0 ? null : (
-              <div className="pointer-events-none absolute inset-0 text-sm leading-relaxed text-muted-foreground/35 sm:text-[13px]">
+              <div className="pointer-events-none absolute inset-0 text-inherit leading-[inherit] text-muted-foreground/35">
                 {placeholder}
               </div>
             )

@@ -1,4 +1,11 @@
-import { ChevronDownIcon, InfoIcon, LoaderIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  ChevronDownIcon,
+  InfoIcon,
+  LoaderIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react";
 import { type ReactNode, type RefObject } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
@@ -169,11 +176,12 @@ export function ProviderCard({
                 </span>
                 {card.setupUrl ? (
                   <Button
-                    className="mt-2 h-7 px-2 text-xs"
+                    className="mt-2 h-7 gap-1 px-2 text-xs"
                     variant="outline"
                     onClick={onOpenSetupGuide}
                   >
                     {providerDisplayName} setup guide
+                    <ArrowUpRightIcon className="size-3" aria-hidden="true" />
                   </Button>
                 ) : null}
               </label>

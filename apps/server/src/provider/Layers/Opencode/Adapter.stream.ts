@@ -14,6 +14,7 @@ import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Effect, ServiceMap } from "effect";
 
 import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { PROVIDER_RECOVERING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { toMessage } from "./Adapter.stream.utils.ts";
@@ -86,59 +87,135 @@ export function startEventStream(
   makeSyntheticEvent: SyntheticEventFn,
   emitFn: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>,
   services: ServiceMap.ServiceMap<never>,
-): void {
+  reconcileActiveTurn?: (session: ActiveOpencodeSession) => Promise<void>,
+  recovery?: {
+    readonly retryDelays?: ReadonlyArray<number>;
+    readonly random?: () => number;
+  },
+): { stop(): void; invalidate(): void } {
   const abortController = new AbortController();
   session.sseAbortController = abortController;
+  let invalidated = false;
+  let healthNotificationEmitted = false;
+  const isOwner = () => session.sseAbortController === abortController;
+  const reconcile = async () => {
+    if (session.activeTurnId && isOwner())
+      await reconcileActiveTurn?.(session).catch(() => undefined);
+  };
+  const emitHealth = async (message: string, turnId = session.activeTurnId) => {
+    if (
+      !isOwner() ||
+      healthNotificationEmitted ||
+      turnId === undefined ||
+      session.activeTurnId !== turnId
+    )
+      return;
+    healthNotificationEmitted = true;
+    await makeSyntheticEvent(
+      session.threadId,
+      "session.state.changed",
+      {
+        state: "error",
+        reason: PROVIDER_RECOVERING_SESSION_REASON,
+        detail: { message },
+      },
+      { turnId },
+    )
+      .pipe(
+        Effect.flatMap((event) => emitFn([event])),
+        Effect.runPromiseWith(services),
+      )
+      .catch(() => undefined);
+  };
 
   void (async () => {
-    try {
-      const { stream } = await session.client.event.subscribe(undefined, {
-        signal: abortController.signal,
-      });
-      for await (const event of stream) {
-        if (abortController.signal.aborted) break;
+    const retryDelays = recovery?.retryDelays ?? [100, 200, 400];
+    const random = recovery?.random ?? Math.random;
+    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+      try {
+        if (abortController.signal.aborted || !isOwner()) return;
+        if (attempt > 0) await reconcile();
+        if (abortController.signal.aborted || !isOwner()) return;
+        const { stream } = await session.client.event.subscribe(undefined, {
+          signal: abortController.signal,
+        });
+        if (attempt > 0) await reconcile();
+        for await (const event of stream) {
+          if (abortController.signal.aborted || !isOwner()) return;
 
-        // Filter events to only those for this session.
-        // In v2, sessionID is always on event.properties.sessionID.
-        const eventSessionId = (event.properties as Record<string, unknown>).sessionID as
-          | string
-          | undefined;
+          // Filter events to only those for this session.
+          // In v2, sessionID is always on event.properties.sessionID.
+          const eventSessionId = (event.properties as Record<string, unknown>).sessionID as
+            | string
+            | undefined;
 
-        if (eventSessionId && eventSessionId !== session.opencodeSessionId) {
-          continue;
+          if (eventSessionId && eventSessionId !== session.opencodeSessionId) {
+            continue;
+          }
+
+          await handleEventFn(session, event)
+            .pipe(Effect.runPromiseWith(services))
+            .catch((err) => {
+              console.error(
+                `[opencode-adapter] handleEvent error for session=${session.opencodeSessionId} event.type=${event.type}:`,
+                err,
+              );
+            });
         }
-
-        await handleEventFn(session, event)
-          .pipe(Effect.runPromiseWith(services))
-          .catch((err) => {
-            console.error(
-              `[opencode-adapter] handleEvent error for session=${session.opencodeSessionId} event.type=${event.type}:`,
-              err,
-            );
-          });
-      }
-    } catch (err) {
-      // Only log if this wasn't an intentional abort
-      if (!abortController.signal.aborted) {
-        console.error(
-          `[opencode-adapter] SSE stream error for session=${session.opencodeSessionId}:`,
-          err,
-        );
-        // Emit a runtime error so the UI can surface the connection issue
-        makeSyntheticEvent(session.threadId, "runtime.error", {
-          message: toMessage(err, "SSE event stream disconnected unexpectedly."),
-          class: "transport_error",
-        })
-          .pipe(
-            Effect.flatMap((evt) => emitFn([evt])),
-            Effect.runPromiseWith(services),
-          )
-          .catch(() => {
-            console.error(
-              `[opencode-adapter] Failed to emit SSE disconnect error for session=${session.opencodeSessionId}`,
-            );
-          });
+        if (abortController.signal.aborted || !isOwner()) return;
+        throw new Error("SSE event stream ended unexpectedly.");
+      } catch (error) {
+        if (abortController.signal.aborted || !isOwner()) return;
+        if (attempt === retryDelays.length) {
+          const turnId = session.activeTurnId;
+          await reconcile();
+          await emitHealth(
+            invalidated
+              ? "OpenCode server process stopped unexpectedly. The active turn remains unresolved."
+              : toMessage(
+                  error,
+                  "SSE event stream recovery was exhausted. The active turn remains unresolved.",
+                ),
+            turnId,
+          );
+          return;
+        }
+        await reconcile();
+        const delay = retryDelays[attempt]!;
+        await new Promise<void>((resolve) => {
+          const onAbort = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(
+            () => {
+              abortController.signal.removeEventListener("abort", onAbort);
+              resolve();
+            },
+            delay + Math.floor(random() * Math.max(1, delay / 4)),
+          );
+          abortController.signal.addEventListener("abort", onAbort, { once: true });
+        });
       }
     }
   })();
+  return {
+    stop: () => {
+      if (isOwner()) {
+        abortController.abort();
+        session.sseAbortController = null;
+      }
+    },
+    invalidate: () => {
+      invalidated = true;
+      const turnId = session.activeTurnId;
+      abortController.abort();
+      void reconcile().then(() =>
+        emitHealth(
+          "OpenCode server process stopped unexpectedly. The active turn remains unresolved.",
+          turnId,
+        ),
+      );
+    },
+  };
 }

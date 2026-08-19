@@ -4,10 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const mockSettings = vi.hoisted(() => ({
   threadRetentionPolicy: "never" as const,
+  defaultThreadEnvMode: "local" as const,
+  confirmThreadArchive: false,
+  confirmThreadDelete: true,
 }));
 
 vi.mock("../../hooks/useSettings", () => ({
   useSettings: () => mockSettings,
+  useUpdateSettings: () => ({ updateSettings: vi.fn() }),
 }));
 
 vi.mock("../../rpc/nativeApi", () => ({
@@ -20,20 +24,28 @@ vi.mock("../../rpc/serverState", () => ({
 
 import { ThreadRetentionSettingsSection } from "./ThreadRetentionSettingsSection";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
-import { ThreadRetentionRunStatus } from "./ThreadRetentionRunStatus";
 import { SETTINGS_SEARCH_ITEMS } from "./SettingsSidebarNav.items";
 
 describe("ThreadRetentionSettingsSection", () => {
-  it("renders the safe policy and explicit permanent-delete action", () => {
+  it("renders the server-owned daily policy and immediate cleanup action", () => {
     const markup = renderToStaticMarkup(<ThreadRetentionSettingsSection />);
 
-    expect(markup).toContain("Automatic thread cleanup");
+    expect(markup).toContain("Threads");
+    expect(markup).toContain("New threads");
+    expect(markup).toContain("Archive confirmation");
+    expect(markup).toContain("Delete confirmation");
     expect(markup).toContain("Automatically delete old threads");
-    expect(markup).toContain("Checks thresholds daily");
-    expect(markup).toContain("takes priority over scheduled cleanup");
+    expect(markup).toContain("The server checks daily");
+    expect(markup).toContain("Eligible root thread subtrees are cleaned up together");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
-    expect(markup).toContain("cannot be undone");
+    expect(markup).toContain("Delete now");
+    expect(markup).toContain("Automatic cleanup above is separate");
+    expect(markup).toContain("Choose the cutoff in the confirmation dialog");
+    expect(markup).not.toContain("using the one-off period on this row");
+    expect(markup).toContain(
+      "Eligible root thread subtrees and their descendants are cleaned up together",
+    );
   });
 
   it("uses day-based labels for every cleanup threshold", () => {
@@ -56,7 +68,13 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(SETTINGS_SEARCH_ITEMS).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          label: "New threads",
+          section: "Threads",
+          to: "/settings/general",
+        }),
+        expect.objectContaining({
           label: "Automatic thread cleanup",
+          section: "Threads",
           to: "/settings/general",
         }),
         expect.objectContaining({
@@ -107,18 +125,14 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("This is an estimate.");
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
-    expect(markup).toContain(
-      "Cleanup is waiting for safety or recovery work to finish before this request can start.",
-    );
     for (const phrase of [
-      "pinned",
+      "Child threads are deleted with their parent",
+      "Pinned",
       "active or running",
-      "queued",
-      "waiting for approval or input",
-      "watched",
-      "delegated parent or child task",
       "project folders",
       "other files",
+      "Provider-remote conversations are not deleted",
+      "canonical history or retained baselines",
     ]) {
       expect(markup).toContain(phrase);
     }
@@ -161,34 +175,15 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("Export or back up anything you need");
   });
 
-  it("uses a collapsed, non-color status summary that exposes run progress on demand", () => {
+  it("shows a preview failure in the confirmation body", () => {
     const markup = renderToStaticMarkup(
-      <ThreadRetentionRunStatus
-        pollingError={null}
-        onRetry={() => undefined}
-        run={{
-          runId: "run-1",
-          trigger: "manual",
-          policy: "7-days",
-          cutoffAt: "2026-07-28T00:00:00.000Z",
-          status: "completed_with_failures",
-          eligibleCount: 7,
-          selectedCount: 6,
-          requestedCount: 5,
-          completedCount: 4,
-          skippedCount: 1,
-          failedCount: 1,
-          createdAt: "2026-08-04T00:00:00.000Z",
-          updatedAt: "2026-08-04T00:01:00.000Z",
-          completedAt: "2026-08-04T00:01:00.000Z",
-          deferredReason: null,
-          errorMessage: "One thread could not be deleted.",
-        }}
+      <ThreadRetentionConfirmationContent
+        trigger="manual"
+        preview={null}
+        previewError="Failed to preview thread retention."
       />,
     );
-
-    expect(markup).toContain("completed with failures");
-    expect(markup).toContain('aria-expanded="false"');
-    expect(markup).not.toContain("Accepted:");
+    expect(markup).toContain("Failed to preview thread retention.");
+    expect(markup).not.toContain("Preparing a server-authoritative preview");
   });
 });

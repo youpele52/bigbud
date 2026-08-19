@@ -7,12 +7,10 @@ import type {
   ThreadId,
 } from "@bigbud/contracts";
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
-import { FAVORITE_THREAD_LIMIT } from "@bigbud/contracts/constants/settings.constant";
-import { SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { AppState, ThreadHydration } from "./main.store";
 import { mapSidebarThreadSummary, mapThreadSummary, mergeThreadDetail } from "./mappers.lazy.store";
-import { normalizeSidebarThreadIds } from "./helpers.sidebar.store";
+import { sidebarMembershipFromCatalog } from "./helpers.sidebar.store";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
 
@@ -195,16 +193,14 @@ export function syncBoundedCatalog(
     threadIdsByProjectId,
     threadSummaryCursorByProjectId,
     threadHydrationById,
-    sidebarRecentThreadIds: normalizeSidebarThreadIds(
-      sidebarCatalog.recentThreadIds,
-      availableThreadIds,
-      SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS,
-    ),
-    sidebarPinnedThreadIds: normalizeSidebarThreadIds(
-      sidebarCatalog.pinnedThreadIds,
-      availableThreadIds,
-      FAVORITE_THREAD_LIMIT,
-    ),
+    ...sidebarMembershipFromCatalog({
+      recentThreadIds: sidebarCatalog.recentThreadIds,
+      pinnedThreadIds: sidebarCatalog.pinnedThreadIds,
+      localRecentThreadIds: state.sidebarRecentThreadIds,
+      localPinnedThreadIds: state.sidebarPinnedThreadIds,
+      localThreads: state.threads,
+      catalogAvailableIds: availableThreadIds,
+    }),
     bootstrapComplete: true,
   };
 }
@@ -258,16 +254,14 @@ export function syncSidebarCatalog(
     threads,
     sidebarThreadsById,
     threadHydrationById,
-    sidebarRecentThreadIds: normalizeSidebarThreadIds(
-      sidebarCatalog.recentThreadIds,
-      availableThreadIds,
-      SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS,
-    ),
-    sidebarPinnedThreadIds: normalizeSidebarThreadIds(
-      sidebarCatalog.pinnedThreadIds,
-      availableThreadIds,
-      FAVORITE_THREAD_LIMIT,
-    ),
+    ...sidebarMembershipFromCatalog({
+      recentThreadIds: sidebarCatalog.recentThreadIds,
+      pinnedThreadIds: sidebarCatalog.pinnedThreadIds,
+      localRecentThreadIds: state.sidebarRecentThreadIds,
+      localPinnedThreadIds: state.sidebarPinnedThreadIds,
+      localThreads: state.threads,
+      catalogAvailableIds: availableThreadIds,
+    }),
   };
 }
 

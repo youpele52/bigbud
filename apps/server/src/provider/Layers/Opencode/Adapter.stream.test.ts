@@ -170,7 +170,7 @@ it.effect("requires explicit approval for external directories in full-access mo
   });
 });
 
-it("emits a canonical runtime error when the SSE stream disconnects", async () => {
+it("emits a turn-scoped recovery state when the SSE stream disconnects", async () => {
   let emitted: ReadonlyArray<ProviderRuntimeEvent> = [];
   const stream = {
     next: async () => {
@@ -192,13 +192,14 @@ it("emits a canonical runtime error when the SSE stream disconnects", async () =
   startEventStream(
     session,
     () => Effect.void,
-    (threadId, type, payload) =>
+    (threadId, type, payload, extra) =>
       Effect.succeed({
         eventId: EventId.makeUnsafe("evt-sse-disconnected"),
         provider: "opencode",
         threadId,
         createdAt: CREATED_AT,
         type,
+        ...(extra?.turnId ? { turnId: extra.turnId } : {}),
         payload,
       } as never),
     (events) => Effect.sync(() => void (emitted = events)),
@@ -211,9 +212,14 @@ it("emits a canonical runtime error when the SSE stream disconnects", async () =
   }
   expect(emitted).toHaveLength(1);
   expect(emitted[0]).toMatchObject({
-    type: "runtime.error",
+    type: "session.state.changed",
     provider: "opencode",
     threadId: THREAD_ID,
-    payload: { class: "transport_error", message: "SSE disconnected" },
+    turnId: TURN_ID,
+    payload: {
+      state: "error",
+      reason: "provider.recovering",
+      detail: { message: "SSE disconnected" },
+    },
   });
 });

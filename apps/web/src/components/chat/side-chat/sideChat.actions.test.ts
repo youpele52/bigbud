@@ -216,6 +216,25 @@ describe("attachSidecarToComposer", () => {
     expect(useSideChatStore.getState().presentation).toBe("open");
   });
 
+  it("closes a Sidecar when it is a deleted descendant", () => {
+    const rootThreadId = ThreadId.makeUnsafe("root-thread");
+    useSideChatStore.getState().show(sidecarThreadId);
+    useSideChatStore.getState().beginClose(sidecarThreadId, "2026-07-12T20:00:00.000Z");
+
+    applySideChatLifecycleEvents([
+      lifecycleEvent("thread.deleted", {
+        threadId: rootThreadId,
+        threadIds: [rootThreadId, sidecarThreadId],
+        deletedAt: "2026-07-12T20:00:01.000Z",
+      }),
+    ]);
+
+    expect(useSideChatStore.getState()).toMatchObject({
+      closedThreadId: sidecarThreadId,
+      threadId: null,
+    });
+  });
+
   it("does not create a duplicate while the first Sidecar is still creating", async () => {
     let resolveCreate: (() => void) | undefined;
     dispatchCommandMock.mockImplementationOnce(

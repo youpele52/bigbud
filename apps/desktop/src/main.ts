@@ -116,6 +116,11 @@ floatingAssistantWindows = new FloatingAssistantWindows({
     prepareForAppQuit("floating-assistant-menu-quit");
     app.quit();
   },
+  onRestart: () => {
+    app.relaunch();
+    prepareForAppQuit("floating-assistant-menu-restart");
+    app.quit();
+  },
   preferences: desktopPreferences,
   registry: windowRegistry,
   resolveIconPath,

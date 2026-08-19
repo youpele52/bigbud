@@ -46,7 +46,8 @@ export function useSidebarThreadDeleteActions(input: {
       if (input.confirmThreadDelete) {
         setPendingDeleteConfirmation({
           title: `Delete thread "${thread.title}"?`,
-          description: "This permanently clears conversation history for this thread.",
+          description:
+            "This deletes this thread and any child threads from bigbud's local views and cleans up associated bigbud-managed local resources.",
           threadIds: [threadId],
         });
         return;

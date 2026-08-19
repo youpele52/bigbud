@@ -157,8 +157,6 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const threadRetention = Option.getOrElse(threadRetentionOption, () => ({
     preview: retentionUnavailable,
     enqueue: retentionUnavailable,
-    getRun: retentionUnavailable,
-    listRuns: retentionUnavailable,
     setPolicy: retentionUnavailable,
     runScheduledOnce: retentionUnavailable(),
     start: Effect.void,

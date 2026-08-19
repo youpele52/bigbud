@@ -4,6 +4,7 @@ import { NonNegativeInt } from "@bigbud/contracts";
 import { Effect, Layer, Schema, Struct } from "effect";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 
 import {
   DeleteProjectionThreadActivitiesInput,
@@ -260,7 +261,10 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionThreadActivityRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadActivityRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertProjectionThreadActivityRow(row);
+    }).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
           "ProjectionThreadActivityRepository.upsert:query",

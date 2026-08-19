@@ -38,6 +38,8 @@ import {
 } from "../components/floating-assistant/FloatingAssistantShell";
 import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
 import { useCompactChatThread } from "../hooks/useCompactChatThread";
+import { CompactLinkHandoffCoordinator } from "../components/CompactLinkHandoffCoordinator";
+import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererReadyCoordinator";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -57,6 +59,8 @@ export function RootRouteView() {
     return (
       <>
         <MascotStateCoordinator />
+        <WebSocketConnectionCoordinator />
+        <DesktopBackendStartupCoordinator />
         <MascotShell />
       </>
     );
@@ -109,6 +113,8 @@ export function RootRouteView() {
   return (
     <ToastProvider>
       <AnchoredToastProvider>
+        <CompactLinkHandoffCoordinator />
+        <DesktopRendererReadyCoordinator />
         <ServerStateBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />

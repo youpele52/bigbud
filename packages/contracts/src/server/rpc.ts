@@ -45,8 +45,6 @@ import {
   WsPluginsUpdateRpc,
 } from "./rpc.plugins";
 import {
-  WsServerGetThreadRetentionRunRpc,
-  WsServerListThreadRetentionRunsRpc,
   WsServerPreviewThreadRetentionRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerStartThreadRetentionRpc,
@@ -151,8 +149,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerPreviewThreadRetentionRpc,
   WsServerStartThreadRetentionRpc,
-  WsServerGetThreadRetentionRunRpc,
-  WsServerListThreadRetentionRunsRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerSetThreadPinnedRpc,
   WsServerReadDocumentUrlRpc,

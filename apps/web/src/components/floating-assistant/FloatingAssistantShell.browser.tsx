@@ -3,9 +3,9 @@ import "../../index.css";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
   ProjectId,
+  ThreadId,
   type GetStartupProjectCatalogResult,
   type NativeApi,
-  type ThreadId,
 } from "@bigbud/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -26,7 +26,9 @@ import { resetServerStateForTests, setServerConfigSnapshot } from "~/rpc/serverS
 import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
+import { mapSidebarThreadSummary } from "~/stores/main/mappers.lazy.store";
 
+import { CompactChatPicker } from "./CompactChatPicker";
 import { CompactChatShell } from "./FloatingAssistantShell";
 import { threadDetail, threadSummary } from "./CompactChatSynchronization.browser/fixtures";
 
@@ -207,6 +209,70 @@ describe("CompactChatShell", () => {
         priorityProjectId: BUILT_IN_CHATS_PROJECT_ID,
       });
       expect(refreshProviders).not.toHaveBeenCalled();
+    } finally {
+      await mounted.unmount();
+      queryClient.clear();
+    }
+  });
+
+  it("shows only the application loader while compact chat is preparing", async () => {
+    useStore.setState({ bootstrapComplete: false });
+    const queryClient = new QueryClient();
+    const router = createCompactRouter(queryClient);
+    const mounted = await render(
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          <RouterProvider router={router as never} />
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    try {
+      await expect.element(page.getByText("Loading application")).toBeInTheDocument();
+      await expect.element(page.getByRole("button", { name: "New chat" })).not.toBeInTheDocument();
+      await expect.element(page.getByTestId("composer-editor")).not.toBeInTheDocument();
+    } finally {
+      await mounted.unmount();
+      queryClient.clear();
+    }
+  });
+
+  it("selects completed threads from recents without a completed section", async () => {
+    const completedThreadId = ThreadId.makeUnsafe("completed-thread");
+    const completedSummary = mapSidebarThreadSummary({
+      ...threadSummary(completedThreadId, 13),
+      title: "Completed task",
+      sessionStatus: "stopped",
+      latestTurnState: "completed",
+    });
+    const selectThread = vi.fn(async () => true);
+    useStore.setState((state) => ({
+      ...state,
+      sidebarThreadsById: { [completedThreadId]: completedSummary },
+      sidebarRecentThreadIds: [completedThreadId],
+      threadIdsByProjectId: { [BUILT_IN_CHATS_PROJECT_ID]: [completedThreadId] },
+    }));
+    const compactChat = {
+      loadMoreProjects: vi.fn(),
+      loadProjectThreads: vi.fn(),
+      newChat: vi.fn(async () => true),
+      selectThread,
+      threadTitle: "New chat",
+    } as unknown as ReturnType<typeof useCompactChatThread>;
+    const queryClient = new QueryClient();
+    const mounted = await render(
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          <CompactChatPicker compactChat={compactChat} />
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    try {
+      await page.getByRole("button", { name: "Choose floating chat" }).click();
+      await expect.element(page.getByText("Completed", { exact: true })).not.toBeInTheDocument();
+      await page.getByText("Completed task").click();
+      expect(selectThread).toHaveBeenCalledWith(completedThreadId, BUILT_IN_CHATS_PROJECT_ID);
     } finally {
       await mounted.unmount();
       queryClient.clear();

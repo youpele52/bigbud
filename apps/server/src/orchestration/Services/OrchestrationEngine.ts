@@ -24,11 +24,15 @@ import type { Stream } from "effect";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
+import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion.ts";
 
 /**
  * OrchestrationEngineShape - Service API for orchestration command and event flow.
  */
 export interface OrchestrationEngineShape {
+  /** Shared deletion fence and subtree operation for orchestration reactors. */
+  readonly threadDeletion?: ThreadDeletionShape;
+
   /**
    * Read the current in-memory orchestration read model.
    *

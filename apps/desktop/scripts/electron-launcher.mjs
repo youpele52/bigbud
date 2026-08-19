@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const APP_DISPLAY_NAME = "bigbud";
 const APP_BUNDLE_ID = "ai.bigbud.desktop";
 const DEV_APP_BUNDLE_ID = "ai.bigbud.desktop.dev";
-const LAUNCHER_VERSION = 3;
+const LAUNCHER_VERSION = 4;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const desktopDir = resolve(__dirname, "..");
@@ -41,12 +41,33 @@ function setPlistString(plistPath, key, value) {
   throw new Error(`Failed to update plist key "${key}" at ${plistPath}: ${details}`.trim());
 }
 
+function setPlistBoolean(plistPath, key, value) {
+  const replaceResult = spawnSync("plutil", ["-replace", key, "-bool", String(value), plistPath], {
+    encoding: "utf8",
+  });
+  if (replaceResult.status === 0) {
+    return;
+  }
+
+  const insertResult = spawnSync("plutil", ["-insert", key, "-bool", String(value), plistPath], {
+    encoding: "utf8",
+  });
+  if (insertResult.status === 0) {
+    return;
+  }
+
+  const details = [replaceResult.stderr, insertResult.stderr].filter(Boolean).join("\n");
+  throw new Error(`Failed to update plist key "${key}" at ${plistPath}: ${details}`.trim());
+}
+
 function patchMainBundleInfoPlist(appBundlePath, iconPath, appBundleId) {
   const infoPlistPath = join(appBundlePath, "Contents", "Info.plist");
   setPlistString(infoPlistPath, "CFBundleDisplayName", APP_DISPLAY_NAME);
   setPlistString(infoPlistPath, "CFBundleName", APP_DISPLAY_NAME);
   setPlistString(infoPlistPath, "CFBundleIdentifier", appBundleId);
   setPlistString(infoPlistPath, "CFBundleIconFile", "icon.icns");
+  setPlistBoolean(infoPlistPath, "LSUIElement", false);
+  setPlistBoolean(infoPlistPath, "LSBackgroundOnly", false);
 
   const resourcesDir = join(appBundlePath, "Contents", "Resources");
   copyFileSync(iconPath, join(resourcesDir, "icon.icns"));

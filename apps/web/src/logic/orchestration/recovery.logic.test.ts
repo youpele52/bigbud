@@ -116,6 +116,22 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     });
   });
 
+  it("applies live events after snapshot recovery fails instead of deferring forever", () => {
+    const coordinator = createOrchestrationRecoveryCoordinator();
+
+    expect(coordinator.beginSnapshotRecovery("bootstrap")).toBe(true);
+    expect(coordinator.classifyDomainEvent(1)).toBe("defer");
+    coordinator.failSnapshotRecovery();
+
+    expect(coordinator.getState()).toMatchObject({
+      bootstrapped: true,
+      inFlight: null,
+      latestSequence: 0,
+      highestObservedSequence: 1,
+    });
+    expect(coordinator.classifyDomainEvent(1)).toBe("apply");
+  });
+
   it("marks replay failure as unbootstrapped so snapshot fallback is recovery-only", () => {
     const coordinator = createOrchestrationRecoveryCoordinator();
 

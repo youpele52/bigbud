@@ -8,7 +8,7 @@ import {
   buildAppUnderTest,
   getWsServerUrl,
   serverTestLayer,
-  withWsRpcClient,
+  withRetriedWsRpcClient,
 } from "./server.test.helpers.ts";
 
 it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
@@ -174,19 +174,19 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       const wsUrl = yield* getWsServerUrl("/ws");
 
       const status = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitRefreshStatus]({ cwd: "/tmp/repo" }),
         ),
       );
       assert.equal(status.branch, "main");
 
       const pull = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.gitPull]({ cwd: "/tmp/repo" })),
+        withRetriedWsRpcClient(wsUrl, (client) => client[WS_METHODS.gitPull]({ cwd: "/tmp/repo" })),
       );
       assert.equal(pull.status, "pulled");
 
       const stackedEvents = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitRunStackedAction]({
             actionId: "action-1",
             cwd: "/tmp/repo",
@@ -204,7 +204,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       }
 
       const resolvedPr = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitResolvePullRequest]({
             cwd: "/tmp/repo",
             reference: "1",
@@ -214,7 +214,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       assert.equal(resolvedPr.pullRequest.number, 1);
 
       const prepared = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitPreparePullRequestThread]({
             cwd: "/tmp/repo",
             reference: "1",
@@ -225,19 +225,21 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       assert.equal(prepared.branch, "feature/demo");
 
       const branches = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitListBranches]({ cwd: "/tmp/repo" }),
         ),
       );
       assert.equal(branches.branches[0]?.name, "main");
 
       const commits = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.gitListCommits]({ cwd: "/tmp/repo" })),
+        withRetriedWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitListCommits]({ cwd: "/tmp/repo" }),
+        ),
       );
       assert.equal(commits.commits[0]?.shortSha, "abc123d");
 
       const commitDetails = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitGetCommitDetails]({
             cwd: "/tmp/repo",
             commit: "abc123def456",
@@ -247,14 +249,14 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       assert.equal(commitDetails.commit.subject, "feat: history");
 
       const workingTreeDiff = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitReadWorkingTreeDiff]({ cwd: "/tmp/repo" }),
         ),
       );
       assert.equal(workingTreeDiff.diff.includes("diff --git"), true);
 
       const worktree = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitCreateWorktree]({
             cwd: "/tmp/repo",
             branch: "main",
@@ -265,7 +267,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       assert.equal(worktree.worktree.branch, "feature/demo");
 
       yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitRemoveWorktree]({
             cwd: "/tmp/repo",
             path: "/tmp/wt",
@@ -274,7 +276,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       );
 
       yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitCreateBranch]({
             cwd: "/tmp/repo",
             branch: "feature/new",
@@ -283,7 +285,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       );
 
       yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitCheckout]({
             cwd: "/tmp/repo",
             branch: "main",
@@ -292,7 +294,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       );
 
       yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitInit]({
             cwd: "/tmp/repo",
           }),
@@ -319,9 +321,9 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const result = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.gitPull]({ cwd: "/tmp/repo" })).pipe(
-          Effect.result,
-        ),
+        withRetriedWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitPull]({ cwd: "/tmp/repo" }),
+        ).pipe(Effect.result),
       );
 
       assertFailure(result, gitError);

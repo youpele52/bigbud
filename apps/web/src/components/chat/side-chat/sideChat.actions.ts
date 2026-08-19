@@ -11,6 +11,7 @@ import { type RemovedComposerThreadReferenceFiles, useComposerDraftStore } from 
 import { useStore } from "~/stores/main";
 import { useSideChatStore } from "~/stores/sideChat";
 import { toastManager } from "~/components/ui/toast";
+import { getDeletedThreadIds } from "~/logic/orchestration/thread-deletion.logic";
 
 const detachedReferencesBySidecarId = new Map<ThreadId, RemovedComposerThreadReferenceFiles[]>();
 
@@ -230,7 +231,12 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
   for (const event of events) {
     const state = useSideChatStore.getState();
     const eventThreadId = "threadId" in event.payload ? event.payload.threadId : null;
-    if (!state.threadId || eventThreadId !== state.threadId) {
+    const affectsSideChat =
+      state.threadId !== null &&
+      (event.type === "thread.deleted"
+        ? getDeletedThreadIds(event.payload).includes(state.threadId)
+        : eventThreadId === state.threadId);
+    if (!affectsSideChat) {
       continue;
     }
     switch (event.type) {
@@ -249,7 +255,7 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
         break;
       case "thread.deleted":
         if (state.presentation === "closing") {
-          completeSideChatClose(event.payload.threadId);
+          completeSideChatClose(state.threadId!);
         }
         break;
       default:

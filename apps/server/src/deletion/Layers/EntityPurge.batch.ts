@@ -131,8 +131,6 @@ export function makeEntityPurgeMaintenance(input: {
   readonly mapError: (operation: string) => (error: unknown) => ProjectionRepositoryError;
   readonly projectionPipeline: OrchestrationProjectionPipelineShape;
   readonly queries: ReturnType<typeof makeEntityPurgeSql>;
-  readonly requestProject: EntityPurgeShape["requestProject"];
-  readonly requestThread: EntityPurgeShape["requestThread"];
   readonly runInternal: (
     job: PurgeJob,
     baselinePreflighted?: boolean,
@@ -162,14 +160,6 @@ export function makeEntityPurgeMaintenance(input: {
         const incompleteJobs = yield* input.jobs.listIncomplete(limit);
         yield* increment(threadRetentionPurgeBacklog, {}, yield* input.jobs.countIncomplete());
         for (const job of incompleteJobs) batchJobs.set(job.jobId, job);
-        const remaining = Math.max(0, limit - batchJobs.size);
-        for (const candidate of yield* input.queries.listDeletionCandidates({ limit: remaining })) {
-          const job =
-            candidate.entityKind === "thread"
-              ? yield* input.requestThread(ThreadId.makeUnsafe(candidate.entityId))
-              : yield* input.requestProject(ProjectId.makeUnsafe(candidate.entityId));
-          batchJobs.set(job.jobId, job);
-        }
         const completed = yield* runBatchInternal([...batchJobs.values()]);
         if (completed > 0) yield* input.projectionPipeline.compactVerifiedPrefix();
         const orphanBudget = Math.max(0, limit - batchJobs.size);

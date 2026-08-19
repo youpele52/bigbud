@@ -14,6 +14,7 @@ export interface FloatingAssistantWindowsDeps {
   readonly isDevelopment: boolean;
   readonly onOpenMain: () => void;
   readonly onQuit: () => void;
+  readonly onRestart: () => void;
   readonly preferences: DesktopPreferencesStore;
   readonly registry: DesktopWindowRegistry;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
@@ -119,6 +120,7 @@ export class FloatingAssistantWindows {
       backgroundColor: "#00000000",
       frame: false,
       hasShadow: false,
+      roundedCorners: false,
       transparent: process.platform !== "linux",
       show: false,
       focusable: true,
@@ -214,22 +216,19 @@ export class FloatingAssistantWindows {
     });
     window.webContents.on("context-menu", (_event, params) => {
       if (role === "mascot") {
-        Menu.buildFromTemplate([
-          { label: "Open chat", click: () => void this.openCompactChat() },
-          { label: "New chat", click: () => void this.openCompactChat() },
-          { label: "Open bigbud", click: this.deps.onOpenMain },
-          { type: "separator" },
-          { label: "Hide mascot", click: () => this.hideMascot() },
-          {
-            label: "Disable floating assistant",
-            click: () => {
+        Menu.buildFromTemplate(
+          buildMascotContextMenuTemplate({
+            onDisable: () => {
               this.deps.onOpenMain();
               this.disable();
             },
-          },
-          { type: "separator" },
-          { label: "Quit bigbud", click: this.deps.onQuit },
-        ]).popup({ window });
+            onHideMascot: () => this.hideMascot(),
+            onOpenChat: () => void this.openCompactChat(),
+            onOpenMain: this.deps.onOpenMain,
+            onQuit: this.deps.onQuit,
+            onRestart: this.deps.onRestart,
+          }),
+        ).popup({ window });
         return;
       }
       Menu.buildFromTemplate([{ role: "copy", enabled: params.editFlags.canCopy }]).popup({
@@ -245,6 +244,27 @@ export class FloatingAssistantWindows {
       : `${this.deps.desktopScheme}://app/index.html#/?desktopWindowRole=${role}`;
     void window.loadURL(url);
   }
+}
+
+export function buildMascotContextMenuTemplate(actions: {
+  readonly onDisable: () => void;
+  readonly onHideMascot: () => void;
+  readonly onOpenChat: () => void;
+  readonly onOpenMain: () => void;
+  readonly onQuit: () => void;
+  readonly onRestart: () => void;
+}) {
+  return [
+    { label: "Open chat", click: () => actions.onOpenChat() },
+    { label: "New chat", click: () => actions.onOpenChat() },
+    { label: "Open bigbud", click: actions.onOpenMain },
+    { type: "separator" as const },
+    { label: "Hide mascot", click: actions.onHideMascot },
+    { label: "Disable floating assistant", click: actions.onDisable },
+    { type: "separator" as const },
+    { label: "Restart bigbud", click: actions.onRestart },
+    { label: "Quit bigbud", click: actions.onQuit },
+  ];
 }
 
 function isPoint(value: unknown): value is { x: number; y: number } {

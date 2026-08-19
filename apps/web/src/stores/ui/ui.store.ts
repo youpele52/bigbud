@@ -1,11 +1,13 @@
 import { Debouncer } from "@tanstack/react-pacer";
-import { type ProjectId, type ThreadId } from "@bigbud/contracts";
+import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { create } from "zustand";
 
 import {
+  PERSISTED_STATE_KEY,
   persistState,
   readPersistedState,
   reorderProjects,
+  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
@@ -20,6 +22,7 @@ export {
   persistState,
   readPersistedState,
   reorderProjects,
+  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
@@ -256,5 +259,22 @@ useUiStateStore.subscribe((state) => debouncedPersistState.maybeExecute(state));
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", () => {
     debouncedPersistState.flush();
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== PERSISTED_STATE_KEY || event.newValue === null) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(event.newValue) as {
+        threadLastVisitedAtById?: Record<string, string>;
+      };
+      const incoming = sanitizePersistedThreadLastVisitedAt(parsed.threadLastVisitedAtById);
+      const markVisited = useUiStateStore.getState().markThreadVisited;
+      for (const [threadId, visitedAt] of Object.entries(incoming)) {
+        markVisited(ThreadId.makeUnsafe(threadId), visitedAt);
+      }
+    } catch {
+      // Ignore malformed persisted UI from another window.
+    }
   });
 }

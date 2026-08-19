@@ -1,6 +1,7 @@
 import type { BrowserAction, BrowserResult } from "@bigbud/contracts";
 
 import type { ElectronWebview } from "./BrowserPanel.viewport.types";
+import { navigateElectronWebview } from "./BrowserPanel.viewport.webview.navigate";
 
 const PAGE_TEXT_LIMIT = 40_000;
 
@@ -29,7 +30,7 @@ export async function executeWebviewAgentAction(
 ): Promise<BrowserResult> {
   switch (action.action) {
     case "navigate":
-      webview.setAttribute("src", action.url);
+      navigateElectronWebview(webview, action.url);
       return { action: action.action, summary: `Navigating visible browser to ${action.url}.` };
     case "capture":
       return {

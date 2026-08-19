@@ -9,7 +9,6 @@ type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 export function shouldRefreshSidebarCatalog(event: OrchestrationEvent): boolean {
   switch (event.type) {
     case "thread.created":
-    case "thread.deletion-requested":
     case "thread.deletion-failed":
     case "thread.deleted":
     case "thread.archived":

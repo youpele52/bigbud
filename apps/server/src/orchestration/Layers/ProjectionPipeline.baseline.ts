@@ -77,16 +77,20 @@ export function makeProjectionBaselineOperations(input: {
     return true;
   });
 
-  const compact = Effect.fn("compactCanonicalProjectionEvents")(function* (batchSize = 500) {
+  const verifyThrough = Effect.fn("verifyProjectionBaselineThrough")(function* () {
     const candidateOption = yield* input.baselines.createCandidate(input.projectorNames);
     if (Option.isNone(candidateOption)) return;
     const verified = yield* verify(candidateOption.value);
     if (!verified) return;
+  });
+
+  const compact = Effect.fn("compactCanonicalProjectionEvents")(function* (batchSize = 500) {
+    yield* verifyThrough();
     if (input.eventStore.compactVerifiedPrefix) {
       const result = yield* input.eventStore.compactVerifiedPrefix(batchSize);
       yield* increment(threadRetentionCompactionRows, {}, result.deletedCount);
     }
   });
 
-  return { compact, verify };
+  return { compact, verify, verifyThrough };
 }

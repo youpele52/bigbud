@@ -1,7 +1,7 @@
-import type { OrchestrationThread } from "@bigbud/contracts";
 import {
   PROVIDER_CHECKING_SESSION_REASON,
   PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
   PROVIDER_STALLED_SESSION_REASON,
 } from "@bigbud/contracts/constants/providerRuntime.constant";
 import type { ProviderTurnLiveness } from "@bigbud/contracts/orchestration/providerTurnLiveness";
@@ -39,32 +39,46 @@ function shouldInspect(liveness: ProviderTurnLiveness, nowMs: number): boolean {
 
 function projectHealthState(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
-  readonly thread: OrchestrationThread;
   readonly liveness: ProviderTurnLiveness;
   readonly status: "running" | "ready" | "error";
   readonly reason: string | null;
   readonly lastError: string | null;
   readonly occurredAt: string;
   readonly terminal?: boolean;
+  readonly clearHealthProjection?: boolean;
 }) {
-  const current = input.thread.session;
-  if (!current || current.activeTurnId !== input.liveness.turnId) return Effect.void;
-  return input.orchestrationEngine
-    .dispatch({
-      type: "thread.session.set",
-      commandId: serverCommandId("provider-turn-health"),
-      threadId: input.thread.id,
-      session: {
-        ...current,
-        status: input.status,
-        activeTurnId: input.terminal ? null : input.liveness.turnId,
-        reason: input.reason,
-        lastError: input.lastError,
-        updatedAt: input.occurredAt,
-      },
-      createdAt: input.occurredAt,
-    })
-    .pipe(Effect.asVoid);
+  return Effect.gen(function* () {
+    const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
+      (candidate) => candidate.id === input.liveness.threadId,
+    );
+    const current = thread?.session;
+    if (!thread || !current || current.activeTurnId !== input.liveness.turnId) return;
+    const isHealthProjection =
+      current.reason === PROVIDER_CHECKING_SESSION_REASON ||
+      current.reason === PROVIDER_RECOVERING_SESSION_REASON ||
+      current.reason === PROVIDER_STALLED_SESSION_REASON ||
+      current.reason === PROVIDER_LOST_SESSION_REASON;
+    if (input.clearHealthProjection && current.status === "error" && !isHealthProjection) {
+      return;
+    }
+    yield* input.orchestrationEngine
+      .dispatch({
+        type: "thread.session.set",
+        commandId: serverCommandId("provider-turn-health"),
+        threadId: thread.id,
+        expectedActiveTurnId: input.liveness.turnId,
+        session: {
+          ...current,
+          status: input.status,
+          activeTurnId: input.terminal ? null : input.liveness.turnId,
+          reason: input.clearHealthProjection && isHealthProjection ? null : input.reason,
+          lastError: input.clearHealthProjection && isHealthProjection ? null : input.lastError,
+          updatedAt: input.occurredAt,
+        },
+        createdAt: input.occurredAt,
+      })
+      .pipe(Effect.asVoid);
+  });
 }
 
 export function superviseProviderTurns(input: {
@@ -94,22 +108,12 @@ export function superviseProviderTurns(input: {
             status: "checking",
             failed: false,
           });
-          yield* projectHealthState({
-            orchestrationEngine: input.orchestrationEngine,
-            thread,
-            liveness,
-            status: "error",
-            reason: PROVIDER_CHECKING_SESSION_REASON,
-            lastError: STATUS_UNCONFIRMED_ERROR,
-            occurredAt,
-          });
-
           const inspection = yield* input.providerService
             .inspectActiveTurn({ threadId: liveness.threadId, turnId: liveness.turnId })
             .pipe(Effect.timeoutOption(PROVIDER_TURN_INSPECTION_TIMEOUT_MS), Effect.option);
           const result = Option.getOrUndefined(Option.flatten(inspection));
           const inspectionStatus = result?.status ?? "timed-out";
-          const failedInspection = result === undefined || result.status === "unavailable";
+          const failedInspection = result === undefined;
           yield* input.providerService.recordTurnInspection({
             threadId: liveness.threadId,
             turnId: liveness.turnId,
@@ -129,7 +133,6 @@ export function superviseProviderTurns(input: {
               const failed = result.status === "failed";
               yield* projectHealthState({
                 orchestrationEngine: input.orchestrationEngine,
-                thread,
                 liveness,
                 status: failed ? "error" : "ready",
                 reason: null,
@@ -144,15 +147,22 @@ export function superviseProviderTurns(input: {
             return;
           }
 
-          if (result?.status === "running") {
+          if (result?.status === "running" || result?.status === "waiting-for-user") {
+            yield* projectHealthState({
+              orchestrationEngine: input.orchestrationEngine,
+              liveness,
+              status: "running",
+              reason: null,
+              lastError: null,
+              occurredAt,
+              clearHealthProjection: true,
+            });
             return;
           }
-          if (result?.status === "waiting-for-user") return;
 
           if (result?.status === "missing") {
             yield* projectHealthState({
               orchestrationEngine: input.orchestrationEngine,
-              thread,
               liveness,
               status: "error",
               reason: PROVIDER_LOST_SESSION_REASON,
@@ -162,10 +172,11 @@ export function superviseProviderTurns(input: {
             return;
           }
 
+          if (result?.status === "unavailable") return;
+
           if (liveness.consecutiveInspectionFailures + 1 >= PROVIDER_TURN_MAX_INSPECTION_FAILURES) {
             yield* projectHealthState({
               orchestrationEngine: input.orchestrationEngine,
-              thread,
               liveness,
               status: "error",
               reason: PROVIDER_STALLED_SESSION_REASON,

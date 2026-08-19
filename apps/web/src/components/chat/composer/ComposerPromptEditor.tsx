@@ -27,6 +27,7 @@ export const ComposerPromptEditor = forwardRef<
     disabled,
     placeholder,
     className,
+    compact,
     onRemoveTerminalContext,
     onChange,
     onCommandKeyDown,
@@ -71,6 +72,7 @@ export const ComposerPromptEditor = forwardRef<
         editorRef={ref}
         {...(onCommandKeyDown ? { onCommandKeyDown } : {})}
         {...(className ? { className } : {})}
+        {...(compact ? { compact } : {})}
       />
     </LexicalComposer>
   );

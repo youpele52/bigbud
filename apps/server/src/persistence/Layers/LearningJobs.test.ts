@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { LearningJobRepository } from "../Services/LearningJobs.ts";
 import { LearningJobRepositoryLive } from "./LearningJobs.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = LearningJobRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory));
 
@@ -13,6 +14,11 @@ it.layer(layer)("LearningJobRepository", (it) => {
   it.effect("creates one durable job per thread turn", () =>
     Effect.gen(function* () {
       const repository = yield* LearningJobRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-learning"),
+      });
       const job = {
         jobId: "learning:thread:turn",
         threadId: ThreadId.makeUnsafe("thread-learning"),
@@ -54,6 +60,10 @@ it.layer(layer)("LearningJobRepository", (it) => {
       const repository = yield* LearningJobRepository;
       const sql = yield* SqlClient.SqlClient;
       const now = "2026-07-11T10:00:00.000Z";
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-learning-legacy"),
+      });
       yield* sql`
         INSERT INTO learning_jobs (
           job_id, thread_id, turn_id, provider, model, model_selection_json,
@@ -79,6 +89,8 @@ it.layer(layer)("LearningJobRepository", (it) => {
     Effect.gen(function* () {
       const repository = yield* LearningJobRepository;
       const threadId = ThreadId.makeUnsafe("thread-skill-only");
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({ sql, threadId });
       const job = {
         jobId: "learning:thread:turn-skill",
         threadId,

@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { ProviderSessionRuntimeRepository } from "../Services/ProviderSessionRuntime.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "./ProviderSessionRuntime.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = ProviderSessionRuntimeRepositoryLive.pipe(
   Layer.provideMerge(SqlitePersistenceMemory),
@@ -54,8 +55,8 @@ it.layer(layer)("provider retention runtime leases", (it) => {
       const repository = yield* ProviderSessionRuntimeRepository;
       const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("provider-durable-lease-thread");
+      yield* insertProjectionThreadParent({ sql, threadId });
       yield* repository.upsert(runtime(threadId));
-      yield* sql`DELETE FROM projection_threads WHERE thread_id = ${threadId}`;
       assert.deepEqual(
         yield* sql<{
           count: number;
@@ -77,6 +78,7 @@ it.layer(layer)("provider retention runtime leases", (it) => {
       const repository = yield* ProviderSessionRuntimeRepository;
       const sql = yield* SqlClient.SqlClient;
       const missing = ThreadId.makeUnsafe("provider-missing-cwd-thread");
+      yield* insertProjectionThreadParent({ sql, threadId: missing });
       yield* repository.upsert(runtime(missing, { cwd: null }));
       const remote = ThreadId.makeUnsafe("provider-remote-thread");
       yield* repository.upsert(runtime(remote, { remote: true, cwd: "/remote/workspace" }));
