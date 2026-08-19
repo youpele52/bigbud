@@ -205,11 +205,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
                         ).pipe(Effect.asVoid)
                       : processEnvelope(envelope).pipe(
                           Effect.tap((accepted) =>
-                            (envelope.command.type === "thread.delete" && !accepted) ||
-                            (envelope.command.type === "thread.delete.finalize" && accepted) ||
-                            (envelope.command.type === "thread.delete.abort" && accepted)
-                              ? deletionFence.release(envelope.command)
-                              : Effect.void,
+                            deletionFence.releaseAfterProcess(envelope.command, accepted),
                           ),
                           Effect.asVoid,
                         ),

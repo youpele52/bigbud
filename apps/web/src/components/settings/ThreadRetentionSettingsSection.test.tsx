@@ -32,6 +32,8 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("Eligible root thread subtrees are cleaned up together");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
+    expect(markup).toContain("Automatic cleanup above is separate");
+    expect(markup).toContain("One-off cleanup period");
     expect(markup).toContain(
       "Eligible root thread subtrees and their descendants are cleaned up together",
     );

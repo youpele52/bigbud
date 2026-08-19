@@ -146,16 +146,18 @@ export function buildThreadReconciliationCommand(input: {
   };
 }
 
+export const STARTUP_STALE_DELETE_RETRY_LIMIT = 25;
+
 export function buildStartupReconciliationCommands(input: {
   threads: ReadonlyArray<OrchestrationThread>;
   liveSessions: ReadonlyArray<ProviderSession>;
-  deletionOwnedThreadIds?: ReadonlySet<string>;
   occurredAt: string;
 }): ReadonlyArray<OrchestrationCommand> {
   const liveSessionByThreadId = new Map(
     input.liveSessions.map((session) => [session.threadId, session]),
   );
   const commands: OrchestrationCommand[] = [];
+  let staleDeleteRetries = 0;
 
   for (const thread of input.threads) {
     if (thread.deletedAt !== null) {
@@ -163,15 +165,16 @@ export function buildStartupReconciliationCommands(input: {
     }
 
     if (thread.deletingAt !== null) {
-      if (input.deletionOwnedThreadIds?.has(thread.id)) {
+      if (staleDeleteRetries >= STARTUP_STALE_DELETE_RETRY_LIMIT) {
         continue;
       }
+      staleDeleteRetries += 1;
       commands.push({
-        type: "thread.delete.abort",
-        commandId: serverCommandId("provider-runtime-stale-thread-delete-abort"),
+        type: "thread.delete",
+        commandId: serverCommandId("provider-runtime-stale-thread-delete-retry"),
         threadId: thread.id,
-        createdAt: input.occurredAt,
       });
+      continue;
     }
 
     const command = buildThreadReconciliationCommand({

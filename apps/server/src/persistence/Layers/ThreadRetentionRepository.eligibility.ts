@@ -2,7 +2,8 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 export const retentionExclusionCaseSql = `
     CASE
-      WHEN t.deleting_at IS NOT NULL OR t.deleted_at IS NOT NULL THEN 'deleting'
+      WHEN t.deleted_at IS NOT NULL THEN 'already_deleted'
+      WHEN t.deleting_at IS NOT NULL THEN 'deleting'
       WHEN t.pinned_at IS NOT NULL THEN 'pinned'
       WHEN NOT EXISTS (
         SELECT 1 FROM projection_projects AS project

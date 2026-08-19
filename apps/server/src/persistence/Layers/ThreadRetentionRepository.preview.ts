@@ -2,10 +2,11 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { ThreadRetentionExclusionReason } from "../Services/ThreadRetentionRepository.ts";
+import { retentionExclusionCase } from "./ThreadRetentionRepository.eligibility.ts";
 import {
-  retentionDurableExclusions,
-  retentionExclusionCase,
-} from "./ThreadRetentionRepository.eligibility.ts";
+  retentionEligibleRootFromSql,
+  retentionSubtreeCteSql,
+} from "./ThreadRetentionRepository.pages.ts";
 
 const THREAD_LIMIT = 250;
 const ATTACHMENT_LIMIT = 1_000;
@@ -13,22 +14,22 @@ const CHECKPOINT_LIMIT = 1_000;
 const BYTE_LIMIT = 100 * 1024 * 1024;
 
 export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
-  const eligible = retentionDurableExclusions(sql);
   const exclusion = retentionExclusionCase(sql);
 
   return Effect.fn("ThreadRetentionRepository.preview")(function* (cutoffAt: string) {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
-        const totals = yield* sql<{
+        const totals = yield* sql.unsafe<{
           eligibleCount: number;
           oldest: string | null;
           newest: string | null;
-        }>`
-          SELECT COUNT(*) AS "eligibleCount", MIN(t.last_activity_at) AS oldest,
-            MAX(t.last_activity_at) AS newest
-          FROM projection_threads AS t
-          WHERE t.last_activity_at <= ${cutoffAt} AND ${eligible}
-        `;
+        }>(
+          `${retentionSubtreeCteSql}
+          SELECT COUNT(*) AS "eligibleCount", MIN(activity.last_activity_at) AS oldest,
+            MAX(activity.last_activity_at) AS newest
+          ${retentionEligibleRootFromSql}`,
+          [cutoffAt],
+        );
         const exclusions = yield* sql<{
           reason: ThreadRetentionExclusionReason;
           count: number;
@@ -38,7 +39,7 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
             WHERE t.last_activity_at <= ${cutoffAt}
           ) WHERE reason IS NOT NULL GROUP BY reason ORDER BY reason ASC
         `;
-        const estimates = yield* sql<{
+        const estimates = yield* sql.unsafe<{
           attachmentCount: number;
           attachmentRows: number;
           attachmentBytes: number;
@@ -46,11 +47,19 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
           checkpointRows: number;
           checkpointBytes: number;
           worktreeCount: number;
-        }>`
-          WITH candidates AS (
-            SELECT t.thread_id, t.worktree_path FROM projection_threads AS t
-            WHERE t.last_activity_at <= ${cutoffAt} AND ${eligible}
-            ORDER BY t.last_activity_at ASC, t.thread_id ASC LIMIT ${THREAD_LIMIT}
+        }>(
+          `${retentionSubtreeCteSql},
+          eligible_roots AS (
+            SELECT t.thread_id AS thread_id, activity.last_activity_at AS last_activity_at
+            ${retentionEligibleRootFromSql}
+          ), candidates AS (
+            SELECT subtree.thread_id, thread.worktree_path
+            FROM eligible_roots
+            JOIN thread_subtree AS subtree ON subtree.root_thread_id = eligible_roots.thread_id
+            JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
+            ORDER BY eligible_roots.last_activity_at ASC, eligible_roots.thread_id ASC,
+              subtree.thread_id ASC
+            LIMIT ${THREAD_LIMIT}
           ), attachment_rows AS (
             SELECT COALESCE(json_extract(attachment.value, '$.sizeBytes'), 0) AS known_bytes
             FROM projection_thread_messages AS message
@@ -84,8 +93,9 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
             COALESCE((SELECT SUM(known_bytes) FROM (
               SELECT known_bytes FROM checkpoints LIMIT ${CHECKPOINT_LIMIT}
             )), 0) AS "checkpointBytes",
-            (SELECT COUNT(*) FROM candidates WHERE worktree_path IS NOT NULL) AS "worktreeCount"
-        `;
+            (SELECT COUNT(*) FROM candidates WHERE worktree_path IS NOT NULL) AS "worktreeCount"`,
+          [cutoffAt],
+        );
         const total = totals[0];
         const estimate = estimates[0];
         const eligibleCount = total?.eligibleCount ?? 0;

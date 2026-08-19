@@ -100,6 +100,7 @@ export const ServerThreadRetentionResult = Schema.Struct({
   eligibleCount: NonNegativeInt,
   deletedCount: NonNegativeInt,
   skippedCount: NonNegativeInt,
+  pendingCount: NonNegativeInt,
   completedAt: IsoDateTime,
 });
 export type ServerThreadRetentionResult = typeof ServerThreadRetentionResult.Type;

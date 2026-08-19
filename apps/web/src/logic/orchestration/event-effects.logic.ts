@@ -8,6 +8,7 @@ export interface OrchestrationBatchEffects {
   clearDeletedProjectIds: ProjectId[];
   removeSelectedThreadIds: ThreadId[];
   removeTerminalStateThreadIds: ThreadId[];
+  failedDeleteThreadIds: ThreadId[];
   needsProviderInvalidation: boolean;
 }
 
@@ -20,6 +21,7 @@ export function deriveOrchestrationBatchEffects(
       clearPromotedDraft: boolean;
       clearDeletedThread: boolean;
       removeTerminalState: boolean;
+      failedDelete: boolean;
     }
   >();
   let needsProviderInvalidation = false;
@@ -37,6 +39,7 @@ export function deriveOrchestrationBatchEffects(
           clearPromotedDraft: true,
           clearDeletedThread: false,
           removeTerminalState: false,
+          failedDelete: false,
         });
         break;
       }
@@ -52,6 +55,7 @@ export function deriveOrchestrationBatchEffects(
             clearPromotedDraft: false,
             clearDeletedThread: true,
             removeTerminalState: true,
+            failedDelete: false,
           });
         }
         break;
@@ -62,6 +66,7 @@ export function deriveOrchestrationBatchEffects(
           clearPromotedDraft: false,
           clearDeletedThread: false,
           removeTerminalState: true,
+          failedDelete: false,
         });
         break;
       }
@@ -71,6 +76,17 @@ export function deriveOrchestrationBatchEffects(
           clearPromotedDraft: false,
           clearDeletedThread: false,
           removeTerminalState: false,
+          failedDelete: false,
+        });
+        break;
+      }
+
+      case "thread.deletion-failed": {
+        threadLifecycleEffects.set(event.payload.threadId, {
+          clearPromotedDraft: false,
+          clearDeletedThread: false,
+          removeTerminalState: false,
+          failedDelete: true,
         });
         break;
       }
@@ -86,6 +102,7 @@ export function deriveOrchestrationBatchEffects(
   const clearDeletedProjectIds: ProjectId[] = [];
   const removeSelectedThreadIds: ThreadId[] = [];
   const removeTerminalStateThreadIds: ThreadId[] = [];
+  const failedDeleteThreadIds: ThreadId[] = [];
   for (const event of events) {
     if (event.type === "project.deleted") {
       clearDeletedProjectIds.push(event.payload.projectId);
@@ -102,6 +119,9 @@ export function deriveOrchestrationBatchEffects(
     if (effect.removeTerminalState) {
       removeTerminalStateThreadIds.push(threadId);
     }
+    if (effect.failedDelete) {
+      failedDeleteThreadIds.push(threadId);
+    }
   }
 
   return {
@@ -110,6 +130,7 @@ export function deriveOrchestrationBatchEffects(
     clearDeletedProjectIds,
     removeSelectedThreadIds,
     removeTerminalStateThreadIds,
+    failedDeleteThreadIds,
     needsProviderInvalidation,
   };
 }

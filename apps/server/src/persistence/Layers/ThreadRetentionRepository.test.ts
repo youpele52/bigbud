@@ -153,6 +153,7 @@ layer("ThreadRetentionRepository", (it) => {
       `;
       const repository = yield* ThreadRetentionRepository;
       assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), []);
+      assert.equal((yield* repository.preview(cutoffAt)).eligibleCount, 0);
     }),
   );
 
@@ -170,8 +171,12 @@ layer("ThreadRetentionRepository", (it) => {
       yield* seedThread("delegated");
       yield* seedThread("scheduled");
       yield* seedThread("owned");
+      yield* seedThread("already-deleted");
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE projection_threads SET pinned_at = ${now} WHERE thread_id = 'pinned'`;
+      yield* sql`
+        UPDATE projection_threads SET deleted_at = ${now} WHERE thread_id = 'already-deleted'
+      `;
       yield* sql`
         UPDATE projection_threads
         SET queued_prompts_json = '[{"id":"queued-message"}]' WHERE thread_id = 'queued'
@@ -218,6 +223,7 @@ layer("ThreadRetentionRepository", (it) => {
       assert.equal(preview.eligibleCount, 3);
       assert.deepEqual(preview.exclusionCounts, [
         { reason: "active_task", count: 1 },
+        { reason: "already_deleted", count: 1 },
         { reason: "automation_owned", count: 1 },
         { reason: "pending_work", count: 1 },
         { reason: "pinned", count: 1 },

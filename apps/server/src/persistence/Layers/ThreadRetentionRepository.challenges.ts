@@ -171,7 +171,11 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           consumedAt: request.consumedAt,
         });
         return result === "consumed"
-          ? ({ consumed: true, policy: challenge.value.policy } as const)
+          ? ({
+              consumed: true,
+              policy: challenge.value.policy,
+              cutoffAt: challenge.value.cutoffAt,
+            } as const)
           : ({ consumed: false, result } as const);
       }),
     );

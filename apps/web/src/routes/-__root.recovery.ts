@@ -8,6 +8,7 @@ import {
 } from "../stores/composer";
 import { useStore } from "../stores/main";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import { toastManager } from "../components/ui/toast";
 import {
   applySideChatLifecycleEvents,
   reconcileSideChatSnapshot,
@@ -28,6 +29,7 @@ import {
   setThreadHydrationEventApplier,
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
+import { getFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
 import {
   coalesceOrchestrationUiEvents,
   shouldFlushOrchestrationEventImmediately,
@@ -171,6 +173,10 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     for (const threadId of batchEffects.removeTerminalStateThreadIds) {
       input.removeTerminalState(threadId);
     }
+    const failedDeleteToast = getFailedThreadDeletionToast(
+      batchEffects.failedDeleteThreadIds.length,
+    );
+    if (failedDeleteToast) toastManager.add(failedDeleteToast);
   };
 
   const applyEventBatch = (

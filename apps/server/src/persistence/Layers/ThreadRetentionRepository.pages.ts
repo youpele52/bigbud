@@ -13,7 +13,7 @@ import { retentionExclusionCaseSql } from "./ThreadRetentionRepository.eligibili
 const OUTSTANDING_STATUSES = ["selected", "deletion_requested", "prepared", "purging"];
 const clampLimit = (limit: number) => Math.max(1, Math.min(250, Math.floor(limit)));
 
-export const retentionCandidateSelectSql = `
+export const retentionSubtreeCteSql = `
   WITH RECURSIVE thread_subtree(root_thread_id, thread_id) AS (
     SELECT t.thread_id, t.thread_id
     FROM projection_threads AS t
@@ -33,14 +33,22 @@ export const retentionCandidateSelectSql = `
     JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
     GROUP BY subtree.root_thread_id
   )
-  SELECT t.thread_id AS "threadId", activity.last_activity_at AS "lastActivityAt"
+`;
+
+export const retentionEligibleRootFromSql = `
   FROM projection_threads AS t
   JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
   WHERE t.deleted_at IS NULL AND t.deleting_at IS NULL AND t.pinned_at IS NULL
     AND activity.last_activity_at <= ?
+    AND (${retentionExclusionCaseSql}) IS NULL
+`;
+
+export const retentionCandidateSelectSql = `
+  ${retentionSubtreeCteSql}
+  SELECT t.thread_id AS "threadId", activity.last_activity_at AS "lastActivityAt"
+  ${retentionEligibleRootFromSql}
     AND (? IS NULL OR activity.last_activity_at > ?
       OR (activity.last_activity_at = ? AND t.thread_id > ?))
-    AND (${retentionExclusionCaseSql}) IS NULL
   ORDER BY activity.last_activity_at ASC, t.thread_id ASC LIMIT ?
 `;
 

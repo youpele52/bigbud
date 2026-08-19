@@ -42,10 +42,10 @@ export function ThreadRetentionConfirmationContent({
             </>
           ) : (
             <p>
-              <strong className="text-foreground">{preview.eligibleCount}</strong> threads have been
-              inactive since {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible
-              for deletion. Before deleting, bigbud checks each thread again for safety, so the
-              final safety checks may skip a subtree that became active.
+              <strong className="text-foreground">{preview.eligibleCount}</strong> root thread
+              subtrees last had activity on or before {formatRetentionCutoff(preview.cutoffAt)} and
+              are currently eligible for deletion. Before deleting, bigbud checks each subtree again
+              for safety, so a later safety check may skip a subtree that became active.
             </p>
           )}
           {maintenanceMessage ? <p>{maintenanceMessage}</p> : null}

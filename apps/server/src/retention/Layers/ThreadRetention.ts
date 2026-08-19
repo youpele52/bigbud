@@ -30,7 +30,15 @@ const makeThreadRetention = Effect.gen(function* () {
   const run = (
     policy: import("@bigbud/contracts").FiniteThreadRetentionPolicy,
     trigger: "manual" | "scheduled",
-  ) => runDirectThreadRetention({ policy, trigger, repository, orchestration });
+    cutoffAt?: string,
+  ) =>
+    runDirectThreadRetention({
+      policy,
+      trigger,
+      repository,
+      orchestration,
+      ...(cutoffAt === undefined ? {} : { cutoffAt }),
+    });
 
   const enqueue: ThreadRetentionShape["enqueue"] = ({ challengeToken }) =>
     Effect.gen(function* () {
@@ -54,7 +62,7 @@ const makeThreadRetention = Effect.gen(function* () {
           return yield* retentionError("challenge_consumed", "The confirmation was already used.");
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
-      return yield* run(accepted.policy, "manual");
+      return yield* run(accepted.policy, "manual", accepted.cutoffAt);
     }).pipe(
       Effect.mapError((error) =>
         Schema.is(ServerThreadRetentionError)(error)

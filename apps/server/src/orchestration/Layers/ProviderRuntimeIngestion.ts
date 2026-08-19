@@ -7,7 +7,7 @@
  *
  * @module ProviderRuntimeIngestion
  */
-import { Clock, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
+import { Clock, Effect, Layer, Schedule, Scope, Stream } from "effect";
 import { Cause } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
@@ -38,8 +38,6 @@ import {
   makePeriodicReconciliationState,
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
-import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
-import { PurgeJobRepository } from "../../persistence/Services/PurgeJobRepository.ts";
 import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
 
 const make = Effect.fn("make")(function* () {
@@ -47,8 +45,6 @@ const make = Effect.fn("make")(function* () {
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
-  const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
-  const purgeJobRepository = yield* Effect.serviceOption(PurgeJobRepository);
   const cacheHelpers = yield* makeRuntimeProcessorCacheHelpers();
 
   const processorServices: RuntimeProcessorServices = {
@@ -116,34 +112,18 @@ const make = Effect.fn("make")(function* () {
 
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
-      const [readModel, discovery, purgeJobs] = yield* Effect.all([
+      const [readModel, discovery] = yield* Effect.all([
         orchestrationEngine.getReadModel(),
         discoverProviderSessions(),
-        Option.isSome(purgeJobRepository)
-          ? purgeJobRepository.value.listIncomplete(1_000)
-          : Effect.succeed([]),
       ]);
       const liveSessions = discovery.sessions;
       const reconcilableThreads = readModel.threads.filter((thread) =>
         discovery.availableProviders.has(thread.modelSelection.provider),
       );
-      const startupDeletingThreadIds = readModel.threads
-        .filter((thread) => thread.deletingAt !== null)
-        .slice(0, 250)
-        .map((thread) => thread.id);
-      const deletionOwnedThreadIds = new Set<string>(
-        Option.isSome(retentionRepository)
-          ? yield* retentionRepository.value.listDeletionOwnedThreadIds(startupDeletingThreadIds)
-          : [],
-      );
-      for (const job of purgeJobs) {
-        if (job.entityKind === "thread") deletionOwnedThreadIds.add(job.entityId);
-      }
       const occurredAt = new Date().toISOString();
       const commands = buildStartupReconciliationCommands({
         threads: reconcilableThreads,
         liveSessions,
-        deletionOwnedThreadIds,
         occurredAt,
       });
 

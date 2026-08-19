@@ -16,7 +16,9 @@ export function makeDeletionFence(input: {
   readonly readModel: () => OrchestrationReadModel;
 }) {
   const allowsWhileFenced = (command: OrchestrationCommand, threadId: ThreadId) =>
-    command.type === "thread.delete.finalize" || command.type === "thread.delete.abort"
+    command.type === "thread.delete.finalize" ||
+    command.type === "thread.delete.abort" ||
+    command.type === "thread.retention-delete"
       ? input.threadDeletion.isFenceRoot(threadId)
       : Effect.succeed(false);
 
@@ -48,14 +50,26 @@ export function makeDeletionFence(input: {
     );
   };
 
-  const acquire = (command: OrchestrationCommand) =>
-    command.type === "thread.delete"
-      ? input.threadDeletion.acquireFence(command.threadId)
-      : Effect.succeed(true);
+  const acquire = (command: OrchestrationCommand) => {
+    if (command.type === "thread.delete") {
+      return input.threadDeletion.acquireFence(command.threadId);
+    }
+    if (command.type === "thread.retention-delete") {
+      return input.threadDeletion
+        .isFenceRoot(command.threadId)
+        .pipe(
+          Effect.flatMap((held) =>
+            held ? Effect.succeed(true) : input.threadDeletion.acquireFence(command.threadId),
+          ),
+        );
+    }
+    return Effect.succeed(true);
+  };
 
   const release = (command: OrchestrationCommand) => {
     switch (command.type) {
       case "thread.delete":
+      case "thread.retention-delete":
       case "thread.delete.finalize":
       case "thread.delete.abort":
         return input.threadDeletion.releaseFence(command.threadId);
@@ -64,5 +78,22 @@ export function makeDeletionFence(input: {
     }
   };
 
-  return { assertAllows, acquire, release } as const;
+  const releaseAfterProcess = (command: OrchestrationCommand, accepted: boolean) => {
+    if (command.type === "thread.delete.finalize" || command.type === "thread.delete.abort") {
+      return accepted ? release(command) : Effect.void;
+    }
+    if (command.type === "thread.delete") {
+      return accepted ? Effect.void : release(command);
+    }
+    if (command.type === "thread.retention-delete") {
+      if (!accepted) return release(command);
+      const thread = input
+        .readModel()
+        .threads.find((candidate) => candidate.id === command.threadId);
+      return thread?.deletingAt == null ? release(command) : Effect.void;
+    }
+    return Effect.void;
+  };
+
+  return { assertAllows, acquire, release, releaseAfterProcess } as const;
 }

@@ -84,11 +84,30 @@ describe("ThreadRetentionSettingsSection logic", () => {
         eligibleCount: 8,
         deletedCount: 6,
         skippedCount: 2,
+        pendingCount: 0,
         completedAt: "2026-08-18T00:00:00.000Z",
       }),
     ).toEqual({
       title: "Thread cleanup finished",
       description: "Deleted 6 threads and skipped 2.",
+    });
+  });
+
+  it("does not call a pending cleanup finished", () => {
+    expect(
+      getRetentionCleanupSuccessToast({
+        trigger: "manual",
+        policy: "14-days",
+        cutoffAt: "2026-08-04T00:00:00.000Z",
+        eligibleCount: 4,
+        deletedCount: 0,
+        skippedCount: 0,
+        pendingCount: 4,
+        completedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toEqual({
+      title: "Thread cleanup still running",
+      description: "Deleted 0 so far, skipped 0. 4 still deleting.",
     });
   });
 });

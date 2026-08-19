@@ -88,13 +88,20 @@ export function getRetentionCleanupLoadingToast(): { readonly title: string } {
   return { title: "Deleting eligible threads…" };
 }
 
+export function formatRetentionCleanupResult(result: ServerThreadRetentionResult): string {
+  if (result.pendingCount > 0) {
+    return `Deleted ${result.deletedCount} so far, skipped ${result.skippedCount}. ${result.pendingCount} still deleting.`;
+  }
+  return `Deleted ${result.deletedCount} threads and skipped ${result.skippedCount}.`;
+}
+
 export function getRetentionCleanupSuccessToast(result: ServerThreadRetentionResult): {
   readonly title: string;
   readonly description: string;
 } {
   return {
-    title: "Thread cleanup finished",
-    description: `Deleted ${result.deletedCount} threads and skipped ${result.skippedCount}.`,
+    title: result.pendingCount > 0 ? "Thread cleanup still running" : "Thread cleanup finished",
+    description: formatRetentionCleanupResult(result),
   };
 }
 

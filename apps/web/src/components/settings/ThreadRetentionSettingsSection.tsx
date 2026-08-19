@@ -24,6 +24,7 @@ import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
 import {
+  formatRetentionCleanupResult,
   getRetentionCleanupLoadingToast,
   getRetentionCleanupSuccessToast,
   getRetentionPolicyUpdatedToast,
@@ -169,8 +170,7 @@ export function ThreadRetentionSettingsSection() {
           status={
             result ? (
               <p className="text-xs text-muted-foreground">
-                Latest cleanup deleted {result.deletedCount} threads and skipped{" "}
-                {result.skippedCount}.
+                Latest cleanup: {formatRetentionCleanupResult(result)}
               </p>
             ) : null
           }
@@ -206,22 +206,45 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Runs now across all projects using a one-off cleanup period you choose. Eligible root thread subtrees and their descendants are cleaned up together."
+          description="Runs now across all projects using the one-off period on this row. Automatic cleanup above is separate. Eligible root thread subtrees and their descendants are cleaned up together."
           control={
-            <Button
-              ref={actionButtonRef}
-              variant="destructive-outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                const nextPolicy = policy === "never" ? "7-days" : policy;
-                setManualPolicy(nextPolicy);
-                void requestPreview("manual", nextPolicy);
-              }}
-            >
-              <Trash2Icon />
-              Delete eligible threads now
-            </Button>
+            <div className="flex w-full flex-col gap-2">
+              <Select
+                value={manualPolicy}
+                disabled={busy}
+                onValueChange={(value) => {
+                  if (
+                    typeof value === "string" &&
+                    (FINITE_THREAD_RETENTION_POLICIES as readonly string[]).includes(value)
+                  ) {
+                    setManualPolicy(value as FiniteThreadRetentionPolicy);
+                  }
+                }}
+              >
+                <SelectTrigger aria-label="One-off cleanup period" className="w-full">
+                  <SelectValue>{THREAD_RETENTION_POLICY_LABELS[manualPolicy]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  {FINITE_THREAD_RETENTION_POLICIES.map((value) => (
+                    <SelectItem hideIndicator key={value} value={value}>
+                      {THREAD_RETENTION_POLICY_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+              <Button
+                ref={actionButtonRef}
+                variant="destructive-outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  void requestPreview("manual", manualPolicy);
+                }}
+              >
+                <Trash2Icon />
+                Delete eligible threads now
+              </Button>
+            </div>
           }
         />
       </SettingsSection>

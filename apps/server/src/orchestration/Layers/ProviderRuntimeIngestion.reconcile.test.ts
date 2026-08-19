@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
 import {
+  STARTUP_STALE_DELETE_RETRY_LIMIT,
   buildStartupReconciliationCommands,
   buildThreadReconciliationCommand,
   dispatchReconciliationCommandSafely,
@@ -185,24 +186,70 @@ describe("provider startup reconciliation", () => {
     });
   });
 
-  it("does not abort or reconcile retention/purge-owned deletions", () => {
-    expect(
-      buildStartupReconciliationCommands({
-        threads: [deletingThread],
-        liveSessions: [],
-        deletionOwnedThreadIds: new Set([deletingThreadId]),
-        occurredAt,
-      }),
-    ).toEqual([]);
-  });
-
-  it("continues abort recovery for unowned stale deletions", () => {
+  it("retries retention/purge-owned stale deletions at startup", () => {
     expect(
       buildStartupReconciliationCommands({
         threads: [deletingThread],
         liveSessions: [],
         occurredAt,
       }).map((command) => command.type),
-    ).toEqual(["thread.delete.abort"]);
+    ).toEqual(["thread.delete"]);
+  });
+
+  it("caps stale deletion retries so startup cannot stampede", () => {
+    const threads = Array.from({ length: STARTUP_STALE_DELETE_RETRY_LIMIT + 3 }, (_, index) => ({
+      ...deletingThread,
+      id: ThreadId.makeUnsafe(`startup-deleting-thread-${index}`),
+    })) as import("@bigbud/contracts").OrchestrationThread[];
+
+    expect(
+      buildStartupReconciliationCommands({
+        threads,
+        liveSessions: [],
+        occurredAt,
+      }).filter((command) => command.type === "thread.delete"),
+    ).toHaveLength(STARTUP_STALE_DELETE_RETRY_LIMIT);
+  });
+
+  it("retries unowned stale deletions instead of aborting them back into the sidebar", () => {
+    expect(
+      buildStartupReconciliationCommands({
+        threads: [deletingThread],
+        liveSessions: [],
+        occurredAt,
+      }).map((command) => command.type),
+    ).toEqual(["thread.delete"]);
+  });
+
+  it("does not reconcile sessions for a deleting thread it is retrying", () => {
+    expect(
+      buildStartupReconciliationCommands({
+        threads: [
+          {
+            ...deletingThread,
+            session: {
+              threadId: deletingThreadId,
+              status: "running",
+              providerName: "codex",
+              runtimeMode: "full-access",
+              activeTurnId: null,
+              lastError: null,
+              updatedAt: occurredAt,
+            },
+          } as import("@bigbud/contracts").OrchestrationThread,
+        ],
+        liveSessions: [
+          {
+            threadId: deletingThreadId,
+            provider: "codex",
+            status: "ready",
+            runtimeMode: "full-access",
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          },
+        ],
+        occurredAt,
+      }).map((command) => command.type),
+    ).toEqual(["thread.delete"]);
   });
 });

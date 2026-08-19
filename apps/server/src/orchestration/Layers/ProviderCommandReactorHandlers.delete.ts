@@ -18,6 +18,7 @@ import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { ThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
+import { threadSubtreeHasLiveActiveRuntime } from "../../deletion/Services/ThreadDeletion.preflight.ts";
 import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
 
 type DeleteRequestedEvent = Extract<
@@ -92,7 +93,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
     updatedAt: input.occurredAt,
   });
 
-  const runCleanupStep = <A, E, R>(
+  const runCleanupStepOnce = <A, E, R>(
     step: "provider" | "browser" | "terminal" | "shell",
     effect: Effect.Effect<A, E, R>,
   ) =>
@@ -107,6 +108,15 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
               detail: Cause.pretty(exit.cause),
             }
           : { ok: true as const, step },
+      ),
+    );
+  const runCleanupStep = <A, E, R>(
+    step: "provider" | "browser" | "terminal" | "shell",
+    effect: () => Effect.Effect<A, E, R>,
+  ) =>
+    runCleanupStepOnce(step, effect()).pipe(
+      Effect.flatMap((first) =>
+        first.ok ? Effect.succeed(first) : runCleanupStepOnce(step, effect()),
       ),
     );
 
@@ -128,18 +138,9 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
         Effect.gen(function* () {
           if (threads.some((candidate) => candidate.pinnedAt !== null)) return "pinned" as const;
           const liveSessions = yield* providerService.listSessions();
-          const hasActiveRuntime = threads.some(
-            (candidate) =>
-              candidate.session?.status === "starting" ||
-              candidate.session?.status === "running" ||
-              candidate.latestTurn?.state === "running" ||
-              liveSessions.some(
-                (session) =>
-                  session.threadId === candidate.id &&
-                  (session.status === "connecting" || session.status === "running"),
-              ),
-          );
-          return hasActiveRuntime ? ("active" as const) : undefined;
+          return threadSubtreeHasLiveActiveRuntime({ threads, liveSessions })
+            ? ("active" as const)
+            : undefined;
         }).pipe(
           Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
         ),
@@ -177,14 +178,12 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 : Effect.void;
           const results = yield* Effect.all(
             [
-              runCleanupStep("provider", providerCleanup),
-              runCleanupStep("browser", browser.close(candidate.id)),
-              runCleanupStep(
-                "terminal",
+              runCleanupStep("provider", () => providerCleanup),
+              runCleanupStep("browser", () => browser.close(candidate.id)),
+              runCleanupStep("terminal", () =>
                 terminal.close({ threadId: candidate.id, deleteHistory: false }),
               ),
-              runCleanupStep(
-                "shell",
+              runCleanupStep("shell", () =>
                 Option.isSome(shell) ? shell.value.closeThread(candidate.id) : Effect.void,
               ),
             ],
