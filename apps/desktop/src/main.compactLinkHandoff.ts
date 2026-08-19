@@ -48,7 +48,9 @@ export function createCompactLinkHandoffCoordinator(
     attachedWindow = window;
     rendererReady = false;
     window.webContents.on("did-start-loading", () => {
-      if (attachedWindow === window) rendererReady = false;
+      if (attachedWindow !== window || window.isDestroyed()) return;
+      if (!window.webContents.isLoadingMainFrame()) return;
+      rendererReady = false;
     });
     window.once("closed", () => clearClosedWindow(window));
   };

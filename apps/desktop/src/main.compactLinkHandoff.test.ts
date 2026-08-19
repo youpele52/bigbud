@@ -62,9 +62,11 @@ describe("compact link handoff coordinator", () => {
 
     coordinator.attachMainWindow(window as never);
     coordinator.markRendererReady(window as never);
+    window.webContents.isLoadingMainFrame.mockReturnValue(true);
     handlers.get("did-start-loading")?.();
     coordinator.request(firstHandoff);
     handlers.get("did-start-loading")?.();
+    window.webContents.isLoadingMainFrame.mockReturnValue(false);
     coordinator.markRendererReady(window as never);
     expect(window.webContents.send).toHaveBeenCalledOnce();
 
@@ -75,6 +77,29 @@ describe("compact link handoff coordinator", () => {
     expect(window.webContents.send).not.toHaveBeenCalledWith("desktop:menu-action", {
       ...firstHandoff,
       href: "cleared.md",
+    });
+  });
+
+  it("still delivers later handoffs after a guest-frame load", () => {
+    const { handlers, window } = createWindow();
+    const coordinator = createCompactLinkHandoffCoordinator({
+      getMainWindow: () => window as never,
+      openMainWindow: () => window as never,
+      menuActionChannel: "desktop:menu-action",
+    });
+
+    coordinator.attachMainWindow(window as never);
+    coordinator.markRendererReady(window as never);
+    coordinator.request(firstHandoff);
+    window.webContents.send.mockClear();
+
+    handlers.get("did-start-loading")?.();
+    coordinator.request({ ...firstHandoff, href: "https://localhost:4321/docs" });
+
+    expect(window.webContents.send).toHaveBeenCalledOnce();
+    expect(window.webContents.send).toHaveBeenCalledWith("desktop:menu-action", {
+      ...firstHandoff,
+      href: "https://localhost:4321/docs",
     });
   });
 

@@ -10,6 +10,37 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
+## v0.2.204 (19 August, 2026)
+
+### Floating Assistant
+
+- Opened markdown file and external links from compact chat in the main window after navigating to the source thread.
+- Kept those compact-chat file and link handoffs working after the first click, instead of only focusing the main window once the in-app browser or file preview had loaded.
+- Stopped Electron from aborting in-app browser navigations (`GUEST_VIEW_MANAGER_CALL` / `ERR_ABORTED`) when compact chat or the browser panel opened a new URL while a previous page was still loading.
+- Replaced completed-thread check marks in the compact chat picker with colored status dots that match the sidebar, including green for completed work.
+
+### Refined Settings
+
+- Grouped new-thread defaults, archive and delete confirmations, and automatic cleanup into one **Threads** section on the General page.
+- Removed the extra day picker from **Delete eligible threads now**; you choose the cutoff in the confirmation dialog, and the **Delete now** button matches the automatic-period control width.
+- Reduced Default chat folder and Learning folder path labels to a smaller monospace size so they sit with the rest of the settings controls.
+
+### Safer Thread Cleanup
+
+- Moved thread deletion and automatic cleanup onto the server. Root chats and their descendants now go through one pipeline, and Settings and the sidebar follow real cleanup events instead of polling.
+- Made **Delete now** use the period you confirm in the dialog, and made the preview count match what actually gets cleaned up. Age follows the latest user message, the same clock as Recents.
+- Kept deletes fail-closed: after a delete is committed, chats stay hidden, file-cleanup problems no longer restore them, 1-, 2-, and 3-day periods work in the database, and bigbud waits for cleanup to settle before navigating away.
+
+### More Reliable Chats and Providers
+
+- Hardened provider recovery so turn identity is preserved across health inspection, stream and process recovery, and direct dispatch, and aligned chat and sidebar status with that recovery state.
+- Connected OpenCode session status, questions, and permission checks to active-turn inspection so idle turns can complete explicitly while unexpected statuses keep local state.
+
+### Validation
+
+- Added regression coverage for server-owned deletion and retention, preview and claim eligibility, compact-chat link handoff, mascot shell startup, provider recovery, and OpenCode turn inspection.
+- Verified formatting, linting, and workspace type checks.
+
 ## v0.2.203 (17 August, 2026)
 
 ### Floating Assistant
