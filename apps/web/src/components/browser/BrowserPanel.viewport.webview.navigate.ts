@@ -23,11 +23,6 @@ export function navigateElectronWebview(webview: ElectronWebview, url: string): 
   if (url.length === 0 || webviewIsShowingUrl(webview, url)) return;
 
   if (isWebviewReady(webview) && typeof webview.loadURL === "function") {
-    try {
-      webview.stop?.();
-    } catch {
-      // Guest may not have a document in flight yet.
-    }
     void webview.loadURL(url).catch((error: unknown) => {
       if (isAbortedWebviewNavigation(error)) return;
       console.error("Failed to load browser URL:", error);

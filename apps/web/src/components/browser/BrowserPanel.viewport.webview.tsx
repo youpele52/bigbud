@@ -186,6 +186,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
       webviewRef.current = webview;
       containerRef.current.appendChild(webview);
+      navigateElectronWebview(webview, urlRef.current);
       const certificateChallengeController = makeWebviewCertificateChallengeController({
         bridge: window.desktopBridge,
         webview,
@@ -371,7 +372,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
     useEffect(() => {
       const webview = webviewRef.current;
-      if (!webview || !isWebviewReady(webview)) return;
+      if (!webview) return;
       navigateElectronWebview(webview, url);
     }, [url]);
 

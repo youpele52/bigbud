@@ -71,9 +71,20 @@ describe("electron webview navigation", () => {
     });
 
     navigateElectronWebview(webview, "https://www.earthdata.nasa.gov/centers/ob-daac");
-    expect(webview.stop).toHaveBeenCalledOnce();
+    expect(webview.stop).not.toHaveBeenCalled();
     expect(loadURL).toHaveBeenCalledWith("https://www.earthdata.nasa.gov/centers/ob-daac");
     await Promise.resolve();
+  });
+
+  it("does not restart a navigation that already redirected to the requested URL", () => {
+    const webview = makeWebview({
+      getURL: vi.fn(() => "https://www.whoi.edu/ocean-facts/"),
+      getAttribute: vi.fn(() => "https://www.whoi.edu/ocean-facts"),
+    });
+
+    navigateElectronWebview(webview, "https://www.whoi.edu/ocean-facts/");
+    expect(webview.loadURL).not.toHaveBeenCalled();
+    expect(webview.setAttribute).not.toHaveBeenCalled();
   });
 
   it("falls back to src while the guest is still attaching", () => {
