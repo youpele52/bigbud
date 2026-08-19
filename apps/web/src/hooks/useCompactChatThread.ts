@@ -1,5 +1,5 @@
 import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readNativeApi } from "~/rpc/nativeApi";
 import {
@@ -10,33 +10,41 @@ import {
 } from "~/routes/-__root.bounded-bootstrap";
 import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
+import { useUiStateStore } from "~/stores/ui";
 import { newThreadId } from "~/lib/utils";
 import { loadProjectForNewThread } from "~/hooks/useHandleNewThread";
+import { createSidebarCatalogRefresher } from "~/routes/-__root.sidebar-catalog";
 import {
   getCompactChatModelPreference,
   isCompactChatModelPreferenceAvailable,
 } from "~/models/compactChatModelPreference";
 import { getNewestRecentlyUsedModel } from "~/models/recentlyUsedModels";
 import { useDefaultChatCwd, useServerProviders } from "~/rpc/serverState";
-
-const COMPACT_THREAD_STORAGE_KEY = "bigbud:compact-chat:state:v1";
+import {
+  COMPACT_THREAD_STORAGE_KEY,
+  parseCompactChatPersistedState,
+  serializeCompactChatPersistedState,
+  shouldAbandonCompactChatThread,
+} from "~/hooks/useCompactChatThread.logic";
 
 function getInitialSelection() {
   return getCompactChatModelPreference() ?? getNewestRecentlyUsedModel();
 }
 
-function readStoredThreadId(): ThreadId | null {
+function readStoredCompactChatState() {
   try {
-    const value = localStorage.getItem(COMPACT_THREAD_STORAGE_KEY);
-    return value ? (value as ThreadId) : null;
+    return parseCompactChatPersistedState(localStorage.getItem(COMPACT_THREAD_STORAGE_KEY));
   } catch {
     return null;
   }
 }
 
-function persistThreadId(threadId: ThreadId): void {
+function persistCompactChatState(threadId: ThreadId, materialized: boolean): void {
   try {
-    localStorage.setItem(COMPACT_THREAD_STORAGE_KEY, threadId);
+    localStorage.setItem(
+      COMPACT_THREAD_STORAGE_KEY,
+      serializeCompactChatPersistedState({ threadId, materialized }),
+    );
   } catch {
     // Compact chat remains usable when storage is unavailable.
   }
@@ -44,16 +52,18 @@ function persistThreadId(threadId: ThreadId): void {
 
 export function useCompactChatThread() {
   const [threadState, setThreadState] = useState(() => {
-    const storedThreadId = readStoredThreadId();
+    const stored = readStoredCompactChatState();
     return {
       projectId: BUILT_IN_CHATS_PROJECT_ID,
-      restoring: storedThreadId !== null,
-      threadId: storedThreadId ?? newThreadId(),
+      restoring: stored !== null,
+      threadId: stored?.threadId ?? newThreadId(),
+      persistedMaterialized: stored?.materialized ?? false,
     };
   });
-  const { projectId: selectedProjectId, restoring, threadId } = threadState;
+  const { projectId: selectedProjectId, restoring, threadId, persistedMaterialized } = threadState;
   const bootstrapComplete = useStore((state) => state.bootstrapComplete);
   const serverThread = useStore((state) => state.threads.find((thread) => thread.id === threadId));
+  const seenOnServerRef = useRef(false);
   // Only the thread id is persisted; use the catalog's project after restoring an existing thread.
   const projectId = serverThread?.projectId ?? selectedProjectId;
   const compactProject = useStore((state) =>
@@ -77,21 +87,42 @@ export function useCompactChatThread() {
   );
 
   useEffect(() => {
-    persistThreadId(threadId);
+    seenOnServerRef.current = false;
   }, [threadId]);
+
+  useEffect(() => {
+    if (serverThread && serverThread.deletingAt === null) {
+      seenOnServerRef.current = true;
+    }
+  }, [serverThread]);
+
+  useEffect(() => {
+    persistCompactChatState(threadId, serverThread != null && serverThread.deletingAt === null);
+  }, [serverThread, threadId]);
+
+  const startFreshThread = useCallback(
+    (nextProjectId: ProjectId) => {
+      seenOnServerRef.current = false;
+      clearDraftThread(threadId);
+      setInitialSelection(getInitialSelection());
+      setThreadState({
+        projectId: nextProjectId,
+        restoring: false,
+        threadId: newThreadId(),
+        persistedMaterialized: false,
+      });
+    },
+    [clearDraftThread, threadId],
+  );
+
+  const abandonCurrentThread = useCallback(() => {
+    startFreshThread(BUILT_IN_CHATS_PROJECT_ID);
+  }, [startFreshThread]);
 
   // The bounded startup catalog may not include the persisted compact thread.
   // Resolve it exactly before deciding that its id belongs to a local draft.
   useEffect(() => {
     if (!restoring || !bootstrapComplete) return;
-    if (serverThread) {
-      setThreadState((current) =>
-        current.threadId === threadId
-          ? { ...current, projectId: serverThread.projectId, restoring: false }
-          : current,
-      );
-      return;
-    }
     const api = readNativeApi();
     if (!api) return;
 
@@ -99,25 +130,31 @@ export function useCompactChatThread() {
     void runBoundedBootstrap({ api, selectedThreadId: threadId, disposed: () => disposed })
       .then(() => {
         if (disposed) return;
-        if (useStore.getState().threads.some((thread) => thread.id === threadId)) {
-          setThreadState((current) =>
-            current.threadId === threadId ? { ...current, restoring: false } : current,
-          );
+        const restored = useStore.getState().threads.find((thread) => thread.id === threadId);
+        if (
+          shouldAbandonCompactChatThread({
+            deleting: restored?.deletingAt != null,
+            presentOnServer: restored !== undefined && restored.deletingAt === null,
+            seenOnServer: seenOnServerRef.current,
+            restoring: true,
+            persistedMaterialized,
+            hasLocalDraft: Boolean(useComposerDraftStore.getState().getDraftThread(threadId)),
+            hydrationFailed: false,
+          })
+        ) {
+          abandonCurrentThread();
           return;
         }
-        if (useComposerDraftStore.getState().getDraftThread(threadId)) {
-          setThreadState((current) =>
-            current.threadId === threadId ? { ...current, restoring: false } : current,
-          );
-          return;
-        }
-        clearDraftThread(threadId);
-        setInitialSelection(getInitialSelection());
-        setThreadState({
-          projectId: BUILT_IN_CHATS_PROJECT_ID,
-          restoring: false,
-          threadId: newThreadId(),
-        });
+        setThreadState((current) =>
+          current.threadId === threadId
+            ? {
+                ...current,
+                ...(restored ? { projectId: restored.projectId } : {}),
+                restoring: false,
+                persistedMaterialized: restored !== undefined && restored.deletingAt === null,
+              }
+            : current,
+        );
       })
       .catch((error: unknown) => {
         if (!disposed) console.error("Failed to restore compact chat thread", error);
@@ -125,7 +162,31 @@ export function useCompactChatThread() {
     return () => {
       disposed = true;
     };
-  }, [bootstrapComplete, clearDraftThread, restoring, serverThread, threadId]);
+  }, [abandonCurrentThread, bootstrapComplete, persistedMaterialized, restoring, threadId]);
+
+  useEffect(() => {
+    if (restoring) return;
+    if (
+      shouldAbandonCompactChatThread({
+        deleting: serverThread?.deletingAt != null,
+        presentOnServer: serverThread !== undefined && serverThread.deletingAt === null,
+        seenOnServer: seenOnServerRef.current,
+        restoring: false,
+        persistedMaterialized,
+        hasLocalDraft: Boolean(useComposerDraftStore.getState().getDraftThread(threadId)),
+        hydrationFailed: hydrationStatus === "failed",
+      })
+    ) {
+      abandonCurrentThread();
+    }
+  }, [
+    abandonCurrentThread,
+    hydrationStatus,
+    persistedMaterialized,
+    restoring,
+    serverThread,
+    threadId,
+  ]);
 
   useEffect(() => {
     if (!bootstrapComplete || restoring || compactProject) return;
@@ -162,6 +223,7 @@ export function useCompactChatThread() {
 
   useEffect(() => {
     if (!bootstrapComplete || restoring || !compactProject || serverThread) return;
+    if (seenOnServerRef.current || persistedMaterialized) return;
     setDraftThreadContext(threadId, {
       projectId,
       branch: null,
@@ -177,6 +239,7 @@ export function useCompactChatThread() {
     bootstrapComplete,
     compactProject,
     initialSelection,
+    persistedMaterialized,
     restoring,
     serverThread,
     setDraftThreadContext,
@@ -192,6 +255,7 @@ export function useCompactChatThread() {
       !bootstrapComplete ||
       restoring ||
       !serverThread ||
+      serverThread.deletingAt !== null ||
       (hydrationStatus !== "unloaded" && hydrationStatus !== "failed")
     ) {
       return;
@@ -211,18 +275,24 @@ export function useCompactChatThread() {
   const newChat = useCallback(
     async (nextProjectId = projectId) => {
       if (!(await discardDraft())) return false;
-      setInitialSelection(getInitialSelection());
-      setThreadState({ projectId: nextProjectId, restoring: false, threadId: newThreadId() });
+      startFreshThread(nextProjectId);
       return true;
     },
-    [discardDraft, projectId],
+    [discardDraft, projectId, startFreshThread],
   );
 
   const selectThread = useCallback(
     async (nextThreadId: ThreadId, nextProjectId: ProjectId) => {
       if (nextThreadId === threadId) return true;
       if (!(await discardDraft())) return false;
-      setThreadState({ projectId: nextProjectId, restoring: false, threadId: nextThreadId });
+      useUiStateStore.getState().markThreadVisited(nextThreadId);
+      seenOnServerRef.current = false;
+      setThreadState({
+        projectId: nextProjectId,
+        restoring: false,
+        threadId: nextThreadId,
+        persistedMaterialized: true,
+      });
       return true;
     },
     [discardDraft, threadId],
@@ -237,11 +307,14 @@ export function useCompactChatThread() {
   const loadMoreProjects = useCallback(async () => {
     const api = readNativeApi();
     if (!api) return;
-    await Promise.all(
-      (["local", "remote"] as const).map((scope) =>
+    await Promise.all([
+      ...(["local", "remote"] as const).map((scope) =>
         loadMoreProjectCatalog({ api, scope }).catch(() => undefined),
       ),
-    );
+      createSidebarCatalogRefresher(api)
+        .refresh(() => false)
+        .catch(() => undefined),
+    ]);
   }, []);
 
   const retryProjectLoad = useCallback(() => {
@@ -281,7 +354,7 @@ export function useCompactChatThread() {
   }, [synchronizeMaterializedThread, threadId]);
 
   return {
-    isMaterialized: Boolean(serverThread),
+    isMaterialized: serverThread != null && serverThread.deletingAt === null,
     loadMoreProjects,
     loadProjectThreads,
     newChat,

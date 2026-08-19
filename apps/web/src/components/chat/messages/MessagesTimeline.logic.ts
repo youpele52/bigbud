@@ -5,7 +5,7 @@ import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../../lib/turnDiffT
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
 import { estimateTimelineMessageHeight } from "../../timelineHeight";
 
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 2;
+export const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
 
 export interface TimelineDurationMessage {
   id: string;

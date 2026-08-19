@@ -237,11 +237,10 @@ describe("CompactChatShell", () => {
     }
   });
 
-  it("marks unseen completed threads and selects them from the picker", async () => {
+  it("selects completed threads from recents without a completed section", async () => {
     const completedThreadId = ThreadId.makeUnsafe("completed-thread");
     const completedSummary = mapSidebarThreadSummary({
       ...threadSummary(completedThreadId, 13),
-      projectId: MAIN_PROJECT_ID,
       title: "Completed task",
       sessionStatus: "stopped",
       latestTurnState: "completed",
@@ -251,7 +250,7 @@ describe("CompactChatShell", () => {
       ...state,
       sidebarThreadsById: { [completedThreadId]: completedSummary },
       sidebarRecentThreadIds: [completedThreadId],
-      threadIdsByProjectId: { [MAIN_PROJECT_ID]: [completedThreadId] },
+      threadIdsByProjectId: { [BUILT_IN_CHATS_PROJECT_ID]: [completedThreadId] },
     }));
     const compactChat = {
       loadMoreProjects: vi.fn(),
@@ -270,11 +269,10 @@ describe("CompactChatShell", () => {
     );
 
     try {
-      await expect.element(page.getByLabelText("1 completed thread")).toBeInTheDocument();
       await page.getByRole("button", { name: "Choose floating chat" }).click();
-      await expect.element(page.getByText("Completed", { exact: true })).toBeInTheDocument();
-      await page.getByLabelText("Completed").getByText("Completed task").click();
-      expect(selectThread).toHaveBeenCalledWith(completedThreadId, MAIN_PROJECT_ID);
+      await expect.element(page.getByText("Completed", { exact: true })).not.toBeInTheDocument();
+      await page.getByText("Completed task").click();
+      expect(selectThread).toHaveBeenCalledWith(completedThreadId, BUILT_IN_CHATS_PROJECT_ID);
     } finally {
       await mounted.unmount();
       queryClient.clear();

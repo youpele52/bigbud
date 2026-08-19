@@ -20,20 +20,21 @@ vi.mock("../../rpc/serverState", () => ({
 
 import { ThreadRetentionSettingsSection } from "./ThreadRetentionSettingsSection";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
-import { ThreadRetentionRunStatus } from "./ThreadRetentionRunStatus";
 import { SETTINGS_SEARCH_ITEMS } from "./SettingsSidebarNav.items";
 
 describe("ThreadRetentionSettingsSection", () => {
-  it("renders the safe policy and explicit permanent-delete action", () => {
+  it("renders the server-owned daily policy and immediate cleanup action", () => {
     const markup = renderToStaticMarkup(<ThreadRetentionSettingsSection />);
 
     expect(markup).toContain("Automatic thread cleanup");
     expect(markup).toContain("Automatically delete old threads");
-    expect(markup).toContain("Checks daily using fixed");
-    expect(markup).toContain("Eligible root thread subtrees are deleted immediately");
+    expect(markup).toContain("The server checks daily");
+    expect(markup).toContain("Eligible root thread subtrees are cleaned up together");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
-    expect(markup).toContain("cannot be undone");
+    expect(markup).toContain(
+      "Eligible root thread subtrees and their descendants are cleaned up together",
+    );
   });
 
   it("uses day-based labels for every cleanup threshold", () => {
@@ -107,7 +108,15 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("This is an estimate.");
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
-    for (const phrase of ["Pinned", "active or running", "project folders", "other files"]) {
+    for (const phrase of [
+      "Child threads are deleted with their parent",
+      "Pinned",
+      "active or running",
+      "project folders",
+      "other files",
+      "Provider-remote conversations are not deleted",
+      "canonical history or retained baselines",
+    ]) {
       expect(markup).toContain(phrase);
     }
   });
@@ -147,36 +156,5 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("3");
     expect(markup).toContain("currently eligible for future cleanup");
     expect(markup).toContain("Export or back up anything you need");
-  });
-
-  it("uses a collapsed, non-color status summary that exposes run progress on demand", () => {
-    const markup = renderToStaticMarkup(
-      <ThreadRetentionRunStatus
-        pollingError={null}
-        onRetry={() => undefined}
-        run={{
-          runId: "run-1",
-          trigger: "manual",
-          policy: "7-days",
-          cutoffAt: "2026-07-28T00:00:00.000Z",
-          status: "completed_with_failures",
-          eligibleCount: 7,
-          selectedCount: 6,
-          requestedCount: 5,
-          completedCount: 4,
-          skippedCount: 1,
-          failedCount: 1,
-          createdAt: "2026-08-04T00:00:00.000Z",
-          updatedAt: "2026-08-04T00:01:00.000Z",
-          completedAt: "2026-08-04T00:01:00.000Z",
-          deferredReason: null,
-          errorMessage: "One thread could not be deleted.",
-        }}
-      />,
-    );
-
-    expect(markup).toContain("completed with failures");
-    expect(markup).toContain('aria-expanded="false"');
-    expect(markup).not.toContain("Accepted:");
   });
 });

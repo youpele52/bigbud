@@ -58,6 +58,10 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:00.000Z",
         updatedAt: "2026-02-27T00:00:00.000Z",
       }),
+      makeEvent("thread.deletion-requested", {
+        threadId: deletedThreadId,
+        deletingAt: "2026-02-27T00:00:01.000Z",
+      }),
       makeEvent("thread.deleted", {
         threadId: deletedThreadId,
         threadIds: [deletedThreadId, deletedDescendantThreadId],

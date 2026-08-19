@@ -23,6 +23,11 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
+import {
+  getRetentionCleanupLoadingToast,
+  getRetentionCleanupSuccessToast,
+  getRetentionPolicyUpdatedToast,
+} from "./ThreadRetentionSettingsSection.logic";
 
 export function ThreadRetentionSettingsSection() {
   const policy = useSettings().threadRetentionPolicy;
@@ -114,23 +119,34 @@ export function ThreadRetentionSettingsSection() {
       await requestPreview(dialogTrigger, preview.policy);
       return;
     }
+    const trigger = dialogTrigger;
+    const challengeToken = preview.challenge.token;
+    const nextPolicy = preview.policy;
+    closeDialog();
     setActionBusy(true);
     try {
-      if (dialogTrigger === "policy-change") {
+      if (trigger === "policy-change") {
         const settings = await ensureNativeApi().server.setThreadRetentionPolicy({
-          policy: preview.policy,
-          challengeToken: preview.challenge.token,
+          policy: nextPolicy,
+          challengeToken,
         });
         applySettingsUpdated(settings);
-      } else {
-        const run = await ensureNativeApi().server.startThreadRetention({
-          challengeToken: preview.challenge.token,
-        });
-        setResult(run);
+        toastManager.add({ type: "success", ...getRetentionPolicyUpdatedToast() });
+        return;
       }
-      closeDialog();
+      const runPromise = ensureNativeApi().server.startThreadRetention({ challengeToken });
+      toastManager.promise(runPromise, {
+        loading: getRetentionCleanupLoadingToast(),
+        success: (run) => getRetentionCleanupSuccessToast(run),
+        error: (error) => ({
+          title: "Unable to confirm thread cleanup",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      });
+      const run = await runPromise;
+      if (mountedRef.current) setResult(run);
     } catch (error) {
-      showError("Unable to confirm thread cleanup", error);
+      if (trigger === "policy-change") showError("Unable to confirm thread cleanup", error);
     } finally {
       if (mountedRef.current) setActionBusy(false);
     }
@@ -140,14 +156,14 @@ export function ThreadRetentionSettingsSection() {
   const dialogTitle =
     dialogTrigger === "policy-change"
       ? `Delete old threads after ${THREAD_RETENTION_POLICY_LABELS[dialogPolicy]}?`
-      : `Permanently delete threads older than ${THREAD_RETENTION_POLICY_LABELS[manualPolicy]}?`;
+      : `Delete threads older than ${THREAD_RETENTION_POLICY_LABELS[manualPolicy]}?`;
 
   return (
     <>
       <SettingsSection title="Automatic thread cleanup">
         <SettingsRow
           title="Automatically delete old threads"
-          description="Checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are deleted immediately. Pinned and active threads are preserved."
+          description="The server checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are cleaned up together. Pinned and active subtrees are skipped."
           layout="three-quarter-control"
           statusPlacement="below"
           status={
@@ -190,7 +206,7 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Immediately deletes eligible root thread subtrees across all projects using a one-off cleanup period you choose. This cannot be undone."
+          description="Runs now across all projects using a one-off cleanup period you choose. Eligible root thread subtrees and their descendants are cleaned up together."
           control={
             <Button
               ref={actionButtonRef}
@@ -213,7 +229,7 @@ export function ThreadRetentionSettingsSection() {
       <AlertDialog
         open={dialogTrigger !== null}
         onOpenChange={(open) => {
-          if (!open && !actionBusy) closeDialog();
+          if (!open) closeDialog();
         }}
       >
         <AlertDialogPopup
@@ -229,10 +245,11 @@ export function ThreadRetentionSettingsSection() {
             confirmLabel={
               dialogTrigger === "policy-change"
                 ? "Enable automatic cleanup"
-                : "Delete threads permanently"
+                : "Delete eligible threads"
             }
             confirmVariant="destructive"
             busy={actionBusy}
+            cancelDisabled={false}
             cancelButtonRef={cancelButtonRef}
             confirmDisabled={
               previewBusy || !preview || (dialogTrigger === "manual" && preview.eligibleCount === 0)

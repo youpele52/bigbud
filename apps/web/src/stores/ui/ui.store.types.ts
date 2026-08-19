@@ -6,6 +6,7 @@ export interface PersistedUiState {
   favouritesExpanded?: boolean;
   projectOrderCwds?: string[];
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  threadLastVisitedAtById?: Record<string, string>;
 }
 
 export interface UiProjectState {

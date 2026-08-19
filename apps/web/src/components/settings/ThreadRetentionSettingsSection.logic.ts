@@ -1,4 +1,5 @@
 import type {
+  ServerThreadRetentionResult,
   ServerThreadRetentionRun,
   ThreadRetentionMaintenanceState,
 } from "@bigbud/contracts/server/threadRetention";
@@ -45,8 +46,8 @@ export function getRetentionRunStatusMessage(run: ServerThreadRetentionRun): str
   switch (run.status) {
     case "queued":
       return run.trigger === "manual"
-        ? "Cleanup request is ready to start at a safe checkpoint, ahead of scheduled cleanup."
-        : "Cleanup request queued — it will start automatically when safe.";
+        ? "Manual cleanup is starting now."
+        : "Scheduled cleanup is starting now.";
     case "deferred":
       return "Cleanup is paused — it will retry automatically when safe.";
     case "selecting":
@@ -65,9 +66,9 @@ export function getRetentionMaintenanceMessage(
     case "available":
       return null;
     case "scheduled_active":
-      return "Scheduled cleanup is active. This request starts at the next safe checkpoint.";
+      return "Scheduled cleanup is active. This manual cleanup runs now.";
     case "manual_active":
-      return "Another manual cleanup is active. This request may join an equivalent cleanup; otherwise it waits for that cleanup.";
+      return "Another manual cleanup is active. This manual cleanup runs now.";
     case "safety_deferred":
       return "Cleanup is waiting for safety or recovery work to finish before this request can start.";
   }
@@ -81,6 +82,30 @@ export function formatRetentionCutoff(cutoffAt: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(cutoffAt),
   );
+}
+
+export function getRetentionCleanupLoadingToast(): { readonly title: string } {
+  return { title: "Deleting eligible threads…" };
+}
+
+export function getRetentionCleanupSuccessToast(result: ServerThreadRetentionResult): {
+  readonly title: string;
+  readonly description: string;
+} {
+  return {
+    title: "Thread cleanup finished",
+    description: `Deleted ${result.deletedCount} threads and skipped ${result.skippedCount}.`,
+  };
+}
+
+export function getRetentionPolicyUpdatedToast(): {
+  readonly title: string;
+  readonly description: string;
+} {
+  return {
+    title: "Automatic cleanup updated",
+    description: "The server will use the new period on its next daily check.",
+  };
 }
 
 export function formatRetentionBytes(bytes: number): string {

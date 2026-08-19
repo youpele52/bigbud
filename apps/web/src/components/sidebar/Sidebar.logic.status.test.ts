@@ -129,7 +129,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Working", pulse: true, dotClass: "bg-primary" });
+    ).toMatchObject({ label: "Working", pulse: true, dotClass: "bg-info-foreground" });
   });
 
   it.each(["provider.stalled", "provider.lost-session"])(
@@ -182,7 +182,11 @@ describe("resolveThreadStatusPill", () => {
       },
     });
 
-    expect(connecting).toMatchObject({ label: "Connecting", dotClass: "bg-primary", pulse: true });
+    expect(connecting).toMatchObject({
+      label: "Connecting",
+      dotClass: "bg-info-foreground",
+      pulse: true,
+    });
     expect(resolveProjectStatusIndicator([connecting])).toBe(connecting);
   });
 

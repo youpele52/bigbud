@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  getRetentionRunStatusMessage,
+  getRetentionCleanupSuccessToast,
   getRetentionMaintenanceMessage,
   getRetentionPollIntervalMs,
+  getRetentionRunStatusMessage,
   shouldReplaceRetentionRun,
 } from "./ThreadRetentionSettingsSection.logic";
 
@@ -51,9 +52,7 @@ describe("ThreadRetentionSettingsSection logic", () => {
   });
 
   it("uses actionable cleanup copy for queued and active internal statuses", () => {
-    expect(getRetentionRunStatusMessage(RUN)).toBe(
-      "Cleanup request is ready to start at a safe checkpoint, ahead of scheduled cleanup.",
-    );
+    expect(getRetentionRunStatusMessage(RUN)).toBe("Manual cleanup is starting now.");
     expect(getRetentionRunStatusMessage({ ...RUN, status: "deferred" })).toContain(
       "retry automatically",
     );
@@ -66,13 +65,30 @@ describe("ThreadRetentionSettingsSection logic", () => {
   it("explains each preview maintenance state without overpromising deletion", () => {
     expect(getRetentionMaintenanceMessage("available")).toBeNull();
     expect(getRetentionMaintenanceMessage("scheduled_active")).toBe(
-      "Scheduled cleanup is active. This request starts at the next safe checkpoint.",
+      "Scheduled cleanup is active. This manual cleanup runs now.",
     );
     expect(getRetentionMaintenanceMessage("manual_active")).toBe(
-      "Another manual cleanup is active. This request may join an equivalent cleanup; otherwise it waits for that cleanup.",
+      "Another manual cleanup is active. This manual cleanup runs now.",
     );
     expect(getRetentionMaintenanceMessage("safety_deferred")).toBe(
       "Cleanup is waiting for safety or recovery work to finish before this request can start.",
     );
+  });
+
+  it("summarizes a completed cleanup for toasts", () => {
+    expect(
+      getRetentionCleanupSuccessToast({
+        trigger: "manual",
+        policy: "14-days",
+        cutoffAt: "2026-08-04T00:00:00.000Z",
+        eligibleCount: 8,
+        deletedCount: 6,
+        skippedCount: 2,
+        completedAt: "2026-08-18T00:00:00.000Z",
+      }),
+    ).toEqual({
+      title: "Thread cleanup finished",
+      description: "Deleted 6 threads and skipped 2.",
+    });
   });
 });

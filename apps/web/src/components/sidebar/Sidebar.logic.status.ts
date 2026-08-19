@@ -66,10 +66,10 @@ export function resolveThreadStatusPill(input: {
   if (thread.session?.status === "running" || hasActiveProviderProgress(thread)) {
     return isSessionCompacting(thread.session)
       ? status("Compacting", "text-warning", "bg-warning", true)
-      : status("Working", "text-primary", "bg-primary", true);
+      : status("Working", "text-info-foreground", "bg-info-foreground", true);
   }
   if (thread.session?.status === "connecting") {
-    return status("Connecting", "text-primary", "bg-primary", true);
+    return status("Connecting", "text-info-foreground", "bg-info-foreground", true);
   }
   if (
     !thread.hasPendingUserInput &&

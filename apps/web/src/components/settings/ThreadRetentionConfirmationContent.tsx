@@ -8,6 +8,7 @@ import {
   formatRetentionBytes,
   formatRetentionCutoff,
   formatRetentionExclusionReason,
+  getRetentionMaintenanceMessage,
 } from "./ThreadRetentionSettingsSection.logic";
 
 interface ThreadRetentionConfirmationContentProps {
@@ -19,6 +20,10 @@ export function ThreadRetentionConfirmationContent({
   preview,
   trigger,
 }: ThreadRetentionConfirmationContentProps) {
+  const maintenanceMessage = preview
+    ? getRetentionMaintenanceMessage(preview.maintenanceState)
+    : null;
+
   return (
     <div className="space-y-3">
       {preview ? (
@@ -43,11 +48,14 @@ export function ThreadRetentionConfirmationContent({
               final safety checks may skip a subtree that became active.
             </p>
           )}
+          {maintenanceMessage ? <p>{maintenanceMessage}</p> : null}
           <div>
             <p className="font-medium text-foreground">Deletion includes</p>
             <p>
-              Deleting a thread permanently removes its chat history, attachments, checkpoints and
-              diffs, terminal and provider logs, and any bigbud-managed worktrees.
+              bigbud removes each selected thread subtree from its current local views and cleans up
+              associated bigbud-managed local resources, including attachments, checkpoints and
+              diffs, terminal and provider logs, and managed worktrees. Child threads are deleted
+              with their parent.
             </p>
           </div>
           <div>
@@ -87,6 +95,10 @@ export function ThreadRetentionConfirmationContent({
           </div>
           <div>
             <p className="font-medium text-foreground">Not included in this cleanup</p>
+            <p>
+              Provider-remote conversations are not deleted. Cleanup also does not claim to erase
+              all local canonical history or retained baselines.
+            </p>
             {preview.exclusionCounts.length > 0 ? (
               <ul className="list-disc pl-5">
                 {preview.exclusionCounts.map((exclusion) => (
@@ -118,8 +130,8 @@ export function ThreadRetentionConfirmationContent({
       <p className="flex items-start gap-2 font-medium text-destructive">
         <AlertTriangleIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {trigger === "policy-change"
-          ? "Future cleanup permanently deletes eligible bigbud data and cannot be undone."
-          : "This permanently deletes the listed bigbud data and cannot be undone. Export or back up anything you need first."}
+          ? "Future cleanup removes eligible local thread subtrees and managed resources. Export or back up anything you need first."
+          : "This cleanup removes the listed local thread subtrees and managed resources. Export or back up anything you need first."}
       </p>
     </div>
   );

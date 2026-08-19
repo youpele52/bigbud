@@ -3,6 +3,18 @@ import { useMemo } from "react";
 
 import type { SidebarThreadSummary } from "../../models/types";
 
+export function collectVisibleChatThreads(input: {
+  sidebarThreadsById: Record<string, SidebarThreadSummary>;
+  sidebarRecentThreadIds: readonly string[];
+  loadedChatThreadIds: readonly string[];
+}): SidebarThreadSummary[] {
+  return [...new Set([...input.sidebarRecentThreadIds, ...input.loadedChatThreadIds])]
+    .map((threadId) => input.sidebarThreadsById[threadId])
+    .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
+    .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
+    .filter((thread) => isBuiltInChatsProject(thread.projectId));
+}
+
 export function useSidebarVisibleThreads(input: {
   sidebarThreads: readonly SidebarThreadSummary[];
   sidebarThreadsById: Record<string, SidebarThreadSummary>;
@@ -18,11 +30,11 @@ export function useSidebarVisibleThreads(input: {
   );
   const visibleChatThreads = useMemo(
     () =>
-      [...new Set([...input.sidebarRecentThreadIds, ...input.loadedChatThreadIds])]
-        .map((threadId) => input.sidebarThreadsById[threadId])
-        .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
-        .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
-        .filter((thread) => isBuiltInChatsProject(thread.projectId)),
+      collectVisibleChatThreads({
+        loadedChatThreadIds: input.loadedChatThreadIds,
+        sidebarRecentThreadIds: input.sidebarRecentThreadIds,
+        sidebarThreadsById: input.sidebarThreadsById,
+      }),
     [input.loadedChatThreadIds, input.sidebarRecentThreadIds, input.sidebarThreadsById],
   );
 
