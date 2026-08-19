@@ -8,7 +8,10 @@ import type {
   ThreadRetentionCandidate,
   ThreadRetentionRepositoryShape,
 } from "../Services/ThreadRetentionRepository.ts";
-import { retentionExclusionCaseSql } from "./ThreadRetentionRepository.eligibility.ts";
+import {
+  retentionExclusionCaseSql,
+  retentionVisibleActivitySql,
+} from "./ThreadRetentionRepository.eligibility.ts";
 
 const OUTSTANDING_STATUSES = ["selected", "deletion_requested", "prepared", "purging"];
 const clampLimit = (limit: number) => Math.max(1, Math.min(250, Math.floor(limit)));
@@ -28,7 +31,7 @@ export const retentionSubtreeCteSql = `
     JOIN projection_threads AS child ON child.parent_thread_id = subtree.thread_id
     WHERE child.deleted_at IS NULL
   ), subtree_activity AS (
-    SELECT subtree.root_thread_id, MAX(thread.last_activity_at) AS last_activity_at
+    SELECT subtree.root_thread_id, MAX(${retentionVisibleActivitySql("thread")}) AS last_activity_at
     FROM thread_subtree AS subtree
     JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
     GROUP BY subtree.root_thread_id

@@ -9,21 +9,16 @@ import {
   ThreadRetentionRunItem,
   ThreadRetentionRepository,
   isThreadRetentionTerminalRunStatus,
-  type RecheckAndClaimRetentionItemInput,
-  type ThreadRetentionExclusionReason,
   type ThreadRetentionRepositoryShape,
   type TransitionRetentionItemInput,
 } from "../Services/ThreadRetentionRepository.ts";
 import { makeThreadRetentionChallenges } from "./ThreadRetentionRepository.challenges.ts";
 import { makeThreadRetentionAudit } from "./ThreadRetentionRepository.audit.ts";
+import { makeThreadRetentionClaim } from "./ThreadRetentionRepository.claim.ts";
 import { makeThreadRetentionPages } from "./ThreadRetentionRepository.pages.ts";
 import { makeThreadRetentionPreview } from "./ThreadRetentionRepository.preview.ts";
 import { makeThreadRetentionQueue } from "./ThreadRetentionRepository.queue.ts";
 import { makeThreadRetentionRetry } from "./ThreadRetentionRepository.retry.ts";
-import {
-  retentionDurableExclusions,
-  retentionExclusionCase,
-} from "./ThreadRetentionRepository.eligibility.ts";
 
 const clampLimit = (limit: number, maximum = 100) =>
   Math.max(1, Math.min(maximum, Math.floor(limit)));
@@ -32,8 +27,6 @@ const mapPersistenceError = (operation: string) =>
 
 const makeThreadRetentionRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const exclusion = retentionExclusionCase(sql);
-  const eligible = retentionDurableExclusions(sql);
 
   const getRunQuery = (runId: string) =>
     sql<ThreadRetentionRun>`
@@ -95,61 +88,6 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         AND status IN ('deletion_requested', 'prepared', 'purging')
     `.pipe(Effect.map((rows) => rows.map((row) => row.threadId)));
   };
-
-  const recheckAndClaimItem = Effect.fn("ThreadRetentionRepository.recheckAndClaimItem")(function* (
-    input: RecheckAndClaimRetentionItemInput,
-  ) {
-    return yield* sql.withTransaction(
-      Effect.gen(function* () {
-        const claimed = yield* sql`
-          UPDATE thread_retention_run_items SET status = 'deletion_requested',
-            next_attempt_at = NULL,
-            attempt_count = attempt_count + 1, updated_at = ${input.claimedAt}
-          WHERE run_id = ${input.runId} AND thread_id = ${input.threadId} AND status = 'selected'
-            AND expected_last_activity_at = ${input.expectedLastActivityAt}
-            AND EXISTS (
-              SELECT 1 FROM projection_threads AS t WHERE t.thread_id = ${input.threadId}
-                AND t.last_activity_at = ${input.expectedLastActivityAt}
-                AND t.last_activity_at <= ${input.cutoffAt} AND ${eligible}
-            )
-          RETURNING thread_id
-        `;
-        if (claimed.length === 1) {
-          yield* sql`UPDATE thread_retention_runs SET requested_count = requested_count + 1,
-            updated_at = ${input.claimedAt} WHERE run_id = ${input.runId}`;
-          return { claimed: true } as const;
-        }
-        const rows = yield* sql<{
-          itemStatus: string;
-          reason: ThreadRetentionExclusionReason | null;
-        }>`
-          SELECT item.status AS "itemStatus",
-            CASE WHEN t.thread_id IS NULL OR t.last_activity_at <> ${input.expectedLastActivityAt}
-              OR t.last_activity_at > ${input.cutoffAt} THEN 'activity_changed' ELSE ${exclusion} END AS reason
-          FROM thread_retention_run_items AS item
-          LEFT JOIN projection_threads AS t ON t.thread_id = item.thread_id
-          WHERE item.run_id = ${input.runId} AND item.thread_id = ${input.threadId}
-        `;
-        const row = rows[0];
-        if (row?.itemStatus !== "selected" || row.reason === null) {
-          return { claimed: false, reason: "not_selected" } as const;
-        }
-        const skipped = yield* sql`
-          UPDATE thread_retention_run_items SET status = 'skipped', exclusion_reason = ${row.reason},
-            next_attempt_at = NULL,
-            attempt_count = attempt_count + 1, updated_at = ${input.claimedAt}, completed_at = ${input.claimedAt}
-          WHERE run_id = ${input.runId} AND thread_id = ${input.threadId} AND status = 'selected'
-          RETURNING thread_id
-        `;
-        if (skipped.length === 1)
-          yield* sql`
-          UPDATE thread_retention_runs SET skipped_count = skipped_count + 1,
-            updated_at = ${input.claimedAt} WHERE run_id = ${input.runId}
-        `;
-        return { claimed: false, reason: row.reason } as const;
-      }),
-    );
-  });
 
   const transitionRun = (input: Parameters<ThreadRetentionRepositoryShape["transitionRun"]>[0]) => {
     if (input.expectedStatuses.length === 0) return Effect.succeed(false);
@@ -267,6 +205,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
   const cleanupAudit = makeThreadRetentionAudit(sql);
   const pages = makeThreadRetentionPages(sql);
   const preview = makeThreadRetentionPreview(sql);
+  const claim = makeThreadRetentionClaim(sql);
   const retry = makeThreadRetentionRetry(sql);
   const insertSelectedItems = ((
     input: Parameters<ThreadRetentionRepositoryShape["insertSelectedItems"]>[0],
@@ -326,7 +265,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         mapPersistenceError("recordRequiredBaselineSequence"),
       ),
     recheckAndClaimItem: (input) =>
-      recheckAndClaimItem(input).pipe(mapPersistenceError("recheckAndClaimItem")),
+      claim.recheckAndClaimItem(input).pipe(mapPersistenceError("recheckAndClaimItem")),
     findItemByDeletionCommandId: (commandId) =>
       findItemQuery(commandId).pipe(mapPersistenceError("findItemByDeletionCommandId")),
     listRunItems: (runId) => listRunItems(runId).pipe(mapPersistenceError("listRunItems")),

@@ -1,5 +1,14 @@
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
+/** Sidebar-visible recency: latest user message, else thread created_at. */
+export function retentionVisibleActivitySql(threadAlias: string): string {
+  return `COALESCE((
+      SELECT MAX(message.created_at)
+      FROM projection_thread_messages AS message
+      WHERE message.thread_id = ${threadAlias}.thread_id AND message.role = 'user'
+    ), ${threadAlias}.created_at)`;
+}
+
 export const retentionExclusionCaseSql = `
     CASE
       WHEN t.deleted_at IS NOT NULL THEN 'already_deleted'
@@ -29,7 +38,7 @@ export const retentionExclusionCaseSql = `
         SELECT 1 FROM thread_activity_leases AS lease
         WHERE lease.thread_id = t.thread_id
       ) THEN 'running'
-      WHEN json_array_length(t.queued_prompts_json) > 0 OR EXISTS (
+      WHEN (json_valid(t.queued_prompts_json) AND json_array_length(t.queued_prompts_json) > 0) OR EXISTS (
         SELECT 1 FROM projection_turns AS turn
         WHERE turn.thread_id = t.thread_id AND turn.state = 'pending'
       ) OR EXISTS (
@@ -47,6 +56,7 @@ export const retentionExclusionCaseSql = `
       WHEN EXISTS (
         SELECT 1 FROM projection_thread_tasks AS task
         WHERE task.thread_id = t.thread_id
+          AND json_valid(task.task_json)
           AND json_extract(task.task_json, '$.status') IN ('pending', 'inProgress')
       ) THEN 'active_task'
       WHEN EXISTS (

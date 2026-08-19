@@ -103,9 +103,7 @@ export function FileAccessSettingsSection() {
             onClick={() => void handlePickDefaultChatFolder()}
           >
             <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-xs">
-              {settings.defaultChatCwd}
-            </span>
+            <span className="truncate font-mono text-xs">{settings.defaultChatCwd}</span>
           </Button>
         }
       />

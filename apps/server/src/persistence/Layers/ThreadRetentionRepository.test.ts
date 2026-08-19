@@ -78,7 +78,7 @@ const seedThread = Effect.fn("seedRetentionThread")(function* (id: string, lastA
     worktreePath: null,
     latestTurnId: null,
     queuedPrompts: [],
-    createdAt: oldAt,
+    createdAt: lastActivityAt,
     updatedAt: lastActivityAt,
     lastActivityAt,
     archivedAt: null,
@@ -144,11 +144,8 @@ layer("ThreadRetentionRepository", (it) => {
       yield* sql`
         UPDATE projection_threads
         SET parent_thread_id = 'old-root', parent_thread_title = 'old-root',
-          parent_thread_project_id = ${projectId}
-        WHERE thread_id = 'new-child'
-      `;
-      yield* sql`
-        UPDATE projection_threads SET last_activity_at = ${now}, updated_at = ${now}
+          parent_thread_project_id = ${projectId},
+          created_at = ${now}, updated_at = ${now}, last_activity_at = ${now}
         WHERE thread_id = 'new-child'
       `;
       const repository = yield* ThreadRetentionRepository;
@@ -339,7 +336,6 @@ layer("ThreadRetentionRepository", (it) => {
       yield* seedProject();
       yield* seedThread("changed");
       const repository = yield* ThreadRetentionRepository;
-      const threads = yield* ProjectionThreadRepository;
       yield* repository.createOrGetActiveRun({
         runId: "run-changed",
         trigger: "manual",
@@ -367,7 +363,12 @@ layer("ThreadRetentionRepository", (it) => {
         expectedCursor: null,
         nextCursor: { threadId: ThreadId.makeUnsafe("changed"), lastActivityAt: oldAt },
       });
-      yield* threads.touchActivity({ threadId: ThreadId.makeUnsafe("changed"), occurredAt: now });
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('changed-user', 'changed', 'user', 'later', 0, ${now}, ${now})
+      `;
       assert.deepEqual(
         yield* repository.recheckAndClaimItem({
           runId: "run-changed",

@@ -9,13 +9,13 @@ import { OrchestrationEventStoreLive } from "../../persistence/Layers/Orchestrat
 import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ThreadRetentionRepositoryLive } from "../../persistence/Layers/ThreadRetentionRepository.ts";
-import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 const oldAt = "2026-01-01T00:00:00.000Z";
 const cutoffAt = "2026-02-01T00:00:00.000Z";
@@ -49,7 +49,6 @@ it("claims in the command transaction, safely skips races, and deduplicates comm
       runtime.runPromise(effect as Effect.Effect<A, E, never>);
     const engine = await run(Effect.service(OrchestrationEngineService));
     const repository = await run(Effect.service(ThreadRetentionRepository));
-    const threads = await run(Effect.service(ProjectionThreadRepository));
     const projectId = ProjectId.makeUnsafe("retention-command-project");
     await run(
       engine.dispatch({
@@ -108,11 +107,13 @@ it("claims in the command transaction, safely skips races, and deduplicates comm
         createdAt: changedAt,
       }),
     );
+    const sql = await run(Effect.service(SqlClient.SqlClient));
     await run(
-      threads.touchActivity({
-        threadId: ThreadId.makeUnsafe("retention-race"),
-        occurredAt: changedAt,
-      }),
+      sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('retention-race-user', 'retention-race', 'user', 'later', 0, ${changedAt}, ${changedAt})
+      `,
     );
 
     const raceCommand = {

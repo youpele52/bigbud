@@ -87,6 +87,13 @@ export function makeThreadRetentionPreview(input: {
         timer: threadRetentionPreviewDuration,
         attributes: { trigger: request.trigger, policy: request.policy },
       }),
+      Effect.tapError((error) =>
+        Effect.logWarning("thread retention preview failed", {
+          policy: request.policy,
+          trigger: request.trigger,
+          detail: String(error),
+        }),
+      ),
       Effect.mapError((error) =>
         Schema.is(ServerThreadRetentionError)(error)
           ? error

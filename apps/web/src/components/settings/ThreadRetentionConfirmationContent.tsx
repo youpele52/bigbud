@@ -13,11 +13,13 @@ import {
 
 interface ThreadRetentionConfirmationContentProps {
   readonly preview: ServerThreadRetentionPreview | null;
+  readonly previewError?: string | null;
   readonly trigger: ThreadRetentionConsentTrigger | null;
 }
 
 export function ThreadRetentionConfirmationContent({
   preview,
+  previewError,
   trigger,
 }: ThreadRetentionConfirmationContentProps) {
   const maintenanceMessage = preview
@@ -26,7 +28,11 @@ export function ThreadRetentionConfirmationContent({
 
   return (
     <div className="space-y-3">
-      {preview ? (
+      {previewError ? (
+        <p role="alert" className="font-medium text-destructive">
+          {previewError}
+        </p>
+      ) : preview ? (
         <>
           {trigger === "policy-change" ? (
             <>
@@ -43,9 +49,10 @@ export function ThreadRetentionConfirmationContent({
           ) : (
             <p>
               <strong className="text-foreground">{preview.eligibleCount}</strong> root thread
-              subtrees last had activity on or before {formatRetentionCutoff(preview.cutoffAt)} and
-              are currently eligible for deletion. Before deleting, bigbud checks each subtree again
-              for safety, so a later safety check may skip a subtree that became active.
+              subtrees last had a user message on or before{" "}
+              {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible for deletion.
+              Before deleting, bigbud checks each subtree again for safety, so a later safety check
+              may skip a subtree that became active.
             </p>
           )}
           {maintenanceMessage ? <p>{maintenanceMessage}</p> : null}
