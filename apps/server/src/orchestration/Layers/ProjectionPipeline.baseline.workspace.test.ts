@@ -144,16 +144,16 @@ it.layer(BaseTestLayer)("projection baseline workspace", (it) => {
         causationEventId: null,
         correlationId: null,
         metadata: {},
-        payload: { threadId: parentId, deletedAt: now },
+        payload: { threadId: parentId, threadIds: [parentId, childId], deletedAt: now },
       });
       yield* pipeline.projectEvent(deleted);
       yield* pipeline.ensureVerifiedBaselineThrough(4);
 
-      const children = yield* sql<{ readonly parentThreadId: string | null }>`
-        SELECT parent_thread_id AS "parentThreadId"
-        FROM projection_threads WHERE thread_id = ${childId}
+      const children = yield* sql<{ readonly threadId: string }>`
+        SELECT thread_id AS "threadId"
+        FROM projection_threads WHERE thread_id IN (${parentId}, ${childId})
       `;
-      assert.deepEqual(children, [{ parentThreadId: null }]);
+      assert.deepEqual(children, []);
       const baselines = yield* ProjectionBaselineRepository;
       const verified = yield* baselines.latestVerified();
       assert.equal(verified._tag, "Some");

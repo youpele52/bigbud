@@ -3,6 +3,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   GetProjectionPendingApprovalInput,
   DeleteProjectionPendingApprovalInput,
@@ -102,7 +103,10 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionPendingApprovalRepositoryShape["upsert"] = (row) =>
-    upsertProjectionPendingApprovalRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertProjectionPendingApprovalRow(row);
+    }).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionPendingApprovalRepository.upsert:query")),
     );
 

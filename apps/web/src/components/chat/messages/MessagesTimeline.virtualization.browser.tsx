@@ -190,12 +190,12 @@ describe("MessagesTimeline virtualization harness", () => {
       const targetRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
       expect(targetRowElement, "Unable to locate target work-log row.").toBeTruthy();
       expect(targetRowElement!.textContent).not.toContain("tool output line 8");
-      expect(targetRowElement!.textContent).toContain("tool output line 9");
+      expect(targetRowElement!.textContent).not.toContain("tool output line 9");
       expect(targetRowElement!.textContent).toContain("tool output line 10");
 
       const showMoreButton =
         Array.from(targetRowElement!.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
-          button.textContent?.includes("Show 8 more"),
+          button.textContent?.includes("Show 9 more"),
         ) ?? null;
       expect(showMoreButton, 'Unable to find "Show more" button.').toBeTruthy();
 
@@ -218,8 +218,8 @@ describe("MessagesTimeline virtualization harness", () => {
 
       await vi.waitFor(() => {
         const collapsedRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
-        expect(collapsedRowElement?.textContent).not.toContain("tool output line 2");
-        expect(collapsedRowElement?.textContent).toContain("Show 8 more");
+        expect(collapsedRowElement?.textContent).not.toContain("tool output line 9");
+        expect(collapsedRowElement?.textContent).toContain("Show 9 more");
       });
 
       const afterCollapse = await measureTimelineRow({

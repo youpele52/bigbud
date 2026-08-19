@@ -7,7 +7,6 @@ import { vi } from "vitest";
 const writeStartupStatus = vi.hoisted(() => vi.fn());
 vi.mock("./startupStatus.ts", () => ({ writeStartupStatus }));
 
-import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
 import { Keybindings } from "../keybindings/keybindings.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor.ts";
@@ -31,6 +30,7 @@ import {
 } from "./serverRuntimeStartup.ts";
 import { runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
+import { EntityPurgeTest } from "../deletion/Services/EntityPurge.ts";
 
 const hasMetricSnapshot = (
   snapshots: ReadonlyArray<Metric.Metric.Snapshot>,
@@ -66,6 +66,7 @@ const startupLayer = (
       Layer.mergeAll(
         nodeServices,
         serverConfig,
+        EntityPurgeTest,
         ServerLifecycleEventsLive,
         ServerSettingsService.layerTest(),
         Layer.succeed(AnalyticsService, {
@@ -81,13 +82,6 @@ const startupLayer = (
           getSnapshot: Effect.die("keybindings getSnapshot"),
           streamChanges: Stream.empty,
           upsertKeybindingRule: () => Effect.die("keybindings upsertKeybindingRule"),
-        }),
-        Layer.succeed(EntityPurge, {
-          requestThread: () => Effect.die("purge requestThread"),
-          requestProject: () => Effect.die("purge requestProject"),
-          run: () => Effect.die("purge run"),
-          runBatch: () => Effect.die("purge runBatch"),
-          auditAndResume: () => Effect.sync(() => events.push("purge.audit")),
         }),
         Layer.succeed(OrchestrationReactor, {
           start: () => reactorStart,
@@ -227,7 +221,7 @@ it.effect("runStartupPhase records duration and outcome metrics", () =>
   }),
 );
 
-it.effect("defers the purge audit until after readiness", () => {
+it.effect("does not schedule the retired purge audit", () => {
   const events: Array<string> = [];
   return Effect.scoped(
     Effect.gen(function* () {
@@ -243,7 +237,7 @@ it.effect("defers the purge audit until after readiness", () => {
 
       yield* TestClock.adjust("1 second");
       yield* Effect.yieldNow;
-      assert.deepEqual(events, ["reactors.start", "purge.audit"]);
+      assert.deepEqual(events, ["reactors.start"]);
     }).pipe(Effect.provide(startupLayer(events))),
   );
 });

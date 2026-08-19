@@ -6,6 +6,7 @@ import { type ChatReaderPosition } from "../scroller/chatScroll.constants";
 import { type ExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { type TurnDiffSummary } from "../../../models/types";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
+import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 
 export const MIN_ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
 export const RECENT_COMPLETED_TURNS_TO_KEEP_MOUNTED = 2;
@@ -33,6 +34,7 @@ export interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
   workspaceExecutionTargetId?: ExecutionTargetId | undefined;
   focusMessageId?: MessageId | null;
   onReplyToMessage?: (messageId: MessageId) => void;
@@ -70,6 +72,7 @@ export interface MessagesTimelineRowContentProps {
   nowIso: string;
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
   workspaceExecutionTargetId?: ExecutionTargetId | undefined;
   isWorking: boolean;
   onTimelineImageLoad: () => void;

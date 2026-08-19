@@ -353,6 +353,7 @@ const makeEntityPurge = Effect.gen(function* () {
                 yield* assertThreadRuntimeQuiescent(queries, entityId as ThreadId);
               yield* queries.deleteProvenReceipts({ entityKind: job.entityKind, entityId });
               if (job.entityKind === "thread") {
+                yield* queries.deleteProvenThreadCanonical({ threadId: entityId as ThreadId });
                 yield* queries.deleteThreadRoot({ threadId: entityId as ThreadId });
               } else {
                 yield* queries.deleteProjectRoot({ projectId: entityId as ProjectId });
@@ -387,8 +388,6 @@ const makeEntityPurge = Effect.gen(function* () {
     mapError: mapPurgeError,
     projectionPipeline,
     queries,
-    requestProject,
-    requestThread,
     runInternal,
   });
 

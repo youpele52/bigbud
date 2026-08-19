@@ -8,6 +8,7 @@ import {
 } from "../stores/composer";
 import { useStore } from "../stores/main";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import { toastManager } from "../components/ui/toast";
 import {
   applySideChatLifecycleEvents,
   reconcileSideChatSnapshot,
@@ -20,6 +21,7 @@ import {
   createOrchestrationRecoveryCoordinator,
   deriveOrchestrationBatchEffects,
   deriveReplayRetryDecision,
+  RECOVERY_OPERATION_TIMEOUT_MS,
   retryTransportRecoveryOperation,
   type ReplayRetryTracker,
 } from "../logic/orchestration";
@@ -27,6 +29,7 @@ import {
   setThreadHydrationEventApplier,
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
+import { getFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
 import {
   coalesceOrchestrationUiEvents,
   shouldFlushOrchestrationEventImmediately,
@@ -170,6 +173,10 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     for (const threadId of batchEffects.removeTerminalStateThreadIds) {
       input.removeTerminalState(threadId);
     }
+    const failedDeleteToast = getFailedThreadDeletionToast(
+      batchEffects.failedDeleteThreadIds.length,
+    );
+    if (failedDeleteToast) toastManager.add(failedDeleteToast);
   };
 
   const applyEventBatch = (
@@ -215,7 +222,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     try {
       const replay = await retryTransportRecoveryOperation(
         () => input.api.orchestration.replayEvents(fromSequenceExclusive),
-        { shouldAbort: disposed },
+        { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (replay.availability === "gap") {
         replayRetryTracker = null;
@@ -276,9 +283,6 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           },
         );
       }
-      if (replayCompletion.shouldReplay) {
-        fallbackToBoundedRecovery();
-      }
       return;
     }
 
@@ -319,7 +323,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     try {
       const projectionSequence = await retryTransportRecoveryOperation(
         () => runBoundedBootstrap({ api: input.api, selectedThreadId, disposed }),
-        { shouldAbort: disposed },
+        { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (!disposed()) {
         reconcileSnapshotDerivedState();
@@ -329,8 +333,15 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           });
         }
       }
-    } catch {
+    } catch (error) {
       recovery.failSnapshotRecovery();
+      if (import.meta.env.MODE !== "test") {
+        console.warn("[orchestration-recovery]", "Snapshot recovery failed.", {
+          reason,
+          error,
+          state: recovery.getState(),
+        });
+      }
     }
   };
 

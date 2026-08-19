@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { deriveOrchestrationBatchEffects } from "./event-effects.logic";
+import { getFailedThreadDeletionToast } from "./thread-deletion.logic";
 
 function makeEvent<T extends OrchestrationEvent["type"]>(
   type: T,
@@ -42,6 +43,7 @@ describe("deriveOrchestrationBatchEffects", () => {
   it("targets draft promotion and terminal cleanup from thread lifecycle events", () => {
     const createdThreadId = ThreadId.makeUnsafe("thread-created");
     const deletedThreadId = ThreadId.makeUnsafe("thread-deleted");
+    const deletedDescendantThreadId = ThreadId.makeUnsafe("thread-deleted-descendant");
     const archivedThreadId = ThreadId.makeUnsafe("thread-archived");
 
     const effects = deriveOrchestrationBatchEffects([
@@ -57,8 +59,13 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:00.000Z",
         updatedAt: "2026-02-27T00:00:00.000Z",
       }),
+      makeEvent("thread.deletion-requested", {
+        threadId: deletedThreadId,
+        deletingAt: "2026-02-27T00:00:01.000Z",
+      }),
       makeEvent("thread.deleted", {
         threadId: deletedThreadId,
+        threadIds: [deletedThreadId, deletedDescendantThreadId],
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
       makeEvent("thread.archived", {
@@ -69,10 +76,15 @@ describe("deriveOrchestrationBatchEffects", () => {
     ]);
 
     expect(effects.clearPromotedDraftThreadIds).toEqual([createdThreadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId]);
+    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId, deletedDescendantThreadId]);
     expect(effects.clearDeletedProjectIds).toEqual([]);
-    expect(effects.removeSelectedThreadIds).toEqual([deletedThreadId]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([deletedThreadId, archivedThreadId]);
+    expect(effects.removeSelectedThreadIds).toEqual([deletedThreadId, deletedDescendantThreadId]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([
+      deletedThreadId,
+      deletedDescendantThreadId,
+      archivedThreadId,
+    ]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
     expect(effects.needsProviderInvalidation).toBe(false);
   });
 
@@ -113,6 +125,7 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.clearDeletedProjectIds).toEqual([]);
     expect(effects.removeSelectedThreadIds).toEqual([]);
     expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
     expect(effects.needsProviderInvalidation).toBe(true);
   });
 
@@ -136,6 +149,7 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.clearDeletedProjectIds).toEqual([]);
     expect(effects.removeSelectedThreadIds).toEqual([]);
     expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
   });
 
   it("clears project-scoped drafts when a project is deleted", () => {
@@ -153,5 +167,51 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.clearDeletedProjectIds).toEqual([projectId]);
     expect(effects.removeSelectedThreadIds).toEqual([]);
     expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
+  });
+
+  it("does not treat deletion-requested as a completed delete", () => {
+    const threadId = ThreadId.makeUnsafe("thread-deleting");
+    const effects = deriveOrchestrationBatchEffects([
+      makeEvent("thread.deletion-requested", {
+        threadId,
+        deletingAt: "2026-02-27T00:00:01.000Z",
+      }),
+    ]);
+
+    expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.removeSelectedThreadIds).toEqual([]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([]);
+  });
+
+  it("treats a later deletion failure as a restore, not a completed delete", () => {
+    const threadId = ThreadId.makeUnsafe("thread-restored");
+    const effects = deriveOrchestrationBatchEffects([
+      makeEvent("thread.deletion-requested", {
+        threadId,
+        deletingAt: "2026-02-27T00:00:01.000Z",
+      }),
+      makeEvent("thread.deletion-failed", {
+        threadId,
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.removeSelectedThreadIds).toEqual([]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.failedDeleteThreadIds).toEqual([threadId]);
+  });
+
+  it("summarizes restored threads after a failed deletion", () => {
+    expect(getFailedThreadDeletionToast(0)).toBeNull();
+    expect(getFailedThreadDeletionToast(1)).toEqual({
+      type: "error",
+      title: "Thread was not deleted",
+      description:
+        "bigbud restored them after a safety check or cleanup failure. They are still in the sidebar.",
+    });
+    expect(getFailedThreadDeletionToast(4)?.title).toBe("4 threads were not deleted");
   });
 });

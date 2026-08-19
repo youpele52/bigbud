@@ -13,16 +13,26 @@ import {
 
 interface ThreadRetentionConfirmationContentProps {
   readonly preview: ServerThreadRetentionPreview | null;
+  readonly previewError?: string | null;
   readonly trigger: ThreadRetentionConsentTrigger | null;
 }
 
 export function ThreadRetentionConfirmationContent({
   preview,
+  previewError,
   trigger,
 }: ThreadRetentionConfirmationContentProps) {
+  const maintenanceMessage = preview
+    ? getRetentionMaintenanceMessage(preview.maintenanceState)
+    : null;
+
   return (
     <div className="space-y-3">
-      {preview ? (
+      {previewError ? (
+        <p role="alert" className="font-medium text-destructive">
+          {previewError}
+        </p>
+      ) : preview ? (
         <>
           {trigger === "policy-change" ? (
             <>
@@ -38,17 +48,21 @@ export function ThreadRetentionConfirmationContent({
             </>
           ) : (
             <p>
-              <strong className="text-foreground">{preview.eligibleCount}</strong> threads have been
-              inactive since {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible
-              for deletion. Before deleting, bigbud checks each thread again for safety, so the
-              final number may be lower.
+              <strong className="text-foreground">{preview.eligibleCount}</strong> root thread
+              subtrees last had a user message on or before{" "}
+              {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible for deletion.
+              Before deleting, bigbud checks each subtree again for safety, so a later safety check
+              may skip a subtree that became active.
             </p>
           )}
+          {maintenanceMessage ? <p>{maintenanceMessage}</p> : null}
           <div>
             <p className="font-medium text-foreground">Deletion includes</p>
             <p>
-              Deleting a thread permanently removes its chat history, attachments, checkpoints and
-              diffs, terminal and provider logs, and any bigbud-managed worktrees.
+              bigbud removes each selected thread subtree from its current local views and cleans up
+              associated bigbud-managed local resources, including attachments, checkpoints and
+              diffs, terminal and provider logs, and managed worktrees. Child threads are deleted
+              with their parent.
             </p>
           </div>
           <div>
@@ -57,9 +71,8 @@ export function ThreadRetentionConfirmationContent({
               Always preserved
             </p>
             <p>
-              Threads are never deleted if they are pinned, active or running, queued, waiting for
-              approval or input, watched, or part of a delegated parent or child task. Your project
-              folders, source files, and other files outside bigbud-managed storage are also kept.
+              Pinned and active or running thread subtrees are never deleted. Your project folders,
+              source files, and other files outside bigbud-managed storage are also kept.
             </p>
           </div>
           <div aria-label="Preview estimates">
@@ -89,6 +102,10 @@ export function ThreadRetentionConfirmationContent({
           </div>
           <div>
             <p className="font-medium text-foreground">Not included in this cleanup</p>
+            <p>
+              Provider-remote conversations are not deleted. Cleanup also does not claim to erase
+              all local canonical history or retained baselines.
+            </p>
             {preview.exclusionCounts.length > 0 ? (
               <ul className="list-disc pl-5">
                 {preview.exclusionCounts.map((exclusion) => (
@@ -101,11 +118,6 @@ export function ThreadRetentionConfirmationContent({
               <p>No counted exclusions were returned. Final safety checks still apply.</p>
             )}
           </div>
-          {getRetentionMaintenanceMessage(preview.maintenanceState) ? (
-            <p className="font-medium text-foreground">
-              {getRetentionMaintenanceMessage(preview.maintenanceState)}
-            </p>
-          ) : null}
           {preview.warnings.length > 0 ? (
             <div role="alert" className="font-medium text-foreground">
               <p>Preview warnings</p>
@@ -125,8 +137,8 @@ export function ThreadRetentionConfirmationContent({
       <p className="flex items-start gap-2 font-medium text-destructive">
         <AlertTriangleIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {trigger === "policy-change"
-          ? "Future cleanup permanently deletes eligible bigbud data and cannot be undone."
-          : "This permanently deletes the listed bigbud data and cannot be undone. Export or back up anything you need first."}
+          ? "Future cleanup removes eligible local thread subtrees and managed resources. Export or back up anything you need first."
+          : "This cleanup removes the listed local thread subtrees and managed resources. Export or back up anything you need first."}
       </p>
     </div>
   );

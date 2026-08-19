@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { CommandId, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
@@ -91,7 +94,9 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.stopSession.mock.calls.length === 1);
     await waitFor(() => harness.browserClose.mock.calls.length === 1);
-    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(() =>
+      harness.terminalClose.mock.calls.some((call) => call[0]?.deleteHistory === true),
+    );
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
       return (
@@ -102,9 +107,7 @@ describe("ProviderCommandReactor", () => {
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.deletingAt).toBeNull();
-    expect(thread?.deletedAt).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
+    expect(thread).toBeUndefined();
   });
 
   it("aborts thread deletion when cleanup fails and leaves the thread undeleted", async () => {
@@ -147,7 +150,7 @@ describe("ProviderCommandReactor", () => {
     );
 
     await waitFor(() => harness.stopSession.mock.calls.length === 1);
-    await waitFor(() => harness.browserClose.mock.calls.length === 1);
+    await waitFor(() => harness.browserClose.mock.calls.length === 2);
     await waitFor(() => harness.terminalClose.mock.calls.length === 1);
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
@@ -173,6 +176,15 @@ describe("ProviderCommandReactor", () => {
   it("reacts to project.delete by deleting live child threads before final project delete", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
+    const projectDirectories = [
+      path.join(harness.stateDir, "memory", "projects", "project-1"),
+      path.join(harness.stateDir, "notes", "project-1"),
+      path.join(harness.stateDir, "kanban", "project-1"),
+    ];
+    for (const directory of projectDirectories) {
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, "delete.txt"), "delete");
+    }
 
     await Effect.runPromise(
       harness.startSession(ThreadId.makeUnsafe("thread-1"), {
@@ -223,7 +235,7 @@ describe("ProviderCommandReactor", () => {
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(project?.deletedAt).not.toBeNull();
     expect(project?.deletingAt).toBeNull();
-    expect(thread?.deletedAt).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
+    expect(thread).toBeUndefined();
+    await waitFor(() => projectDirectories.every((directory) => !fs.existsSync(directory)));
   });
 });

@@ -33,7 +33,21 @@ export interface ContextMenuItem<T extends string = string> {
 
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
-export type FloatingAssistantCaller = "logo" | "mascot";
+export type FloatingAssistantCaller = "chrome" | "logo" | "matte";
+
+export interface CompactChatLinkHandoff {
+  readonly type: "compact-chat-link";
+  readonly threadId: string;
+  readonly href: string;
+  readonly workspaceRoot: string | null;
+}
+
+export interface DesktopRendererReadyAction {
+  readonly type: "desktop-renderer-ready";
+  readonly role: "main";
+}
+
+export type DesktopMenuAction = string | CompactChatLinkHandoff | DesktopRendererReadyAction;
 
 export interface DesktopNotificationInput {
   title: string;
@@ -60,6 +74,7 @@ export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertific
   hideMascot?: () => Promise<boolean>;
   disableFloatingAssistant?: () => Promise<boolean>;
   quitApplication?: () => Promise<void>;
+  restartApplication?: () => Promise<void>;
   getFloatingAssistantEnabled?: () => Promise<boolean>;
   setFloatingAssistantEnabled?: (enabled: boolean) => Promise<boolean>;
   getFloatingAssistantCaller?: () => Promise<FloatingAssistantCaller>;
@@ -84,7 +99,8 @@ export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertific
     position?: { x: number; y: number },
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
-  onMenuAction: (listener: (action: string) => void) => () => void;
+  onMenuAction: (listener: (action: DesktopMenuAction) => void) => () => void;
+  sendMenuAction?: (action: DesktopMenuAction) => void;
   getUpdateState: () => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;

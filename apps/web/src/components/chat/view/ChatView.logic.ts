@@ -24,6 +24,7 @@ import {
 import {
   threadHasStarted,
   waitForStartedServerThread,
+  waitForThreadDeletionToSettle,
   waitForThreadToDisappear,
   waitForThreadToExist,
 } from "./ChatView.threadWait.logic";
@@ -31,6 +32,7 @@ import {
 export {
   threadHasStarted,
   waitForStartedServerThread,
+  waitForThreadDeletionToSettle,
   waitForThreadToDisappear,
   waitForThreadToExist,
 } from "./ChatView.threadWait.logic";

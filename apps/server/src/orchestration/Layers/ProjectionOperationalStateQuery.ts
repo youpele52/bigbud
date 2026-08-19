@@ -44,17 +44,20 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
       sql
         .withTransaction(
           Effect.gen(function* () {
-            const rows = yield* Effect.all({
-              projectRows: startupWindowSql.listOperationalProjectRows(undefined),
-              threadRows: startupWindowSql.listOperationalThreadRows(undefined),
-              messageRows: startupWindowSql.listActiveThreadMessageRows(undefined),
-              activityRows: startupWindowSql.listActiveThreadActivityRows(undefined),
-              taskRows: startupWindowSql.listActiveThreadTaskRows(undefined),
-              sessionRows: snapshotSql.listThreadSessionRows(undefined),
-              latestTurnRows: snapshotSql.listLatestTurnRows(undefined),
-              stateRows: snapshotSql.listProjectionStateRows(undefined),
-              threadWatchRows: snapshotSql.listThreadWatchRows(undefined),
-            });
+            const rows = yield* Effect.all(
+              {
+                projectRows: startupWindowSql.listOperationalProjectRows(undefined),
+                threadRows: startupWindowSql.listOperationalThreadRows(undefined),
+                messageRows: startupWindowSql.listActiveThreadMessageRows(undefined),
+                activityRows: startupWindowSql.listActiveThreadActivityRows(undefined),
+                taskRows: startupWindowSql.listActiveThreadTaskRows(undefined),
+                sessionRows: startupWindowSql.listOperationalSessionRows(undefined),
+                latestTurnRows: startupWindowSql.listOperationalLatestTurnRows(undefined),
+                stateRows: snapshotSql.listProjectionStateRows(undefined),
+                threadWatchRows: snapshotSql.listThreadWatchRows(undefined),
+              },
+              { concurrency: 1 },
+            );
             return yield* decodeReadModel(
               assembleSnapshotRows({
                 ...rows,
@@ -77,29 +80,36 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
     sql
       .withTransaction(
         Effect.gen(function* () {
-          const rows = yield* Effect.all({
-            projectRows: threadSql.listProjectRows({ threadId }),
-            threadRows: threadSql.listThreadRows({ threadId }),
-            messageRows: threadSql.listThreadMessageRows({
-              threadId,
-              limit: includeHistory ? -1 : STARTUP_OPERATIONAL_MESSAGE_LIMIT,
-            }),
-            activityRows: threadSql.listThreadActivityRows({
-              threadId,
-              limit: includeHistory ? -1 : STARTUP_OPERATIONAL_ACTIVITY_LIMIT,
-            }),
-            taskRows: threadSql.listThreadTaskRows({ threadId }),
-            sessionRows: threadSql.listThreadSessionRows({ threadId }),
-            latestTurnRows: threadSql.listLatestTurnRows({ threadId }),
-            stateRows: threadSql.listProjectionStateRows(undefined),
-            threadWatchRows: threadSql.listThreadWatchRows({ threadId }),
-            proposedPlanRows: includeHistory
-              ? threadSql.listThreadProposedPlanRows({ threadId })
-              : Effect.succeed([]),
-            checkpointRows: includeHistory
-              ? threadSql.listCheckpointRows({ threadId })
-              : Effect.succeed([]),
-          });
+          const rows = yield* Effect.all(
+            {
+              projectRows: threadSql.listProjectRows({ threadId }),
+              threadRows: threadSql.listThreadRows({ threadId }),
+              messageRows: includeHistory
+                ? threadSql.listAllThreadMessageRows({ threadId })
+                : threadSql.listThreadMessageRows({
+                    threadId,
+                    limit: STARTUP_OPERATIONAL_MESSAGE_LIMIT,
+                  }),
+              activityRows: includeHistory
+                ? threadSql.listAllThreadActivityRows({ threadId })
+                : threadSql.listThreadActivityRows({
+                    threadId,
+                    limit: STARTUP_OPERATIONAL_ACTIVITY_LIMIT,
+                  }),
+              taskRows: threadSql.listThreadTaskRows({ threadId }),
+              sessionRows: threadSql.listThreadSessionRows({ threadId }),
+              latestTurnRows: threadSql.listLatestTurnRows({ threadId }),
+              stateRows: threadSql.listProjectionStateRows(undefined),
+              threadWatchRows: threadSql.listThreadWatchRows({ threadId }),
+              proposedPlanRows: includeHistory
+                ? threadSql.listThreadProposedPlanRows({ threadId })
+                : Effect.succeed([]),
+              checkpointRows: includeHistory
+                ? threadSql.listCheckpointRows({ threadId })
+                : Effect.succeed([]),
+            },
+            { concurrency: 1 },
+          );
           if (rows.threadRows.length === 0) {
             return Option.none<OrchestrationReadModel>();
           }

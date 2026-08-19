@@ -4,12 +4,75 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Keep bigbud close at hand with the new Floating Assistant: drag its caller anywhere, open a compact chat from any desktop Space, and choose either the bigbud app icon or a hand mascot that waves when you hover.
+- Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
-- Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
+
+## v0.2.204 (19 August, 2026)
+
+### Floating Assistant
+
+- Opened markdown file and external links from compact chat in the main window after navigating to the source thread.
+- Kept those compact-chat file and link handoffs working after the first click, instead of only focusing the main window once the in-app browser or file preview had loaded.
+- Stopped Electron from aborting in-app browser navigations (`GUEST_VIEW_MANAGER_CALL` / `ERR_ABORTED`) when compact chat or the browser panel opened a new URL while a previous page was still loading.
+- Replaced completed-thread check marks in the compact chat picker with colored status dots that match the sidebar, including green for completed work.
+
+### Refined Settings
+
+- Grouped new-thread defaults, archive and delete confirmations, and automatic cleanup into one **Threads** section on the General page.
+- Removed the extra day picker from **Delete eligible threads now**; you choose the cutoff in the confirmation dialog, and the **Delete now** button matches the automatic-period control width.
+- Reduced Default chat folder and Learning folder path labels to a smaller monospace size so they sit with the rest of the settings controls.
+
+### Safer Thread Cleanup
+
+- Moved thread deletion and automatic cleanup onto the server. Root chats and their descendants now go through one pipeline, and Settings and the sidebar follow real cleanup events instead of polling.
+- Made **Delete now** use the period you confirm in the dialog, and made the preview count match what actually gets cleaned up. Age follows the latest user message, the same clock as Recents.
+- Kept deletes fail-closed: after a delete is committed, chats stay hidden, file-cleanup problems no longer restore them, 1-, 2-, and 3-day periods work in the database, and bigbud waits for cleanup to settle before navigating away.
+
+### More Reliable Chats and Providers
+
+- Hardened provider recovery so turn identity is preserved across health inspection, stream and process recovery, and direct dispatch, and aligned chat and sidebar status with that recovery state.
+- Connected OpenCode session status, questions, and permission checks to active-turn inspection so idle turns can complete explicitly while unexpected statuses keep local state.
+
+### Validation
+
+- Added regression coverage for server-owned deletion and retention, preview and claim eligibility, compact-chat link handoff, mascot shell startup, provider recovery, and OpenCode turn inspection.
+- Verified formatting, linting, and workspace type checks.
+
+## v0.2.203 (17 August, 2026)
+
+### Floating Assistant
+
+- Added chrome and matte finish options for the floating hand mascot, with matching animations and saved preferences. New installations turn the Floating Assistant on and use the matte hand unless you already saved a preference. The mascot also points when bigbud shows an in-app toast or a task-completion notification.
+- Added recent thread and project navigation to the floating chat, including project-specific thread lists, new-thread actions, recent completion indicators, and safe switching when an unsent draft exists.
+- Matched floating-chat composer and provider/model picker sizing more closely to the main chat while preserving the shared chat controls and sidebar ordering.
+- Reworked mascot synchronization to use bounded catalog loading, event replay, reconnect recovery, and placeholder threads instead of waiting for a full snapshot, so the mascot can reflect active work sooner and on larger local databases.
+
+### More Reliable Desktop Startup
+
+- Fixed macOS development and packaged applications appearing as background processes instead of normal foreground apps. bigbud now remains available in the Dock and Cmd-Tab, with coverage for activation policy and application identity.
+- Added **Restart bigbud** in Application settings (desktop only), just above Diagnostics, as a manual recovery hatch. It relaunches the app and stops the local engine; in-flight turns and unsent composer text do not survive.
+
+### Safer Thread Cleanup
+
+- Added a migration that reconstructs missing thread and project deletion markers from canonical deletion events, allowing stalled cleanup jobs to finish safely while preserving existing markers.
+
+### Refined Settings
+
+- Marked settings actions that leave the app with an arrow-up-right icon after the label, including About links, **View changelog**, **Open logs folder**, provider setup guides, and System Settings.
+
+### More Reliable Chats
+
+- When provider health is still unconfirmed, sending now starts a new turn instead of waiting in the queue. A short toast explains that you can keep going, and both turns may show briefly if the last one is still running.
+- Timed out stuck event replay and startup recovery after 15 seconds so a hung snapshot no longer blocks live chat updates.
+- Limited startup session and latest-turn loading to the same operational thread window as chats, instead of reading those full tables, so large local databases start more reliably.
+
+### Validation
+
+- Added regression coverage for mascot synchronization, mascot preferences, deletion-marker backfill, floating-chat completion navigation, and macOS application identity.
+- Verified focused floating-chat browser coverage, formatting, linting, and workspace type checks.
 
 ## v0.2.202 (16 August, 2026)
 
@@ -31,6 +94,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Separated local and remote project catalogs so their startup loading, pagination, retries, cursors, and failures no longer affect one another.
 - Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now shows the exact number of projects available to load, with **Load n more projects** capped at five and **Load all n projects** when more remain.
 - Added targeted database indexes and query coverage for efficient project catalog loading at scale.
+- Added project results to the Command Palette, including unloaded local and SSH projects. SSH projects verify their connection before opening.
+- Replaced the static SSH badge with live connected, connecting, and disconnected status in the sidebar.
 
 ### SSH Project Editing and External Tools
 
@@ -43,10 +108,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added persisted, provider-neutral supervision for turns that stop producing events. bigbud can inspect silent turns, surface recoverable health states, and safely reconcile them with bounded checks.
 - Routed automatic follow-ups and queued-prompt delivery through shared safety gates, so they remain queued whenever a turn, session startup, active run, or pending interaction is still in progress.
 - Preserved exactly-once queued follow-up delivery across provider completion, failures, terminal activity, replay, and idle-versus-active races. The composer now makes an unconfirmed provider-health state clearer.
+- Added Provider Settings controls to hide individual providers from the composer and `/model` menu, with a safe fallback when your current provider becomes hidden.
+
+### Reliable Automations
+
+- Made automation chats server-owned: creating an automation creates its dedicated chat atomically, prevents direct deletion while it is in use, and removes the chat after its final automation is deleted.
 
 ### Automatic Thread Cleanup
 
-- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days; **Never** remains available to disable scheduled cleanup.
+- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days. Every finite period now enables daily automatic cleanup; **Never** remains available to disable it.
 - Made daily and confirmed cleanup durable across recovery and restarts, including repaired interrupted purge and projection-baseline recovery, so work waits and resumes safely when it can proceed.
 - Prioritized manual cleanup at safe checkpoints, coalesced equivalent manual requests into one run, and kept individual retry delays from stopping other eligible threads.
 - Improved the cleanup confirmation dialog and status with direct one-off period selection, clearer deletion and preservation details, understandable estimates and exclusions, and plain-language waiting and progress updates; added durable retries, safe worker wake-ups, and regression coverage.

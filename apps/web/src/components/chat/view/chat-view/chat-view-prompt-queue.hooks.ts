@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { MessageId, ThreadId } from "@bigbud/contracts";
 
+import { isSessionHealthUnconfirmed } from "~/logic/session";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
 import type { usePlanHandlers } from "../ChatView.planHandlers.logic";
@@ -35,7 +36,11 @@ export function isPromptQueueTurnInProgress(input: {
   isSendBusy: boolean;
   isRevertingCheckpoint: boolean;
   latestTurnSettled: boolean;
+  sessionHealthUnconfirmed?: boolean;
 }) {
+  if (input.sessionHealthUnconfirmed) {
+    return true;
+  }
   return (
     input.activeSessionTurnRunning ||
     input.isSendBusy ||
@@ -61,6 +66,7 @@ export function useChatViewPromptQueue({
     isSendBusy: thread.isSendBusy,
     isRevertingCheckpoint: base.isRevertingCheckpoint,
     latestTurnSettled: thread.latestTurnSettled,
+    sessionHealthUnconfirmed: isSessionHealthUnconfirmed(base.activeThread?.session ?? null),
   });
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
     isWorking: activeTurnInProgress,

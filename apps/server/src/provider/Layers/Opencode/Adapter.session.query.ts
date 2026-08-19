@@ -23,8 +23,10 @@ export function makeStopSessionRecord(
     Effect.tryPromise({
       try: async () => {
         // Abort SSE stream
-        record.sseAbortController?.abort();
-        record.sseAbortController = null;
+        record.stopEventStream?.();
+        delete record.stopEventStream;
+        record.unsubscribeServerInvalidation?.();
+        delete record.unsubscribeServerInvalidation;
 
         // Clear pending permissions
         record.pendingPermissions.clear();

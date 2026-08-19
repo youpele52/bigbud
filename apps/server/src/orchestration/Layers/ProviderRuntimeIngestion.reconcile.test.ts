@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
 import {
+  STARTUP_STALE_DELETE_RETRY_LIMIT,
   buildStartupReconciliationCommands,
   buildThreadReconciliationCommand,
   dispatchReconciliationCommandSafely,
@@ -20,7 +21,7 @@ const deletingThread = {
 } as import("@bigbud/contracts").OrchestrationThread;
 
 describe("provider startup reconciliation", () => {
-  it("preserves a supervisor health projection while the provider still reports the turn", () => {
+  it("preserves stalled supervisor health while the provider still reports the turn", () => {
     const threadId = ThreadId.makeUnsafe("stalled-projection-thread");
     const turnId = TurnId.makeUnsafe("stalled-projection-turn");
     const thread = {
@@ -54,6 +55,44 @@ describe("provider startup reconciliation", () => {
     });
 
     expect(command).toBeNull();
+  });
+
+  it("heals a legacy checking projection from a matching running provider session", () => {
+    const threadId = ThreadId.makeUnsafe("checking-projection-thread");
+    const turnId = TurnId.makeUnsafe("checking-projection-turn");
+    const command = buildThreadReconciliationCommand({
+      thread: {
+        id: threadId,
+        deletedAt: null,
+        deletingAt: null,
+        runtimeMode: "full-access",
+        session: {
+          threadId,
+          status: "error",
+          providerName: "codex",
+          runtimeMode: "full-access",
+          activeTurnId: turnId,
+          reason: "provider.checking",
+          lastError: "Status cannot be confirmed",
+          updatedAt: occurredAt,
+        },
+      } as unknown as import("@bigbud/contracts").OrchestrationThread,
+      liveSession: {
+        threadId,
+        provider: "codex",
+        status: "running",
+        runtimeMode: "full-access",
+        activeTurnId: turnId,
+        createdAt: occurredAt,
+        updatedAt: occurredAt,
+      },
+      occurredAt,
+    });
+
+    expect(command).toMatchObject({
+      type: "thread.session.set",
+      session: { status: "running", activeTurnId: turnId, reason: null, lastError: null },
+    });
   });
 
   it("contains one dispatch failure so later reconciliation commands still run", async () => {
@@ -147,24 +186,70 @@ describe("provider startup reconciliation", () => {
     });
   });
 
-  it("does not abort or reconcile retention/purge-owned deletions", () => {
-    expect(
-      buildStartupReconciliationCommands({
-        threads: [deletingThread],
-        liveSessions: [],
-        deletionOwnedThreadIds: new Set([deletingThreadId]),
-        occurredAt,
-      }),
-    ).toEqual([]);
-  });
-
-  it("continues abort recovery for unowned stale deletions", () => {
+  it("retries retention/purge-owned stale deletions at startup", () => {
     expect(
       buildStartupReconciliationCommands({
         threads: [deletingThread],
         liveSessions: [],
         occurredAt,
       }).map((command) => command.type),
-    ).toEqual(["thread.delete.abort"]);
+    ).toEqual(["thread.delete"]);
+  });
+
+  it("caps stale deletion retries so startup cannot stampede", () => {
+    const threads = Array.from({ length: STARTUP_STALE_DELETE_RETRY_LIMIT + 3 }, (_, index) => ({
+      ...deletingThread,
+      id: ThreadId.makeUnsafe(`startup-deleting-thread-${index}`),
+    })) as import("@bigbud/contracts").OrchestrationThread[];
+
+    expect(
+      buildStartupReconciliationCommands({
+        threads,
+        liveSessions: [],
+        occurredAt,
+      }).filter((command) => command.type === "thread.delete"),
+    ).toHaveLength(STARTUP_STALE_DELETE_RETRY_LIMIT);
+  });
+
+  it("retries unowned stale deletions instead of aborting them back into the sidebar", () => {
+    expect(
+      buildStartupReconciliationCommands({
+        threads: [deletingThread],
+        liveSessions: [],
+        occurredAt,
+      }).map((command) => command.type),
+    ).toEqual(["thread.delete"]);
+  });
+
+  it("does not reconcile sessions for a deleting thread it is retrying", () => {
+    expect(
+      buildStartupReconciliationCommands({
+        threads: [
+          {
+            ...deletingThread,
+            session: {
+              threadId: deletingThreadId,
+              status: "running",
+              providerName: "codex",
+              runtimeMode: "full-access",
+              activeTurnId: null,
+              lastError: null,
+              updatedAt: occurredAt,
+            },
+          } as import("@bigbud/contracts").OrchestrationThread,
+        ],
+        liveSessions: [
+          {
+            threadId: deletingThreadId,
+            provider: "codex",
+            status: "ready",
+            runtimeMode: "full-access",
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          },
+        ],
+        occurredAt,
+      }).map((command) => command.type),
+    ).toEqual(["thread.delete"]);
   });
 });

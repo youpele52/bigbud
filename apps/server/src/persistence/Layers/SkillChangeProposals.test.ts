@@ -1,10 +1,12 @@
 import { ThreadId, TurnId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SkillChangeProposalRepository } from "../Services/SkillChangeProposals.ts";
 import { SkillChangeProposalRepositoryLive } from "./SkillChangeProposals.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = SkillChangeProposalRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory));
 
@@ -12,6 +14,11 @@ it.layer(layer)("SkillChangeProposalRepository", (it) => {
   it.effect("persists and resolves an exact targeted patch", () =>
     Effect.gen(function* () {
       const repository = yield* SkillChangeProposalRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-1"),
+      });
       yield* repository.create({
         proposalId: "proposal-1",
         threadId: ThreadId.makeUnsafe("thread-1"),

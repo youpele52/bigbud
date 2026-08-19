@@ -3,10 +3,12 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import {
+  ProjectionLatestTurnDbRowSchema,
   ProjectionProjectDbRowSchema,
-  ProjectionThreadDbRowSchema,
   ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadDbRowSchema,
   ProjectionThreadMessageDbRowSchema,
+  ProjectionThreadSessionDbRowSchema,
   ProjectionThreadTaskDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 
@@ -204,6 +206,67 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     `,
   });
 
+  const listOperationalSessionRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionThreadSessionDbRowSchema,
+    execute: () => sql`
+      SELECT
+        s.thread_id AS "threadId",
+        s.status,
+        s.provider_name AS "providerName",
+        s.provider_session_id AS "providerSessionId",
+        s.provider_thread_id AS "providerThreadId",
+        s.runtime_mode AS "runtimeMode",
+        s.active_turn_id AS "activeTurnId",
+        s.reason,
+        s.last_error AS "lastError",
+        s.updated_at AS "updatedAt"
+      FROM projection_thread_sessions s
+      WHERE EXISTS (
+        SELECT 1 FROM projection_threads t
+        WHERE t.thread_id = s.thread_id
+          AND ${operationalThreadPredicate}
+      )
+      ORDER BY s.thread_id ASC
+    `,
+  });
+
+  const listOperationalLatestTurnRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionLatestTurnDbRowSchema,
+    execute: () => sql`
+      WITH ranked AS (
+        SELECT
+          turns.thread_id AS "threadId",
+          turns.turn_id AS "turnId",
+          turns.state,
+          turns.requested_at AS "requestedAt",
+          turns.started_at AS "startedAt",
+          turns.completed_at AS "completedAt",
+          turns.assistant_message_id AS "assistantMessageId",
+          turns.source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
+          turns.source_proposed_plan_id AS "sourceProposedPlanId",
+          ROW_NUMBER() OVER (
+            PARTITION BY turns.thread_id
+            ORDER BY turns.requested_at DESC, turns.turn_id DESC
+          ) AS row_number
+        FROM projection_turns turns
+        WHERE turns.turn_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM projection_threads t
+            WHERE t.thread_id = turns.thread_id
+              AND ${operationalThreadPredicate}
+          )
+      )
+      SELECT
+        "threadId", "turnId", state, "requestedAt", "startedAt", "completedAt",
+        "assistantMessageId", "sourceProposedPlanThreadId", "sourceProposedPlanId"
+      FROM ranked
+      WHERE row_number = 1
+      ORDER BY "threadId" ASC
+    `,
+  });
+
   const listActiveThreadTaskRows = SqlSchema.findAll({
     Request: Schema.Void,
     Result: ProjectionThreadTaskDbRowSchema,
@@ -223,5 +286,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     listActiveThreadMessageRows,
     listActiveThreadActivityRows,
     listActiveThreadTaskRows,
+    listOperationalSessionRows,
+    listOperationalLatestTurnRows,
   };
 }

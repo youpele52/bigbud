@@ -105,7 +105,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       readonly preserveExistingBinding?: boolean;
     }) =>
       startProviderSession({
-        services: { providerService, setThreadSession },
+        services: {
+          providerService,
+          setThreadSession,
+          assertRuntimeStartAllowed: services.assertRuntimeStartAllowed,
+        },
         thread,
         threadId,
         createdAt,

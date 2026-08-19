@@ -5,6 +5,8 @@ import {
 } from "@bigbud/contracts";
 import { create } from "zustand";
 
+import { getDeletedThreadIds } from "../../logic/orchestration/thread-deletion.logic";
+
 interface ThinkingStreamState {
   readonly activitiesByThreadId: Record<string, Record<string, OrchestrationThreadActivity>>;
 }
@@ -158,11 +160,17 @@ function reconcilePersistedActivities(
     }
 
     if (event.type === "thread.deleted") {
-      if (!(event.payload.threadId in nextState.activitiesByThreadId)) {
+      const nextActivitiesByThreadId = { ...nextState.activitiesByThreadId };
+      let changed = false;
+      for (const threadId of getDeletedThreadIds(event.payload)) {
+        if (threadId in nextActivitiesByThreadId) {
+          delete nextActivitiesByThreadId[threadId];
+          changed = true;
+        }
+      }
+      if (!changed) {
         continue;
       }
-      const nextActivitiesByThreadId = { ...nextState.activitiesByThreadId };
-      delete nextActivitiesByThreadId[event.payload.threadId];
       nextState = {
         activitiesByThreadId: nextActivitiesByThreadId,
       };

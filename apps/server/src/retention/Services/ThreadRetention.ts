@@ -1,10 +1,9 @@
 import type {
-  ServerListThreadRetentionRunsResult,
   ServerPreviewThreadRetentionInput,
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
   ServerThreadRetentionPreview,
-  ServerThreadRetentionRun,
+  ServerThreadRetentionResult,
   ServerThreadRetentionError,
 } from "@bigbud/contracts/server/threadRetention.ts";
 import type { Effect } from "effect";
@@ -16,13 +15,7 @@ export interface ThreadRetentionShape {
   ) => Effect.Effect<ServerThreadRetentionPreview, ServerThreadRetentionError>;
   readonly enqueue: (
     input: ServerStartThreadRetentionInput,
-  ) => Effect.Effect<ServerThreadRetentionRun, ServerThreadRetentionError>;
-  readonly getRun: (
-    runId: string,
-  ) => Effect.Effect<ServerThreadRetentionRun, ServerThreadRetentionError>;
-  readonly listRuns: (
-    limit?: number,
-  ) => Effect.Effect<ServerListThreadRetentionRunsResult, ServerThreadRetentionError>;
+  ) => Effect.Effect<ServerThreadRetentionResult, ServerThreadRetentionError>;
   readonly setPolicy: (
     input: ServerSetThreadRetentionPolicyInput,
   ) => Effect.Effect<

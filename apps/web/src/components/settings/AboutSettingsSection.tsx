@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ExternalLinkIcon } from "lucide-react";
+import { ArrowUpRightIcon } from "lucide-react";
 import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { resolveAndPersistPreferredEditor } from "../../models/editor";
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -28,7 +28,9 @@ export function AboutSettingsSection() {
   const observability = useServerObservability();
   const availableEditors = useServerAvailableEditors();
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const [openDiagnosticsError, setOpenDiagnosticsError] = useState<string | null>(null);
+  const canRestart = Boolean(window.desktopBridge?.restartApplication);
 
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
 
@@ -43,6 +45,15 @@ export function AboutSettingsSection() {
     const mode = observability?.localTracingEnabled ? "Local trace file" : "Terminal logs only";
     return exports.length > 0 ? `${mode}. OTLP exporting ${exports.join(" and ")}.` : `${mode}.`;
   })();
+
+  const restartApplication = useCallback(() => {
+    const restart = window.desktopBridge?.restartApplication;
+    if (!restart || isRestarting) return;
+    setIsRestarting(true);
+    void restart().catch(() => {
+      setIsRestarting(false);
+    });
+  }, [isRestarting]);
 
   const openLogsDirectory = useCallback(() => {
     if (!logsDirectoryPath) return;
@@ -75,9 +86,14 @@ export function AboutSettingsSection() {
         title="Changelog"
         description="See what changed in recent updates."
         control={
-          <Button size="xs" variant="outline" onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}>
+          <Button
+            size="xs"
+            variant="outline"
+            className="gap-1"
+            onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}
+          >
             View changelog
-            <ExternalLinkIcon className="size-3.5" />
+            <ArrowUpRightIcon className="size-3 shrink-0" aria-hidden="true" />
           </Button>
         }
       />
@@ -89,16 +105,32 @@ export function AboutSettingsSection() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="-ml-2.5 gap-1.5 text-muted-foreground text-xs"
+                className="gap-1.5 px-0 text-muted-foreground text-xs hover:bg-transparent"
                 onClick={() => openExternalUrl(url)}
               >
-                <ExternalLinkIcon className="size-3" />
                 {label}
+                <ArrowUpRightIcon className="size-3 shrink-0" aria-hidden="true" />
               </Button>
             </li>
           ))}
         </ul>
       </SettingsRow>
+      {canRestart ? (
+        <SettingsRow
+          title="Restart"
+          description="Restarts bigbud and its local engine. Use this if chat stays stuck after reconnect."
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={isRestarting}
+              onClick={restartApplication}
+            >
+              {isRestarting ? "Restarting..." : "Restart bigbud"}
+            </Button>
+          }
+        />
+      ) : null}
       <SettingsRow
         title="Diagnostics"
         description={diagnosticsDescription}
@@ -116,10 +148,14 @@ export function AboutSettingsSection() {
           <Button
             size="xs"
             variant="outline"
+            className="gap-1"
             disabled={!logsDirectoryPath || isOpeningLogsDirectory}
             onClick={openLogsDirectory}
           >
             {isOpeningLogsDirectory ? "Opening..." : "Open logs folder"}
+            {isOpeningLogsDirectory ? null : (
+              <ArrowUpRightIcon className="size-3 shrink-0" aria-hidden="true" />
+            )}
           </Button>
         }
       />

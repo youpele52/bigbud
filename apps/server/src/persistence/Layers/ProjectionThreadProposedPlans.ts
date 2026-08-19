@@ -3,6 +3,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   DeleteProjectionThreadProposedPlansInput,
   ListProjectionThreadProposedPlansInput,
@@ -77,7 +78,10 @@ const makeProjectionThreadProposedPlanRepository = Effect.gen(function* () {
   });
 
   const upsert: ProjectionThreadProposedPlanRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadProposedPlanRow(row).pipe(
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertProjectionThreadProposedPlanRow(row);
+    }).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadProposedPlanRepository.upsert:query")),
     );
 

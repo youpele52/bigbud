@@ -218,6 +218,24 @@ const makeEventStore = Effect.gen(function* () {
               ON CONFLICT (thread_id) DO NOTHING
             `;
           }
+          if (persisted.type === "thread.deleted" && "threadIds" in event.payload) {
+            const threadIds = (event.payload as { readonly threadIds?: ReadonlyArray<ThreadId> })
+              .threadIds;
+            yield* Effect.forEach(
+              threadIds ?? [],
+              (threadId) =>
+                sql`
+                INSERT INTO orchestration_deletion_markers (
+                  entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+                ) VALUES ('thread', ${threadId}, ${persisted.sequence}, ${persisted.occurredAt}, NULL)
+                ON CONFLICT (entity_kind, entity_id) DO UPDATE SET
+                  deletion_sequence = excluded.deletion_sequence,
+                  deleted_at = excluded.deleted_at,
+                  covered_by_baseline_sequence = NULL
+              `,
+              { discard: true },
+            );
+          }
           return persisted;
         }),
       )
@@ -295,12 +313,21 @@ const makeEventStore = Effect.gen(function* () {
     const normalizedLimit = Math.max(0, Math.floor(limit));
     return sql
       .withTransaction(
-        Effect.all({
-          range: readEventRange(undefined),
-          rows: readEventRowsFromSequence({
+        Effect.gen(function* () {
+          const range = yield* readEventRange(undefined);
+          const rows = yield* readEventRowsFromSequence({
             sequenceExclusive: requestedFromSequenceExclusive,
             limit: normalizedLimit,
-          }),
+          });
+          const replayStart = Math.max(
+            requestedFromSequenceExclusive,
+            range.retainedThroughSequence,
+          );
+          const gaps = yield* sql<{ readonly latestSequence: number | null }>`
+            SELECT MAX(sequence) AS "latestSequence" FROM orchestration_event_gaps
+            WHERE sequence > ${replayStart} AND sequence <= ${range.latestSequence}
+          `;
+          return { range, rows, latestGapSequence: gaps[0]?.latestSequence ?? null };
         }),
       )
       .pipe(
@@ -310,23 +337,26 @@ const makeEventStore = Effect.gen(function* () {
             "OrchestrationEventStore.readReplay:decodeRows",
           ),
         ),
-        Effect.flatMap(({ range, rows }) =>
+        Effect.flatMap(({ range, rows, latestGapSequence }) =>
           Effect.forEach(rows, (row) =>
             decodeEventCompat(row).pipe(
               Effect.mapError(
                 toPersistenceDecodeError("OrchestrationEventStore.readReplay:rowToEvent"),
               ),
             ),
-          ).pipe(Effect.map((events) => ({ range, events }))),
+          ).pipe(Effect.map((events) => ({ range, events, latestGapSequence }))),
         ),
-        Effect.map(({ range, events }) => {
+        Effect.map(({ range, events, latestGapSequence }) => {
           const earliestAvailableSequence = range.earliestAvailableSequence;
           const latestSequence = range.latestSequence;
           const inferredRetainedThrough =
             earliestAvailableSequence === null
               ? range.retainedThroughSequence
               : Math.max(range.retainedThroughSequence, earliestAvailableSequence - 1);
-          const retainedFromSequenceExclusive = inferredRetainedThrough;
+          const retainedFromSequenceExclusive = Math.max(
+            inferredRetainedThrough,
+            latestGapSequence ?? 0,
+          );
           const hasInternalGap = events.some(
             (event, index) =>
               event.sequence !==
@@ -335,7 +365,9 @@ const makeEventStore = Effect.gen(function* () {
                 : events[index - 1]!.sequence + 1),
           );
           const availability =
-            requestedFromSequenceExclusive < retainedFromSequenceExclusive || hasInternalGap
+            requestedFromSequenceExclusive < retainedFromSequenceExclusive ||
+            latestGapSequence !== null ||
+            hasInternalGap
               ? ("gap" as const)
               : ("available" as const);
           const availableEvents = availability === "gap" ? [] : events;

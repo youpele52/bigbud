@@ -14,7 +14,7 @@ import {
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("bigbud-project-memory-delete-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
-    it.effect("retains project memory for EntityPurge after project deletion is finalized", () =>
+    it.effect("retains project memory for direct cleanup after finalization", () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;

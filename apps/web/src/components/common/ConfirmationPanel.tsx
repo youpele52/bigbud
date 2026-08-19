@@ -15,6 +15,7 @@ interface ConfirmationPanelProps {
   confirmVariant?: "default" | "destructive";
   busy?: boolean;
   confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
   cancelButtonRef?: Ref<HTMLButtonElement>;
   className?: string;
   titleSlot?: ReactNode;
@@ -31,6 +32,7 @@ export function ConfirmationPanel({
   confirmVariant = "default",
   busy = false,
   confirmDisabled = false,
+  cancelDisabled,
   cancelButtonRef,
   className,
   titleSlot,
@@ -68,7 +70,7 @@ export function ConfirmationPanel({
           ref={cancelButtonRef}
           size="sm"
           variant="outline"
-          disabled={busy}
+          disabled={cancelDisabled ?? busy}
           onClick={onCancel}
         >
           {cancelLabel}

@@ -1,6 +1,72 @@
-import { describe, expect, it } from "vitest";
+import { ThreadId } from "@bigbud/contracts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildBranchThreadTitle } from "./useThreadActions";
+import type { Thread } from "../models/types";
+import { makeThread } from "../stores/main/main.store.test.helpers";
+
+const mockState = vi.hoisted(() => ({
+  confirm: vi.fn(async () => true),
+  dispatchCommand: vi.fn(async () => undefined),
+  navigate: vi.fn(async () => undefined),
+  routeThreadId: "thread-1",
+  threads: [] as Thread[],
+  listeners: [] as Array<(state: { threads: Thread[] }) => void>,
+  useMutation: vi.fn(),
+  waitForThreadDeletionToSettle: vi.fn(
+    async (): Promise<"deleted" | "aborted" | "timeout"> => "deleted",
+  ),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => mockState.navigate,
+  useParams: ({ select }: { select: (params: { threadId: string }) => unknown }) =>
+    select({ threadId: mockState.routeThreadId }),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useMutation: mockState.useMutation,
+}));
+
+vi.mock("../rpc/nativeApi", () => ({
+  readNativeApi: () => ({
+    dialogs: { confirm: mockState.confirm },
+    orchestration: { dispatchCommand: mockState.dispatchCommand },
+  }),
+}));
+
+vi.mock("../stores/main", () => ({
+  useStore: {
+    getState: () => ({ threads: mockState.threads }),
+    subscribe: (listener: (state: { threads: Thread[] }) => void) => {
+      mockState.listeners.push(listener);
+      return () => {
+        mockState.listeners = mockState.listeners.filter((entry) => entry !== listener);
+      };
+    },
+  },
+}));
+
+vi.mock("./useSettings", () => ({
+  useSettings: () => ({ sidebarThreadSortOrder: "created_at" }),
+}));
+
+vi.mock("./useHandleNewThread", () => ({
+  useHandleNewThread: () => ({ handleNewThread: vi.fn() }),
+}));
+
+vi.mock("../components/chat/view/ChatView.logic", () => ({
+  waitForThreadDeletionToSettle: () => mockState.waitForThreadDeletionToSettle(),
+  waitForThreadToExist: vi.fn(async () => true),
+}));
+
+vi.mock("../lib/utils", () => ({
+  newCommandId: () => "command-1",
+  newThreadId: () => ThreadId.makeUnsafe("new-thread"),
+}));
+
+import { buildBranchThreadTitle, useThreadActions } from "./useThreadActions";
 
 describe("buildBranchThreadTitle", () => {
   it("adds A for the first branch of an unsuffixed title", () => {
@@ -29,5 +95,72 @@ describe("buildBranchThreadTitle", () => {
     expect(
       buildBranchThreadTitle("Old thread name (Z)", ["Old thread name", "Old thread name (Z)"]),
     ).toBe("Old thread name (AA)");
+  });
+});
+
+describe("useThreadActions", () => {
+  beforeEach(() => {
+    mockState.confirm.mockClear();
+    mockState.dispatchCommand.mockClear();
+    mockState.navigate.mockClear();
+    mockState.routeThreadId = "thread-1";
+    mockState.useMutation.mockClear();
+    mockState.waitForThreadDeletionToSettle.mockReset();
+    mockState.waitForThreadDeletionToSettle.mockResolvedValue("deleted");
+    mockState.threads = [
+      makeThread({
+        id: ThreadId.makeUnsafe("thread-1"),
+        createdAt: "2026-03-09T10:00:00.000Z",
+        worktreePath: "/repo/worktrees/thread-1",
+      }),
+      makeThread({
+        id: ThreadId.makeUnsafe("thread-2"),
+        createdAt: "2026-03-09T10:05:00.000Z",
+      }),
+    ];
+  });
+
+  it("dispatches deletion and navigates to the fallback thread", async () => {
+    let actions: ReturnType<typeof useThreadActions> | undefined;
+
+    function ThreadActionsCapture() {
+      actions = useThreadActions();
+      return null;
+    }
+
+    renderToStaticMarkup(createElement(ThreadActionsCapture));
+
+    await actions!.deleteThread(ThreadId.makeUnsafe("thread-1"));
+
+    expect(mockState.dispatchCommand).toHaveBeenCalledWith({
+      type: "thread.delete",
+      commandId: "command-1",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+    });
+    expect(mockState.navigate).toHaveBeenCalledWith({
+      to: "/$threadId",
+      params: { threadId: ThreadId.makeUnsafe("thread-2") },
+      replace: true,
+    });
+    expect(mockState.confirm).not.toHaveBeenCalled();
+    expect(mockState.useMutation).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate away when deletion is aborted", async () => {
+    let actions: ReturnType<typeof useThreadActions> | undefined;
+
+    function ThreadActionsCapture() {
+      actions = useThreadActions();
+      return null;
+    }
+
+    renderToStaticMarkup(createElement(ThreadActionsCapture));
+
+    mockState.waitForThreadDeletionToSettle.mockResolvedValue("aborted");
+
+    await actions!.deleteThread(ThreadId.makeUnsafe("thread-1"));
+
+    expect(mockState.dispatchCommand).toHaveBeenCalled();
+    expect(mockState.navigate).not.toHaveBeenCalled();
   });
 });

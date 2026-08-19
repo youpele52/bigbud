@@ -257,6 +257,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      extendInfo: {
+        LSBackgroundOnly: false,
+        LSUIElement: false,
+      },
     };
     // Only pass entitlements for signed builds. Ad-hoc codesign (used when
     // signing secrets are missing) fails on non-Mach-O files inside the

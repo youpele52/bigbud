@@ -297,4 +297,18 @@ layer("thread retention consent", (it) => {
       if (distinct.consumed) assert.equal(distinct.run.runId, "different-policy-run");
     }),
   );
+
+  it.effect("issues a 3-days preview challenge", () =>
+    Effect.gen(function* () {
+      const issued = yield* (yield* ThreadRetentionRepository).issueChallenge({
+        challengeId: "three-day-challenge",
+        trigger: "manual",
+        policy: "3-days",
+        cutoffAt: "2026-08-16T00:00:00.000Z",
+        issuedAt: "2026-08-19T11:55:00.000Z",
+        expiresAt: "2026-08-19T12:00:00.000Z",
+      });
+      assert.equal(issued.policy, "3-days");
+    }),
+  );
 });

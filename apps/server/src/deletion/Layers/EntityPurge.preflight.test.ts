@@ -161,7 +161,7 @@ it.layer(testLayer)("entity purge baseline preflight", (it) => {
       );
     }),
   );
-  it.effect("discovers a bounded orphan manifest without a project workspace", () =>
+  it.effect("does not create jobs for deleted entities without a legacy manifest", () =>
     Effect.gen(function* () {
       preflightSequences.length = 0;
       const purge = yield* EntityPurge;
@@ -193,12 +193,12 @@ it.layer(testLayer)("entity purge baseline preflight", (it) => {
       const completed = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count FROM purge_jobs WHERE status = 'completed' AND entity_id LIKE 'orphan-thread-%'
       `;
-      assert.deepEqual(completed, [{ count: 2 }]);
+      assert.deepEqual(completed, [{ count: 0 }]);
       const survivors = yield* Effect.forEach(
         ["orphan-thread-a", "orphan-thread-b", "orphan-thread-c"],
         (threadId) => fs.exists(`${config.providerLogsDir}/${threadId}.log`),
       );
-      assert.equal(survivors.filter(Boolean).length, 1);
+      assert.equal(survivors.filter(Boolean).length, 3);
     }),
   );
 

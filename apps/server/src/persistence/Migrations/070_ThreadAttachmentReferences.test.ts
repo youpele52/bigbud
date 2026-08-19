@@ -7,6 +7,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { runMigrations } from "../Migrations.ts";
 import * as NodeSqliteClient from "../NodeSqliteClient.ts";
 import { makeEntityPurgeSql } from "../../deletion/Layers/EntityPurge.sql.ts";
+import { insertProjectionThreadParent } from "../Layers/ProjectionThread.test.helpers.ts";
 
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
@@ -34,7 +35,7 @@ layer("070_ThreadAttachmentReferences", (it) => {
           ('activity-whitespace-screenshot', 'thread-e', 'info', 'tool.completed', '',
             '{"title":"computer_use","data":{"result":{"screenshot":{"attachmentId":"  ","mimeType":"image/png"}}}}', 'now')
       `;
-      yield* runMigrations();
+      yield* runMigrations({ toMigrationInclusive: 70 });
 
       const refs = yield* sql<{
         readonly attachmentId: string;
@@ -63,6 +64,12 @@ layer("070_ThreadAttachmentReferences", (it) => {
       const sql = yield* SqlClient.SqlClient;
       yield* runMigrations();
       yield* sql`DELETE FROM projection_thread_attachment_refs`;
+      yield* Effect.forEach(
+        ["thread-a", "thread-b", "thread-c", "thread-d", "thread-e"],
+        (threadId) =>
+          insertProjectionThreadParent({ sql, threadId: ThreadId.makeUnsafe(threadId) }),
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid);
       yield* sql`
         INSERT INTO projection_thread_messages (
           message_id, thread_id, role, text, is_streaming, created_at, updated_at, attachments_json

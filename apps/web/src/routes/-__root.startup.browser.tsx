@@ -18,7 +18,10 @@ vi.mock("../hooks/useSettings", () => ({
   useSettings: () => ({ hasSeenFileAccessPrompt: true }),
 }));
 vi.mock("../hooks/useWindowMaterial", () => ({ useWindowMaterial: () => undefined }));
-vi.mock("../rpc/serverState", () => ({ useServerConfig: () => null }));
+vi.mock("../rpc/serverState", () => ({
+  useServerConfig: () => null,
+  useServerProviders: () => [],
+}));
 vi.mock("../components/layout/StartupSplash", () => ({
   StartupSplash: ({ className = "" }: { className?: string }) => (
     <div data-testid="startup-splash" className={className} />
@@ -33,8 +36,17 @@ vi.mock("../components/layout/AppSidebarLayout", () => ({
   ),
 }));
 vi.mock("../components/ui/toast", () => ({
-  ToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  AnchoredToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ToastProvider: ({ children }: { children: ReactNode }) => (
+    <div data-testid="toast-provider">{children}</div>
+  ),
+  AnchoredToastProvider: ({ children }: { children: ReactNode }) => (
+    <div data-testid="anchored-toast-provider">{children}</div>
+  ),
+  toastManager: {
+    add: vi.fn(),
+    close: vi.fn(),
+    update: vi.fn(),
+  },
 }));
 vi.mock("../components/WebSocketConnectionSurface", () => ({
   WebSocketConnectionCoordinator: () => null,
@@ -48,6 +60,13 @@ vi.mock("../components/SlowRpcAckToastCoordinator", () => ({
 }));
 vi.mock("../components/DesktopBackendStartupCoordinator", () => ({
   DesktopBackendStartupCoordinator: () => null,
+}));
+vi.mock("../components/floating-assistant/MascotStateCoordinator", () => ({
+  MascotStateCoordinator: () => null,
+}));
+vi.mock("../components/floating-assistant/FloatingAssistantShell", () => ({
+  MascotShell: () => <div data-testid="mascot-shell" />,
+  CompactChatShell: () => <div data-testid="compact-chat-shell" />,
 }));
 vi.mock("../components/plugins/PluginUpdateToastCoordinator", () => ({
   PluginUpdateToastCoordinator: () => null,
@@ -87,6 +106,7 @@ describe("RootRouteView startup", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     readNativeApiMock.mockReset();
+    Reflect.deleteProperty(window, "desktopBridge");
   });
 
   it("mounts the shell and outlet before bootstrap completes beneath an exiting splash", async () => {
@@ -119,6 +139,21 @@ describe("RootRouteView startup", () => {
       expect(document.querySelector('[data-testid="startup-splash"]')).toBeTruthy();
       expect(document.querySelector('[data-testid="app-shell"]')).toBeNull();
       expect(document.querySelector('[data-testid="route-outlet"]')).toBeNull();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not mount toast providers in the mascot window", async () => {
+    window.desktopBridge = {
+      getWindowRole: () => "mascot",
+    } as NonNullable<typeof window.desktopBridge>;
+    const mounted = await mountRoot();
+
+    try {
+      expect(document.querySelector('[data-testid="mascot-shell"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="toast-provider"]')).toBeNull();
+      expect(document.querySelector('[data-testid="anchored-toast-provider"]')).toBeNull();
     } finally {
       await mounted.cleanup();
     }

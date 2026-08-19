@@ -80,4 +80,16 @@ describe("retryTransportRecoveryOperation", () => {
     expect(attempts).toBe(2);
     expect(sleep).toHaveBeenCalledOnce();
   });
+
+  it("times out hung recovery operations without retrying", async () => {
+    await expect(
+      retryTransportRecoveryOperation(
+        () =>
+          new Promise(() => {
+            // Hang until the recovery timeout fires.
+          }),
+        { timeoutMs: 20, maxRetries: 5 },
+      ),
+    ).rejects.toThrow("Orchestration recovery operation timed out");
+  });
 });

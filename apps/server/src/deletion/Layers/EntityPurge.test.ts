@@ -182,7 +182,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
         yield* fs.writeFileString(`${directory}/delete.txt`, "delete");
       }
 
-      yield* purge.auditAndResume();
+      yield* purge.run(yield* purge.requestProject(projectId));
 
       const projects = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count FROM projection_projects WHERE project_id = ${projectId}
@@ -271,10 +271,10 @@ it.layer(testLayer)("EntityPurge", (it) => {
       const purge = yield* EntityPurge;
       const sql = yield* SqlClient.SqlClient;
       yield* sql`
-        INSERT INTO projection_thread_messages (
-          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        INSERT INTO projection_notes (
+          note_id, project_id, title, content, created_at, updated_at
         ) VALUES (
-          'orphan-message', 'missing-thread', 'user', 'delete', 0,
+          'orphan-note', 'missing-project', 'Orphan', 'delete',
           '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z'
         )
       `;
@@ -283,8 +283,8 @@ it.layer(testLayer)("EntityPurge", (it) => {
 
       const rows = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count
-        FROM projection_thread_messages
-        WHERE thread_id = 'missing-thread'
+        FROM projection_notes
+        WHERE note_id = 'orphan-note'
       `;
       assert.deepStrictEqual(rows, [{ count: 0 }]);
     }),
@@ -372,15 +372,24 @@ it.layer(testLayer)("EntityPurge", (it) => {
       yield* purge.run(job);
       const finalized = yield* sql<{
         readonly events: number;
+        readonly eventIds: number;
+        readonly identities: number;
+        readonly streams: number;
         readonly receipts: number;
         readonly markers: number;
       }>`
         SELECT
           (SELECT COUNT(*) FROM orchestration_events WHERE stream_id = ${threadId}) AS events,
+          (SELECT COUNT(*) FROM orchestration_event_ids WHERE sequence = 1) AS "eventIds",
+          (SELECT COUNT(*) FROM orchestration_thread_identity WHERE thread_id = ${threadId}) AS identities,
+          (SELECT COUNT(*) FROM orchestration_stream_state
+            WHERE aggregate_kind = 'thread' AND stream_id = ${threadId}) AS streams,
           (SELECT COUNT(*) FROM orchestration_command_receipts WHERE aggregate_id = ${threadId}) AS receipts,
           (SELECT COUNT(*) FROM orchestration_deletion_markers WHERE entity_id = ${threadId}) AS markers
       `;
-      assert.deepEqual(finalized, [{ events: 1, receipts: 0, markers: 1 }]);
+      assert.deepEqual(finalized, [
+        { events: 0, eventIds: 0, identities: 0, streams: 0, receipts: 0, markers: 0 },
+      ]);
     }),
   );
 });

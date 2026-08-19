@@ -77,7 +77,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
   const visibleBrowser = yield* VisibleBrowserControl;
 
-  return (envelope: CommandEnvelope): Effect.Effect<void> => {
+  return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
     const processingStartedAtMs = Date.now();
     const aggregateRef = commandToAggregateRef(envelope.command);
@@ -241,7 +241,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 startedAtMs: Date.now(),
               });
             }
-            return;
+            return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;
           if (!Schema.is(OrchestrationCommandPreviouslyRejectedError)(error)) {
@@ -272,6 +272,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
             }
           }
           yield* Deferred.fail(envelope.result, error);
+          return false;
         }),
       ),
     );

@@ -1,10 +1,12 @@
 import { MessageId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ProjectionThreadMessageRepository } from "../Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadMessageRepositoryLive } from "./ProjectionThreadMessages.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = it.layer(
   ProjectionThreadMessageRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -14,10 +16,12 @@ layer("ProjectionThreadMessageRepository", (it) => {
   it.effect("preserves existing attachments when upsert omits attachments", () =>
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadMessageRepository;
+      const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("thread-preserve-attachments");
       const messageId = MessageId.makeUnsafe("message-preserve-attachments");
       const createdAt = "2026-02-28T19:00:00.000Z";
       const updatedAt = "2026-02-28T19:00:01.000Z";
+      yield* insertProjectionThreadParent({ sql, threadId });
       const persistedAttachments = [
         {
           type: "image" as const,
@@ -68,9 +72,11 @@ layer("ProjectionThreadMessageRepository", (it) => {
   it.effect("allows explicit attachment clearing with an empty array", () =>
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadMessageRepository;
+      const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("thread-clear-attachments");
       const messageId = MessageId.makeUnsafe("message-clear-attachments");
       const createdAt = "2026-02-28T19:10:00.000Z";
+      yield* insertProjectionThreadParent({ sql, threadId });
 
       yield* repository.upsert({
         messageId,
@@ -114,9 +120,11 @@ layer("ProjectionThreadMessageRepository", (it) => {
   it.effect("preserves existing reply targets when upsert omits reply metadata", () =>
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadMessageRepository;
+      const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("thread-preserve-reply");
       const messageId = MessageId.makeUnsafe("message-preserve-reply");
       const createdAt = "2026-02-28T19:20:00.000Z";
+      yield* insertProjectionThreadParent({ sql, threadId });
       const replyTo = {
         messageId: MessageId.makeUnsafe("message-parent"),
         role: "assistant" as const,

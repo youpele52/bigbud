@@ -282,6 +282,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                     return (
                       <MenuItem
                         key={option.value}
+                        className={props.menuItemClassName}
                         disabled={isActivatingCliProxy}
                         title={liveProvider.message ?? "Start CLIProxyAPI"}
                         onClick={() => void activateCliProxy()}
@@ -306,6 +307,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                   return (
                     <MenuItem
                       key={option.value}
+                      className={props.menuItemClassName}
                       disabled
                       title={liveProvider.message ?? unavailableLabel}
                     >
@@ -336,7 +338,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                       });
                     }}
                   >
-                    <MenuSubTrigger>
+                    <MenuSubTrigger className={props.menuItemClassName}>
                       <OptionIcon
                         aria-hidden="true"
                         className={cn(
@@ -379,7 +381,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
               {UNAVAILABLE_PROVIDER_OPTIONS.map((option) => {
                 const OptionIcon = PROVIDER_ICON_BY_PROVIDER[option.value];
                 return (
-                  <MenuItem key={option.value} disabled>
+                  <MenuItem key={option.value} className={props.menuItemClassName} disabled>
                     <OptionIcon
                       aria-hidden="true"
                       className="size-4 shrink-0 text-muted-foreground/85 opacity-80"

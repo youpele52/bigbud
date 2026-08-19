@@ -162,13 +162,7 @@ export interface NativeApi {
     ) => Promise<Retention.ServerThreadRetentionPreview>;
     startThreadRetention: (
       input: Retention.ServerStartThreadRetentionInput,
-    ) => Promise<Retention.ServerThreadRetentionRun>;
-    getThreadRetentionRun: (
-      input: Retention.ServerGetThreadRetentionRunInput,
-    ) => Promise<Retention.ServerThreadRetentionRun>;
-    listThreadRetentionRuns: (
-      input?: Retention.ServerListThreadRetentionRunsInput,
-    ) => Promise<Retention.ServerListThreadRetentionRunsResult>;
+    ) => Promise<Retention.ServerThreadRetentionResult>;
     setThreadRetentionPolicy: (
       input: Retention.ServerSetThreadRetentionPolicyInput,
     ) => Promise<ServerSettings>;

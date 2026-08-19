@@ -111,6 +111,51 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Checking", pulse: false });
   });
 
+  it("shows working instead of stale checking when the matching provider turn is streaming", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          latestTurn: {
+            ...makeLatestTurn(),
+            completedAt: null,
+            state: "running",
+          },
+          session: {
+            ...baseThread.session,
+            status: "error",
+            activeTurnId: "turn-1" as never,
+            reason: "provider.checking",
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Working", pulse: true, dotClass: "bg-info-foreground" });
+  });
+
+  it.each(["provider.stalled", "provider.lost-session"])(
+    "keeps terminal provider state %s distinct from active work",
+    (reason) => {
+      expect(
+        resolveThreadStatusPill({
+          thread: {
+            ...baseThread,
+            latestTurn: {
+              ...makeLatestTurn(),
+              completedAt: null,
+              state: "running",
+            },
+            session: {
+              ...baseThread.session,
+              status: "error",
+              activeTurnId: "turn-1" as never,
+              reason,
+            },
+          },
+        }),
+      ).toMatchObject({ label: "Stalled", pulse: false, dotClass: "bg-destructive" });
+    },
+  );
+
   it("shows compacting context when the running session is compacting", () => {
     expect(
       resolveThreadStatusPill({
@@ -137,7 +182,11 @@ describe("resolveThreadStatusPill", () => {
       },
     });
 
-    expect(connecting).toMatchObject({ label: "Connecting", dotClass: "bg-primary", pulse: true });
+    expect(connecting).toMatchObject({
+      label: "Connecting",
+      dotClass: "bg-info-foreground",
+      pulse: true,
+    });
     expect(resolveProjectStatusIndicator([connecting])).toBe(connecting);
   });
 

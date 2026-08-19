@@ -3,6 +3,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
+import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   ProjectionThreadTask,
   ProjectionThreadTaskLookup,
@@ -66,9 +67,10 @@ const makeRepository = Effect.gen(function* () {
       sql`DELETE FROM projection_thread_tasks WHERE thread_id = ${threadId}`,
   });
   const upsert: ProjectionThreadTaskRepositoryShape["upsert"] = (row) =>
-    upsertRow(row).pipe(
-      Effect.mapError(mapError("ProjectionThreadTaskRepository.upsert", "encode")),
-    );
+    Effect.gen(function* () {
+      yield* assertProjectionThreadParent(sql, row.threadId);
+      yield* upsertRow(row);
+    }).pipe(Effect.mapError(mapError("ProjectionThreadTaskRepository.upsert", "encode")));
   const getByTaskId: ProjectionThreadTaskRepositoryShape["getByTaskId"] = (input) =>
     getRow(input).pipe(
       Effect.mapError(mapError("ProjectionThreadTaskRepository.getByTaskId", "decode")),

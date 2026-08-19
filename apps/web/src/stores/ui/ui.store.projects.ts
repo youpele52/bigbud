@@ -29,6 +29,26 @@ let persistedProjectStateUsesLegacyShape = false;
 const currentProjectCwdById = new Map<ProjectId, string | null>();
 let legacyKeysCleanedUp = false;
 
+export function sanitizePersistedThreadLastVisitedAt(
+  value: PersistedUiState["threadLastVisitedAtById"],
+): Record<string, string> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const nextState: Record<string, string> = {};
+  for (const [threadId, visitedAt] of Object.entries(value)) {
+    if (!threadId || typeof visitedAt !== "string") {
+      continue;
+    }
+    if (!Number.isFinite(Date.parse(visitedAt))) {
+      continue;
+    }
+    nextState[threadId] = visitedAt;
+  }
+  return nextState;
+}
+
 function sanitizePersistedThreadChangedFilesExpanded(
   value: PersistedUiState["threadChangedFilesExpandedById"],
 ): Record<string, Record<string, boolean>> {
@@ -105,6 +125,7 @@ export function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
+      threadLastVisitedAtById: sanitizePersistedThreadLastVisitedAt(parsed.threadLastVisitedAtById),
     };
   } catch {
     return initialState;
@@ -148,6 +169,7 @@ export function persistState(state: UiState): void {
         favouritesExpanded: state.favouritesExpanded,
         projectOrderCwds,
         threadChangedFilesExpandedById,
+        threadLastVisitedAtById: state.threadLastVisitedAtById,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {

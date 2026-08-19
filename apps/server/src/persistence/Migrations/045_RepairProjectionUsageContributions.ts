@@ -1,34 +1,25 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
-
-function containsDuplicateColumnError(value: unknown): boolean {
-  if (typeof value === "string") {
-    return /duplicate column/i.test(value);
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const error = value as { readonly cause?: unknown; readonly message?: unknown };
-  return containsDuplicateColumnError(error.message) || containsDuplicateColumnError(error.cause);
-}
-
-const ignoreDuplicateColumn = (error: SqlError) =>
-  containsDuplicateColumnError(error) ? Effect.void : Effect.fail(error);
 
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const columns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(projection_usage_contributions)
+  `;
 
-  yield* sql`
-    ALTER TABLE projection_usage_contributions
-    ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'
-  `.pipe(Effect.catchTag("SqlError", ignoreDuplicateColumn));
+  if (!columns.some((column) => column.name === "model")) {
+    yield* sql`
+      ALTER TABLE projection_usage_contributions
+      ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'
+    `;
+  }
 
-  yield* sql`
-    ALTER TABLE projection_usage_contributions
-    ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT 'default'
-  `.pipe(Effect.catchTag("SqlError", ignoreDuplicateColumn));
+  if (!columns.some((column) => column.name === "interaction_mode")) {
+    yield* sql`
+      ALTER TABLE projection_usage_contributions
+      ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT 'default'
+    `;
+  }
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_usage_backfill_state (

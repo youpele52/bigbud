@@ -1,5 +1,4 @@
 import {
-  Cause,
   Data,
   Deferred,
   Effect,
@@ -22,7 +21,6 @@ import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
 import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
 import { cleanupHandoffDocumentFiles } from "../ws/wsHandoffDocument.ts";
-import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
 import { runLegacyPinnedThreadSettingsMigration } from "./LegacyPinnedThreadSettingsMigration.ts";
 import { writeStartupStatus } from "./startupStatus.ts";
 import { runThreadRetentionSettingsMigration } from "./ThreadRetentionSettingsMigration.ts";
@@ -147,7 +145,6 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const orchestrationReactor = yield* OrchestrationReactor;
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
-  const entityPurge = yield* EntityPurge;
   const threadRetention = yield* Effect.serviceOption(ThreadRetention);
   const commandGate = yield* makeCommandGate;
   const httpListening = yield* Deferred.make<void>();
@@ -261,18 +258,6 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
         }),
       );
 
-      yield* Effect.forkScoped(
-        Effect.sleep("1 second").pipe(
-          Effect.andThen(entityPurge.auditAndResume()),
-          Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logWarning("entity purge audit failed", {
-                  cause,
-                }),
-          ),
-        ),
-      );
       yield* Effect.logDebug("startup phase: recording startup heartbeat");
       yield* launchStartupHeartbeat;
       yield* Effect.yieldNow;

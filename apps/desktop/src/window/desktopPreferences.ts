@@ -1,18 +1,20 @@
 import * as FS from "node:fs";
 import * as Path from "node:path";
 
+import type { FloatingAssistantCaller } from "@bigbud/contracts/server/ipc.ts";
+
 export interface DesktopPreferences {
   version: 1;
   floatingAssistantEnabled: boolean;
-  floatingAssistantCaller: "logo" | "mascot";
+  floatingAssistantCaller: FloatingAssistantCaller;
   mascotVisible: boolean;
   mascotBounds: { x: number; y: number } | null;
 }
 
 const defaults: DesktopPreferences = {
   version: 1,
-  floatingAssistantEnabled: false,
-  floatingAssistantCaller: "mascot",
+  floatingAssistantEnabled: true,
+  floatingAssistantCaller: "matte",
   mascotVisible: true,
   mascotBounds: null,
 };
@@ -34,8 +36,11 @@ function decode(value: unknown): DesktopPreferences | null {
   if (state.mascotBounds !== null && !isFinitePoint(state.mascotBounds)) return null;
   return {
     ...state,
-    // Existing profiles predate caller selection and should receive the new hand mascot.
-    floatingAssistantCaller: state.floatingAssistantCaller === "logo" ? "logo" : "mascot",
+    // The legacy "mascot" caller and invalid values migrate to the default matte-black hand.
+    floatingAssistantCaller:
+      state.floatingAssistantCaller === "logo" || state.floatingAssistantCaller === "chrome"
+        ? state.floatingAssistantCaller
+        : "matte",
   } as DesktopPreferences;
 }
 

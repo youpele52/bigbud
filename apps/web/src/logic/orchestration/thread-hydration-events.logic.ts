@@ -1,5 +1,6 @@
 import { ThreadId, type OrchestrationEvent } from "@bigbud/contracts";
 import { useStore } from "../../stores/main";
+import { getDeletedThreadIds } from "./thread-deletion.logic";
 
 interface ActiveHydration {
   readonly token: number;
@@ -16,6 +17,16 @@ export interface ThreadHydrationEventBuffer {
   ) => ReadonlyArray<OrchestrationEvent> | null;
   fail: (threadId: ThreadId, token: number) => ReadonlyArray<OrchestrationEvent> | null;
   clear: () => void;
+}
+
+function eventThreadIds(event: OrchestrationEvent): readonly ThreadId[] {
+  if (event.type === "thread.deleted") {
+    return getDeletedThreadIds(event.payload);
+  }
+  if ("threadId" in event.payload && typeof event.payload.threadId === "string") {
+    return [event.payload.threadId];
+  }
+  return event.aggregateKind === "thread" ? [ThreadId.makeUnsafe(event.aggregateId)] : [];
 }
 
 function eventThreadId(event: OrchestrationEvent): ThreadId | null {
@@ -51,16 +62,19 @@ export function createThreadHydrationEventBuffer(): ThreadHydrationEventBuffer {
       return token;
     },
     bufferEvent: (event) => {
-      const threadId = eventThreadId(event);
-      if (threadId === null) {
-        return false;
+      const primaryThreadId = eventThreadId(event);
+      let bufferedPrimaryEvent = false;
+      for (const threadId of eventThreadIds(event)) {
+        const active = activeByThreadId.get(threadId);
+        if (!active) {
+          continue;
+        }
+        active.eventsBySequence.set(event.sequence, event);
+        if (threadId === primaryThreadId) {
+          bufferedPrimaryEvent = true;
+        }
       }
-      const active = activeByThreadId.get(threadId);
-      if (!active) {
-        return false;
-      }
-      active.eventsBySequence.set(event.sequence, event);
-      return true;
+      return bufferedPrimaryEvent;
     },
     finish: (threadId, token, projectionSequence) => take(threadId, token, projectionSequence),
     fail: (threadId, token) => take(threadId, token, -1),

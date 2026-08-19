@@ -40,6 +40,7 @@ const ThreadDeleteFinalizeCommand = Schema.Struct({
   type: Schema.Literal("thread.delete.finalize"),
   commandId: CommandId,
   threadId: ThreadId,
+  threadIds: Schema.optional(Schema.Array(ThreadId)),
   createdAt: IsoDateTime,
 });
 
@@ -72,6 +73,7 @@ const ThreadSessionSetCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   session: OrchestrationSession,
+  expectedActiveTurnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });
 

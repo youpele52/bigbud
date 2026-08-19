@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { makeProjectionPipelinePrefixedTestLayer } from "./ProjectionPipeline.test.helpers.ts";
@@ -17,6 +18,12 @@ it.layer(
       const sql = yield* SqlClient.SqlClient;
       const now = new Date().toISOString();
       const later = new Date(Date.now() + 1_000).toISOString();
+
+      yield* insertProjectionThreadParent({
+        sql,
+        threadId: ThreadId.makeUnsafe("thread-overwrite"),
+        projectId: "project-overwrite",
+      });
 
       yield* eventStore.append({
         type: "project.created",

@@ -13,6 +13,7 @@ import {
   registerProviderCommandReactorTestCleanup,
   waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
+import { settleActiveTurn } from "./ProviderCommandReactor.test.settleTurn.ts";
 
 describe("ProviderCommandReactor", () => {
   registerProviderCommandReactorTestCleanup();
@@ -368,6 +369,7 @@ describe("ProviderCommandReactor", () => {
     );
 
     await Effect.runPromise(harness.stopSession({ threadId: ThreadId.makeUnsafe("thread-1") }));
+    await settleActiveTurn(harness.engine, "cmd-bootstrap-1-settled", secondTurnAt);
 
     await Effect.runPromise(
       harness.engine.dispatch({

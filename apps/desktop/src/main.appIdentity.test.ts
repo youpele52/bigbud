@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const electronApp = vi.hoisted(() => ({
   dock: {
     setIcon: vi.fn(),
+    show: vi.fn(() => Promise.resolve()),
   },
   getVersion: vi.fn(() => "1.2.3"),
   isPackaged: false,
+  isReady: vi.fn(() => true),
+  setActivationPolicy: vi.fn(),
   setAboutPanelOptions: vi.fn(),
   setAppUserModelId: vi.fn(),
   setName: vi.fn(),
@@ -34,11 +37,14 @@ describe("configureAppIdentity", () => {
   afterEach(() => {
     setPlatform(originalPlatform);
     electronApp.dock.setIcon.mockClear();
+    electronApp.dock.show.mockClear();
     electronApp.getVersion.mockClear();
+    electronApp.setActivationPolicy.mockClear();
     electronApp.setAboutPanelOptions.mockClear();
     electronApp.setAppUserModelId.mockClear();
     electronApp.setName.mockClear();
     electronApp.isPackaged = false;
+    electronApp.isReady.mockReturnValue(true);
   });
 
   it("does not set the dock icon from the app bundle in packaged macOS builds", () => {
@@ -57,6 +63,8 @@ describe("configureAppIdentity", () => {
     });
 
     expect(resolveIconPath).not.toHaveBeenCalled();
+    expect(electronApp.setActivationPolicy).toHaveBeenCalledWith("regular");
+    expect(electronApp.dock.show).toHaveBeenCalledOnce();
     expect(electronApp.dock.setIcon).not.toHaveBeenCalled();
   });
 
@@ -75,6 +83,8 @@ describe("configureAppIdentity", () => {
     });
 
     expect(resolveIconPath).toHaveBeenCalledWith("png");
+    expect(electronApp.setActivationPolicy).toHaveBeenCalledWith("regular");
+    expect(electronApp.dock.show).toHaveBeenCalledOnce();
     expect(electronApp.dock.setIcon).toHaveBeenCalledWith(
       "/repo/assets/dev/blueprint-macos-1024.png",
     );

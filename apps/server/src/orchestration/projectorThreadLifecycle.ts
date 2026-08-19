@@ -10,7 +10,6 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   OrchestrationThread,
-  type ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -30,16 +29,6 @@ import {
   ThreadUnpinnedPayload,
 } from "./Schemas.ts";
 
-function detachChildren(
-  threads: ReadonlyArray<OrchestrationThread>,
-  parentThreadId: ThreadId,
-): OrchestrationThread[] {
-  return threads.map((thread) => {
-    if (thread.parentThread?.threadId !== parentThreadId) return thread;
-    const { parentThread: _, ...detached } = thread;
-    return detached;
-  });
-}
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
 
 function resolveSyncedElevatorSummaryUpdate(input: {
@@ -230,18 +219,13 @@ export function projectThreadDeleted(
   event: Extract<OrchestrationEvent, { type: "thread.deleted" }>,
 ): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
   return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
-    Effect.map((payload) => ({
-      ...nextBase,
-      threads: detachChildren(
-        updateThread(nextBase.threads, payload.threadId, {
-          deletingAt: null,
-          deletedAt: payload.deletedAt,
-          pinnedAt: null,
-          updatedAt: payload.deletedAt,
-        }),
-        payload.threadId,
-      ),
-    })),
+    Effect.map((payload) => {
+      const deletedThreadIds = new Set(payload.threadIds ?? [payload.threadId]);
+      return {
+        ...nextBase,
+        threads: nextBase.threads.filter((thread) => !deletedThreadIds.has(thread.id)),
+      };
+    }),
   );
 }
 

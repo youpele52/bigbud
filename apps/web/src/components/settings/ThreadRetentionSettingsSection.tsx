@@ -7,6 +7,7 @@ import {
 } from "@bigbud/contracts/core/settings.threadRetention";
 import type {
   ServerThreadRetentionPreview,
+  ServerThreadRetentionResult,
   ThreadRetentionConsentTrigger,
 } from "@bigbud/contracts/server/threadRetention";
 import { Trash2Icon } from "lucide-react";
@@ -21,9 +22,14 @@ import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { ThreadBehaviorSettingsRows } from "./ThreadRetentionSettingsSection.behavior";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
-import { ThreadRetentionRunStatus } from "./ThreadRetentionRunStatus";
-import { useThreadRetentionRun } from "./useThreadRetentionRun";
+import {
+  formatRetentionCleanupResult,
+  getRetentionCleanupLoadingToast,
+  getRetentionCleanupSuccessToast,
+  getRetentionPolicyUpdatedToast,
+} from "./ThreadRetentionSettingsSection.logic";
 
 export function ThreadRetentionSettingsSection() {
   const policy = useSettings().threadRetentionPolicy;
@@ -36,10 +42,10 @@ export function ThreadRetentionSettingsSection() {
   const [dialogTrigger, setDialogTrigger] = useState<ThreadRetentionConsentTrigger | null>(null);
   const [dialogPolicy, setDialogPolicy] = useState<FiniteThreadRetentionPolicy>("7-days");
   const [preview, setPreview] = useState<ServerThreadRetentionPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
-  const { latestRun, pollingError, availability, acceptRun, retryPolling } =
-    useThreadRetentionRun();
+  const [result, setResult] = useState<ServerThreadRetentionResult | null>(null);
   const busy = previewBusy || actionBusy;
 
   useEffect(() => {
@@ -62,6 +68,7 @@ export function ThreadRetentionSettingsSection() {
     previewSequenceRef.current += 1;
     setDialogTrigger(null);
     setPreview(null);
+    setPreviewError(null);
     setPreviewBusy(false);
   }, []);
 
@@ -72,6 +79,7 @@ export function ThreadRetentionSettingsSection() {
       setDialogTrigger(trigger);
       setDialogPolicy(nextPolicy);
       setPreview(null);
+      setPreviewError(null);
       setPreviewBusy(true);
       try {
         const result = await ensureNativeApi().server.previewThreadRetention({
@@ -82,13 +90,14 @@ export function ThreadRetentionSettingsSection() {
         setPreview(result);
       } catch (error) {
         if (!mountedRef.current || sequence !== previewSequenceRef.current) return;
-        closeDialog();
-        showError("Unable to preview thread cleanup", error);
+        setPreviewError(
+          error instanceof Error ? error.message : "Failed to preview thread retention.",
+        );
       } finally {
         if (mountedRef.current && sequence === previewSequenceRef.current) setPreviewBusy(false);
       }
     },
-    [closeDialog, showError],
+    [],
   );
 
   const handlePolicyChange = useCallback(
@@ -116,54 +125,66 @@ export function ThreadRetentionSettingsSection() {
       await requestPreview(dialogTrigger, preview.policy);
       return;
     }
+    const trigger = dialogTrigger;
+    const challengeToken = preview.challenge.token;
+    const nextPolicy = preview.policy;
+    closeDialog();
     setActionBusy(true);
     try {
-      if (dialogTrigger === "policy-change") {
+      if (trigger === "policy-change") {
         const settings = await ensureNativeApi().server.setThreadRetentionPolicy({
-          policy: preview.policy,
-          challengeToken: preview.challenge.token,
+          policy: nextPolicy,
+          challengeToken,
         });
         applySettingsUpdated(settings);
-      } else {
-        const run = await ensureNativeApi().server.startThreadRetention({
-          challengeToken: preview.challenge.token,
-        });
-        acceptRun(run);
+        toastManager.add({ type: "success", ...getRetentionPolicyUpdatedToast() });
+        return;
       }
-      closeDialog();
+      const runPromise = ensureNativeApi().server.startThreadRetention({ challengeToken });
+      toastManager.promise(runPromise, {
+        loading: getRetentionCleanupLoadingToast(),
+        success: (run) => getRetentionCleanupSuccessToast(run),
+        error: (error) => ({
+          title: "Unable to confirm thread cleanup",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      });
+      const run = await runPromise;
+      if (mountedRef.current) setResult(run);
     } catch (error) {
-      showError("Unable to confirm thread cleanup", error);
+      if (trigger === "policy-change") showError("Unable to confirm thread cleanup", error);
     } finally {
       if (mountedRef.current) setActionBusy(false);
     }
-  }, [acceptRun, closeDialog, dialogTrigger, preview, requestPreview, showError]);
+  }, [closeDialog, dialogTrigger, preview, requestPreview, showError]);
 
   const selectedLabel = THREAD_RETENTION_POLICY_LABELS[policy];
   const dialogTitle =
     dialogTrigger === "policy-change"
       ? `Delete old threads after ${THREAD_RETENTION_POLICY_LABELS[dialogPolicy]}?`
-      : `Permanently delete threads older than ${THREAD_RETENTION_POLICY_LABELS[manualPolicy]}?`;
+      : `Delete threads older than ${THREAD_RETENTION_POLICY_LABELS[manualPolicy]}?`;
 
   return (
     <>
-      <SettingsSection title="Automatic thread cleanup">
+      <SettingsSection title="Threads">
+        <ThreadBehaviorSettingsRows />
         <SettingsRow
           title="Automatically delete old threads"
-          description="Checks thresholds daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Manual cleanup takes priority over scheduled cleanup at safe checkpoints, while a different manual cleanup is never interrupted. Pinned, active, queued, waiting, watched, and delegated threads are preserved."
+          searchTerms={["Automatic thread cleanup"]}
+          description="The server checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are cleaned up together. Pinned and active subtrees are skipped."
           layout="three-quarter-control"
           statusPlacement="below"
           status={
-            <ThreadRetentionRunStatus
-              run={latestRun}
-              pollingError={pollingError}
-              availability={availability}
-              onRetry={retryPolling}
-            />
+            result ? (
+              <p className="text-xs text-muted-foreground">
+                Latest cleanup: {formatRetentionCleanupResult(result)}
+              </p>
+            ) : null
           }
           control={
             <Select
               value={policy}
-              disabled={busy || availability === "loading"}
+              disabled={busy}
               onValueChange={(value) => {
                 if (
                   typeof value === "string" &&
@@ -192,21 +213,21 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Deletes eligible threads across all projects using a one-off cleanup period you choose and cannot be undone. Manual requests take priority over scheduled cleanup at safe checkpoints."
+          description="Runs now across all projects. Choose the cutoff in the confirmation dialog. Automatic cleanup above is separate. Eligible root thread subtrees and their descendants are cleaned up together."
+          layout="three-quarter-control"
           control={
             <Button
               ref={actionButtonRef}
               variant="destructive-outline"
               size="sm"
-              disabled={busy || availability !== "available"}
+              className="w-full"
+              disabled={busy}
               onClick={() => {
-                const nextPolicy = policy === "never" ? "7-days" : policy;
-                setManualPolicy(nextPolicy);
-                void requestPreview("manual", nextPolicy);
+                void requestPreview("manual", manualPolicy);
               }}
             >
               <Trash2Icon />
-              Delete eligible threads now
+              Delete now
             </Button>
           }
         />
@@ -215,7 +236,7 @@ export function ThreadRetentionSettingsSection() {
       <AlertDialog
         open={dialogTrigger !== null}
         onOpenChange={(open) => {
-          if (!open && !actionBusy) closeDialog();
+          if (!open) closeDialog();
         }}
       >
         <AlertDialogPopup
@@ -231,10 +252,11 @@ export function ThreadRetentionSettingsSection() {
             confirmLabel={
               dialogTrigger === "policy-change"
                 ? "Enable automatic cleanup"
-                : "Delete threads permanently"
+                : "Delete eligible threads"
             }
             confirmVariant="destructive"
             busy={actionBusy}
+            cancelDisabled={false}
             cancelButtonRef={cancelButtonRef}
             confirmDisabled={
               previewBusy || !preview || (dialogTrigger === "manual" && preview.eligibleCount === 0)
@@ -275,7 +297,11 @@ export function ThreadRetentionSettingsSection() {
                     </Select>
                   </div>
                 ) : null}
-                <ThreadRetentionConfirmationContent preview={preview} trigger={dialogTrigger} />
+                <ThreadRetentionConfirmationContent
+                  preview={preview}
+                  previewError={previewError}
+                  trigger={dialogTrigger}
+                />
               </div>
             }
           />

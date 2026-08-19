@@ -85,6 +85,25 @@ async function startSession(
     }),
   );
   await waitFor(() => harness.startSession.mock.calls.length === 1);
+  await harness.drain();
+  await Effect.runPromise(
+    harness.engine.dispatch({
+      type: "thread.session.set",
+      commandId: CommandId.makeUnsafe("cmd-reconfigure-session-ready"),
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      session: {
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        status: "ready",
+        providerName: "codex",
+        runtimeMode: "approval-required",
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: createdAt,
+      },
+      createdAt,
+    }),
+  );
+  await waitFor(async () => (await getThread(harness))?.session?.status === "ready");
 }
 
 async function reconfigureProject(

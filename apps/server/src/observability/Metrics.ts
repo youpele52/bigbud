@@ -157,6 +157,7 @@ export const threadRetentionCompactionRows = Metric.histogram(
 
 const THREAD_RETENTION_ELIGIBILITY_REASONS = new Set([
   "eligible",
+  "already_deleted",
   "deleting",
   "pinned",
   "project_unavailable",
@@ -166,8 +167,7 @@ const THREAD_RETENTION_ELIGIBILITY_REASONS = new Set([
   "pending_work",
   "waiting_for_user",
   "active_task",
-  "watched",
-  "delegated",
+  "automation_owned",
   "scheduled",
 ]);
 

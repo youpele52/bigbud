@@ -36,6 +36,7 @@ export const desktopIpcChannels = {
   hideMascot: "desktop:hide-mascot",
   disableFloatingAssistant: "desktop:disable-floating-assistant",
   quitApplication: "desktop:quit-application",
+  restartApplication: "desktop:restart-application",
   getFloatingAssistantEnabled: "desktop:get-floating-assistant-enabled",
   setFloatingAssistantEnabled: "desktop:set-floating-assistant-enabled",
   getFloatingAssistantCaller: "desktop:get-floating-assistant-caller",

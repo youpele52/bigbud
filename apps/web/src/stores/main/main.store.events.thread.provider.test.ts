@@ -114,4 +114,42 @@ describe("provider orchestration updates", () => {
     );
     expect(next.threads[0]?.activities).toHaveLength(1);
   });
+
+  it("heals a legacy checking projection when matching assistant streaming resumes", () => {
+    const turnId = "turn-1" as never;
+    const thread = makeThread({
+      session: {
+        provider: "codex",
+        status: "error",
+        orchestrationStatus: "error",
+        activeTurnId: turnId,
+        reason: "provider.checking",
+        lastError: "Status cannot be confirmed",
+        createdAt: "2026-02-27T00:00:00.000Z",
+        updatedAt: "2026-02-27T00:00:00.000Z",
+      },
+    });
+
+    const next = applyOrchestrationEvent(
+      makeState(thread),
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId: "assistant-1" as never,
+        role: "assistant",
+        text: "Still working",
+        turnId,
+        streaming: true,
+        createdAt: "2026-02-27T00:00:02.000Z",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+    );
+
+    expect(next.threads[0]?.session).toMatchObject({
+      status: "running",
+      orchestrationStatus: "running",
+      activeTurnId: turnId,
+    });
+    expect(next.threads[0]?.session).not.toHaveProperty("reason");
+    expect(next.threads[0]?.session).not.toHaveProperty("lastError");
+  });
 });

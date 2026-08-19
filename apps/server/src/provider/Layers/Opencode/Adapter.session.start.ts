@@ -53,6 +53,7 @@ export interface StartSessionDeps {
   ) => Effect.Effect<void>;
   readonly syntheticEventFn: SyntheticEventFn;
   readonly services: ServiceMap.ServiceMap<never>;
+  readonly reconcileActiveTurn?: (session: ActiveOpencodeSession) => Promise<void>;
 }
 
 export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["startSession"] {
@@ -329,13 +330,16 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
 
       deps.sessions.set(input.threadId, record);
 
-      startEventStream(
+      const eventStream = startEventStream(
         record,
         deps.handleEventFn,
         deps.syntheticEventFn,
         deps.emitFn,
         deps.services,
+        deps.reconcileActiveTurn,
       );
+      record.stopEventStream = eventStream.stop;
+      record.unsubscribeServerInvalidation = serverHandle.onInvalidated?.(eventStream.invalidate);
 
       yield* deps.emitFn([
         yield* deps.syntheticEventFn(

@@ -109,6 +109,26 @@ export function projectEvent(
     case "thread.turn-start-failed":
       return projectThreadTurnStartFailed(nextBase, event);
 
+    case "thread.turn-start-requested": {
+      const thread = nextBase.threads.find((entry) => entry.id === event.payload.threadId);
+      if (!thread) return Effect.succeed(nextBase);
+      return Effect.succeed({
+        ...nextBase,
+        threads: updateThread(nextBase.threads, event.payload.threadId, {
+          session: {
+            threadId: thread.id,
+            status: "starting",
+            providerName: thread.modelSelection.provider,
+            runtimeMode: thread.runtimeMode,
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: event.payload.createdAt,
+          },
+          updatedAt: event.occurredAt,
+        }),
+      });
+    }
+
     case "thread.prompt-queued":
     case "thread.queued-prompt-removed":
     case "thread.queued-prompts-flushed":

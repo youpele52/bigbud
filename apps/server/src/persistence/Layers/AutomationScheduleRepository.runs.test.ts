@@ -14,6 +14,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { AutomationScheduleRepositoryLive } from "./AutomationScheduleRepository.ts";
 import { AutomationScheduleRepository } from "../Services/AutomationScheduleRepository.ts";
+import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const baseLayer = Layer.mergeAll(NodeServices.layer, SqlitePersistenceMemory);
 const repositoryLayer = AutomationScheduleRepositoryLive.pipe(Layer.provideMerge(baseLayer));
@@ -27,6 +28,8 @@ const clearAutomationTables = Effect.gen(function* () {
 
 const createSchedule = (automationId: AutomationId, threadId: ThreadId) =>
   Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* insertProjectionThreadParent({ sql, threadId });
     const repository = yield* AutomationScheduleRepository;
     yield* repository.create({
       automationId,

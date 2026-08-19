@@ -31,6 +31,11 @@ export interface OrchestrationProjectionPipelineShape {
     sequence: number,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
+  /** Verify a replacement baseline without compacting the global event prefix. */
+  readonly ensureVerifiedBaselineThroughWithoutCompaction?: (
+    sequence: number,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
   /** Delete at most one bounded canonical prefix covered by a verified baseline. */
   readonly compactVerifiedPrefix: (
     batchSize?: number,

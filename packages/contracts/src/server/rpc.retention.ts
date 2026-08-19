@@ -4,15 +4,12 @@ import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
 import { ServerSettings } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
-  ServerGetThreadRetentionRunInput,
-  ServerListThreadRetentionRunsInput,
-  ServerListThreadRetentionRunsResult,
   ServerPreviewThreadRetentionInput,
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
   ServerThreadRetentionError,
   ServerThreadRetentionPreview,
-  ServerThreadRetentionRun,
+  ServerThreadRetentionResult,
 } from "./threadRetention";
 
 export class ThreadRetentionMutationAuthorization extends RpcMiddleware.Service<ThreadRetentionMutationAuthorization>()(
@@ -28,24 +25,9 @@ export const WsServerPreviewThreadRetentionRpc = Rpc.make(WS_METHODS.serverPrevi
 
 export const WsServerStartThreadRetentionRpc = Rpc.make(WS_METHODS.serverStartThreadRetention, {
   payload: ServerStartThreadRetentionInput,
-  success: ServerThreadRetentionRun,
+  success: ServerThreadRetentionResult,
   error: ServerThreadRetentionError,
 }).middleware(ThreadRetentionMutationAuthorization);
-
-export const WsServerGetThreadRetentionRunRpc = Rpc.make(WS_METHODS.serverGetThreadRetentionRun, {
-  payload: ServerGetThreadRetentionRunInput,
-  success: ServerThreadRetentionRun,
-  error: ServerThreadRetentionError,
-});
-
-export const WsServerListThreadRetentionRunsRpc = Rpc.make(
-  WS_METHODS.serverListThreadRetentionRuns,
-  {
-    payload: ServerListThreadRetentionRunsInput,
-    success: ServerListThreadRetentionRunsResult,
-    error: ServerThreadRetentionError,
-  },
-);
 
 export const WsServerSetThreadRetentionPolicyRpc = Rpc.make(
   WS_METHODS.serverSetThreadRetentionPolicy,

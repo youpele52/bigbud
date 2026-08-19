@@ -1,27 +1,21 @@
-import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import type {
+  CompactChatLinkHandoff,
+  FloatingAssistantCaller,
+} from "@bigbud/contracts/server/ipc.ts";
+import { PlusIcon, SquareArrowOutUpRightIcon, XIcon } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
 import { ThreadComposerSurface } from "~/components/chat/view/ThreadComposerSurface";
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
-import celebrationMascot from "~/assets/mascot/bigbud-hand/celebration.webp";
-import thinkingMascot from "~/assets/mascot/bigbud-hand/thinking.webp";
-import thumbsUpMascot from "~/assets/mascot/bigbud-hand/thumbs-up.webp";
-import typingMascot from "~/assets/mascot/bigbud-hand/typing.webp";
-import waveMascot from "~/assets/mascot/bigbud-hand/wave.webp";
 
+import { CompactChatPicker } from "./CompactChatPicker";
+import { MASCOT_ANIMATIONS } from "./mascotAssets";
 import { useMascotAnimation } from "./useMascotAnimation";
-
-const MASCOT_ANIMATIONS = {
-  celebration: celebrationMascot,
-  thinking: thinkingMascot,
-  "thumbs-up": thumbsUpMascot,
-  typing: typingMascot,
-  wave: waveMascot,
-} as const;
 
 const COMPACT_CHAT_TITLE_MAX_LENGTH = 40;
 
@@ -61,7 +55,7 @@ export function MascotShell() {
   const bridge = window.desktopBridge;
   const dragState = useRef<{ moved: boolean; startX: number; startY: number } | null>(null);
   const didDrag = useRef(false);
-  const [caller, setCaller] = useState<"logo" | "mascot">("mascot");
+  const [caller, setCaller] = useState<FloatingAssistantCaller>("matte");
   const [isHovered, setIsHovered] = useState(false);
   const { animation, animationKey } = useMascotAnimation(isHovered);
 
@@ -71,10 +65,13 @@ export function MascotShell() {
     return bridge.onFloatingAssistantCallerChange?.(setCaller);
   }, [bridge]);
 
+  const finish = caller === "chrome" ? "chrome" : "matte";
+
   return (
     <main
       data-floating-assistant-mascot=""
       data-mascot-animation={animation}
+      data-mascot-finish={finish}
       className="flex h-screen w-screen items-center justify-center bg-transparent"
     >
       <button
@@ -83,7 +80,7 @@ export function MascotShell() {
         className={
           caller === "logo"
             ? "flex size-28 cursor-pointer items-center justify-center rounded-[36px] border border-white/15 bg-gradient-to-br from-neutral-700 via-neutral-900 to-neutral-950 p-0 text-white shadow-[0_8px_16px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.16)] transition-transform hover:scale-[1.03] active:scale-95"
-            : "flex size-36 cursor-grab touch-none select-none items-center justify-center bg-transparent p-0 text-foreground transition-opacity hover:opacity-80 active:cursor-grabbing"
+            : "flex size-36 cursor-grab touch-none select-none items-center justify-center border-0 bg-transparent p-0 text-foreground outline-none ring-0 transition-opacity hover:opacity-80 focus:outline-none focus-visible:outline-none focus-visible:ring-0 active:cursor-grabbing active:outline-none"
         }
         draggable={false}
         onDragStart={(event) => event.preventDefault()}
@@ -132,8 +129,8 @@ export function MascotShell() {
           <BigbudLogo className="h-14" />
         ) : (
           <img
-            key={animationKey}
-            src={MASCOT_ANIMATIONS[animation]}
+            key={`${finish}:${animationKey}`}
+            src={MASCOT_ANIMATIONS[finish][animation]}
             alt=""
             draggable={false}
             className="size-full object-contain drop-shadow-[0_5px_4px_rgb(0_0_0_/_0.22)]"
@@ -162,7 +159,28 @@ export function CompactChatShell({
     threadSyncError,
     threadId,
     threadTitle,
+    workspaceRoot,
   } = compactChat;
+  const canSendCompactLinkHandoff = typeof bridge?.sendMenuAction === "function";
+  const onMarkdownAnchorClick = useCallback(
+    ({ href }: { href: string }) => {
+      if (typeof bridge?.sendMenuAction !== "function") return;
+      const action: CompactChatLinkHandoff = {
+        type: "compact-chat-link",
+        threadId,
+        href,
+        workspaceRoot: workspaceRoot ?? null,
+      };
+      void bridge?.openMainWindow?.();
+      bridge.sendMenuAction(action);
+    },
+    [bridge, threadId, workspaceRoot],
+  );
+
+  if (preparing) {
+    return <BigbudLoader />;
+  }
+
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -179,7 +197,7 @@ export function CompactChatShell({
           <CompactChatHeaderAction
             label="Open bigbud"
             disabled={!isMaterialized}
-            icon={<ExternalLinkIcon className="size-3.5" />}
+            icon={<SquareArrowOutUpRightIcon className="size-3.5" />}
             onClick={() => void bridge?.openMainWindow?.(threadId)}
           />
           <CompactChatHeaderAction
@@ -215,12 +233,20 @@ export function CompactChatShell({
           </Button>
         </div>
       ) : null}
-      {preparing || projectLoadError ? null : (
+      {projectLoadError ? null : (
         <ThreadComposerSurface
           threadId={threadId}
           onThreadMaterialized={synchronizeMaterializedThread}
         >
-          {(context) => <CompactThreadConversation {...context} workspaceRoot={undefined} />}
+          {(context) => (
+            <CompactThreadConversation
+              {...context}
+              composerClassName="max-w-[calc(52rem*2/3)]"
+              projectPicker={<CompactChatPicker compactChat={compactChat} />}
+              workspaceRoot={workspaceRoot}
+              onMarkdownAnchorClick={canSendCompactLinkHandoff ? onMarkdownAnchorClick : undefined}
+            />
+          )}
         </ThreadComposerSurface>
       )}
     </main>

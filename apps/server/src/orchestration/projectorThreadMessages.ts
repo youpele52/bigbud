@@ -3,6 +3,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
+import { PROVIDER_CHECKING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 import { Effect } from "effect";
 
 import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
@@ -61,10 +62,25 @@ export function projectThreadMessageSent(
             : entry,
         )
       : [...thread.messages, message];
+    const session =
+      message.role === "assistant" &&
+      message.streaming &&
+      message.turnId !== null &&
+      thread.session?.activeTurnId === message.turnId &&
+      thread.session.reason === PROVIDER_CHECKING_SESSION_REASON
+        ? {
+            ...thread.session,
+            status: "running" as const,
+            reason: null,
+            lastError: null,
+            updatedAt: message.updatedAt,
+          }
+        : thread.session;
     return {
       ...model,
       threads: updateThread(model.threads, payload.threadId, {
         messages: messages.slice(-MAX_THREAD_MESSAGES),
+        session,
         updatedAt: event.occurredAt,
       }),
     };

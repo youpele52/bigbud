@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { BotIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
+import { ArrowUpRightIcon, BotIcon, InfoIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
@@ -342,8 +342,8 @@ export function ComputerUseAccessSettingsSection() {
                 className="gap-1.5 text-xs"
                 onClick={handleOpenAccessibilitySettings}
               >
-                <ExternalLinkIcon className="size-3" />
                 Accessibility
+                <ArrowUpRightIcon className="size-3" />
               </Button>
               <Button
                 variant="ghost"
@@ -351,8 +351,8 @@ export function ComputerUseAccessSettingsSection() {
                 className="gap-1.5 text-xs"
                 onClick={handleOpenScreenRecordingSettings}
               >
-                <ExternalLinkIcon className="size-3" />
                 Screen Recording
+                <ArrowUpRightIcon className="size-3" />
               </Button>
             </div>
           }

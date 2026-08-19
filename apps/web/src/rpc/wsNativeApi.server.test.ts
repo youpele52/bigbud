@@ -113,11 +113,6 @@ describe("wsNativeApi — server", () => {
     };
     rpcClientMock.server.previewThreadRetention.mockResolvedValue(preview);
     rpcClientMock.server.startThreadRetention.mockResolvedValue(run);
-    rpcClientMock.server.getThreadRetentionRun.mockResolvedValue(run);
-    rpcClientMock.server.listThreadRetentionRuns.mockResolvedValue({
-      runs: [run],
-      availability: "available",
-    });
     rpcClientMock.server.setThreadRetentionPolicy.mockResolvedValue({
       ...DEFAULT_SERVER_SETTINGS,
       threadRetentionPolicy: "7-days",
@@ -131,11 +126,6 @@ describe("wsNativeApi — server", () => {
     await expect(
       api.server.startThreadRetention({ challengeToken: "challenge-1" }),
     ).resolves.toEqual(run);
-    await expect(api.server.getThreadRetentionRun({ runId: "run-1" })).resolves.toEqual(run);
-    await expect(api.server.listThreadRetentionRuns({ limit: 1 })).resolves.toEqual({
-      runs: [run],
-      availability: "available",
-    });
     await expect(
       api.server.setThreadRetentionPolicy({
         policy: "7-days",

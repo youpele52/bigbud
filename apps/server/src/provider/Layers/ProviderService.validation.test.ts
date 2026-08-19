@@ -1,5 +1,6 @@
 import { assert } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { ProviderSession } from "@bigbud/contracts";
 import { ProviderSessionStartInput } from "@bigbud/contracts";
 import { ProviderService } from "../Services/ProviderService.ts";
@@ -7,6 +8,25 @@ import { ProviderSessionRuntimeRepository } from "../../persistence/Services/Pro
 import { asThreadId, makeProviderServiceLayer } from "./ProviderService.test.helpers.ts";
 
 const validation = makeProviderServiceLayer();
+
+const createProjectedThread = (sql: SqlClient.SqlClient, threadId: string) =>
+  Effect.gen(function* () {
+    const projectId = `provider-validation-${threadId}`;
+    yield* sql`
+      INSERT OR IGNORE INTO projection_projects
+        (project_id, title, scripts_json, created_at, updated_at)
+      VALUES (${projectId}, 'Provider validation', '{}', datetime('now'), datetime('now'))
+    `;
+    yield* sql`
+      INSERT OR IGNORE INTO projection_threads
+        (thread_id, project_id, title, model_selection_json, runtime_mode,
+         interaction_mode, created_at, updated_at)
+      VALUES (${threadId}, ${projectId}, 'Provider validation',
+        '{"provider":"codex","model":"test"}', 'full-access', 'default',
+        datetime('now'), datetime('now'))
+    `;
+  });
+
 validation.layer("ProviderServiceLive validation", (it) => {
   it.effect("returns ProviderValidationError for invalid input payloads", () =>
     Effect.gen(function* () {
@@ -37,6 +57,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-missing");
 
       validation.codex.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {
@@ -76,6 +98,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-remote-codex");
 
       validation.codex.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {
@@ -128,6 +152,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-remote-opencode");
 
       validation.opencode.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {
@@ -180,6 +206,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-remote-pi");
 
       validation.pi.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {
@@ -245,6 +273,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-remote-claude");
 
       validation.claude.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {
@@ -305,6 +335,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* createProjectedThread(sql, "thread-remote-copilot");
 
       validation.copilot.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
         Effect.sync(() => {

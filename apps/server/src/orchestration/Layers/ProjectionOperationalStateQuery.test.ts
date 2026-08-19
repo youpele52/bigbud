@@ -65,7 +65,9 @@ function seedOperationalFixture(sql: SqlClient.SqlClient) {
         ('thread-active', 'running', 'codex', 'full-access', 'turn-active',
          '2026-01-01T00:10:00.000Z'),
         ('thread-inactive', 'ready', 'codex', 'full-access', NULL,
-         '2026-01-01T00:10:01.000Z')
+         '2026-01-01T00:10:01.000Z'),
+        ('thread-dormant', 'ready', 'codex', 'full-access', NULL,
+         '2026-01-01T00:10:02.000Z')
     `;
     yield* sql`
       WITH RECURSIVE counter(value) AS (
@@ -132,7 +134,10 @@ function seedOperationalFixture(sql: SqlClient.SqlClient) {
           '2026-01-01T00:04:01.000Z', '2026-01-01T00:04:02.000Z',
           1, 'checkpoint-inactive', 'ready', '[]'),
         ('thread-inactive', NULL, 'pending', '2026-01-01T00:04:03.000Z',
-          NULL, NULL, NULL, NULL, NULL, '[]')
+          NULL, NULL, NULL, NULL, NULL, '[]'),
+        ('thread-dormant', 'turn-dormant', 'completed', '2026-01-01T00:04:04.000Z',
+          '2026-01-01T00:04:04.000Z', '2026-01-01T00:04:05.000Z',
+          NULL, NULL, NULL, '[]')
     `;
     yield* sql`
       INSERT INTO projection_thread_watches (

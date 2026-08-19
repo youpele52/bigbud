@@ -69,6 +69,13 @@ export function configureAppIdentity(identity: DesktopAppIdentity): void {
   }
 
   if (process.platform === "darwin" && app.dock) {
+    // Keep the desktop app in the normal macOS application class. A UIElement
+    // application is omitted from Cmd-Tab and other standard app surfaces.
+    app.setActivationPolicy("regular");
+    if (app.isReady()) {
+      void app.dock.show();
+    }
+
     // Packaged macOS apps already get their Dock icon from the app bundle.
     if (app.isPackaged) {
       return;

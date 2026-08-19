@@ -2,6 +2,7 @@ import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
+  type OrchestrationEvent,
   ProjectId,
   ThreadId,
   TurnId,
@@ -11,6 +12,8 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { decideThreadSessionCommand } from "./deciderThreads.turn.session.ts";
+import { projectEvent } from "./projector.ts";
+import { makeEvent } from "./projector.test.helpers.ts";
 
 const threadId = ThreadId.makeUnsafe("thread-interrupt");
 const turnId = TurnId.makeUnsafe("turn-interrupt");
@@ -90,4 +93,56 @@ describe("thread.turn.interrupt", () => {
       },
     });
   });
+});
+
+describe("thread.session.set expected active turn", () => {
+  function healthCommand() {
+    return {
+      type: "thread.session.set" as const,
+      commandId: CommandId.makeUnsafe("health-stale"),
+      threadId,
+      expectedActiveTurnId: turnId,
+      session: {
+        ...readModel.threads[0]!.session!,
+        status: "running" as const,
+        activeTurnId: turnId,
+        updatedAt: createdAt,
+      },
+      createdAt,
+    };
+  }
+
+  it.each([
+    ["terminal clearing", "ready", null],
+    ["newer turn", "running", TurnId.makeUnsafe("turn-newer")],
+  ] as const)(
+    "persists no stale health event after %s",
+    async (_scenario, status, activeTurnId) => {
+      const afterInterveningUpdate = await Effect.runPromise(
+        projectEvent(
+          readModel,
+          makeEvent({
+            sequence: 1,
+            type: "thread.session-set",
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            occurredAt: createdAt,
+            commandId: "intervening-session-update",
+            payload: {
+              threadId,
+              session: { ...readModel.threads[0]!.session!, status, activeTurnId },
+            },
+          }) as OrchestrationEvent,
+        ),
+      );
+      const events = await Effect.runPromise(
+        decideThreadSessionCommand({
+          command: healthCommand(),
+          readModel: afterInterveningUpdate,
+        }),
+      );
+
+      expect(events).toEqual([]);
+    },
+  );
 });

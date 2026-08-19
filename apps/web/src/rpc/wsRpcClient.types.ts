@@ -72,14 +72,11 @@ import {
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 import type {
-  ServerGetThreadRetentionRunInput,
-  ServerListThreadRetentionRunsInput,
-  ServerListThreadRetentionRunsResult,
   ServerPreviewThreadRetentionInput,
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
   ServerThreadRetentionPreview,
-  ServerThreadRetentionRun,
+  ServerThreadRetentionResult,
 } from "@bigbud/contracts/server/threadRetention";
 
 import type { WsRpcProtocolClient } from "./protocol";
@@ -229,13 +226,7 @@ export interface WsRpcClient {
     ) => Promise<ServerThreadRetentionPreview>;
     readonly startThreadRetention: (
       input: ServerStartThreadRetentionInput,
-    ) => Promise<ServerThreadRetentionRun>;
-    readonly getThreadRetentionRun: (
-      input: ServerGetThreadRetentionRunInput,
-    ) => Promise<ServerThreadRetentionRun>;
-    readonly listThreadRetentionRuns: (
-      input?: ServerListThreadRetentionRunsInput,
-    ) => Promise<ServerListThreadRetentionRunsResult>;
+    ) => Promise<ServerThreadRetentionResult>;
     readonly setThreadRetentionPolicy: (
       input: ServerSetThreadRetentionPolicyInput,
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverSetThreadRetentionPolicy>>;
