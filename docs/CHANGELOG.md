@@ -10,6 +10,30 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
+## v0.2.205 (22 August, 2026)
+
+### Floating Assistant
+
+- Double-clicking the floating mascot now opens the main bigbud window without also opening compact chat; single-click still opens compact chat after the double-click window has passed.
+- Added a compact pending-approval card in the Floating Assistant, while preserving the same approve, deny, and action dispatch behavior as the main chat.
+- Aligned compact composer controls with the model picker's typography so the floating chat feels closer to the main composer.
+
+### Faster File Search
+
+- Made `Mod+F` current-file aware. When a file preview is focused, matches from that file appear first in the search palette, with global project results still available underneath.
+- Added focused preview context, result navigation, and plain-text preview support so search results can take you back to the exact file match.
+
+### Files Preview
+
+- Let workspace file-opening route any in-workspace file into the Files panel when a preview is available, including extensionless files and dotfiles such as Dockerfiles, `.env.example`, and `.gitattributes`.
+- Raised the text preview limit from 512 KiB to 5 MiB and removed the client-provided preview byte limit from the project contract.
+- Rejected oversized, binary, NUL-byte, and invalid UTF-8 previews with explicit errors instead of truncating or attempting to display non-text content.
+
+### Better Diff Annotations
+
+- Hold `Shift` and click a diff line number to annotate that line with the same composer flow used by normal file previews.
+- Diff annotations now include the surrounding before-and-after code in your prompt, and changed or renamed files are easier to spot with amber triangle markers in the diff header.
+
 ## v0.2.204 (19 August, 2026)
 
 ### Floating Assistant

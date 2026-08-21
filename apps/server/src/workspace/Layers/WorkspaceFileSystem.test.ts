@@ -71,23 +71,66 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
       }),
     );
 
-    it.effect("truncates previews to the requested max bytes", () =>
+    it.effect("reads text files at the 5 MiB size limit", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem;
         const cwd = yield* makeTempDir;
-        yield* writeTextFile(cwd, "src/large.ts", "1234567890");
+        const contents = "a".repeat(5 * 1024 * 1024);
+        yield* writeTextFile(cwd, "src/large.ts", contents);
 
         const result = yield* workspaceFileSystem.readFilePreview({
           cwd,
           relativePath: "src/large.ts",
-          maxBytes: 4,
         });
 
-        expect(result).toEqual({
-          relativePath: "src/large.ts",
-          contents: "1234",
-          sizeBytes: 10,
-          truncated: true,
+        expect(result.contents).toBe(contents);
+        expect(result.sizeBytes).toBe(contents.length);
+        expect(result.truncated).toBe(false);
+      }),
+    );
+
+    it.effect("rejects previews larger than 5 MiB", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "large.txt", "a".repeat(5 * 1024 * 1024 + 1));
+
+        const error = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "large.txt" })
+          .pipe(Effect.flip);
+
+        expect(error).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is too large to preview (maximum 5 MiB).",
+        });
+      }),
+    );
+
+    it.effect("rejects NUL bytes and invalid UTF-8 previews", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* makeTempDir;
+
+        yield* fileSystem.writeFile(path.join(cwd, "nul.txt"), new Uint8Array([0x61, 0, 0x62]));
+        const nulError = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "nul.txt" })
+          .pipe(Effect.flip);
+
+        expect(nulError).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is not valid UTF-8 text and cannot be previewed.",
+        });
+
+        yield* fileSystem.writeFile(path.join(cwd, "invalid.txt"), new Uint8Array([0xc3, 0x28]));
+        const invalidError = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "invalid.txt" })
+          .pipe(Effect.flip);
+
+        expect(invalidError).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is not valid UTF-8 text and cannot be previewed.",
         });
       }),
     );

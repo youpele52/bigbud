@@ -23,7 +23,7 @@ import {
   WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
 } from "./WorkspaceFileSystem.search.ts";
 
-const DEFAULT_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
+const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const WORKSPACE_DIRECTORY_WATCH_RECURSIVE = process.platform !== "linux";
 
 export function createDirectoryChangedStream(input: {
@@ -78,26 +78,33 @@ export function createDirectoryChangedStream(input: {
 
 async function readTextFilePreview(
   absolutePath: string,
-  maxBytes: number,
 ): Promise<{ contents: string; sizeBytes: number; truncated: boolean }> {
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
     throw new Error("Workspace preview target is not a file.");
   }
+  if (fileStat.size > DEFAULT_FILE_PREVIEW_MAX_BYTES) {
+    throw new Error("File is too large to preview (maximum 5 MiB).");
+  }
 
-  const bytesToRead = Math.min(fileStat.size, maxBytes);
-  const buffer = Buffer.alloc(bytesToRead);
+  const buffer = Buffer.alloc(fileStat.size);
   const fileHandle = await open(absolutePath, "r");
   try {
-    const { bytesRead } = await fileHandle.read(buffer, 0, bytesToRead, 0);
+    const { bytesRead } = await fileHandle.read(buffer, 0, fileStat.size, 0);
     const bytes = buffer.subarray(0, bytesRead);
     if (bytes.includes(0)) {
-      throw new Error("Binary files cannot be previewed.");
+      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
+    }
+    let contents: string;
+    try {
+      contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
     }
     return {
-      contents: new TextDecoder("utf-8").decode(bytes),
+      contents,
       sizeBytes: fileStat.size,
-      truncated: fileStat.size > maxBytes,
+      truncated: false,
     };
   } finally {
     await fileHandle.close();
@@ -129,8 +136,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     }
 
     const preview = yield* Effect.tryPromise({
-      try: () =>
-        readTextFilePreview(target.absolutePath, input.maxBytes ?? DEFAULT_FILE_PREVIEW_MAX_BYTES),
+      try: () => readTextFilePreview(target.absolutePath),
       catch: (cause) =>
         new WorkspaceFileSystemError({
           cwd: input.cwd,

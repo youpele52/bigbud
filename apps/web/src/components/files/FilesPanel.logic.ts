@@ -6,12 +6,8 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
-  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
-import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
-import { readNativeApi } from "../../rpc/nativeApi";
 import { openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
-import { joinWorkspaceEntryPath } from "./filesPanel.dnd";
 
 interface ReconcilePreviewPathAfterDirectoryRefreshInput {
   readonly previewPath: string | null;
@@ -88,21 +84,10 @@ export function openFilesPanelEntry(
     return;
   }
 
-  if (isVideoFilePath(entry.path) || isCodeRelatedFilePath(entry.path)) {
-    if (openPreview) {
-      openPreview(entry.path);
-    } else {
-      setPreviewPath(entry.path);
-      setPreviewPosition(null);
-    }
-    return;
+  if (openPreview) {
+    openPreview(entry.path);
+  } else {
+    setPreviewPath(entry.path);
+    setPreviewPosition(null);
   }
-
-  const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
-  const api = readNativeApi();
-  if (!api) return;
-
-  void openPathInPreferredApp(api, absolutePath).catch((error) => {
-    console.error("Failed to open file:", error);
-  });
 }
