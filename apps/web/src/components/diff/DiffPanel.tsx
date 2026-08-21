@@ -1,23 +1,11 @@
-// TODO: Split by concern when this file is next touched.
 import { Virtualizer } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  Columns2Icon,
-  Rows3Icon,
-  TextWrapIcon,
-  XIcon,
-} from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { openFileInFilesPanel } from "../../stores/files/filesPanel.coordinator";
 import { useSettings } from "../../hooks/useSettings";
-import { formatShortTimestamp } from "../../utils/timestamp";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
-import { ToggleGroup, Toggle } from "../ui/toggle-group";
-import { Button } from "../ui/button";
 import {
   type DiffRenderMode,
   getRenderablePatch,
@@ -31,6 +19,7 @@ import { makeAnnotationId } from "../files/FilesPanel.shared";
 import type { CodeAnnotationDraft } from "../files/FilePreview";
 import { DiffPanelAnnotationComposer, type PendingDiffAnnotation } from "./DiffPanel.annotations";
 import { DiffPanelFile } from "./DiffPanelFile";
+import { DiffPanelHeader } from "./DiffPanelHeader";
 import { useDiffAnnotateContextMenu } from "./useDiffAnnotateContextMenu";
 
 interface DiffPanelProps {
@@ -119,6 +108,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   useDiffAnnotateContextMenu({
     viewportRef: patchViewportRef,
     canAnnotate,
+    cwd: activeCwd,
     fileDiffByPath,
     pierreLineSelectionsRef,
     onAnnotateRequest: setPendingAnnotation,
@@ -191,135 +181,24 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   }, [selectedTurn?.turnId, selectedTurnId, turnStripRef]);
 
   const headerRow = (
-    <>
-      <div className="relative min-w-0 flex-1 [-webkit-app-region:no-drag]">
-        <button
-          type="button"
-          className={cn(
-            "absolute left-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border bg-background/90 text-muted-foreground transition-colors",
-            canScrollTurnStripLeft
-              ? "border-border/70 hover:border-border hover:text-foreground"
-              : "cursor-not-allowed border-border/40 text-muted-foreground/40",
-          )}
-          onClick={() => scrollTurnStripBy(-180)}
-          disabled={!canScrollTurnStripLeft}
-          aria-label="Scroll turn list left"
-        >
-          <ChevronLeftIcon className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "absolute right-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border bg-background/90 text-muted-foreground transition-colors",
-            canScrollTurnStripRight
-              ? "border-border/70 hover:border-border hover:text-foreground"
-              : "cursor-not-allowed border-border/40 text-muted-foreground/40",
-          )}
-          onClick={() => scrollTurnStripBy(180)}
-          disabled={!canScrollTurnStripRight}
-          aria-label="Scroll turn list right"
-        >
-          <ChevronRightIcon className="size-3.5" />
-        </button>
-        <div
-          ref={turnStripRef}
-          className="turn-chip-strip flex gap-1 overflow-x-auto px-6 py-0.5"
-          style={
-            canScrollTurnStripLeft || canScrollTurnStripRight
-              ? {
-                  maskImage: `linear-gradient(to right, ${canScrollTurnStripLeft ? "transparent 24px, black 72px" : "black"}, ${canScrollTurnStripRight ? "black calc(100% - 72px), transparent calc(100% - 24px)" : "black"})`,
-                }
-              : undefined
-          }
-          onWheel={onTurnStripWheel}
-        >
-          <button
-            type="button"
-            className="shrink-0 rounded-md"
-            onClick={selectWholeConversation}
-            data-turn-chip-selected={selectedTurnId === null}
-          >
-            <div
-              className={cn(
-                "rounded-md border px-2 py-1 text-left transition-colors",
-                selectedTurnId === null
-                  ? "border-border bg-accent text-accent-foreground"
-                  : "border-border/70 bg-background/70 text-muted-foreground/80 hover:border-border hover:text-foreground/80",
-              )}
-            >
-              <div className="text-[10px] leading-tight font-medium">All turns</div>
-            </div>
-          </button>
-          {orderedTurnDiffSummaries.map((summary) => (
-            <button
-              key={summary.turnId}
-              type="button"
-              className="shrink-0 rounded-md"
-              onClick={() => selectTurn(summary.turnId)}
-              title={summary.turnId}
-              data-turn-chip-selected={summary.turnId === selectedTurn?.turnId}
-            >
-              <div
-                className={cn(
-                  "rounded-md border px-2 py-1 text-left transition-colors",
-                  summary.turnId === selectedTurn?.turnId
-                    ? "border-border bg-accent text-accent-foreground"
-                    : "border-border/70 bg-background/70 text-muted-foreground/80 hover:border-border hover:text-foreground/80",
-                )}
-              >
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] leading-tight font-medium">
-                    Turn{" "}
-                    {summary.checkpointTurnCount ??
-                      inferredCheckpointTurnCountByTurnId[summary.turnId] ??
-                      "?"}
-                  </span>
-                  <span className="text-[9px] leading-tight opacity-70">
-                    {formatShortTimestamp(summary.completedAt, settings.timestampFormat)}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
-        <ToggleGroup
-          className="shrink-0"
-          variant="toolbar"
-          size="xs"
-          value={[diffRenderMode]}
-          onValueChange={(value) => {
-            const next = value[0];
-            if (next === "stacked" || next === "split") {
-              setDiffRenderMode(next);
-            }
-          }}
-        >
-          <Toggle aria-label="Stacked diff view" value="stacked">
-            <Rows3Icon className="size-3" />
-          </Toggle>
-          <Toggle aria-label="Split diff view" value="split">
-            <Columns2Icon className="size-3" />
-          </Toggle>
-        </ToggleGroup>
-        <Toggle
-          aria-label={diffWordWrap ? "Disable diff line wrapping" : "Enable diff line wrapping"}
-          title={diffWordWrap ? "Disable line wrapping" : "Enable line wrapping"}
-          variant="toolbar"
-          size="xs"
-          pressed={diffWordWrap}
-          onPressedChange={(pressed) => {
-            setDiffWordWrap(Boolean(pressed));
-          }}
-        >
-          <TextWrapIcon className="size-3" />
-        </Toggle>
-        <Button variant="toolbar" size="icon-xs" onClick={closeDiff} aria-label="Close diff panel">
-          <XIcon className="size-3" />
-        </Button>
-      </div>
-    </>
+    <DiffPanelHeader
+      canScrollTurnStripLeft={canScrollTurnStripLeft}
+      canScrollTurnStripRight={canScrollTurnStripRight}
+      diffRenderMode={diffRenderMode}
+      diffWordWrap={diffWordWrap}
+      inferredCheckpointTurnCountByTurnId={inferredCheckpointTurnCountByTurnId}
+      onClose={closeDiff}
+      onDiffRenderModeChange={setDiffRenderMode}
+      onDiffWordWrapChange={setDiffWordWrap}
+      onSelectTurn={selectTurn}
+      onSelectWholeConversation={selectWholeConversation}
+      onTurnStripWheel={onTurnStripWheel}
+      orderedTurnDiffSummaries={orderedTurnDiffSummaries}
+      scrollTurnStripBy={scrollTurnStripBy}
+      selectedTurnId={selectedTurn?.turnId ?? null}
+      timestampFormat={settings.timestampFormat}
+      turnStripRef={turnStripRef}
+    />
   );
 
   return (

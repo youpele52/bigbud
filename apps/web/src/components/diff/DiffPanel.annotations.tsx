@@ -11,6 +11,8 @@ export interface PendingDiffAnnotation {
   readonly selectedText: string;
   readonly anchorX: number;
   readonly anchorY: number;
+  readonly viewportHeight: number;
+  readonly viewportWidth: number;
 }
 
 interface DiffPanelAnnotationComposerProps {
@@ -26,11 +28,11 @@ export function DiffPanelAnnotationComposer({
 }: DiffPanelAnnotationComposerProps) {
   const left = Math.min(
     Math.max(pendingAnnotation.anchorX, 16),
-    Math.max(16, window.innerWidth - 436),
+    Math.max(16, pendingAnnotation.viewportWidth - 436),
   );
   const top = Math.min(
     Math.max(pendingAnnotation.anchorY, 16),
-    Math.max(16, window.innerHeight - 280),
+    Math.max(16, pendingAnnotation.viewportHeight - 280),
   );
 
   return (
