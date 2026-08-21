@@ -99,7 +99,7 @@ describe("BrowserPanel annotation UX", () => {
     useBrowserPanelStore.setState({
       open: true,
       tabsById: {
-        browser: { title: "", url: "https://example.com" },
+        browser: { faviconUrl: null, title: "", url: "https://example.com" },
       },
     });
   });

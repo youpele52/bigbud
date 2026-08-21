@@ -45,6 +45,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const agentCursor = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentCursor);
   const agentHandoff = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentHandoff);
   const ensureTab = useBrowserPanelStore((state) => state.ensureTab);
+  const setTabFavicon = useBrowserPanelStore((state) => state.setTabFavicon);
   const setTabTitle = useBrowserPanelStore((state) => state.setTabTitle);
   const setTabUrl = useBrowserPanelStore((state) => state.setTabUrl);
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
@@ -106,6 +107,10 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   useEffect(() => {
     setTabTitle(tabId, pageMetadata.title.trim());
   }, [pageMetadata.title, setTabTitle, tabId]);
+
+  useEffect(() => {
+    setTabFavicon(tabId, pageMetadata.faviconUrl);
+  }, [pageMetadata.faviconUrl, setTabFavicon, tabId]);
 
   const reloadViewport = useCallback(
     (mode: "normal" | "ignoring-cache") => reloadBrowserViewport(viewportRef, mode),

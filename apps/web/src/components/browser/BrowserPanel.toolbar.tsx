@@ -3,7 +3,6 @@ import {
   ArrowUpRightIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
-  GlobeIcon,
   MousePointer2Icon,
   RotateCwIcon,
   XIcon,
@@ -64,9 +63,11 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   annotationDisabled = false,
   agentControlled = false,
 }: BrowserToolbarProps) {
+  const [addressBarHovered, setAddressBarHovered] = useState(false);
   const [urlFocused, setUrlFocused] = useState(false);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(-1);
   const pageLabel = pageMetadata.title.trim() || getBrowserFallbackLabel(inputUrl);
+  const isAddressBarExpanded = urlFocused || addressBarHovered || inputUrl.trim().length === 0;
   const matchingHistoryUrls = urlFocused ? filterBrowserHistory(historyUrls, inputUrl) : [];
 
   const handleKeyDown = useCallback(
@@ -191,7 +192,11 @@ export const BrowserToolbar = memo(function BrowserToolbar({
         </Tooltip>
       </div>
 
-      <div className="relative min-w-0 flex-1">
+      <div
+        className="relative min-w-0 flex-1"
+        onMouseEnter={() => setAddressBarHovered(true)}
+        onMouseLeave={() => setAddressBarHovered(false)}
+      >
         <input
           type="text"
           value={inputUrl}
@@ -210,43 +215,40 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           }}
           disabled={agentControlled}
           className={cn(
-            "h-8 w-full min-w-0 rounded-lg border border-input bg-background pl-3 pr-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32",
-            !urlFocused && "text-transparent caret-transparent placeholder:text-transparent",
+            "h-8 w-full min-w-0 rounded-lg border px-3 pr-10 text-left font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45",
+            isAddressBarExpanded
+              ? "border-input bg-background dark:bg-input/32"
+              : "border-transparent bg-transparent",
+            !urlFocused &&
+              inputUrl.trim().length > 0 &&
+              "text-transparent caret-transparent placeholder:text-transparent",
           )}
           placeholder="Enter a URL"
         />
-        {!urlFocused && (
-          <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center gap-2 pl-3 pr-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground">
-            {pageMetadata.faviconUrl ? (
-              <img
-                src={pageMetadata.faviconUrl}
-                alt=""
-                className="size-4 shrink-0 rounded-sm"
-                draggable={false}
-              />
-            ) : (
-              <GlobeIcon className="size-4 shrink-0 text-muted-foreground/70" />
-            )}
+        {!urlFocused && inputUrl.trim().length > 0 && (
+          <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center justify-center px-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground">
             <span className="min-w-0 truncate">{pageLabel}</span>
           </div>
         )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="xs"
-                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 px-0"
-                onClick={onOpenInExternalBrowser}
-                disabled={agentControlled}
-                aria-label="Open in default browser"
-              >
-                <ArrowUpRightIcon className="size-4" />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">Open in default browser</TooltipPopup>
-        </Tooltip>
+        {addressBarHovered && !urlFocused ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 px-0"
+                  onClick={onOpenInExternalBrowser}
+                  disabled={agentControlled}
+                  aria-label="Open in default browser"
+                >
+                  <ArrowUpRightIcon className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">Open in default browser</TooltipPopup>
+          </Tooltip>
+        ) : null}
         {matchingHistoryUrls.length > 0 && (
           <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
             {matchingHistoryUrls.map((url, index) => (

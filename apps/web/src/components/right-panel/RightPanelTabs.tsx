@@ -170,6 +170,7 @@ export function RightPanelTabs({
   const moveTab = useRightPanelTabsStore((state) => state.moveTab);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const browserTabsById = useBrowserPanelStore((state) => state.tabsById);
+  const setBrowserTabFavicon = useBrowserPanelStore((state) => state.setTabFavicon);
   const browserTabLimitReached =
     countRightPanelTabsByKind(openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS;
   const browserTabMenuLabel = browserTabLimitReached
@@ -217,6 +218,7 @@ export function RightPanelTabs({
           const Icon = TAB_ICONS[kind];
           const isActive = activeTabId === tabId;
           const label = getTabLabel(tabId, openTabs, browserTabsById);
+          const faviconUrl = kind === "browser" ? browserTabsById[tabId]?.faviconUrl : null;
 
           return (
             <div
@@ -287,7 +289,17 @@ export function RightPanelTabs({
                   requestRightPanel(kind);
                 }}
               >
-                <Icon className="size-3.5" />
+                {faviconUrl ? (
+                  <img
+                    src={faviconUrl}
+                    alt=""
+                    className="size-3.5 shrink-0 rounded-sm"
+                    draggable={false}
+                    onError={() => setBrowserTabFavicon(tabId, null)}
+                  />
+                ) : (
+                  <Icon className="size-3.5" />
+                )}
                 <span className="truncate text-xs font-medium">{label}</span>
               </button>
               <span className="flex items-center justify-center">
