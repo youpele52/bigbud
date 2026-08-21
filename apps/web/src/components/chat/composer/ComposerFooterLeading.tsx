@@ -95,6 +95,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
 
         <CompactComposerControlsMenu
           interactionMode={interactionMode}
+          compact={compact}
           planCardOpen={planCardOpen}
           planCardLabel={planCardLabel}
           runtimeMode={runtimeMode}

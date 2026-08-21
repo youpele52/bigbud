@@ -1,6 +1,7 @@
 import { ProviderInteractionMode, RuntimeMode } from "@bigbud/contracts";
 import { memo, type ReactNode } from "react";
 import { EllipsisIcon, ListMusicIcon, ListTodoIcon, MessageSquareShare } from "lucide-react";
+import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
 import {
   Menu,
@@ -13,6 +14,7 @@ import {
 } from "../../ui/menu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
+  compact?: boolean;
   interactionMode: ProviderInteractionMode;
   planCardOpen: boolean;
   planCardLabel: string;
@@ -39,7 +41,14 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
       >
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
-      <MenuPopup align="start" className="[--available-height:50dvh]">
+      <MenuPopup
+        align="start"
+        className={cn(
+          "[--available-height:50dvh]",
+          props.compact &&
+            "[&_[data-slot=menu-item]]:text-xs [&_[data-slot=menu-radio-item]]:text-xs sm:[&_[data-slot=menu-item]]:text-xs sm:[&_[data-slot=menu-radio-item]]:text-xs",
+        )}
+      >
         {props.traitsMenuContent ? (
           <>
             {props.traitsMenuContent}
