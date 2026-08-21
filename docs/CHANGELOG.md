@@ -34,6 +34,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Hold `Shift` and click a diff line number to annotate that line with the same composer flow used by normal file previews.
 - Diff annotations now include the surrounding before-and-after code in your prompt, and changed or renamed files are easier to spot with amber triangle markers in the diff header.
 
+### Browser Tabs and Address Bar
+
+- Show each website's own icon on its browser tab in the right panel instead of a generic globe, with the globe kept as the fallback when a site has no icon or the icon fails to load.
+- Made the address bar quieter while you read: it shows just the site name centered when idle, reveals its field and open-in-default-browser shortcut on hover, and becomes a left-aligned URL editor when you click into it or when a tab is still empty.
+
 ## v0.2.204 (19 August, 2026)
 
 ### Floating Assistant
