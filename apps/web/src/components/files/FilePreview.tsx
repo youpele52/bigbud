@@ -12,6 +12,7 @@ import {
 } from "./FilePreview.markdown";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
+import { isCodeRelatedFilePath } from "../../models/editor";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import {
   buildAbsolutePreviewPath,
@@ -26,6 +27,7 @@ import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
 import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
 import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
+import { FilePreviewSearchFocus } from "./FilePreviewSearchFocus";
 
 interface FilePreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
@@ -59,6 +61,7 @@ export const FilePreview = memo(function FilePreview({
   onScrollPositionChange,
   onPreviewLoadError,
   onCreateAnnotation,
+  onSearchMatch,
 }: FilePreviewProps) {
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
@@ -126,6 +129,21 @@ export const FilePreview = memo(function FilePreview({
       onScrollPositionChange?.(event.currentTarget.scrollTop),
     [onScrollPositionChange],
   );
+  const handleSearchMatch = useCallback(
+    (line: number) => {
+      onSearchMatch?.(line);
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const scrollTop = getPreviewScrollTop(
+        line,
+        state.contents.split("\n").length,
+        container.clientHeight,
+        FILE_PREVIEW_LINE_HEIGHT,
+      );
+      if (scrollTop !== null) container.scrollTo({ top: scrollTop, behavior: "smooth" });
+    },
+    [onSearchMatch, state.contents],
+  );
 
   const lines = useMemo(
     () =>
@@ -138,6 +156,10 @@ export const FilePreview = memo(function FilePreview({
   );
   const language = useMemo(() => inferPreviewLanguage(relativePath), [relativePath]);
   const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
+  const isPlainTextFile = useMemo(
+    () => !isMarkdownFile && !isCodeRelatedFilePath(relativePath),
+    [isMarkdownFile, relativePath],
+  );
   const breadcrumb = useMemo(
     () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
     [cwd, projectName, relativePath],
@@ -228,7 +250,13 @@ export const FilePreview = memo(function FilePreview({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <FilePreviewSearchFocus
+      className="flex h-full min-h-0 flex-col bg-background"
+      contents={state.contents}
+      enabled={state.loaded && !state.loading && !state.error}
+      path={relativePath}
+      onSelectMatch={handleSearchMatch}
+    >
       <FilePreviewHeader
         breadcrumb={breadcrumb}
         absolutePath={absolutePath}
@@ -312,12 +340,16 @@ export const FilePreview = memo(function FilePreview({
               ref={codeContainerRef}
               className="file-preview-code min-w-0 px-3 text-foreground/85"
             >
-              <SyntaxHighlightedCode
-                code={state.contents}
-                language={language}
-                themeName={themeName}
-                fallback={plainFallback}
-              />
+              {isPlainTextFile ? (
+                plainFallback
+              ) : (
+                <SyntaxHighlightedCode
+                  code={state.contents}
+                  language={language}
+                  themeName={themeName}
+                  fallback={plainFallback}
+                />
+              )}
             </div>
           </div>
           {selectedRange && onCreateAnnotation ? (
@@ -332,6 +364,6 @@ export const FilePreview = memo(function FilePreview({
           ) : null}
         </div>
       )}
-    </div>
+    </FilePreviewSearchFocus>
   );
 });

@@ -15,6 +15,7 @@ interface FilesPanelPreviewProps extends FilePreviewNavigationProps {
   readonly projectName?: string | undefined;
   readonly onScrollPositionChange: (scrollTop: number) => void;
   readonly onCreateAnnotation?: ((annotation: CodeAnnotationDraft) => void) | undefined;
+  readonly onSearchMatch?: ((line: number) => void) | undefined;
 }
 
 export function FilesPanelPreview(props: FilesPanelPreviewProps) {
@@ -39,6 +40,7 @@ export function FilesPanelPreview(props: FilesPanelPreviewProps) {
     initialScrollTop: props.historyEntry?.scrollTop,
     onScrollPositionChange: props.onScrollPositionChange,
     onCreateAnnotation: props.onCreateAnnotation,
+    onSearchMatch: props.onSearchMatch,
   };
   return props.relativePath.toLowerCase().endsWith(".ipynb") ? (
     <IpynbPreview {...scrollProps} />

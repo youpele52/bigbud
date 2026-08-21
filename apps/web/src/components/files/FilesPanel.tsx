@@ -270,6 +270,10 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     },
     [activeProjectName, activeThreadId, activeWorkspaceRoot, addAnnotation, previewPath],
   );
+  const handleSearchMatch = useCallback(
+    (line: number) => setPreviewPosition({ line, column: null }),
+    [setPreviewPosition],
+  );
 
   const treeBody = useMemo(() => {
     if (showRootLoading) {
@@ -349,6 +353,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
             {...sharedPreviewProps}
             onScrollPositionChange={persistScrollPosition}
             onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
+            onSearchMatch={handleSearchMatch}
           />
         </div>
         <div
@@ -373,6 +378,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     handleCreateCodeAnnotation,
     handleNavigateBack,
     handleNavigateForward,
+    handleSearchMatch,
     handleTreeResizeStart,
     handlePreviewLoadError,
     previewPath,

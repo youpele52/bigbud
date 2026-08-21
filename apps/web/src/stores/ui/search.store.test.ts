@@ -4,7 +4,11 @@ import { useSearchStore } from "./search.store";
 
 describe("search.store", () => {
   beforeEach(() => {
-    useSearchStore.setState({ searchOpen: false });
+    useSearchStore.setState({
+      searchOpen: false,
+      fileSearchContext: null,
+      activeFileSearchContext: null,
+    });
   });
 
   it("initializes with search closed", () => {
@@ -41,5 +45,30 @@ describe("search.store", () => {
 
     expect(setSpy).not.toHaveBeenCalled();
     setSpy.mockRestore();
+  });
+
+  it("opens with the focused file context as a snapshot", () => {
+    const onSelectMatch = vi.fn();
+    const context = { path: "src/app.ts", contents: "needle", onSelectMatch };
+
+    useSearchStore.getState().setFileSearchContext(context);
+
+    expect(useSearchStore.getState().openSearchForFileContext()).toBe(true);
+    expect(useSearchStore.getState().searchOpen).toBe(true);
+    expect(useSearchStore.getState().activeFileSearchContext).toBe(context);
+  });
+
+  it("does not open a file search without a focused preview", () => {
+    expect(useSearchStore.getState().openSearchForFileContext()).toBe(false);
+    expect(useSearchStore.getState().searchOpen).toBe(false);
+  });
+
+  it("clears the active file context when search closes", () => {
+    const context = { path: "src/app.ts", contents: "needle", onSelectMatch: vi.fn() };
+    useSearchStore.setState({ searchOpen: true, activeFileSearchContext: context });
+
+    useSearchStore.getState().setSearchOpen(false);
+
+    expect(useSearchStore.getState().activeFileSearchContext).toBeNull();
   });
 });

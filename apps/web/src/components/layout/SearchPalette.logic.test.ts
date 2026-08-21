@@ -8,6 +8,7 @@ import {
   highlightMatch,
   findThreadSearchMatch,
   findMessageSearchMatches,
+  findFileSearchMatches,
 } from "./SearchPalette.logic";
 
 function createMockThread(overrides: Partial<Thread> & { id: string }): Thread {
@@ -280,5 +281,18 @@ describe("findMessageSearchMatches", () => {
 
   it("returns empty array for null threads", () => {
     expect(findMessageSearchMatches(null, "alpha")).toEqual([]);
+  });
+});
+
+describe("findFileSearchMatches", () => {
+  it("returns every matching line with one-based line numbers", () => {
+    expect(findFileSearchMatches("first\nNeedle here\nneedle again", "NEEDLE")).toEqual([
+      { line: 2, lineText: "Needle here" },
+      { line: 3, lineText: "needle again" },
+    ]);
+  });
+
+  it("does not return results for an empty query", () => {
+    expect(findFileSearchMatches("one\ntwo", "  ")).toEqual([]);
   });
 });
