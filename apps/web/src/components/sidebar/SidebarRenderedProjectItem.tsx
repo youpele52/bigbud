@@ -219,11 +219,11 @@ export function SidebarRenderedProjectItem({
                 />
               ) : project.expanded ? (
                 <FolderOpenIcon
-                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+                  className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                 />
               ) : (
                 <FolderIcon
-                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+                  className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                 />
               )}
               {renamingProjectId === project.id ? (

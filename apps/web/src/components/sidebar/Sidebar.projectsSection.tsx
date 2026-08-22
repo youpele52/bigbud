@@ -1,4 +1,6 @@
-import { PlusIcon, TriangleAlertIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { CloudIcon } from "@hugeicons/core-free-icons";
+import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
 import { type RefObject } from "react";
 import {
   type SidebarProjectSortOrder,
@@ -9,7 +11,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarGroup } from "../ui/sidebar";
 import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProjectItem";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem } from "./SidebarRenderedProjectItem";
@@ -161,7 +163,10 @@ export function SidebarProjectsSection({
             </>
           }
         >
-          Projects
+          <span className="inline-flex items-center gap-1.5">
+            <LaptopMinimalIcon aria-hidden="true" className={SIDEBAR_ICON_SIZE_CLASS} />
+            Projects
+          </span>
         </SidebarSectionLabel>
 
         {shouldShowProjectPathEntry && (
@@ -230,7 +235,16 @@ export function SidebarProjectsSection({
               </>
             }
           >
-            Remote Projects
+            <span className="inline-flex items-center gap-1.5">
+              <HugeiconsIcon
+                aria-hidden="true"
+                className={SIDEBAR_ICON_SIZE_CLASS}
+                icon={CloudIcon}
+                size={14}
+                strokeWidth={1.5}
+              />
+              Remote Projects
+            </span>
           </SidebarSectionLabel>
 
           <SidebarProjectList

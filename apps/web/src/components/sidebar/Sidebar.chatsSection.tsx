@@ -1,9 +1,6 @@
-import {
-  ChevronRightIcon,
-  MessageSquareIcon,
-  MessageSquareTextIcon,
-  SquarePenIcon,
-} from "lucide-react";
+import { Chatting01Icon, Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ChevronRightIcon, SquarePenIcon } from "lucide-react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
@@ -97,7 +94,16 @@ export function SidebarChatsSection({
           </>
         }
       >
-        Chats
+        <span className="inline-flex items-center gap-1.5">
+          <HugeiconsIcon
+            aria-hidden="true"
+            className={SIDEBAR_ICON_SIZE_CLASS}
+            icon={Chatting01Icon}
+            size={14}
+            strokeWidth={1.5}
+          />
+          Chats
+        </span>
       </SidebarSectionLabel>
 
       <SidebarMenu>
@@ -112,15 +118,13 @@ export function SidebarChatsSection({
               type="button"
               className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
             >
-              {isExpanded ? (
-                <MessageSquareTextIcon
-                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
-                />
-              ) : (
-                <MessageSquareIcon
-                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
-                />
-              )}
+              <HugeiconsIcon
+                aria-hidden="true"
+                className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+                icon={Comment03Icon}
+                size={12}
+                strokeWidth={1.5}
+              />
               <span className="truncate text-xs font-medium text-foreground/90">Recents</span>
               <ChevronRightIcon
                 className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-all duration-150 ${
