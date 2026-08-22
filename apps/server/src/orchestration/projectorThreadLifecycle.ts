@@ -223,7 +223,15 @@ export function projectThreadDeleted(
       const deletedThreadIds = new Set(payload.threadIds ?? [payload.threadId]);
       return {
         ...nextBase,
-        threads: nextBase.threads.filter((thread) => !deletedThreadIds.has(thread.id)),
+        threads: nextBase.threads
+          .filter((thread) => !deletedThreadIds.has(thread.id))
+          .map((thread) => {
+            if (!thread.parentThread || !deletedThreadIds.has(thread.parentThread.threadId)) {
+              return thread;
+            }
+            const { parentThread: _parentThread, ...detachedThread } = thread;
+            return detachedThread;
+          }),
       };
     }),
   );

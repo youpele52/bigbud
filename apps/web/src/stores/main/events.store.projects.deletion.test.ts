@@ -113,6 +113,58 @@ describe("thread deletion state", () => {
     expect(aborted.threads[0]?.deletingAt).toBeNull();
   });
 
+  it("detaches a surviving direct child when its parent is deleted", () => {
+    const parent = makeThread({ id: ThreadId.makeUnsafe("thread-parent") });
+    const child = makeThread({
+      id: ThreadId.makeUnsafe("thread-child"),
+      parentThread: { threadId: parent.id, title: parent.title },
+    });
+    const state = {
+      ...makeState(parent),
+      threads: [parent, child],
+      sidebarThreadsById: {
+        [parent.id]: buildSidebarThreadSummary(parent),
+        [child.id]: buildSidebarThreadSummary(child),
+      },
+    };
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.deleted", {
+        threadId: parent.id,
+        deletedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.threads).toEqual([expect.objectContaining({ id: child.id })]);
+    expect(next.threads[0]?.parentThread).toBeUndefined();
+    expect(next.sidebarThreadsById[child.id]).not.toHaveProperty("parentThread");
+  });
+
+  it("detaches a cached child when the deleted parent is absent from local state", () => {
+    const parentId = ThreadId.makeUnsafe("uncached-parent");
+    const child = makeThread({
+      id: ThreadId.makeUnsafe("cached-child"),
+      parentThread: { threadId: parentId, title: "Uncached parent" },
+    });
+    const state = {
+      ...makeState(child),
+      sidebarThreadsById: { [child.id]: buildSidebarThreadSummary(child) },
+    };
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.deleted", {
+        threadId: parentId,
+        deletedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next).not.toBe(state);
+    expect(next.threads[0]?.parentThread).toBeUndefined();
+    expect(next.sidebarThreadsById[child.id]).not.toHaveProperty("parentThread");
+  });
+
   it("keeps deleting membership when a catalog refresh omits the in-flight thread", () => {
     const thread = makeThread({
       id: ThreadId.makeUnsafe("thread-deleting"),

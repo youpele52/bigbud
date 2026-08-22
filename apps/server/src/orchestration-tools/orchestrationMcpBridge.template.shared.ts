@@ -128,7 +128,6 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   '        title: { type: "string", description: "Title for the new standalone bigbud thread", maxLength: 200 },',
   '        task: { type: "string", description: "Task for the new standalone bigbud thread", maxLength: 32000 },',
   '        projectId: { type: "string", description: "Optional project ID" },',
-  '        workspacePath: { type: "string", description: "Optional workspace path" },',
   '        watchForCompletion: { type: "boolean", description: "Wait for the thread to complete" },',
   "      },",
   '      required: ["title", "task"],',

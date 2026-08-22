@@ -98,7 +98,6 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "        title,",
     "        task,",
     "        ...(args?.projectId ? { projectId: String(args.projectId).trim() } : {}),",
-    "        ...(args?.workspacePath ? { workspacePath: String(args.workspacePath).trim() } : {}),",
     "        watchForCompletion: args?.watchForCompletion === true,",
     "        invocationId: `mcp:${String(requestId)}`,",
     "        sourceMessageId: SOURCE_MESSAGE_ID,",

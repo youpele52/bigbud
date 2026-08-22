@@ -321,7 +321,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         pinned: input.pinned,
       }),
     sendMessage: (input) =>
-      sendThreadMessageViaOrchestration({ orchestrationEngine: engine, ...input }),
+      sendThreadMessageViaOrchestration({
+        orchestrationEngine: engine,
+        threadDelegationRepository,
+        ...input,
+      }),
     computerUse: (input) =>
       Effect.gen(function* () {
         const settings = yield* serverSettingsService.getSettings.pipe(

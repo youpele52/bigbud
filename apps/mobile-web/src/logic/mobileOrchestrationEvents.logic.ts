@@ -311,8 +311,19 @@ export function applyOrchestrationEventToSnapshot(
     }
 
     case "thread.deleted": {
-      const threads = snapshot.threads.filter((thread) => thread.id !== event.payload.threadId);
-      if (threads.length === snapshot.threads.length) {
+      const deletedThreadIds = new Set(event.payload.threadIds ?? [event.payload.threadId]);
+      let detached = false;
+      const threads = snapshot.threads
+        .filter((thread) => !deletedThreadIds.has(thread.id))
+        .map((thread) => {
+          if (!thread.parentThread || !deletedThreadIds.has(thread.parentThread.threadId)) {
+            return thread;
+          }
+          detached = true;
+          const { parentThread: _parentThread, ...detachedThread } = thread;
+          return detachedThread;
+        });
+      if (threads.length === snapshot.threads.length && !detached) {
         return { changed: false, snapshot };
       }
       return {

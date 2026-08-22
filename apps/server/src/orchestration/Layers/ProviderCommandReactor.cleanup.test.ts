@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { CommandId, ThreadId } from "@bigbud/contracts";
+import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -36,7 +36,6 @@ describe("ProviderCommandReactor", () => {
         createdAt: now,
       }),
     );
-
     await Effect.runPromise(
       harness.engine.dispatch({
         type: "thread.session.stop",
@@ -83,7 +82,6 @@ describe("ProviderCommandReactor", () => {
         createdAt: now,
       }),
     );
-
     await Effect.runPromise(
       harness.engine.dispatch({
         type: "thread.delete",
@@ -210,6 +208,35 @@ describe("ProviderCommandReactor", () => {
         createdAt: now,
       }),
     );
+    const childThreadId = ThreadId.makeUnsafe("project-delete-child");
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-project-delete-child-create"),
+        threadId: childThreadId,
+        projectId: asProjectId("project-1"),
+        title: "Project deletion child",
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          projectId: asProjectId("project-1"),
+          title: "New thread",
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.makeUnsafe("cmd-single-delete-before-project-delete"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+      }),
+    );
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -220,8 +247,8 @@ describe("ProviderCommandReactor", () => {
     );
 
     await waitFor(() => harness.stopSession.mock.calls.length === 1);
-    await waitFor(() => harness.browserClose.mock.calls.length === 1);
-    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(() => harness.browserClose.mock.calls.length >= 2);
+    await waitFor(() => harness.terminalClose.mock.calls.length >= 2);
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
       return (
@@ -233,9 +260,11 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const project = readModel.projects.find((entry) => entry.id === asProjectId("project-1"));
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    const child = readModel.threads.find((entry) => entry.id === childThreadId);
     expect(project?.deletedAt).not.toBeNull();
     expect(project?.deletingAt).toBeNull();
     expect(thread).toBeUndefined();
+    expect(child).toBeUndefined();
     await waitFor(() => projectDirectories.every((directory) => !fs.existsSync(directory)));
   });
 });

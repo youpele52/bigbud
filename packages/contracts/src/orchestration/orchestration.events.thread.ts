@@ -84,6 +84,7 @@ export const ThreadDeletedPayload = Schema.Struct({
 
 export const ThreadDeletionRequestedPayload = Schema.Struct({
   threadId: ThreadId,
+  mode: Schema.optional(Schema.Literals(["single", "subtree"])),
   deletingAt: IsoDateTime,
 });
 

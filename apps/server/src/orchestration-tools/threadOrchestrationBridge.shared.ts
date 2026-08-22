@@ -28,10 +28,10 @@ export const CREATE_THREAD_TOOL_DESCRIPTION =
   "Create a standalone bigbud thread in a project and optionally watch it for completion.";
 
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
-  "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
+  "Get live workflow status for a bigbud thread in the current project or a directly delegated child. Use this to check whether another thread's agent is still working before starting dependent work.";
 
 export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION =
-  "Send a follow-up message to an existing bigbud thread. Starts it when safely idle or queues it durably while busy.";
+  "Send a follow-up message to an existing bigbud thread in the current project or a directly delegated child. Starts it when safely idle or queues it durably while busy.";
 
 export const LIST_PINNED_THREADS_TOOL_DESCRIPTION =
   "List pinned bigbud threads globally across all projects. This is read-only.";

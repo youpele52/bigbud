@@ -276,10 +276,21 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
   const deleteProjectionThreadRow = SqlSchema.void({
     Request: DeleteProjectionThreadInput,
     execute: ({ threadId }) =>
-      sql`
-        DELETE FROM projection_threads
-        WHERE thread_id = ${threadId}
-      `,
+      sql.withTransaction(
+        Effect.gen(function* () {
+          yield* sql`
+            UPDATE projection_threads
+            SET parent_thread_id = NULL,
+              parent_thread_title = NULL,
+              parent_thread_project_id = NULL
+            WHERE parent_thread_id = ${threadId}
+          `;
+          yield* sql`
+            DELETE FROM projection_threads
+            WHERE thread_id = ${threadId}
+          `;
+        }),
+      ),
   });
 
   const touchProjectionThreadActivity = SqlSchema.void({

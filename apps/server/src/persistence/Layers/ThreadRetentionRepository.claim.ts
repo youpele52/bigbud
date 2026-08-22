@@ -5,7 +5,6 @@ import type {
   RecheckAndClaimRetentionItemInput,
   ThreadRetentionExclusionReason,
 } from "../Services/ThreadRetentionRepository.ts";
-import { retentionExclusionCaseSql } from "./ThreadRetentionRepository.eligibility.ts";
 import { retentionSubtreeCteSql } from "./ThreadRetentionRepository.pages.ts";
 
 export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
@@ -24,10 +23,11 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
             AND EXISTS (
               SELECT 1 FROM projection_threads AS t
               JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
+              LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = t.thread_id
               WHERE t.thread_id = ?
                 AND activity.last_activity_at = ?
                 AND activity.last_activity_at <= ?
-                AND (${retentionExclusionCaseSql}) IS NULL
+                AND exclusion.reason IS NULL
             )
           RETURNING thread_id`,
           [
@@ -53,10 +53,11 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
           SELECT item.status AS "itemStatus",
             CASE WHEN t.thread_id IS NULL OR activity.last_activity_at <> ?
               OR activity.last_activity_at > ? THEN 'activity_changed'
-              ELSE (${retentionExclusionCaseSql}) END AS reason
+              ELSE exclusion.reason END AS reason
           FROM thread_retention_run_items AS item
           LEFT JOIN projection_threads AS t ON t.thread_id = item.thread_id
           LEFT JOIN subtree_activity AS activity ON activity.root_thread_id = item.thread_id
+          LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = item.thread_id
           WHERE item.run_id = ? AND item.thread_id = ?`,
           [input.expectedLastActivityAt, input.cutoffAt, input.runId, input.threadId],
         );

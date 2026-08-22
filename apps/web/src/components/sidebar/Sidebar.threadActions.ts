@@ -319,7 +319,7 @@ export function useSidebarThreadActions({
         setPendingDeleteConfirmation({
           title: `Delete ${count} thread${count === 1 ? "" : "s"}?`,
           description:
-            "This deletes the selected threads and any child threads from bigbud's local views and cleans up associated bigbud-managed local resources.",
+            "This deletes only the selected threads and their bigbud-managed resources. Child threads remain available as standalone threads.",
           threadIds: ids,
         });
         return;
