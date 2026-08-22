@@ -10,7 +10,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
-## v0.2.205 (22 August, 2026)
+## v0.2.205 (23 August, 2026)
 
 ### Floating Assistant
 
@@ -40,6 +40,24 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Show each website's own icon on its browser tab in the right panel instead of a generic globe, with the globe kept as the fallback when a site has no icon or the icon fails to load.
 - Made the address bar quieter while you read: it shows just the site name centered when idle, reveals its field and open-in-default-browser shortcut on hover, and becomes a left-aligned URL editor when you click into it or when a tab is still empty.
+
+### Safer Browser Sessions
+
+- Isolated desktop browser tabs in a dedicated persistent session, denied unexpected guest permissions and pop-up windows, and restricted top-level navigation and redirects to HTTP(S) pages.
+- Added URL-or-search handling to the browser address bar, synchronized visit history and bookmarks, and added clearer loading, crash, annotation, and navigation error states.
+- Kept visible browser tabs attached to the thread using them, with safe fallback to a background browser when no tab is attached. Browser leases now release correctly after failures, cancellations, timeouts, renderer errors, tab closure, and handoffs.
+
+### Thread Orchestration and Cleanup
+
+- Restored follow-up messaging for directly delegated threads across authorized projects, aligned orchestration access across providers, and removed the unsupported workspace-path argument from thread creation tools.
+- Made normal thread deletion remove only the selected thread. Existing child threads now remain available as standalone threads, while project and automatic cleanup stay bounded to the relevant project and never delete cross-project descendants implicitly.
+- Hardened deletion and retention against concurrent work, including safe fence takeover, project-boundary protection, descendant eligibility checks, and recovery of delegation reservations before child threads are created.
+- Kept web and mobile thread views synchronized when deleted threads are removed or surviving children become standalone, including mobile detail-cache invalidation.
+
+### Validation
+
+- Added regression coverage for browser session isolation, navigation policy, visible-tab routing and lease cleanup, delegated thread access, deletion boundaries, retention safety, migration recovery, and web/mobile synchronization.
+- Verified formatting, linting, type checks, and the full workspace test suite.
 
 ## v0.2.204 (19 August, 2026)
 
