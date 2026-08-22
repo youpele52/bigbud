@@ -22,6 +22,8 @@ import {
   OrchestrationThreadActivity,
 } from "./orchestration.thread";
 
+const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
+
 const ProjectDeleteFinalizeCommand = Schema.Struct({
   type: Schema.Literal("project.delete.finalize"),
   commandId: CommandId,
@@ -41,6 +43,7 @@ const ThreadDeleteFinalizeCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   threadIds: Schema.optional(Schema.Array(ThreadId)),
+  mode: Schema.optional(ThreadDeletionMode),
   createdAt: IsoDateTime,
 });
 
@@ -48,6 +51,7 @@ const ThreadDeleteAbortCommand = Schema.Struct({
   type: Schema.Literal("thread.delete.abort"),
   commandId: CommandId,
   threadId: ThreadId,
+  mode: Schema.optional(ThreadDeletionMode),
   createdAt: IsoDateTime,
 });
 
