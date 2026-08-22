@@ -1,19 +1,12 @@
-import { ChevronDownIcon, FolderIcon, SquarePenIcon } from "lucide-react";
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  isBuiltInChatsProject,
-  type ProjectId,
-  type ThreadId,
-} from "@bigbud/contracts";
+import { CheckIcon, ChevronDownIcon, SquarePenIcon } from "lucide-react";
+import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useMemo } from "react";
 
 import {
-  orderItemsByPreferredIds,
-  resolveThreadStatusPill,
-  sortProjectsForSidebar,
-  sortThreadsForSidebar,
-} from "~/components/sidebar/Sidebar.logic";
-import { collectVisibleChatThreads } from "~/components/sidebar/Sidebar.state.visibleThreads";
+  getComposerPickerChatRecents,
+  getComposerPickerProjects,
+  getComposerPickerProjectThreads,
+} from "~/components/project/ComposerProjectPicker.logic";
 import {
   Menu,
   MenuGroup,
@@ -33,9 +26,10 @@ import type { SidebarThreadSummary } from "~/models/types";
 import { cn } from "~/lib/utils";
 import { useStore } from "~/stores/main";
 import { useUiStateStore } from "~/stores/ui";
+import { ProjectLocationIcon } from "~/components/project/ProjectLocationIcon";
 
-const RECENT_ITEM_LIMIT = 6;
-const compactPickerItemClassName = "min-h-6 py-0 text-xs sm:min-h-6";
+const PROJECT_ITEM_LIMIT = 6;
+const compactPickerItemClassName = "min-h-7 py-1 text-xs sm:min-h-7";
 
 export function CompactChatPicker({
   compactChat,
@@ -48,17 +42,14 @@ export function CompactChatPicker({
   const sidebarRecentThreadIds = useStore((state) => state.sidebarRecentThreadIds);
   const threadIdsByProjectId = useStore((state) => state.threadIdsByProjectId);
   const projectOrder = useUiStateStore((state) => state.projectOrder);
-  const lastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
   const recentThreads = useMemo(
     () =>
-      sortThreadsForSidebar(
-        collectVisibleChatThreads({
-          loadedChatThreadIds: threadIdsByProjectId[BUILT_IN_CHATS_PROJECT_ID] ?? [],
-          sidebarRecentThreadIds,
-          sidebarThreadsById,
-        }),
-        appSettings.sidebarThreadSortOrder,
-      ).slice(0, RECENT_ITEM_LIMIT),
+      getComposerPickerChatRecents({
+        loadedChatThreadIds: threadIdsByProjectId[BUILT_IN_CHATS_PROJECT_ID] ?? [],
+        sidebarRecentThreadIds,
+        sidebarThreadsById,
+        sortOrder: appSettings.sidebarThreadSortOrder,
+      }),
     [
       appSettings.sidebarThreadSortOrder,
       sidebarRecentThreadIds,
@@ -67,34 +58,24 @@ export function CompactChatPicker({
     ],
   );
   const recentProjects = useMemo(() => {
-    const visibleProjects = projects.filter(
-      (project) => project.deletingAt === null && !isBuiltInChatsProject(project.id),
-    );
-    const orderedProjects = orderItemsByPreferredIds({
-      items: visibleProjects,
-      preferredIds: projectOrder,
-      getId: (project) => project.id,
-    });
-    const visibleThreads = Object.values(sidebarThreadsById).filter(
-      (thread) => thread.archivedAt === null && thread.deletingAt === null,
-    );
-    return sortProjectsForSidebar(orderedProjects, visibleThreads, "updated_at").slice(
-      0,
-      RECENT_ITEM_LIMIT,
-    );
-  }, [projectOrder, projects, sidebarThreadsById]);
+    return getComposerPickerProjects({
+      projectOrder,
+      projects,
+      sidebarThreadsById,
+      sortOrder: appSettings.sidebarProjectSortOrder,
+    }).slice(0, PROJECT_ITEM_LIMIT);
+  }, [appSettings.sidebarProjectSortOrder, projectOrder, projects, sidebarThreadsById]);
 
   const selectThread = (threadId: ThreadId, projectId: ProjectId) => {
     void compactChat.selectThread(threadId, projectId);
   };
   const getProjectThreads = (projectId: ProjectId) =>
-    sortThreadsForSidebar(
-      (threadIdsByProjectId[projectId] ?? [])
-        .map((threadId) => sidebarThreadsById[threadId])
-        .filter((thread): thread is NonNullable<typeof thread> => Boolean(thread))
-        .filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
-      appSettings.sidebarThreadSortOrder,
-    );
+    getComposerPickerProjectThreads({
+      projectId,
+      sidebarThreadsById,
+      threadIdsByProjectId,
+      sortOrder: appSettings.sidebarThreadSortOrder,
+    });
 
   return (
     <Menu>
@@ -110,15 +91,17 @@ export function CompactChatPicker({
           />
         }
       >
-        <FolderIcon className="size-3" />
+        <ProjectLocationIcon
+          className="size-3"
+          project={projects.find((project) => project.id === compactChat.projectId)}
+        />
         <span className="max-w-[8rem] truncate text-xs">{compactChat.projectName}</span>
         <ChevronDownIcon className="size-3" />
       </MenuTrigger>
       <MenuPopup align="start" side="top" className="min-w-64">
         <MenuGroup>
-          <MenuGroupLabel className="sm:text-xs">Recent threads</MenuGroupLabel>
+          <MenuGroupLabel className="sm:text-xs">Recents</MenuGroupLabel>
           <ThreadMenuItems
-            lastVisitedAtById={lastVisitedAtById}
             threads={recentThreads}
             currentThreadId={compactChat.threadId}
             onSelect={selectThread}
@@ -133,7 +116,6 @@ export function CompactChatPicker({
               return (
                 <MenuSub key={project.id}>
                   <MenuSubTrigger
-                    inset
                     className={cn(
                       compactPickerItemClassName,
                       project.id === compactChat.projectId
@@ -142,7 +124,15 @@ export function CompactChatPicker({
                     )}
                     onClick={() => void compactChat.loadProjectThreads(project.id)}
                   >
-                    <FolderIcon className="size-3 opacity-60" />
+                    <span className="inline-flex w-2.5 shrink-0 items-center justify-center">
+                      {project.id === compactChat.projectId ? (
+                        <CheckIcon className="size-3" />
+                      ) : null}
+                    </span>
+                    <ProjectLocationIcon
+                      className={cn("size-3", project.id !== compactChat.projectId && "opacity-60")}
+                      project={project}
+                    />
                     {project.name}
                   </MenuSubTrigger>
                   <MenuSubPopup sideOffset={-1} className="min-w-56">
@@ -158,7 +148,6 @@ export function CompactChatPicker({
                     </MenuItem>
                     <MenuSeparator />
                     <ThreadMenuItems
-                      lastVisitedAtById={lastVisitedAtById}
                       threads={projectThreads}
                       currentThreadId={compactChat.threadId}
                       onSelect={selectThread}
@@ -176,12 +165,10 @@ export function CompactChatPicker({
 
 function ThreadMenuItems({
   currentThreadId,
-  lastVisitedAtById,
   onSelect,
   threads,
 }: {
   currentThreadId: ThreadId;
-  lastVisitedAtById: Record<string, string>;
   onSelect: (threadId: ThreadId, projectId: ProjectId) => void;
   threads: ReadonlyArray<SidebarThreadSummary>;
 }) {
@@ -194,16 +181,11 @@ function ThreadMenuItems({
   }
 
   return threads.map((thread) => {
-    const status = resolveThreadStatusPill({
-      thread: { ...thread, lastVisitedAt: lastVisitedAtById[thread.id] },
-    });
-
     return (
       <MenuItem
         key={thread.id}
         disabled={thread.id === currentThreadId}
         className={cn(
-          "grid grid-cols-[1rem_1fr]",
           compactPickerItemClassName,
           thread.id === currentThreadId
             ? "text-foreground data-disabled:opacity-100"
@@ -213,17 +195,10 @@ function ThreadMenuItems({
           ? {}
           : { onClick: () => onSelect(thread.id, thread.projectId) })}
       >
-        <span className="col-start-1 flex size-3 items-center justify-center">
-          {status ? (
-            <span
-              aria-hidden="true"
-              className={`size-1.5 shrink-0 rounded-full ${
-                status.label === "Completed" ? "bg-success" : status.dotClass
-              } ${status.pulse ? "animate-pulse" : ""}`}
-            />
-          ) : null}
+        <span className="inline-flex w-2.5 shrink-0 items-center justify-center">
+          {thread.id === currentThreadId ? <CheckIcon className="size-3" /> : null}
         </span>
-        <span className="col-start-2 min-w-0 truncate">{thread.title}</span>
+        <span className="min-w-0 truncate">{thread.title}</span>
       </MenuItem>
     );
   });
