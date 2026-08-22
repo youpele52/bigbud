@@ -28,12 +28,27 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
     sql`DELETE FROM thread_activity_leases WHERE lease_id = ${durableLeaseId(leaseId)}`.pipe(
       Effect.ignore,
     );
+  const retention = makeVisibleBrowserRetentionControl({
+    state,
+    commands,
+    releaseDurableLease,
+  });
 
   const isAvailable = Ref.get(state).pipe(Effect.map((current) => current.renderers.length > 0));
   const hasThreadLease: VisibleBrowserControlShape["hasThreadLease"] = (threadId) =>
     Ref.get(state).pipe(
       Effect.map((current) =>
         [...current.leases.values()].some((lease) => lease.threadId === threadId),
+      ),
+    );
+  const resolveThreadLease: VisibleBrowserControlShape["resolveThreadLease"] = (threadId) =>
+    Ref.get(state).pipe(
+      Effect.map(
+        (current) =>
+          [...current.leases.values()]
+            .toReversed()
+            .find((lease) => lease.threadId === threadId && lease.tabId !== null)?.tabId ??
+          undefined,
       ),
     );
 
@@ -161,16 +176,16 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
               }),
         ),
         Effect.ensuring(
-          Ref.update(state, (previous) => {
-            const pending = new Map(previous.pending);
-            pending.delete(commandId);
-            return { ...previous, pending };
+          retention.releaseLease({
+            leaseId,
+            pendingCommandId: commandId,
+            reason: "Browser command was cancelled before completion.",
           }),
         ),
       );
     });
 
-  const complete: VisibleBrowserControlShape["complete"] = (input) =>
+  const completePending = (input: Parameters<VisibleBrowserControlShape["complete"]>[0]) =>
     Ref.modify(state, (previous) => {
       const releaseCommand = previous.releases.get(input.commandId);
       if (releaseCommand?.rendererId === input.rendererId) {
@@ -191,10 +206,19 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
       const leases = new Map(previous.leases);
       const lease = leases.get(pendingEntry.command.leaseId);
       const createdTabs = new Map(previous.createdTabs);
-      if (lease && pendingEntry.command.action.action === "close_tab") {
-        leases.delete(lease.leaseId);
+      if (pendingEntry.command.action.action === "close_tab") {
         createdTabs.delete(pendingEntry.command.action.tabId);
+      }
+      if (
+        lease &&
+        (input.error !== undefined ||
+          pendingEntry.command.action.action === "close_tab" ||
+          pendingEntry.command.action.action === "release_tab" ||
+          !input.result?.tabId)
+      ) {
+        leases.delete(lease.leaseId);
       } else if (lease && input.result?.tabId) {
+        leases.delete(lease.leaseId);
         leases.set(lease.leaseId, { ...lease, tabId: input.result.tabId });
         if (lease.openedByAgent) {
           createdTabs.set(input.result.tabId, {
@@ -211,6 +235,7 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
         const shouldReleaseLease =
           input.error !== undefined ||
           pendingEntry.command.action.action === "close_tab" ||
+          pendingEntry.command.action.action === "release_tab" ||
           !input.result?.tabId;
         const release = shouldReleaseLease
           ? releaseDurableLease(pendingEntry.command.leaseId)
@@ -250,6 +275,24 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
       Effect.asVoid,
     );
 
+  const complete: VisibleBrowserControlShape["complete"] = (input) => {
+    const error = input.error;
+    if (error === undefined) return completePending(input);
+    return Ref.get(state).pipe(
+      Effect.flatMap((current) => {
+        const entry = current.pending.get(input.commandId);
+        return entry?.command.rendererId === input.rendererId
+          ? retention.releaseLease({
+              leaseId: entry.command.leaseId,
+              pendingCommandId: input.commandId,
+              notifyRenderer: false,
+              reason: error,
+            })
+          : completePending(input);
+      }),
+    );
+  };
+
   const streamCommands: VisibleBrowserControlShape["streamCommands"] = (rendererId) =>
     Stream.unwrap(
       Ref.update(state, (current) =>
@@ -278,19 +321,16 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
       ),
     );
 
-  const retention = makeVisibleBrowserRetentionControl({
-    state,
-    commands,
-    releaseDurableLease,
-  });
-
   return {
     hasThreadLease,
+    resolveThreadLease,
     isAvailable,
     execute,
     complete,
     streamCommands,
-    ...retention,
+    reconcileThread: retention.reconcileThread,
+    revokeLease: retention.revokeLease,
+    getLeases: retention.getLeases,
   } satisfies VisibleBrowserControlShape;
 });
 

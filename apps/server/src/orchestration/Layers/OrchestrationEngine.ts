@@ -24,7 +24,6 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
-import { browserViaOrchestration } from "../../orchestration-tools/ThreadBrowserTools.ts";
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
@@ -65,6 +64,7 @@ import {
   makeCommandProcessor,
 } from "./OrchestrationEngine.commandProcessing.ts";
 import { makeDeletionFence } from "./OrchestrationEngine.deletionFence.ts";
+import { executeBrowserAction } from "./OrchestrationEngine.browser.ts";
 
 const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
@@ -342,31 +342,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         });
       }),
     browser: (input) =>
-      Effect.gen(function* () {
-        const requestedTarget = input.action.target ?? "auto";
-        if (requestedTarget === "visible" || (requestedTarget === "auto" && input.action.tabId)) {
-          const thread = readModel.threads.find((candidate) => candidate.id === input.threadId);
-          const turnId =
-            thread?.session?.status === "running"
-              ? (thread.session.activeTurnId ??
-                (thread.latestTurn?.state === "running" ? thread.latestTurn.turnId : null))
-              : null;
-          if (!turnId) {
-            return yield* Effect.fail(
-              new Error("The visible browser requires an active agent turn."),
-            );
-          }
-          return yield* visibleBrowser.execute({
-            threadId: input.threadId,
-            turnId,
-            action: input.action,
-          });
-        }
-        return yield* browserViaOrchestration({
-          browser,
-          threadId: input.threadId,
-          action: input.action,
-        });
+      executeBrowserAction({
+        browser,
+        readModel: () => readModel,
+        threadId: input.threadId,
+        action: input.action,
+        visibleBrowser,
       }),
     createThread: (input) =>
       createThreadViaOrchestration({
