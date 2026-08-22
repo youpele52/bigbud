@@ -7,6 +7,8 @@ function renderToolbar(options?: {
   title?: string;
   faviconUrl?: string | null;
   annotationActive?: boolean;
+  loading?: boolean;
+  canStopLoading?: boolean;
 }) {
   return renderToStaticMarkup(
     <BrowserToolbar
@@ -21,6 +23,7 @@ function renderToolbar(options?: {
       onGoBack={() => {}}
       onGoForward={() => {}}
       onReload={() => {}}
+      onStopLoading={() => {}}
       onOpenInExternalBrowser={() => {}}
       onAnnotate={() => {}}
       annotationActive={options?.annotationActive ?? false}
@@ -32,6 +35,8 @@ function renderToolbar(options?: {
             : "https://nairaland.com/favicon.ico",
       }}
       historyUrls={[]}
+      loading={options?.loading ?? false}
+      canStopLoading={options?.canStopLoading ?? true}
     />,
   );
 }
@@ -67,7 +72,7 @@ describe("BrowserToolbar page identity", () => {
     const markup = renderToolbar({ inputUrl: "", title: "", faviconUrl: null });
 
     expect(markup).toContain("border-input bg-background");
-    expect(markup).toContain('placeholder="Enter a URL"');
+    expect(markup).toContain('placeholder="Enter a URL or search"');
     expect(markup).not.toContain("text-transparent caret-transparent");
   });
 
@@ -76,5 +81,16 @@ describe("BrowserToolbar page identity", () => {
 
     expect(markup).toContain("text-info-foreground");
     expect(markup).toContain('data-pressed="true"');
+  });
+
+  it("replaces reload with stop loading only while a page is loading", () => {
+    expect(renderToolbar({ loading: true })).toContain('aria-label="Stop loading"');
+    expect(renderToolbar()).toContain('aria-label="Reload"');
+  });
+
+  it("keeps reload available when loading cannot be stopped", () => {
+    expect(renderToolbar({ loading: true, canStopLoading: false })).toContain(
+      'aria-label="Reload"',
+    );
   });
 });

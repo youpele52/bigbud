@@ -1,6 +1,7 @@
 import { memo, useCallback, useState } from "react";
 import {
   ArrowUpRightIcon,
+  BookmarkIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   MousePointer2Icon,
@@ -12,7 +13,11 @@ import { isElectron } from "~/config/env";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { BrowserPageMetadata } from "./BrowserPanel.viewport";
-import { filterBrowserHistory, resolveBrowserHistorySelectionIndex } from "./BrowserPanel.history";
+import {
+  type BrowserVisitRecord,
+  filterBrowserHistory,
+  resolveBrowserHistorySelectionIndex,
+} from "./BrowserPanel.history";
 
 export interface BrowserToolbarProps {
   inputUrl: string;
@@ -26,13 +31,18 @@ export interface BrowserToolbarProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onReload: () => void;
+  onStopLoading: () => void;
   onOpenInExternalBrowser: () => void;
   onAnnotate: () => void;
+  onToggleBookmark?: (() => void) | undefined;
   annotationActive?: boolean;
   pageMetadata: BrowserPageMetadata;
-  historyUrls: string[];
+  historyUrls: BrowserVisitRecord[];
   annotationDisabled?: boolean;
   agentControlled?: boolean;
+  bookmarked?: boolean;
+  loading?: boolean;
+  canStopLoading?: boolean;
 }
 
 function getBrowserFallbackLabel(inputUrl: string): string {
@@ -55,13 +65,18 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   onGoBack,
   onGoForward,
   onReload,
+  onStopLoading,
   onOpenInExternalBrowser,
   onAnnotate,
+  onToggleBookmark,
   annotationActive = false,
   pageMetadata,
   historyUrls,
   annotationDisabled = false,
   agentControlled = false,
+  bookmarked = false,
+  loading = false,
+  canStopLoading = true,
 }: BrowserToolbarProps) {
   const [addressBarHovered, setAddressBarHovered] = useState(false);
   const [urlFocused, setUrlFocused] = useState(false);
@@ -156,15 +171,21 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                 variant="ghost"
                 size="xs"
                 className="shrink-0 px-1.5"
-                onClick={onReload}
+                onClick={loading && canStopLoading ? onStopLoading : onReload}
                 disabled={agentControlled}
-                aria-label="Reload"
+                aria-label={loading && canStopLoading ? "Stop loading" : "Reload"}
               >
-                <RotateCwIcon className="size-4" />
+                {loading && canStopLoading ? (
+                  <XIcon className="size-4" />
+                ) : (
+                  <RotateCwIcon className="size-4" />
+                )}
               </Button>
             }
           />
-          <TooltipPopup side="bottom">Reload</TooltipPopup>
+          <TooltipPopup side="bottom">
+            {loading && canStopLoading ? "Stop loading" : "Reload"}
+          </TooltipPopup>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger
@@ -188,6 +209,26 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           />
           <TooltipPopup side="bottom">
             {annotationActive ? "Exit annotation mode" : annotateTooltip}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 px-1.5"
+                onClick={onToggleBookmark}
+                disabled={!onToggleBookmark || agentControlled}
+                aria-label={bookmarked ? "Remove bookmark" : "Add bookmark"}
+                data-pressed={bookmarked ? "true" : undefined}
+              >
+                <BookmarkIcon className="size-4" fill={bookmarked ? "currentColor" : "none"} />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {bookmarked ? "Remove bookmark" : "Add bookmark"}
           </TooltipPopup>
         </Tooltip>
       </div>
@@ -223,7 +264,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
               inputUrl.trim().length > 0 &&
               "text-transparent caret-transparent placeholder:text-transparent",
           )}
-          placeholder="Enter a URL"
+          placeholder="Enter a URL or search"
         />
         {!urlFocused && inputUrl.trim().length > 0 && (
           <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center justify-center px-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground">

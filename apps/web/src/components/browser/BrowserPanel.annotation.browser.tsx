@@ -1,12 +1,16 @@
 import "../../index.css";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import { waitForBrowserTabAgentHandler } from "./browserAgentControl";
 
 const annotationHarness = vi.hoisted(() => {
   let pendingResolve: ((value: null) => void) | null = null;
+  let pendingCancelResolve: (() => void) | null = null;
+  let cancelError: Error | null = null;
 
   return {
     startAnnotation: vi.fn(
@@ -15,21 +19,40 @@ const annotationHarness = vi.hoisted(() => {
           pendingResolve = resolve;
         }),
     ),
-    cancelAnnotation: vi.fn(async () => {
+    cancelAnnotation: vi.fn(() => {
       pendingResolve?.(null);
       pendingResolve = null;
+      if (cancelError) {
+        return Promise.reject(cancelError);
+      }
+      if (pendingCancelResolve) {
+        return new Promise<void>((resolve) => {
+          pendingCancelResolve = resolve;
+        });
+      }
+      return Promise.resolve();
     }),
+    rejectCancellation(error: Error) {
+      cancelError = error;
+    },
+    stallCancellation() {
+      pendingCancelResolve = () => undefined;
+    },
     resolvePending: (value: null) => {
       pendingResolve?.(value);
       pendingResolve = null;
     },
     reset() {
       pendingResolve = null;
+      pendingCancelResolve = null;
+      cancelError = null;
       this.startAnnotation.mockClear();
       this.cancelAnnotation.mockClear();
     },
   };
 });
+
+const browserHistoryStorageMock = vi.hoisted(() => ({ set: vi.fn() }));
 
 vi.mock("~/config/env", () => ({
   isElectron: true,
@@ -37,7 +60,7 @@ vi.mock("~/config/env", () => ({
 
 vi.mock("~/hooks/useLocalStorage", () => ({
   getLocalStorageItem: vi.fn(() => null),
-  setLocalStorageItem: vi.fn(),
+  setLocalStorageItem: browserHistoryStorageMock.set,
 }));
 
 vi.mock("~/stores/composer", () => ({
@@ -96,6 +119,7 @@ async function waitForAnnotateButton(): Promise<HTMLButtonElement> {
 describe("BrowserPanel annotation UX", () => {
   beforeEach(() => {
     annotationHarness.reset();
+    browserHistoryStorageMock.set.mockClear();
     useBrowserPanelStore.setState({
       open: true,
       tabsById: {
@@ -161,6 +185,179 @@ describe("BrowserPanel annotation UX", () => {
         expect(annotateButton.dataset.pressed).toBeUndefined();
         expect(annotateButton.className).not.toContain("text-info-foreground");
       });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("cleans up annotation mode immediately while browser close cancellation is pending", async () => {
+    annotationHarness.stallCancellation();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      const annotateButton = await waitForAnnotateButton();
+      annotateButton.click();
+      await vi.waitFor(() => expect(annotateButton.dataset.pressed).toBe("true"));
+
+      document
+        .querySelector<HTMLButtonElement>('button[aria-label="Close browser panel"]')
+        ?.click();
+
+      await vi.waitFor(() => {
+        expect(annotationHarness.cancelAnnotation).toHaveBeenCalledTimes(1);
+        expect(annotateButton.dataset.pressed).toBeUndefined();
+      });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("cleans up annotation mode when panel-hide cancellation fails", async () => {
+    annotationHarness.rejectCancellation(new Error("Cancellation failed"));
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      const annotateButton = await waitForAnnotateButton();
+      annotateButton.click();
+      await vi.waitFor(() => expect(annotateButton.dataset.pressed).toBe("true"));
+
+      useBrowserPanelStore.setState({ open: false });
+
+      await vi.waitFor(() => {
+        expect(annotationHarness.cancelAnnotation).toHaveBeenCalledTimes(1);
+        expect(annotateButton.dataset.pressed).toBeUndefined();
+      });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("cleans up annotation mode when its mounted tab becomes hidden", async () => {
+    annotationHarness.stallCancellation();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} visible />, {
+      container: host,
+    });
+
+    try {
+      const annotateButton = await waitForAnnotateButton();
+      annotateButton.click();
+      await vi.waitFor(() => expect(annotateButton.dataset.pressed).toBe("true"));
+
+      await screen.rerender(<BrowserPanel activeThreadId={"thread-1" as never} visible={false} />);
+
+      await vi.waitFor(() => {
+        expect(annotationHarness.cancelAnnotation).toHaveBeenCalledTimes(1);
+        expect(annotateButton.dataset.pressed).toBeUndefined();
+      });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("recovers when second-click cancellation fails", async () => {
+    annotationHarness.rejectCancellation(new Error("Cancellation failed"));
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      const annotateButton = await waitForAnnotateButton();
+      annotateButton.click();
+      await vi.waitFor(() => expect(annotateButton.dataset.pressed).toBe("true"));
+
+      annotateButton.click();
+
+      await vi.waitFor(() => {
+        expect(annotationHarness.cancelAnnotation).toHaveBeenCalledTimes(1);
+        expect(annotateButton.dataset.pressed).toBeUndefined();
+      });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("registers its mounted tab for agent control", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      await expect(waitForBrowserTabAgentHandler("browser")).resolves.toEqual(
+        expect.objectContaining({ execute: expect.any(Function) }),
+      );
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("submits resolved omnibox navigation without recording pre-commit history", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      const input = document.querySelector('input[placeholder="Enter a URL or search"]');
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error("Unable to find browser omnibox.");
+      }
+      await page.getByPlaceholder("Enter a URL or search").fill("example.com:443/docs");
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+      await vi.waitFor(() => {
+        expect(useBrowserPanelStore.getState().tabsById.browser?.url).toBe(
+          "https://example.com/docs",
+        );
+        expect(browserHistoryStorageMock.set).not.toHaveBeenCalled();
+      });
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("adds a bookmark from the accessible toolbar action", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
+      container: host,
+    });
+
+    try {
+      await page.getByRole("button", { name: "Add bookmark" }).click();
+
+      await vi.waitFor(() => {
+        expect(browserHistoryStorageMock.set).toHaveBeenCalledWith(
+          "bigbud:browser-bookmarks:v1",
+          expect.objectContaining({
+            version: 1,
+            bookmarks: [
+              expect.objectContaining({
+                url: "https://example.com/",
+                title: "",
+                createdAt: expect.any(String),
+                updatedAt: expect.any(String),
+              }),
+            ],
+          }),
+          expect.anything(),
+        );
+      });
+      await expect.element(page.getByRole("button", { name: "Remove bookmark" })).toBeVisible();
     } finally {
       await screen.unmount();
     }

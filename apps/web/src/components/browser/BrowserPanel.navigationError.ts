@@ -32,6 +32,15 @@ export function classifyBrowserNavigationError(
   const technicalCode = getErrorCode(failure);
   const code = failure.errorDescription;
 
+  if (code === "ERR_UNSUPPORTED_SCHEME") {
+    return {
+      title: "This URL can't be opened",
+      description: "bigbud can only open HTTP and HTTPS URLs.",
+      suggestions: ["Using a URL that begins with http:// or https://", "Searching for the text"],
+      technicalCode,
+    };
+  }
+
   if (code === "ERR_NAME_NOT_RESOLVED") {
     return {
       title: "This site can't be reached",
