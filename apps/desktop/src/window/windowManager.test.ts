@@ -2,18 +2,47 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createWindow } from "./windowManager";
 
-const { buildFromTemplateMock, closeHostMock, mockWindowInstances, popupMock } = vi.hoisted(() => ({
+const {
+  attachGuestMock,
+  bindBrowserNavigationPolicyMock,
+  buildFromTemplateMock,
+  closeHostMock,
+  initializeBrowserSessionMock,
+  isBrowserGuestMock,
+  initializationOrder,
+  mockWindowInstances,
+  popupMock,
+} = vi.hoisted(() => ({
   popupMock: vi.fn(),
   buildFromTemplateMock: vi.fn(() => ({ popup: vi.fn() })),
+  attachGuestMock: vi.fn(),
+  bindBrowserNavigationPolicyMock: vi.fn(),
   closeHostMock: vi.fn(),
+  initializeBrowserSessionMock: vi.fn(),
+  isBrowserGuestMock: vi.fn(),
+  initializationOrder: [] as string[],
   mockWindowInstances: [] as Array<any>,
 }));
 
 vi.mock("./certificateChallengeManager", () => ({
   certificateChallengeManager: {
-    attachGuest: vi.fn(),
+    attachGuest: attachGuestMock,
     closeHost: closeHostMock,
   },
+}));
+
+vi.mock("./browserNavigationPolicy", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./browserNavigationPolicy")>();
+  return {
+    ...actual,
+    bindBrowserNavigationPolicy: bindBrowserNavigationPolicyMock,
+  };
+});
+
+vi.mock("./browserSession", () => ({
+  BROWSER_SESSION_PARTITION: "persist:bigbud-browser",
+  initializeBrowserSession: initializeBrowserSessionMock,
+  isBrowserGuest: isBrowserGuestMock,
 }));
 
 type MenuTemplateEntry = {
@@ -26,6 +55,7 @@ type MenuTemplateEntry = {
 vi.mock("electron", () => {
   class MockBrowserWindow {
     constructor(public options?: Record<string, unknown>) {
+      initializationOrder.push("window");
       mockWindowInstances.push(this);
     }
 
@@ -40,6 +70,9 @@ vi.mock("electron", () => {
         }
         if (event === "did-attach-webview") {
           this.didAttachWebviewHandler = handler;
+        }
+        if (event === "will-attach-webview") {
+          this.willAttachWebviewHandler = handler;
         }
       }),
       setWindowOpenHandler: vi.fn(),
@@ -62,6 +95,13 @@ vi.mock("electron", () => {
     contextMenuHandler: ((event: { preventDefault: () => void }, params: any) => void) | null =
       null;
     didAttachWebviewHandler: ((event: unknown, guestWebContents: any) => void) | null = null;
+    willAttachWebviewHandler:
+      | ((
+          event: { preventDefault(): void },
+          webPreferences: any,
+          params: { partition?: string; src?: string },
+        ) => void)
+      | null = null;
   }
 
   return {
@@ -98,6 +138,18 @@ function createWindowUnderTest() {
 }
 
 describe("windowManager context menu", () => {
+  it("initializes the browser session before creating windows reopened by activation or single-instance", () => {
+    mockWindowInstances.length = 0;
+    initializationOrder.length = 0;
+    initializeBrowserSessionMock.mockImplementation(() => {
+      initializationOrder.push("browser session");
+    });
+
+    createWindowUnderTest();
+
+    expect(initializationOrder).toEqual(["browser session", "window"]);
+  });
+
   it("passes spellcheck through to webPreferences", () => {
     mockWindowInstances.length = 0;
 
@@ -133,6 +185,9 @@ describe("windowManager context menu", () => {
 
   it("closes the browser context menu on guest left clicks", () => {
     mockWindowInstances.length = 0;
+    attachGuestMock.mockClear();
+    bindBrowserNavigationPolicyMock.mockClear();
+    isBrowserGuestMock.mockReturnValue(true);
     const window = createWindowUnderTest();
     const guestHandlers = new Map<string, (...args: any[]) => void>();
     const guestWebContents = {
@@ -141,6 +196,7 @@ describe("windowManager context menu", () => {
       on: vi.fn((event: string, handler: (...args: any[]) => void) => {
         guestHandlers.set(event, handler);
       }),
+      setWindowOpenHandler: vi.fn(),
     };
 
     window?.didAttachWebviewHandler?.({}, guestWebContents);
@@ -150,10 +206,111 @@ describe("windowManager context menu", () => {
     beforeMouseEvent?.({}, { type: "mouseDown", button: "right" });
 
     expect(window?.webContents.send).toHaveBeenCalledTimes(1);
+    expect(attachGuestMock).toHaveBeenCalledWith(window?.webContents, guestWebContents);
+    expect(bindBrowserNavigationPolicyMock).toHaveBeenCalledWith(guestWebContents);
+    const guestWindowOpenHandler = guestWebContents.setWindowOpenHandler.mock.calls[0]?.[0];
+    expect(guestWindowOpenHandler?.({ url: "https://untrusted.example/popup" })).toEqual({
+      action: "deny",
+    });
     expect(window?.webContents.send).toHaveBeenCalledWith(
       "desktop:menu-action",
       "close-browser-context-menu",
     );
+  });
+
+  it("binds navigation policy only to visible browser guests", () => {
+    mockWindowInstances.length = 0;
+    bindBrowserNavigationPolicyMock.mockClear();
+    isBrowserGuestMock.mockReturnValue(false);
+    const window = createWindowUnderTest();
+    const guestWebContents = { id: 2, on: vi.fn(), once: vi.fn() };
+
+    window?.didAttachWebviewHandler?.({}, guestWebContents);
+
+    expect(bindBrowserNavigationPolicyMock).not.toHaveBeenCalled();
+  });
+
+  it("hardens browser guest privileges without changing PDF or media preferences", () => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const webPreferences = {
+      autoplayPolicy: "no-user-gesture-required",
+      allowRunningInsecureContent: true,
+      contextIsolation: false,
+      nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
+      nodeIntegrationInWorker: true,
+      plugins: true,
+      preload: "/untrusted/preload.js",
+      sandbox: false,
+      webSecurity: false,
+      webviewTag: true,
+    };
+
+    window?.willAttachWebviewHandler?.({ preventDefault: vi.fn() }, webPreferences, {
+      partition: "persist:bigbud-browser",
+      src: "https://example.com",
+    });
+
+    expect(webPreferences).toMatchObject({
+      autoplayPolicy: "no-user-gesture-required",
+      allowRunningInsecureContent: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      nodeIntegrationInWorker: false,
+      plugins: true,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+    });
+    expect(webPreferences).not.toHaveProperty("preload");
+  });
+
+  it("leaves non-browser webview preferences unchanged", () => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const webPreferences = {
+      autoplayPolicy: "no-user-gesture-required",
+      allowRunningInsecureContent: true,
+      contextIsolation: false,
+      nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
+      nodeIntegrationInWorker: true,
+      plugins: true,
+      preload: "/trusted/preload.js",
+      sandbox: false,
+      webSecurity: false,
+      webviewTag: true,
+    };
+    const originalPreferences = { ...webPreferences };
+
+    window?.willAttachWebviewHandler?.({ preventDefault: vi.fn() }, webPreferences, {
+      partition: "persist:other",
+      src: "file:///trusted/local.html",
+    });
+
+    expect(webPreferences).toEqual(originalPreferences);
+  });
+
+  it.each([
+    ["file:///etc/passwd", true],
+    [undefined, false],
+  ])("enforces initial browser guest navigation for %s", (src, blocked) => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const event = { preventDefault: vi.fn() };
+
+    window?.willAttachWebviewHandler?.(
+      event,
+      {},
+      {
+        partition: "persist:bigbud-browser",
+        src,
+      },
+    );
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(blocked ? 1 : 0);
   });
 
   it("forwards native browser navigation commands to the renderer", () => {

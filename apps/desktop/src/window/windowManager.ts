@@ -3,6 +3,13 @@ import * as Path from "node:path";
 import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
+import { hardenBrowserGuestPreferences } from "./browserGuestPreferences";
+import { bindBrowserNavigationPolicy, isAllowedBrowserNavigation } from "./browserNavigationPolicy";
+import {
+  BROWSER_SESSION_PARTITION,
+  initializeBrowserSession,
+  isBrowserGuest,
+} from "./browserSession";
 import { certificateChallengeManager } from "./certificateChallengeManager";
 
 const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
@@ -102,6 +109,7 @@ export interface CreateWindowDeps {
 }
 
 export function createWindow(deps: CreateWindowDeps): BrowserWindow {
+  initializeBrowserSession();
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -217,11 +225,25 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
 
   window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
     certificateChallengeManager.attachGuest(window.webContents, guestWebContents);
+    if (isBrowserGuest(guestWebContents)) {
+      bindBrowserNavigationPolicy(guestWebContents);
+      guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    }
     guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
       if (input.type === "mouseDown" && input.button === "left") {
         window.webContents.send(deps.menuActionChannel, "close-browser-context-menu");
       }
     });
+  });
+
+  window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+    if (params.partition === BROWSER_SESSION_PARTITION) {
+      if (!isAllowedBrowserNavigation(params.src ?? "about:blank", { allowAboutBlank: true })) {
+        event.preventDefault();
+        return;
+      }
+      hardenBrowserGuestPreferences(webPreferences);
+    }
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
