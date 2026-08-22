@@ -15,8 +15,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Floating Assistant
 
 - Double-clicking the floating mascot now opens the main bigbud window without also opening compact chat; single-click still opens compact chat after the double-click window has passed.
-- Added a compact pending-approval card in the Floating Assistant, while preserving the same approve, deny, and action dispatch behavior as the main chat.
+- Refined the compact pending-approval card in the Floating Assistant while preserving the same approve, deny, and action dispatch behavior as the main chat.
 - Aligned compact composer controls with the model picker's typography so the floating chat feels closer to the main composer.
+- Refined the main and floating composer project pickers so Chats supplies four shared Recents, stays pinned at the top of the project list, and each project opens its own recent threads and new-thread action.
+- Added clearer local and remote project icons and selection check marks across composer menus and the sidebar, while tightening the surrounding icon hierarchy.
 
 ### Faster File Search
 
