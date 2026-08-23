@@ -107,8 +107,13 @@ Provider status is checked in real-time and displayed in Settings. Each provider
 bigbud can connect to remote projects over SSH while keeping the app experience local.
 
 - **Remote workspace support** — Open and work in remote projects across Codex, Claude, Copilot, OpenCode, and Pi where supported
+- **Agent-backed by default** — Supported remote workspace operations use the managed Rust agent at `$HOME/.bigbud/agent/bin/current`, including provider shell and file bridges
 - **Safer reconnects** — After restart, saved remote workspaces stay disconnected until SSH access is verified again
 - **Flexible unlock flow** — Reconnect with SSH keys or temporary password-based SSH unlock without saving secrets
+- **Consent-gated setup** — On first use, bigbud explains the remote-agent installation and waits for an explicit Yes before writing anything to the remote host or creating the project
+- **Explicit recovery mode** — Set `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` before starting the server to use the centralized compatibility transport; accepted agent operations never silently retry over SSH
+
+Packaged desktop builds use the managed agent transport by default. `bun dev:desktop` uses `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` automatically so local development does not require a published remote-agent release; set `BIGBUD_REMOTE_AGENT_TRANSPORT=agent` to exercise the managed-agent installer. Packaged builds use the signed `remote-agent-install-source.json` published with the same release. `BIGBUD_REMOTE_AGENT_BINARY` remains available for testing a custom remote path.
 
 ## Computer Use
 

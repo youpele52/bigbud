@@ -25,7 +25,10 @@ import {
   insertRankedEntry,
 } from "./WorkspaceEntriesSearch.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
-import { buildRemoteWorkspaceIndex } from "./WorkspaceEntries.remote.ts";
+import {
+  buildRemoteWorkspaceIndex,
+  listRemoteWorkspaceDirectoryFromSsh,
+} from "./WorkspaceEntries.remote.ts";
 import { filterGitIgnoredPaths, isInsideGitWorkTree } from "./WorkspaceEntries.git.ts";
 import {
   IGNORED_DIRECTORY_NAMES,
@@ -298,11 +301,13 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
     if (!isLocalExecutionTarget(executionTargetId)) {
-      return yield* new WorkspaceEntriesError({
-        cwd: input.cwd,
-        operation: "workspaceEntries.listDirectory",
-        detail: "Remote workspace directory listing is not supported yet.",
-      });
+      return {
+        entries: yield* listRemoteWorkspaceDirectoryFromSsh({
+          cwd: input.cwd,
+          executionTargetId,
+          relativeDir: input.relativePath ?? "",
+        }),
+      };
     }
 
     const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);

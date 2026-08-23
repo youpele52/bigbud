@@ -296,7 +296,23 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fn("runStackedAction")(
     function* (input, options) {
-      yield* assertLocalExecutionTarget("git.runStackedAction", input.cwd, input.executionTargetId);
+      if (!isLocalExecutionTarget(input.executionTargetId)) {
+        if (input.action === "create_pr" || input.action === "commit_push_pr") {
+          return yield* new GitCommandError({
+            operation: "git.runStackedAction",
+            command: input.action,
+            cwd: input.cwd,
+            detail:
+              "Remote stacked actions support commit and push only; pull-request creation remains local.",
+          });
+        }
+      } else {
+        yield* assertLocalExecutionTarget(
+          "git.runStackedAction",
+          input.cwd,
+          input.executionTargetId,
+        );
+      }
       return yield* runStackedActionStep(input, options);
     },
   );

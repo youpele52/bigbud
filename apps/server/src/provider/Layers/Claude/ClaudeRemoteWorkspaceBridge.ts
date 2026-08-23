@@ -3,6 +3,7 @@ import type { Options as ClaudeQueryOptions } from "@anthropic-ai/claude-agent-s
 import { createRemoteWorkspaceMcpBridge } from "../../../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
+import type { ThreadOrchestrationHttpConfig } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 
 const CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 const CLAUDE_REMOTE_WORKSPACE_BUILTIN_TOOLS = [
@@ -29,6 +30,7 @@ export interface ClaudeRemoteWorkspaceBridge {
 
 export async function createClaudeRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
+  httpConfig: ThreadOrchestrationHttpConfig,
 ): Promise<ClaudeRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceMcpBridge(
     workspaceTarget,
@@ -38,6 +40,7 @@ export async function createClaudeRemoteWorkspaceBridge(
       "The actual project files live on the remote host configured for this thread.",
       "",
     ],
+    httpConfig,
   );
 
   return {

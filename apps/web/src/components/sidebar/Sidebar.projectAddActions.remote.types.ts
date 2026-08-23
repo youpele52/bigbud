@@ -36,6 +36,13 @@ export interface SidebarRemoteProjectAddActionsOutput {
         : string,
   ) => void;
   readonly submitRemoteProjectDialog: () => Promise<void>;
+  readonly remoteAgentInstallRequest: {
+    readonly candidate: RemoteProjectDraft;
+    readonly executionTargetId: string;
+    readonly targetLabel: string;
+  } | null;
+  readonly declineRemoteAgentInstall: () => void;
+  readonly completeRemoteAgentInstall: (message: string) => Promise<void>;
   readonly isRemoteProjectUnlockDialogOpen: boolean;
   readonly remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
   readonly remoteProjectUnlockKeyPath: string;

@@ -1,9 +1,7 @@
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { toastManager } from "../components/ui/toast";
 import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
-import { getSshAuthFailureToastTitle } from "../lib/ssh";
 import { readNativeApi } from "../rpc/nativeApi";
 import {
   type RemoteExecutionAuthMode,
@@ -16,8 +14,8 @@ import {
 } from "./useRemoteExecutionAccessGate.shared";
 import {
   ensureBackgroundRemoteExecutionToast,
-  formatRemoteExecutionToastDescription,
   readRemoteExecutionCheck,
+  showRemoteExecutionFailureToast,
   startRemoteExecutionCheck,
 } from "./useRemoteExecutionAccessGate.checks";
 
@@ -56,10 +54,15 @@ async function verifyRemoteExecutionTarget(input: {
     throw new Error("Native API not found.");
   }
 
-  await api.server.verifyExecutionTarget({
+  const result = await api.server.verifyExecutionTarget({
     executionTargetId: input.executionTargetId,
     ...(input.cwd ? { cwd: input.cwd } : {}),
   });
+  if (result.remoteAgent?.status === "install-required") {
+    throw new Error(
+      "The bigbud remote agent is not installed. Edit the remote project to review and approve installation.",
+    );
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -192,13 +195,15 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return false;
       }
 
-      toastManager.add({
-        type: "error",
-        title: input.unavailableTitle ?? "Remote project unavailable",
-        description: formatRemoteExecutionToastDescription(
+      showRemoteExecutionFailureToast({
+        executionTargetId,
+        ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+        check:
           check ??
-            resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote project."),
-        ),
+          resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote project."),
+        retry: () => {
+          void beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false });
+        },
       });
       return false;
     },
@@ -239,10 +244,13 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return false;
       }
       if (check?.status === "error") {
-        toastManager.add({
-          type: "error",
-          title: input.unavailableTitle ?? "Remote project unavailable",
-          description: formatRemoteExecutionToastDescription(check),
+        showRemoteExecutionFailureToast({
+          executionTargetId,
+          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+          check,
+          retry: () => {
+            void beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false });
+          },
         });
         return false;
       }
@@ -260,7 +268,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       }
       return true;
     },
-    [executionTargetChecks, verifiedExecutionTargetIds],
+    [beginRemoteExecutionTargetAccessCheck, executionTargetChecks, verifiedExecutionTargetIds],
   );
 
   const submitRemoteExecutionAuth = useCallback(async () => {
@@ -323,24 +331,28 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       setExecutionTargetCheck(pendingAction.executionTargetId, failureStatus);
       if (failureStatus.status === "auth_required") {
         setRemoteExecutionAuthError(errorMessage);
-        toastManager.add({
-          type: "error",
-          title: getSshAuthFailureToastTitle(remoteExecutionAuthMode),
-          description: formatRemoteExecutionToastDescription(failureStatus),
-        });
         return;
       }
 
       closeAuthDialog();
-      toastManager.add({
-        type: "error",
-        title: pendingAction.unavailableTitle ?? "Remote project unavailable",
-        description: formatRemoteExecutionToastDescription(failureStatus),
+      showRemoteExecutionFailureToast({
+        executionTargetId: pendingAction.executionTargetId,
+        ...(pendingAction.unavailableTitle
+          ? { unavailableTitle: pendingAction.unavailableTitle }
+          : {}),
+        check: failureStatus,
+        retry: () => {
+          void beginRemoteExecutionTargetAccessCheck({
+            ...pendingAction,
+            resumeOnUnlockOnly: false,
+          });
+        },
       });
     } finally {
       setIsAuthenticatingRemoteExecution(false);
     }
   }, [
+    beginRemoteExecutionTargetAccessCheck,
     closeAuthDialog,
     markExecutionTargetVerified,
     pendingAction,

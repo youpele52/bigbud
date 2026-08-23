@@ -209,6 +209,49 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.equal(env.T3CODE_NO_BROWSER, undefined);
         assert.equal(env.T3CODE_HOST, undefined);
         assert.equal(env.VITE_WS_URL, undefined);
+        assert.equal(env.BIGBUD_REMOTE_AGENT_TRANSPORT, "direct-ssh");
+      }),
+    );
+
+    it.effect("preserves an explicit desktop direct-ssh setting", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:desktop",
+          baseEnv: { BIGBUD_REMOTE_AGENT_TRANSPORT: "direct-ssh" },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          authToken: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.BIGBUD_REMOTE_AGENT_TRANSPORT, "direct-ssh");
+      }),
+    );
+
+    it.effect("allows desktop development to opt into the managed agent", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:desktop",
+          baseEnv: { BIGBUD_REMOTE_AGENT_TRANSPORT: "agent" },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          authToken: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.BIGBUD_REMOTE_AGENT_TRANSPORT, "agent");
       }),
     );
   });

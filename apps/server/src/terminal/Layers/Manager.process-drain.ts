@@ -74,6 +74,8 @@ export function trySpawnWith(
         cols: session.cols,
         rows: session.rows,
         env: spawnEnv,
+        executionTargetId: session.executionTargetId,
+        ...(isLocalExecutionTarget(session.executionTargetId) ? {} : { remoteCwd: session.cwd }),
       }),
     );
 

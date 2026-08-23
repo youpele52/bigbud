@@ -8,11 +8,14 @@ import { createCodexRemoteWorkspaceBridge } from "./codexRemoteWorkspaceBridge.t
 
 describe("codexRemoteWorkspaceBridge", () => {
   it("creates a self-contained MCP server and codex config overrides", async () => {
-    const bridge = await createCodexRemoteWorkspaceBridge({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    const bridge = await createCodexRemoteWorkspaceBridge(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+    );
 
     expect(bridge.cwd).toContain("bigbud-codex-remote-workspace-");
     expect(bridge.configArgs).toEqual([
@@ -25,14 +28,16 @@ describe("codexRemoteWorkspaceBridge", () => {
       "-c",
       expect.stringContaining("mcp_servers.bigbud_remote_workspace.cwd="),
     ]);
-    expect(bridge.promptPrefix).toContain("Bigbud remote workspace mode");
+    expect(bridge.promptPrefix).toContain("bigbud remote workspace mode");
     expect(bridge.promptPrefix).toContain("/srv/project");
 
     const serverPath = path.join(bridge.cwd, ".bigbud/remote-workspace-mcp-server.mjs");
     const source = await fs.readFile(serverPath, "utf8");
     expect(source).toContain('name: "read"');
     expect(source).toContain('name: "apply_patch"');
-    expect(source).toContain("root@devbox");
+    expect(source).toContain("remote_workspace_process");
+    expect(source).toContain("token-1");
+    expect(source).not.toContain("root@devbox");
 
     const check = spawnSync(process.execPath, ["--check", serverPath], {
       encoding: "utf8",

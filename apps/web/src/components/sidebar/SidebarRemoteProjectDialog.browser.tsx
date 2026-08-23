@@ -55,6 +55,10 @@ import { useRef } from "react";
 import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteProjectAddActions } from "./Sidebar.projectAddActions.remote";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
+import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
+import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
+
+type CreateProject = (input: CreateProjectInput) => Promise<CreateProjectResult>;
 
 const project = {
   id: ProjectId.makeUnsafe("project-1"),
@@ -65,9 +69,13 @@ const project = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
-function RemoteProjectEditHarness() {
+function RemoteProjectEditHarness({
+  createProject = vi.fn<CreateProject>().mockResolvedValue({ ok: true }),
+}: {
+  createProject?: CreateProject;
+}) {
   const remote = useSidebarRemoteProjectAddActions({
-    createProject: vi.fn(),
+    createProject,
     isAddingProject: false,
   });
   const projectActions = useSidebarProjectActions({
@@ -93,6 +101,9 @@ function RemoteProjectEditHarness() {
       >
         Open project menu
       </button>
+      <button type="button" onClick={remote.openRemoteProjectDialog}>
+        Open add dialog
+      </button>
       <SidebarRemoteProjectDialog
         mode={remote.remoteProjectDialogMode}
         open={remote.isRemoteProjectDialogOpen}
@@ -110,14 +121,20 @@ function RemoteProjectEditHarness() {
           void remote.submitRemoteProjectDialog();
         }}
       />
+      <SidebarRemoteAgentInstallDialog
+        request={remote.remoteAgentInstallRequest}
+        onDecline={remote.declineRemoteAgentInstall}
+        onInstalled={remote.completeRemoteAgentInstall}
+      />
     </>
   );
 }
 
-async function mountHarness() {
+async function mountHarness(createProject?: CreateProject) {
   const host = document.createElement("div");
   document.body.append(host);
-  const screen = await render(<RemoteProjectEditHarness />, { container: host });
+  const props = createProject === undefined ? {} : { createProject };
+  const screen = await render(<RemoteProjectEditHarness {...props} />, { container: host });
   return {
     [Symbol.asyncDispose]: async () => {
       await screen.unmount();
@@ -128,13 +145,17 @@ async function mountHarness() {
 
 function setApi(input: {
   readonly verifyExecutionTarget: ReturnType<typeof vi.fn>;
+  readonly installRemoteAgent?: ReturnType<typeof vi.fn>;
   readonly getSnapshot: ReturnType<typeof vi.fn>;
   readonly dispatchCommand: ReturnType<typeof vi.fn>;
   readonly show: ReturnType<typeof vi.fn>;
 }) {
   nativeApi.current = {
     contextMenu: { show: input.show },
-    server: { verifyExecutionTarget: input.verifyExecutionTarget },
+    server: {
+      verifyExecutionTarget: input.verifyExecutionTarget,
+      installRemoteAgent: input.installRemoteAgent ?? vi.fn(),
+    },
     orchestration: {
       getSnapshot: input.getSnapshot,
       dispatchCommand: input.dispatchCommand,
@@ -213,5 +234,83 @@ describe("SidebarRemoteProjectDialog", () => {
       .element(page.getByText(/The new SSH target cannot access these worktrees/))
       .toBeInTheDocument();
     expect(dispatchCommand).not.toHaveBeenCalled();
+  });
+
+  it("requires consent before installing the agent and leaves no project on No", async () => {
+    const installRemoteAgent = vi.fn();
+    const dispatchCommand = vi.fn();
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget: vi.fn().mockResolvedValue({
+        message: "SSH verified; agent missing",
+        remoteAgent: { status: "install-required" },
+      }),
+      installRemoteAgent,
+      getSnapshot: vi.fn(),
+      dispatchCommand,
+    });
+    await using _ = await mountHarness();
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect.element(page.getByText("Install the bigbud remote agent?")).toBeInTheDocument();
+    await page.getByRole("button", { name: "No, cancel setup" }).click();
+    await expect
+      .element(page.getByText("Install the bigbud remote agent?"))
+      .not.toBeInTheDocument();
+    expect(installRemoteAgent).not.toHaveBeenCalled();
+    expect(dispatchCommand).not.toHaveBeenCalled();
+  });
+
+  it("does not create a new remote project when installation is declined", async () => {
+    const createProject = vi.fn<CreateProject>();
+    setApi({
+      show: vi.fn(),
+      verifyExecutionTarget: vi.fn().mockResolvedValue({
+        message: "SSH verified; agent missing",
+        remoteAgent: { status: "install-required" },
+      }),
+      getSnapshot: vi.fn(),
+      dispatchCommand: vi.fn(),
+    });
+    await using _ = await mountHarness(createProject);
+
+    await page.getByRole("button", { name: "Open add dialog" }).click();
+    await page.getByLabelText("Host or IP").fill("remote.example.com");
+    await page.getByLabelText("Remote project path").fill("/srv/project");
+    await page.getByRole("button", { name: "Add remote project" }).click();
+    await page.getByRole("button", { name: "No, cancel setup" }).click();
+
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it("installs after consent before updating the remote project", async () => {
+    const installRemoteAgent = vi.fn().mockResolvedValue({
+      message: "bigbud remote agent 1.2.3 was installed successfully.",
+      version: "1.2.3",
+    });
+    const dispatchCommand = vi.fn().mockResolvedValue(undefined);
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget: vi.fn().mockResolvedValue({
+        message: "SSH verified; agent missing",
+        remoteAgent: { status: "install-required" },
+      }),
+      installRemoteAgent,
+      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      dispatchCommand,
+    });
+    await using _ = await mountHarness();
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await page.getByRole("button", { name: "Yes, install agent" }).click();
+
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(installRemoteAgent).toHaveBeenCalledOnce();
+    expect(installRemoteAgent.mock.invocationCallOrder[0]).toBeLessThan(
+      dispatchCommand.mock.invocationCallOrder[0]!,
+    );
   });
 });

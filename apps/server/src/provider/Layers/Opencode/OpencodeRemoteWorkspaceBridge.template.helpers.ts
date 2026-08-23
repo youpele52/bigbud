@@ -1,4 +1,4 @@
-import type { RemoteWorkspaceBridgeConfig } from "../../../remote-workspace-bridge/remoteWorkspaceBridge.ts";
+import type { ThreadOrchestrationHttpConfig } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 
 export function renderToolSource(input: {
   readonly description: string;
@@ -21,14 +21,6 @@ export function renderToolSource(input: {
   ].join("\n");
 }
 
-export function renderConfig(input: RemoteWorkspaceBridgeConfig): string {
-  return JSON.stringify(
-    {
-      ...(input.cwd ? { cwd: input.cwd } : {}),
-      destination: input.destination,
-      transportArgs: [...input.transportArgs],
-    },
-    null,
-    2,
-  );
+export function renderConfig(input: ThreadOrchestrationHttpConfig): string {
+  return JSON.stringify(input, null, 2);
 }

@@ -53,6 +53,7 @@ import { GitCoreLive } from "./git/Layers/GitCore";
 import { GitHubCliLive } from "./git/Layers/GitHubCli";
 import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
+import { PtyAdapter } from "./terminal/Services/PTY";
 import { GitManagerLive } from "./git/Layers/GitManager";
 import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
 import { KeybindingsLive } from "./keybindings/keybindings";
@@ -79,9 +80,7 @@ import {
 } from "./provider/providerCapabilities";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
-import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries";
-import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem";
-import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
+import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
@@ -103,6 +102,7 @@ import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
+import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -284,20 +284,25 @@ const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(GitCoreLive),
 );
 
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(PtyAdapterLive));
-
-const WorkspaceLayerLive = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
-);
+const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
+const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
+const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
+const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
+  ? Layer.effect(
+      PtyAdapter,
+      Effect.gen(function* () {
+        const base = yield* PtyAdapter;
+        const resolver = configuredRemoteAgentLayers.ptyResolver;
+        if (!resolver) return base;
+        return makeRemoteAgentPtyAdapter(base, resolver);
+      }),
+    ).pipe(Layer.provide(PtyAdapterLive))
+  : PtyAdapterLive;
+const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
-  Layer.provideMerge(CheckpointingLayerLive),
+  Layer.provideMerge(Layer.mergeAll(RemoteAgentLayerLive, CheckpointingLayerLive)),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ThreadRetentionLayerLive),

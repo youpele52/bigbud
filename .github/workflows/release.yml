@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Desktop And Remote Agent
 
 on:
   push:
@@ -27,6 +27,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
 
       - id: release_meta
         name: Resolve release version
@@ -80,6 +89,15 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Rust format
+        run: cargo fmt --all --check
+
+      - name: Rust lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cargo test --locked --workspace
 
       - name: Test
         run: bun run test
@@ -267,9 +285,77 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  remote_agent_build:
+    name: Build remote agent ${{ matrix.label }}
+    needs: preflight
+    # Build against the oldest supported Ubuntu runner so the glibc dependency
+    # remains usable on older Linux development hosts.
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            strip: strip
+          - label: Linux arm64
+            target: aarch64-unknown-linux-gnu
+            strip: aarch64-linux-gnu-strip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(protobuf-compiler)
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            packages+=(gcc-aarch64-linux-gnu)
+          fi
+          sudo apt-get update
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Build remote agent
+        shell: bash
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: ${{ needs.preflight.outputs.version }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --locked --release --package bigbud-remote-agent --target "${{ matrix.target }}"
+
+      - name: Prepare remote agent release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          target='${{ matrix.target }}'
+          asset_name="bigbud-remote-agent-${version}-${target}"
+          mkdir -p release-publish
+          cp "target/${target}/release/bigbud-remote-agent" "release-publish/${asset_name}"
+          '${{ matrix.strip }}' "release-publish/${asset_name}"
+          chmod 755 "release-publish/${asset_name}"
+          (cd release-publish && sha256sum "${asset_name}" > "${asset_name}.sha256")
+
+      - name: Upload remote agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent-${{ matrix.target }}
+          path: release-publish/*
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: [preflight, build]
+    needs: [preflight, build, remote_agent_build]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -289,6 +375,13 @@ jobs:
           merge-multiple: true
           path: release-assets
 
+      - name: Download all remote agent artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-agent-*
+          merge-multiple: true
+          path: release-assets
+
       - name: Merge macOS updater manifests
         run: |
           node scripts/merge-mac-update-manifests.ts \
@@ -300,6 +393,36 @@ jobs:
         run: |
           cp apps/marketing/public/install.sh release-assets/install.sh
           cp apps/marketing/public/install.ps1 release-assets/install.ps1
+
+      - name: Build signed remote agent manifest
+        env:
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          node scripts/build-remote-agent-release-manifest.ts \
+            --version "$version" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output release-assets/remote-agent-manifest.json \
+            --install-source-output release-assets/remote-agent-install-source.json \
+            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
+            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
+
+      - name: Verify packaged remote agent assets
+        env:
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          node scripts/verify-remote-agent-release-assets.ts \
+            --manifest release-assets/remote-agent-manifest.json \
+            --install-source release-assets/remote-agent-install-source.json \
+            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
+            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -320,4 +443,7 @@ jobs:
             release-assets/latest*.yml
             release-assets/install.sh
             release-assets/install.ps1
+            release-assets/bigbud-remote-agent-*
+            release-assets/remote-agent-install-source.json
+            release-assets/remote-agent-manifest.json
           fail_on_unmatched_files: true

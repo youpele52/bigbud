@@ -24,6 +24,15 @@ jobs:
         with:
           node-version-file: package.json
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
+
       - name: Cache Bun and Turbo
         uses: actions/cache@v5
         with:
@@ -40,11 +49,23 @@ jobs:
       - name: Format
         run: bun run fmt:check
 
+      - name: Rust format
+        run: cargo fmt --all --check
+
+      - name: Rust lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cargo test --locked --workspace
+
+      - name: Rust binary build
+        run: cargo build --locked --workspace --release
+
       - name: Lint
         run: bun run lint
 
-      # - name: Typecheck
-      #   run: bun run typecheck
+      - name: Typecheck
+        run: bun run typecheck
 
       - name: Test
         run: bun run test

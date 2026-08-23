@@ -43,9 +43,14 @@ export function makeCommitStep(
       /** When true, also produce a semantic feature branch name. */
       includeBranch?: boolean;
       filePaths?: readonly string[];
+      executionTargetId?: string;
       modelSelection: ModelSelection;
     }) {
-      const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
+      const context = yield* gitCore.prepareCommitContext(
+        input.cwd,
+        input.filePaths,
+        input.executionTargetId,
+      );
       if (!context) {
         return null;
       }
@@ -98,6 +103,7 @@ export function makeCommitStep(
     filePaths?: readonly string[],
     progressReporter?: GitActionProgressReporter,
     actionId?: string,
+    executionTargetId?: string,
   ) {
     const emit = (event: GitActionProgressPayload) =>
       progressReporter && actionId
@@ -124,6 +130,7 @@ export function makeCommitStep(
         branch,
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
+        ...(executionTargetId ? { executionTargetId } : {}),
         modelSelection,
       });
     }
@@ -184,6 +191,7 @@ export function makeCommitStep(
     const { commitSha } = yield* gitCore.commit(cwd, suggestion.subject, suggestion.body, {
       timeoutMs: COMMIT_TIMEOUT_MS,
       ...(commitProgress ? { progress: commitProgress } : {}),
+      ...(executionTargetId ? { executionTargetId } : {}),
     });
     if (currentHookName !== null) {
       yield* emit({
@@ -207,6 +215,7 @@ export function makeCommitStep(
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
+    executionTargetId?: string,
   ) {
     const suggestion = yield* resolveCommitAndBranchSuggestion({
       cwd,
@@ -214,6 +223,7 @@ export function makeCommitStep(
       ...(commitMessage ? { commitMessage } : {}),
       ...(filePaths ? { filePaths } : {}),
       includeBranch: true,
+      ...(executionTargetId ? { executionTargetId } : {}),
       modelSelection,
     });
     if (!suggestion) {
@@ -224,11 +234,21 @@ export function makeCommitStep(
     }
 
     const preferredBranch = suggestion.branch ?? sanitizeFeatureBranchName(suggestion.subject);
-    const existingBranchNames = yield* gitCore.listLocalBranchNames(cwd);
+    const existingBranchNames = yield* gitCore.listLocalBranchNames(cwd, executionTargetId);
     const resolvedBranch = resolveAutoFeatureBranchName(existingBranchNames, preferredBranch);
 
-    yield* gitCore.createBranch({ cwd, branch: resolvedBranch });
-    yield* Effect.scoped(gitCore.checkoutBranch({ cwd, branch: resolvedBranch }));
+    yield* gitCore.createBranch({
+      cwd,
+      branch: resolvedBranch,
+      ...(executionTargetId ? { executionTargetId } : {}),
+    });
+    yield* Effect.scoped(
+      gitCore.checkoutBranch({
+        cwd,
+        branch: resolvedBranch,
+        ...(executionTargetId ? { executionTargetId } : {}),
+      }),
+    );
 
     return {
       branchStep: { status: "created" as const, name: resolvedBranch },

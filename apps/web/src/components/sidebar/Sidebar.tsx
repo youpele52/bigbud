@@ -23,6 +23,7 @@ import { SidebarActionsSection } from "./Sidebar.actionsSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
+import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
@@ -244,6 +245,12 @@ export default function Sidebar() {
             onSubmit={() => {
               void s.submitRemoteProjectDialog();
             }}
+          />
+
+          <SidebarRemoteAgentInstallDialog
+            request={s.remoteAgentInstallRequest}
+            onDecline={s.declineRemoteAgentInstall}
+            onInstalled={s.completeRemoteAgentInstall}
           />
 
           <SidebarUnlockSshKeyDialog

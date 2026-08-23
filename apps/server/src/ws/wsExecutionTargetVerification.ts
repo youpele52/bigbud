@@ -8,8 +8,15 @@ import {
   ServerVerifyExecutionTargetError,
   type ServerVerifyExecutionTargetInput,
   type ServerVerifyExecutionTargetResult,
+  ServerInstallRemoteAgentError,
+  type ServerInstallRemoteAgentInput,
+  type ServerInstallRemoteAgentResult,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
+import type {
+  RemoteAgentHealth,
+  RemoteAgentInstaller,
+} from "../remote-agent/remoteAgentServerLayer.ts";
 
 import {
   unlockSshExecutionTargetCredential,
@@ -19,8 +26,9 @@ import {
 
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
+  remoteAgentHealth?: RemoteAgentHealth,
 ): Effect.fn.Return<ServerVerifyExecutionTargetResult, ServerVerifyExecutionTargetError> {
-  return yield* Effect.tryPromise({
+  const sshResult = yield* Effect.tryPromise({
     try: () =>
       verifySshExecutionTarget({
         executionTargetId: input.executionTargetId,
@@ -32,6 +40,57 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
         cause,
       }),
   });
+  if (!remoteAgentHealth) {
+    return { ...sshResult, remoteAgent: { status: "disabled" } };
+  }
+
+  const agent = yield* Effect.tryPromise({
+    try: () => remoteAgentHealth.verify(input.executionTargetId),
+    catch: (cause) =>
+      new ServerVerifyExecutionTargetError({
+        message:
+          cause instanceof Error
+            ? `SSH access is available, but the configured remote agent is unavailable: ${cause.message}`
+            : "SSH access is available, but the configured remote agent is unavailable.",
+        cause,
+      }),
+  });
+  if (agent.status === "install-required") {
+    return {
+      ...sshResult,
+      message: `${sshResult.message} The bigbud remote agent must be installed before this remote project can be created.`,
+      remoteAgent: { status: "install-required" },
+    };
+  }
+  return {
+    ...sshResult,
+    message: `${sshResult.message} Remote agent ${agent.agentVersion} is ready.`,
+    remoteAgent: { status: "ready", version: agent.agentVersion },
+  };
+});
+
+export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(function* (
+  input: ServerInstallRemoteAgentInput,
+  remoteAgentInstaller?: RemoteAgentInstaller,
+): Effect.fn.Return<ServerInstallRemoteAgentResult, ServerInstallRemoteAgentError> {
+  if (!remoteAgentInstaller) {
+    return yield* new ServerInstallRemoteAgentError({
+      message: "Remote agent installation is disabled by the server configuration.",
+    });
+  }
+  const result = yield* Effect.tryPromise({
+    try: () => remoteAgentInstaller.install(input.executionTargetId),
+    catch: (cause) =>
+      new ServerInstallRemoteAgentError({
+        message: cause instanceof Error ? cause.message : "Failed to install the remote agent.",
+        cause,
+      }),
+  });
+  return {
+    executionTargetId: input.executionTargetId,
+    version: result.version,
+    message: `bigbud remote agent ${result.version} was installed successfully.`,
+  };
 });
 
 export const unlockSshKeyEffect = Effect.fn("unlockSshKeyEffect")(function* (

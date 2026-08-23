@@ -41,7 +41,9 @@
       "require": "./src/server/rpc.mobile.ts"
     },
     "./server/rpc.retention": "./src/server/rpc.retention.ts",
+    "./server/server": "./src/server/server.ts",
     "./server/threadRetention": "./src/server/threadRetention.ts",
+    "./workspace/project": "./src/workspace/project.ts",
     "./workspace/*": "./src/workspace/*",
     "./server/*": "./src/server/*"
   },

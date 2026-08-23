@@ -189,6 +189,13 @@ export interface SidebarState {
     value: string | ProviderRuntimeLocation,
   ) => void;
   submitRemoteProjectDialog: () => Promise<void>;
+  remoteAgentInstallRequest: {
+    readonly candidate: RemoteProjectDraft;
+    readonly executionTargetId: string;
+    readonly targetLabel: string;
+  } | null;
+  declineRemoteAgentInstall: () => void;
+  completeRemoteAgentInstall: (message: string) => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;
   remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
   remoteProjectUnlockKeyPath: string;

@@ -146,6 +146,9 @@ export interface NativeApi {
     verifyExecutionTarget: (
       input: Server.ServerVerifyExecutionTargetInput,
     ) => Promise<Server.ServerVerifyExecutionTargetResult>;
+    installRemoteAgent: (
+      input: Server.ServerInstallRemoteAgentInput,
+    ) => Promise<Server.ServerInstallRemoteAgentResult>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;

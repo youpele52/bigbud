@@ -12,7 +12,7 @@ import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadReten
 import { CheckpointDiffQuery } from "../checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "../startup/config";
 import { GitCore } from "../git/Services/GitCore";
-import { GitManager } from "../git/Services/GitManager";
+import { GitManager, type GitManagerShape } from "../git/Services/GitManager";
 import { GitStatusBroadcaster } from "../git/Services/GitStatusBroadcaster";
 import { Keybindings } from "../keybindings/keybindings";
 import { Open, resolveAvailableEditors, resolveAvailableTerminals } from "../utils/open";
@@ -33,6 +33,13 @@ import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
 import { WorkspaceEntries } from "../workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "../workspace/Services/WorkspaceFileSystem";
+import { WorkspaceRuntime } from "../workspace-runtime/Services/WorkspaceRuntime.ts";
+import { RemoteAgentShellRunner } from "../remote-agent/remoteAgentShell.ts";
+import {
+  isRemoteAgentConfigured,
+  RemoteAgentHealthService,
+  RemoteAgentInstallerService,
+} from "../remote-agent/remoteAgentServerLayer.ts";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner";
 import { makeDispatchBootstrapThreadCommand } from "./wsBootstrap";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
@@ -47,47 +54,9 @@ import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/PluginRegistry";
+import { makeCoalescedPromiseEffect, toError } from "./wsRpcContext.helpers";
 
-class CliProxyActivationEffectError extends Schema.TaggedErrorClass<CliProxyActivationEffectError>()(
-  "CliProxyActivationEffectError",
-  {
-    detail: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  },
-) {
-  override get message(): string {
-    return this.detail;
-  }
-}
-
-function toError(cause: unknown): CliProxyActivationEffectError {
-  return Schema.is(CliProxyActivationEffectError)(cause)
-    ? cause
-    : new CliProxyActivationEffectError({
-        detail: cause instanceof Error ? cause.message : "CLIProxyAPI activation failed.",
-        cause,
-      });
-}
-
-export function makeCoalescedPromiseEffect<A>(operation: () => Effect.Effect<A, Error>) {
-  let inFlight: Promise<A> | undefined;
-  return () => {
-    if (inFlight) {
-      return Effect.tryPromise({
-        try: () => inFlight!,
-        catch: toError,
-      });
-    }
-    const promise = Effect.runPromise(operation()).finally(() => {
-      inFlight = undefined;
-    });
-    inFlight = promise;
-    return Effect.tryPromise({
-      try: () => promise,
-      catch: toError,
-    });
-  };
-}
+export { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -107,6 +76,9 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const providerRegistry = yield* ProviderRegistry;
   const discoveryRegistry = yield* DiscoveryRegistry;
   const threadShellRunner = yield* ThreadShellRunner;
+  const remoteAgentShellRunner = yield* Effect.serviceOption(RemoteAgentShellRunner);
+  const remoteAgentHealth = yield* Effect.serviceOption(RemoteAgentHealthService);
+  const remoteAgentInstaller = yield* Effect.serviceOption(RemoteAgentInstallerService);
   const config = yield* ServerConfig;
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
@@ -114,6 +86,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const startup = yield* ServerRuntimeStartup;
   const workspaceEntries = yield* WorkspaceEntries;
   const workspaceFileSystem = yield* WorkspaceFileSystem;
+  const workspaceRuntime = yield* WorkspaceRuntime;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
   const projectionNotes = yield* ProjectionNoteRepository;
   const projectionKanban = yield* ProjectionKanbanRepository;
@@ -203,6 +176,9 @@ export const makeWsRpcContext = Effect.gen(function* () {
       Effect.flatMap(() => gitStatusBroadcaster.invalidateRemote(cwd)),
     );
 
+  const gitStatus = (input: Parameters<GitManagerShape["status"]>[0]) =>
+    isLocalExecutionTarget(input.executionTargetId) ? gitManager.status(input) : git.status(input);
+
   const dispatchBootstrapThreadCommand = makeDispatchBootstrapThreadCommand(
     orchestrationEngine,
     git,
@@ -269,6 +245,9 @@ export const makeWsRpcContext = Effect.gen(function* () {
     orchestrationEngine,
     serverSettings,
     threadShellRunner,
+    ...(Option.isSome(remoteAgentShellRunner)
+      ? { remoteThreadShellRunner: remoteAgentShellRunner.value.resolve }
+      : {}),
     serverCommandId,
     toDispatchCommandError,
   });
@@ -293,6 +272,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     const discovery = yield* discoveryRegistry.getCatalog;
     const rawSettings = yield* serverSettings.getSettings;
     const settings = resolveTextGenByProbeStatus(rawSettings, providers);
+    const remoteAgentEnabled = isRemoteAgentConfigured();
 
     const skillBreakdown = new Map<string, number>();
     for (const skill of discovery.skills) {
@@ -323,6 +303,13 @@ export const makeWsRpcContext = Effect.gen(function* () {
         ...(config.otlpMetricsUrl !== undefined ? { otlpMetricsUrl: config.otlpMetricsUrl } : {}),
         otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
       },
+      workspaceCapabilities: {
+        remoteAgent: {
+          enabled: remoteAgentEnabled,
+          supportsDirectoryWatch: remoteAgentEnabled,
+          supportsPtyReattach: remoteAgentEnabled,
+        },
+      },
       settings,
     };
   });
@@ -339,6 +326,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     fileSystem,
     git,
     gitManager,
+    gitStatus,
     gitStatusBroadcaster,
     handoffJobs,
     keybindings,
@@ -369,6 +357,9 @@ export const makeWsRpcContext = Effect.gen(function* () {
     toDispatchCommandError,
     workspaceEntries,
     workspaceFileSystem,
+    workspaceRuntime,
+    remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
+    remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
   };
 });
 

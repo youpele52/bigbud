@@ -76,6 +76,10 @@
       "types": "./src/platform.ts",
       "import": "./src/platform.ts"
     },
+    "./remoteAgentArtifact": {
+      "types": "./src/remoteAgentArtifact.ts",
+      "import": "./src/remoteAgentArtifact.ts"
+    },
     "./DevPorts": {
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"

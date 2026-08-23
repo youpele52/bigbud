@@ -6,11 +6,14 @@ import { createPiRemoteWorkspaceBridge } from "./PiRemoteWorkspaceBridge.ts";
 
 describe("PiRemoteWorkspaceBridge", () => {
   it("creates an extension-backed synthetic cwd for remote workspaces", async () => {
-    const bridge = await createPiRemoteWorkspaceBridge({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    const bridge = await createPiRemoteWorkspaceBridge(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+    );
 
     const extensionPath = `${bridge.cwd}/.bigbud/bigbud-remote-workspace-bridge.ts`;
     expect(bridge.extensionPath).toBe(extensionPath);
@@ -27,7 +30,9 @@ describe("PiRemoteWorkspaceBridge", () => {
     expect(source).toContain('name: "edit"');
     expect(source).toContain('name: "bash"');
     expect(source).toContain("/srv/project");
-    expect(source).toContain("root@devbox");
+    expect(source).toContain("remote_workspace_process");
+    expect(source).toContain("token-1");
+    expect(source).not.toContain("root@devbox");
 
     await bridge.cleanup();
     await expect(fs.access(bridge.cwd)).rejects.toThrow();

@@ -97,10 +97,28 @@ export const ProjectDirectoryChangedEvent = Schema.Struct({
   version: Schema.Literal(1),
   type: Schema.Literal("directoryChanged"),
   relativePath: Schema.String,
+  generation: Schema.optional(Schema.Number),
 });
 export type ProjectDirectoryChangedEvent = typeof ProjectDirectoryChangedEvent.Type;
 
-export const ProjectDirectoryWatchEvent = Schema.Union([ProjectDirectoryChangedEvent]);
+export const ProjectDirectoryRescanRequiredEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("rescanRequired"),
+  relativePath: Schema.String,
+  generation: Schema.Number,
+  reason: Schema.Union([
+    Schema.Literal("transportLost"),
+    Schema.Literal("agentRestarted"),
+    Schema.Literal("leaseExpired"),
+    Schema.Literal("overflow"),
+  ]),
+});
+export type ProjectDirectoryRescanRequiredEvent = typeof ProjectDirectoryRescanRequiredEvent.Type;
+
+export const ProjectDirectoryWatchEvent = Schema.Union([
+  ProjectDirectoryChangedEvent,
+  ProjectDirectoryRescanRequiredEvent,
+]);
 export type ProjectDirectoryWatchEvent = typeof ProjectDirectoryWatchEvent.Type;
 
 export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectDirectoryWatchError>()(
@@ -139,6 +157,8 @@ export const ProjectWriteFileInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
+  /** SHA-256 of the version the caller read before editing, when known. */
+  expectedSha256: Schema.optional(Schema.String),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 

@@ -11,6 +11,8 @@ import { GitCoreLive, makeGitCore } from "./GitCore.ts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-core-test-" });
 
+export const GitCoreDependenciesLayer = Layer.provideMerge(ServerConfigLayer, NodeServices.layer);
+
 const GitCoreTestLayer = GitCoreLive.pipe(
   Layer.provide(ServerConfigLayer),
   Layer.provide(NodeServices.layer),
@@ -99,9 +101,16 @@ export function runShellCommand(input: {
 }
 
 export const makeIsolatedGitCore = (executeOverride: GitCoreShape["execute"]) =>
-  makeGitCore({ executeOverride }).pipe(
-    Effect.provide(Layer.provideMerge(ServerConfigLayer, NodeServices.layer)),
-  );
+  makeGitCore({ executeOverride }).pipe(Effect.provide(GitCoreDependenciesLayer));
+
+export const makeIsolatedGitCoreWithRemote = (input: {
+  readonly execute: GitCoreShape["execute"];
+  readonly remoteExecute: GitCoreShape["execute"];
+}) =>
+  makeGitCore({
+    executeOverride: input.execute,
+    remoteExecuteOverride: input.remoteExecute,
+  }).pipe(Effect.provide(GitCoreDependenciesLayer));
 
 /** Create a repo with an initial commit so branches work. */
 export function initRepoWithCommit(

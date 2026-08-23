@@ -48,7 +48,7 @@ function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command:
   const transportTarget = resolveToolTransportTarget(workspaceTarget);
   return {
     name: "bash",
-    description: "Run a shell command in the remote workspace over SSH.",
+    description: "Run a shell command in the remote workspace through bigbud.",
     parameters: {
       type: "object",
       properties: {
@@ -109,8 +109,8 @@ export async function createCopilotRemoteWorkspaceBridge(
       systemMessage: {
         mode: "append",
         content: [
-          "Bigbud remote workspace mode is enabled.",
-          `The working directory for repository work is ${bridge.initialCwd} on the remote host ${bridge.destination}.`,
+          "bigbud remote workspace mode is enabled.",
+          `The working directory for repository work is ${bridge.initialCwd} on the configured remote host.`,
           "Use the normal file and edit tools; they are backed by the remote workspace session filesystem.",
           "Use the bash tool for shell commands in the remote workspace.",
           "Do not rely on local filesystem or local shell context for repository work in this session.",

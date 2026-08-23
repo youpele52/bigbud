@@ -8,11 +8,14 @@ import { createClaudeRemoteWorkspaceBridge } from "./ClaudeRemoteWorkspaceBridge
 
 describe("ClaudeRemoteWorkspaceBridge", () => {
   it("creates a self-contained MCP bridge with a remote-safe builtin tool list", async () => {
-    const bridge = await createClaudeRemoteWorkspaceBridge({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    const bridge = await createClaudeRemoteWorkspaceBridge(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+    );
 
     expect(bridge.cwd).toContain("bigbud-claude-remote-workspace-");
     expect(bridge.queryOptions.tools).toEqual([
@@ -35,7 +38,9 @@ describe("ClaudeRemoteWorkspaceBridge", () => {
     const source = await fs.readFile(serverPath, "utf8");
     expect(source).toContain('name: "read"');
     expect(source).toContain('name: "apply_patch"');
-    expect(source).toContain("root@devbox");
+    expect(source).toContain("remote_workspace_process");
+    expect(source).toContain("token-1");
+    expect(source).not.toContain("root@devbox");
 
     const check = spawnSync(process.execPath, ["--check", serverPath], {
       encoding: "utf8",
