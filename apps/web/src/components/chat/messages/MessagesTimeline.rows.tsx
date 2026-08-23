@@ -95,13 +95,15 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                       {groupLabel} ({groupedEntries.length})
                     </p>
                     {hasOverflow && (
-                      <button
+                      <Button
                         type="button"
-                        className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
+                        size="xs"
+                        variant="muted-outline"
+                        className="font-normal text-xs"
                         onClick={() => onToggleWorkGroup(groupId)}
                       >
                         {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}

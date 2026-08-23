@@ -35,7 +35,11 @@ export function ThreadBehaviorSettingsRows() {
               }
             }}
           >
-            <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-full sm:w-44"
+              aria-label="Default thread mode"
+            >
               <SelectValue>
                 {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
               </SelectValue>

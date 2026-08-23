@@ -195,6 +195,7 @@ export function ThreadRetentionSettingsSection() {
               }}
             >
               <SelectTrigger
+                variant="muted-outline"
                 ref={policyTriggerRef}
                 className="w-full"
                 aria-label="Automatic thread cleanup period"
@@ -218,9 +219,9 @@ export function ThreadRetentionSettingsSection() {
           control={
             <Button
               ref={actionButtonRef}
-              variant="destructive-outline"
+              variant="muted-outline"
               size="sm"
-              className="w-full"
+              className="w-full font-normal text-xs text-destructive [:hover,:active,[data-pressed]]:text-destructive"
               disabled={busy}
               onClick={() => {
                 void requestPreview("manual", manualPolicy);
@@ -282,6 +283,7 @@ export function ThreadRetentionSettingsSection() {
                       }}
                     >
                       <SelectTrigger
+                        variant="muted-outline"
                         aria-label="One-off cleanup period"
                         className="w-full sm:w-1/3"
                       >

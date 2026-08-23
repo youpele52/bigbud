@@ -244,7 +244,7 @@ export function MobileRemoteControlSettingsSection() {
               </Button>
               <Button
                 size="sm"
-                variant="outline"
+                variant="muted-outline"
                 disabled={disableTailscaleMutation.isPending}
                 onClick={() => disableTailscaleMutation.mutate()}
               >
@@ -330,7 +330,7 @@ export function MobileRemoteControlSettingsSection() {
                     </p>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="muted-outline"
                       onClick={() => copyToClipboard(pairingLink)}
                     >
                       {isCopied ? "Copied!" : "Copy link"}
@@ -370,7 +370,7 @@ export function MobileRemoteControlSettingsSection() {
                 </div>
                 <Button
                   size="xs"
-                  variant="outline"
+                  variant="muted-outline"
                   disabled={session.revokedAt !== null || revokeSessionMutation.isPending}
                   onClick={() => revokeSessionMutation.mutate(session.sessionId)}
                 >

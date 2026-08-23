@@ -102,7 +102,7 @@ export function SttSettingsSection() {
           <div className="flex shrink-0 gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="muted-outline"
               className="shrink-0"
               disabled={!draftKey.trim() || isVerifying}
               onClick={() => void handleVerify()}
@@ -141,7 +141,7 @@ export function SttSettingsSection() {
             value={selectedModel}
             onValueChange={(value) => setSelectedModel(value as SttModel)}
           >
-            <SelectTrigger className="w-52">
+            <SelectTrigger variant="muted-outline" className="w-52">
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>

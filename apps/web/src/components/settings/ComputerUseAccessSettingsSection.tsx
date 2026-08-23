@@ -214,7 +214,7 @@ export function ComputerUseAccessSettingsSection() {
         control={
           <Button
             size="xs"
-            variant="outline"
+            variant="muted-outline"
             disabled={
               !settings.computerUseEnabled ||
               requestPermissionsMutation.isPending ||
@@ -313,7 +313,7 @@ export function ComputerUseAccessSettingsSection() {
           <>
             <Button
               size="xs"
-              variant="outline"
+              variant="muted-outline"
               disabled={doctorMutation.isPending || installMutation.isPending}
               onClick={() => doctorMutation.mutate()}
             >

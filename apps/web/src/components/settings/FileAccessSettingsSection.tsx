@@ -95,7 +95,7 @@ export function FileAccessSettingsSection() {
         }
         control={
           <Button
-            variant="outline"
+            variant="muted-outline"
             size="sm"
             className="w-full justify-start gap-1.5 sm:w-64"
             aria-label="Default chat folder"
@@ -120,7 +120,11 @@ export function FileAccessSettingsSection() {
               }
             }}
           >
-            <SelectTrigger className="w-full sm:w-56" aria-label="File access permission level">
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-full sm:w-56"
+              aria-label="File access permission level"
+            >
               <SelectValue>
                 {PERMISSION_LEVEL_OPTIONS.find(
                   (o) => o.value === settings.fileAccessPermissionLevel,
@@ -170,7 +174,7 @@ export function FileAccessSettingsSection() {
         description="Clear the saved preference so bigbud asks you again before using expanded file access."
         control={
           <Button
-            variant="outline"
+            variant="muted-outline"
             size="sm"
             className="gap-1.5 text-xs"
             disabled={isResetting}

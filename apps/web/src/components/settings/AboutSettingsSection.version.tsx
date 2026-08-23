@@ -140,7 +140,7 @@ function AboutVersionUpdateRow() {
             render={
               <Button
                 size="xs"
-                variant={action === "install" ? "default" : "outline"}
+                variant={action === "install" ? "default" : "muted-outline"}
                 disabled={buttonDisabled}
                 onClick={handleButtonClick}
               >
@@ -184,7 +184,7 @@ function ManualInstallRow() {
       control={
         <Button
           size="xs"
-          variant="outline"
+          variant="muted-outline"
           onClick={() => copyToClipboard(command)}
           aria-label={isCopied ? "Copied" : "Copy install command"}
         >

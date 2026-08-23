@@ -250,7 +250,7 @@ function AssistantTurnDiffCard({
           <Button
             type="button"
             size="xs"
-            variant="outline"
+            variant="muted-outline"
             data-scroll-anchor-ignore
             onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
           >
@@ -259,7 +259,7 @@ function AssistantTurnDiffCard({
           <Button
             type="button"
             size="xs"
-            variant="outline"
+            variant="muted-outline"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
             View diff

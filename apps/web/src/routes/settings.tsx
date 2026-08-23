@@ -61,7 +61,7 @@ function SettingsContentLayout() {
                 {showRestoreDefaults && (
                   <Button
                     size="xs"
-                    variant="outline"
+                    variant="muted-outline"
                     disabled={changedSettingLabels.length === 0}
                     onClick={() => void restoreDefaults()}
                   >
@@ -86,7 +86,7 @@ function SettingsContentLayout() {
               {showRestoreDefaults && (
                 <Button
                   size="xs"
-                  variant="outline"
+                  variant="muted-outline"
                   disabled={changedSettingLabels.length === 0}
                   onClick={() => void restoreDefaults()}
                 >

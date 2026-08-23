@@ -118,7 +118,7 @@ export function ProviderCard({
             onActivateCliProxy ? (
               <Button
                 size="sm"
-                variant="outline"
+                variant="muted-outline"
                 className="mt-2 h-7 px-2 text-xs"
                 disabled={isActivatingCliProxy}
                 onClick={onActivateCliProxy}
@@ -177,7 +177,7 @@ export function ProviderCard({
                 {card.setupUrl ? (
                   <Button
                     className="mt-2 h-7 gap-1 px-2 text-xs"
-                    variant="outline"
+                    variant="muted-outline"
                     onClick={onOpenSetupGuide}
                   >
                     {providerDisplayName} setup guide
@@ -296,7 +296,7 @@ export function ProviderCard({
                       placeholder={card.customModelPlaceholder}
                       spellCheck={false}
                     />
-                    <Button className="shrink-0" variant="outline" onClick={onAddCustomModel}>
+                    <Button className="shrink-0" variant="muted-outline" onClick={onAddCustomModel}>
                       <PlusIcon className="size-3.5" />
                       Add
                     </Button>
