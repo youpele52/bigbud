@@ -1,4 +1,5 @@
 import { XIcon } from "lucide-react";
+import type { MessageId, OrchestrationTurnControlOperation } from "@bigbud/contracts";
 
 import { Button } from "../../ui/button";
 import type { QueuedPrompt } from "../view/ChatView.promptQueue.logic";
@@ -9,6 +10,10 @@ interface ComposerPromptQueueProps {
   canSendNow: boolean;
   onRemovePrompt: (id: string) => void;
   onInterruptAndFlush: () => void;
+  canSteer: boolean;
+  onSteer: () => void;
+  nativeSteer: boolean;
+  controlOperation: OrchestrationTurnControlOperation | null;
 }
 
 export function ComposerPromptQueue({
@@ -16,36 +21,59 @@ export function ComposerPromptQueue({
   canSendNow,
   onRemovePrompt,
   onInterruptAndFlush,
+  canSteer,
+  onSteer,
+  nativeSteer,
+  controlOperation,
 }: ComposerPromptQueueProps) {
   if (queuedPrompts.length === 0) {
     return null;
   }
+  const controlPending =
+    controlOperation !== null &&
+    !["completed", "failed", "superseded", "cancelled"].includes(controlOperation.state);
 
   return (
     <div className="border-b border-border/65 px-3 py-2 sm:px-4">
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="text-muted-foreground text-xs">
-          Queued {queuedPrompts.length}/{MAX_QUEUED_PROMPTS}
+          {controlOperation
+            ? controlOperation.state === "ambiguous"
+              ? "Steer delivery uncertain · prompts held"
+              : controlOperation.strategy === "interrupt-continue"
+                ? "Interrupting before continuation"
+                : `Turn control: ${controlOperation.state}`
+            : `Queued ${queuedPrompts.length}/${MAX_QUEUED_PROMPTS}`}
         </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 rounded-full px-2.5 text-xs"
-          disabled={!canSendNow}
-          onClick={onInterruptAndFlush}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path
-              d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Send now
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {canSteer ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-full px-2.5 text-xs"
+              onClick={onSteer}
+              disabled={controlPending}
+              title={
+                nativeSteer
+                  ? undefined
+                  : "This provider stops the current response before applying queued instructions."
+              }
+            >
+              Steer
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 rounded-full px-2.5 text-xs"
+            disabled={!canSendNow || controlPending}
+            onClick={onInterruptAndFlush}
+          >
+            Stop &amp; send
+          </Button>
+        </div>
       </div>
       <div className="mt-2 flex max-h-24 flex-col gap-1 overflow-y-auto">
         {queuedPrompts.map((prompt, index) => (
@@ -56,6 +84,10 @@ export function ComposerPromptQueue({
               type="button"
               className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => onRemovePrompt(prompt.id)}
+              disabled={
+                controlPending &&
+                controlOperation?.reservedPromptIds.includes(prompt.id as MessageId) === true
+              }
               aria-label={`Remove queued prompt ${index + 1}`}
             >
               <XIcon className="size-3.5" />
