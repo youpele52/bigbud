@@ -127,6 +127,10 @@ export interface SidebarState {
   setShowAllFavourites: (showAll: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
+  areProjectsExpanded: boolean;
+  setAreProjectsExpanded: (expanded: boolean) => void;
+  areRemoteProjectsExpanded: boolean;
+  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;

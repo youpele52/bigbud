@@ -1,6 +1,8 @@
 import { Chatting01Icon, Comment03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ChevronRightIcon, SquarePenIcon } from "lucide-react";
+import { autoAnimate } from "@formkit/auto-animate";
+import { SquarePenIcon } from "lucide-react";
+import { useCallback } from "react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
@@ -9,7 +11,6 @@ import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import {
   SidebarGroup,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
@@ -54,6 +55,9 @@ export function SidebarChatsSection({
   chatsSortOrder = "updated_at",
   onChatsSortOrderChange,
 }: SidebarChatsSectionProps) {
+  const attachChatsContentRef = useCallback((node: HTMLElement | null) => {
+    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
+  }, []);
   const hasHiddenChats =
     collapsedHiddenChatCount === null
       ? renderedChats.length > RECENT_CHAT_INITIAL_VISIBLE_COUNT || hasMoreChats
@@ -66,6 +70,8 @@ export function SidebarChatsSection({
   return (
     <SidebarGroup className="px-2 py-2">
       <SidebarSectionLabel
+        isExpanded={isExpanded}
+        onExpandedChange={onExpandedChange}
         actions={
           <>
             {onChatsSortOrderChange && (
@@ -106,18 +112,10 @@ export function SidebarChatsSection({
         </span>
       </SidebarSectionLabel>
 
-      <SidebarMenu>
-        <div className="group/project-header relative">
-          <SidebarMenuButton
-            render={<div />}
-            size="sm"
-            className="gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
-            onClick={() => onExpandedChange(!isExpanded)}
-          >
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
-            >
+      <div ref={attachChatsContentRef}>
+        {isExpanded ? (
+          <SidebarMenu className="ml-1 mr-1 gap-0.5 overflow-hidden pl-1 pr-1">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-foreground/90">
               <HugeiconsIcon
                 aria-hidden="true"
                 className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
@@ -125,108 +123,100 @@ export function SidebarChatsSection({
                 size={12}
                 strokeWidth={1.5}
               />
-              <span className="truncate text-xs font-medium text-foreground/90">Recents</span>
-              <ChevronRightIcon
-                className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-all duration-150 ${
-                  isExpanded
-                    ? "translate-x-0 rotate-90 opacity-100"
-                    : "translate-x-1 opacity-0 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100"
-                }`}
-              />
-            </button>
-          </SidebarMenuButton>
-        </div>
+              <span>Recents</span>
+            </div>
+            {/* Thread list - shown when expanded */}
+            {isExpanded && (
+              <SidebarMenuSub className="my-0 ml-2 mr-1 gap-0.5 overflow-hidden pl-3 pr-1 py-0">
+                {renderedChats.length === 0 ? (
+                  <div className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60">
+                    <span>No chats yet</span>
+                  </div>
+                ) : (
+                  <>
+                    {visibleChats.map((entry) => (
+                      <SidebarThreadRow
+                        key={entry.threadId}
+                        threadId={entry.threadId}
+                        orderedProjectThreadIds={entry.orderedThreadIds}
+                        routeThreadId={sharedProjectItemProps.routeThreadId}
+                        selectedThreadIds={sharedProjectItemProps.selectedThreadIds}
+                        showThreadJumpHints={sharedProjectItemProps.showThreadJumpHints}
+                        jumpLabel={
+                          sharedProjectItemProps.threadJumpLabelById.get(entry.threadId) ?? null
+                        }
+                        renamingThreadId={sharedProjectItemProps.renamingThreadId}
+                        renamingTitle={sharedProjectItemProps.renamingTitle}
+                        setRenamingTitle={sharedProjectItemProps.setRenamingTitle}
+                        onRenamingInputMount={sharedProjectItemProps.onRenamingInputMount}
+                        hasRenameCommitted={sharedProjectItemProps.hasRenameCommitted}
+                        markRenameCommitted={sharedProjectItemProps.markRenameCommitted}
+                        handleThreadClick={sharedProjectItemProps.handleThreadClick}
+                        navigateToThread={sharedProjectItemProps.navigateToThread}
+                        handleMultiSelectContextMenu={
+                          sharedProjectItemProps.handleMultiSelectContextMenu
+                        }
+                        handleThreadContextMenu={sharedProjectItemProps.handleThreadContextMenu}
+                        clearSelection={sharedProjectItemProps.clearSelection}
+                        commitRename={sharedProjectItemProps.commitRename}
+                        cancelRename={sharedProjectItemProps.cancelRename}
+                        branchThread={sharedProjectItemProps.branchThread}
+                        favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
+                        automationThreadIds={sharedProjectItemProps.automationThreadIds}
+                        toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
+                        requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
+                        openPrLink={sharedProjectItemProps.openPrLink}
+                        pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}
+                      />
+                    ))}
 
-        {/* Thread list - shown when expanded */}
-        {isExpanded && (
-          <SidebarMenuSub className="my-0 ml-2 mr-1 gap-0.5 overflow-hidden pl-3 pr-1 py-0">
-            {renderedChats.length === 0 ? (
-              <div className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60">
-                <span>No chats yet</span>
-              </div>
-            ) : (
-              <>
-                {visibleChats.map((entry) => (
-                  <SidebarThreadRow
-                    key={entry.threadId}
-                    threadId={entry.threadId}
-                    orderedProjectThreadIds={entry.orderedThreadIds}
-                    routeThreadId={sharedProjectItemProps.routeThreadId}
-                    selectedThreadIds={sharedProjectItemProps.selectedThreadIds}
-                    showThreadJumpHints={sharedProjectItemProps.showThreadJumpHints}
-                    jumpLabel={
-                      sharedProjectItemProps.threadJumpLabelById.get(entry.threadId) ?? null
-                    }
-                    renamingThreadId={sharedProjectItemProps.renamingThreadId}
-                    renamingTitle={sharedProjectItemProps.renamingTitle}
-                    setRenamingTitle={sharedProjectItemProps.setRenamingTitle}
-                    onRenamingInputMount={sharedProjectItemProps.onRenamingInputMount}
-                    hasRenameCommitted={sharedProjectItemProps.hasRenameCommitted}
-                    markRenameCommitted={sharedProjectItemProps.markRenameCommitted}
-                    handleThreadClick={sharedProjectItemProps.handleThreadClick}
-                    navigateToThread={sharedProjectItemProps.navigateToThread}
-                    handleMultiSelectContextMenu={
-                      sharedProjectItemProps.handleMultiSelectContextMenu
-                    }
-                    handleThreadContextMenu={sharedProjectItemProps.handleThreadContextMenu}
-                    clearSelection={sharedProjectItemProps.clearSelection}
-                    commitRename={sharedProjectItemProps.commitRename}
-                    cancelRename={sharedProjectItemProps.cancelRename}
-                    branchThread={sharedProjectItemProps.branchThread}
-                    favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
-                    automationThreadIds={sharedProjectItemProps.automationThreadIds}
-                    toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
-                    requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
-                    openPrLink={sharedProjectItemProps.openPrLink}
-                    pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}
-                  />
-                ))}
-
-                {hasHiddenChats && (
-                  <SidebarMenuSubItem className="w-full">
-                    <SidebarMenuSubButton
-                      render={<button type="button" disabled={isLoadingMoreChats} />}
-                      data-thread-selection-safe
-                      size="sm"
-                      className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                      onClick={() => onShowAllChange(!showAll)}
-                    >
-                      <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <span>
-                          {showAll
-                            ? "Show less"
-                            : collapsedHiddenChatCount === null
-                              ? `See more (${hiddenCount})`
-                              : `See more (${collapsedHiddenChatCount})`}
-                        </span>
-                      </span>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
+                    {hasHiddenChats && (
+                      <SidebarMenuSubItem className="w-full">
+                        <SidebarMenuSubButton
+                          render={<button type="button" disabled={isLoadingMoreChats} />}
+                          data-thread-selection-safe
+                          size="sm"
+                          className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                          onClick={() => onShowAllChange(!showAll)}
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span>
+                              {showAll
+                                ? "Show less"
+                                : collapsedHiddenChatCount === null
+                                  ? `See more (${hiddenCount})`
+                                  : `See more (${collapsedHiddenChatCount})`}
+                            </span>
+                          </span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    )}
+                    {showAll && hasMoreChats && (
+                      <SidebarMenuSubItem className="w-full">
+                        <SidebarMenuSubButton
+                          render={<button type="button" disabled={isLoadingMoreChats} />}
+                          data-thread-selection-safe
+                          size="sm"
+                          className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                          onClick={onLoadMoreChats}
+                        >
+                          <span>
+                            {isLoadingMoreChats
+                              ? "Loading..."
+                              : unloadedChatCount === null
+                                ? "Load more"
+                                : `Load more (${unloadedChatCount})`}
+                          </span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    )}
+                  </>
                 )}
-                {showAll && hasMoreChats && (
-                  <SidebarMenuSubItem className="w-full">
-                    <SidebarMenuSubButton
-                      render={<button type="button" disabled={isLoadingMoreChats} />}
-                      data-thread-selection-safe
-                      size="sm"
-                      className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                      onClick={onLoadMoreChats}
-                    >
-                      <span>
-                        {isLoadingMoreChats
-                          ? "Loading..."
-                          : unloadedChatCount === null
-                            ? "Load more"
-                            : `Load more (${unloadedChatCount})`}
-                      </span>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                )}
-              </>
+              </SidebarMenuSub>
             )}
-          </SidebarMenuSub>
-        )}
-      </SidebarMenu>
+          </SidebarMenu>
+        ) : null}
+      </div>
     </SidebarGroup>
   );
 }

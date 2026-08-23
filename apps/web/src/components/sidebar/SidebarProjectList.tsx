@@ -24,6 +24,8 @@ import {
   loadMoreProjectCatalog,
 } from "../../routes/-__root.bounded-bootstrap";
 
+export const SIDEBAR_PROJECT_LIST_CLASS_NAME = "ml-1 mr-1 gap-0.5 overflow-hidden pl-1 pr-1";
+
 const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
@@ -105,7 +107,7 @@ export function SidebarProjectList({
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <SidebarMenu>
+          <SidebarMenu className={SIDEBAR_PROJECT_LIST_CLASS_NAME}>
             <SortableContext
               items={renderedProjects.map((rp) => rp.project.id)}
               strategy={verticalListSortingStrategy}
@@ -119,7 +121,7 @@ export function SidebarProjectList({
           </SidebarMenu>
         </DndContext>
       ) : (
-        <SidebarMenu ref={attachAutoAnimateRef}>
+        <SidebarMenu ref={attachAutoAnimateRef} className={SIDEBAR_PROJECT_LIST_CLASS_NAME}>
           {renderedProjects.map((rp) => (
             <SidebarMenuItem key={rp.project.id} className="rounded-md">
               {renderProjectItem(rp, null)}

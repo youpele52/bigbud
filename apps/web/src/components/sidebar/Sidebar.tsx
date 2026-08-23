@@ -139,6 +139,10 @@ export default function Sidebar() {
                   onAdd={s.handleAddProject}
                   onCancelAdd={s.cancelAddProject}
                   renderedProjects={s.renderedProjects}
+                  isExpanded={s.areProjectsExpanded}
+                  onExpandedChange={s.setAreProjectsExpanded}
+                  isRemoteProjectsExpanded={s.areRemoteProjectsExpanded}
+                  onRemoteProjectsExpandedChange={s.setAreRemoteProjectsExpanded}
                   isManualProjectSorting={s.isManualProjectSorting}
                   onDragStart={s.handleProjectDragStart}
                   onDragEnd={s.handleProjectDragEnd}

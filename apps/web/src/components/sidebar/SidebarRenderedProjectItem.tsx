@@ -24,6 +24,7 @@ import {
   type SidebarRenderedProjectItemProps,
 } from "./SidebarRenderedProjectItem.types";
 import { SidebarRemoteProjectStatusIcon } from "./SidebarRemoteProjectStatusIcon";
+import { SidebarProjectChevron } from "./SidebarProjectChevron";
 
 export function SidebarRenderedProjectItem({
   dragHandleProps,
@@ -259,9 +260,7 @@ export function SidebarRenderedProjectItem({
                     {project.name}
                   </span>
                   {project.expanded ? (
-                    <ChevronRightIcon
-                      className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 rotate-90 text-muted-foreground/70 transition-all duration-150`}
-                    />
+                    <SidebarProjectChevron expanded />
                   ) : projectStatus ? (
                     <span
                       aria-hidden="true"
@@ -280,9 +279,7 @@ export function SidebarRenderedProjectItem({
                       />
                     </span>
                   ) : (
-                    <ChevronRightIcon
-                      className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 translate-x-1 text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100`}
-                    />
+                    <SidebarProjectChevron expanded={false} />
                   )}
                 </span>
               )}
