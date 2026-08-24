@@ -4,6 +4,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { canMoveFileHistory } from "../../stores/files/filesPanel.history";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
+import { getParentDirectoryPath } from "./FilesPanel.logic";
 
 interface FilesPanelHistoryInput {
   readonly workspaceKey: string;
@@ -83,11 +84,6 @@ export function useFilesPanelScrollPersistence(workspaceKey: string, path: strin
   );
 }
 
-function parentDirectory(path: string): string {
-  const separatorIndex = path.lastIndexOf("/");
-  return separatorIndex < 0 ? "" : path.slice(0, separatorIndex);
-}
-
 export function isConfirmedMissingFileError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /\b(?:ENOENT|ENOTDIR)\b|no such file or directory/i.test(message);
@@ -102,10 +98,11 @@ async function checkFileExists(
   if (!api) return "unknown";
 
   try {
+    const parentDirectoryPath = getParentDirectoryPath(relativePath);
     const directory = await api.projects.listDirectory({
       cwd: workspaceRoot,
       ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
-      ...(parentDirectory(relativePath) ? { relativePath: parentDirectory(relativePath) } : {}),
+      ...(parentDirectoryPath ? { relativePath: parentDirectoryPath } : {}),
     });
     return directory.entries.some((entry) => entry.path === relativePath) ? "exists" : "missing";
   } catch (error) {

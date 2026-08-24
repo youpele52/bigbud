@@ -11,7 +11,12 @@ import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.co
 import type { CodeAnnotationDraft } from "./FilePreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
-import { applyDirectoryNavigationRequest, openFilesPanelEntry } from "./FilesPanel.logic";
+import {
+  applyDirectoryNavigationRequest,
+  applyFileOpenRequest,
+  applyPreviewDirectoryNavigation,
+  openFilesPanelEntry,
+} from "./FilesPanel.logic";
 import { EMPTY_ENTRIES, makeAnnotationId } from "./FilesPanel.shared";
 import { renderFilesPanelTreeBody } from "./FilesPanel.body";
 import { FilesPanelRefreshCoordinator } from "./FilesPanelRefreshCoordinator";
@@ -33,6 +38,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   activeThreadId,
 }: FilesPanelProps) {
   const previewPath = useFilesPanelStore((state) => state.previewPath);
+  const filesWorkspaceKey = useFilesPanelStore((state) => state.workspaceKey);
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const fileOpenRequest = useFilesPanelStore((state) => state.fileOpenRequest);
   const workspaceRootOverride = useFilesPanelStore((state) => state.workspaceRootOverride);
@@ -92,6 +98,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       onEntriesRemoved: handleDirectoryEntriesRemoved,
       workspaceKey,
     });
+  const directoryStateByPathRef = useRef(directoryStateByPath);
+  directoryStateByPathRef.current = directoryStateByPath;
   const { contextMenuState, openContextMenu, closeContextMenu } = useFilesPanelContextMenu();
   const { navigateHistory, removePreviewIfMissing, restoreCurrentPreview } = useFilesPanelHistory({
     workspaceKey,
@@ -159,15 +167,35 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   ]);
 
   useEffect(() => {
-    if (!fileOpenRequest) return;
+    if (!fileOpenRequest || filesWorkspaceKey !== workspaceKey) return;
 
-    openPreview({
-      path: fileOpenRequest.path,
-      position: fileOpenRequest.position,
-      scrollTop: null,
+    applyFileOpenRequest({
+      request: fileOpenRequest,
+      directoryStateByPath: directoryStateByPathRef.current,
+      loadDirectory,
+      setExpandedDirectories,
+      openPreview,
+      consumeRequest: consumeFileOpenRequest,
     });
-    consumeFileOpenRequest(fileOpenRequest.requestId);
-  }, [consumeFileOpenRequest, fileOpenRequest, openPreview]);
+  }, [
+    consumeFileOpenRequest,
+    fileOpenRequest,
+    filesWorkspaceKey,
+    loadDirectory,
+    openPreview,
+    workspaceKey,
+  ]);
+
+  useEffect(() => {
+    if (!previewPath || filesWorkspaceKey !== workspaceKey) return;
+
+    applyPreviewDirectoryNavigation(
+      previewPath,
+      directoryStateByPathRef.current,
+      loadDirectory,
+      setExpandedDirectories,
+    );
+  }, [filesWorkspaceKey, loadDirectory, previewPath, workspaceKey]);
 
   const canNavigateHistory = useCallback(
     (direction: -1 | 1) => canMoveFileHistory(activeHistory, direction),
