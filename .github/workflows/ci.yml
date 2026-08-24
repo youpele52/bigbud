@@ -172,6 +172,9 @@ jobs:
             --build-version "0.0.0-ci.${{ github.run_number }}" \
             --verbose
 
+      - name: Smoke test packaged workspace watcher
+        run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
+
       - name: Collect release-style artifacts
         shell: bash
         run: |
@@ -250,10 +253,12 @@ jobs:
           dmg_files=(release-assets/*.dmg)
           appimage_files=(release-assets/*.AppImage)
           exe_files=(release-assets/*.exe)
+          watcher_files=(release-assets/server-workspace-agent-*)
 
           (( ${#dmg_files[@]} > 0 ))
           (( ${#appimage_files[@]} > 0 ))
           (( ${#exe_files[@]} > 0 ))
+          (( ${#watcher_files[@]} == 4 ))
 
       - name: Upload assembled release payload
         uses: actions/upload-artifact@v4

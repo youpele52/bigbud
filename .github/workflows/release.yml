@@ -224,6 +224,9 @@ jobs:
 
           bun run dist:desktop:artifact -- "${args[@]}"
 
+      - name: Smoke test packaged workspace watcher
+        run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
+
       - name: Build Linux .deb fallback
         if: matrix.platform == 'linux'
         shell: bash
@@ -446,4 +449,5 @@ jobs:
             release-assets/bigbud-remote-agent-*
             release-assets/remote-agent-install-source.json
             release-assets/remote-agent-manifest.json
+            release-assets/server-workspace-agent-*
           fail_on_unmatched_files: true

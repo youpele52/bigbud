@@ -20,6 +20,8 @@ This document covers how to run desktop releases from one tag, first without sig
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
 - Signing is optional and auto-detected per platform from secrets.
 - Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
+- Builds the platform-native `bigbud-remote-agent` on every desktop runner and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching.
+- Smoke-checks each packaged workspace watcher on its native runner, publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
 - Publishes `remote-agent-manifest.json`, `remote-agent-install-source.json`, and one `.sha256` file per remote-agent binary. The install source contains the signed manifest and its public trust key; artifact URLs point to binaries in the same GitHub Release.
 
 Remote-agent release signing uses the Ed25519 key supplied through the required
@@ -211,6 +213,12 @@ bun run dist:desktop:linux:deb
    - all matrix builds pass
    - release job uploads expected files
 6. Smoke test downloaded artifacts.
+   - Confirm the packaged workspace-agent binary exists and is executable.
+   - Run its `--check` identity probe.
+   - Complete a framed protocol handshake and verify the `workspace.watch` capability.
+   - Start the app, subscribe to a local workspace, and confirm external edits refresh the active preview.
+   - Quit the app and confirm the ephemeral workspace-agent process exits.
+7. Before publishing `@bigbud/server`, download all four `server-workspace-agent-*` release artifacts into `release-assets/`. The server publish command stages them into `dist/workspace-agent/<platform>-<arch>/`, verifies their executable target headers, and refuses to publish an incomplete set.
 
 ## 5) Troubleshooting
 
@@ -221,3 +229,8 @@ bun run dist:desktop:linux:deb
 - Build fails with signing error:
   - Retry with secrets removed to confirm unsigned path still works.
   - Re-check certificate/profile names and tenant/client credentials.
+- Local workspace watcher reports that its agent is unavailable:
+  - Packaged builds: verify `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` exists in the app resources and passes `--check`.
+  - Published standalone server: verify `dist/workspace-agent/<platform>-<arch>/bigbud-remote-agent[.exe]` exists. Publishing should have failed before release if any supported target was absent.
+  - Source checkout: run `cargo build --locked --package bigbud-remote-agent` or set `BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to an executable native binary.
+  - Do not point the override at a binary for another operating system or architecture; startup verifies OS, architecture, protocol, and the `workspace.watch` capability.

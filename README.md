@@ -115,6 +115,8 @@ bigbud can connect to remote projects over SSH while keeping the app experience 
 
 Packaged desktop builds use the managed agent transport by default. `bun dev:desktop` uses `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` automatically so local development does not require a published remote-agent release; set `BIGBUD_REMOTE_AGENT_TRANSPORT=agent` to exercise the managed-agent installer. Packaged builds use the signed `remote-agent-install-source.json` published with the same release. `BIGBUD_REMOTE_AGENT_BINARY` remains available for testing a custom remote path.
 
+Local and managed-remote file watching share the Rust `bigbud-workspace-watch` implementation. Server-bearing development commands build the native `bigbud-remote-agent` automatically, and packaged desktop builds include it. Standalone server deployments can set `BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to an executable built with `cargo build --locked --package bigbud-remote-agent`; a missing or incompatible binary is reported as a typed watcher diagnostic instead of falling back to a different local watcher.
+
 ## Computer Use
 
 bigbud's **Computer Use** feature lets AI agents control the in-app browser and, on desktop, your macOS machine. This enables agents to navigate web pages, fill forms, take screenshots, open applications, and more — all within your session.

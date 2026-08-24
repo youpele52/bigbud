@@ -36,6 +36,10 @@ export const MODE_ARGS = {
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 export type DevMode = keyof typeof MODE_ARGS;
+
+export function devModeRequiresWorkspaceAgent(mode: DevMode): boolean {
+  return mode === "dev" || mode === "dev:server" || mode === "dev:desktop";
+}
 export type PortAvailabilityCheck<R = never> = (port: number) => Effect.Effect<boolean, never, R>;
 
 export const DEV_RUNNER_MODES = Object.keys(MODE_ARGS) as Array<DevMode>;

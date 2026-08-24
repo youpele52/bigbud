@@ -21,7 +21,7 @@ export interface RemoteAgentReleaseManifest {
   readonly artifacts: ReadonlyArray<{
     readonly version: string;
     readonly protocolMajor: 1;
-    readonly protocolMinor: 0;
+    readonly protocolMinor: 1;
     readonly targetTriple: RemoteAgentReleaseTarget;
     readonly sizeBytes: number;
     readonly sha256: string;
@@ -104,7 +104,7 @@ export function buildRemoteAgentReleaseManifest(
     const artifact = {
       version: input.version,
       protocolMajor: 1 as const,
-      protocolMinor: 0 as const,
+      protocolMinor: 1 as const,
       targetTriple,
       sizeBytes: bytes.byteLength,
       sha256: createHash("sha256").update(bytes).digest("hex"),

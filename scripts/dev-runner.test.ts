@@ -12,12 +12,25 @@ import {
 
 import {
   createDevRunnerEnv,
+  devModeRequiresWorkspaceAgent,
   findFirstAvailableOffset,
   resolveModePortOffsets,
   resolveOffset,
 } from "./dev-runner.ts";
 
 it.layer(NodeServices.layer)("dev-runner", (it) => {
+  describe("workspace agent build selection", () => {
+    it.effect("builds only for server-bearing development modes", () =>
+      Effect.sync(() => {
+        assert.equal(devModeRequiresWorkspaceAgent("dev"), true);
+        assert.equal(devModeRequiresWorkspaceAgent("dev:server"), true);
+        assert.equal(devModeRequiresWorkspaceAgent("dev:desktop"), true);
+        assert.equal(devModeRequiresWorkspaceAgent("dev:web"), false);
+        assert.equal(devModeRequiresWorkspaceAgent("dev:mobile-web"), false);
+      }),
+    );
+  });
+
   describe("resolveOffset", () => {
     it.effect("uses explicit BIGBUD_PORT_OFFSET when provided", () =>
       Effect.sync(() => {

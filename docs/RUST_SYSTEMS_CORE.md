@@ -2,13 +2,13 @@
 
 ## Status
 
-Proposed implementation plan. This document defines the intended architecture and rollout gates; it is not a commitment to move all backend code to Rust.
+Accepted architecture with incremental implementation. The remote workspace agent and the shared local/managed-remote workspace watcher are implemented; the remaining systems-core scope retains the rollout gates in this document.
 
 ## Objective
 
 Introduce a Rust systems core while retaining the existing Electron desktop app, React UI, Bun/TypeScript server, provider SDKs, orchestration, and local canonical state.
 
-The first product outcome is a thin, resumable remote workspace agent that makes SSH projects approach local parity for files, search, Git, processes, terminals, and file watching. The same Rust libraries may later power a local sidecar so local and remote workspaces share one systems implementation.
+The first product outcome is a thin, resumable remote workspace agent that makes SSH projects approach local parity for files, search, Git, processes, terminals, and file watching. File watching now uses one shared Rust implementation for local and managed-remote workspaces: the TypeScript server launches one ephemeral local `bigbud-remote-agent` over framed stdio, while managed remote hosts run the same binary over SSH.
 
 The intended architecture is:
 
@@ -23,7 +23,7 @@ Bun/TypeScript application layer
 |- WebSocket/API and UI event models
 `- normalized WorkspaceRuntime
               |
-        local protocol client
+     target-neutral protocol client
               |
               v
 Rust systems runtime
@@ -37,7 +37,7 @@ Rust systems runtime
        +------+------+
        |             |
        v             v
- local sidecar   remote agent over SSH
+ local ephemeral agent   remote agent over SSH
 ```
 
 ## Product Decisions
@@ -59,6 +59,8 @@ Rust systems runtime
 **Rust systems core**: Shared Rust libraries for workspace and operating-system operations. It does not own bigbud's domain model.
 
 **Local sidecar**: A packaged Rust daemon launched on the same machine as the TypeScript server. This is a later migration target, not required for the first remote-agent release.
+
+**Local workspace watch agent**: One ephemeral `bigbud-remote-agent` child per TypeScript server. It multiplexes local watch subscriptions over framed stdio, writes no journal or persistent agent state, and is not a general local-runtime migration.
 
 **Remote agent**: A small Rust executable installed on an SSH host and invoked by bigbud. It performs bounded workspace operations and temporarily supervises resumable operations.
 
@@ -133,8 +135,9 @@ bigbud/
 |- crates/
 |  |- bigbud-protocol/
 |  |- bigbud-systems/
+|  |- bigbud-workspace-watch/
 |  |- bigbud-remote-agent/
-|  `- bigbud-local-daemon/        # added only when local migration begins
+|  `- bigbud-local-daemon/        # optional future non-watcher migration
 |- protocol/
 |  `- remote-agent/v1.proto
 |- apps/
@@ -144,12 +147,13 @@ bigbud/
 
 Crate responsibilities:
 
-| Crate                 | Responsibility                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| `bigbud-protocol`     | Generated protocol types, framing, compatibility negotiation, and protocol errors         |
-| `bigbud-systems`      | Reusable files, search, Git, process, PTY, watcher, containment, and operation primitives |
-| `bigbud-remote-agent` | SSH stdio entrypoint, workspace registration, operation journal, and remote lifecycle     |
-| `bigbud-local-daemon` | Optional later local sidecar using `bigbud-systems`; not part of the first milestone      |
+| Crate                    | Responsibility                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `bigbud-protocol`        | Generated protocol types, framing, compatibility negotiation, and protocol errors     |
+| `bigbud-systems`         | Reusable files, search, Git, process, PTY, containment, and operation primitives      |
+| `bigbud-workspace-watch` | Protocol-neutral watcher registry, reconciliation, batching, bounds, and recovery     |
+| `bigbud-remote-agent`    | SSH/ephemeral stdio entrypoint, workspace registration, journal, and remote lifecycle |
+| `bigbud-local-daemon`    | Optional later local sidecar using `bigbud-systems`; not part of the first milestone  |
 
 Keep each crate narrow. A shared crate is justified only when both executables use it or when it isolates a coherent safety-critical concern.
 
@@ -408,9 +412,11 @@ Threat-model and security review gates are required before enabling write, Git m
 
 ## Local Sidecar Direction
 
-The remote agent establishes the Rust toolchain and shared systems implementation. A local sidecar can follow once remote primitives are stable and measurements show value.
+Workspace watching is the first local Rust slice. The Bun server supervises exactly one `bigbud-remote-agent --ephemeral` child, verifies the `workspace.watch` capability, and restarts it with bounded backoff. A new agent epoch forces resubscription and a rescan before exact events resume. `bigbud-workspace-watch` owns native/poll backend selection, reconciliation, the 100 ms batch, generations, sequences, and resource bounds for both local and managed-remote workspaces. Direct SSH remains an explicit bounded-polling exception because no agent is running on that host.
 
-Electron or the Bun server may supervise the local sidecar using the repository's existing daemon patterns:
+A broader local sidecar for files, search, Git, processes, or PTYs remains optional and should follow only when measurements show value.
+
+Any broader local sidecar should continue using the repository's existing daemon patterns:
 
 - Private Unix socket on macOS/Linux and named pipe on Windows.
 - Health handshake and structured readiness state.

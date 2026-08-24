@@ -8,9 +8,13 @@ import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
 import { assertBundledSkillsDirectory } from "./bundledSkills.ts";
+import { findDesktopWorkspaceAgentTarget } from "../workspace-agent-target.ts";
 import { assertLinuxBackendModulesLink } from "./linuxArtifactVerify.backendModules.ts";
 import { BuildScriptError, commandOutputOptions, runCommand } from "./shared.ts";
 import { assertLinuxElectronRuntimeFiles } from "./linuxRuntimeFiles.ts";
+import { assertWorkspaceAgentBinary } from "./workspaceAgent.ts";
+
+const LINUX_X64_WORKSPACE_AGENT = findDesktopWorkspaceAgentTarget("linux", "x64")!;
 
 /**
  * Find the Linux unpacked app directory inside the electron-builder output.
@@ -106,6 +110,11 @@ export const verifyLinuxUnpackedArtifact = Effect.fn("verifyLinuxUnpackedArtifac
     `${unpackedDir}/resources/server/bundled-skills`,
     "Linux unpacked artifact verification failed",
   );
+  yield* assertWorkspaceAgentBinary(
+    `${unpackedDir}/resources/server/workspace-agent/bin/bigbud-remote-agent`,
+    "Linux unpacked artifact verification failed",
+    LINUX_X64_WORKSPACE_AGENT,
+  );
   yield* Effect.log("[desktop-artifact] Unpacked Linux artifact verification passed.");
 });
 
@@ -128,6 +137,11 @@ export const verifyLinuxAppImageArtifact = Effect.fn("verifyLinuxAppImageArtifac
   yield* assertBundledSkillsDirectory(
     `${extractedRoot}/resources/server/bundled-skills`,
     "AppImage artifact verification failed",
+  );
+  yield* assertWorkspaceAgentBinary(
+    `${extractedRoot}/resources/server/workspace-agent/bin/bigbud-remote-agent`,
+    "AppImage artifact verification failed",
+    LINUX_X64_WORKSPACE_AGENT,
   );
 
   yield* Effect.log("[desktop-artifact] AppImage artifact verification passed.");

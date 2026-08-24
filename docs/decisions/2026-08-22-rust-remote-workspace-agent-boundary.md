@@ -1,6 +1,6 @@
 # Local Authority And Remote Workspace Agent Boundary
 
-**Status:** Accepted for Phase 0/1 implementation
+**Status:** Accepted; extended by the unified workspace watcher implementation
 
 **Date:** 22 August, 2026
 
@@ -69,7 +69,8 @@ backend will implement.
 
 ## Consequences
 
-This keeps the first implementation small and reversible. It also means the
-runtime façade is intentionally incomplete: process, PTY, watch, platform,
-operation lifecycle, and Rust protocol work remain later phases and must not be
-smuggled into the local read adapter.
+This kept the first implementation small and reversible. Workspace watching is
+now the first shared local/remote systems slice: one ephemeral local agent and
+managed remote agents use the protocol-neutral `bigbud-workspace-watch` crate.
+TypeScript still owns authorization, supervision, routing, and product state;
+the change does not move local files, search, Git, processes, or PTYs into Rust.
