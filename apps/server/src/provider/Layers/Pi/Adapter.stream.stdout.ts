@@ -1,4 +1,3 @@
-// TODO: Split by concern when this file is next touched.
 import { randomUUID } from "node:crypto";
 
 import { EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
@@ -90,10 +89,15 @@ export function makeHandleStdoutEvent(deps: {
         session.completedTurnBoundary = undefined;
         session.missingAgentEndRecoveryToken = undefined;
         return yield* deps.emit([
-          yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
-            state: "running",
-            reason: "agent_start",
-          }),
+          yield* deps.makeSyntheticEvent(
+            session.threadId,
+            session.sessionEpoch,
+            "session.state.changed",
+            {
+              state: "running",
+              reason: "agent_start",
+            },
+          ),
         ]);
       }
       case "turn_start": {
@@ -104,6 +108,7 @@ export function makeHandleStdoutEvent(deps: {
         return yield* deps.emit([
           yield* deps.makeSyntheticEvent(
             session.threadId,
+            session.sessionEpoch,
             "turn.started",
             {
               ...(session.model ? { model: session.model } : {}),
@@ -134,6 +139,7 @@ export function makeHandleStdoutEvent(deps: {
                   eventId: stamp.eventId,
                   createdAt,
                   threadId: session.threadId,
+                  sessionEpoch: session.sessionEpoch,
                   ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
                   itemId,
                   raw,
@@ -161,6 +167,7 @@ export function makeHandleStdoutEvent(deps: {
                   eventId: stamp.eventId,
                   createdAt,
                   threadId: session.threadId,
+                  sessionEpoch: session.sessionEpoch,
                   ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
                   itemId,
                   raw,
@@ -204,6 +211,7 @@ export function makeHandleStdoutEvent(deps: {
                 eventId: EventId.makeUnsafe(randomUUID()),
                 createdAt,
                 threadId: session.threadId,
+                sessionEpoch: session.sessionEpoch,
                 ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
                 itemId,
                 raw,
@@ -221,6 +229,7 @@ export function makeHandleStdoutEvent(deps: {
               eventId: stamp.eventId,
               createdAt,
               threadId: session.threadId,
+              sessionEpoch: session.sessionEpoch,
               ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
               itemId,
               raw,
@@ -260,7 +269,7 @@ export function makeHandleStdoutEvent(deps: {
               }),
             reportExhausted: (recovery) =>
               deps
-                .makeSyntheticEvent(session.threadId, "runtime.error", {
+                .makeSyntheticEvent(session.threadId, session.sessionEpoch, "runtime.error", {
                   message: "Pi completion recovery exhausted",
                   class: "provider_error",
                   detail: {
@@ -324,6 +333,7 @@ export function makeHandleStdoutEvent(deps: {
           return yield* deps.emit([
             yield* deps.makeSyntheticEvent(
               session.threadId,
+              session.sessionEpoch,
               "session.state.changed",
               {
                 state: "running",
@@ -350,7 +360,7 @@ export function makeHandleStdoutEvent(deps: {
             }),
           reportExhausted: (recovery) =>
             deps
-              .makeSyntheticEvent(session.threadId, "runtime.error", {
+              .makeSyntheticEvent(session.threadId, session.sessionEpoch, "runtime.error", {
                 message: "Pi completion recovery exhausted",
                 class: "provider_error",
                 detail: {

@@ -49,13 +49,9 @@ import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers
 import { ProjectionCatalogQueryLive } from "./orchestration/Layers/ProjectionCatalogQuery";
 import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/ProjectionOperationalStateQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
-import { GitCoreLive } from "./git/Layers/GitCore";
-import { GitHubCliLive } from "./git/Layers/GitHubCli";
-import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
+import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
 import { PtyAdapter } from "./terminal/Services/PTY";
-import { GitManagerLive } from "./git/Layers/GitManager";
-import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
 import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
@@ -81,7 +77,6 @@ import {
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
-import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { CuaDriverLive } from "./computer-use/Layers/CuaDriver";
@@ -271,19 +266,6 @@ const ProjectionPersistenceLayerLive = Layer.mergeAll(
   MemoryStoreLive,
 );
 
-const GitLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(
-    GitManagerLive.pipe(
-      Layer.provideMerge(ProjectSetupScriptRunnerLive),
-      Layer.provideMerge(GitCoreLive),
-      Layer.provideMerge(GitHubCliLive),
-      Layer.provideMerge(RoutingTextGenerationLive),
-    ),
-  ),
-  Layer.provideMerge(GitStatusBroadcasterLive.pipe(Layer.provideMerge(GitCoreLive))),
-  Layer.provideMerge(GitCoreLive),
-);
-
 const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
 const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
 const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
@@ -299,6 +281,8 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
     ).pipe(Layer.provide(PtyAdapterLive))
   : PtyAdapterLive;
 const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
+
+const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services

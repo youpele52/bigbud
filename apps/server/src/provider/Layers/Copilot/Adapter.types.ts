@@ -69,6 +69,7 @@ export interface ActiveCopilotSession {
   readonly client: import("@github/copilot-sdk").CopilotClient;
   session: CopilotSession;
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   readonly createdAt: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
   readonly providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];
@@ -166,15 +167,18 @@ export function buildThreadSnapshot(
   };
 }
 
+type RuntimeEventBase<T> = T extends unknown ? Omit<T, "type" | "payload"> : never;
+
 export function eventBase(input: {
   eventId: EventId;
   createdAt: string;
   threadId: ThreadId;
+  sessionEpoch: number;
   turnId?: TurnId;
   itemId?: string;
   requestId?: string;
   raw?: ProviderRuntimeEvent["raw"];
-}): Omit<ProviderRuntimeEvent, "type" | "payload"> {
+}): RuntimeEventBase<ProviderRuntimeEvent> {
   const providerTurnId = input.turnId;
   const providerItemId = toProviderItemId(input.itemId);
   const providerRequestId = normalizeString(input.requestId);
@@ -183,6 +187,7 @@ export function eventBase(input: {
     eventId: input.eventId,
     provider: PROVIDER,
     threadId: input.threadId,
+    sessionEpoch: input.sessionEpoch,
     createdAt: input.createdAt,
     ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.itemId ? { itemId: toRuntimeItemId(input.itemId) } : {}),

@@ -288,7 +288,7 @@ export function useSidebarState(): SidebarState {
   cancelThreadRenameRef.current = threadActions.cancelRename;
 
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
-  const [areProjectsExpanded, setAreProjectsExpanded] = useState(true);
+  const [areProjectsExpanded, setAreProjectsExpanded] = useState(false);
   const [areRemoteProjectsExpanded, setAreRemoteProjectsExpanded] = useState(false);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);

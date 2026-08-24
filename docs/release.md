@@ -19,6 +19,17 @@ This document covers how to run desktop releases from one tag, first without sig
 - Includes Electron auto-update metadata (for example `latest*.yml` and `*.blockmap`) in release assets.
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
 - Signing is optional and auto-detected per platform from secrets.
+- Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
+- Publishes `remote-agent-manifest.json`, `remote-agent-install-source.json`, and one `.sha256` file per remote-agent binary. The install source contains the signed manifest and its public trust key; artifact URLs point to binaries in the same GitHub Release.
+
+Remote-agent release signing uses the Ed25519 key supplied through the required
+`BIGBUD_REMOTE_AGENT_SIGNING_KEY` and `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID`
+secrets. The key ID must match a public key in the runtime trust store before
+remote-agent installation is enabled.
+
+At runtime, the packaged server resolves the install source for its own version at
+`https://github.com/youpele52/bigbud/releases/download/v<version>/remote-agent-install-source.json`.
+Remote installation is only called after the user approves the first-use prompt.
 
 ## Desktop auto-update notes
 
@@ -89,7 +100,9 @@ This document covers how to run desktop releases from one tag, first without sig
 
 Use this first to validate the release pipeline.
 
-1. Confirm no signing secrets are required for this test.
+1. Desktop signing secrets may be absent for this test. The remote-agent
+   Ed25519 signing secrets are required because remote-agent manifests are
+   never published unsigned.
 2. Create a test tag:
    - `git tag v0.0.0-beta.1`
    - `git push origin v0.0.0-beta.1`

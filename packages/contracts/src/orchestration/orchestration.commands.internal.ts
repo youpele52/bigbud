@@ -20,6 +20,7 @@ import {
   OrchestrationTaskFreshness,
   OrchestrationTaskSource,
   OrchestrationThreadActivity,
+  OrchestrationTurnControlOperation,
 } from "./orchestration.thread";
 
 const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
@@ -78,6 +79,25 @@ const ThreadSessionSetCommand = Schema.Struct({
   threadId: ThreadId,
   session: OrchestrationSession,
   expectedActiveTurnId: Schema.optional(TurnId),
+  expectedSessionEpoch: Schema.optional(NonNegativeInt),
+  advanceSessionEpoch: Schema.optional(Schema.Boolean),
+  createdAt: IsoDateTime,
+});
+
+const ThreadQueuedPromptFlushCancelCommand = Schema.Struct({
+  type: Schema.Literal("thread.queued-prompt.flush-cancel"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  intentId: CommandId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadTurnControlSetCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn-control.set"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  operation: OrchestrationTurnControlOperation,
+  expectedOperationId: Schema.optional(CommandId),
   createdAt: IsoDateTime,
 });
 
@@ -184,6 +204,8 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadRetentionDeleteCommand,
   ThreadPinMigrateCommand,
   ThreadSessionSetCommand,
+  ThreadQueuedPromptFlushCancelCommand,
+  ThreadTurnControlSetCommand,
   ThreadTurnStartFailedCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantReplaceCommand,

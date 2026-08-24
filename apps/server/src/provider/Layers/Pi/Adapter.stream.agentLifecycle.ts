@@ -28,10 +28,15 @@ export const settlePiAgentEnd = Effect.fn("settlePiAgentEnd")(function* (deps: {
     deps.session.activeTurnId = nextQueuedTurnId;
     deps.session.completedTurnBoundary = undefined;
     return yield* deps.emit([
-      yield* deps.makeSyntheticEvent(deps.session.threadId, "session.state.changed", {
-        state: "running",
-        reason: "turn.queued",
-      }),
+      yield* deps.makeSyntheticEvent(
+        deps.session.threadId,
+        deps.session.sessionEpoch,
+        "session.state.changed",
+        {
+          state: "running",
+          reason: "turn.queued",
+        },
+      ),
     ]);
   }
 
@@ -49,6 +54,7 @@ export const settlePiAgentEnd = Effect.fn("settlePiAgentEnd")(function* (deps: {
         eventId: boundary.stamp.eventId,
         createdAt: boundary.stamp.createdAt,
         threadId: deps.session.threadId,
+        sessionEpoch: deps.session.sessionEpoch,
         ...(finalTurnId ? { turnId: finalTurnId } : {}),
         raw: boundary.raw,
       }),
@@ -66,10 +72,15 @@ export const settlePiAgentEnd = Effect.fn("settlePiAgentEnd")(function* (deps: {
     } as ProviderRuntimeEvent);
   }
   events.push(
-    yield* deps.makeSyntheticEvent(deps.session.threadId, "session.state.changed", {
-      state: "ready",
-      reason: "agent_end",
-    }),
+    yield* deps.makeSyntheticEvent(
+      deps.session.threadId,
+      deps.session.sessionEpoch,
+      "session.state.changed",
+      {
+        state: "ready",
+        reason: "agent_end",
+      },
+    ),
   );
   return yield* deps.emit(events);
 });

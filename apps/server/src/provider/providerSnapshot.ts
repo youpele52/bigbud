@@ -9,6 +9,7 @@ import type {
   ServerProviderSlashCommand,
   ServerProviderState,
 } from "@bigbud/contracts";
+import { compareCodexCliVersions, MINIMUM_CODEX_CLI_VERSION } from "./codexCliVersion.ts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { normalizeModelSlug } from "@bigbud/shared/model";
@@ -175,8 +176,14 @@ export function buildServerProvider(input: {
   modelDiscovery?: ServerProviderModelDiscovery;
   slashCommands?: ReadonlyArray<ServerProviderSlashCommand>;
   skills?: ReadonlyArray<ServerProviderSkill>;
+  supportsSteer?: boolean;
   probe: ProviderProbeResult;
 }): ServerProvider {
+  const nativeSteer =
+    input.provider === "pi" ||
+    (input.provider === "codex" &&
+      input.probe.version !== null &&
+      compareCodexCliVersions(input.probe.version, MINIMUM_CODEX_CLI_VERSION) >= 0);
   return {
     provider: input.provider,
     enabled: input.enabled,
@@ -192,6 +199,15 @@ export function buildServerProvider(input: {
     ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
+    // App-level steering is universal; providers without native steering use
+    // the explicit interrupt-and-continue strategy.
+    supportsSteer: true,
+    turnControl: {
+      nativeSteer,
+      interruptTarget: input.provider === "codex" ? "exact-turn" : "current-session",
+      activeTurnInspection: "unavailable",
+      continuation: true,
+    },
   };
 }
 

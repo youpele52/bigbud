@@ -106,17 +106,29 @@ export default function GitActionsControl({
     gitFetchMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
   );
   const discardMutation = useMutation(
-    gitDiscardChangesMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
+    gitDiscardChangesMutationOptions({
+      cwd: gitCwd,
+      executionTargetId,
+      queryClient,
+    }),
   );
 
   const isRunStackedActionRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd, executionTargetId) }) > 0;
+    useIsMutating({
+      mutationKey: gitMutationKeys.runStackedAction(gitCwd, executionTargetId),
+    }) > 0;
   const isPullRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd, executionTargetId) }) > 0;
+    useIsMutating({
+      mutationKey: gitMutationKeys.pull(gitCwd, executionTargetId),
+    }) > 0;
   const isFetchRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.fetch(gitCwd, executionTargetId) }) > 0;
+    useIsMutating({
+      mutationKey: gitMutationKeys.fetch(gitCwd, executionTargetId),
+    }) > 0;
   const isDiscardRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.discardChanges(gitCwd, executionTargetId) }) > 0;
+    useIsMutating({
+      mutationKey: gitMutationKeys.discardChanges(gitCwd, executionTargetId),
+    }) > 0;
   const isGitActionRunning =
     isRunStackedActionRunning || isPullRunning || isFetchRunning || isDiscardRunning;
 
@@ -325,7 +337,10 @@ export default function GitActionsControl({
     [initMutation, runPull, runFetch, runGitActionWithToast],
   );
 
-  const openChangedFileInEditor = useChangedFileEditor({ gitCwd, threadToastData });
+  const openChangedFileInEditor = useChangedFileEditor({
+    gitCwd,
+    threadToastData,
+  });
 
   const resetCommitDialog = () => {
     setIsCommitDialogOpen(false);
@@ -338,6 +353,7 @@ export default function GitActionsControl({
     <>
       <GitActionsControlActions
         gitCwd={gitCwd}
+        executionTargetId={executionTargetId}
         showGit={showGit}
         queryClient={queryClient}
         isRepo={isRepo}

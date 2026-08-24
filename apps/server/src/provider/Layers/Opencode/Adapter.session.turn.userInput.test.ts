@@ -38,7 +38,7 @@ it.effect("maps OpenCode user-input answers from stable, header, and question ke
   const { respondToUserInput } = makeTurnMethods({
     provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
-    syntheticEventFn: (threadId, type, payload, extra) =>
+    syntheticEventFn: (threadId, _sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         threadId,
         type,

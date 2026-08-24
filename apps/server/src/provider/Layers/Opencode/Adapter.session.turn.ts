@@ -113,6 +113,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
 
       const event = yield* syntheticEventFn(
         threadId,
+        record.sessionEpoch,
         "request.resolved",
         {
           requestType: pending.requestType,
@@ -149,6 +150,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       // whether the subsequent TUI API calls succeed.
       const resolvedEvent = yield* syntheticEventFn(
         threadId,
+        record.sessionEpoch,
         "user-input.resolved",
         { answers: answers as Record<string, unknown> },
         {

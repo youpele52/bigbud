@@ -13,6 +13,7 @@ export interface ProviderTurnLivenessRepositoryShape {
     readonly threadId: ThreadId;
     readonly turnId: TurnId;
     readonly provider: ProviderKind;
+    readonly sessionEpoch: number;
     readonly startedAt: string;
   }) => Effect.Effect<void, PersistenceSqlError>;
   readonly observeEvent: (
@@ -22,6 +23,7 @@ export interface ProviderTurnLivenessRepositoryShape {
   readonly recordInspection: (input: {
     readonly threadId: ThreadId;
     readonly turnId: TurnId;
+    readonly sessionEpoch: number;
     readonly observedAt: string;
     readonly status: ProviderTurnInspectionState;
     readonly failed: boolean;
@@ -29,11 +31,13 @@ export interface ProviderTurnLivenessRepositoryShape {
   readonly markTerminal: (input: {
     readonly threadId: ThreadId;
     readonly turnId?: TurnId;
+    readonly sessionEpoch?: number;
     readonly terminalAt: string;
   }) => Effect.Effect<void, PersistenceSqlError>;
   readonly claimTerminal: (input: {
     readonly threadId: ThreadId;
     readonly turnId: TurnId;
+    readonly sessionEpoch: number;
     readonly provider: ProviderKind;
     readonly terminalAt: string;
   }) => Effect.Effect<boolean, PersistenceSqlError>;

@@ -75,6 +75,7 @@ export function makeRespondToUserInput(input: {
     yield* input.emit([
       yield* input.makeSyntheticEvent(
         threadId,
+        session.sessionEpoch,
         "user-input.resolved",
         { answers },
         {
@@ -82,7 +83,7 @@ export function makeRespondToUserInput(input: {
           requestId,
         },
       ),
-      yield* input.makeSyntheticEvent(threadId, "session.state.changed", {
+      yield* input.makeSyntheticEvent(threadId, session.sessionEpoch, "session.state.changed", {
         state: session.activeTurnId ? "running" : "ready",
         reason: "user-input.resolved",
       }),

@@ -6,7 +6,11 @@ import { updateThread } from "./projectorHelpers.ts";
 type QueuedPromptEvent = Extract<
   OrchestrationEvent,
   {
-    type: "thread.prompt-queued" | "thread.queued-prompt-removed" | "thread.queued-prompts-flushed";
+    type:
+      | "thread.prompt-queued"
+      | "thread.queued-prompt-removed"
+      | "thread.queued-prompts-flushed"
+      | "thread.queued-prompt-flush-cancelled";
   }
 >;
 
@@ -56,6 +60,7 @@ export function projectThreadQueuedPromptEvent(
         ...model,
         threads: updateThread(model.threads, thread.id, {
           queuedPrompts: (thread.queuedPrompts ?? []).filter((prompt) => !removed.has(prompt.id)),
+          queueHold: false,
           pendingInterruptFlushIntent:
             thread.pendingInterruptFlushIntent !== null &&
             thread.pendingInterruptFlushIntent !== undefined &&
@@ -66,6 +71,19 @@ export function projectThreadQueuedPromptEvent(
             )
               ? null
               : thread.pendingInterruptFlushIntent,
+          updatedAt: event.occurredAt,
+        }),
+      });
+    }
+    case "thread.queued-prompt-flush-cancelled": {
+      const thread = model.threads.find((entry) => entry.id === event.payload.threadId);
+      if (!thread || thread.pendingInterruptFlushIntent?.intentId !== event.payload.intentId) {
+        return Effect.succeed(model);
+      }
+      return Effect.succeed({
+        ...model,
+        threads: updateThread(model.threads, thread.id, {
+          pendingInterruptFlushIntent: null,
           updatedAt: event.occurredAt,
         }),
       });

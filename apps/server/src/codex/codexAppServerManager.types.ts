@@ -126,6 +126,13 @@ export interface CodexAppServerSendTurnInput {
   readonly interactionMode?: ProviderInteractionMode;
 }
 
+export interface CodexAppServerSteerTurnInput {
+  readonly threadId: ThreadId;
+  readonly input: string;
+  readonly expectedTurnId: TurnId;
+  readonly clientUserMessageId: string;
+}
+
 export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
@@ -145,6 +152,7 @@ export interface CodexAppServerStartSessionInput {
   readonly cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   readonly developerInstructions?: string;
   readonly runtimeMode: RuntimeMode;
+  readonly sessionEpoch?: number;
 }
 
 export interface CodexThreadTurnSnapshot {

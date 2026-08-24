@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+message WorkspaceOpenRequest {
+  string request_id = 1;
+  string workspace_handle = 2;
+  string root = 3;
+}
+
+message WorkspaceOpenResponse {
+  string request_id = 1;
+  string workspace_handle = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message ReadFileRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+  uint64 offset = 6;
+  uint64 max_bytes = 7;
+}
+
+message ReadFileResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  bytes bytes = 4;
+  uint64 total_bytes = 5;
+  bool truncated = 6;
+  string error_code = 7;
+  string error_message = 8;
+}
+
+message ListDirectoryRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+}
+
+message DirectoryEntry {
+  string path = 1;
+  bool is_directory = 2;
+  bool is_file = 3;
+  uint64 size_bytes = 4;
+  uint64 modified_unix_ms = 5;
+}
+
+message ListDirectoryResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  repeated DirectoryEntry entries = 4;
+  string error_code = 5;
+  string error_message = 6;
+}
+
+message FilenameSearchRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+  string query = 6;
+  uint32 max_results = 7;
+}
+
+message FilenameSearchResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  repeated DirectoryEntry entries = 4;
+  bool truncated = 5;
+  string error_code = 6;
+  string error_message = 7;
+}
+
+message ContentSearchRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+  string query = 6;
+  uint32 max_results = 7;
+}
+
+message ContentMatch {
+  string path = 1;
+  uint32 line = 2;
+  uint32 column = 3;
+  string excerpt = 4;
+}
+
+message ContentSearchResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  repeated ContentMatch matches = 4;
+  bool truncated = 5;
+  string error_code = 6;
+  string error_message = 7;
+}
+
+message WriteFileRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+  bytes bytes = 6;
+  string expected_sha256 = 7;
+}
+
+message WriteFileResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  uint64 written_bytes = 4;
+  string error_code = 5;
+  string error_message = 6;
+  string current_sha256 = 7;
+}

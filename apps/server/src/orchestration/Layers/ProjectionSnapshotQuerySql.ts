@@ -99,6 +99,8 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           worktree_path AS "worktreePath",
            queued_prompts_json AS "queuedPrompts",
            pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
+           pending_turn_control_operation_json AS "pendingTurnControlOperation",
+           queue_hold AS "queueHold",
           CASE
              WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
              ELSE json_object(
@@ -209,6 +211,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           provider_thread_id AS "providerThreadId",
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
+          session_epoch AS "sessionEpoch",
           reason,
           last_error AS "lastError",
           updated_at AS "updatedAt"

@@ -84,9 +84,17 @@ export interface ProviderServiceShape {
     input: ProviderInterruptTurnInput,
   ) => Effect.Effect<void, ProviderServiceError>;
 
+  readonly steerTurn?: (input: {
+    readonly threadId: ThreadId;
+    readonly input: string;
+    readonly turnId?: import("@bigbud/contracts").TurnId;
+    readonly sessionEpoch?: number;
+  }) => Effect.Effect<void, ProviderServiceError>;
+
   readonly inspectActiveTurn: (input: {
     readonly threadId: ThreadId;
     readonly turnId: import("@bigbud/contracts").TurnId;
+    readonly sessionEpoch: number;
   }) => Effect.Effect<ProviderActiveTurnInspection, ProviderServiceError>;
 
   readonly listActiveTurnLiveness: () => Effect.Effect<ReadonlyArray<ProviderTurnLiveness>>;
@@ -94,6 +102,7 @@ export interface ProviderServiceShape {
   readonly recordTurnInspection: (input: {
     readonly threadId: ThreadId;
     readonly turnId: import("@bigbud/contracts").TurnId;
+    readonly sessionEpoch: number;
     readonly observedAt: string;
     readonly status: ProviderTurnInspectionState;
     readonly failed: boolean;
@@ -103,6 +112,7 @@ export interface ProviderServiceShape {
     readonly threadId: ThreadId;
     readonly turnId: import("@bigbud/contracts").TurnId;
     readonly provider: ProviderKind;
+    readonly sessionEpoch: number;
     readonly terminalAt: string;
   }) => Effect.Effect<boolean>;
 

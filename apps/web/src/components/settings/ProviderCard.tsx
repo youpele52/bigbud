@@ -141,6 +141,7 @@ export function ProviderCard({
               />
             </Button>
             <Switch
+              tone="success"
               checked={card.providerConfig.enabled}
               onCheckedChange={onToggleEnabled}
               aria-label={`Enable ${providerDisplayName}`}

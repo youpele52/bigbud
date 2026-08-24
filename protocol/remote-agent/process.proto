@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+message ProcessRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string command = 5;
+  repeated string args = 6;
+  uint64 timeout_ms = 7;
+  uint64 max_output_bytes = 8;
+  repeated ProcessEnvironment environment = 9;
+  bytes stdin = 10;
+}
+
+message ProcessEnvironment {
+  string name = 1;
+  string value = 2;
+}
+
+message ProcessAccepted {
+  string request_id = 1;
+  string operation_id = 2;
+  bool accepted = 3;
+  bool duplicate = 4;
+  string error_code = 5;
+  string error_message = 6;
+}
+
+message ProcessOutput {
+  string operation_id = 1;
+  uint64 sequence = 2;
+  string stream = 3;
+  bytes bytes = 4;
+}
+
+message ProcessCompleted {
+  string request_id = 1;
+  string operation_id = 2;
+  string state = 3;
+  bool has_exit_code = 4;
+  int32 exit_code = 5;
+  bool output_truncated = 6;
+  string error_code = 7;
+  string error_message = 8;
+}
+
+message ProcessAttachRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  uint64 after_sequence = 3;
+}
+
+message ProcessOutputAck {
+  string request_id = 1;
+  string operation_id = 2;
+  uint64 acknowledged_sequence = 3;
+}
+
+message ProcessAckResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message ProcessAttachResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  string state = 3;
+  uint64 next_sequence = 4;
+  uint64 first_retained_sequence = 5;
+}

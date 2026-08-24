@@ -15,6 +15,19 @@ export interface RemoteAgentProcessResult {
   readonly completed: RemoteAgentProcessCompleted;
 }
 
+export interface RemoteAgentProcessRunInput {
+  readonly workspaceHandle: string;
+  readonly operationId: string;
+  readonly requestDigest: Uint8Array;
+  readonly command: string;
+  readonly args?: ReadonlyArray<string>;
+  readonly timeoutMs?: number;
+  readonly maxOutputBytes?: number;
+  readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
+  readonly stdin?: Uint8Array;
+  readonly requestId?: string;
+}
+
 export class RemoteAgentProcessError extends Error {
   readonly _tag = "RemoteAgentProcessError";
 
@@ -43,6 +56,13 @@ function errorFromCompleted(completed: RemoteAgentProcessCompleted): Error | nul
   return completed.errorCode && completed.errorCode !== "NONZERO_EXIT"
     ? new RemoteAgentProcessError(completed.errorCode, completed.errorMessage)
     : null;
+}
+
+function isUnknownOperationError(cause: unknown): boolean {
+  return (
+    cause instanceof RemoteAgentConnectionError &&
+    cause.message.includes("operation is unknown or expired")
+  );
 }
 
 export class RemoteAgentProcessClient {
@@ -91,40 +111,54 @@ export class RemoteAgentProcessClient {
     return { ...response, terminal: true, detail: "cancellation-terminal" };
   }
 
-  async run(input: {
-    readonly workspaceHandle: string;
-    readonly operationId: string;
-    readonly requestDigest: Uint8Array;
-    readonly command: string;
-    readonly args?: ReadonlyArray<string>;
-    readonly timeoutMs?: number;
-    readonly maxOutputBytes?: number;
-    readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
-    readonly stdin?: Uint8Array;
-    readonly requestId?: string;
-  }): Promise<RemoteAgentProcessResult> {
-    const requestId = input.requestId ?? randomUUID();
-    const accepted = (await this.connection.request(
-      {
-        type: "processRequest",
-        value: {
-          requestId,
-          operationId: input.operationId,
-          requestDigest: input.requestDigest,
-          workspaceHandle: input.workspaceHandle,
-          command: input.command,
-          args: input.args ?? [],
-          timeoutMs: input.timeoutMs ?? 30_000,
-          maxOutputBytes: input.maxOutputBytes ?? 1024 * 1024,
-          ...(input.environment ? { environment: input.environment } : {}),
-          ...(input.stdin ? { stdin: input.stdin } : {}),
-        },
-      },
-      (frame) => frame.type === "processAccepted" && frame.value.requestId === requestId,
-    )) as Extract<
+  async run(input: RemoteAgentProcessRunInput): Promise<RemoteAgentProcessResult> {
+    return this.requestProcess(input, input.requestId ?? randomUUID(), true);
+  }
+
+  private async requestProcess(
+    input: RemoteAgentProcessRunInput,
+    requestId: string,
+    allowResubmit: boolean,
+  ): Promise<RemoteAgentProcessResult> {
+    let accepted: Extract<
       Awaited<ReturnType<RemoteAgentConnection["nextFrame"]>>,
       { type: "processAccepted" }
     >;
+    try {
+      accepted = (await this.connection.request(
+        {
+          type: "processRequest",
+          value: {
+            requestId,
+            operationId: input.operationId,
+            requestDigest: input.requestDigest,
+            workspaceHandle: input.workspaceHandle,
+            command: input.command,
+            args: input.args ?? [],
+            timeoutMs: input.timeoutMs ?? 30_000,
+            maxOutputBytes: input.maxOutputBytes ?? 1024 * 1024,
+            ...(input.environment ? { environment: input.environment } : {}),
+            ...(input.stdin ? { stdin: input.stdin } : {}),
+          },
+        },
+        (frame) => frame.type === "processAccepted" && frame.value.requestId === requestId,
+      )) as typeof accepted;
+    } catch (cause) {
+      if (!this.reconnect) throw cause;
+      const replacement = await this.reconnect();
+      try {
+        return await replacement.attach({ operationId: input.operationId });
+      } catch (attachCause) {
+        if (!isUnknownOperationError(attachCause)) throw attachCause;
+        if (!allowResubmit) {
+          throw new RemoteAgentProcessError(
+            "PROCESS_OUTCOME_UNKNOWN",
+            `Remote process ${input.operationId} has no retained acceptance record after resubmission.`,
+          );
+        }
+        return replacement.requestProcess(input, `${requestId}:retry`, false);
+      }
+    }
     if (!accepted.value.accepted) {
       throw new RemoteAgentProcessError(accepted.value.errorCode, accepted.value.errorMessage);
     }

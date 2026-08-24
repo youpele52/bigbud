@@ -113,6 +113,7 @@ export function startEventStream(
     healthNotificationEmitted = true;
     await makeSyntheticEvent(
       session.threadId,
+      session.sessionEpoch,
       "session.state.changed",
       {
         state: "error",

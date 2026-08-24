@@ -35,6 +35,7 @@ import { invalidateGitStatusQuery } from "~/lib/gitReactQuery";
 
 export interface GitActionsControlActionProps {
   gitCwd: string | null;
+  executionTargetId?: string | undefined;
   showGit: boolean;
   queryClient: QueryClient;
   isRepo: boolean;
@@ -80,7 +81,9 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
   return (
     <Menu
       onOpenChange={(open) => {
-        if (open && props.gitCwd) void invalidateGitStatusQuery(props.queryClient, props.gitCwd);
+        if (open && props.gitCwd) {
+          void invalidateGitStatusQuery(props.queryClient, props.gitCwd, props.executionTargetId);
+        }
       }}
     >
       <MenuTrigger

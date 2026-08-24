@@ -90,7 +90,7 @@ export function renderThreadOrchestrationConfigLiteral(
 
 export function renderCallOrchestrationToolSource(): string {
   return [
-    "async function callOrchestrationTool(body) {",
+    "async function callOrchestrationTool(body, signal) {",
     `  const response = await fetch(\`http://\${CONFIG.host}:\${CONFIG.port}${THREAD_ORCHESTRATION_API_PATH}\`, {`,
     "    method: 'POST',",
     "    headers: {",
@@ -98,6 +98,7 @@ export function renderCallOrchestrationToolSource(): string {
     "      'x-bigbud-thread-tool-token': CONFIG.token,",
     "    },",
     "    body: JSON.stringify(body),",
+    "    ...(signal ? { signal } : {}),",
     "  });",
     "  const payload = await response.json().catch(() => ({}));",
     "  if (!response.ok) {",

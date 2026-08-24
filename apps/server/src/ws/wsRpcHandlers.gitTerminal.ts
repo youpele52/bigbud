@@ -59,6 +59,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
               git: context.git,
               cwd: input.cwd,
               executionTargetId: input.executionTargetId!,
+              invalidation: context.remoteGitStatusInvalidation,
             }),
         { "rpc.aggregate": "git" },
       ),
@@ -90,7 +91,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitPull,
         context.git
           .pullCurrentBranch(input.cwd, input.executionTargetId)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -103,7 +104,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitFetch,
         context.git
           .fetch(input.cwd, input.executionTargetId)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -116,7 +117,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitDiscardChanges,
         context.git
           .discardChanges(input.cwd, input.executionTargetId)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -137,7 +138,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
               },
             })
             .pipe(
-              Effect.tap(() => context.refreshGitStatus(input.cwd)),
+              Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId)),
               Effect.matchCauseEffect({
                 onFailure: (cause) => Queue.failCause(queue, cause),
                 onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
@@ -161,7 +162,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitPreparePullRequestThread,
         context.gitManager
           .preparePullRequestThread(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitListBranches]: (input: Parameters<WsRpcContext["git"]["listBranches"]>[0]) =>
@@ -173,7 +174,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitCreateWorktree,
         context.git
           .createWorktree(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -183,7 +184,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitRemoveWorktree,
         context.git
           .removeWorktree(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -191,7 +192,9 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitCreateBranch]: (input: Parameters<WsRpcContext["git"]["createBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitCreateBranch,
-        context.git.createBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .createBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -201,7 +204,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitCheckout,
         context.git
           .checkoutBranch(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -209,19 +212,25 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitRenameBranch]: (input: Parameters<WsRpcContext["git"]["renameBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitRenameBranch,
-        context.git.renameBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .renameBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitDeleteBranch]: (input: Parameters<WsRpcContext["git"]["deleteBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitDeleteBranch,
-        context.git.deleteBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .deleteBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitInit]: (input: Parameters<WsRpcContext["git"]["initRepo"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitInit,
-        context.git.initRepo(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .initRepo(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.terminalOpen]: (input: Parameters<WsRpcContext["terminalManager"]["open"]>[0]) =>

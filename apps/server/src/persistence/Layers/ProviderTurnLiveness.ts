@@ -12,6 +12,7 @@ type LivenessRow = {
   threadId: string;
   turnId: string;
   provider: ProviderTurnLiveness["provider"];
+  sessionEpoch: number;
   turnStartedAt: string;
   lastRuntimeEventAt: string | null;
   lastMeaningfulProgressAt: string;
@@ -31,14 +32,15 @@ const make = Effect.gen(function* () {
           yield* sql`UPDATE provider_turn_liveness SET terminal_at = ${input.startedAt}
           WHERE thread_id = ${input.threadId} AND terminal_at IS NULL`;
           yield* sql`INSERT INTO provider_turn_liveness (
-          thread_id, turn_id, provider_name, turn_started_at, last_runtime_event_at,
+          thread_id, turn_id, provider_name, session_epoch, turn_started_at, last_runtime_event_at,
           last_meaningful_progress_at, last_inspection_at, inspection_status,
           consecutive_inspection_failures, terminal_at
         ) VALUES (
-          ${input.threadId}, ${input.turnId}, ${input.provider}, ${input.startedAt}, NULL,
+          ${input.threadId}, ${input.turnId}, ${input.provider}, ${input.sessionEpoch}, ${input.startedAt}, NULL,
           ${input.startedAt}, NULL, 'idle', 0, NULL
         ) ON CONFLICT (thread_id, turn_id) DO UPDATE SET
           provider_name = excluded.provider_name,
+          session_epoch = excluded.session_epoch,
           turn_started_at = excluded.turn_started_at,
           last_runtime_event_at = NULL,
           last_meaningful_progress_at = excluded.last_meaningful_progress_at,
@@ -78,7 +80,8 @@ const make = Effect.gen(function* () {
           WHEN ${input.status} IN ('checking', 'unavailable') THEN consecutive_inspection_failures
           WHEN ${input.failed ? 1 : 0} = 1 THEN consecutive_inspection_failures + 1
           ELSE 0 END
-      WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId} AND terminal_at IS NULL`.pipe(
+      WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId}
+        AND session_epoch = ${input.sessionEpoch} AND terminal_at IS NULL`.pipe(
       Effect.asVoid,
       Effect.mapError(toPersistenceSqlError("ProviderTurnLiveness.recordInspection")),
     );
@@ -86,7 +89,9 @@ const make = Effect.gen(function* () {
   const markTerminal: ProviderTurnLivenessRepositoryShape["markTerminal"] = (input) =>
     (input.turnId
       ? sql`UPDATE provider_turn_liveness SET terminal_at = ${input.terminalAt}
-          WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId} AND terminal_at IS NULL`
+          WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId}
+            ${input.sessionEpoch !== undefined ? sql`AND session_epoch = ${input.sessionEpoch}` : sql``}
+            AND terminal_at IS NULL`
       : sql`UPDATE provider_turn_liveness SET terminal_at = ${input.terminalAt}
           WHERE thread_id = ${input.threadId} AND terminal_at IS NULL`
     ).pipe(
@@ -101,6 +106,7 @@ const make = Effect.gen(function* () {
           const claimed = yield* sql<{ turnId: string }>`UPDATE provider_turn_liveness
           SET terminal_at = ${input.terminalAt}
           WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId}
+            AND session_epoch = ${input.sessionEpoch}
             AND terminal_at IS NULL
           RETURNING turn_id AS "turnId"`;
           if (claimed.length === 1) return true;
@@ -111,11 +117,11 @@ const make = Effect.gen(function* () {
           WHERE thread_id = ${input.threadId} AND turn_id = ${input.turnId}`;
           if (existing.length > 0) return false;
           yield* sql`INSERT INTO provider_turn_liveness (
-          thread_id, turn_id, provider_name, turn_started_at, last_runtime_event_at,
+          thread_id, turn_id, provider_name, session_epoch, turn_started_at, last_runtime_event_at,
           last_meaningful_progress_at, last_inspection_at, inspection_status,
           consecutive_inspection_failures, terminal_at
         ) VALUES (
-          ${input.threadId}, ${input.turnId}, ${input.provider}, ${input.terminalAt},
+          ${input.threadId}, ${input.turnId}, ${input.provider}, ${input.sessionEpoch}, ${input.terminalAt},
           ${input.terminalAt}, ${input.terminalAt}, NULL, 'completed', 0, ${input.terminalAt}
         )`;
           return true;
@@ -134,6 +140,7 @@ const make = Effect.gen(function* () {
   const listActive: ProviderTurnLivenessRepositoryShape["listActive"] = () =>
     sql<LivenessRow>`SELECT thread_id AS "threadId", turn_id AS "turnId",
       provider_name AS provider, turn_started_at AS "turnStartedAt",
+      session_epoch AS "sessionEpoch",
       last_runtime_event_at AS "lastRuntimeEventAt",
       last_meaningful_progress_at AS "lastMeaningfulProgressAt",
       last_inspection_at AS "lastInspectionAt", inspection_status AS "inspectionStatus",

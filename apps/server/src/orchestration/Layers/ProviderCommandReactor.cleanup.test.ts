@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
+import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId, TurnId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -15,7 +15,7 @@ import {
 describe("ProviderCommandReactor", () => {
   registerProviderCommandReactorTestCleanup();
 
-  it("reacts to thread.session.stop by stopping provider session and clearing thread session state", async () => {
+  it("reacts to thread.session.stop by interrupting the active turn without tearing down the session", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
@@ -26,10 +26,10 @@ describe("ProviderCommandReactor", () => {
         threadId: ThreadId.makeUnsafe("thread-1"),
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
-          status: "ready",
+          status: "running",
           providerName: "codex",
           runtimeMode: "approval-required",
-          activeTurnId: null,
+          activeTurnId: TurnId.makeUnsafe("turn-1"),
           lastError: null,
           updatedAt: now,
         },
@@ -45,13 +45,14 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.interruptTurn.mock.calls.length === 1);
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session).not.toBeNull();
-    expect(thread?.session?.status).toBe("stopped");
+    expect(harness.stopSession).not.toHaveBeenCalled();
+    expect(thread?.session?.status).toBe("running");
     expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.activeTurnId).toBeNull();
+    expect(thread?.session?.activeTurnId).toBe("turn-1");
   });
 
   it("reacts to thread.deletion-requested by stopping provider, browser, and terminal before final delete", async () => {

@@ -251,6 +251,7 @@ describe("mobileOrchestrationEvents.logic", () => {
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: turnId,
+          sessionEpoch: 0,
           lastError: null,
           reason: null,
           updatedAt: "2026-01-01T00:00:02.000Z",

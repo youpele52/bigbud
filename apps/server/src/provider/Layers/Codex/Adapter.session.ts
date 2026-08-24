@@ -10,7 +10,6 @@ import {
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import type { CodexAppServerStartSessionInput } from "../../../codex/codexAppServerManager.ts";
-import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
 import {
   buildCodexSessionOrchestrationConfig,
   composeBridgeCleanups,
@@ -37,6 +36,8 @@ import { mapToRuntimeEvents } from "./Adapter.stream.ts";
 import { makeResolveAttachment, toRequestError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
 import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.session.bootstrap.ts";
+import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorkspace.ts";
+import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
@@ -95,20 +96,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : undefined,
         useLegacyExecutionTargetForProviderRuntime: false,
       });
-      const remoteWorkspaceBridge =
-        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
-        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
-          ? yield* Effect.tryPromise({
-              try: () => createCodexRemoteWorkspaceBridge(executionContext.workspaceTarget),
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: PROVIDER,
-                  threadId: input.threadId,
-                  detail: toMessage(cause, "Failed to prepare Codex remote workspace bridge."),
-                  cause,
-                }),
-            })
-          : undefined;
       const orchestrationBridge = yield* Effect.tryPromise({
         try: () =>
           prepareThreadOrchestrationMcpBridge({
@@ -125,6 +112,15 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             cause,
           }),
       });
+      const remoteWorkspaceBridge =
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+          ? yield* prepareCodexRemoteWorkspaceBridge({
+              workspaceTarget: executionContext.workspaceTarget,
+              orchestrationBridge,
+              threadId: input.threadId,
+            })
+          : undefined;
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
       const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools();
       const mergedConfigArgs = mergeCodexConfigArgs(
@@ -149,6 +145,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,
+        ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
         binaryPath,
         ...(homePath ? { homePath } : {}),
         ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
@@ -261,11 +258,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
   });
 
-  const interruptTurn: CodexAdapterShape["interruptTurn"] = (threadId, turnId) =>
-    Effect.tryPromise({
-      try: () => manager.interruptTurn(threadId, turnId),
-      catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-    });
+  const { interruptTurn, steerTurn } = makeCodexTurnControl(manager);
 
   const readThread: CodexAdapterShape["readThread"] = (threadId) =>
     Effect.tryPromise({
@@ -379,10 +372,18 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      supportsSteer: true,
+      turnControl: {
+        nativeSteer: true,
+        interruptTarget: "exact-turn",
+        activeTurnInspection: "unavailable",
+        continuation: true,
+      },
     },
     startSession,
     sendTurn,
     interruptTurn,
+    steerTurn,
     inspectActiveTurn: unavailableActiveTurnInspection("codex"),
     readThread,
     rollbackThread,

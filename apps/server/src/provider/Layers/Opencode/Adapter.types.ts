@@ -47,8 +47,11 @@ export interface ActiveOpencodeSession {
   readonly releaseServer: () => void;
   /** Cleans up a synthetic remote-workspace bridge when one was created. */
   readonly cleanupBridge?: (() => Promise<void>) | undefined;
+  /** Keeps provider tools anchored to the actual remote workspace. */
+  readonly remoteWorkspaceSystemPrompt?: string | undefined;
   readonly opencodeSessionId: string;
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   readonly createdAt: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
   readonly providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];

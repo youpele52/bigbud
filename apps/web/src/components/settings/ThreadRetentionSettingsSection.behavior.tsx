@@ -73,6 +73,7 @@ export function ThreadBehaviorSettingsRows() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.confirmThreadArchive}
             onCheckedChange={(checked) =>
               updateSettings({ confirmThreadArchive: Boolean(checked) })
@@ -99,6 +100,7 @@ export function ThreadBehaviorSettingsRows() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.confirmThreadDelete}
             onCheckedChange={(checked) => updateSettings({ confirmThreadDelete: Boolean(checked) })}
             aria-label="Confirm thread deletion"

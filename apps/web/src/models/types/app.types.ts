@@ -4,6 +4,7 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
   OrchestrationSessionStatus,
+  OrchestrationTurnControlOperation,
   OrchestrationThreadPurpose,
   OrchestrationThreadActivity,
   ProjectScript as ContractProjectScript,
@@ -172,6 +173,8 @@ export interface Thread {
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   queuedPrompts?: Array<{ id: MessageId; text: string; createdAt: string }>;
+  pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;
+  queueHold?: boolean;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
@@ -225,6 +228,7 @@ export interface ThreadSession {
   provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;
+  sessionEpoch?: number | undefined;
   createdAt: string;
   updatedAt: string;
   reason?: string | null;

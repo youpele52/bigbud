@@ -1,4 +1,4 @@
-import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bigbud/contracts";
+import type { ProjectEntry, ThreadId } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -12,18 +12,18 @@ import type { CodeAnnotationDraft } from "./FilePreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
 import { applyDirectoryNavigationRequest, openFilesPanelEntry } from "./FilesPanel.logic";
-import { EMPTY_ENTRIES, FILE_PREVIEW_MIN_WIDTH, makeAnnotationId } from "./FilesPanel.shared";
-import { renderFilesPanelTree } from "./FilesPanel.tree";
+import { EMPTY_ENTRIES, makeAnnotationId } from "./FilesPanel.shared";
+import { renderFilesPanelTreeBody } from "./FilesPanel.body";
+import { FilesPanelRefreshCoordinator } from "./FilesPanelRefreshCoordinator";
 import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
 import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
-import { useFilesPanelDirectoryRefresh } from "./useFilesPanelDirectoryRefresh";
 import {
   useFilesPanelAuxNavigation,
   useFilesPanelHistory,
   useFilesPanelScrollPersistence,
 } from "./useFilesPanelHistory";
 import { createFilesPanelWorkspaceKey } from "./FilesPanel.workspace";
-import { FilesPanelPreview } from "./FilesPanel.preview";
+import { renderFilesPanelPreviewBody } from "./FilesPanel.previewBody";
 
 interface FilesPanelProps {
   activeThreadId?: ThreadId | null;
@@ -179,14 +179,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   );
   useFilesPanelAuxNavigation(panelContainerRef, canNavigateHistory, navigateFileHistory);
 
-  useFilesPanelDirectoryRefresh({
-    workspaceRoot: activeWorkspaceRoot,
-    workspaceExecutionTargetId: activeWorkspaceExecutionTargetId,
-    expandedDirectories,
-    directoryStateByPath,
-    loadDirectory,
-  });
-
   useEffect(() => {
     if (!directoryNavigationRequest) return;
 
@@ -211,7 +203,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   }, [activeWorkspaceRoot, directoryStateByPath, loadDirectory]);
 
   const rootDirectoryState = directoryStateByPath[""];
-  const remoteWorkspace = isRemoteExecutionTargetId(activeWorkspaceExecutionTargetId);
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
   const showRootLoading = rootDirectoryState?.loading && sortedRootEntries.length === 0;
   const previewTargetLine = previewPosition?.line;
@@ -232,11 +223,22 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const handleOpenFile = useCallback(
     (entry: ProjectEntry) => {
       if (!activeWorkspaceRoot) return;
-      openFilesPanelEntry(entry, activeWorkspaceRoot, setPreviewPath, setPreviewPosition, (path) =>
-        openPreview({ path, position: null, scrollTop: null }),
+      openFilesPanelEntry(
+        entry,
+        activeWorkspaceRoot,
+        setPreviewPath,
+        setPreviewPosition,
+        (path) => openPreview({ path, position: null, scrollTop: null }),
+        activeWorkspaceExecutionTargetId,
       );
     },
-    [activeWorkspaceRoot, openPreview, setPreviewPath, setPreviewPosition],
+    [
+      activeWorkspaceExecutionTargetId,
+      activeWorkspaceRoot,
+      openPreview,
+      setPreviewPath,
+      setPreviewPosition,
+    ],
   );
 
   const handleCreateCodeAnnotation = useCallback(
@@ -268,28 +270,19 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   );
 
   const treeBody = useMemo(() => {
-    if (showRootLoading) {
-      return <div className="p-3 text-sm text-muted-foreground/70">Loading files...</div>;
-    }
-    if (rootDirectoryState?.error) {
-      return <div className="p-3 text-sm text-destructive/80">{rootDirectoryState.error}</div>;
-    }
-    return (
-      <div className="space-y-0.5 p-2">
-        {renderFilesPanelTree({
-          entries: sortedRootEntries,
-          depth: 0,
-          workspaceRoot: activeWorkspaceRoot,
-          previewPath,
-          resolvedTheme,
-          expandedDirectories,
-          directoryStateByPath,
-          onToggleDirectory: handleToggleDirectory,
-          onOpenFile: handleOpenFile,
-          onOpenContextMenu: openContextMenu,
-        })}
-      </div>
-    );
+    return renderFilesPanelTreeBody({
+      showLoading: showRootLoading,
+      error: rootDirectoryState?.error,
+      entries: sortedRootEntries,
+      workspaceRoot: activeWorkspaceRoot,
+      previewPath,
+      resolvedTheme,
+      expandedDirectories,
+      directoryStateByPath,
+      onToggleDirectory: handleToggleDirectory,
+      onOpenFile: handleOpenFile,
+      onOpenContextMenu: openContextMenu,
+    });
   }, [
     directoryStateByPath,
     expandedDirectories,
@@ -305,62 +298,26 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   ]);
 
   const panelBody = useMemo(() => {
-    if (!activeWorkspaceRoot) {
-      return (
-        <div className="p-3 text-sm text-muted-foreground/70">
-          Select a project to browse files.
-        </div>
-      );
-    }
-    if (remoteWorkspace) {
-      return (
-        <div className="p-3 text-sm text-muted-foreground/70">
-          Remote workspaces are not supported in the Files panel yet.
-        </div>
-      );
-    }
-    if (!previewPath) {
-      return <div className="h-full overflow-y-auto">{treeBody}</div>;
-    }
-    const canNavigateBack = canMoveFileHistory(activeHistory, -1);
-    const canNavigateForward = canMoveFileHistory(activeHistory, 1);
-    const sharedPreviewProps = {
-      canNavigateBack,
-      canNavigateForward,
+    return renderFilesPanelPreviewBody({
+      workspaceRoot: activeWorkspaceRoot,
+      previewPath,
+      treeBody,
+      history: activeHistory,
+      historyEntry: activeHistoryEntry,
+      targetLine: previewTargetLine,
+      executionTargetId: activeWorkspaceExecutionTargetId,
+      projectName: activeProjectName,
+      fileTreeContainerRef,
+      fileTreeWidth,
       onNavigateBack: handleNavigateBack,
       onNavigateForward: handleNavigateForward,
       onClose: closePreview,
       onPreviewLoadError: handlePreviewLoadError,
-    };
-    return (
-      <div ref={fileTreeContainerRef} className="flex h-full min-h-0">
-        <div className="min-h-0 flex-1" style={{ minWidth: FILE_PREVIEW_MIN_WIDTH }}>
-          <FilesPanelPreview
-            cwd={activeWorkspaceRoot}
-            relativePath={previewPath}
-            targetLine={previewTargetLine}
-            executionTargetId={activeWorkspaceExecutionTargetId}
-            projectName={activeProjectName}
-            historyEntry={activeHistoryEntry}
-            {...sharedPreviewProps}
-            onScrollPositionChange={persistScrollPosition}
-            onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
-            onSearchMatch={handleSearchMatch}
-          />
-        </div>
-        <div
-          className="z-10 w-[3px] shrink-0 cursor-col-resize select-none hover:bg-primary/30"
-          role="separator"
-          onMouseDown={handleTreeResizeStart}
-        />
-        <div
-          className="min-h-0 overflow-y-auto border-l border-border"
-          style={{ width: fileTreeWidth }}
-        >
-          {treeBody}
-        </div>
-      </div>
-    );
+      onScrollPositionChange: persistScrollPosition,
+      onCreateAnnotation: activeThreadId ? handleCreateCodeAnnotation : undefined,
+      onSearchMatch: handleSearchMatch,
+      onTreeResizeStart: handleTreeResizeStart,
+    });
   }, [
     activeThreadId,
     activeHistory,
@@ -377,7 +334,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     previewTargetLine,
     persistScrollPosition,
     activeProjectName,
-    remoteWorkspace,
     treeBody,
     activeWorkspaceExecutionTargetId,
     activeWorkspaceRoot,
@@ -386,7 +342,18 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   return (
     <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
       <FilesPanelHeader />
-      <div className="min-h-0 flex-1 overflow-hidden">{panelBody}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <FilesPanelRefreshCoordinator
+          workspaceRoot={activeWorkspaceRoot}
+          workspaceExecutionTargetId={activeWorkspaceExecutionTargetId}
+          previewPath={previewPath}
+          expandedDirectories={expandedDirectories}
+          directoryStateByPath={directoryStateByPath}
+          loadDirectory={loadDirectory}
+        >
+          {panelBody}
+        </FilesPanelRefreshCoordinator>
+      </div>
       <FilesPanelContextMenu
         contextMenuState={contextMenuState}
         workspaceRoot={activeWorkspaceRoot ?? undefined}

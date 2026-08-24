@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+import "remote-agent/common.proto";
+import "remote-agent/process.proto";
+import "remote-agent/pty.proto";
+import "remote-agent/workspace.proto";
+
+message Frame {
+  oneof payload {
+    ClientHello client_hello = 1;
+    AgentHello agent_hello = 2;
+    DiagnosticRequest diagnostic_request = 3;
+    DiagnosticResponse diagnostic_response = 4;
+    CancelRequest cancel_request = 5;
+    CancelResponse cancel_response = 6;
+    ProtocolError protocol_error = 7;
+    WorkspaceOpenRequest workspace_open_request = 8;
+    WorkspaceOpenResponse workspace_open_response = 9;
+    ReadFileRequest read_file_request = 10;
+    ReadFileResponse read_file_response = 11;
+    ListDirectoryRequest list_directory_request = 12;
+    ListDirectoryResponse list_directory_response = 13;
+    FilenameSearchRequest filename_search_request = 14;
+    FilenameSearchResponse filename_search_response = 15;
+    ContentSearchRequest content_search_request = 16;
+    ContentSearchResponse content_search_response = 17;
+    ProcessRequest process_request = 18;
+    ProcessAccepted process_accepted = 19;
+    ProcessOutput process_output = 20;
+    ProcessCompleted process_completed = 21;
+    ProcessAttachRequest process_attach_request = 22;
+    ProcessOutputAck process_output_ack = 23;
+    ProcessAckResponse process_ack_response = 24;
+    ProcessAttachResponse process_attach_response = 25;
+    WriteFileRequest write_file_request = 26;
+    WriteFileResponse write_file_response = 27;
+    PtyCreateRequest pty_create_request = 42;
+    PtyCreateResponse pty_create_response = 43;
+    PtyInput pty_input = 44;
+    PtyOutput pty_output = 45;
+    PtyOutputAck pty_output_ack = 46;
+    PtyResizeRequest pty_resize_request = 47;
+    PtyResizeResponse pty_resize_response = 48;
+    PtySignalRequest pty_signal_request = 49;
+    PtySignalResponse pty_signal_response = 50;
+    PtyAttachRequest pty_attach_request = 51;
+    PtyAttachResponse pty_attach_response = 52;
+    PtyCloseRequest pty_close_request = 53;
+    PtyCloseResponse pty_close_response = 54;
+    PtyExited pty_exited = 55;
+    PtyInputResponse pty_input_response = 56;
+    PtyOutputAckResponse pty_output_ack_response = 57;
+  }
+}

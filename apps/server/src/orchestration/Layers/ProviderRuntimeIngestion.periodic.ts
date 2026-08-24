@@ -20,7 +20,8 @@ export function selectPeriodicReconciliationThreads(
       (thread) =>
         thread.deletedAt === null &&
         thread.archivedAt === null &&
-        (thread.pendingInterruptFlushIntent !== null ||
+        (thread.pendingInterruptFlushIntent != null ||
+          thread.pendingTurnControlOperation != null ||
           (thread.session?.activeTurnId ?? null) !== null ||
           thread.session?.status === "running"),
     )

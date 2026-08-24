@@ -609,14 +609,18 @@ The agent must not be called lightweight based only on implementation language. 
 
 ## Rollout and Fallback
 
-1. Ship behind an experimental setting for internal and prerelease builds.
-2. Prefer the agent for read-only operations after successful install and handshake.
-3. Fall back to current direct SSH only when the operation is safe to retry and the compatibility policy permits it.
-4. Do not switch an in-flight mutation between implementations.
-5. Record privacy-preserving lifecycle diagnostics: versions, capability, timings, reconnect reason classes, and terminal error codes. Never record commands, paths, file contents, prompts, or provider output.
-6. Expand default usage capability group by capability group.
-7. Retain an explicit repair/reinstall action and a direct SSH recovery path during rollout.
-8. Remove fallback only after at least one stable release has demonstrated parity on the supported matrix.
+Current implementation status:
+
+1. Supported remote workspaces select the agent before execution by default and use the managed `$HOME/.bigbud/agent/bin/current` path unless `BIGBUD_REMOTE_AGENT_BINARY` overrides it.
+2. Provider remote-workspace bridges call the authenticated per-thread bigbud endpoint; they no longer construct or launch their own SSH workspace commands.
+3. `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` selects the centralized compatibility transport before execution. It is a recovery mode, not an automatic per-operation fallback.
+4. An accepted agent operation is never retried through direct SSH after an ambiguous result.
+
+Remaining rollout gates:
+
+1. Record privacy-preserving lifecycle diagnostics: versions, capability, timings, reconnect reason classes, and terminal error codes. Never record commands, paths, file contents, prompts, or provider output.
+2. Retain an explicit repair/reinstall action and direct SSH recovery mode until signed artifact delivery, live-host integration, soak, and provider parity evidence pass the supported matrix.
+3. Remove the recovery mode only after at least one stable release has demonstrated parity on that matrix.
 
 ## First Implementation Slice
 

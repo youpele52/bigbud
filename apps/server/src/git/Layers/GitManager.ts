@@ -13,6 +13,7 @@ import { GitHubCli } from "../Services/GitHubCli.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ProjectSetupScriptRunner } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import {
   normalizePullRequestReference,
   toResolvedPullRequest,
@@ -93,12 +94,13 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const serverSettingsService = yield* ServerSettingsService;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const config = yield* ServerConfig;
 
   // ── Sub-module factories ────────────────────────────────────────────────
   const prHelpers = makePrHelpers(gitCore, gitHubCli);
   const branchContext = makeBranchContext(gitCore, gitHubCli);
   const prLookup = makePrLookup(gitCore, gitHubCli, branchContext);
-  const commitStep = makeCommitStep(gitCore, textGeneration, fileSystem);
+  const commitStep = makeCommitStep(gitCore, textGeneration, fileSystem, config.cwd);
   const prStep = makePrStep(
     gitCore,
     gitHubCli,

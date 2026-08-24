@@ -28,6 +28,7 @@ import { usePreviewLoad } from "./usePreviewLoad";
 import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
 import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
 import { FilePreviewSearchFocus } from "./FilePreviewSearchFocus";
+import { BigbudLoader } from "../layout/BigbudLoader";
 
 interface FilePreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
@@ -280,7 +281,7 @@ export const FilePreview = memo(function FilePreview({
       />
 
       {shouldShowPreviewLoading(state) ? (
-        <div className="p-3 text-sm text-muted-foreground/70">Loading preview...</div>
+        <BigbudLoader className="min-h-0 flex-1" label="Loading file preview..." />
       ) : state.error ? (
         <div className="flex gap-2 p-3 text-sm text-destructive/80">
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />

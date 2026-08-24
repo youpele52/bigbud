@@ -123,6 +123,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
         yield* offerRuntimeEvent({
           type: "session.exited",
           ...(yield* makeEventStamp()),
+          sessionEpoch: ctx.sessionEpoch,
           provider: PROVIDER,
           threadId: ctx.threadId,
           payload: { exitKind: "graceful" },

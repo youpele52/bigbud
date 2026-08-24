@@ -72,6 +72,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
 
   const makeSyntheticEvent = (<TType extends ProviderRuntimeEvent["type"]>(
     threadId: ThreadId,
+    sessionEpoch: number,
     type: TType,
     payload: Extract<ProviderRuntimeEvent, { type: TType }>["payload"],
     extra?: { turnId?: TurnId; itemId?: string; requestId?: string },
@@ -83,6 +84,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
           eventId: stamp.eventId,
           createdAt: stamp.createdAt,
           threadId,
+          sessionEpoch,
           ...(extra?.turnId ? { turnId: extra.turnId } : {}),
           ...(extra?.itemId ? { itemId: extra.itemId } : {}),
           ...(extra?.requestId ? { requestId: extra.requestId } : {}),
@@ -129,6 +131,13 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      supportsSteer: true,
+      turnControl: {
+        nativeSteer: true,
+        interruptTarget: "current-session",
+        activeTurnInspection: "unavailable",
+        continuation: true,
+      },
     },
     ...methods,
     get streamEvents() {

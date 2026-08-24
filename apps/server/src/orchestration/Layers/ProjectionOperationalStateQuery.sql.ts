@@ -69,6 +69,8 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         t.last_activity_at AS "lastActivityAt",
         t.queued_prompts_json AS "queuedPrompts",
         t.pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
+        t.pending_turn_control_operation_json AS "pendingTurnControlOperation",
+        t.queue_hold AS "queueHold",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t
@@ -218,6 +220,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         s.provider_thread_id AS "providerThreadId",
         s.runtime_mode AS "runtimeMode",
         s.active_turn_id AS "activeTurnId",
+        s.session_epoch AS "sessionEpoch",
         s.reason,
         s.last_error AS "lastError",
         s.updated_at AS "updatedAt"

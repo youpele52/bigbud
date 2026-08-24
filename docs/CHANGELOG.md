@@ -4,13 +4,48 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
+- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
 - Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
-- Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
-- Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
-- Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
-- Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
+- Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
+- Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.205 (23 August, 2026)
+## v0.2.205 (25 August, 2026)
+
+### Remote Workspace Agent
+
+- Added a managed remote agent for remote workspaces. On first use, bigbud asks permission to install it under `~/.bigbud/agent` on the remote computer and verifies the setup before using the project.
+- Built the managed remote agent and its shared communication protocol in [Rust](https://rust-lang.org/) for lower-overhead remote execution, durable recovery, and reliable handling of files, Git, terminals, shell commands, and provider tools.
+- Made the managed remote agent the default transport for supported remote workspace files, Git, terminals, shell commands, and provider tools.
+- Routed Codex, Claude, Copilot, OpenCode, KiloCode, and Pi through one authenticated per-thread execution path instead of separate direct workspace SSH bridges.
+- Kept direct SSH as an explicit server-start compatibility mode via `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh`; there is no automatic transport switch after an agent operation is accepted.
+
+### More Reliable Claude and CLIProxyAPI Sessions
+
+- Hardened Claude Agent SDK turn handling so overlapping sends are rejected safely, stale interrupts are ignored, malformed results fail cleanly, and stream recovery stays bounded and session-aware.
+- Made Claude task tracking follow the SDK's real lifecycle, including durable IDs returned by task creation, structured task snapshots, completed and deleted tasks, and protection against ordinary tool descriptions appearing as fake tasks.
+- Improved CLIProxyAPI configuration and lifecycle validation with selected-config checks, clearer startup diagnostics, health and authentication verification, live model catalog validation, and coalesced concurrent inspections.
+
+### A Safer, Smarter Browser
+
+- Isolated desktop browser tabs in a dedicated persistent session, denied unexpected guest permissions and pop-up windows, and restricted top-level navigation and redirects to HTTP(S) pages.
+- Added URL-or-search handling to the browser address bar, synchronized visit history and bookmarks, and added clearer loading, crash, annotation, and navigation error states.
+- Kept visible browser tabs attached to the thread using them, with safe fallback to a background browser when no tab is attached. Browser leases now release correctly after failures, cancellations, timeouts, renderer errors, tab closure, and handoffs.
+- Show each website's own icon on its browser tab in the right panel instead of a generic globe, with the globe kept as the fallback when a site has no icon or the icon fails to load.
+- Made the address bar quieter while you read: it shows just the site name centered when idle, reveals its field and open-in-default-browser shortcut on hover, and becomes a left-aligned URL editor when you click into it or when a tab is still empty.
+
+### Thread Orchestration and Cleanup
+
+- Restored follow-up messaging for directly delegated threads across authorized projects, aligned orchestration access across providers, and removed the unsupported workspace-path argument from thread creation tools.
+- Made normal thread deletion remove only the selected thread. Existing child threads now remain available as standalone threads, while project and automatic cleanup stay bounded to the relevant project and never delete cross-project descendants implicitly.
+- Hardened deletion and retention against concurrent work, including safe fence takeover, project-boundary protection, descendant eligibility checks, and recovery of delegation reservations before child threads are created.
+- Kept web and mobile thread views synchronized when deleted threads are removed or surviving children become standalone, including mobile detail-cache invalidation.
+
+### Files Preview
+
+- Let workspace file-opening route any in-workspace file into the Files panel when a preview is available, including extensionless files and dotfiles such as Dockerfiles, `.env.example`, and `.gitattributes`.
+- Added drag-and-drop from the open file name in the preview header into the composer, matching the existing Files tree behavior for sharing file context.
+- Raised the text preview limit from 512 KiB to 5 MiB and removed the client-provided preview byte limit from the project contract.
+- Rejected oversized, binary, NUL-byte, and invalid UTF-8 previews with explicit errors instead of truncating or attempting to display non-text content.
 
 ### Floating Assistant
 
@@ -25,39 +60,17 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Made `Mod+F` current-file aware. When a file preview is focused, matches from that file appear first in the search palette, with global project results still available underneath.
 - Added focused preview context, result navigation, and plain-text preview support so search results can take you back to the exact file match.
 
-### Files Preview
-
-- Let workspace file-opening route any in-workspace file into the Files panel when a preview is available, including extensionless files and dotfiles such as Dockerfiles, `.env.example`, and `.gitattributes`.
-- Raised the text preview limit from 512 KiB to 5 MiB and removed the client-provided preview byte limit from the project contract.
-- Rejected oversized, binary, NUL-byte, and invalid UTF-8 previews with explicit errors instead of truncating or attempting to display non-text content.
-
 ### Better Diff Annotations
 
 - Hold `Shift` and click a diff line number to annotate that line with the same composer flow used by normal file previews.
 - Diff annotations now include the surrounding before-and-after code in your prompt, and changed or renamed files are easier to spot with amber triangle markers in the diff header.
 
-### Browser Tabs and Address Bar
-
-- Show each website's own icon on its browser tab in the right panel instead of a generic globe, with the globe kept as the fallback when a site has no icon or the icon fails to load.
-- Made the address bar quieter while you read: it shows just the site name centered when idle, reveals its field and open-in-default-browser shortcut on hover, and becomes a left-aligned URL editor when you click into it or when a tab is still empty.
-
-### Safer Browser Sessions
-
-- Isolated desktop browser tabs in a dedicated persistent session, denied unexpected guest permissions and pop-up windows, and restricted top-level navigation and redirects to HTTP(S) pages.
-- Added URL-or-search handling to the browser address bar, synchronized visit history and bookmarks, and added clearer loading, crash, annotation, and navigation error states.
-- Kept visible browser tabs attached to the thread using them, with safe fallback to a background browser when no tab is attached. Browser leases now release correctly after failures, cancellations, timeouts, renderer errors, tab closure, and handoffs.
-
-### Thread Orchestration and Cleanup
-
-- Restored follow-up messaging for directly delegated threads across authorized projects, aligned orchestration access across providers, and removed the unsupported workspace-path argument from thread creation tools.
-- Made normal thread deletion remove only the selected thread. Existing child threads now remain available as standalone threads, while project and automatic cleanup stay bounded to the relevant project and never delete cross-project descendants implicitly.
-- Hardened deletion and retention against concurrent work, including safe fence takeover, project-boundary protection, descendant eligibility checks, and recovery of delegation reservations before child threads are created.
-- Kept web and mobile thread views synchronized when deleted threads are removed or surviving children become standalone, including mobile detail-cache invalidation.
-
 ### Validation
 
 - Added regression coverage for browser session isolation, navigation policy, visible-tab routing and lease cleanup, delegated thread access, deletion boundaries, retention safety, migration recovery, and web/mobile synchronization.
 - Verified formatting, linting, type checks, and the full workspace test suite.
+- Added regression coverage for Claude turn safety, task lifecycle and SDK message decoding, stream recovery, CLIProxyAPI lifecycle, authentication, and model catalog handling.
+- Verified the Claude and CLIProxyAPI provider suites with 201 passing tests and 1 skipped test, alongside formatting, lint, and workspace type checks.
 
 ## v0.2.204 (19 August, 2026)
 

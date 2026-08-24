@@ -62,6 +62,68 @@ fn rejects_environment_values_outside_the_agent_allowlist() {
 }
 
 #[test]
+fn rejects_protected_remote_identity_environment_overrides() {
+    for name in ["HOME", "PATH", "XDG_CONFIG_HOME", "SSH_AUTH_SOCK"] {
+        let result = process_environment_from_entries(&[v1::ProcessEnvironment {
+            name: name.to_owned(),
+            value: "untrusted".to_owned(),
+        }]);
+        assert!(
+            matches!(result, Err(SessionError::Process(message)) if message.contains("not permitted"))
+        );
+    }
+}
+
+#[test]
+fn accepts_explicit_git_identity_environment() {
+    let result = process_environment_from_entries(&[
+        v1::ProcessEnvironment {
+            name: "GIT_AUTHOR_NAME".to_owned(),
+            value: "Remote Author".to_owned(),
+        },
+        v1::ProcessEnvironment {
+            name: "GIT_COMMITTER_EMAIL".to_owned(),
+            value: "committer@example.com".to_owned(),
+        },
+    ])
+    .unwrap();
+    assert_eq!(
+        result,
+        vec![
+            ("GIT_AUTHOR_NAME".to_owned(), "Remote Author".to_owned()),
+            (
+                "GIT_COMMITTER_EMAIL".to_owned(),
+                "committer@example.com".to_owned()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn accepts_bounded_git_configuration_environment() {
+    let result = process_environment_from_entries(&[
+        v1::ProcessEnvironment {
+            name: "GIT_CONFIG".to_owned(),
+            value: "/remote/config".to_owned(),
+        },
+        v1::ProcessEnvironment {
+            name: "GIT_ASKPASS".to_owned(),
+            value: "/remote/askpass".to_owned(),
+        },
+        v1::ProcessEnvironment {
+            name: "GIT_SSH_COMMAND".to_owned(),
+            value: "ssh -o BatchMode=yes".to_owned(),
+        },
+        v1::ProcessEnvironment {
+            name: "GIT_CONFIG_COUNT".to_owned(),
+            value: "1".to_owned(),
+        },
+    ])
+    .unwrap();
+    assert_eq!(result.len(), 4);
+}
+
+#[test]
 fn exposes_explicit_terminal_cancellation_result() {
     let mut session = AgentSession::new();
     session.handle(hello()).unwrap();

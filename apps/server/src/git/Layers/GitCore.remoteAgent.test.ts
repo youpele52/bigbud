@@ -66,6 +66,43 @@ it.layer(TestLayer)("GitCore remote read-only composition", (it) => {
       }),
     );
 
+    it.effect("reuses the per-target upstream refresh cache", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remoteDir = yield* makeTmpDir("git-remote-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const local = yield* GitCore;
+        yield* local.execute({
+          operation: "GitCore.test.initBare",
+          cwd: remoteDir,
+          args: ["init", "--bare"],
+        });
+        yield* local.execute({
+          operation: "GitCore.test.addRemote",
+          cwd,
+          args: ["remote", "add", "origin", remoteDir],
+        });
+        yield* local.execute({
+          operation: "GitCore.test.push",
+          cwd,
+          args: ["push", "-u", "origin", initialBranch],
+        });
+        let statusFetches = 0;
+        const remote = yield* makeIsolatedGitCoreWithRemote({
+          execute: local.execute,
+          remoteExecute: (input) => {
+            if (input.operation === "GitCore.fetchRemoteForStatus") statusFetches += 1;
+            return local.execute({ ...input, executionTargetId: "local" });
+          },
+        });
+
+        yield* remote.statusDetails(cwd, "ssh:example");
+        yield* remote.statusDetails(cwd, "ssh:example");
+
+        expect(statusFetches).toBe(1);
+      }),
+    );
+
     it.effect("routes remote history and commit details through the executor", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

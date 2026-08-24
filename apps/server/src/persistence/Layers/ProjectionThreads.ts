@@ -3,6 +3,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import {
   OrchestrationQueuedPrompt,
   OrchestrationPendingInterruptFlushIntent,
+  OrchestrationTurnControlOperation,
   ParentThreadReference,
   PersistedModelSelection,
 } from "@bigbud/contracts";
@@ -33,6 +34,10 @@ const ProjectionThreadDbRow = ProjectionThread.mapFields(
     pendingInterruptFlushIntent: Schema.NullOr(
       Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
     ),
+    pendingTurnControlOperation: Schema.NullOr(
+      Schema.fromJsonString(OrchestrationTurnControlOperation),
+    ),
+    queueHold: Schema.Number,
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
@@ -71,6 +76,8 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     ...(row.pendingInterruptFlushIntent !== undefined
       ? { pendingInterruptFlushIntent: row.pendingInterruptFlushIntent }
       : {}),
+    pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
+    queueHold: row.queueHold === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastActivityAt: row.lastActivityAt,
@@ -112,6 +119,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           latest_turn_id,
            queued_prompts_json,
            pending_interrupt_flush_intent_json,
+           pending_turn_control_operation_json,
+           queue_hold,
           created_at,
           updated_at,
           last_activity_at,
@@ -144,6 +153,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.latestTurnId},
            ${JSON.stringify(row.queuedPrompts)},
            ${row.pendingInterruptFlushIntent == null ? null : JSON.stringify(row.pendingInterruptFlushIntent)},
+           ${row.pendingTurnControlOperation == null ? null : JSON.stringify(row.pendingTurnControlOperation)},
+           ${row.queueHold ? 1 : 0},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.lastActivityAt},
@@ -176,6 +187,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           latest_turn_id = excluded.latest_turn_id,
            queued_prompts_json = excluded.queued_prompts_json,
            pending_interrupt_flush_intent_json = excluded.pending_interrupt_flush_intent_json,
+           pending_turn_control_operation_json = excluded.pending_turn_control_operation_json,
+           queue_hold = excluded.queue_hold,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           last_activity_at = MAX(projection_threads.last_activity_at, excluded.last_activity_at),
@@ -217,6 +230,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           latest_turn_id AS "latestTurnId",
            queued_prompts_json AS "queuedPrompts",
            pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
+           pending_turn_control_operation_json AS "pendingTurnControlOperation",
+           queue_hold AS "queueHold",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           last_activity_at AS "lastActivityAt",
@@ -260,7 +275,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           latest_turn_id AS "latestTurnId",
            queued_prompts_json AS "queuedPrompts",
            pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
-          created_at AS "createdAt",
+           pending_turn_control_operation_json AS "pendingTurnControlOperation",
+           queue_hold AS "queueHold",
+           created_at AS "createdAt",
           updated_at AS "updatedAt",
           last_activity_at AS "lastActivityAt",
           archived_at AS "archivedAt",

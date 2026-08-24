@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   ApprovalRequestId,
+  CommandId,
   CheckpointRef,
   ExecutionTargetId,
   IsoDateTime,
@@ -35,6 +36,7 @@ import {
   OrchestrationTaskFreshness,
   OrchestrationTaskSource,
   OrchestrationThreadPurpose,
+  OrchestrationTurnControlOperation,
   OrchestrationThreadActivity,
   ParentThreadReference,
   SourceProposedPlanReference,
@@ -74,6 +76,10 @@ export const ThreadQueuedPromptRemovedPayload = Schema.Struct({
 export const ThreadQueuedPromptsFlushedPayload = Schema.Struct({
   threadId: ThreadId,
   messageIds: Schema.Array(MessageId),
+});
+export const ThreadQueuedPromptFlushCancelledPayload = Schema.Struct({
+  threadId: ThreadId,
+  intentId: CommandId,
 });
 
 export const ThreadDeletedPayload = Schema.Struct({
@@ -191,7 +197,21 @@ export const ThreadTurnInterruptRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
   pendingFlushIntent: Schema.optional(OrchestrationPendingInterruptFlushIntent),
+  operation: Schema.optional(OrchestrationTurnControlOperation),
   createdAt: IsoDateTime,
+});
+
+export const ThreadTurnSteerRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  turnId: Schema.optional(TurnId),
+  queuedPromptIds: Schema.Array(MessageId),
+  operation: Schema.optional(OrchestrationTurnControlOperation),
+  createdAt: IsoDateTime,
+});
+
+export const ThreadTurnControlSetPayload = Schema.Struct({
+  threadId: ThreadId,
+  operation: OrchestrationTurnControlOperation,
 });
 
 export const ThreadApprovalResponseRequestedPayload = Schema.Struct({
@@ -233,6 +253,7 @@ export const ThreadRevertedPayload = Schema.Struct({
 
 export const ThreadSessionStopRequestedPayload = Schema.Struct({
   threadId: ThreadId,
+  operation: Schema.optional(OrchestrationTurnControlOperation),
   createdAt: IsoDateTime,
 });
 

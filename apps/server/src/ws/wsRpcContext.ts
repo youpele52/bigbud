@@ -14,6 +14,8 @@ import { ServerConfig } from "../startup/config";
 import { GitCore } from "../git/Services/GitCore";
 import { GitManager, type GitManagerShape } from "../git/Services/GitManager";
 import { GitStatusBroadcaster } from "../git/Services/GitStatusBroadcaster";
+import { makeRemoteGitStatusInvalidation } from "../git/Layers/RemoteGitStatusInvalidation.ts";
+import { makeGitStatusRefresh } from "../git/gitStatusRefresh.ts";
 import { Keybindings } from "../keybindings/keybindings";
 import { Open, resolveAvailableEditors, resolveAvailableTerminals } from "../utils/open";
 import { normalizeDispatchCommand } from "../orchestration/Normalizer";
@@ -71,6 +73,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const gitManager = yield* GitManager;
   const git = yield* GitCore;
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
+  const remoteGitStatusInvalidation = yield* makeRemoteGitStatusInvalidation;
   const terminalManager = yield* TerminalManager;
   const providerService = yield* ProviderService;
   const providerRegistry = yield* ProviderRegistry;
@@ -170,11 +173,11 @@ export const makeWsRpcContext = Effect.gen(function* () {
           cause,
         });
 
-  const refreshGitStatus = (cwd: string) =>
-    gitManager.invalidateStatus(cwd).pipe(
-      Effect.flatMap(() => gitStatusBroadcaster.invalidateLocal(cwd)),
-      Effect.flatMap(() => gitStatusBroadcaster.invalidateRemote(cwd)),
-    );
+  const refreshGitStatus = makeGitStatusRefresh({
+    gitManager,
+    gitStatusBroadcaster,
+    remoteGitStatusInvalidation,
+  });
 
   const gitStatus = (input: Parameters<GitManagerShape["status"]>[0]) =>
     isLocalExecutionTarget(input.executionTargetId) ? gitManager.status(input) : git.status(input);
@@ -347,6 +350,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     providerRegistry,
     providerService,
     refreshGitStatus,
+    remoteGitStatusInvalidation,
     schedulerReactor,
     serverCommandId,
     serverSettings,

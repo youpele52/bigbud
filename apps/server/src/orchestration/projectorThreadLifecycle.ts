@@ -101,6 +101,8 @@ export function projectThreadCreated(
         latestTurn: null,
         queuedPrompts: [],
         pendingInterruptFlushIntent: null,
+        pendingTurnControlOperation: null,
+        queueHold: false,
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,

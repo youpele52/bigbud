@@ -7,7 +7,7 @@ import {
   maybeGenerateThreadElevatorSummary,
   shouldRefreshThreadElevatorSummary,
 } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
-import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.ts";
+import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 function makeMessage(id: string, role: "user" | "assistant" | "system") {
   return {

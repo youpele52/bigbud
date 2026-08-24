@@ -185,6 +185,7 @@ export function ComputerUseAccessSettingsSection() {
         description={getComputerUseSettingsDescription(platform)}
         control={
           <Switch
+            tone="success"
             checked={settings.computerUseEnabled}
             onCheckedChange={(checked) => handleComputerUseEnabledChange(Boolean(checked))}
             aria-label="Enable desktop computer use"

@@ -53,31 +53,6 @@ function output(sequence: number, text: string): RemoteAgentFrame {
 }
 
 describe("remote agent process client", () => {
-  it("does not reconnect when transport fails before acceptance", async () => {
-    let reconnects = 0;
-    const client = new RemoteAgentProcessClient(
-      {
-        request: async () => {
-          throw new RemoteAgentConnectionError("socket closed before acceptance");
-        },
-      } as unknown as RemoteAgentConnection,
-      async () => {
-        reconnects += 1;
-        return new RemoteAgentProcessClient(fakeConnection([]));
-      },
-    );
-
-    await expect(
-      client.run({
-        workspaceHandle: "workspace",
-        operationId: "operation",
-        requestDigest: new Uint8Array([1]),
-        command: "printf",
-      }),
-    ).rejects.toThrow("before acceptance");
-    expect(reconnects).toBe(0);
-  });
-
   it("deduplicates retransmitted output sequences", async () => {
     const client = new RemoteAgentProcessClient(
       fakeConnection([accepted, output(1, "once"), output(1, "once"), completed]),

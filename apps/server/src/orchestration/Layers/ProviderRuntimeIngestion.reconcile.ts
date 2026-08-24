@@ -62,6 +62,7 @@ function areSessionsEqual(
     left?.providerName === right.providerName &&
     left?.runtimeMode === right.runtimeMode &&
     left?.activeTurnId === right.activeTurnId &&
+    (left?.sessionEpoch ?? 0) === (right.sessionEpoch ?? 0) &&
     (left.reason ?? null) === (right.reason ?? null) &&
     left?.lastError === right.lastError &&
     left?.updatedAt === right.updatedAt
@@ -77,6 +78,12 @@ function toReconciledSession(input: {
   const currentSession = thread.session;
 
   if (liveSession) {
+    if (
+      liveSession.sessionEpoch !== undefined &&
+      liveSession.sessionEpoch !== (currentSession?.sessionEpoch ?? 0)
+    ) {
+      return null;
+    }
     const status = mapProviderSessionStatusToOrchestrationStatus(liveSession.status);
     const currentReason = currentSession?.reason ?? null;
     const preserveSupervisorState =
@@ -94,6 +101,7 @@ function toReconciledSession(input: {
       providerName: liveSession.provider,
       runtimeMode: thread.runtimeMode ?? liveSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       activeTurnId: liveSession.activeTurnId ?? null,
+      sessionEpoch: currentSession?.sessionEpoch ?? liveSession.sessionEpoch ?? 0,
       reason: healLegacyChecking
         ? null
         : preserveSupervisorState
@@ -122,6 +130,7 @@ function toReconciledSession(input: {
     providerName: currentSession.providerName,
     runtimeMode: thread.runtimeMode ?? currentSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     activeTurnId: null,
+    sessionEpoch: currentSession.sessionEpoch ?? 0,
     reason: null,
     lastError: currentSession.lastError,
     updatedAt: occurredAt,
@@ -142,6 +151,10 @@ export function buildThreadReconciliationCommand(input: {
     commandId: serverCommandId("provider-runtime-session-reconcile"),
     threadId: input.thread.id,
     session: nextSession,
+    expectedSessionEpoch: input.thread.session?.sessionEpoch ?? 0,
+    ...(input.thread.session?.activeTurnId
+      ? { expectedActiveTurnId: input.thread.session.activeTurnId }
+      : {}),
     createdAt: input.occurredAt,
   };
 }

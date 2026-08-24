@@ -19,38 +19,92 @@ const READ_ONLY_COMMANDS = new Set([
   "show",
   "show-ref",
   "status",
-  "symbolic-ref",
 ]);
+
+function isReadOnlyBranchCommand(args: ReadonlyArray<string>): boolean {
+  if (args.length === 2 && args[1] === "--show-current") return true;
+  if (!args.includes("--list")) {
+    return (
+      (args.length === 3 && args[1] === "--no-color" && args[2] === "--no-column") ||
+      (args.length === 4 &&
+        args[1] === "--no-color" &&
+        args[2] === "--no-column" &&
+        args[3] === "--remotes")
+    );
+  }
+  return (
+    args.length === 5 &&
+    args[1] === "--list" &&
+    args[2] === "--no-column" &&
+    args[3]?.startsWith("--format=") === true
+  );
+}
+
+function isReadOnlyConfigCommand(args: ReadonlyArray<string>): boolean {
+  const options = args.slice(1);
+  const [first] = options;
+  if (["--get", "--get-all", "--get-regexp"].includes(first ?? "")) {
+    return options.length === 2 || (options.length === 3 && options[2] === "--show-origin");
+  }
+  return (
+    options.some((option) => option === "--list" || option === "-l") &&
+    options.every((option) => ["--list", "-l", "--show-origin"].includes(option))
+  );
+}
+
+function isReadOnlySymbolicRefCommand(args: ReadonlyArray<string>): boolean {
+  const values = args.slice(1);
+  const references = values.filter((value) => !value.startsWith("-"));
+  return (
+    references.length === 1 &&
+    values.every((value) => !value.startsWith("-") || ["--quiet", "-q", "--short"].includes(value))
+  );
+}
 
 function isReadOnlyGitCommand(args: ReadonlyArray<string>): boolean {
   const [command = ""] = args;
-  if (READ_ONLY_COMMANDS.has(command)) {
-    return true;
-  }
-
-  if (command === "branch") {
-    return !args.some((arg) => ["-c", "-C", "-d", "-D", "-m", "-M"].includes(arg));
-  }
-
-  if (command === "config") {
-    return args.some((arg) =>
-      ["--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin"].includes(arg),
+  if (READ_ONLY_COMMANDS.has(command)) return true;
+  if (command === "branch") return isReadOnlyBranchCommand(args);
+  if (command === "config") return isReadOnlyConfigCommand(args);
+  if (command === "symbolic-ref") return isReadOnlySymbolicRefCommand(args);
+  if (command === "remote") {
+    return (
+      args.length === 1 ||
+      (args.length === 2 && args[1] === "-v") ||
+      (args.length === 3 && ["get-url", "show"].includes(args[1] ?? ""))
     );
   }
-
-  if (command === "remote") {
-    return args.some((arg) => ["-v", "get-url", "show"].includes(arg));
-  }
-
-  return command === "worktree" && args.includes("list");
+  return (
+    command === "worktree" &&
+    (args.length === 2 || args.length === 3) &&
+    args[1] === "list" &&
+    (args.length === 2 || args[2] === "--porcelain")
+  );
 }
 
 function safeEnvironment(input: ExecuteGitInput): Record<string, string> {
   const environment: Record<string, string> = {
     GIT_TERMINAL_PROMPT: "0",
   };
+  const allowedNames = new Set([
+    "COLUMNS",
+    "GIT_ASKPASS",
+    "GIT_CONFIG",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_SSH_COMMAND",
+    "HOME",
+    "PATH",
+    "SSH_AUTH_SOCK",
+    "XDG_CONFIG_HOME",
+  ]);
   for (const [name, value] of Object.entries(input.env ?? {})) {
-    if (typeof value === "string" && /^(GIT_(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE))$/.test(name)) {
+    if (
+      typeof value === "string" &&
+      (allowedNames.has(name) ||
+        /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name) ||
+        /^GIT_(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)$/.test(name))
+    ) {
       environment[name] = value;
     }
   }

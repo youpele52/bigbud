@@ -73,12 +73,14 @@ export function openFilesPanelEntry(
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
   openPreview?: (path: string) => void,
+  executionTargetId?: string | undefined,
 ): void {
   if (isPdfFilePath(entry.path) || isImageFilePath(entry.path) || isHtmlFilePath(entry.path)) {
     openNewBrowserTab({
       url: buildWorkspaceFilePreviewUrl({
         cwd: workspaceRoot,
         relativePath: entry.path,
+        executionTargetId,
       }),
     });
     return;

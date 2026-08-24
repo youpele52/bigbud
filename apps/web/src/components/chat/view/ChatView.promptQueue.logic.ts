@@ -1,4 +1,10 @@
-import type { CommandId, MessageId, ThreadId, TurnId } from "@bigbud/contracts";
+import type {
+  CommandId,
+  MessageId,
+  OrchestrationTurnControlOperation,
+  ThreadId,
+  TurnId,
+} from "@bigbud/contracts";
 import { useCallback, useMemo } from "react";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { newCommandId, newMessageId } from "~/lib/utils";
@@ -25,6 +31,11 @@ interface UsePromptQueueInput {
   threadId: ThreadId;
   projectedPrompts: readonly QueuedPrompt[];
   activeTurnInProgress: boolean;
+  activeTurnId?: TurnId | null | undefined;
+  sessionEpoch?: number | undefined;
+  controlOperation?: OrchestrationTurnControlOperation | null | undefined;
+  nativeSteer?: boolean;
+  canSteer?: boolean;
   onInterrupt: (options?: {
     queuedPromptIdsAfterSettlement?: readonly MessageId[];
   }) => Promise<void>;
@@ -42,6 +53,7 @@ export function buildSendNowInterruptCommand(input: {
   readonly commandId: CommandId;
   readonly queuedPromptIds: readonly MessageId[];
   readonly createdAt: string;
+  readonly sessionEpoch?: number | undefined;
 }) {
   return {
     type: "thread.turn.interrupt" as const,
@@ -49,6 +61,26 @@ export function buildSendNowInterruptCommand(input: {
     threadId: input.threadId,
     ...(input.turnId !== undefined ? { turnId: input.turnId } : {}),
     queuedPromptIdsAfterSettlement: input.queuedPromptIds,
+    ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
+    createdAt: input.createdAt,
+  };
+}
+
+export function buildSteerCommand(input: {
+  readonly threadId: ThreadId;
+  readonly turnId: TurnId;
+  readonly commandId: CommandId;
+  readonly queuedPromptIds: readonly MessageId[];
+  readonly createdAt: string;
+  readonly sessionEpoch?: number | undefined;
+}) {
+  return {
+    type: "thread.turn.steer" as const,
+    commandId: input.commandId,
+    threadId: input.threadId,
+    turnId: input.turnId,
+    queuedPromptIds: input.queuedPromptIds,
+    ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
     createdAt: input.createdAt,
   };
 }
@@ -72,6 +104,9 @@ export function buildComposerFollowUpCommand(input: {
 
 export function usePromptQueue(input: UsePromptQueueInput) {
   const queuedPrompts = input.projectedPrompts;
+  const controlPending =
+    input.controlOperation != null &&
+    !["completed", "failed", "superseded", "cancelled"].includes(input.controlOperation.state);
 
   const queuedPromptCount = queuedPrompts.length;
   const hasQueuedPrompts = queuedPromptCount > 0;
@@ -144,24 +179,61 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     }
   }, [input, queuedPrompts]);
 
+  const steerQueuedPrompts = useCallback(async () => {
+    if (
+      input.canSteer !== true ||
+      !input.activeTurnInProgress ||
+      input.activeTurnId === null ||
+      input.activeTurnId === undefined ||
+      controlPending ||
+      queuedPrompts.length === 0
+    ) {
+      return;
+    }
+    const api = readNativeApi();
+    if (!api) return;
+    try {
+      await api.orchestration.dispatchCommand(
+        buildSteerCommand({
+          threadId: input.threadId,
+          turnId: input.activeTurnId,
+          commandId: newCommandId(),
+          queuedPromptIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
+          sessionEpoch: input.sessionEpoch,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+    } catch (error) {
+      input.onError(promptQueueErrorMessage(error));
+    }
+  }, [controlPending, input, queuedPrompts]);
+
   return useMemo(
     () => ({
       queuedPrompts,
       queuedPromptCount,
       hasQueuedPrompts,
       canQueueMorePrompts,
+      canSteer: input.canSteer === true,
+      nativeSteer: input.nativeSteer === true,
+      controlOperation: input.controlOperation ?? null,
       queuePrompt,
       removeQueuedPrompt,
       interruptAndFlushQueuedPrompts,
+      steerQueuedPrompts,
     }),
     [
       canQueueMorePrompts,
       hasQueuedPrompts,
+      input.canSteer,
+      input.controlOperation,
+      input.nativeSteer,
       interruptAndFlushQueuedPrompts,
       queuePrompt,
       queuedPromptCount,
       queuedPrompts,
       removeQueuedPrompt,
+      steerQueuedPrompts,
     ],
   );
 }

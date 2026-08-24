@@ -118,6 +118,7 @@ export async function startSession(
       model: normalizeCodexModelSlug(input.model),
       cwd: resolvedCwd,
       threadId,
+      ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
       createdAt: now,
       updatedAt: now,
     };

@@ -24,6 +24,8 @@ export function startProviderSession(input: {
   readonly resumeCursor?: unknown;
   readonly preserveExistingBinding?: boolean;
 }) {
+  const currentSessionEpoch = input.thread.session?.sessionEpoch ?? 0;
+  const nextSessionEpoch = currentSessionEpoch + 1;
   const executionTargets = resolveProviderSessionExecutionTargets({
     providerRuntimeExecutionTargetId: input.thread.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: input.thread.workspaceExecutionTargetId,
@@ -37,10 +39,13 @@ export function startProviderSession(input: {
       providerName: input.provider,
       runtimeMode: input.thread.runtimeMode,
       activeTurnId: null,
+      sessionEpoch: nextSessionEpoch,
       lastError: null,
       updatedAt: input.createdAt,
     },
     createdAt: input.createdAt,
+    expectedSessionEpoch: currentSessionEpoch,
+    advanceSessionEpoch: true,
   });
   const startSession = Effect.suspend(() =>
     (input.fresh
@@ -53,13 +58,12 @@ export function startProviderSession(input: {
       modelSelection: input.modelSelection,
       ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
       runtimeMode: input.thread.runtimeMode,
+      sessionEpoch: nextSessionEpoch,
     }),
   );
 
-  return input.preserveExistingBinding
-    ? input.services.assertRuntimeStartAllowed(input.threadId).pipe(Effect.andThen(startSession))
-    : markSessionStarting.pipe(
-        Effect.andThen(input.services.assertRuntimeStartAllowed(input.threadId)),
-        Effect.andThen(startSession),
-      );
+  return markSessionStarting.pipe(
+    Effect.andThen(input.services.assertRuntimeStartAllowed(input.threadId)),
+    Effect.andThen(startSession),
+  );
 }

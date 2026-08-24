@@ -1,9 +1,11 @@
-import { isRemoteExecutionTargetId } from "@bigbud/contracts";
 import { useEffect, useRef } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
+import { useServerConfig } from "../../rpc/serverState";
 import { getFilePreviewWatchRelativePath } from "./FilePreview.logic";
+import { useFilesPanelRefreshContext } from "./FilesPanelRefreshCoordinator";
 import { createDebouncedFilePreviewRefresh } from "./useFilePreviewRefresh.logic";
+import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
 
 interface FilePreviewRefreshInput {
   readonly cwd: string;
@@ -35,6 +37,12 @@ export function useFilePreviewRefresh({
   executionTargetId,
   refreshPreview,
 }: UseFilePreviewRefreshInput) {
+  const refreshContext = useFilesPanelRefreshContext();
+  const serverConfig = useServerConfig();
+  const remoteAgentWatchEnabled = supportsWorkspaceDirectoryWatch(
+    executionTargetId,
+    serverConfig?.workspaceCapabilities,
+  );
   const debouncedRefreshRef = useRef(createDebouncedFilePreviewRefresh(refreshPreview));
 
   useEffect(() => {
@@ -42,8 +50,15 @@ export function useFilePreviewRefresh({
   }, [refreshPreview]);
 
   useEffect(() => {
+    if (!refreshContext) {
+      return;
+    }
+    return refreshContext.registerPreview({ cwd, relativePath, refreshPreview });
+  }, [cwd, refreshContext, refreshPreview, relativePath]);
+
+  useEffect(() => {
     const api = readNativeApi();
-    if (!api || isRemoteExecutionTargetId(executionTargetId)) {
+    if (!api || !remoteAgentWatchEnabled || refreshContext) {
       return;
     }
 
@@ -58,5 +73,5 @@ export function useFilePreviewRefresh({
         onResubscribe: scheduleRefresh,
       },
     );
-  }, [cwd, executionTargetId, relativePath]);
+  }, [cwd, executionTargetId, refreshContext, relativePath, remoteAgentWatchEnabled]);
 }

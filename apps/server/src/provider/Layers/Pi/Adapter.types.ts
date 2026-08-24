@@ -50,6 +50,7 @@ export interface PendingPiUserInputRequest {
 export interface ActivePiSession {
   readonly process: PiRpcProcess;
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   readonly createdAt: string;
   readonly runtimeMode: PiSessionRuntimeMode;
   readonly pendingUserInputs: Map<string, PendingPiUserInputRequest>;
@@ -119,6 +120,7 @@ export type PiRunPromise = <A, E>(effect: Effect.Effect<A, E, never>) => Promise
 
 export type PiSyntheticEventFn = <TType extends ProviderRuntimeEvent["type"]>(
   threadId: ThreadId,
+  sessionEpoch: number,
   type: TType,
   payload: Extract<ProviderRuntimeEvent, { type: TType }>["payload"],
   extra?: {

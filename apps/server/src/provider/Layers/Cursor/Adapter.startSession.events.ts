@@ -68,6 +68,7 @@ export function emitPlanUpdate(
     yield* deps.offerRuntimeEvent(
       makeAcpPlanUpdatedEvent({
         stamp: yield* deps.makeEventStamp(),
+        session: ctx,
         provider: PROVIDER,
         threadId: ctx.threadId,
         turnId: ctx.activeTurnId,
@@ -95,6 +96,7 @@ export function forkNotificationFiber(
             yield* deps.offerRuntimeEvent(
               makeAcpAssistantItemEvent({
                 stamp: yield* deps.makeEventStamp(),
+                session: ctx,
                 provider: PROVIDER,
                 threadId: ctx.threadId,
                 turnId: ctx.activeTurnId,
@@ -107,6 +109,7 @@ export function forkNotificationFiber(
             yield* deps.offerRuntimeEvent(
               makeAcpAssistantItemEvent({
                 stamp: yield* deps.makeEventStamp(),
+                session: ctx,
                 provider: PROVIDER,
                 threadId: ctx.threadId,
                 turnId: ctx.activeTurnId,
@@ -131,6 +134,7 @@ export function forkNotificationFiber(
             yield* deps.offerRuntimeEvent(
               makeAcpToolCallEvent({
                 stamp: yield* deps.makeEventStamp(),
+                session: ctx,
                 provider: PROVIDER,
                 threadId: ctx.threadId,
                 turnId: ctx.activeTurnId,
@@ -144,6 +148,7 @@ export function forkNotificationFiber(
             yield* deps.offerRuntimeEvent(
               makeAcpContentDeltaEvent({
                 stamp: yield* deps.makeEventStamp(),
+                session: ctx,
                 provider: PROVIDER,
                 threadId: ctx.threadId,
                 turnId: ctx.activeTurnId,

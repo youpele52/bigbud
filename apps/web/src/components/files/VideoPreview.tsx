@@ -1,5 +1,5 @@
 import { AlertCircleIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import { buildWorkspaceFilePreviewUrl } from "../../lib/workspaceFilePreview";
 import { openPathInPreferredApp } from "../../models/editor";
@@ -10,6 +10,8 @@ import { buildAbsolutePreviewPath, buildFilePreviewBreadcrumb } from "./FilePrev
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import type { FilePreviewNavigationProps } from "./FilePreview.types";
+import { BigbudLoader } from "../layout/BigbudLoader";
+import { getMediaPreviewPhase } from "./mediaPreviewState";
 
 interface VideoPreviewProps extends FilePreviewNavigationProps {
   cwd: string;
@@ -30,7 +32,8 @@ export const VideoPreview = memo(function VideoPreview({
   onClose,
   onPreviewLoadError,
 }: VideoPreviewProps) {
-  const [loadError, setLoadError] = useState(false);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [errorUrl, setErrorUrl] = useState<string | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const breadcrumb = useMemo(
     () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
@@ -41,17 +44,17 @@ export const VideoPreview = memo(function VideoPreview({
     [cwd, relativePath],
   );
   const refreshPreview = useCallback(() => {
-    setLoadError(false);
     setPreviewVersion((current) => current + 1);
   }, []);
   const videoUrl = useMemo(() => {
     const url = buildWorkspaceFilePreviewUrl({
       cwd,
       relativePath,
+      executionTargetId,
     });
     const separator = url.includes("?") ? "&" : "?";
     return `${url}${separator}v=${previewVersion}`;
-  }, [cwd, previewVersion, relativePath]);
+  }, [cwd, executionTargetId, previewVersion, relativePath]);
 
   useFilePreviewRefresh({
     cwd,
@@ -60,10 +63,9 @@ export const VideoPreview = memo(function VideoPreview({
     refreshPreview,
   });
 
-  useEffect(() => {
-    setLoadError(false);
-    setPreviewVersion(0);
-  }, [relativePath]);
+  const phase = getMediaPreviewPhase({ url: videoUrl, loadedUrl, errorUrl });
+  const loadError = phase === "error";
+  const loading = phase === "loading";
 
   const handleOpenExternally = useCallback(() => {
     const api = readNativeApi();
@@ -102,7 +104,7 @@ export const VideoPreview = memo(function VideoPreview({
         onContextMenu={handleContextMenu}
       />
       <div
-        className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
         onContextMenu={handleContextMenu}
       >
         {loadError ? (
@@ -118,20 +120,31 @@ export const VideoPreview = memo(function VideoPreview({
             </Button>
           </div>
         ) : (
-          <video
-            key={videoUrl}
-            src={videoUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="max-h-full max-w-full"
-            onError={() => {
-              setLoadError(true);
-              onPreviewLoadError?.();
-            }}
-          >
-            <track kind="captions" />
-          </video>
+          <>
+            {loading ? (
+              <div className="absolute inset-0">
+                <BigbudLoader label="Loading video preview..." />
+              </div>
+            ) : null}
+            <video
+              key={videoUrl}
+              src={videoUrl}
+              controls
+              playsInline
+              preload="metadata"
+              className={`max-h-full max-w-full ${loading ? "invisible" : ""}`}
+              onLoadedMetadata={() => {
+                setLoadedUrl(videoUrl);
+                setErrorUrl(null);
+              }}
+              onError={() => {
+                setErrorUrl(videoUrl);
+                onPreviewLoadError?.();
+              }}
+            >
+              <track kind="captions" />
+            </video>
+          </>
         )}
       </div>
     </div>

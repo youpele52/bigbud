@@ -33,11 +33,16 @@ export function makeHandleProcessExit(deps: {
     });
 
     yield* deps.emit([
-      yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
-        state: "stopped",
-        reason: detail,
-      }),
-      yield* deps.makeSyntheticEvent(session.threadId, "session.exited", {
+      yield* deps.makeSyntheticEvent(
+        session.threadId,
+        session.sessionEpoch,
+        "session.state.changed",
+        {
+          state: "stopped",
+          reason: detail,
+        },
+      ),
+      yield* deps.makeSyntheticEvent(session.threadId, session.sessionEpoch, "session.exited", {
         reason: detail,
         recoverable: true,
         exitKind: "error",

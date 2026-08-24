@@ -2,6 +2,7 @@ import type { ThreadId } from "@bigbud/contracts";
 import { memo } from "react";
 
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import {
   AnnotationComposerPanel,
   formatAnnotationTargetLabel,
@@ -20,6 +21,10 @@ export const NotesPanelContent = memo(function NotesPanelContent({
   activeThreadId,
 }: NotesPanelProps) {
   const state = useNotesPanelState({ activeThreadId: activeThreadId ?? null });
+
+  if (state.loading && state.notes.length === 0) {
+    return <BigbudLoader label="Loading notes..." />;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">

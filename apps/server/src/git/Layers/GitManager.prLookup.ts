@@ -23,6 +23,7 @@ import {
 import { summarizeGitActionResult } from "./GitManager.commitUtils.ts";
 import type { BranchHeadContext, PullRequestInfo } from "./GitManager.types.ts";
 import type { makeBranchContext } from "./GitManager.branchContext.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
 export function makePrLookup(
   gitCore: GitCoreShape,
@@ -170,7 +171,7 @@ export function makePrLookup(
           }
         : null;
     const shouldLookupExistingOpenPr =
-      !executionTargetId &&
+      isLocalExecutionTarget(executionTargetId) &&
       (result.action === "commit_push" || result.action === "push") &&
       result.push.status === "pushed" &&
       result.branch.status !== "created" &&
@@ -210,7 +211,7 @@ export function makePrLookup(
               label: "View PR",
               url: openPr.url,
             }
-          : !executionTargetId &&
+          : isLocalExecutionTarget(executionTargetId) &&
               (result.action === "push" || result.action === "commit_push") &&
               result.push.status === "pushed" &&
               !currentBranchIsDefault

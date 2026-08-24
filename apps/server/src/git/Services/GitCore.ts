@@ -242,13 +242,17 @@ export interface GitCoreShape {
   /**
    * Determine whether the provided cwd is inside a git work tree.
    */
-  readonly isInsideWorkTree: (cwd: string) => Effect.Effect<boolean, GitCommandError>;
+  readonly isInsideWorkTree: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<boolean, GitCommandError>;
 
   /**
    * List tracked and untracked workspace file paths relative to cwd.
    */
   readonly listWorkspaceFiles: (
     cwd: string,
+    executionTargetId?: string,
   ) => Effect.Effect<GitListWorkspaceFilesResult, GitCommandError>;
 
   /**
@@ -257,6 +261,7 @@ export interface GitCoreShape {
   readonly filterIgnoredPaths: (
     cwd: string,
     relativePaths: ReadonlyArray<string>,
+    executionTargetId?: string,
   ) => Effect.Effect<ReadonlyArray<string>, GitCommandError>;
 
   /**

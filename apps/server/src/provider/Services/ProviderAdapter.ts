@@ -49,6 +49,12 @@ export type ProviderSessionRecoveryMode =
   | "unsupported";
 export type ProviderConversationRewindMode = "transcript-and-files" | "files-only" | "unsupported";
 export type ProviderConversationForkMode = "native" | "resume-copy" | "unsupported";
+export interface ProviderTurnControlCapabilities {
+  readonly nativeSteer: boolean;
+  readonly interruptTarget: "exact-turn" | "current-session";
+  readonly activeTurnInspection: "authoritative" | "best-effort" | "unavailable";
+  readonly continuation: boolean;
+}
 
 export interface ProviderAdapterCapabilities {
   /**
@@ -61,6 +67,10 @@ export interface ProviderAdapterCapabilities {
   readonly conversationRewind?: ProviderConversationRewindMode;
   /** Declares whether the provider can create an isolated conversation fork. */
   readonly conversationFork?: ProviderConversationForkMode;
+  /** Declares whether the provider can steer the current turn without starting one. */
+  readonly supportsSteer?: boolean;
+  /** Structured execution strengths used by the provider-neutral turn controller. */
+  readonly turnControl?: ProviderTurnControlCapabilities;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -100,6 +110,13 @@ export interface ProviderAdapterShape<TError> {
    * Interrupt an active turn.
    */
   readonly interruptTurn: (threadId: ThreadId, turnId?: TurnId) => Effect.Effect<void, TError>;
+
+  /** Add instructions to the current turn without interrupting it. */
+  readonly steerTurn?: (
+    threadId: ThreadId,
+    input: string,
+    turnId?: TurnId,
+  ) => Effect.Effect<void, TError>;
 
   /** Authoritative provider-native inspection, or `unavailable` when unsupported. */
   readonly inspectActiveTurn: (

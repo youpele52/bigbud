@@ -3,16 +3,25 @@ use super::*;
 const MAX_ENVIRONMENT_ENTRIES: usize = 64;
 const MAX_ENVIRONMENT_VALUE_BYTES: usize = 16 * 1024;
 const MAX_ENVIRONMENT_BYTES: usize = 256 * 1024;
-const ALLOWED_ENVIRONMENT_NAMES: [&str; 12] = [
+const ALLOWED_ENVIRONMENT_NAMES: [&str; 21] = [
     "BIGBUD_TEST",
     "CI",
+    "COLUMNS",
+    "GIT_AUTHOR_DATE",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_NAME",
+    "GIT_COMMITTER_DATE",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_CONFIG",
+    "GIT_CONFIG_GLOBAL",
     "GIT_CONFIG_NOSYSTEM",
+    "GIT_ASKPASS",
+    "GIT_SSH_COMMAND",
     "GIT_TERMINAL_PROMPT",
-    "HOME",
     "LANG",
     "LC_ALL",
     "LC_CTYPE",
-    "PATH",
     "TERM",
     "TMPDIR",
     "TZ",
@@ -42,7 +51,7 @@ pub(super) fn process_environment_from_entries(
                         || (index > 0
                             && (byte == b'_' || byte.is_ascii_uppercase() || byte.is_ascii_digit()))
                 });
-            let allowed_name = ALLOWED_ENVIRONMENT_NAMES.contains(&entry.name.as_str());
+            let allowed_name = is_allowed_environment_name(&entry.name);
             total_bytes = total_bytes.saturating_add(entry.name.len() + entry.value.len());
             if !valid_name
                 || !allowed_name
@@ -58,6 +67,20 @@ pub(super) fn process_environment_from_entries(
             Ok((entry.name.clone(), entry.value.clone()))
         })
         .collect()
+}
+
+fn is_allowed_environment_name(name: &str) -> bool {
+    ALLOWED_ENVIRONMENT_NAMES.contains(&name)
+        || (name.starts_with("GIT_CONFIG_")
+            && (name == "GIT_CONFIG_COUNT"
+                || name.strip_prefix("GIT_CONFIG_KEY_").is_some_and(|suffix| {
+                    !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
+                })
+                || name
+                    .strip_prefix("GIT_CONFIG_VALUE_")
+                    .is_some_and(|suffix| {
+                        !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
+                    })))
 }
 
 impl Default for AgentSession {

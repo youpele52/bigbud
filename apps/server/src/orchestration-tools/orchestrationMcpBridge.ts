@@ -8,6 +8,7 @@ import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth
 import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
+  type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
 import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "./AgentWorkspaceTools.ts";
@@ -25,6 +26,7 @@ export interface ThreadOrchestrationBridge {
   readonly serverPath: string;
   readonly bridgeDir: string;
   readonly token: string;
+  readonly httpConfig: ThreadOrchestrationHttpConfig;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -93,6 +95,7 @@ export async function createThreadOrchestrationBridge(
     serverPath,
     bridgeDir,
     token,
+    httpConfig,
     cleanup: async () => {
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,

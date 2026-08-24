@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Layer, Option, Path } from "effect";
+import { Cache, Effect, Layer, Option, Path } from "effect";
 
 import {
   GitCore,
@@ -12,6 +12,7 @@ import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCor
 import { makeGitStatusOps } from "./GitStatus.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps } from "./GitWorktree.ts";
+import type { GitWorktreeOps } from "./GitWorktree.ts";
 import { makeGitHistoryOps } from "./GitHistory.ts";
 import {
   formatRemoteExecutionTargetDetail,
@@ -22,12 +23,13 @@ import { requireRemoteGitAgent } from "./GitCore.target.ts";
 
 export { makeGitCore };
 
+type GitWorktreeRoutingOps = GitWorktreeOps;
+
 const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   executeOverride?: GitCoreShape["execute"];
   remoteExecuteOverride?: GitCoreShape["execute"];
 }) {
   const path = yield* Path.Path;
-  const fileSystem = yield* FileSystem.FileSystem;
   const { worktreesDir } = yield* ServerConfig;
 
   let executeRaw: (input: ExecuteGitInput) => Effect.Effect<ExecuteGitResult, GitCommandError>;
@@ -43,7 +45,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
 
   const statusOps = yield* makeGitStatusOps(helpers, path);
 
-  const branchOps = makeGitBranchOps(helpers, statusOps, fileSystem);
+  const branchOps = makeGitBranchOps(helpers, statusOps);
 
   const worktreeOps = makeGitWorktreeOps(helpers, statusOps, path, worktreesDir);
   const historyOps = makeGitHistoryOps(helpers);
@@ -72,11 +74,31 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       );
       return {
         statusOps: targetStatusOps,
-        branchOps: makeGitBranchOps(targetHelpers, targetStatusOps, fileSystem),
+        branchOps: makeGitBranchOps(targetHelpers, targetStatusOps),
         worktreeOps: targetWorktreeOps,
         historyOps: makeGitHistoryOps(targetHelpers),
       };
     });
+  const remoteOpsByTarget = yield* Cache.make({
+    capacity: 64,
+    lookup: makeRemoteOpsForTarget,
+  });
+  const remoteOpsForTarget = (executionTargetId: string) =>
+    Cache.get(remoteOpsByTarget, executionTargetId);
+  const routeWorktreeOp = <A>(input: {
+    cwd: string;
+    executionTargetId?: string;
+    operation: string;
+    local: () => Effect.Effect<A, GitCommandError>;
+    remote: (worktreeOps: GitWorktreeRoutingOps) => Effect.Effect<A, GitCommandError>;
+  }) =>
+    input.executionTargetId && !isLocalExecutionTarget(input.executionTargetId)
+      ? remoteExecute
+        ? remoteOpsForTarget(input.executionTargetId).pipe(
+            Effect.flatMap(({ worktreeOps: targetWorktreeOps }) => input.remote(targetWorktreeOps)),
+          )
+        : requireRemoteGitAgent(input.operation, input.cwd, input.executionTargetId)
+      : input.local();
 
   const assertLocalExecutionTarget = (
     operation: string,
@@ -118,7 +140,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     },
     status: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ statusOps: targetStatusOps }) => targetStatusOps.status(input)),
           )
         : assertLocalExecutionTarget("git.status", input.cwd, input.executionTargetId).pipe(
@@ -127,7 +149,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     statusDetails: (cwd, executionTargetId?: string) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.statusDetails(cwd),
               ),
@@ -137,7 +159,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     statusDetailsLocal: (cwd, executionTargetId?: string) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.statusDetailsLocal(cwd),
               ),
@@ -147,7 +169,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     prepareCommitContext: (cwd, filePaths, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.prepareCommitContext(cwd, filePaths),
               ),
@@ -157,7 +179,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     commit: (cwd, subject, body, options) =>
       options?.executionTargetId && !isLocalExecutionTarget(options.executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(options.executionTargetId).pipe(
+          ? remoteOpsForTarget(options.executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.commit(cwd, subject, body, options),
               ),
@@ -167,7 +189,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     pushCurrentBranch: (cwd, fallbackBranch, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.pushCurrentBranch(cwd, fallbackBranch),
               ),
@@ -177,7 +199,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     pullCurrentBranch: (cwd, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.pullCurrentBranch(cwd),
               ),
@@ -187,7 +209,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     fetch: (cwd, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) => targetStatusOps.fetch(cwd)),
             )
           : requireRemoteGitAgent("git.fetch", cwd, executionTargetId)
@@ -195,7 +217,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     discardChanges: (cwd, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.discardChanges(cwd),
               ),
@@ -205,7 +227,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     readRangeContext: (cwd, baseBranch, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.readRangeContext(cwd, baseBranch),
               ),
@@ -215,7 +237,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     readConfigValue: (cwd, key, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
                 targetStatusOps.readConfigValue(cwd, key),
               ),
@@ -224,7 +246,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         : statusOps.readConfigValue(cwd, key),
     listBranches: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.listBranches(input)),
           )
         : assertLocalExecutionTarget("git.listBranches", input.cwd, input.executionTargetId).pipe(
@@ -232,7 +254,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     listCommits: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ historyOps: targetHistoryOps }) =>
               targetHistoryOps.listCommits(input),
             ),
@@ -242,7 +264,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     getCommitDetails: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ historyOps: targetHistoryOps }) =>
               targetHistoryOps.getCommitDetails(input),
             ),
@@ -254,7 +276,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ).pipe(Effect.andThen(historyOps.getCommitDetails(input))),
     readWorkingTreeDiff: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ historyOps: targetHistoryOps }) =>
               targetHistoryOps.readWorkingTreeDiff(input),
             ),
@@ -266,7 +288,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ).pipe(Effect.andThen(historyOps.readWorkingTreeDiff(input))),
     checkoutBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) =>
               targetBranchOps.checkoutBranch(input),
             ),
@@ -276,7 +298,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     createBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.createBranch(input)),
           )
         : assertLocalExecutionTarget("git.createBranch", input.cwd, input.executionTargetId).pipe(
@@ -284,7 +306,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     renameBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.renameBranch(input)),
           )
         : assertLocalExecutionTarget("git.renameBranch", input.cwd, input.executionTargetId).pipe(
@@ -292,7 +314,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     deleteBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.deleteBranch(input)),
           )
         : assertLocalExecutionTarget("git.deleteBranch", input.cwd, input.executionTargetId).pipe(
@@ -300,7 +322,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     setBranchUpstream: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) =>
               targetBranchOps.setBranchUpstream(input),
             ),
@@ -313,7 +335,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     listLocalBranchNames: (cwd, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
-          ? makeRemoteOpsForTarget(executionTargetId).pipe(
+          ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ branchOps: targetBranchOps }) =>
                 targetBranchOps.listLocalBranchNames(cwd),
               ),
@@ -322,7 +344,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         : branchOps.listLocalBranchNames(cwd),
     initRepo: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.initRepo(input)),
           )
         : assertLocalExecutionTarget("git.init", input.cwd, input.executionTargetId).pipe(
@@ -330,7 +352,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     ensureRemote: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ branchOps: targetBranchOps }) => targetBranchOps.ensureRemote(input)),
           )
         : assertLocalExecutionTarget("git.ensureRemote", input.cwd, input.executionTargetId).pipe(
@@ -347,7 +369,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
                 detail: "A remote worktree path is required.",
               }),
             )
-          : makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+          : remoteOpsForTarget(input.executionTargetId!).pipe(
               Effect.flatMap(({ worktreeOps: targetWorktreeOps }) =>
                 targetWorktreeOps.createWorktree(input),
               ),
@@ -357,7 +379,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     removeWorktree: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ worktreeOps: targetWorktreeOps }) =>
               targetWorktreeOps.removeWorktree(input),
             ),
@@ -367,7 +389,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ),
     fetchPullRequestBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ worktreeOps: targetWorktreeOps }) =>
               targetWorktreeOps.fetchPullRequestBranch(input),
             ),
@@ -379,7 +401,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           ).pipe(Effect.andThen(worktreeOps.fetchPullRequestBranch(input))),
     fetchRemoteBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? makeRemoteOpsForTarget(input.executionTargetId!).pipe(
+        ? remoteOpsForTarget(input.executionTargetId!).pipe(
             Effect.flatMap(({ worktreeOps: targetWorktreeOps }) =>
               targetWorktreeOps.fetchRemoteBranch(input),
             ),
@@ -389,9 +411,30 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
             input.cwd,
             input.executionTargetId,
           ).pipe(Effect.andThen(worktreeOps.fetchRemoteBranch(input))),
-    isInsideWorkTree: worktreeOps.isInsideWorkTree,
-    listWorkspaceFiles: worktreeOps.listWorkspaceFiles,
-    filterIgnoredPaths: worktreeOps.filterIgnoredPaths,
+    isInsideWorkTree: (cwd, executionTargetId) =>
+      routeWorktreeOp({
+        cwd,
+        ...(executionTargetId !== undefined ? { executionTargetId } : {}),
+        operation: "git.isInsideWorkTree",
+        local: () => worktreeOps.isInsideWorkTree(cwd),
+        remote: (ops) => ops.isInsideWorkTree(cwd),
+      }),
+    listWorkspaceFiles: (cwd, executionTargetId) =>
+      routeWorktreeOp({
+        cwd,
+        ...(executionTargetId !== undefined ? { executionTargetId } : {}),
+        operation: "git.listWorkspaceFiles",
+        local: () => worktreeOps.listWorkspaceFiles(cwd),
+        remote: (ops) => ops.listWorkspaceFiles(cwd),
+      }),
+    filterIgnoredPaths: (cwd, relativePaths, executionTargetId) =>
+      routeWorktreeOp({
+        cwd,
+        ...(executionTargetId !== undefined ? { executionTargetId } : {}),
+        operation: "git.filterIgnoredPaths",
+        local: () => worktreeOps.filterIgnoredPaths(cwd, relativePaths),
+        remote: (ops) => ops.filterIgnoredPaths(cwd, relativePaths),
+      }),
   } satisfies GitCoreShape;
 });
 

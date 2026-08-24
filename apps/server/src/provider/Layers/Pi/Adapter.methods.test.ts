@@ -11,6 +11,12 @@ vi.mock("../../../orchestration-tools/PiOrchestrationBridge.ts", () => ({
     extensionPath: "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts",
     bridgeDir: "/tmp/pi-orchestration",
     extraArgs: ["--extension", "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts"],
+    httpConfig: {
+      host: "127.0.0.1",
+      port: 3000,
+      threadId: "thread-remote-pi",
+      token: "thread-tool-token",
+    },
     cleanup: async () => undefined,
   })),
 }));
@@ -78,6 +84,7 @@ describe("PiAdapter methods", () => {
       methods.startSession({
         provider: "pi",
         threadId,
+        sessionEpoch: 42,
         providerRuntimeExecutionTargetId: "local",
         workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
         cwd: "/root/project",
@@ -100,6 +107,12 @@ describe("PiAdapter methods", () => {
         extensionPath: "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts",
         bridgeDir: "/tmp/pi-orchestration",
         extraArgs: ["--extension", "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts"],
+        httpConfig: {
+          host: "127.0.0.1",
+          port: 3000,
+          threadId: "thread-remote-pi",
+          token: "thread-tool-token",
+        },
         cleanup: expect.any(Function),
       },
       env: process.env,
@@ -109,6 +122,7 @@ describe("PiAdapter methods", () => {
     expect(session.workspaceExecutionTargetId).toBe(
       "ssh:host=devbox&user=root&port=22&auth=ssh-key",
     );
+    expect(session.sessionEpoch).toBe(42);
     expect(subscribe).toHaveBeenCalledTimes(1);
     expect(stop).not.toHaveBeenCalled();
   });
@@ -131,6 +145,7 @@ describe("PiAdapter methods", () => {
         stop: async () => undefined,
       },
       threadId,
+      sessionEpoch: 0,
       createdAt: "2026-05-13T00:00:00.000Z",
       runtimeMode: "approval-required",
       pendingUserInputs: new Map(),
@@ -199,6 +214,7 @@ describe("PiAdapter methods", () => {
         stop: async () => undefined,
       },
       threadId,
+      sessionEpoch: 0,
       createdAt: "2026-05-13T00:00:00.000Z",
       runtimeMode: "approval-required",
       pendingUserInputs: new Map(),

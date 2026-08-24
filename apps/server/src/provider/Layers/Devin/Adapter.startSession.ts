@@ -74,6 +74,7 @@ export function makeStartSessionEffect(
     }
 
     const cwd = nodePath.resolve(input.cwd.trim());
+    const sessionEpoch = input.sessionEpoch ?? 0;
     const devinModelSelection =
       input.modelSelection?.provider === "devin" ? input.modelSelection : undefined;
     const existing = deps.sessions.get(input.threadId);
@@ -159,6 +160,7 @@ export function makeStartSessionEffect(
           yield* deps.offerRuntimeEvent(
             makeAcpRequestOpenedEvent({
               stamp: yield* deps.makeEventStamp(),
+              session: { sessionEpoch },
               provider: PROVIDER,
               threadId: input.threadId,
               turnId: ctx?.activeTurnId,
@@ -176,6 +178,7 @@ export function makeStartSessionEffect(
           yield* deps.offerRuntimeEvent(
             makeAcpRequestResolvedEvent({
               stamp: yield* deps.makeEventStamp(),
+              session: { sessionEpoch },
               provider: PROVIDER,
               threadId: input.threadId,
               turnId: ctx?.activeTurnId,
@@ -220,6 +223,7 @@ export function makeStartSessionEffect(
       cwd,
       model: devinModelSelection?.model,
       threadId: input.threadId,
+      sessionEpoch,
       resumeCursor: {
         schemaVersion: DEVIN_RESUME_VERSION,
         sessionId: started.sessionId,
@@ -230,6 +234,7 @@ export function makeStartSessionEffect(
 
     ctx = {
       threadId: input.threadId,
+      sessionEpoch,
       session,
       scope: sessionScope,
       acp,
@@ -250,6 +255,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "session.started",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { resume: started.initializeResult },
@@ -257,6 +263,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "session.state.changed",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { state: "ready", reason: "Devin ACP session ready" },
@@ -264,6 +271,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "thread.started",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { providerThreadId: started.sessionId },

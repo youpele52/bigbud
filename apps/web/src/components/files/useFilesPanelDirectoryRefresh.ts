@@ -1,9 +1,10 @@
-import { isRemoteExecutionTargetId } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
+import { useServerConfig } from "../../rpc/serverState";
 import type { DirectoryState } from "./FilesPanel.shared";
 import { createDebouncedDirectoryRefresh } from "./useFilesPanelDirectoryRefresh.logic";
+import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
 
 interface UseFilesPanelDirectoryRefreshInput {
   readonly workspaceRoot: string | null;
@@ -39,6 +40,11 @@ export function useFilesPanelDirectoryRefresh({
   directoryStateByPath,
   loadDirectory,
 }: UseFilesPanelDirectoryRefreshInput) {
+  const serverConfig = useServerConfig();
+  const remoteAgentWatchEnabled = supportsWorkspaceDirectoryWatch(
+    workspaceExecutionTargetId,
+    serverConfig?.workspaceCapabilities,
+  );
   const visibleDirectoryPaths = useMemo(
     () => getVisibleDirectoryPaths(expandedDirectories, directoryStateByPath),
     [directoryStateByPath, expandedDirectories],
@@ -70,7 +76,7 @@ export function useFilesPanelDirectoryRefresh({
     }
 
     const api = readNativeApi();
-    if (!api || isRemoteExecutionTargetId(workspaceExecutionTargetId)) {
+    if (!api || !remoteAgentWatchEnabled) {
       return;
     }
 
@@ -98,5 +104,5 @@ export function useFilesPanelDirectoryRefresh({
         unsubscribeDirectory();
       }
     };
-  }, [visibleDirectoryPaths, workspaceExecutionTargetId, workspaceRoot]);
+  }, [remoteAgentWatchEnabled, visibleDirectoryPaths, workspaceExecutionTargetId, workspaceRoot]);
 }

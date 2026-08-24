@@ -20,6 +20,7 @@ import { buildCodexCollaborationMode, normalizeCodexModelSlug } from "./codexMod
 import { parseThreadSnapshot } from "./codexAppServerManager.protocol";
 import {
   type CodexAppServerSendTurnInput,
+  type CodexAppServerSteerTurnInput,
   type CodexSessionContext,
   type CodexThreadSnapshot,
 } from "./codexAppServerManager.types";
@@ -180,6 +181,33 @@ export async function interruptTurn(
   });
 }
 
+export async function steerTurn(
+  input: CodexAppServerSteerTurnInput,
+  context: CodexSessionContext,
+  ops: TurnOps,
+): Promise<void> {
+  if (context.session.activeTurnId !== input.expectedTurnId) {
+    throw new Error("The requested Codex turn is no longer active.");
+  }
+  const providerThreadId = readResumeThreadId({
+    threadId: context.session.threadId,
+    runtimeMode: context.session.runtimeMode,
+    resumeCursor: context.session.resumeCursor,
+  });
+  if (!providerThreadId) throw new Error("Session is missing provider resume thread id.");
+
+  const response = await ops.sendRequest<unknown>(context, "turn/steer", {
+    threadId: providerThreadId,
+    clientUserMessageId: input.clientUserMessageId,
+    input: [{ type: "text", text: input.input, text_elements: [] }],
+    expectedTurnId: input.expectedTurnId,
+  });
+  const acknowledgedTurnId = readStr(readObj(response), "turnId");
+  if (acknowledgedTurnId !== input.expectedTurnId) {
+    throw new Error("turn/steer acknowledgement did not match the expected turn.");
+  }
+}
+
 export async function readThread(
   context: CodexSessionContext,
   ops: TurnOps,
@@ -252,6 +280,7 @@ export function respondToRequest(
     kind: "notification",
     provider: "codex",
     threadId: context.session.threadId,
+    sessionEpoch: context.session.sessionEpoch!,
     createdAt: new Date().toISOString(),
     method: "item/requestApproval/decision",
     turnId: pendingRequest.turnId,
@@ -291,6 +320,7 @@ export function respondToUserInput(
     kind: "notification",
     provider: "codex",
     threadId: context.session.threadId,
+    sessionEpoch: context.session.sessionEpoch!,
     createdAt: new Date().toISOString(),
     method: "item/tool/requestUserInput/answered",
     turnId: pendingRequest.turnId,

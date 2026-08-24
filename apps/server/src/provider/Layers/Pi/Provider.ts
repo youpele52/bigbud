@@ -122,6 +122,7 @@ function makeInitialPiSnapshot(settings: PiSettings): ServerProvider {
       enabled: false,
       checkedAt,
       models,
+      supportsSteer: true,
       probe: {
         installed: false,
         version: null,
@@ -137,6 +138,7 @@ function makeInitialPiSnapshot(settings: PiSettings): ServerProvider {
     enabled: true,
     checkedAt,
     models,
+    supportsSteer: true,
     probe: {
       installed: false,
       version: null,
@@ -174,6 +176,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       enabled: false,
       checkedAt,
       models: fallbackModels,
+      supportsSteer: true,
       probe: {
         installed: false,
         version: null,
@@ -200,6 +203,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       enabled: piSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      supportsSteer: true,
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -218,6 +222,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       enabled: piSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      supportsSteer: true,
       probe: {
         installed: true,
         version: null,
@@ -237,6 +242,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       enabled: piSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      supportsSteer: true,
       probe: {
         installed: true,
         version: parsedVersion,

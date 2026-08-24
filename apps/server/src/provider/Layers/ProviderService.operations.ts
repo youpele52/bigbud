@@ -34,6 +34,7 @@ import {
 } from "./ProviderServiceHelpers.ts";
 import type { makeResolveRoutableSession } from "./ProviderServiceSessionRouting.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
+import { readPersistedSessionEpoch } from "./ProviderServiceHelpers.ts";
 
 /** Return type of `makeResolveRoutableSession` — the curried session resolver. */
 export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSession>;
@@ -121,6 +122,9 @@ function enrichSessionsWithBindings(
         ? { resumeCursor: binding.resumeCursor }
         : undefined,
       binding.runtimeMode !== undefined ? { runtimeMode: binding.runtimeMode } : undefined,
+      session.sessionEpoch === undefined
+        ? { sessionEpoch: readPersistedSessionEpoch(binding.runtimePayload) }
+        : undefined,
     );
   });
 }

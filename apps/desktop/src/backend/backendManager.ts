@@ -1,5 +1,6 @@
 import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
+import { app } from "electron";
 import {
   backendChildEnv,
   captureBackendOutput,
@@ -171,6 +172,7 @@ export async function startBackend(): Promise<void> {
             : {}),
           ...computerUseRuntimeEnv,
           BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
+          BIGBUD_DESKTOP_PACKAGED: app.isPackaged ? "1" : "0",
           ELECTRON_RUN_AS_NODE: "1",
           BIGBUD_STARTUP_STATUS_FD: "4",
         },

@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { Effect } from "effect";
 import type { GitCommandError } from "@bigbud/contracts";
 
@@ -133,11 +131,6 @@ export function makeReadStatusDetails({
     const readFallbackNumstatForPath = Effect.fn("readFallbackNumstatForPath")(function* (
       relativePath: string,
     ) {
-      const absolutePath = path.join(cwd, relativePath);
-      if (!existsSync(absolutePath)) {
-        return null;
-      }
-
       const args = ["diff", "--numstat", "--no-index", "/dev/null", "--", relativePath] as const;
       const result = yield* executeGit(`${operationPrefix}.fallbackNumstat`, cwd, args, {
         allowNonZeroExit: true,

@@ -312,6 +312,7 @@ export function GeneralSettingsSection() {
           }
           control={
             <Switch
+              tone="success"
               checked={settings.diffWordWrap}
               onCheckedChange={(checked) => updateSettings({ diffWordWrap: Boolean(checked) })}
               aria-label="Wrap diff lines by default"

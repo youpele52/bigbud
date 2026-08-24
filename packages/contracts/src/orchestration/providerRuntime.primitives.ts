@@ -6,6 +6,7 @@ import {
   RuntimeItemId,
   RuntimeRequestId,
   ThreadId,
+  NonNegativeInt,
   TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
@@ -155,6 +156,9 @@ export const ProviderRuntimeEventBase = Schema.Struct({
   threadId: ThreadId,
   createdAt: IsoDateTime,
   turnId: Schema.optional(TurnId),
+  // Legacy persisted/runtime sources may not have an epoch. Consumers must
+  // explicitly reject an absent epoch once a session has advanced past zero.
+  sessionEpoch: Schema.optional(NonNegativeInt),
   itemId: Schema.optional(RuntimeItemId),
   requestId: Schema.optional(RuntimeRequestId),
   providerRefs: Schema.optional(ProviderRefs),

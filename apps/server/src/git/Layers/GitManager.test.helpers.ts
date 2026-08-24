@@ -147,6 +147,7 @@ export function runStackedAction(
     cwd: string;
     action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
     actionId?: string;
+    executionTargetId?: string;
     commitMessage?: string;
     featureBranch?: boolean;
     filePaths?: readonly string[];

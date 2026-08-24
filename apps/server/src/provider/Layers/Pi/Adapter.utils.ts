@@ -64,6 +64,7 @@ export function eventBase(input: {
   readonly eventId: import("@bigbud/contracts").EventId;
   readonly createdAt: string;
   readonly threadId: import("@bigbud/contracts").ThreadId;
+  readonly sessionEpoch: number;
   readonly turnId?: import("@bigbud/contracts").TurnId;
   readonly itemId?: string;
   readonly requestId?: string;
@@ -77,6 +78,7 @@ export function eventBase(input: {
     eventId: input.eventId,
     provider: PROVIDER,
     threadId: input.threadId,
+    sessionEpoch: input.sessionEpoch,
     createdAt: input.createdAt,
     ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.itemId ? { itemId: toRuntimeItemId(input.itemId) } : {}),

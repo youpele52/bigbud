@@ -43,6 +43,7 @@ import {
 import { projectThreadTaskEvent } from "./projectorTasks.ts";
 import { projectThreadMessageSent } from "./projectorThreadMessages.ts";
 import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.ts";
+import { projectThreadTurnControlEvent } from "./projectorThreadTurnControl.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -121,9 +122,11 @@ export function projectEvent(
             providerName: thread.modelSelection.provider,
             runtimeMode: thread.runtimeMode,
             activeTurnId: null,
+            sessionEpoch: thread.session?.sessionEpoch ?? 0,
             lastError: null,
             updatedAt: event.payload.createdAt,
           },
+          queueHold: false,
           updatedAt: event.occurredAt,
         }),
       });
@@ -132,20 +135,14 @@ export function projectEvent(
     case "thread.prompt-queued":
     case "thread.queued-prompt-removed":
     case "thread.queued-prompts-flushed":
+    case "thread.queued-prompt-flush-cancelled":
       return projectThreadQueuedPromptEvent(nextBase, event);
 
-    case "thread.turn-interrupt-requested": {
-      const thread = nextBase.threads.find((entry) => entry.id === event.payload.threadId);
-      if (!thread || event.payload.pendingFlushIntent === undefined)
-        return Effect.succeed(nextBase);
-      return Effect.succeed({
-        ...nextBase,
-        threads: updateThread(nextBase.threads, thread.id, {
-          pendingInterruptFlushIntent: event.payload.pendingFlushIntent,
-          updatedAt: event.occurredAt,
-        }),
-      });
-    }
+    case "thread.turn-interrupt-requested":
+    case "thread.turn-steer-requested":
+    case "thread.session-stop-requested":
+    case "thread.turn-control-set":
+      return projectThreadTurnControlEvent(nextBase, event);
 
     case "thread.message-sent":
       return projectThreadMessageSent(nextBase, event);

@@ -1,7 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
+import {
+  remoteAgentProcessRequestDigest,
+  remoteAgentWorkspaceHandle,
+} from "./remoteAgentProcessRequest.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
 
 export interface RemoteAgentToolRunInput {
@@ -31,13 +35,6 @@ const ALLOWED_REMOTE_AGENT_ENVIRONMENT = new Set([
   "TZ",
 ]);
 
-function workspaceHandle(input: RemoteAgentToolRunInput): string {
-  return `workspace-${createHash("sha256")
-    .update(`${input.executionTargetId}\0${input.cwd}`)
-    .digest("hex")
-    .slice(0, 32)}`;
-}
-
 function environment(input: NodeJS.ProcessEnv | undefined) {
   return Object.entries(input ?? {}).flatMap(([name, value]) => {
     if (value === undefined) return [];
@@ -46,22 +43,6 @@ function environment(input: NodeJS.ProcessEnv | undefined) {
     }
     return [];
   });
-}
-
-function requestDigest(input: RemoteAgentToolRunInput): Uint8Array {
-  const hash = createHash("sha256");
-  hash.update(input.executionTargetId);
-  hash.update("\0");
-  hash.update(input.cwd);
-  hash.update("\0");
-  hash.update(input.command);
-  hash.update("\0");
-  hash.update(JSON.stringify(input.args ?? []));
-  hash.update("\0");
-  hash.update(JSON.stringify(environment(input.env)));
-  hash.update("\0");
-  hash.update(input.stdin ?? "");
-  return hash.digest();
 }
 
 function commandLabel(input: RemoteAgentToolRunInput): string {
@@ -73,17 +54,30 @@ export function makeRemoteAgentToolRunner(input: {
 }): RemoteAgentToolRunner {
   return async (runInput) => {
     const client = await input.resolve(runInput.executionTargetId);
-    const handle = workspaceHandle(runInput);
+    const handle = remoteAgentWorkspaceHandle(runInput);
+    const args = runInput.args ?? [];
+    const requestEnvironment = environment(runInput.env);
+    const timeoutMs = runInput.timeoutMs ?? 30_000;
+    const maxOutputBytes = runInput.maxBufferBytes ?? 8 * 1024 * 1024;
     await new RemoteAgentWorkspaceClient(client.connection).openWorkspace(handle, runInput.cwd);
     const result = await client.run({
       workspaceHandle: handle,
       operationId: `tool-${randomUUID()}`,
-      requestDigest: requestDigest(runInput),
+      requestDigest: remoteAgentProcessRequestDigest({
+        executionTargetId: runInput.executionTargetId,
+        cwd: runInput.cwd,
+        command: runInput.command,
+        args,
+        environment: requestEnvironment,
+        timeoutMs,
+        maxOutputBytes,
+        ...(runInput.stdin !== undefined ? { stdin: runInput.stdin } : {}),
+      }),
       command: runInput.command,
-      args: runInput.args ?? [],
-      timeoutMs: runInput.timeoutMs ?? 30_000,
-      maxOutputBytes: runInput.maxBufferBytes ?? 8 * 1024 * 1024,
-      environment: environment(runInput.env),
+      args,
+      timeoutMs,
+      maxOutputBytes,
+      environment: requestEnvironment,
       ...(runInput.stdin !== undefined ? { stdin: new TextEncoder().encode(runInput.stdin) } : {}),
     });
     const stdout = new TextDecoder().decode(result.stdout);

@@ -176,6 +176,8 @@ function mapThreadRow(
     latestTurn: groupedRows.latestTurnByThread.get(row.threadId) ?? null,
     queuedPrompts: row.queuedPrompts,
     pendingInterruptFlushIntent: row.pendingInterruptFlushIntent ?? null,
+    pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
+    queueHold: row.queueHold === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,

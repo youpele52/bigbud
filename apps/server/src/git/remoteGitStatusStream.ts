@@ -8,6 +8,7 @@ import type {
 } from "@bigbud/contracts/workspace/git.results.ts";
 import type { GitServiceError } from "@bigbud/contracts/workspace/git.errors.ts";
 import type { GitCoreShape } from "./Services/GitCore.ts";
+import type { RemoteGitStatusInvalidationShape } from "./Services/RemoteGitStatusInvalidation.ts";
 
 const REMOTE_STATUS_POLL_INTERVAL = "2 seconds";
 
@@ -38,6 +39,7 @@ export function makeRemoteGitStatusStream(input: {
   readonly git: GitCoreShape;
   readonly cwd: string;
   readonly executionTargetId: string;
+  readonly invalidation: RemoteGitStatusInvalidationShape;
 }): Effect.Effect<Stream.Stream<GitStatusStreamEvent, never>, GitServiceError> {
   return Effect.gen(function* () {
     const initial = yield* input.git.status({
@@ -51,15 +53,21 @@ export function makeRemoteGitStatusStream(input: {
       remote: previous.remote,
     };
 
-    const updates = Stream.fromEffectRepeat(
-      Effect.gen(function* () {
-        yield* Effect.sleep(REMOTE_STATUS_POLL_INTERVAL);
-        const next = yield* input.git
-          .status({ cwd: input.cwd, executionTargetId: input.executionTargetId })
-          .pipe(
-            Effect.map(toSnapshot),
-            Effect.catch(() => Effect.succeed(null)),
-          );
+    const refreshTriggers = Stream.merge(
+      Stream.fromEffectRepeat(Effect.sleep(REMOTE_STATUS_POLL_INTERVAL)),
+      input.invalidation.changes({
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      }),
+    );
+    const updates = refreshTriggers.pipe(
+      Stream.mapEffect(() =>
+        input.git.status({ cwd: input.cwd, executionTargetId: input.executionTargetId }).pipe(
+          Effect.map(toSnapshot),
+          Effect.catch(() => Effect.succeed(null)),
+        ),
+      ),
+      Stream.map((next) => {
         if (next === null) {
           return Option.none<GitStatusStreamEvent>();
         }
@@ -81,7 +89,6 @@ export function makeRemoteGitStatusStream(input: {
           ? Option.some<GitStatusStreamEvent>({ _tag: "localUpdated", local: next.local })
           : Option.some<GitStatusStreamEvent>({ _tag: "remoteUpdated", remote: next.remote });
       }),
-    ).pipe(
       Stream.filter((event) => Option.isSome(event)),
       Stream.map((event) => Option.getOrThrow(event)),
     );

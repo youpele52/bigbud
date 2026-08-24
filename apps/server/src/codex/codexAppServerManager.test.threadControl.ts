@@ -107,4 +107,29 @@ describe("thread checkpoint control", () => {
       turns: [],
     });
   });
+
+  it("steers the fenced active turn with the provider thread id and client message id", async () => {
+    const { manager, context, sendRequest } = createThreadControlHarness();
+    Object.assign(context.session, { activeTurnId: "turn_1", status: "running" });
+    sendRequest.mockResolvedValue({ turnId: "turn_1" });
+
+    await manager.steerTurn({
+      threadId: asThreadId("thread_1"),
+      input: "Focus on the failing test.",
+      expectedTurnId: "turn_1" as never,
+      clientUserMessageId: "client-message-1",
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith(
+      context,
+      "turn/steer",
+      {
+        threadId: "thread_1",
+        clientUserMessageId: "client-message-1",
+        input: [{ type: "text", text: "Focus on the failing test.", text_elements: [] }],
+        expectedTurnId: "turn_1",
+      },
+      undefined,
+    );
+  });
 });

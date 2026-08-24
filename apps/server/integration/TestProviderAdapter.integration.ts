@@ -86,6 +86,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         const session: ProviderSession = {
           provider,
           status: "ready",
+          sessionEpoch: input.sessionEpoch ?? 0,
           runtimeMode: input.runtimeMode,
           threadId,
           cwd: input.cwd,
@@ -136,6 +137,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
             ...(fixtureEvent as Record<string, unknown>),
             eventId: randomUUID(),
             provider,
+            sessionEpoch: state.session.sessionEpoch,
             sessionId: RuntimeSessionId.makeUnsafe(String(input.threadId)),
             createdAt: nowIso(),
           };

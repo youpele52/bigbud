@@ -98,6 +98,7 @@ export function eventBase(input: {
   eventId: EventId;
   createdAt: string;
   threadId: ThreadId;
+  sessionEpoch: number;
   provider: import("@bigbud/contracts").ProviderKind;
   turnId?: TurnId;
   itemId?: string;
@@ -112,6 +113,7 @@ export function eventBase(input: {
     eventId: input.eventId,
     provider: input.provider,
     threadId: input.threadId,
+    sessionEpoch: input.sessionEpoch,
     createdAt: input.createdAt,
     ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.itemId ? { itemId: toRuntimeItemId(input.itemId) } : {}),

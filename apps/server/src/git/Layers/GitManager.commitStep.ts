@@ -18,6 +18,7 @@ import { FileSystem } from "effect";
 import type { GitCoreShape } from "../Services/GitCore.ts";
 import type { TextGenerationShape } from "../Services/TextGeneration.ts";
 import type { GitActionProgressReporter } from "../Services/GitManager.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import {
   COMMIT_TIMEOUT_MS,
   formatCommitMessage,
@@ -34,6 +35,7 @@ export function makeCommitStep(
   gitCore: GitCoreShape,
   textGeneration: TextGenerationShape,
   fileSystem: FileSystem.FileSystem,
+  serverCwd: string,
 ) {
   const resolveCommitAndBranchSuggestion = Effect.fn("resolveCommitAndBranchSuggestion")(
     function* (input: {
@@ -74,7 +76,7 @@ export function makeCommitStep(
 
       const generated = yield* textGeneration
         .generateCommitMessage({
-          cwd: input.cwd,
+          cwd: isLocalExecutionTarget(input.executionTargetId) ? input.cwd : serverCwd,
           branch: input.branch,
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
