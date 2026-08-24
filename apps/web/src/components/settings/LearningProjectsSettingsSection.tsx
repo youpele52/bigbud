@@ -57,7 +57,7 @@ export function LearningProjectsSettingsSection() {
         description="Multi-session /skills teach projects are stored here, inside your default chat folder."
         control={
           <Button
-            variant="muted-outline"
+            variant="outline"
             size="sm"
             className="w-full justify-start gap-1.5 sm:w-64"
             aria-label="Open learning projects folder"
@@ -74,7 +74,7 @@ export function LearningProjectsSettingsSection() {
         description='Start a new one from chat with /skills teach and a topic, e.g. "/skills teach budgeting".'
         control={
           <Button
-            variant="muted-outline"
+            variant="outline"
             size="sm"
             className="gap-1.5 text-xs"
             disabled={loading}

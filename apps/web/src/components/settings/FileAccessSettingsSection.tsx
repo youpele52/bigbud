@@ -95,7 +95,7 @@ export function FileAccessSettingsSection() {
         }
         control={
           <Button
-            variant="muted-outline"
+            variant="outline"
             size="sm"
             className="w-full justify-start gap-1.5 sm:w-64"
             aria-label="Default chat folder"
@@ -174,7 +174,7 @@ export function FileAccessSettingsSection() {
         description="Clear the saved preference so bigbud asks you again before using expanded file access."
         control={
           <Button
-            variant="muted-outline"
+            variant="outline"
             size="sm"
             className="gap-1.5 text-xs"
             disabled={isResetting}

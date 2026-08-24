@@ -102,7 +102,7 @@ export function SttSettingsSection() {
           <div className="flex shrink-0 gap-2">
             <Button
               type="button"
-              variant="muted-outline"
+              variant="outline"
               className="shrink-0"
               disabled={!draftKey.trim() || isVerifying}
               onClick={() => void handleVerify()}

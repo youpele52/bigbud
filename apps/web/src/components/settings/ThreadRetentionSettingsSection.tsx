@@ -219,7 +219,7 @@ export function ThreadRetentionSettingsSection() {
           control={
             <Button
               ref={actionButtonRef}
-              variant="muted-outline"
+              variant="outline"
               size="sm"
               className="w-full font-normal text-xs text-destructive [:hover,:active,[data-pressed]]:text-destructive"
               disabled={busy}

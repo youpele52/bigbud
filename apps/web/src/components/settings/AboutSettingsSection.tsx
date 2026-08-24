@@ -88,7 +88,7 @@ export function AboutSettingsSection() {
         control={
           <Button
             size="xs"
-            variant="muted-outline"
+            variant="outline"
             className="gap-1"
             onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}
           >
@@ -122,7 +122,7 @@ export function AboutSettingsSection() {
           control={
             <Button
               size="xs"
-              variant="muted-outline"
+              variant="outline"
               disabled={isRestarting}
               onClick={restartApplication}
             >
@@ -147,7 +147,7 @@ export function AboutSettingsSection() {
         control={
           <Button
             size="xs"
-            variant="muted-outline"
+            variant="outline"
             className="gap-1"
             disabled={!logsDirectoryPath || isOpeningLogsDirectory}
             onClick={openLogsDirectory}

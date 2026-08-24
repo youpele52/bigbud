@@ -22,3 +22,33 @@ describe("Button text variant", () => {
     expect(markup).toContain("Show more");
   });
 });
+
+describe("Button outline variants", () => {
+  it("uses muted secondary styling while preserving the requested size", () => {
+    const markup = renderToStaticMarkup(
+      <Button size="lg" variant="outline">
+        Continue
+      </Button>,
+    );
+
+    expect(markup).toContain("text-muted-foreground");
+    expect(markup).toContain("transition-[color,background-color,box-shadow]");
+    expect(markup).toContain("[:hover,:active,[data-pressed]]:text-foreground");
+    expect(markup).toContain("[:hover,:active,[data-pressed]]:bg-accent/50");
+    expect(markup).toContain("h-10");
+    expect(markup).toContain("sm:h-9");
+    expect(markup).not.toContain("h-8");
+    expect(markup).not.toContain("sm:h-7");
+  });
+
+  it("uses compact secondary dimensions by default", () => {
+    const markup = renderToStaticMarkup(<Button variant="outline">Restore defaults</Button>);
+
+    expect(markup).toContain("text-muted-foreground");
+    expect(markup).toContain("transition-[color,background-color,box-shadow]");
+    expect(markup).toContain("[:hover,:active,[data-pressed]]:text-foreground");
+    expect(markup).toContain("[:hover,:active,[data-pressed]]:bg-accent/50");
+    expect(markup).toContain("h-8");
+    expect(markup).toContain("sm:h-7");
+  });
+});

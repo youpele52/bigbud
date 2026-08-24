@@ -151,7 +151,7 @@ export function ArchivedThreadsPanel() {
                 </div>
                 <Button
                   type="button"
-                  variant="muted-outline"
+                  variant="outline"
                   size="sm"
                   className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
                   onClick={() =>

@@ -55,7 +55,7 @@ export function KeybindingsSettingsSection() {
         control={
           <Button
             size="xs"
-            variant="muted-outline"
+            variant="outline"
             disabled={!keybindingsConfigPath || isOpeningKeybindings}
             onClick={openKeybindingsFile}
           >
