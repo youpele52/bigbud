@@ -7,6 +7,9 @@ import type * as React from "react";
 
 import { cn } from "~/lib/utils";
 
+export const textButtonTypography =
+  "font-normal text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55 sm:text-[9px]";
+
 const buttonVariants = cva(
   "[&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium text-sm outline-none transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
@@ -45,6 +48,7 @@ const buttonVariants = cva(
           "border-input bg-popover not-dark:bg-clip-padding h-8 gap-1.5 px-[calc(--spacing(2.5)-1px)] text-muted-foreground shadow-xs/5 not-disabled:not-active:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] dark:bg-input/32 dark:not-disabled:before:shadow-[0_-1px_--theme(--color-white/2%)] dark:not-disabled:not-active:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] sm:h-7 [:disabled,:active,[data-pressed]]:shadow-none [:hover,:active,[data-pressed]]:text-foreground [:hover,[data-pressed]]:bg-accent/50 dark:[:hover,[data-pressed]]:bg-input/64",
         secondary:
           "border-transparent bg-secondary text-secondary-foreground [:active,[data-pressed]]:bg-secondary/80 [:hover,[data-pressed]]:bg-secondary/90",
+        text: `h-auto min-h-6 rounded-md border-transparent px-1.5 py-0.5 transition-colors sm:h-auto hover:border-border/70 hover:bg-accent/30 hover:text-foreground active:border-border/80 active:bg-accent/40 data-[pressed]:border-border/80 data-[pressed]:bg-accent/40 ${textButtonTypography}`,
         toolbar:
           "border-transparent bg-transparent text-muted-foreground shadow-none before:hidden [:hover,[data-pressed]]:bg-secondary [:hover,[data-pressed]]:text-foreground dark:text-muted-foreground/92 dark:[:hover,[data-pressed]]:bg-secondary dark:[:hover,[data-pressed]]:text-foreground",
       },

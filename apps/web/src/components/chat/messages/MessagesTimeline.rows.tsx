@@ -10,7 +10,7 @@ import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
-import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
+import { MessagesTimelineWorkGroup } from "./MessagesTimeline.workGroup";
 import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
 import { MessagesTimelineDelegatedProvenance } from "./MessagesTimeline.delegatedProvenance";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
@@ -24,7 +24,6 @@ import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { isVideoMimeType } from "~/lib/workspaceFilePreview";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { formatTimestamp } from "../../../utils/timestamp";
-import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import {
@@ -69,66 +68,14 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
-      {row.kind === "work" &&
-        (() => {
-          const groupId = row.id;
-          const groupedEntries = row.groupedEntries;
-          const isExpanded = expandedWorkGroups[groupId] ?? false;
-          const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-          const visibleEntries =
-            hasOverflow && !isExpanded
-              ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-              : groupedEntries;
-          const hiddenCount = groupedEntries.length - visibleEntries.length;
-          const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-          const showHeader = hasOverflow || !onlyToolEntries;
-          const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
-          const showSingleEntryActionsOutside = visibleEntries.length === 1;
-          const singleVisibleEntry = showSingleEntryActionsOutside ? visibleEntries[0] : undefined;
-
-          return (
-            <div className="group/work-log flex flex-col items-start gap-1">
-              <div className="w-full rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-                {showHeader && (
-                  <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
-                      {groupLabel} ({groupedEntries.length})
-                    </p>
-                    {hasOverflow && (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="muted-outline"
-                        className="font-normal text-xs"
-                        onClick={() => onToggleWorkGroup(groupId)}
-                      >
-                        {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-                      </Button>
-                    )}
-                  </div>
-                )}
-                <div className="space-y-0.5">
-                  {visibleEntries.map((workEntry) => (
-                    <SimpleWorkEntryRow
-                      key={`work-row:${workEntry.id}`}
-                      workEntry={workEntry}
-                      executionTargetId={workspaceExecutionTargetId}
-                      showActions={!showSingleEntryActionsOutside}
-                    />
-                  ))}
-                </div>
-              </div>
-              {singleVisibleEntry ? (
-                <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100">
-                  <WorkEntryActionButtons
-                    workEntry={singleVisibleEntry}
-                    executionTargetId={workspaceExecutionTargetId}
-                  />
-                </div>
-              ) : null}
-            </div>
-          );
-        })()}
+      {row.kind === "work" && (
+        <MessagesTimelineWorkGroup
+          row={row}
+          isExpanded={expandedWorkGroups[row.id] ?? false}
+          onToggleWorkGroup={onToggleWorkGroup}
+          executionTargetId={workspaceExecutionTargetId}
+        />
+      )}
       {row.kind === "message" &&
         row.message.role === "user" &&
         (() => {

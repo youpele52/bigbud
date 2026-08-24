@@ -248,18 +248,18 @@ function AssistantTurnDiffCard({
         </p>
         <div className="flex items-center gap-1.5">
           <Button
-            type="button"
             size="xs"
-            variant="muted-outline"
+            variant="text"
+            type="button"
             data-scroll-anchor-ignore
             onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
           >
             {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
           </Button>
           <Button
-            type="button"
             size="xs"
-            variant="muted-outline"
+            variant="text"
+            type="button"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
             View diff
