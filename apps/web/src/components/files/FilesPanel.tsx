@@ -3,13 +3,10 @@ import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.const
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "../../hooks/useTheme";
-import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { useDefaultChatCwd } from "../../rpc/serverState";
+import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { canMoveFileHistory, EMPTY_FILE_HISTORY } from "../../stores/files/filesPanel.history";
-import { useProjectById, useThreadById } from "../../stores/main";
-import { useUiStateStore } from "../../stores/ui";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import type { CodeAnnotationDraft } from "./FilePreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
@@ -53,20 +50,15 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const removeHistoryPaths = useFilesPanelStore((state) => state.removeHistoryPaths);
   const setPreviewPath = useFilesPanelStore((state) => state.setPreviewPath);
   const setPreviewPosition = useFilesPanelStore((state) => state.setPreviewPosition);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
+  const {
+    project,
+    cwd: workspaceRoot,
+    executionTargetId: workspaceExecutionTargetId,
+  } = useResolvedWorkspace(activeThreadId);
   const { resolvedTheme } = useTheme();
-  const defaultChatCwd = useDefaultChatCwd();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
   const regularProject = project && !isBuiltInChatsProject(project.id) ? project : undefined;
-  const workspaceExecutionTargetId = thread
-    ? resolveWorkspaceExecutionTargetId(thread)
-    : project
-      ? resolveWorkspaceExecutionTargetId(project)
-      : undefined;
   const activeWorkspaceExecutionTargetId =
     workspaceRootOverride === null ? workspaceExecutionTargetId : undefined;
   const activeProjectName = workspaceRootOverride === null ? regularProject?.name : undefined;
