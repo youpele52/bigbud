@@ -31,9 +31,18 @@ name = "bigbud-remote-agent"
 version = "0.1.0"
 dependencies = [
  "bigbud-protocol",
+ "bigbud-workspace-watch",
+ "libc",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "bigbud-workspace-watch"
+version = "0.1.0"
+dependencies = [
  "libc",
  "notify",
- "sha2",
  "thiserror",
 ]
 

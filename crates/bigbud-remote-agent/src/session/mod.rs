@@ -127,7 +127,7 @@ pub struct PreparedProcess {
     pub job: Option<ProcessJob>,
 }
 
-pub use workspace_watch_handlers::PreparedWorkspaceWatch;
+pub use workspace_watch_handlers::{PreparedWorkspaceWatch, workspace_watch_event_frame};
 
 impl AgentSession {
     pub fn new() -> Self {

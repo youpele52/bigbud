@@ -1,7 +1,11 @@
 use bigbud_protocol::v1;
+use bigbud_workspace_watch::{WorkspaceWatchEvent, WorkspaceWatchRegistry};
 
 use super::{AgentSession, SessionError, WorkspaceRoot, workspace_error_code};
-use crate::workspace::WorkspaceWatchRegistry;
+
+#[cfg(test)]
+#[path = "workspace_watch_handlers.tests.rs"]
+mod tests;
 
 struct WorkspaceWatchRegistration {
     pub subscription_id: String,
@@ -19,12 +23,12 @@ impl PreparedWorkspaceWatch {
         if let Some(registration) = self.registration {
             match registry.subscribe(
                 &registration.subscription_id,
-                registration.workspace,
+                std::sync::Arc::new(registration.workspace),
                 &registration.relative_path,
             ) {
                 Ok(started) => {
                     self.response.generation = started.generation;
-                    self.response.backend = started.backend;
+                    self.response.backend = started.backend.as_str().to_owned();
                 }
                 Err(error) => {
                     self.response.accepted = false;
@@ -38,6 +42,30 @@ impl PreparedWorkspaceWatch {
                 self.response,
             )),
         }
+    }
+}
+
+pub fn workspace_watch_event_frame(event: WorkspaceWatchEvent) -> v1::Frame {
+    let rescan_reason = event.rescan_reason.map(|reason| reason.as_str().to_owned());
+    v1::Frame {
+        payload: Some(v1::frame::Payload::WorkspaceWatchEvent(
+            v1::WorkspaceWatchEvent {
+                subscription_id: event.subscription_id,
+                generation: event.generation,
+                sequence: event.sequence,
+                changes: event
+                    .changes
+                    .into_iter()
+                    .map(|change| v1::WorkspaceChange {
+                        path: change.path,
+                        kind: change.kind.as_str().to_owned(),
+                    })
+                    .collect(),
+                rescan_required: rescan_reason.is_some(),
+                rescan_reason: rescan_reason.unwrap_or_default(),
+                backend: event.backend.as_str().to_owned(),
+            },
+        )),
     }
 }
 

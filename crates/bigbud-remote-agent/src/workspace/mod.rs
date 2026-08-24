@@ -2,7 +2,6 @@ mod directory;
 mod files;
 mod path;
 mod search;
-mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -13,7 +12,6 @@ pub use directory::DirectoryEntry;
 pub use files::ReadFileResult;
 pub use path::WorkspaceRoot;
 pub use search::ContentMatch;
-pub use watch::{WorkspaceWatchError, WorkspaceWatchRegistry, WorkspaceWatchStart};
 
 pub const MAX_TEXT_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_DIRECTORY_ENTRIES: usize = 10_000;
@@ -56,4 +54,53 @@ pub enum WorkspaceError {
 
 pub(super) fn map_io(error: io::Error) -> WorkspaceError {
     WorkspaceError::Io(error)
+}
+
+impl bigbud_workspace_watch::WorkspaceWatchHost for WorkspaceRoot {
+    fn canonical_root(&self) -> &std::path::Path {
+        self.root()
+    }
+
+    fn resolve_directory(
+        &self,
+        relative_path: &str,
+    ) -> Result<std::path::PathBuf, bigbud_workspace_watch::WorkspaceWatchHostError> {
+        WorkspaceRoot::resolve_directory(self, relative_path).map_err(|error| {
+            bigbud_workspace_watch::WorkspaceWatchHostError::new(error.to_string())
+        })
+    }
+
+    fn relative_path(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<String, bigbud_workspace_watch::WorkspaceWatchHostError> {
+        WorkspaceRoot::relative_path(self, path).map_err(|error| {
+            bigbud_workspace_watch::WorkspaceWatchHostError::new(error.to_string())
+        })
+    }
+
+    fn list_directory(
+        &self,
+        relative_path: &str,
+    ) -> Result<
+        Vec<bigbud_workspace_watch::WorkspaceWatchEntry>,
+        bigbud_workspace_watch::WorkspaceWatchHostError,
+    > {
+        self.list_directory_for_watch(relative_path)
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|entry| bigbud_workspace_watch::WorkspaceWatchEntry {
+                        path: entry.path,
+                        is_directory: entry.is_directory,
+                        is_file: entry.is_file,
+                        size_bytes: entry.size_bytes,
+                        modified_unix_ms: entry.modified_unix_ms,
+                    })
+                    .collect()
+            })
+            .map_err(|error| {
+                bigbud_workspace_watch::WorkspaceWatchHostError::new(error.to_string())
+            })
+    }
 }

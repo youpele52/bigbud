@@ -8,6 +8,12 @@ use super::{WorkspaceError, WorkspaceRoot, map_io};
 
 pub const MAX_DIRECTORY_ENTRIES: usize = 10_000;
 
+#[derive(Clone, Copy)]
+enum SymlinkPolicy {
+    Reject,
+    Skip,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryEntry {
     pub path: String,
@@ -22,13 +28,28 @@ impl WorkspaceRoot {
         &self,
         relative_path: &str,
     ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
+        self.list_directory_with_symlink_policy(relative_path, SymlinkPolicy::Reject)
+    }
+
+    pub(super) fn list_directory_for_watch(
+        &self,
+        relative_path: &str,
+    ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
+        self.list_directory_with_symlink_policy(relative_path, SymlinkPolicy::Skip)
+    }
+
+    fn list_directory_with_symlink_policy(
+        &self,
+        relative_path: &str,
+        symlink_policy: SymlinkPolicy,
+    ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
         #[cfg(unix)]
         {
-            list_directory_unix(self, relative_path)
+            list_directory_unix(self, relative_path, symlink_policy)
         }
         #[cfg(not(unix))]
         {
-            list_directory_fallback(self, relative_path)
+            list_directory_fallback(self, relative_path, symlink_policy)
         }
     }
 }
@@ -37,6 +58,7 @@ impl WorkspaceRoot {
 fn list_directory_unix(
     workspace: &WorkspaceRoot,
     relative_path: &str,
+    symlink_policy: SymlinkPolicy,
 ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
     use std::ffi::{CStr, CString};
     use std::os::fd::IntoRawFd;
@@ -55,6 +77,7 @@ fn list_directory_unix(
     }
     let directory_fd = unsafe { libc::dirfd(directory_stream) };
     let mut entries = Vec::new();
+    let mut visited_entries = 0;
     loop {
         let entry = unsafe { libc::readdir(directory_stream) };
         if entry.is_null() {
@@ -64,10 +87,11 @@ fn list_directory_unix(
         if name == b"." || name == b".." {
             continue;
         }
-        if entries.len() >= MAX_DIRECTORY_ENTRIES {
+        if visited_entries >= MAX_DIRECTORY_ENTRIES {
             unsafe { libc::closedir(directory_stream) };
             return Err(WorkspaceError::DirectoryLimitExceeded);
         }
+        visited_entries += 1;
         let name_c = CString::new(name)
             .map_err(|_| WorkspaceError::InvalidPath("non-UTF-8 path".to_owned()))?;
         let mut metadata = unsafe { std::mem::zeroed::<libc::stat>() };
@@ -85,8 +109,13 @@ fn list_directory_unix(
         }
         let file_type = metadata.st_mode & libc::S_IFMT;
         if file_type == libc::S_IFLNK {
-            unsafe { libc::closedir(directory_stream) };
-            return Err(WorkspaceError::SymlinkComponent);
+            match symlink_policy {
+                SymlinkPolicy::Reject => {
+                    unsafe { libc::closedir(directory_stream) };
+                    return Err(WorkspaceError::SymlinkComponent);
+                }
+                SymlinkPolicy::Skip => continue,
+            }
         }
         let path = relative_entry_path(&parent, OsStr::from_bytes(name))?;
         entries.push(DirectoryEntry {
@@ -125,16 +154,25 @@ fn relative_entry_path(parent: &Path, name: &OsStr) -> Result<String, WorkspaceE
 fn list_directory_fallback(
     workspace: &WorkspaceRoot,
     relative_path: &str,
+    symlink_policy: SymlinkPolicy,
 ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
     let path = workspace.resolve_existing(relative_path)?;
     if !fs::metadata(&path).map_err(map_io)?.is_dir() {
         return Err(WorkspaceError::NotDirectory);
     }
     let mut entries = Vec::new();
+    let mut visited_entries = 0;
     for entry in fs::read_dir(path).map_err(map_io)? {
         let entry = entry.map_err(map_io)?;
-        if entries.len() >= MAX_DIRECTORY_ENTRIES {
+        if visited_entries >= MAX_DIRECTORY_ENTRIES {
             return Err(WorkspaceError::DirectoryLimitExceeded);
+        }
+        visited_entries += 1;
+        if entry.file_type().map_err(map_io)?.is_symlink() {
+            match symlink_policy {
+                SymlinkPolicy::Reject => return Err(WorkspaceError::SymlinkComponent),
+                SymlinkPolicy::Skip => continue,
+            }
         }
         let metadata = entry.metadata().map_err(map_io)?;
         entries.push(DirectoryEntry {

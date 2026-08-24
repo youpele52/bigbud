@@ -57,6 +57,7 @@ const frames: ReadonlyArray<readonly [string, RemoteAgentFrame]> = [
         changes: [{ path: "docs/README.md", kind: "modify" }],
         rescanRequired: false,
         rescanReason: "",
+        backend: "native",
       },
     },
   ],

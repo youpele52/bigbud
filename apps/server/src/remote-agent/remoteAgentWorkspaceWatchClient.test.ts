@@ -66,6 +66,7 @@ describe("remote agent workspace watch client", () => {
           changes: [{ path: "docs/README.md", kind: "modify" }],
           rescanRequired: false,
           rescanReason: "",
+          backend: "native",
         },
       }),
     ).toBe(true);

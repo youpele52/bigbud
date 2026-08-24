@@ -18,7 +18,7 @@ import type {
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
-export const REMOTE_AGENT_PROTOCOL_MINOR = 0;
+export const REMOTE_AGENT_PROTOCOL_MINOR = 1;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
 
 export interface RemoteAgentClientHello {

@@ -90,7 +90,11 @@ impl WorkspaceRoot {
             })
             .collect::<Result<Vec<_>, _>>()?;
         if components.is_empty() {
-            return self.root_directory.try_clone().map_err(map_io);
+            let current = CString::new(".")
+                .map_err(|_| WorkspaceError::InvalidPath(relative_path.to_owned()))?;
+            let descriptor =
+                open_directory_at(self.root_directory.as_raw_fd(), &current).map_err(map_io)?;
+            return Ok(unsafe { fs::File::from_raw_fd(descriptor) });
         }
 
         let mut directory = self.root_directory.try_clone().map_err(map_io)?;

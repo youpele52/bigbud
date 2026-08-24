@@ -7,8 +7,9 @@ use bigbud_remote_agent::{
     AgentSession, protocol_error_frame,
     state::{AgentState, supervisor_socket_path},
     supervisor::{run_proxy, run_supervisor},
-    workspace::WorkspaceWatchRegistry,
+    workspace_watch_event_frame,
 };
+use bigbud_workspace_watch::WorkspaceWatchRegistry;
 
 fn state_root() -> Option<std::path::PathBuf> {
     std::env::var_os("BIGBUD_AGENT_STATE_DIR")
@@ -40,8 +41,8 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
     let mut reader = BufReader::new(stdin.lock());
     let writer = Arc::new(Mutex::new(BufWriter::new(io::stdout())));
     let watch_writer = Arc::clone(&writer);
-    let watchers = WorkspaceWatchRegistry::new(move |_, frame| {
-        let _ = write_stdio_responses(&watch_writer, vec![frame]);
+    let watchers = WorkspaceWatchRegistry::new(move |event| {
+        let _ = write_stdio_responses(&watch_writer, vec![workspace_watch_event_frame(event)]);
     });
     let mut watch_subscriptions = HashSet::new();
     loop {
@@ -117,11 +118,13 @@ fn write_stdio_responses(
 fn run_check() {
     let version = option_env!("BIGBUD_AGENT_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     println!(
-        "bigbud-remote-agent\t{}\t{}\t{}\t{}",
+        "bigbud-remote-agent\t{}\t{}\t{}\t{}\t{}\t{}",
         version,
         bigbud_protocol::PROTOCOL_MAJOR,
         bigbud_protocol::PROTOCOL_MINOR,
         option_env!("BIGBUD_AGENT_BUILD_DIGEST").unwrap_or(env!("CARGO_PKG_VERSION")),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
     );
 }
 
@@ -160,6 +163,7 @@ fn main() -> io::Result<()> {
             let stdout = io::stdout();
             run_proxy(stdin, stdout.lock(), &supervisor_socket_path(root))
         }
+        Some("--ephemeral") => run_stdio(AgentSession::new()),
         _ => run_stdio(create_session()?),
     }
 }

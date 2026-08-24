@@ -8,7 +8,7 @@ pub mod v1 {
 }
 
 pub const PROTOCOL_MAJOR: u32 = 1;
-pub const PROTOCOL_MINOR: u32 = 0;
+pub const PROTOCOL_MINOR: u32 = 1;
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Error)]
@@ -170,7 +170,7 @@ mod tests {
             Frame {
                 payload: Some(frame::Payload::AgentHello(AgentHello {
                     protocol_major: 1,
-                    protocol_minor: 0,
+                    protocol_minor: PROTOCOL_MINOR,
                     agent_version: "0.1.0".to_owned(),
                     build_digest: "development".to_owned(),
                     os: "linux".to_owned(),
@@ -277,6 +277,7 @@ mod tests {
                         }],
                         rescan_required: false,
                         rescan_reason: String::new(),
+                        backend: "native".to_owned(),
                     },
                 )),
             },

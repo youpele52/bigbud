@@ -45,6 +45,7 @@ function encodeEvent(value: RemoteAgentWorkspaceWatchEvent): Uint8Array {
   for (const change of value.changes) writer.fieldBytes(4, encodeChange(change));
   writer.fieldBool(5, value.rescanRequired);
   writer.fieldString(6, value.rescanReason);
+  writer.fieldString(7, value.backend);
   return writer.finish();
 }
 
@@ -148,6 +149,7 @@ function decodeEvent(bytes: Uint8Array): RemoteAgentWorkspaceWatchEvent {
     changes: [] as RemoteAgentWorkspaceChange[],
     rescanRequired: false,
     rescanReason: "",
+    backend: "",
   };
   decodeMessage(bytes, (field, wireType, reader) => {
     if (field === 2 || field === 3 || field === 5) {
@@ -162,6 +164,7 @@ function decodeEvent(bytes: Uint8Array): RemoteAgentWorkspaceWatchEvent {
     if (field === 1) value.subscriptionId = reader.string();
     else if (field === 4) value.changes.push(decodeChange(reader.bytesValue()));
     else if (field === 6) value.rescanReason = reader.string();
+    else if (field === 7) value.backend = reader.string();
     else reader.skip(wireType);
   });
   return value;

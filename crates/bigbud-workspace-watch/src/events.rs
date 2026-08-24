@@ -1,30 +1,34 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use bigbud_protocol::v1;
 use notify::{Event, EventKind};
 
-use super::{EventSink, Interest};
-use crate::workspace::{DirectoryEntry, WorkspaceError, WorkspaceRoot};
+use crate::manager::Interest;
+use crate::registry::EventSink;
+use crate::{
+    WorkspaceChange, WorkspaceChangeKind, WorkspaceRescanReason, WorkspaceWatchBackend,
+    WorkspaceWatchEntry, WorkspaceWatchEvent, WorkspaceWatchHost, WorkspaceWatchHostError,
+};
 
 const MAX_CHANGED_PATHS: usize = 256;
 const MAX_CHANGED_BYTES: usize = 128 * 1024;
 
-pub(super) type Snapshot = BTreeMap<String, EntryFingerprint>;
+pub(crate) type Snapshot = BTreeMap<String, EntryFingerprint>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct EntryFingerprint {
+pub(crate) struct EntryFingerprint {
     is_directory: bool,
     is_file: bool,
     size_bytes: u64,
     modified_unix_ms: u64,
 }
 
-pub(super) fn reconcile_events(
-    workspace: &WorkspaceRoot,
+pub(crate) fn reconcile_events(
+    workspace: &dyn WorkspaceWatchHost,
     sink: &EventSink,
     interests: &mut HashMap<String, Interest>,
     generation: u64,
+    backend: WorkspaceWatchBackend,
     events: Vec<Event>,
 ) -> Vec<PathBuf> {
     let mut hinted = BTreeMap::new();
@@ -70,13 +74,14 @@ pub(super) fn reconcile_events(
                         subscription_id,
                         generation,
                         interest.sequence,
-                        "watchInvalidated",
+                        WorkspaceRescanReason::WatchInvalidated,
+                        backend,
                     );
                     continue;
                 }
                 let changed_bytes = changes
                     .iter()
-                    .map(|(path, kind)| path.len().saturating_add(kind.len()))
+                    .map(|(path, kind)| path.len().saturating_add(kind.as_str().len()))
                     .sum::<usize>();
                 if changes.len() > MAX_CHANGED_PATHS || changed_bytes > MAX_CHANGED_BYTES {
                     emit_rescan(
@@ -84,7 +89,8 @@ pub(super) fn reconcile_events(
                         subscription_id,
                         generation,
                         interest.sequence,
-                        "overflow",
+                        WorkspaceRescanReason::Overflow,
+                        backend,
                     );
                 } else {
                     emit_changes(
@@ -93,6 +99,7 @@ pub(super) fn reconcile_events(
                         generation,
                         interest.sequence,
                         changes,
+                        backend,
                     );
                 }
             }
@@ -107,7 +114,8 @@ pub(super) fn reconcile_events(
                     subscription_id,
                     generation,
                     interest.sequence,
-                    "watchInvalidated",
+                    WorkspaceRescanReason::WatchInvalidated,
+                    backend,
                 );
             }
         }
@@ -115,10 +123,10 @@ pub(super) fn reconcile_events(
     invalidated_paths
 }
 
-pub(super) fn snapshot(
-    workspace: &WorkspaceRoot,
+pub(crate) fn snapshot(
+    workspace: &dyn WorkspaceWatchHost,
     relative_path: &str,
-) -> Result<Snapshot, WorkspaceError> {
+) -> Result<Snapshot, WorkspaceWatchHostError> {
     workspace.list_directory(relative_path).map(|entries| {
         entries
             .into_iter()
@@ -127,22 +135,22 @@ pub(super) fn snapshot(
     })
 }
 
-fn snapshot_changes(previous: &Snapshot, next: &Snapshot) -> BTreeMap<String, &'static str> {
+fn snapshot_changes(previous: &Snapshot, next: &Snapshot) -> BTreeMap<String, WorkspaceChangeKind> {
     let mut changes = BTreeMap::new();
     for (path, fingerprint) in next {
         match previous.get(path) {
             None => {
-                changes.insert(path.clone(), "create");
+                changes.insert(path.clone(), WorkspaceChangeKind::Create);
             }
             Some(previous) if previous != fingerprint => {
-                changes.insert(path.clone(), "modify");
+                changes.insert(path.clone(), WorkspaceChangeKind::Modify);
             }
             _ => {}
         }
     }
     for path in previous.keys() {
         if !next.contains_key(path) {
-            changes.insert(path.clone(), "remove");
+            changes.insert(path.clone(), WorkspaceChangeKind::Remove);
         }
     }
     changes
@@ -153,61 +161,41 @@ fn emit_changes(
     subscription_id: &str,
     generation: u64,
     sequence: u64,
-    changes: BTreeMap<String, &'static str>,
+    changes: BTreeMap<String, WorkspaceChangeKind>,
+    backend: WorkspaceWatchBackend,
 ) {
     if changes.is_empty() {
         return;
     }
-    sink(
-        subscription_id,
-        watch_event_frame(subscription_id, generation, sequence, changes, None),
-    );
+    sink(WorkspaceWatchEvent {
+        subscription_id: subscription_id.to_owned(),
+        generation,
+        sequence,
+        changes: changes
+            .into_iter()
+            .map(|(path, kind)| WorkspaceChange { path, kind })
+            .collect(),
+        rescan_reason: None,
+        backend,
+    });
 }
 
-pub(super) fn emit_rescan(
+pub(crate) fn emit_rescan(
     sink: &EventSink,
     subscription_id: &str,
     generation: u64,
     sequence: u64,
-    reason: &str,
+    reason: WorkspaceRescanReason,
+    backend: WorkspaceWatchBackend,
 ) {
-    sink(
-        subscription_id,
-        watch_event_frame(
-            subscription_id,
-            generation,
-            sequence,
-            BTreeMap::new(),
-            Some(reason),
-        ),
-    );
-}
-
-fn watch_event_frame(
-    subscription_id: &str,
-    generation: u64,
-    sequence: u64,
-    changes: BTreeMap<String, &'static str>,
-    rescan_reason: Option<&str>,
-) -> v1::Frame {
-    v1::Frame {
-        payload: Some(v1::frame::Payload::WorkspaceWatchEvent(
-            v1::WorkspaceWatchEvent {
-                subscription_id: subscription_id.to_owned(),
-                generation,
-                sequence,
-                changes: changes
-                    .into_iter()
-                    .map(|(path, kind)| v1::WorkspaceChange {
-                        path,
-                        kind: kind.to_owned(),
-                    })
-                    .collect(),
-                rescan_required: rescan_reason.is_some(),
-                rescan_reason: rescan_reason.unwrap_or_default().to_owned(),
-            },
-        )),
-    }
+    sink(WorkspaceWatchEvent {
+        subscription_id: subscription_id.to_owned(),
+        generation,
+        sequence,
+        changes: Vec::new(),
+        rescan_reason: Some(reason),
+        backend,
+    });
 }
 
 fn direct_child_or_self(path: &str, directory: &str) -> bool {
@@ -216,17 +204,17 @@ fn direct_child_or_self(path: &str, directory: &str) -> bool {
     path == directory || path.parent() == Some(directory)
 }
 
-fn event_kind(kind: &EventKind) -> &'static str {
+fn event_kind(kind: &EventKind) -> WorkspaceChangeKind {
     match kind {
-        EventKind::Create(_) => "create",
-        EventKind::Remove(_) => "remove",
-        EventKind::Modify(_) => "modify",
-        _ => "unknown",
+        EventKind::Create(_) => WorkspaceChangeKind::Create,
+        EventKind::Remove(_) => WorkspaceChangeKind::Remove,
+        EventKind::Modify(_) => WorkspaceChangeKind::Modify,
+        _ => WorkspaceChangeKind::Unknown,
     }
 }
 
-impl From<DirectoryEntry> for EntryFingerprint {
-    fn from(entry: DirectoryEntry) -> Self {
+impl From<WorkspaceWatchEntry> for EntryFingerprint {
+    fn from(entry: WorkspaceWatchEntry) -> Self {
         Self {
             is_directory: entry.is_directory,
             is_file: entry.is_file,

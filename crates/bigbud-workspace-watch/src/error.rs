@@ -1,4 +1,16 @@
-use crate::workspace::WorkspaceError;
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{message}")]
+pub struct WorkspaceWatchHostError {
+    message: String,
+}
+
+impl WorkspaceWatchHostError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceWatchError {
@@ -10,8 +22,8 @@ pub enum WorkspaceWatchError {
     ResourceLimit,
     #[error("workspace watch backend failed: {0}")]
     Backend(#[from] notify::Error),
-    #[error(transparent)]
-    Workspace(#[from] WorkspaceError),
+    #[error("workspace watch host failed: {0}")]
+    Host(#[from] WorkspaceWatchHostError),
 }
 
 impl WorkspaceWatchError {
@@ -21,7 +33,7 @@ impl WorkspaceWatchError {
             Self::WorkerStopped => "WATCH_WORKER_STOPPED",
             Self::ResourceLimit => "RESOURCE_LIMIT",
             Self::Backend(_) => "WATCH_BACKEND_FAILED",
-            Self::Workspace(_) => "WORKSPACE_ERROR",
+            Self::Host(_) => "WORKSPACE_ERROR",
         }
     }
 }

@@ -1,19 +1,24 @@
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::*;
 
 struct TestRoot(std::path::PathBuf);
 
+static NEXT_TEST_ROOT: AtomicU64 = AtomicU64::new(0);
+
 impl TestRoot {
     fn new() -> Self {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("bigbud-agent-test-{suffix}"));
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
+        loop {
+            let suffix = NEXT_TEST_ROOT.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir()
+                .join(format!("bigbud-agent-test-{}-{suffix}", std::process::id()));
+            match fs::create_dir(&path) {
+                Ok(()) => return Self(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("failed to create test root: {error}"),
+            }
+        }
     }
 }
 
@@ -100,6 +105,37 @@ fn rejects_lexical_traversal_and_symlink_escape() {
             workspace.read_file("link/secret.txt", 0, 10),
             Err(WorkspaceError::SymlinkComponent)
         ));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn watch_snapshots_skip_symlinks_without_weakening_directory_listing() {
+    let root = TestRoot::new();
+    fs::write(root.0.join("AGENTS.md"), "instructions").unwrap();
+    std::os::unix::fs::symlink("AGENTS.md", root.0.join("CLAUDE.md")).unwrap();
+    let workspace = WorkspaceRoot::open(&root.0).unwrap();
+
+    assert!(matches!(
+        workspace.list_directory(""),
+        Err(WorkspaceError::SymlinkComponent)
+    ));
+
+    let watch_workspace = WorkspaceRoot::open(&root.0).unwrap();
+    for _ in 0..2 {
+        let watch_entries =
+            <WorkspaceRoot as bigbud_workspace_watch::WorkspaceWatchHost>::list_directory(
+                &watch_workspace,
+                "",
+            )
+            .unwrap();
+        assert_eq!(
+            watch_entries
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["AGENTS.md"]
+        );
     }
 }
 

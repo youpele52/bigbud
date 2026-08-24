@@ -41,7 +41,7 @@ const goldenFrameValues: ReadonlyArray<RemoteAgentFrame> = [
     type: "agentHello",
     value: {
       protocolMajor: 1,
-      protocolMinor: 0,
+      protocolMinor: REMOTE_AGENT_PROTOCOL_MINOR,
       agentVersion: "0.1.0",
       buildDigest: "development",
       os: "linux",
@@ -95,7 +95,7 @@ describe("remote agent protocol", () => {
   it("round-trips a client hello through the bounded frame codec", () => {
     const encoded = encodeDelimitedFrame(clientHello);
     expect(decodeDelimitedFrame(encoded)).toEqual(clientHello);
-    expect(encoded.slice(0, 4)).toEqual(new Uint8Array([0, 0, 0, 39]));
+    expect(encoded.slice(0, 4)).toEqual(new Uint8Array([0, 0, 0, 41]));
   });
 
   it("matches the Rust protobuf golden frames", () => {

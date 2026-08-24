@@ -29,6 +29,7 @@ export interface RemoteAgentWorkspaceWatchEvent {
   readonly changes: ReadonlyArray<RemoteAgentWorkspaceChange>;
   readonly rescanRequired: boolean;
   readonly rescanReason: string;
+  readonly backend: string;
 }
 
 export interface RemoteAgentWorkspaceWatchStopRequest {

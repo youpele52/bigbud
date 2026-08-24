@@ -6,8 +6,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
+use bigbud_workspace_watch::WorkspaceWatchRegistry;
 
-use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace::WorkspaceWatchRegistry};
+use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace_watch_event_frame};
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -47,11 +48,14 @@ pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<(
     let subscribers = Arc::new(Mutex::new(HashMap::new()));
     let watch_subscribers = Arc::new(Mutex::new(HashMap::new()));
     let watch_sink = Arc::clone(&watch_subscribers);
-    let watchers = Arc::new(WorkspaceWatchRegistry::new(
-        move |subscription_id, frame| {
-            let _ = broadcast_response(&watch_sink, subscription_id, frame);
-        },
-    ));
+    let watchers = Arc::new(WorkspaceWatchRegistry::new(move |event| {
+        let subscription_id = event.subscription_id.clone();
+        let _ = broadcast_response(
+            &watch_sink,
+            &subscription_id,
+            workspace_watch_event_frame(event),
+        );
+    }));
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {

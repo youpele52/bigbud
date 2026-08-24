@@ -158,6 +158,7 @@ message WorkspaceWatchEvent {
   repeated WorkspaceChange changes = 4;
   bool rescan_required = 5;
   string rescan_reason = 6;
+  string backend = 7;
 }
 
 message WorkspaceWatchStopRequest {

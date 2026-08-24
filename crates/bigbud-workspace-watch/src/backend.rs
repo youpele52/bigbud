@@ -5,30 +5,56 @@ use std::time::Duration;
 
 use notify::{Config, Event, PollWatcher, RecommendedWatcher, Watcher};
 
-use super::ManagerCommand;
-use crate::workspace::WorkspaceRoot;
+use crate::manager::ManagerCommand;
+use crate::{WorkspaceWatchBackend, WorkspaceWatchHost};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
-pub(super) struct WatchBackend {
+pub(crate) trait WatchBackendFactory: Send + Sync {
+    fn create(
+        &self,
+        workspace: &dyn WorkspaceWatchHost,
+        sender: mpsc::SyncSender<ManagerCommand>,
+    ) -> notify::Result<WatchBackend>;
+
+    fn poll(&self, sender: mpsc::SyncSender<ManagerCommand>) -> notify::Result<WatchBackend>;
+}
+
+pub(crate) struct SystemWatchBackendFactory;
+
+impl WatchBackendFactory for SystemWatchBackendFactory {
+    fn create(
+        &self,
+        workspace: &dyn WorkspaceWatchHost,
+        sender: mpsc::SyncSender<ManagerCommand>,
+    ) -> notify::Result<WatchBackend> {
+        WatchBackend::new(workspace, sender)
+    }
+
+    fn poll(&self, sender: mpsc::SyncSender<ManagerCommand>) -> notify::Result<WatchBackend> {
+        WatchBackend::poll(sender)
+    }
+}
+
+pub(crate) struct WatchBackend {
     watcher: Box<dyn Watcher + Send>,
-    name: &'static str,
+    kind: WorkspaceWatchBackend,
     sender: mpsc::SyncSender<ManagerCommand>,
     allow_poll_fallback: bool,
 }
 
 impl WatchBackend {
-    pub(super) fn new(
-        workspace: &WorkspaceRoot,
+    pub(crate) fn new(
+        workspace: &dyn WorkspaceWatchHost,
         sender: mpsc::SyncSender<ManagerCommand>,
     ) -> notify::Result<Self> {
-        let mode = watcher_mode(workspace.root());
+        let mode = watcher_mode(workspace.canonical_root());
         if mode != "poll" {
             match RecommendedWatcher::new(event_handler(sender.clone()), Config::default()) {
                 Ok(watcher) => {
                     return Ok(Self {
                         watcher: Box::new(watcher),
-                        name: "native",
+                        kind: WorkspaceWatchBackend::Native,
                         sender,
                         allow_poll_fallback: mode != "native-only",
                     });
@@ -40,7 +66,7 @@ impl WatchBackend {
         Self::poll(sender)
     }
 
-    pub(super) fn poll(sender: mpsc::SyncSender<ManagerCommand>) -> notify::Result<Self> {
+    pub(crate) fn poll(sender: mpsc::SyncSender<ManagerCommand>) -> notify::Result<Self> {
         let watcher = PollWatcher::new(
             event_handler(sender.clone()),
             Config::default()
@@ -49,23 +75,23 @@ impl WatchBackend {
         )?;
         Ok(Self {
             watcher: Box::new(watcher),
-            name: "poll",
+            kind: WorkspaceWatchBackend::Poll,
             sender,
             allow_poll_fallback: true,
         })
     }
 
-    pub(super) fn name(&self) -> &'static str {
-        self.name
+    pub(crate) fn kind(&self) -> WorkspaceWatchBackend {
+        self.kind
     }
 
-    pub(super) fn watch(&mut self, path: &Path, existing_paths: &[&Path]) -> notify::Result<bool> {
+    pub(crate) fn watch(&mut self, path: &Path, existing_paths: &[&Path]) -> notify::Result<bool> {
         match self
             .watcher
             .watch(path, notify::RecursiveMode::NonRecursive)
         {
             Ok(()) => Ok(false),
-            Err(_) if self.name == "native" && self.allow_poll_fallback => {
+            Err(_) if self.kind == WorkspaceWatchBackend::Native && self.allow_poll_fallback => {
                 let mut poll = Self::poll(self.sender.clone())?;
                 for existing in existing_paths.iter().copied().collect::<HashSet<_>>() {
                     poll.watcher
@@ -80,8 +106,23 @@ impl WatchBackend {
         }
     }
 
-    pub(super) fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+    pub(crate) fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
         self.watcher.unwatch(path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn injected(
+        watcher: Box<dyn Watcher + Send>,
+        kind: WorkspaceWatchBackend,
+        sender: mpsc::SyncSender<ManagerCommand>,
+        allow_poll_fallback: bool,
+    ) -> Self {
+        Self {
+            watcher,
+            kind,
+            sender,
+            allow_poll_fallback,
+        }
     }
 }
 
@@ -97,7 +138,9 @@ fn event_handler(
 }
 
 fn watcher_mode(root: &Path) -> &'static str {
-    match std::env::var("BIGBUD_REMOTE_FILE_WATCHER_MODE").as_deref() {
+    let configured = std::env::var("BIGBUD_WORKSPACE_WATCHER_MODE")
+        .or_else(|_| std::env::var("BIGBUD_REMOTE_FILE_WATCHER_MODE"));
+    match configured.as_deref() {
         Ok("poll") => "poll",
         Ok("native") => "native-only",
         _ if is_network_filesystem(root) => "poll",

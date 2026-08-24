@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/bigbud-protocol", "crates/bigbud-remote-agent"]
+members = ["crates/bigbud-protocol", "crates/bigbud-remote-agent", "crates/bigbud-workspace-watch"]
 resolver = "2"
 
 [workspace.package]
