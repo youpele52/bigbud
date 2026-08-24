@@ -82,6 +82,46 @@ describe("inspectCliProxy", () => {
     await expect(inspectCliProxy(config, { request })).rejects.toMatchObject({
       _tag: "CatalogRequestFailed",
     });
+
+    await expect(
+      inspectCliProxy(config, {
+        request: async () => new Response("unauthorized", { status: 401 }),
+      }),
+    ).rejects.toMatchObject({ _tag: "AuthenticationFailed" });
+
+    const malformedRequest = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("CLI Proxy API Server"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ models: [{ name: "missing id" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    await expect(inspectCliProxy(config, { request: malformedRequest })).rejects.toMatchObject({
+      _tag: "CatalogMalformed",
+    });
+  });
+
+  it("coalesces concurrent inspections for the same config", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = vi.fn(async (_config: CliProxyConfig, pathname: string) => {
+      if (pathname === "/") await gate;
+      return pathname === "/"
+        ? new Response("CLI Proxy API Server")
+        : new Response(JSON.stringify({ data: [{ id: "gpt-5" }] }));
+    });
+    const first = inspectCliProxy(config, { request });
+    const second = inspectCliProxy(config, { request });
+    release?.();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [{ id: "gpt-5", name: "gpt-5" }],
+      [{ id: "gpt-5", name: "gpt-5" }],
+    ]);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
 

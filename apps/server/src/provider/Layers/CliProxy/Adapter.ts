@@ -191,9 +191,6 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
     startSession: (input) =>
       requireCliProxyModelSelection(input, "startSession").pipe(
         Effect.flatMap((selection) => {
-          if (input.resumeCursor !== undefined) {
-            return Effect.fail(unsupported(input.threadId, "session recovery"));
-          }
           return claude
             .startSession(
               toClaudeSessionStartInput({

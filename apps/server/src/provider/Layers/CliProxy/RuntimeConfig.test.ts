@@ -165,7 +165,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       .fn()
       .mockRejectedValueOnce(new CliProxyClientError("HealthProbeFailed", "not running"))
       .mockResolvedValueOnce([{ id: "gpt-5-codex", name: "GPT-5 Codex" }]);
-    const activate = vi.fn(async () => ({ _tag: "started", strategy: "homebrew" }) as const);
+    const activate = vi.fn(async () => ({ _tag: "started", strategy: "direct" }) as const);
     const sleep = vi.fn(async () => undefined);
     const layer = Layer.mergeAll(
       ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),

@@ -126,7 +126,7 @@ adapterLayer("CliProxyAdapterLive", (it) => {
     }),
   );
 
-  it.effect("rejects recovery before constructing a Claude query", () =>
+  it.effect("starts a fresh query when recovery has no native cursor", () =>
     Effect.gen(function* () {
       const adapter = yield* CliProxyAdapter;
       const beforeQueries = createQuery.mock.calls.length;
@@ -140,11 +140,8 @@ adapterLayer("CliProxyAdapterLive", (it) => {
         } as never)
         .pipe(Effect.result);
 
-      assert.equal(result._tag, "Failure");
-      if (result._tag === "Failure") {
-        assert.equal(result.failure._tag, "ProviderAdapterValidationError");
-      }
-      assert.equal(createQuery.mock.calls.length, beforeQueries);
+      assert.equal(result._tag, "Success");
+      assert.equal(createQuery.mock.calls.length, beforeQueries + 1);
     }),
   );
 

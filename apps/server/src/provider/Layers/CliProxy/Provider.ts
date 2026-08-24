@@ -11,7 +11,7 @@ import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import { CliProxyProvider } from "../../Services/CliProxy/Provider.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { inspectCliProxy } from "./Client.ts";
+import { CliProxyClientError, inspectCliProxy } from "./Client.ts";
 import { CliProxyConfigError, resolveCliProxyConfig } from "./config.ts";
 
 const PROVIDER = "cliProxy" as const;
@@ -155,11 +155,21 @@ export const checkCliProxyProvider = Effect.fn("checkCliProxyProvider")(
       Effect.result,
     );
     if (result._tag === "Failure") {
+      const failure: unknown = result.failure;
+      const clientError = failure instanceof CliProxyClientError ? failure : undefined;
+      const message =
+        clientError?._tag === "AuthenticationFailed"
+          ? "CLIProxyAPI authentication failed."
+          : clientError?._tag === "CatalogMalformed"
+            ? "CLIProxyAPI returned a malformed model catalog."
+            : clientError?._tag === "CatalogRequestFailed"
+              ? "CLIProxyAPI model catalog could not be inspected."
+              : "CLIProxyAPI is configured but is not responding.";
       return unavailableSnapshot({
         checkedAt,
         installed: true,
-        authStatus: "authenticated",
-        message: "CLIProxyAPI is configured but is not responding.",
+        authStatus: "unknown",
+        message,
       });
     }
 
