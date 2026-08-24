@@ -7,4 +7,7 @@ pub mod workspace;
 
 mod session;
 
-pub use session::{AgentSession, PreparedProcess, ProcessJob, SessionError, protocol_error_frame};
+pub use session::{
+    AgentSession, PreparedProcess, PreparedWorkspaceWatch, ProcessJob, SessionError,
+    protocol_error_frame,
+};

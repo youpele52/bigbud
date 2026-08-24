@@ -21,6 +21,7 @@ mod process_handlers;
 mod protocol_helpers;
 mod pty_handlers;
 mod workspace_handlers;
+mod workspace_watch_handlers;
 
 #[cfg(test)]
 #[path = "accepted_operations.tests.rs"]
@@ -66,6 +67,8 @@ pub enum SessionError {
     OperationIdConflict,
     #[error("workspace handle is required")]
     MissingWorkspaceHandle,
+    #[error("workspace watch subscription ID is required")]
+    MissingWorkspaceWatchSubscriptionId,
     #[error("workspace handle is not open: {0}")]
     UnknownWorkspace(String),
     #[error("agent resource limit reached: {0}")]
@@ -123,6 +126,8 @@ pub struct PreparedProcess {
     pub responses: Vec<v1::Frame>,
     pub job: Option<ProcessJob>,
 }
+
+pub use workspace_watch_handlers::PreparedWorkspaceWatch;
 
 impl AgentSession {
     pub fn new() -> Self {
@@ -262,6 +267,7 @@ impl AgentSession {
                     ("workspace.files", 1),
                     ("workspace.search", 1),
                     ("workspace.write", 1),
+                    ("workspace.watch", 1),
                     ("process.run", 1),
                     ("process.attach", 1),
                     ("terminal.pty", 1),

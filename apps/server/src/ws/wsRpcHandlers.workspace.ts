@@ -82,6 +82,9 @@ export function makeWorkspaceWsRpcHandlers(
                         ? cause.detail
                         : "Workspace directory path is outside the project root."
                     }`,
+                    retryable: Schema.is(WorkspaceFileSystemError)(cause)
+                      ? cause.retryable !== false
+                      : false,
                     cause,
                   }),
               ),

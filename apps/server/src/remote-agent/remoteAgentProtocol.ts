@@ -15,6 +15,7 @@ import type {
   RemoteAgentPtySignalRequest,
   RemoteAgentPtySignalResponse,
 } from "./remoteAgentProtocol.pty.ts";
+import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
 export const REMOTE_AGENT_PROTOCOL_MINOR = 0;
@@ -303,8 +304,18 @@ export type {
   RemoteAgentPtySignalRequest,
   RemoteAgentPtySignalResponse,
 } from "./remoteAgentProtocol.pty.ts";
+export type {
+  RemoteAgentWorkspaceChange,
+  RemoteAgentWorkspaceChangeKind,
+  RemoteAgentWorkspaceWatchEvent,
+  RemoteAgentWorkspaceWatchStartRequest,
+  RemoteAgentWorkspaceWatchStartResponse,
+  RemoteAgentWorkspaceWatchStopRequest,
+  RemoteAgentWorkspaceWatchStopResponse,
+} from "./remoteAgentProtocol.workspaceWatch.ts";
 
 export type RemoteAgentFrame =
+  | RemoteAgentWorkspaceWatchFrame
   | { readonly type: "clientHello"; readonly value: RemoteAgentClientHello }
   | { readonly type: "agentHello"; readonly value: RemoteAgentHello }
   | { readonly type: "diagnosticRequest"; readonly value: RemoteAgentDiagnosticRequest }

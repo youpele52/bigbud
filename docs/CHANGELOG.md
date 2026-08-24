@@ -42,6 +42,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Files Preview
 
+- Automatically revealed a file's immediate parent directory when opening or reopening a local or remote preview, expanding the required ancestors and loading only missing directory levels.
 - Let workspace file-opening route any in-workspace file into the Files panel when a preview is available, including extensionless files and dotfiles such as Dockerfiles, `.env.example`, and `.gitattributes`.
 - Added drag-and-drop from the open file name in the preview header into the composer, matching the existing Files tree behavior for sharing file context.
 - Raised the text preview limit from 512 KiB to 5 MiB and removed the client-provided preview byte limit from the project contract.

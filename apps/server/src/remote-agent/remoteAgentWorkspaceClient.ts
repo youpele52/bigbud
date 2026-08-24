@@ -8,6 +8,11 @@ import {
   type RemoteAgentWriteFileResponse,
 } from "./remoteAgentProtocol.ts";
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
+import {
+  startRemoteAgentWorkspaceWatch,
+  type RemoteAgentWorkspaceWatchSubscription,
+} from "./remoteAgentWorkspaceWatchClient.ts";
+import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
 
 export class RemoteAgentWorkspaceError extends Error {
   readonly _tag = "RemoteAgentWorkspaceError";
@@ -116,6 +121,16 @@ export class RemoteAgentWorkspaceClient {
     };
     assertTerminalSuccess(response.value);
     return response.value.entries;
+  }
+
+  watchDirectory(input: {
+    readonly subscriptionId: string;
+    readonly workspaceHandle: string;
+    readonly path: string;
+    readonly onEvent: (event: RemoteAgentWorkspaceWatchEvent) => void;
+    readonly requestId?: string;
+  }): Promise<RemoteAgentWorkspaceWatchSubscription> {
+    return startRemoteAgentWorkspaceWatch({ connection: this.connection, ...input });
   }
 
   async writeFile(input: {

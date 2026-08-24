@@ -1,10 +1,13 @@
-use std::io::{self, BufReader, BufWriter};
+use std::collections::HashSet;
+use std::io::{self, BufReader, BufWriter, Write};
+use std::sync::{Arc, Mutex};
 
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, protocol_error_frame,
     state::{AgentState, supervisor_socket_path},
     supervisor::{run_proxy, run_supervisor},
+    workspace::WorkspaceWatchRegistry,
 };
 
 fn state_root() -> Option<std::path::PathBuf> {
@@ -34,9 +37,13 @@ fn create_session() -> io::Result<AgentSession> {
 
 fn run_stdio(mut session: AgentSession) -> io::Result<()> {
     let stdin = io::stdin();
-    let stdout = io::stdout();
     let mut reader = BufReader::new(stdin.lock());
-    let mut writer = BufWriter::new(stdout.lock());
+    let writer = Arc::new(Mutex::new(BufWriter::new(io::stdout())));
+    let watch_writer = Arc::clone(&writer);
+    let watchers = WorkspaceWatchRegistry::new(move |_, frame| {
+        let _ = write_stdio_responses(&watch_writer, vec![frame]);
+    });
+    let mut watch_subscriptions = HashSet::new();
     loop {
         let frame = match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
@@ -48,6 +55,31 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
         };
 
         let responses = match frame.payload.clone() {
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStartRequest(request)) => {
+                session
+                    .prepare_workspace_watch_start(request)
+                    .map(|prepared| {
+                        let response = prepared.register(&watchers);
+                        if let Some(
+                            bigbud_protocol::v1::frame::Payload::WorkspaceWatchStartResponse(
+                                started,
+                            ),
+                        ) = &response.payload
+                            && started.accepted
+                        {
+                            watch_subscriptions.insert(started.subscription_id.clone());
+                        }
+                        vec![response]
+                    })
+            }
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStopRequest(request)) => {
+                let subscription_id = request.subscription_id.clone();
+                let stopped = watchers.unsubscribe(&subscription_id);
+                watch_subscriptions.remove(&subscription_id);
+                session
+                    .workspace_watch_stop_response(request, stopped)
+                    .map(|response| vec![response])
+            }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
                 session.handle_process_request(request)
             }
@@ -58,19 +90,28 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
         };
         match responses {
             Ok(responses) => {
-                for response in responses {
-                    write_frame(&mut writer, &response, DEFAULT_MAX_FRAME_BYTES)
-                        .map_err(|error| io::Error::new(io::ErrorKind::BrokenPipe, error))?;
-                }
+                write_stdio_responses(&writer, responses)?;
             }
             Err(error) => {
                 let response = protocol_error_frame(&error);
-                write_frame(&mut writer, &response, DEFAULT_MAX_FRAME_BYTES).map_err(
-                    |write_error| io::Error::new(io::ErrorKind::BrokenPipe, write_error),
-                )?;
+                write_stdio_responses(&writer, vec![response])?;
             }
         }
     }
+}
+
+fn write_stdio_responses(
+    writer: &Arc<Mutex<BufWriter<io::Stdout>>>,
+    responses: Vec<bigbud_protocol::v1::Frame>,
+) -> io::Result<()> {
+    let mut writer = writer
+        .lock()
+        .map_err(|_| io::Error::other("agent writer lock was poisoned"))?;
+    for response in responses {
+        write_frame(&mut *writer, &response, DEFAULT_MAX_FRAME_BYTES)
+            .map_err(|error| io::Error::new(io::ErrorKind::BrokenPipe, error))?;
+    }
+    writer.flush()
 }
 
 fn run_check() {

@@ -2,6 +2,7 @@ mod directory;
 mod files;
 mod path;
 mod search;
+mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -12,6 +13,7 @@ pub use directory::DirectoryEntry;
 pub use files::ReadFileResult;
 pub use path::WorkspaceRoot;
 pub use search::ContentMatch;
+pub use watch::{WorkspaceWatchError, WorkspaceWatchRegistry, WorkspaceWatchStart};
 
 pub const MAX_TEXT_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_DIRECTORY_ENTRIES: usize = 10_000;

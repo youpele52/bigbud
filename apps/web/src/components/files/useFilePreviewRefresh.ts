@@ -5,7 +5,10 @@ import { useServerConfig } from "../../rpc/serverState";
 import { getFilePreviewWatchRelativePath } from "./FilePreview.logic";
 import { useFilesPanelRefreshContext } from "./FilesPanelRefreshCoordinator";
 import { createDebouncedFilePreviewRefresh } from "./useFilePreviewRefresh.logic";
-import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
+import {
+  shouldRetryWorkspaceDirectoryWatch,
+  supportsWorkspaceDirectoryWatch,
+} from "./workspaceWatchCapability";
 
 interface FilePreviewRefreshInput {
   readonly cwd: string;
@@ -71,6 +74,7 @@ export function useFilePreviewRefresh({
       scheduleRefresh,
       {
         onResubscribe: scheduleRefresh,
+        shouldRetry: shouldRetryWorkspaceDirectoryWatch,
       },
     );
   }, [cwd, executionTargetId, refreshContext, relativePath, remoteAgentWatchEnabled]);

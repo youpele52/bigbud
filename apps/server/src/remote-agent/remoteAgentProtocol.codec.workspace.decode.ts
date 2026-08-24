@@ -20,6 +20,7 @@ import {
   decodeWriteFileRequest,
   decodeWriteFileResponse,
 } from "./remoteAgentProtocol.codec.workspace.decode.write.ts";
+import { decodeWorkspaceWatchFrame } from "./remoteAgentProtocol.codec.workspace.watch.ts";
 
 type MutableOperationRequest = {
   requestId: string;
@@ -249,6 +250,8 @@ export function decodeWorkspaceFrame(
   field: number,
   bytes: Uint8Array,
 ): RemoteAgentFrame | undefined {
+  const watchFrame = decodeWorkspaceWatchFrame(field, bytes);
+  if (watchFrame) return watchFrame;
   switch (field) {
     case 8:
       return { type: "workspaceOpenRequest", value: decodeWorkspaceOpenRequest(bytes) };

@@ -31,6 +31,7 @@ import { withRemoteReadReconnect } from "./WorkspaceRuntime.remote.reconnect.ts"
 
 export interface RemoteAgentClientResolver {
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentWorkspaceClient>;
+  readonly resolveWatch?: (executionTargetId: string) => Promise<RemoteAgentWorkspaceClient>;
 }
 
 export interface RemoteWorkspaceRuntimeShape {
@@ -386,7 +387,7 @@ export function makeRemoteWorkspaceRuntime(
   return {
     files: { writeFile, readFilePreview, readFileRange, listDirectory },
     search: { searchEntries, searchFileContents },
-    watch: makeRemoteWorkspaceWatch(resolver),
+    watch: makeRemoteWorkspaceWatch({ resolve: resolver.resolveWatch ?? resolver.resolve }),
   };
 }
 

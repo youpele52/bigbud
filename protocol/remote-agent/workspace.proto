@@ -128,3 +128,45 @@ message WriteFileResponse {
   string error_message = 6;
   string current_sha256 = 7;
 }
+
+message WorkspaceWatchStartRequest {
+  string request_id = 1;
+  string subscription_id = 2;
+  string workspace_handle = 3;
+  string path = 4;
+}
+
+message WorkspaceWatchStartResponse {
+  string request_id = 1;
+  string subscription_id = 2;
+  bool accepted = 3;
+  uint64 generation = 4;
+  string backend = 5;
+  string error_code = 6;
+  string error_message = 7;
+}
+
+message WorkspaceChange {
+  string path = 1;
+  string kind = 2;
+}
+
+message WorkspaceWatchEvent {
+  string subscription_id = 1;
+  uint64 generation = 2;
+  uint64 sequence = 3;
+  repeated WorkspaceChange changes = 4;
+  bool rescan_required = 5;
+  string rescan_reason = 6;
+}
+
+message WorkspaceWatchStopRequest {
+  string request_id = 1;
+  string subscription_id = 2;
+}
+
+message WorkspaceWatchStopResponse {
+  string request_id = 1;
+  string subscription_id = 2;
+  bool stopped = 3;
+}

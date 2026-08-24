@@ -64,7 +64,10 @@ export interface NativeApi {
     onDirectoryChange: (
       input: Project.ProjectDirectoryWatchInput,
       callback: (event: Project.ProjectDirectoryWatchEvent) => void,
-      options?: { onResubscribe?: () => void },
+      options?: {
+        onResubscribe?: () => void;
+        shouldRetry?: (error: unknown) => boolean;
+      },
     ) => () => void;
     readFilePreview: (
       input: Project.ProjectReadFilePreviewInput,

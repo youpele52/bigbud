@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
 
-function connection(epoch: string): RemoteAgentConnection {
+function connection(
+  epoch: string,
+  capabilities: ReadonlyArray<string> = [],
+): RemoteAgentConnection {
   return {
     handshake: async () => ({
       protocolMajor: 1,
@@ -14,7 +17,7 @@ function connection(epoch: string): RemoteAgentConnection {
       architecture: "x86_64",
       agentInstanceId: "agent-1",
       agentEpoch: epoch,
-      capabilities: [],
+      capabilities: capabilities.map((name) => ({ name, major: 1, minor: 0 })),
       maxFrameBytes: 1024,
       maxOperationOutputBytes: 1024,
       maxJournalBytes: 1024,
@@ -24,6 +27,13 @@ function connection(epoch: string): RemoteAgentConnection {
 }
 
 describe("remote agent connection pool", () => {
+  it("requires the dedicated workspace watch capability", async () => {
+    const pool = new RemoteAgentConnectionPool({
+      create: async () => connection("epoch-1", ["workspace.files", "workspace.search"]),
+    });
+    await expect(pool.getWorkspaceWatchClient("ssh:one")).rejects.toThrow("workspace.watch");
+  });
+
   it("single-flights connections per execution target", async () => {
     let creates = 0;
     const pool = new RemoteAgentConnectionPool({

@@ -234,6 +234,76 @@ mod tests {
                 })),
             },
         );
+        assert_golden(
+            "workspace_watch_start_request",
+            Frame {
+                payload: Some(frame::Payload::WorkspaceWatchStartRequest(
+                    v1::WorkspaceWatchStartRequest {
+                        request_id: "watch-start".to_owned(),
+                        subscription_id: "watch-1".to_owned(),
+                        workspace_handle: "workspace-1".to_owned(),
+                        path: "docs".to_owned(),
+                    },
+                )),
+            },
+        );
+        assert_golden(
+            "workspace_watch_start_response",
+            Frame {
+                payload: Some(frame::Payload::WorkspaceWatchStartResponse(
+                    v1::WorkspaceWatchStartResponse {
+                        request_id: "watch-start".to_owned(),
+                        subscription_id: "watch-1".to_owned(),
+                        accepted: true,
+                        generation: 4,
+                        backend: "native".to_owned(),
+                        error_code: String::new(),
+                        error_message: String::new(),
+                    },
+                )),
+            },
+        );
+        assert_golden(
+            "workspace_watch_event",
+            Frame {
+                payload: Some(frame::Payload::WorkspaceWatchEvent(
+                    v1::WorkspaceWatchEvent {
+                        subscription_id: "watch-1".to_owned(),
+                        generation: 4,
+                        sequence: 2,
+                        changes: vec![v1::WorkspaceChange {
+                            path: "docs/README.md".to_owned(),
+                            kind: "modify".to_owned(),
+                        }],
+                        rescan_required: false,
+                        rescan_reason: String::new(),
+                    },
+                )),
+            },
+        );
+        assert_golden(
+            "workspace_watch_stop_request",
+            Frame {
+                payload: Some(frame::Payload::WorkspaceWatchStopRequest(
+                    v1::WorkspaceWatchStopRequest {
+                        request_id: "watch-stop".to_owned(),
+                        subscription_id: "watch-1".to_owned(),
+                    },
+                )),
+            },
+        );
+        assert_golden(
+            "workspace_watch_stop_response",
+            Frame {
+                payload: Some(frame::Payload::WorkspaceWatchStopResponse(
+                    v1::WorkspaceWatchStopResponse {
+                        request_id: "watch-stop".to_owned(),
+                        subscription_id: "watch-1".to_owned(),
+                        stopped: true,
+                    },
+                )),
+            },
+        );
     }
 
     #[test]

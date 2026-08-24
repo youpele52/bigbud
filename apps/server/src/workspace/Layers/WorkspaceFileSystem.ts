@@ -23,6 +23,7 @@ import {
   WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
 } from "./WorkspaceFileSystem.search.ts";
 import { makeWorkspaceFileRange } from "./WorkspaceFileSystem.range.ts";
+import { watchRemoteDirectoryViaSsh } from "./WorkspaceFileSystem.remoteWatch.ts";
 import { makeWorkspaceWriteFile } from "./WorkspaceFileSystem.write.ts";
 
 const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
@@ -296,6 +297,20 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     "WorkspaceFileSystem.watchDirectory",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      const target = input.relativePath
+        ? yield* workspacePaths.resolveRelativePathWithinRoot({
+            workspaceRoot: input.cwd,
+            relativePath: input.relativePath,
+          })
+        : { relativePath: "" };
+      return watchRemoteDirectoryViaSsh({
+        executionTargetId,
+        cwd: input.cwd,
+        relativePath: target.relativePath,
+      });
+    }
+
     const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
       Effect.mapError(
         (cause) =>
@@ -317,15 +332,6 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           absolutePath: normalizedWorkspaceRoot,
           relativePath: "",
         };
-
-    if (!isLocalExecutionTarget(executionTargetId)) {
-      return yield* new WorkspaceFileSystemError({
-        cwd: input.cwd,
-        relativePath: input.relativePath,
-        operation: "workspaceFileSystem.watchDirectoryRemote",
-        detail: "Remote workspace directory watching is not supported yet.",
-      });
-    }
 
     return createDirectoryChangedStream({
       cwd: input.cwd,

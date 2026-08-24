@@ -101,6 +101,16 @@ export const ProjectDirectoryChangedEvent = Schema.Struct({
 });
 export type ProjectDirectoryChangedEvent = typeof ProjectDirectoryChangedEvent.Type;
 
+export const ProjectDirectoryChangedEventV2 = Schema.Struct({
+  version: Schema.Literal(2),
+  type: Schema.Literal("directoryChanged"),
+  relativePath: Schema.String,
+  changedPaths: Schema.Array(Schema.String),
+  generation: Schema.Number,
+  sequence: Schema.Number,
+});
+export type ProjectDirectoryChangedEventV2 = typeof ProjectDirectoryChangedEventV2.Type;
+
 export const ProjectDirectoryRescanRequiredEvent = Schema.Struct({
   version: Schema.Literal(1),
   type: Schema.Literal("rescanRequired"),
@@ -115,9 +125,27 @@ export const ProjectDirectoryRescanRequiredEvent = Schema.Struct({
 });
 export type ProjectDirectoryRescanRequiredEvent = typeof ProjectDirectoryRescanRequiredEvent.Type;
 
+export const ProjectDirectoryRescanRequiredEventV2 = Schema.Struct({
+  version: Schema.Literal(2),
+  type: Schema.Literal("rescanRequired"),
+  relativePath: Schema.String,
+  generation: Schema.Number,
+  sequence: Schema.Number,
+  reason: Schema.Union([
+    Schema.Literal("transportLost"),
+    Schema.Literal("agentRestarted"),
+    Schema.Literal("overflow"),
+    Schema.Literal("watchInvalidated"),
+  ]),
+});
+export type ProjectDirectoryRescanRequiredEventV2 =
+  typeof ProjectDirectoryRescanRequiredEventV2.Type;
+
 export const ProjectDirectoryWatchEvent = Schema.Union([
   ProjectDirectoryChangedEvent,
+  ProjectDirectoryChangedEventV2,
   ProjectDirectoryRescanRequiredEvent,
+  ProjectDirectoryRescanRequiredEventV2,
 ]);
 export type ProjectDirectoryWatchEvent = typeof ProjectDirectoryWatchEvent.Type;
 
@@ -125,6 +153,7 @@ export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectD
   "ProjectDirectoryWatchError",
   {
     message: TrimmedNonEmptyString,
+    retryable: Schema.Boolean,
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

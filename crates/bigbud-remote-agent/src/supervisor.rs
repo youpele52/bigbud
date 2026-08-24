@@ -1,21 +1,28 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
-use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
+use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
 
-use crate::{AgentSession, ProcessJob, process::ProcessOptions, protocol_error_frame};
+use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace::WorkspaceWatchRegistry};
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 
 #[cfg(unix)]
-type Writer = Arc<Mutex<BufWriter<UnixStream>>>;
+pub(super) type Writer = Arc<Mutex<BufWriter<UnixStream>>>;
 
 #[cfg(unix)]
-type Subscribers = Arc<Mutex<HashMap<String, Vec<Writer>>>>;
+pub(super) type Subscribers = Arc<Mutex<HashMap<String, Vec<Writer>>>>;
+
+#[cfg(unix)]
+#[path = "supervisor.io.rs"]
+mod io_helpers;
+#[cfg(unix)]
+use io_helpers::*;
 
 #[cfg(unix)]
 pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<()> {
@@ -38,13 +45,24 @@ pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<(
     set_private_socket_permissions(socket_path)?;
     let sessions = Arc::new(Mutex::new(session));
     let subscribers = Arc::new(Mutex::new(HashMap::new()));
+    let watch_subscribers = Arc::new(Mutex::new(HashMap::new()));
+    let watch_sink = Arc::clone(&watch_subscribers);
+    let watchers = Arc::new(WorkspaceWatchRegistry::new(
+        move |subscription_id, frame| {
+            let _ = broadcast_response(&watch_sink, subscription_id, frame);
+        },
+    ));
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 let sessions = Arc::clone(&sessions);
                 let subscribers = Arc::clone(&subscribers);
+                let watch_subscribers = Arc::clone(&watch_subscribers);
+                let watchers = Arc::clone(&watchers);
                 std::thread::spawn(move || {
-                    if let Err(error) = serve_connection(stream, sessions, subscribers) {
+                    if let Err(error) =
+                        serve_connection(stream, sessions, subscribers, watch_subscribers, watchers)
+                    {
                         eprintln!("bigbud remote agent supervisor connection ended: {error}");
                     }
                 });
@@ -75,6 +93,33 @@ fn serve_connection(
     stream: UnixStream,
     sessions: Arc<Mutex<AgentSession>>,
     subscribers: Subscribers,
+    watch_subscribers: Subscribers,
+    watchers: Arc<WorkspaceWatchRegistry>,
+) -> io::Result<()> {
+    let mut subscriptions = HashSet::new();
+    let result = serve_connection_loop(
+        stream,
+        sessions,
+        subscribers,
+        &watch_subscribers,
+        &watchers,
+        &mut subscriptions,
+    );
+    for subscription_id in subscriptions {
+        watchers.unsubscribe(&subscription_id);
+        remove_all_subscribers(&watch_subscribers, &subscription_id);
+    }
+    result
+}
+
+#[cfg(unix)]
+fn serve_connection_loop(
+    stream: UnixStream,
+    sessions: Arc<Mutex<AgentSession>>,
+    subscribers: Subscribers,
+    watch_subscribers: &Subscribers,
+    watchers: &WorkspaceWatchRegistry,
+    watch_ids: &mut HashSet<String>,
 ) -> io::Result<()> {
     let reader_stream = stream.try_clone()?;
     let mut reader = BufReader::new(reader_stream);
@@ -86,6 +131,46 @@ fn serve_connection(
             Err(error) => return Err(io::Error::new(io::ErrorKind::InvalidData, error)),
         };
         match frame.payload {
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStartRequest(request)) => {
+                let prepared = sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                    .prepare_workspace_watch_start(request);
+                match prepared {
+                    Ok(prepared) => {
+                        let subscription_id = prepared.response.subscription_id.clone();
+                        add_subscriber(watch_subscribers, &subscription_id, Arc::clone(&writer))?;
+                        let response = prepared.register(watchers);
+                        let accepted = matches!(
+                            &response.payload,
+                            Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStartResponse(
+                                value
+                            )) if value.accepted
+                        );
+                        if accepted {
+                            watch_ids.insert(subscription_id);
+                        } else {
+                            remove_subscriber(watch_subscribers, &subscription_id, &writer)?;
+                        }
+                        write_responses(&writer, vec![response])?;
+                    }
+                    Err(error) => write_protocol_error(&writer, &error)?,
+                }
+            }
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStopRequest(request)) => {
+                let subscription_id = request.subscription_id.clone();
+                let stopped = watchers.unsubscribe(&subscription_id);
+                watch_ids.remove(&subscription_id);
+                remove_subscriber(watch_subscribers, &subscription_id, &writer)?;
+                let response = sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                    .workspace_watch_stop_response(request, stopped);
+                match response {
+                    Ok(response) => write_responses(&writer, vec![response])?,
+                    Err(error) => write_protocol_error(&writer, &error)?,
+                }
+            }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
                 let prepared = sessions
                     .lock()
@@ -274,42 +359,6 @@ fn spawn_process_job(
 }
 
 #[cfg(unix)]
-fn add_subscriber(subscribers: &Subscribers, operation_id: &str, writer: Writer) -> io::Result<()> {
-    subscribers
-        .lock()
-        .map_err(|_| io::Error::other("agent subscriber lock was poisoned"))?
-        .entry(operation_id.to_owned())
-        .or_default()
-        .push(writer);
-    Ok(())
-}
-
-#[cfg(unix)]
-fn remove_subscriber(
-    subscribers: &Subscribers,
-    operation_id: &str,
-    writer: &Writer,
-) -> io::Result<()> {
-    let mut subscribers = subscribers
-        .lock()
-        .map_err(|_| io::Error::other("agent subscriber lock was poisoned"))?;
-    if let Some(writers) = subscribers.get_mut(operation_id) {
-        writers.retain(|candidate| !Arc::ptr_eq(candidate, writer));
-        if writers.is_empty() {
-            subscribers.remove(operation_id);
-        }
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn remove_all_subscribers(subscribers: &Subscribers, operation_id: &str) {
-    if let Ok(mut subscribers) = subscribers.lock() {
-        subscribers.remove(operation_id);
-    }
-}
-
-#[cfg(unix)]
 fn attach_response_is_live(responses: &[bigbud_protocol::v1::Frame]) -> bool {
     responses.iter().any(|response| {
         matches!(
@@ -329,62 +378,6 @@ fn pty_attach_response_is_live(responses: &[bigbud_protocol::v1::Frame]) -> bool
                 if status.state == "running"
         )
     })
-}
-
-#[cfg(unix)]
-fn broadcast_response(
-    subscribers: &Subscribers,
-    operation_id: &str,
-    response: bigbud_protocol::v1::Frame,
-) -> io::Result<()> {
-    broadcast_responses(subscribers, operation_id, vec![response])
-}
-
-#[cfg(unix)]
-fn broadcast_responses(
-    subscribers: &Subscribers,
-    operation_id: &str,
-    responses: Vec<bigbud_protocol::v1::Frame>,
-) -> io::Result<()> {
-    let writers = subscribers
-        .lock()
-        .map_err(|_| io::Error::other("agent subscriber lock was poisoned"))?
-        .get(operation_id)
-        .cloned()
-        .unwrap_or_default();
-    let mut failed = Vec::new();
-    for writer in writers {
-        if write_responses(&writer, responses.clone()).is_err() {
-            failed.push(writer);
-        }
-    }
-    for writer in failed {
-        remove_subscriber(subscribers, operation_id, &writer)?;
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn write_protocol_error(
-    writer: &Arc<Mutex<BufWriter<UnixStream>>>,
-    error: &crate::SessionError,
-) -> io::Result<()> {
-    write_responses(writer, vec![protocol_error_frame(error)])
-}
-
-#[cfg(unix)]
-fn write_responses(
-    writer: &Arc<Mutex<BufWriter<UnixStream>>>,
-    responses: Vec<bigbud_protocol::v1::Frame>,
-) -> io::Result<()> {
-    let mut writer = writer
-        .lock()
-        .map_err(|_| io::Error::other("agent writer lock was poisoned"))?;
-    for response in responses {
-        write_frame(&mut *writer, &response, DEFAULT_MAX_FRAME_BYTES)
-            .map_err(|error| io::Error::new(io::ErrorKind::BrokenPipe, error))?;
-    }
-    writer.flush()
 }
 
 #[path = "supervisor.proxy.rs"]

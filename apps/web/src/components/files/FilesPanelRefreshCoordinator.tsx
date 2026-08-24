@@ -16,9 +16,14 @@ import { getFilePreviewWatchRelativePath } from "./FilePreview.logic";
 import { getVisibleDirectoryPaths } from "./useFilesPanelDirectoryRefresh";
 import {
   createFilesPanelRefreshCoordinator,
+  getPrioritizedWatchedDirectoryPaths,
+  shouldRefreshPreviewForDirectoryEvent,
   type FilesPanelRefreshTask,
 } from "./FilesPanelRefreshCoordinator.logic";
-import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
+import {
+  shouldRetryWorkspaceDirectoryWatch,
+  supportsWorkspaceDirectoryWatch,
+} from "./workspaceWatchCapability";
 
 interface PreviewRegistration {
   readonly cwd: string;
@@ -100,7 +105,7 @@ export function FilesPanelRefreshCoordinator({
   const watchedDirectoryPaths = useMemo(() => {
     const paths = new Set(visibleDirectoryPaths);
     if (activePreviewDirectory !== null) paths.add(activePreviewDirectory);
-    return [...paths].toSorted((left, right) => left.localeCompare(right));
+    return getPrioritizedWatchedDirectoryPaths([...paths], activePreviewDirectory);
   }, [activePreviewDirectory, visibleDirectoryPaths]);
 
   useEffect(() => {
@@ -155,7 +160,12 @@ export function FilesPanelRefreshCoordinator({
       const relativePath = event.relativePath;
       const tasks: FilesPanelRefreshTask[] = [];
       const currentPreviewTask = previewTask();
-      if (currentPreviewTask && relativePath === activePreviewDirectory) {
+      const previewChanged = shouldRefreshPreviewForDirectoryEvent(
+        event,
+        previewPath,
+        activePreviewDirectory,
+      );
+      if (currentPreviewTask && previewChanged) {
         tasks.push(currentPreviewTask);
       }
       if (watchedDirectoryPaths.includes(relativePath)) {
@@ -177,7 +187,10 @@ export function FilesPanelRefreshCoordinator({
           ...(relativePath.length > 0 ? { relativePath } : {}),
         },
         scheduleDirectoryEvent,
-        { onResubscribe: () => coordinator.scheduleAll(tasksForFullSweep()) },
+        {
+          onResubscribe: () => coordinator.scheduleAll(tasksForFullSweep()),
+          shouldRetry: shouldRetryWorkspaceDirectoryWatch,
+        },
       ),
     );
 

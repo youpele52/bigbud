@@ -1,4 +1,6 @@
-export const FILES_PANEL_REFRESH_DEBOUNCE_MS = 150;
+import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts/workspace/project";
+
+export const FILES_PANEL_REFRESH_DEBOUNCE_MS = 0;
 export const FILES_PANEL_REFRESH_MAX_WAIT_MS = 500;
 
 export interface FilesPanelRefreshTask {
@@ -26,6 +28,30 @@ export interface FilesPanelRefreshCoordinator {
   readonly cancel: (key: string) => void;
   readonly cancelAll: () => void;
   readonly dispose: () => void;
+}
+
+export function shouldRefreshPreviewForDirectoryEvent(
+  event: ProjectDirectoryWatchEvent,
+  previewPath: string | null,
+  activePreviewDirectory: string | null,
+): boolean {
+  return event.version === 2 && event.type === "directoryChanged"
+    ? previewPath !== null && event.changedPaths.includes(previewPath)
+    : event.relativePath === activePreviewDirectory;
+}
+
+export function getPrioritizedWatchedDirectoryPaths(
+  visibleDirectoryPaths: ReadonlyArray<string>,
+  activePreviewDirectory: string | null,
+): string[] {
+  const remaining = new Set(visibleDirectoryPaths);
+  const prioritized: string[] = [];
+  if (activePreviewDirectory !== null) {
+    prioritized.push(activePreviewDirectory);
+    remaining.delete(activePreviewDirectory);
+  }
+  if (remaining.delete("")) prioritized.push("");
+  return [...prioritized, ...[...remaining].toSorted((left, right) => left.localeCompare(right))];
 }
 
 function taskOrder(left: QueuedTask, right: QueuedTask): number {

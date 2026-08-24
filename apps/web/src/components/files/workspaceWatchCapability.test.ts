@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { ProjectDirectoryWatchError } from "@bigbud/contracts/workspace/project";
 
-import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
+import {
+  shouldRetryWorkspaceDirectoryWatch,
+  supportsWorkspaceDirectoryWatch,
+} from "./workspaceWatchCapability";
 
 describe("supportsWorkspaceDirectoryWatch", () => {
   it("keeps local watching enabled without an agent capability snapshot", () => {
@@ -33,5 +37,28 @@ describe("supportsWorkspaceDirectoryWatch", () => {
         },
       }),
     ).toBe(true);
+  });
+
+  it("enables the direct-SSH polling fallback without the managed agent", () => {
+    expect(
+      supportsWorkspaceDirectoryWatch("ssh:host=devbox", {
+        remoteAgent: {
+          enabled: false,
+          supportsDirectoryWatch: true,
+          supportsPtyReattach: false,
+        },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("shouldRetryWorkspaceDirectoryWatch", () => {
+  it("stops retrying explicitly unavailable watches", () => {
+    expect(
+      shouldRetryWorkspaceDirectoryWatch(
+        new ProjectDirectoryWatchError({ message: "unsupported", retryable: false }),
+      ),
+    ).toBe(false);
+    expect(shouldRetryWorkspaceDirectoryWatch(new Error("connection lost"))).toBe(true);
   });
 });

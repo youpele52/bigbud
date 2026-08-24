@@ -2,19 +2,14 @@ import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
+import { RemoteAgentCapabilityError } from "./remoteAgentConnectionPool.ts";
 import { makeRemoteWorkspaceWatch } from "./remoteAgentWorkspaceWatch.ts";
 
-type WatchEntry = {
-  readonly path: string;
-  readonly isDirectory: boolean;
-  readonly isFile: boolean;
-  readonly sizeBytes: number;
-  readonly modifiedUnixMs?: number;
-};
-
-const entry: WatchEntry = { path: "README.md", isDirectory: false, isFile: true, sizeBytes: 10 };
-
-function client(entries: ReadonlyArray<WatchEntry>): RemoteAgentWorkspaceClient {
+function client(input: {
+  readonly events?: ReadonlyArray<RemoteAgentWorkspaceWatchEvent>;
+  readonly failure?: Error;
+}): RemoteAgentWorkspaceClient {
   return {
     openWorkspace: async () => ({
       requestId: "open",
@@ -23,98 +18,141 @@ function client(entries: ReadonlyArray<WatchEntry>): RemoteAgentWorkspaceClient 
       errorCode: "",
       errorMessage: "",
     }),
-    listDirectory: async () => entries,
+    watchDirectory: async (watchInput: {
+      readonly onEvent: (event: RemoteAgentWorkspaceWatchEvent) => void;
+    }) => {
+      setTimeout(() => input.events?.forEach(watchInput.onEvent), 0);
+      return {
+        started: {
+          requestId: "start",
+          subscriptionId: "subscription",
+          accepted: true,
+          generation: 7,
+          backend: "native",
+          errorCode: "",
+          errorMessage: "",
+        },
+        failed: input.failure
+          ? Promise.resolve(input.failure)
+          : new Promise<Error>(() => {
+              // The focused stream test ends through its Effect finalizer.
+            }),
+        close: async () => {},
+      };
+    },
   } as unknown as RemoteAgentWorkspaceClient;
 }
 
 async function collectEvents(input: {
-  readonly resolve: (executionTargetId: string) => Promise<RemoteAgentWorkspaceClient>;
-  readonly leaseMs?: number;
+  readonly resolve: () => Promise<RemoteAgentWorkspaceClient>;
+  readonly count: number;
 }) {
-  const stream = makeRemoteWorkspaceWatch(
+  const watch = makeRemoteWorkspaceWatch(
     { resolve: input.resolve },
-    {
-      pollIntervalMs: 50,
-      ...(input.leaseMs === undefined ? {} : { leaseMs: input.leaseMs }),
-    },
+    { reconnectDelayMs: 50 },
   ).watchDirectory({
     cwd: "/remote/project",
     relativePath: "docs",
     executionTargetId: "ssh:example",
   });
   return Array.from(
-    await Effect.runPromise(Effect.flatMap(stream, (value) => Stream.runCollect(value))),
+    await Effect.runPromise(
+      Effect.flatMap(watch, (stream) => Stream.runCollect(Stream.take(stream, input.count))),
+    ),
   );
 }
 
 describe("remote workspace watcher", () => {
-  it("emits an initial generation, coalesces stable snapshots, and reports changes", async () => {
-    let calls = 0;
+  it("forwards exact changed paths without polling in TypeScript", async () => {
     const events = await collectEvents({
-      resolve: async () => {
-        calls += 1;
-        return client(
-          calls >= 3 ? [{ ...entry, modifiedUnixMs: 2 }] : [{ ...entry, modifiedUnixMs: 1 }],
-        );
-      },
-      leaseMs: 170,
+      resolve: async () =>
+        client({
+          events: [
+            {
+              subscriptionId: "subscription",
+              generation: 7,
+              sequence: 1,
+              changes: [{ path: "docs/README.md", kind: "modify" }],
+              rescanRequired: false,
+              rescanReason: "",
+            },
+          ],
+        }),
+      count: 1,
     });
 
     expect(events).toEqual([
       {
-        version: 1,
+        version: 2,
         type: "directoryChanged",
         relativePath: "docs",
-        generation: 1,
-      },
-      {
-        version: 1,
-        type: "directoryChanged",
-        relativePath: "docs",
-        generation: 2,
-      },
-      {
-        version: 1,
-        type: "rescanRequired",
-        relativePath: "docs",
-        generation: 3,
-        reason: "leaseExpired",
+        changedPaths: ["docs/README.md"],
+        generation: 7,
+        sequence: 1,
       },
     ]);
   });
 
-  it("emits a rescan on transport loss and a fresh generation after recovery", async () => {
+  it("requires a rescan after transport recovery", async () => {
     let attempts = 0;
     const events = await collectEvents({
       resolve: async () => {
         attempts += 1;
-        if (attempts === 1) throw new Error("socket closed");
-        return client([entry]);
+        return client(attempts === 1 ? { failure: new Error("socket closed") } : {});
       },
-      leaseMs: 170,
+      count: 2,
     });
 
-    expect(events.slice(0, 3)).toEqual([
-      {
-        version: 1,
-        type: "rescanRequired",
-        relativePath: "docs",
-        generation: 1,
-        reason: "transportLost",
+    expect(
+      events.map((event) => (event.type === "rescanRequired" ? event.reason : event.type)),
+    ).toEqual(["transportLost", "agentRestarted"]);
+  });
+
+  it("requires a rescan when the agent sequence has a gap", async () => {
+    const events = await collectEvents({
+      resolve: async () =>
+        client({
+          events: [
+            {
+              subscriptionId: "subscription",
+              generation: 7,
+              sequence: 1,
+              changes: [{ path: "docs/one.md", kind: "modify" }],
+              rescanRequired: false,
+              rescanReason: "",
+            },
+            {
+              subscriptionId: "subscription",
+              generation: 7,
+              sequence: 3,
+              changes: [{ path: "docs/two.md", kind: "modify" }],
+              rescanRequired: false,
+              rescanReason: "",
+            },
+          ],
+        }),
+      count: 2,
+    });
+
+    expect(events.map((event) => event.type)).toEqual(["directoryChanged", "rescanRequired"]);
+  });
+
+  it("fails once when the connected agent does not support watching", async () => {
+    let attempts = 0;
+    const watch = makeRemoteWorkspaceWatch({
+      resolve: async () => {
+        attempts += 1;
+        throw new RemoteAgentCapabilityError("ssh:example", "workspace.watch");
       },
-      {
-        version: 1,
-        type: "rescanRequired",
-        relativePath: "docs",
-        generation: 2,
-        reason: "agentRestarted",
-      },
-      {
-        version: 1,
-        type: "directoryChanged",
-        relativePath: "docs",
-        generation: 3,
-      },
-    ]);
+    }).watchDirectory({
+      cwd: "/remote/project",
+      relativePath: "docs",
+      executionTargetId: "ssh:example",
+    });
+
+    await expect(
+      Effect.runPromise(Effect.flatMap(watch, (stream) => Stream.runDrain(stream))),
+    ).rejects.toMatchObject({ retryable: false });
+    expect(attempts).toBe(1);
   });
 });

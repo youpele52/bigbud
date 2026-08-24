@@ -36,6 +36,11 @@ message Frame {
     ProcessAttachResponse process_attach_response = 25;
     WriteFileRequest write_file_request = 26;
     WriteFileResponse write_file_response = 27;
+    WorkspaceWatchStartRequest workspace_watch_start_request = 28;
+    WorkspaceWatchStartResponse workspace_watch_start_response = 29;
+    WorkspaceWatchEvent workspace_watch_event = 30;
+    WorkspaceWatchStopRequest workspace_watch_stop_request = 31;
+    WorkspaceWatchStopResponse workspace_watch_stop_response = 32;
     PtyCreateRequest pty_create_request = 42;
     PtyCreateResponse pty_create_response = 43;
     PtyInput pty_input = 44;

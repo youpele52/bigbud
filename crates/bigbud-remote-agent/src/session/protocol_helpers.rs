@@ -97,6 +97,7 @@ pub fn protocol_error_frame(error: &SessionError) -> v1::Frame {
         SessionError::MissingOperationId => "MISSING_OPERATION_ID",
         SessionError::OperationIdConflict => "OPERATION_ID_CONFLICT",
         SessionError::MissingWorkspaceHandle => "MISSING_WORKSPACE_HANDLE",
+        SessionError::MissingWorkspaceWatchSubscriptionId => "MISSING_WATCH_SUBSCRIPTION_ID",
         SessionError::UnknownWorkspace(_) => "UNKNOWN_WORKSPACE",
         SessionError::ResourceLimit(_) => "RESOURCE_LIMIT",
         SessionError::Process(_) => "PROCESS_ERROR",

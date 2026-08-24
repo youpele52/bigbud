@@ -4,9 +4,45 @@ import {
   createFilesPanelRefreshCoordinator,
   FILES_PANEL_REFRESH_DEBOUNCE_MS,
   FILES_PANEL_REFRESH_MAX_WAIT_MS,
+  getPrioritizedWatchedDirectoryPaths,
+  shouldRefreshPreviewForDirectoryEvent,
 } from "./FilesPanelRefreshCoordinator.logic";
 
 describe("createFilesPanelRefreshCoordinator", () => {
+  it("subscribes the active directory before root and other expanded directories", () => {
+    expect(getPrioritizedWatchedDirectoryPaths(["", "src", "docs/api"], "docs")).toEqual([
+      "docs",
+      "",
+      "docs/api",
+      "src",
+    ]);
+    expect(getPrioritizedWatchedDirectoryPaths(["", "src"], "")).toEqual(["", "src"]);
+  });
+
+  it("uses exact remote paths while retaining broad local invalidations", () => {
+    expect(
+      shouldRefreshPreviewForDirectoryEvent(
+        {
+          version: 2,
+          type: "directoryChanged",
+          relativePath: "docs",
+          changedPaths: ["docs/other.md"],
+          generation: 1,
+          sequence: 1,
+        },
+        "docs/README.md",
+        "docs",
+      ),
+    ).toBe(false);
+    expect(
+      shouldRefreshPreviewForDirectoryEvent(
+        { version: 1, type: "directoryChanged", relativePath: "docs" },
+        "docs/README.md",
+        "docs",
+      ),
+    ).toBe(true);
+  });
+
   it("runs higher-priority work first and deduplicates queued keys", async () => {
     vi.useFakeTimers();
     const completed: string[] = [];

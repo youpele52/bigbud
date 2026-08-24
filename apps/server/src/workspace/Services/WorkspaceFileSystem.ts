@@ -28,6 +28,7 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
     relativePath: Schema.optional(Schema.String),
     operation: Schema.String,
     detail: Schema.String,
+    retryable: Schema.optional(Schema.Boolean),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

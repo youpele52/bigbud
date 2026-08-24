@@ -4,7 +4,10 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { useServerConfig } from "../../rpc/serverState";
 import type { DirectoryState } from "./FilesPanel.shared";
 import { createDebouncedDirectoryRefresh } from "./useFilesPanelDirectoryRefresh.logic";
-import { supportsWorkspaceDirectoryWatch } from "./workspaceWatchCapability";
+import {
+  shouldRetryWorkspaceDirectoryWatch,
+  supportsWorkspaceDirectoryWatch,
+} from "./workspaceWatchCapability";
 
 interface UseFilesPanelDirectoryRefreshInput {
   readonly workspaceRoot: string | null;
@@ -94,6 +97,7 @@ export function useFilesPanelDirectoryRefresh({
         refreshVisibleDirectories,
         {
           onResubscribe: refreshVisibleDirectories,
+          shouldRetry: shouldRetryWorkspaceDirectoryWatch,
         },
       ),
     );

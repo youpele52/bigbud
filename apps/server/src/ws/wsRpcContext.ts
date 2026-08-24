@@ -309,7 +309,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
       workspaceCapabilities: {
         remoteAgent: {
           enabled: remoteAgentEnabled,
-          supportsDirectoryWatch: remoteAgentEnabled,
+          supportsDirectoryWatch: true,
           supportsPtyReattach: remoteAgentEnabled,
         },
       },

@@ -314,7 +314,7 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
   let frame: RemoteAgentFrame | undefined;
   decodeMessage(bytes, (field, wireType, reader) => {
     if (field > 7) {
-      if (!((field >= 8 && field <= 27) || (field >= 42 && field <= 57))) {
+      if (!((field >= 8 && field <= 32) || (field >= 42 && field <= 57))) {
         reader.skip(wireType);
         return;
       }

@@ -63,6 +63,12 @@ export class RemoteAgentConnectionPool {
     );
   }
 
+  async getWorkspaceWatchClient(executionTargetId: string): Promise<RemoteAgentWorkspaceClient> {
+    return new RemoteAgentWorkspaceClient(
+      await this.getWithCapabilities(executionTargetId, ["workspace.files", "workspace.watch"]),
+    );
+  }
+
   async getProcessClient(executionTargetId: string): Promise<RemoteAgentProcessClient> {
     return new RemoteAgentProcessClient(
       await this.getWithCapabilities(executionTargetId, ["process.run"]),
@@ -124,6 +130,7 @@ export class RemoteAgentConnectionPool {
 export function makeRemoteWorkspaceClientResolver(pool: RemoteAgentConnectionPool) {
   return {
     resolve: (executionTargetId: string) => pool.getWorkspaceClient(executionTargetId),
+    resolveWatch: (executionTargetId: string) => pool.getWorkspaceWatchClient(executionTargetId),
   };
 }
 
