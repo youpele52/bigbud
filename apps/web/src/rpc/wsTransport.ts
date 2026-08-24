@@ -11,6 +11,7 @@ import {
 
 interface SubscribeOptions {
   readonly retryDelay?: Duration.Input;
+  readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
   readonly shouldRetry?: (error: unknown) => boolean;
 }
@@ -142,12 +143,14 @@ export class WsTransport {
             return;
           }
           if (isUnknownRequestTagError(error)) {
+            options?.onError?.(error);
             console.warn("WebSocket RPC subscription unavailable", {
               error: formatErrorMessage(error),
             });
             return;
           }
           if (options?.shouldRetry?.(error) === false) {
+            options?.onError?.(error);
             console.warn("WebSocket RPC subscription unavailable", {
               error: formatErrorMessage(error),
             });

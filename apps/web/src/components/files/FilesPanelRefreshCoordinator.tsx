@@ -24,6 +24,7 @@ import {
   shouldRetryWorkspaceDirectoryWatch,
   supportsWorkspaceDirectoryWatch,
 } from "./workspaceWatchCapability";
+import { toastManager } from "../ui/toast";
 
 interface PreviewRegistration {
   readonly cwd: string;
@@ -81,6 +82,7 @@ export function FilesPanelRefreshCoordinator({
     serverConfig?.workspaceCapabilities,
   );
   const previewRegistrationRef = useRef<PreviewRegistration | null>(null);
+  const watchErrorShownRef = useRef(false);
   const loadDirectoryRef = useRef(loadDirectory);
   loadDirectoryRef.current = loadDirectory;
   const coordinator = useMemo(() => createFilesPanelRefreshCoordinator(), []);
@@ -114,6 +116,7 @@ export function FilesPanelRefreshCoordinator({
 
   useEffect(() => {
     coordinator.cancelAll();
+    watchErrorShownRef.current = false;
     if (!workspaceRoot || !watchEnabled) return;
 
     const api = readNativeApi();
@@ -127,7 +130,7 @@ export function FilesPanelRefreshCoordinator({
         run: () => {
           const registration = previewRegistrationRef.current;
           if (registration?.cwd === workspaceRoot && registration.relativePath === previewPath) {
-            registration.refreshPreview();
+            return registration.refreshPreview();
           }
         },
       };
@@ -188,6 +191,18 @@ export function FilesPanelRefreshCoordinator({
         },
         scheduleDirectoryEvent,
         {
+          onError: (error) => {
+            if (watchErrorShownRef.current) return;
+            watchErrorShownRef.current = true;
+            toastManager.add({
+              type: "error",
+              title: "Automatic file refresh unavailable",
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "The workspace watcher could not be started.",
+            });
+          },
           onResubscribe: () => coordinator.scheduleAll(tasksForFullSweep()),
           shouldRetry: shouldRetryWorkspaceDirectoryWatch,
         },

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 
 import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReady } from "../ssh/sshVerification.ts";
@@ -25,8 +25,44 @@ export class RemoteAgentConnectionError extends Error {
 export interface RemoteAgentLocalProcessInput {
   readonly binaryPath: string;
   readonly mode?: "stdio" | "proxy";
+  readonly args?: ReadonlyArray<string>;
   readonly maxFrameBytes?: number;
   readonly env?: NodeJS.ProcessEnv;
+}
+
+interface ClosableChildProcess {
+  readonly pid?: number | undefined;
+  readonly stdin: { end: () => void };
+  readonly kill: (signal?: NodeJS.Signals) => boolean;
+}
+
+export function remoteAgentLocalProcessArgs(
+  input: Pick<RemoteAgentLocalProcessInput, "args" | "mode">,
+): ReadonlyArray<string> {
+  return input.args ?? (input.mode === "proxy" ? ["--proxy"] : []);
+}
+
+export function closeRemoteAgentProcess(
+  child: ClosableChildProcess,
+  options: {
+    readonly platform?: NodeJS.Platform;
+    readonly taskkill?: typeof spawnSync;
+  } = {},
+): void {
+  child.stdin.end();
+  if ((options.platform ?? process.platform) === "win32" && child.pid !== undefined) {
+    try {
+      const result = (options.taskkill ?? spawnSync)(
+        "taskkill",
+        ["/pid", String(child.pid), "/T", "/F"],
+        { stdio: "ignore" },
+      );
+      if (result.status === 0) return;
+    } catch {
+      // taskkill unavailable — fall through to direct termination.
+    }
+  }
+  child.kill("SIGTERM");
 }
 
 export interface RemoteAgentSshProcessInput {
@@ -113,12 +149,16 @@ export class RemoteAgentConnection {
   static local(input: RemoteAgentLocalProcessInput): RemoteAgentConnection {
     const maxFrameBytes = input.maxFrameBytes ?? REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES;
     return new RemoteAgentConnection(
-      spawn(input.binaryPath, input.mode === "proxy" ? ["--proxy"] : [], {
+      spawn(input.binaryPath, remoteAgentLocalProcessArgs(input), {
         stdio: ["pipe", "pipe", "pipe"],
         ...(input.env ? { env: input.env } : {}),
       }),
       maxFrameBytes,
     );
+  }
+
+  get processId(): number | undefined {
+    return this.child.pid;
   }
 
   static ssh(input: RemoteAgentSshProcessInput): RemoteAgentConnection {
@@ -224,8 +264,7 @@ export class RemoteAgentConnection {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    this.child.stdin.end();
-    this.child.kill();
+    closeRemoteAgentProcess(this.child);
     const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
     for (const waiter of this.waiters.splice(0)) waiter.reject(error);
   }

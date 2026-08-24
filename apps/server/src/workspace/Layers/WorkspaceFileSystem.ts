@@ -1,7 +1,6 @@
-import { Cause, Duration, Effect, Exit, FileSystem, Layer, Path, Queue, Stream } from "effect";
-import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts";
+import { Cause, Effect, Exit, FileSystem, Layer, Path } from "effect";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
-import { open, stat, watch } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 
 import {
   WorkspaceFileSystem,
@@ -27,57 +26,6 @@ import { watchRemoteDirectoryViaSsh } from "./WorkspaceFileSystem.remoteWatch.ts
 import { makeWorkspaceWriteFile } from "./WorkspaceFileSystem.write.ts";
 
 const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
-const WORKSPACE_DIRECTORY_WATCH_RECURSIVE = process.platform !== "linux";
-
-export function createDirectoryChangedStream(input: {
-  readonly cwd: string;
-  readonly relativePath: string;
-  readonly watcher: (signal: AbortSignal) => AsyncIterable<unknown>;
-}): Stream.Stream<ProjectDirectoryWatchEvent, WorkspaceFileSystemError> {
-  return Stream.callback<ProjectDirectoryWatchEvent, WorkspaceFileSystemError>((queue) =>
-    Effect.gen(function* () {
-      const abortController = new AbortController();
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          abortController.abort();
-          Queue.endUnsafe(queue);
-        }),
-      );
-
-      yield* Effect.promise(async () => {
-        try {
-          for await (const _event of input.watcher(abortController.signal)) {
-            Queue.offerUnsafe(queue, {
-              version: 1 as const,
-              type: "directoryChanged" as const,
-              relativePath: input.relativePath,
-            });
-          }
-
-          Queue.endUnsafe(queue);
-        } catch (cause) {
-          if (abortController.signal.aborted) {
-            Queue.endUnsafe(queue);
-            return;
-          }
-
-          Queue.failCauseUnsafe(
-            queue,
-            Cause.fail(
-              new WorkspaceFileSystemError({
-                cwd: input.cwd,
-                relativePath: input.relativePath,
-                operation: "workspaceFileSystem.watchDirectory",
-                detail: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-            ),
-          );
-        }
-      });
-    }),
-  ).pipe(Stream.debounce(Duration.millis(100)));
-}
 
 async function readTextFilePreview(
   absolutePath: string,
@@ -297,50 +245,25 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     "WorkspaceFileSystem.watchDirectory",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-    if (!isLocalExecutionTarget(executionTargetId)) {
-      const target = input.relativePath
-        ? yield* workspacePaths.resolveRelativePathWithinRoot({
-            workspaceRoot: input.cwd,
-            relativePath: input.relativePath,
-          })
-        : { relativePath: "" };
-      return watchRemoteDirectoryViaSsh({
-        executionTargetId,
+    if (isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceFileSystemError({
         cwd: input.cwd,
-        relativePath: target.relativePath,
+        relativePath: input.relativePath,
+        operation: "workspaceFileSystem.watchDirectory",
+        detail: "Local directory watching is owned by the Rust workspace watcher.",
+        retryable: false,
       });
     }
-
-    const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "workspaceFileSystem.watchDirectory",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
     const target = input.relativePath
       ? yield* workspacePaths.resolveRelativePathWithinRoot({
-          workspaceRoot: normalizedWorkspaceRoot,
+          workspaceRoot: input.cwd,
           relativePath: input.relativePath,
         })
-      : {
-          absolutePath: normalizedWorkspaceRoot,
-          relativePath: "",
-        };
-
-    return createDirectoryChangedStream({
+      : { relativePath: "" };
+    return watchRemoteDirectoryViaSsh({
+      executionTargetId,
       cwd: input.cwd,
       relativePath: target.relativePath,
-      watcher: (signal) =>
-        watch(target.absolutePath, {
-          recursive: WORKSPACE_DIRECTORY_WATCH_RECURSIVE,
-          signal,
-        }),
     });
   });
 

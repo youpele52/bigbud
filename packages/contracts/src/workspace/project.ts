@@ -93,11 +93,15 @@ export const ProjectDirectoryWatchInput = Schema.Struct({
 });
 export type ProjectDirectoryWatchInput = typeof ProjectDirectoryWatchInput.Type;
 
+export const ProjectDirectoryWatchBackend = Schema.Literals(["native", "poll", "directSshPoll"]);
+export type ProjectDirectoryWatchBackend = typeof ProjectDirectoryWatchBackend.Type;
+
 export const ProjectDirectoryChangedEvent = Schema.Struct({
   version: Schema.Literal(1),
   type: Schema.Literal("directoryChanged"),
   relativePath: Schema.String,
   generation: Schema.optional(Schema.Number),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
 });
 export type ProjectDirectoryChangedEvent = typeof ProjectDirectoryChangedEvent.Type;
 
@@ -108,6 +112,7 @@ export const ProjectDirectoryChangedEventV2 = Schema.Struct({
   changedPaths: Schema.Array(Schema.String),
   generation: Schema.Number,
   sequence: Schema.Number,
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
 });
 export type ProjectDirectoryChangedEventV2 = typeof ProjectDirectoryChangedEventV2.Type;
 
@@ -122,6 +127,7 @@ export const ProjectDirectoryRescanRequiredEvent = Schema.Struct({
     Schema.Literal("leaseExpired"),
     Schema.Literal("overflow"),
   ]),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
 });
 export type ProjectDirectoryRescanRequiredEvent = typeof ProjectDirectoryRescanRequiredEvent.Type;
 
@@ -137,6 +143,7 @@ export const ProjectDirectoryRescanRequiredEventV2 = Schema.Struct({
     Schema.Literal("overflow"),
     Schema.Literal("watchInvalidated"),
   ]),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
 });
 export type ProjectDirectoryRescanRequiredEventV2 =
   typeof ProjectDirectoryRescanRequiredEventV2.Type;

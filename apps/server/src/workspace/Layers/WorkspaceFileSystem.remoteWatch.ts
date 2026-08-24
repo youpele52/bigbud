@@ -45,6 +45,13 @@ export function createRemoteDirectoryPollingStream(
   return Stream.callback<ProjectDirectoryWatchEvent, WorkspaceFileSystemError>(
     (queue) =>
       Effect.gen(function* () {
+        yield* Effect.logInfo("Workspace watcher started").pipe(
+          Effect.annotateLogs({
+            cwd: input.cwd,
+            relativePath: input.relativePath,
+            backend: "directSshPoll",
+          }),
+        );
         const abortController = new AbortController();
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
@@ -71,6 +78,7 @@ export function createRemoteDirectoryPollingStream(
                   type: "directoryChanged",
                   relativePath: input.relativePath,
                   generation,
+                  backend: "directSshPoll",
                 });
                 disconnected = false;
               } else if (previousSnapshot !== undefined && previousSnapshot !== nextSnapshot) {
@@ -80,6 +88,7 @@ export function createRemoteDirectoryPollingStream(
                   type: "directoryChanged",
                   relativePath: input.relativePath,
                   generation,
+                  backend: "directSshPoll",
                 });
               }
               previousSnapshot = nextSnapshot;
@@ -94,6 +103,7 @@ export function createRemoteDirectoryPollingStream(
                   relativePath: input.relativePath,
                   generation,
                   reason: "transportLost",
+                  backend: "directSshPoll",
                 });
                 disconnected = true;
               }

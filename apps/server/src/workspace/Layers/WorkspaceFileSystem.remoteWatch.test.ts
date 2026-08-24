@@ -22,6 +22,7 @@ describe("createRemoteDirectoryPollingStream", () => {
         type: "directoryChanged",
         relativePath: "src",
         generation: 1,
+        backend: "directSshPoll",
       });
     }),
   );
@@ -46,6 +47,7 @@ describe("createRemoteDirectoryPollingStream", () => {
         relativePath: "",
         generation: 1,
         reason: "transportLost",
+        backend: "directSshPoll",
       });
     }),
   );
@@ -72,12 +74,14 @@ describe("createRemoteDirectoryPollingStream", () => {
           relativePath: "docs",
           generation: 1,
           reason: "transportLost",
+          backend: "directSshPoll",
         },
         {
           version: 1,
           type: "directoryChanged",
           relativePath: "docs",
           generation: 2,
+          backend: "directSshPoll",
         },
       ]);
     }),

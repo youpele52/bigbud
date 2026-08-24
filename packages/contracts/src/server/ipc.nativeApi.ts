@@ -65,6 +65,7 @@ export interface NativeApi {
       input: Project.ProjectDirectoryWatchInput,
       callback: (event: Project.ProjectDirectoryWatchEvent) => void,
       options?: {
+        onError?: (error: unknown) => void;
         onResubscribe?: () => void;
         shouldRetry?: (error: unknown) => boolean;
       },

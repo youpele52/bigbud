@@ -86,6 +86,7 @@ type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
   readonly shouldRetry?: (error: unknown) => boolean;
 }

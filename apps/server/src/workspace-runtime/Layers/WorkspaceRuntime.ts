@@ -1,10 +1,11 @@
-import { Effect, Layer } from "effect";
+import { Effect, FileSystem, Layer, Path } from "effect";
 
 import { WorkspaceEntriesLive } from "../../workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "../../workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
 import { WorkspaceEntries } from "../../workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "../../workspace/Services/WorkspaceFileSystem.ts";
+import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import { WorkspaceFiles, workspaceFilesFromExistingServices } from "../Services/WorkspaceFiles.ts";
 import { WorkspaceRuntime } from "../Services/WorkspaceRuntime.ts";
 import {
@@ -15,8 +16,9 @@ import {
   WorkspaceSearch,
   workspaceSearchFromExistingServices,
 } from "../Services/WorkspaceSearch.ts";
-import { WorkspaceWatch, workspaceWatchFromExistingService } from "../Services/WorkspaceWatch.ts";
+import { WorkspaceWatch } from "../Services/WorkspaceWatch.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { makeLocalWorkspaceWatchLayer } from "../../remote-agent/localWorkspaceWatchLayer.ts";
 
 export function makeTargetAwareRuntime(input: {
   readonly local: WorkspaceRuntimeBackendShape;
@@ -69,30 +71,26 @@ const workspaceSearchLive = Layer.effect(
   Layer.provide(workspaceFileSystemForRuntimeLive),
   Layer.provide(workspaceEntriesForRuntimeLive),
 );
-const workspaceWatchLive = Layer.effect(
-  WorkspaceWatch,
-  Effect.gen(function* () {
-    const fileSystem = yield* WorkspaceFileSystem;
-    return workspaceWatchFromExistingService({ watchDirectory: fileSystem.watchDirectory });
-  }),
-).pipe(Layer.provide(workspaceFileSystemForRuntimeLive));
-const workspaceRuntimeLive = Layer.effect(
-  WorkspaceRuntime,
-  Effect.gen(function* () {
-    const files = yield* WorkspaceFiles;
-    const search = yield* WorkspaceSearch;
-    const watch = yield* WorkspaceWatch;
-    const remote = yield* Effect.serviceOption(RemoteWorkspaceRuntime);
-    return makeTargetAwareRuntime({
-      local: { files, search, watch },
-      ...(remote._tag === "Some" ? { remote: remote.value } : {}),
-    });
-  }),
-).pipe(
-  Layer.provide(workspaceFilesLive),
-  Layer.provide(workspaceSearchLive),
-  Layer.provide(workspaceWatchLive),
-);
+const makeWorkspaceRuntimeLive = (
+  localWatchLayer: Layer.Layer<WorkspaceWatch, never, FileSystem.FileSystem | Path.Path>,
+) =>
+  Layer.effect(
+    WorkspaceRuntime,
+    Effect.gen(function* () {
+      const files = yield* WorkspaceFiles;
+      const search = yield* WorkspaceSearch;
+      const watch = yield* WorkspaceWatch;
+      const remote = yield* Effect.serviceOption(RemoteWorkspaceRuntime);
+      return makeTargetAwareRuntime({
+        local: { files, search, watch },
+        ...(remote._tag === "Some" ? { remote: remote.value } : {}),
+      });
+    }),
+  ).pipe(
+    Layer.provide(workspaceFilesLive),
+    Layer.provide(workspaceSearchLive),
+    Layer.provide(localWatchLayer),
+  );
 
 /**
  * Complete workspace runtime composition. Existing workspace services are
@@ -100,7 +98,19 @@ const workspaceRuntimeLive = Layer.effect(
  * the migration. A remote backend is opt-in and only selected for remote
  * execution targets.
  */
-export function makeWorkspaceRuntimeLayer(remoteLayer?: Layer.Layer<RemoteWorkspaceRuntime>) {
+export function makeWorkspaceRuntimeLayer(
+  remoteLayer?: Layer.Layer<RemoteWorkspaceRuntime>,
+  localWatchLayer: Layer.Layer<
+    WorkspaceWatch,
+    never,
+    WorkspaceFileSystem | WorkspacePaths
+  > = makeLocalWorkspaceWatchLayer(),
+) {
+  const resolvedLocalWatchLayer = localWatchLayer.pipe(
+    Layer.provide(workspaceFileSystemForRuntimeLive),
+    Layer.provide(WorkspacePathsLive),
+  );
+  const workspaceRuntimeLive = makeWorkspaceRuntimeLive(resolvedLocalWatchLayer);
   const runtime = remoteLayer
     ? workspaceRuntimeLive.pipe(Layer.provide(remoteLayer))
     : workspaceRuntimeLive;
@@ -110,7 +120,7 @@ export function makeWorkspaceRuntimeLayer(remoteLayer?: Layer.Layer<RemoteWorksp
     workspaceFileSystemForRuntimeLive,
     workspaceFilesLive,
     workspaceSearchLive,
-    workspaceWatchLive,
+    resolvedLocalWatchLayer,
     runtime,
   );
 }
