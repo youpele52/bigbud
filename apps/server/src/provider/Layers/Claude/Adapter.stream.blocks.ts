@@ -7,12 +7,16 @@
  * @module ClaudeAdapter.stream.blocks
  */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { type EventId } from "@bigbud/contracts";
 import { Effect, Random } from "effect";
 
 import { nativeProviderRefs } from "./Adapter.utils.ts";
 import { claudeSdkDiagnostic } from "./Adapter.sdk.projections.ts";
-import type { AssistantTextBlockState, ClaudeSessionContext } from "./Adapter.types.ts";
+import type {
+  AssistantTextBlockState,
+  ClaudeSessionContext,
+  UnstampedProviderRuntimeEvent,
+} from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import {
   asRuntimeItemId,
@@ -25,7 +29,7 @@ export interface BlockHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
 }
 
 export const makeBlockHandlers = (deps: BlockHandlerDeps) => {

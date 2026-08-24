@@ -19,6 +19,7 @@ export function isClaudeTaskTool(toolName: string): boolean {
     "TaskUpdate",
     "TaskGet",
     "TaskList",
+    "task_notification",
     "task_updated",
     "background_tasks_changed",
   ].includes(toolName);

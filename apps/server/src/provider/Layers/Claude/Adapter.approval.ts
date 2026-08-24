@@ -16,7 +16,6 @@ import {
   DEFAULT_RUNTIME_MODE,
   EventId,
   type ProviderApprovalDecision,
-  type ProviderRuntimeEvent,
   type RuntimeMode,
 } from "@bigbud/contracts";
 import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
@@ -30,7 +29,12 @@ import {
   nativeProviderRefs,
   summarizeToolRequest,
 } from "./Adapter.utils.ts";
-import type { ClaudeSessionContext, PendingApproval, PendingUserInput } from "./Adapter.types.ts";
+import type {
+  ClaudeSessionContext,
+  PendingApproval,
+  PendingUserInput,
+  UnstampedProviderRuntimeEvent,
+} from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { decodeClaudePermissionCallback } from "./Adapter.sdk.messages.ts";
 import { claudeSdkPermissionRuntimeRaw } from "./Adapter.sdk.projections.ts";
@@ -48,7 +52,7 @@ export interface ApprovalHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly runFork: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>;
   readonly runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
   readonly emitProposedPlanCompleted: StreamHandlers["emitProposedPlanCompleted"];

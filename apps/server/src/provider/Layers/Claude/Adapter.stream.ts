@@ -7,7 +7,7 @@
  *
  * @module ClaudeAdapter.stream
  */
-import { type EventId, type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
+import { type EventId, ThreadId } from "@bigbud/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Queue, Stream } from "effect";
 
 import { ProviderAdapterProcessError } from "../../Errors.ts";
@@ -17,7 +17,7 @@ import {
   messageFromClaudeStreamCause,
   toError,
 } from "./Adapter.utils.ts";
-import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { makeBlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnHandlers } from "./Adapter.stream.turn.ts";
@@ -29,7 +29,7 @@ export interface StreamHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
 }

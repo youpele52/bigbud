@@ -95,12 +95,27 @@ describe("ClaudeAdapterLive modern task plans", () => {
           index: 2,
           toolId: "task-list",
           toolName: "TaskList",
-          value: { tasks: [{ id: "task-1", subject: "Inspect files", status: "completed" }] },
+          value: {},
           sequence: 3,
         }),
       ]) {
         harness.query.emit(message);
       }
+      harness.query.emit({
+        type: "user",
+        uuid: "modern-plan-task-list-result",
+        session_id: "sdk-session-modern-plan",
+        parent_tool_use_id: null,
+        tool_use_result: {
+          tasks: [{ id: "task-1", subject: "Inspect files", status: "completed", blockedBy: [] }],
+        },
+        message: {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "task-list", content: "Task list returned" },
+          ],
+        },
+      } as unknown as SDKMessage);
       const events = Array.from(yield* Fiber.join(runtimeEventsFiber));
       yield* adapter.stopSession(THREAD_ID);
       return { events, turnId: turn.turnId };
@@ -143,6 +158,63 @@ describe("ClaudeAdapterLive modern task plans", () => {
         ),
       ),
   );
+
+  it.effect("reconciles a native background task notification into a completed plan", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.takeUntil(
+          (event) =>
+            event.type === "turn.plan.updated" &&
+            event.payload.plan.some((step) => step.status === "completed"),
+        ),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "run background task",
+        attachments: [],
+      });
+
+      harness.query.emit({
+        type: "system",
+        subtype: "background_tasks_changed",
+        uuid: "background-snapshot-1",
+        session_id: "sdk-session-native-task",
+        tasks: [{ task_id: "task-1", task_type: "agent", description: "Background task" }],
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "system",
+        subtype: "task_notification",
+        uuid: "task-notification-1",
+        session_id: "sdk-session-native-task",
+        task_id: "task-1",
+        status: "completed",
+        summary: "Background task complete",
+      } as unknown as SDKMessage);
+
+      const events = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      yield* adapter.stopSession(THREAD_ID);
+      assert.equal(
+        events.some((event) => event.type === "task.completed"),
+        true,
+      );
+      assert.deepEqual(
+        events.filter((event) => event.type === "turn.plan.updated").at(-1)?.payload,
+        { plan: [{ step: "Background task", status: "completed" }] },
+      );
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
 
   it.effect("projects the identical modern task plan through a remote Claude bridge", () =>
     trace("ssh:host=devbox&user=root&port=22").pipe(

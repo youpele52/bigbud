@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent, TurnId } from "@bigbud/contracts";
+import { type EventId, TurnId } from "@bigbud/contracts";
 import { Effect, Random } from "effect";
 
 import {
@@ -11,12 +11,13 @@ import {
   toolResultBlocksFromUserMessage,
   toolResultStreamKind,
 } from "./Adapter.utils.ts";
-import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
+import { taskCreateResultId } from "./Adapter.tasks.reducer.parse.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 
 interface MessageSpecificHandlerDeps {
@@ -24,7 +25,7 @@ interface MessageSpecificHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
@@ -129,14 +130,27 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         raw: claudeSdkRuntimeRaw(message, "claude/user"),
       });
 
-      const result = tryParseJsonRecord(toolResult.text);
-      if (result) {
+      const result = asRecord(message.tool_use_result) ?? tryParseJsonRecord(toolResult.text);
+      const createdTaskId =
+        tool.toolName === "TaskCreate" && !toolResult.isError
+          ? taskCreateResultId(message.tool_use_result, toolResult.text)
+          : undefined;
+      const taskResult =
+        tool.toolName === "TaskCreate"
+          ? createdTaskId
+            ? { ...tool.input, task_id: createdTaskId }
+            : toolResult.isError
+              ? { status: "deleted" }
+              : undefined
+          : result;
+      const isTaskListSnapshot = tool.toolName === "TaskList" && Array.isArray(result?.tasks);
+      if (taskResult && (tool.toolName !== "TaskList" || isTaskListSnapshot)) {
         yield* updateClaudeTaskPlan({
           context,
           toolUseId: tool.itemId,
           toolName: tool.toolName,
-          input: result,
-          ...(tool.toolName === "TaskList" ? { authoritativeSnapshot: true } : {}),
+          input: taskResult,
+          ...(isTaskListSnapshot ? { authoritativeSnapshot: true } : {}),
           now: yield* nowIso,
           makeEventStamp,
           offerRuntimeEvent,
@@ -192,6 +206,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       const startedAt = yield* nowIso;
       context.turnState = {
         turnId,
+        synthetic: true,
         startedAt,
         items: [],
         assistantTextBlocks: new Map(),

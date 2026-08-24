@@ -162,9 +162,17 @@ export function taskPatch(value: unknown): Record<string, unknown> | undefined {
   if (
     !patch ||
     (status !== undefined &&
-      !["pending", "running", "completed", "failed", "killed", "paused"].includes(
-        String(status),
-      )) ||
+      ![
+        "pending",
+        "running",
+        "in_progress",
+        "completed",
+        "complete",
+        "done",
+        "failed",
+        "killed",
+        "paused",
+      ].includes(String(status))) ||
     (patch.description !== undefined && !string(patch.description)) ||
     (patch.error !== undefined && !string(patch.error)) ||
     (patch.end_time !== undefined && finiteNumber(patch.end_time) === undefined) ||

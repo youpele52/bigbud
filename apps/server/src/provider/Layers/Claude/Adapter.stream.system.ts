@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, RuntimeTaskId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { type EventId, RuntimeTaskId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import {
@@ -24,7 +24,7 @@ import {
 } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.ts";
-import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
@@ -32,7 +32,7 @@ import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../pro
 
 export interface SystemHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly turn: TurnHandlers;
 }
@@ -226,6 +226,21 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             summary: task.summary,
             ...(task.usage ? { usage: task.usage } : {}),
           },
+        });
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: task.toolUseId ?? task.taskId,
+          toolName: "task_notification",
+          input: {
+            uuid: task.uuid,
+            task_id: task.taskId,
+            status: task.status,
+            summary: task.summary,
+            ...(task.usage ? { usage: task.usage } : {}),
+          },
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
         });
         return;
       }

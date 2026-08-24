@@ -40,6 +40,16 @@ export function taskSubject(input: Record<string, unknown>) {
   );
 }
 
+export function taskCreateResultId(value: unknown, text: string): string | undefined {
+  const record = asRecord(value);
+  const nestedTask = asRecord(record?.task);
+  const structuredId = (record && taskId(record)) ?? (nestedTask && taskId(nestedTask));
+  if (structuredId) return structuredId;
+
+  const match = /\btask\s+#?([\w.:-]+)\s+created successfully\b/iu.exec(text);
+  return match?.[1];
+}
+
 export function normalizeStatus(
   value: unknown,
 ): { status: OrchestrationTaskStatus; nativeStatus: string } | undefined {
@@ -51,7 +61,13 @@ export function normalizeStatus(
   if (["running", "in-progress"].includes(nativeStatus)) {
     return { status: "inProgress", nativeStatus };
   }
-  if (nativeStatus === "completed") return { status: "completed", nativeStatus };
+  // Claude's TodoWrite normally says `completed`, while compatible Claude
+  // endpoints sometimes serialize the same check-off as `done`/`complete`.
+  // Keep the native value for diagnostics, but project all of these forms to
+  // the canonical terminal status used by the plan UI.
+  if (["completed", "complete", "done"].includes(nativeStatus)) {
+    return { status: "completed", nativeStatus };
+  }
   if (["failed", "error"].includes(nativeStatus)) return { status: "failed", nativeStatus };
   if (["cancelled", "killed", "stopped", "interrupted"].includes(nativeStatus)) {
     return { status: "stopped", nativeStatus };

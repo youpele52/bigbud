@@ -65,7 +65,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("drops malformed persisted assistant resume boundaries", () => {
+  it.effect("falls back to a fresh session for malformed persisted assistant boundaries", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -79,6 +79,8 @@ describe("ClaudeAdapterLive", () => {
         runtimeMode: "full-access",
       });
       assert.equal(harness.getLastCreateQueryInput()?.options.resumeSessionAt, undefined);
+      assert.equal(harness.getLastCreateQueryInput()?.options.resume, undefined);
+      assert.equal(harness.getLastCreateQueryInput()?.options.sessionId !== undefined, true);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -275,6 +277,15 @@ describe("ClaudeAdapterLive", () => {
           modelSelection,
           attachments: [],
         });
+        harness.query.emit({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          errors: [],
+          session_id: "model-session",
+          uuid: "model-result-same",
+        } as never);
+        yield* Effect.yieldNow;
         yield* adapter.sendTurn({
           threadId: session.threadId,
           input: "hello again",
@@ -313,6 +324,15 @@ describe("ClaudeAdapterLive", () => {
         },
         attachments: [],
       });
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "model-session",
+        uuid: "model-result-change",
+      } as never);
+      yield* Effect.yieldNow;
       yield* adapter.sendTurn({
         threadId: session.threadId,
         input: "hello again",
