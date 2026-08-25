@@ -27,8 +27,31 @@ This document covers channel-isolated desktop releases and their platform signin
 
 Remote-agent release signing uses the Ed25519 key supplied through the required
 `BIGBUD_REMOTE_AGENT_SIGNING_KEY` and `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID`
-secrets. The key ID must match a public key in the runtime trust store before
-remote-agent installation is enabled.
+secrets. The workflow publishes the corresponding public key in the remote-agent
+install source under that key ID, which lets the installer verify manifest
+signatures and supports key rotation.
+
+## Release environment and secret reference
+
+Use [.env.release.example](../.env.release.example) as the canonical name and
+format reference. Put every populated value in GitHub **repository Actions
+secrets**; do not commit a populated environment file or store the private key
+in GitHub Variables. The tag-release workflow needs all seven values below:
+
+| Secret                               | Purpose and required format                                                                                                                                                                                                                                                                                    |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CSC_LINK`                           | Base64-encoded `.p12` export containing the Apple Developer ID Application certificate and its private key. It signs the macOS app and bundled workspace watcher.                                                                                                                                              |
+| `CSC_KEY_PASSWORD`                   | Password used when that `.p12` file was exported. It decrypts `CSC_LINK` during the macOS build.                                                                                                                                                                                                               |
+| `APPLE_ID`                           | Apple Developer account email used solely for notarization.                                                                                                                                                                                                                                                    |
+| `APPLE_APP_SPECIFIC_PASSWORD`        | App-specific password created for `APPLE_ID`; never use the Apple ID's primary password.                                                                                                                                                                                                                       |
+| `APPLE_TEAM_ID`                      | Ten-character Apple Developer Team ID associated with the certificate and notarization account.                                                                                                                                                                                                                |
+| `BIGBUD_REMOTE_AGENT_SIGNING_KEY`    | Complete multi-line PEM-encoded Ed25519 private key. It signs the Linux remote-agent manifest and must remain a GitHub Actions secret. Generate it with `openssl genpkey -algorithm ED25519 -out bigbud-remote-agent-signing-key.pem` if a new key is needed.                                                  |
+| `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID` | Public label for the remote-agent signing key, for example `release-2026`. It must begin with a letter or digit and use only letters, digits, `.`, `_`, or `-` (64 characters maximum). Reuse it across stable and prerelease channels while using the same private key; change it only when rotating the key. |
+
+`BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN` and `GH_TOKEN` are optional **runtime**
+variables for private-release lookup in a running desktop app. They are not
+release-workflow secrets. GitHub Actions provides the release job's
+`GITHUB_TOKEN` automatically through its `contents: write` permission.
 
 At runtime, the packaged server resolves the install source for its own version at
 `https://github.com/youpele52/bigbud/releases/download/v<version>/remote-agent-install-source.json`.

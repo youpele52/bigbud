@@ -35,3 +35,4 @@ build-certs/
 .DS_Store
 .opencode/
 /.firecrawl/
+bigbud-remote-agent-signing-key.pem
