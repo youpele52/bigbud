@@ -88,6 +88,10 @@
       "types": "./src/releaseChannel.ts",
       "import": "./src/releaseChannel.ts"
     },
+    "./desktopReleaseIdentity": {
+      "types": "./src/desktopReleaseIdentity.ts",
+      "import": "./src/desktopReleaseIdentity.ts"
+    },
     "./cua-driver/release": {
       "types": "./src/cua-driver/release.ts",
       "import": "./src/cua-driver/release.ts"

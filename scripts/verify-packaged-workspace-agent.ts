@@ -1,38 +1,44 @@
-import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import {
+  findPackagedWorkspaceAgent,
+  type DesktopBuildPlatform,
+  validateCodeSignatureRequirement,
+} from "./lib/packaged-workspace-agent.ts";
 import { verifyWorkspaceAgentHandshake } from "./lib/workspace-agent-handshake.ts";
 
-const [releaseRoot, buildPlatform, architecture, copyDirectory] = process.argv.slice(2);
+const rawArguments = process.argv.slice(2);
+const requireCodeSignature = rawArguments.includes("--require-code-signature");
+const [releaseRoot, buildPlatform, architecture, copyDirectory] = rawArguments.filter(
+  (argument) => argument !== "--require-code-signature",
+);
 if (!releaseRoot || !buildPlatform || !architecture) {
   throw new Error(
-    "Usage: node scripts/verify-packaged-workspace-agent.ts <release-root> <mac|linux|win> <arm64|x64> [copy-directory]",
+    "Usage: node scripts/verify-packaged-workspace-agent.ts <release-root> <mac|linux|win> <arm64|x64> [copy-directory] [--require-code-signature]",
   );
 }
-
-const platform = buildPlatform === "mac" ? "darwin" : buildPlatform === "win" ? "win32" : "linux";
-const binaryName = platform === "win32" ? "bigbud-remote-agent.exe" : "bigbud-remote-agent";
-const suffix = `/resources/server/workspace-agent/bin/${binaryName}`;
-
-function findBinary(directory: string): string | undefined {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      const nested = findBinary(path);
-      if (nested) return nested;
-    } else if (entry.isFile() && path.replaceAll("\\", "/").endsWith(suffix)) {
-      return path;
-    }
-  }
-  return undefined;
+if (!(["mac", "linux", "win"] as const).includes(buildPlatform as DesktopBuildPlatform)) {
+  throw new Error(`Unsupported desktop platform: ${buildPlatform}`);
 }
+
+const desktopPlatform = buildPlatform as DesktopBuildPlatform;
+validateCodeSignatureRequirement(desktopPlatform, requireCodeSignature);
+const platform =
+  desktopPlatform === "mac" ? "darwin" : desktopPlatform === "win" ? "win32" : "linux";
 
 if (!statSync(releaseRoot).isDirectory())
   throw new Error(`Release root is not a directory: ${releaseRoot}`);
-const binaryPath = findBinary(releaseRoot);
+const binaryPath = findPackagedWorkspaceAgent(releaseRoot, desktopPlatform);
 if (!binaryPath)
   throw new Error(`Packaged workspace watcher agent was not found under ${releaseRoot}`);
+
+if (requireCodeSignature) {
+  execFileSync("codesign", ["--verify", "--strict", "--verbose=2", binaryPath], {
+    stdio: "inherit",
+  });
+}
 
 const result = spawnSync(binaryPath, ["--check"], { encoding: "utf8" });
 const fields = result.stdout.trim().split("\t");

@@ -169,36 +169,23 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --target "${{ matrix.target }}" \
             --arch "${{ matrix.arch }}" \
-            --build-version "0.0.0-ci.${{ github.run_number }}" \
+            --build-version "0.0.0-preview.${{ github.run_number }}" \
             --verbose
 
       - name: Smoke test packaged workspace watcher
         run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
 
+      - name: Build Linux .deb fallback
+        if: matrix.platform == 'linux'
+        run: >-
+          bun run dist:desktop:artifact -- --platform linux --target deb --arch x64
+          --build-version "0.0.0-preview.${{ github.run_number }}" --output-dir release-deb
+          --skip-build --verbose && cp release-deb/*.deb release/
+
       - name: Collect release-style artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-publish
-
-          shopt -s nullglob
-          for pattern in \
-            "release/*.dmg" \
-            "release/*.zip" \
-            "release/*.AppImage" \
-            "release/*.exe" \
-            "release/*.blockmap" \
-            "release/latest*.yml"; do
-            for file in $pattern; do
-              cp "$file" release-publish/
-            done
-          done
-
-          if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" != "arm64" ]]; then
-            if [[ -f release-publish/latest-mac.yml ]]; then
-              mv release-publish/latest-mac.yml "release-publish/latest-mac-${{ matrix.arch }}.yml"
-            fi
-          fi
+        run: >-
+          node scripts/collect-desktop-release-assets.ts release release-publish
+          "${{ matrix.platform }}" "${{ matrix.arch }}" preview
 
       - name: Upload release-style artifacts
         uses: actions/upload-artifact@v4
@@ -236,29 +223,12 @@ jobs:
       - name: Merge macOS updater manifests
         run: |
           node scripts/merge-mac-update-manifests.ts \
-            release-assets/latest-mac.yml \
-            release-assets/latest-mac-x64.yml
-          rm -f release-assets/latest-mac-x64.yml
+            release-assets/preview-mac.yml \
+            release-assets/preview-mac-x64.yml
+          rm -f release-assets/preview-mac-x64.yml
 
       - name: Verify assembled release payload
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -f release-assets/install.sh
-          test -f release-assets/install.ps1
-          test -f release-assets/latest-mac.yml
-
-          shopt -s nullglob
-          dmg_files=(release-assets/*.dmg)
-          appimage_files=(release-assets/*.AppImage)
-          exe_files=(release-assets/*.exe)
-          watcher_files=(release-assets/server-workspace-agent-*)
-
-          (( ${#dmg_files[@]} > 0 ))
-          (( ${#appimage_files[@]} > 0 ))
-          (( ${#exe_files[@]} > 0 ))
-          (( ${#watcher_files[@]} == 4 ))
+        run: node scripts/verify-desktop-release-assets.ts release-assets preview
 
       - name: Upload assembled release payload
         uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 # Release Checklist
 
-This document covers how to run desktop releases from one tag, first without signing, then with signing.
+This document covers channel-isolated desktop releases and their platform signing guarantees.
 
 ## What the workflow does
 
@@ -16,9 +16,10 @@ This document covers how to run desktop releases from one tag, first without sig
   - Versions with an approved channel suffix after `X.Y.Z` (for example `1.2.3-beta.1`, `1.2.3-preview.1`, or `1.2.3-nightly.20260726`) are published as GitHub prereleases.
   - Stable releases have no suffix; unsupported prerelease channel names fail preflight.
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
-- Includes Electron auto-update metadata (for example `latest*.yml` and `*.blockmap`) in release assets.
+- Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets.
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
-- Signing is optional and auto-detected per platform from secrets.
+- Every public macOS build is Developer ID signed, notarized, and stapled. Missing credentials fail the build.
+- Windows artifacts are intentionally unsigned. Linux does not use OS code signing.
 - Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
 - Builds the platform-native `bigbud-remote-agent` on every desktop runner and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching.
 - Smoke-checks each packaged workspace watcher on its native runner, publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
@@ -45,17 +46,36 @@ Remote installation is only called after the user approves the first-use prompt.
   - `BIGBUD_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
   - legacy alias: `T3CODE_DESKTOP_UPDATE_REPOSITORY`
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
-- Temporary private-repo auth workaround:
+- Optional GitHub API authentication:
   - set `BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
   - legacy alias: `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN`
-  - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
+  - Stable uses electron-updater's private GitHub provider when a token is present.
+  - Prerelease channels use the token only to locate the newest matching release, then download that public release's channel-specific metadata and assets directly.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
-  - `latest*.yml` metadata
+  - active-channel metadata (`latest*.yml`, `beta*.yml`, `preview*.yml`, or `nightly*.yml`)
   - `*.blockmap` files (used for differential downloads)
-- macOS metadata note:
-  - `electron-updater` reads `latest-mac.yml` for both Intel and Apple Silicon.
-  - The workflow merges the per-arch mac manifests into one `latest-mac.yml` before publishing the GitHub Release.
+- Update channels are isolated by installed app identity:
+  - Stable reads `latest` metadata and rejects all prereleases.
+  - Beta reads `beta` metadata and accepts only Beta versions.
+  - Preview reads `preview` metadata and accepts only Preview versions.
+  - Nightly reads `nightly` metadata and accepts only Nightly versions.
+- Prerelease update checks first locate the newest matching GitHub Release and require its platform manifest. This avoids electron-updater's Beta-to-Stable behavior and its private-provider custom-channel limitation.
+- Before an update is exposed or downloaded, the desktop validates the offered version against its installed channel as a second fail-closed boundary.
+- macOS uses `<channel>-mac.yml`. The workflow temporarily names the Intel manifest `<channel>-mac-x64.yml`, merges it with arm64, and publishes one multi-architecture active-channel manifest.
+
+## Side-by-side identity and data isolation
+
+| Channel | Bundle/app ID               | Product          | Electron userData | bigbud base directory        | Updater   |
+| ------- | --------------------------- | ---------------- | ----------------- | ---------------------------- | --------- |
+| Stable  | `ai.bigbud.desktop`         | `bigbud`         | `bigbud`          | `~/.bigbud`                  | `latest`  |
+| Beta    | `ai.bigbud.desktop.beta`    | `bigbud Beta`    | `bigbud-beta`     | `~/.bigbud/channels/beta`    | `beta`    |
+| Preview | `ai.bigbud.desktop.preview` | `bigbud Preview` | `bigbud-preview`  | `~/.bigbud/channels/preview` | `preview` |
+| Nightly | `ai.bigbud.desktop.nightly` | `bigbud Nightly` | `bigbud-nightly`  | `~/.bigbud/channels/nightly` | `nightly` |
+
+The channel-specific bundle IDs, product names, package names, executables, desktop entries, and Windows app IDs allow all four channels to install and run simultaneously. Stable alone may reuse the legacy `T3 Code (Alpha)` Electron profile. `BIGBUD_HOME` (or legacy `T3CODE_HOME`) remains an exact base-directory override. Projects remain ordinary shared filesystem paths and are not copied into channel data.
+
+macOS privacy permissions are associated with the signed bundle identity. Grant Accessibility and Screen Recording separately for each installed channel that uses computer control.
 
 ## Desktop bootstrap installers
 
@@ -80,14 +100,15 @@ Remote installation is only called after the user approves the first-use prompt.
 - The `quality` job currently runs format check, lint, tests, and the desktop pipeline build.
 - Browser tests are not part of CI.
 - The typecheck step runs in the preflight job before any artifacts are built.
-- After `quality` passes, `desktop_release_build` builds unsigned desktop release-style artifacts on:
+- After `quality` passes, `desktop_release_build` builds unsigned, credential-free desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
   - Linux `x64` AppImage + `.deb`
   - Windows `x64`
 - `release_asset_assembly` then merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
-- Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release.
+- Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release. Use these CI artifacts for unsigned smoke testing; never create an unsigned public dry-run release.
 - Public curl-installable assets are only published by `.github/workflows/release.yml` on version tags like `v1.2.3`.
+- CI never imports Apple certificates and receives no production signing or notarization credentials.
 
 ## CUA driver 0.9.1 upgrade note
 
@@ -98,26 +119,16 @@ Remote installation is only called after the user approves the first-use prompt.
 - As general release certification—not unfinished CUA implementation—run packaged and managed smoke checks on the targets supported by that release. Verify daemon restart/cleanup, permissions, capture/input, and fail-closed unsupported Wayland routes.
 - Monitor only bigbud's existing privacy-respecting lifecycle diagnostics; never collect action text, screenshots, or user content for rollout analysis.
 
-## 1) Dry-run release without signing
+## 1) Unsigned validation
 
-Use this first to validate the release pipeline.
-
-1. Desktop signing secrets may be absent for this test. The remote-agent
-   Ed25519 signing secrets are required because remote-agent manifests are
-   never published unsigned.
-2. Create a test tag:
-   - `git tag v0.0.0-beta.1`
-   - `git push origin v0.0.0-beta.1`
-3. Wait for `.github/workflows/release.yml` to finish.
-4. Verify the GitHub Release contains all platform artifacts.
-5. Download each artifact and sanity-check installation on each OS.
+Use `.github/workflows/ci.yml` release-style artifacts to validate packaging without credentials. CI covers channel metadata and manifest naming but does not sign, notarize, staple, or publish. Public macOS releases must never use this unsigned path.
 
 ## Env var naming
 
 - Prefer `BIGBUD_DESKTOP_UPDATE_*` names in new scripts, docs, and runtime configuration.
 - `T3CODE_DESKTOP_UPDATE_*` names remain supported as compatibility aliases where noted in code.
 
-## 2) Apple signing + notarization setup (macOS)
+## 2) Apple signing and notarization setup (macOS)
 
 Required secrets used by the workflow:
 
@@ -145,35 +156,14 @@ Checklist:
 Notes:
 
 - Notarization is performed by an explicit `afterSign` hook (`apps/desktop/scripts/notarize.cjs`) using `@electron/notarize`.
-- The hook staples the notarization ticket to the `.app` and runs `stapler validate` as a **hard build failure** before the DMG/ZIP is created. If validation fails, the release build aborts.
-- The hardened runtime entitlement `com.apple.security.cs.allow-unsigned-executable-memory` has been removed because it is unnecessary on Electron 12+ and weakens security.
+- Stable, Beta, Preview, and Nightly use this same Developer ID certificate while retaining distinct bundle IDs.
+- Signed packaging sets `forceCodeSigning`, explicitly signs the embedded Rust workspace watcher, verifies both the sidecar and full app, notarizes, staples, validates the ticket, and requires Gatekeeper acceptance before the DMG/ZIP is created.
+- All five secrets are validated before certificate import. Any missing credential, signature failure, notarization failure, or staple failure aborts the release.
 - Future migration: the hook can be updated to use an App Store Connect API key (`--key` / `--key-id` / `--issuer`) instead of an app-specific password if desired.
 
-## 3) Azure Trusted Signing setup (Windows)
+## 3) Windows distribution
 
-Required secrets used by the workflow:
-
-- `AZURE_TENANT_ID`
-- `AZURE_CLIENT_ID`
-- `AZURE_CLIENT_SECRET`
-- `AZURE_TRUSTED_SIGNING_ENDPOINT`
-- `AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`
-- `AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`
-- `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME`
-
-Checklist:
-
-1. Create Azure Trusted Signing account and certificate profile.
-2. Record ATS values:
-   - Endpoint
-   - Account name
-   - Certificate profile name
-   - Publisher name
-3. Create/choose an Entra app registration (service principal).
-4. Grant service principal permissions required by Trusted Signing.
-5. Create a client secret for the service principal.
-6. Add Azure secrets listed above in GitHub Actions secrets.
-7. Re-run a tag release and confirm Windows installer is signed.
+Windows NSIS installers are intentionally unsigned for now. The release workflow contains no Azure signing credentials or configuration. Channel-specific app IDs and product/package identities keep Stable, Beta, Preview, and Nightly installs separate.
 
 ## Linux release guarantees
 
@@ -184,7 +174,7 @@ The Linux build is hardened to avoid the class of AppImage breakages caused by f
 - After every Linux build, the script verifies that required Electron runtime files (`snapshot_blob.bin`, `v8_context_snapshot.bin`, `icudtl.dat`) are present in both unpacked `dir` and final AppImage outputs.
 - The AppImage undergoes a headless smoke test (`--appimage-extract-and-run --no-sandbox --version`) before release assets are collected.
 - An `afterExtract` hook copies missing runtime files from the Electron distribution if electron-builder omits them.
-- A `.deb` package is also built as a fallback for users whose system cannot run AppImages.
+- A `.deb` package is also built as a fallback for users whose system cannot run AppImages. It uses a separate build output so its metadata cannot replace the AppImage updater manifest.
 
 ### Local Linux debugging
 
@@ -222,13 +212,11 @@ bun run dist:desktop:linux:deb
 
 ## 5) Troubleshooting
 
-- macOS build unsigned when expected signed:
-  - Check all Apple secrets are populated and non-empty.
-- Windows build unsigned when expected signed:
-  - Check all Azure ATS and auth secrets are populated and non-empty.
+- macOS signing preflight fails:
+  - Check all five Apple secrets are populated and non-empty. Public releases do not fall back to unsigned macOS artifacts.
 - Build fails with signing error:
-  - Retry with secrets removed to confirm unsigned path still works.
-  - Re-check certificate/profile names and tenant/client credentials.
+  - Re-check the Developer ID certificate, Apple team ID, Apple ID, and app-specific password.
+  - Use the unsigned CI artifact path to isolate packaging failures; do not remove release credentials to publish an unsigned build.
 - Local workspace watcher reports that its agent is unavailable:
   - Packaged builds: verify `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` exists in the app resources and passes `--check`.
   - Published standalone server: verify `dist/workspace-agent/<platform>-<arch>/bigbud-remote-agent[.exe]` exists. Publishing should have failed before release if any supported target was absent.

@@ -2,10 +2,9 @@ import { Effect, FileSystem, Path } from "effect";
 import { join } from "node:path";
 import { ChildProcess } from "effect/unstable/process";
 
-import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
+import type { DesktopReleaseIdentity } from "@bigbud/shared/desktopReleaseIdentity";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import {
-  AzureTrustedSigningOptionsConfig,
   BuildScriptError,
   ProductionLinuxIconSource,
   ProductionMacIconSource,
@@ -191,124 +190,128 @@ function resolveGitHubPublishConfig():
   return { provider: "github", owner, repo, releaseType: "release" };
 }
 
-export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
-  platform: typeof BuildPlatform.Type,
-  target: string,
-  productName: string,
-  signed: boolean,
-  mockUpdates: boolean,
-  mockUpdateServerPort: string | undefined,
-  buildResourcesDir: string,
-  repoRoot: string,
-) {
-  const buildConfig: Record<string, unknown> = {
-    appId: "ai.bigbud.desktop",
-    productName,
-    artifactName: "bigbud-${version}-${arch}.${ext}",
-    directories: {
-      buildResources: buildResourcesDir,
-    },
-    npmRebuild: false,
-    extraMetadata: {
-      homepage: "https://bigbud.app",
-      author: {
-        name: "bigbud",
-        email: "dev@bigbud.app",
-      },
-    },
-    // Keep the asar focused on the desktop shell. The backend runtime is staged
-    // separately under extraResources and launched from there at runtime.
-    files: [...DESKTOP_PACKAGED_APP_FILES],
-    // Native .node addons cannot be loaded from inside an asar archive.
-    // These packages must be unpacked to app.asar.unpacked/ at build time.
-    asarUnpack: [
-      "**/node_modules/node-pty/**",
-      "**/node_modules/@github/copilot/prebuilds/**",
-      "**/node_modules/@github/copilot/clipboard/**",
-      "**/node_modules/@msgpackr-extract/**",
-    ],
-    // child_process.spawn cannot execute scripts from inside an asar archive.
-    // Place the full packaged server runtime outside the asar so the backend child
-    // process can be spawned with its own resolvable node_modules tree.
-    extraResources: [
-      {
-        from: "apps/server",
-        to: "server",
-      },
-    ],
-    afterExtract: join(repoRoot, "apps/desktop/scripts/afterExtract.cjs"),
-    afterPack: join(repoRoot, "apps/desktop/scripts/afterPack.cjs"),
-  };
-
-  const publishConfig = resolveGitHubPublishConfig();
-  if (publishConfig) {
-    buildConfig.publish = [publishConfig];
-  } else if (mockUpdates) {
-    buildConfig.publish = [
-      {
-        provider: "generic",
-        url: `http://localhost:${mockUpdateServerPort ?? 3000}`,
-      },
-    ];
-  }
-
-  if (platform === "mac") {
-    const macConfig: Record<string, unknown> = {
-      target: target === "dmg" ? [target, "zip"] : [target],
-      icon: "icon.icns",
-      category: "public.app-category.developer-tools",
-      extendInfo: {
-        LSBackgroundOnly: false,
-        LSUIElement: false,
-      },
-    };
-    // Only pass entitlements for signed builds. Ad-hoc codesign (used when
-    // signing secrets are missing) fails on non-Mach-O files inside the
-    // bundle (e.g. .wasm in node_modules) when entitlements are specified.
-    if (signed) {
-      // Absolute path required: codesign changes CWD when signing nested
-      // binaries (e.g. .node files), so a relative path fails to resolve.
-      macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
-      macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
-      // afterSign is a root-level electron-builder property, not mac-specific.
-      buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
-    } else {
-      // Explicitly disable code signing for unsigned builds. Otherwise
-      // electron-builder falls back to ad-hoc signing, which fails at
-      // preAutoEntitlements because there is no ElectronTeamID.
-      macConfig.identity = null;
-    }
-    buildConfig.mac = macConfig;
-  }
-
-  if (platform === "linux") {
-    buildConfig.linux = {
-      target: [target],
-      executableName: BIGBUD_LINUX_EXECUTABLE_NAME,
-      icon: "icon.png",
-      category: "Development",
-      maintainer: "bigbud <dev@bigbud.app>",
-      desktop: {
-        entry: {
-          StartupWMClass: "bigbud",
+export const createBuildConfig = Effect.fn("createBuildConfig")(
+  (
+    platform: typeof BuildPlatform.Type,
+    target: string,
+    identity: DesktopReleaseIdentity,
+    signed: boolean,
+    mockUpdates: boolean,
+    mockUpdateServerPort: string | undefined,
+    buildResourcesDir: string,
+    repoRoot: string,
+  ) =>
+    Effect.sync(() => {
+      const buildConfig: Record<string, unknown> = {
+        appId: identity.appId,
+        productName: identity.productName,
+        artifactName: "bigbud-${version}-${arch}.${ext}",
+        directories: {
+          buildResources: buildResourcesDir,
         },
-      },
-    };
-  }
+        npmRebuild: false,
+        extraMetadata: {
+          homepage: "https://bigbud.app",
+          author: {
+            name: "bigbud",
+            email: "dev@bigbud.app",
+          },
+        },
+        // Keep the asar focused on the desktop shell. The backend runtime is staged
+        // separately under extraResources and launched from there at runtime.
+        files: [...DESKTOP_PACKAGED_APP_FILES],
+        // Native .node addons cannot be loaded from inside an asar archive.
+        // These packages must be unpacked to app.asar.unpacked/ at build time.
+        asarUnpack: [
+          "**/node_modules/node-pty/**",
+          "**/node_modules/@github/copilot/prebuilds/**",
+          "**/node_modules/@github/copilot/clipboard/**",
+          "**/node_modules/@msgpackr-extract/**",
+        ],
+        // child_process.spawn cannot execute scripts from inside an asar archive.
+        // Place the full packaged server runtime outside the asar so the backend child
+        // process can be spawned with its own resolvable node_modules tree.
+        extraResources: [
+          {
+            from: "apps/server",
+            to: "server",
+          },
+        ],
+        afterExtract: join(repoRoot, "apps/desktop/scripts/afterExtract.cjs"),
+        afterPack: join(repoRoot, "apps/desktop/scripts/afterPack.cjs"),
+      };
 
-  if (platform === "win") {
-    const winConfig: Record<string, unknown> = {
-      target: [target],
-      icon: "icon.ico",
-    };
-    if (signed) {
-      winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
-    }
-    buildConfig.win = winConfig;
-  }
+      const publishConfig = resolveGitHubPublishConfig();
+      if (publishConfig) {
+        buildConfig.publish = [{ ...publishConfig, channel: identity.updaterChannel }];
+      } else if (mockUpdates) {
+        buildConfig.publish = [
+          {
+            provider: "generic",
+            channel: identity.updaterChannel,
+            url: `http://localhost:${mockUpdateServerPort ?? 3000}`,
+          },
+        ];
+      }
 
-  return buildConfig;
-});
+      if (platform === "mac") {
+        const macConfig: Record<string, unknown> = {
+          target: target === "dmg" ? [target, "zip"] : [target],
+          icon: "icon.icns",
+          category: "public.app-category.developer-tools",
+          extendInfo: {
+            LSBackgroundOnly: false,
+            LSUIElement: false,
+          },
+        };
+        // Only pass entitlements for signed builds. Ad-hoc codesign (used when
+        // signing secrets are missing) fails on non-Mach-O files inside the
+        // bundle (e.g. .wasm in node_modules) when entitlements are specified.
+        if (signed) {
+          buildConfig.forceCodeSigning = true;
+          // Absolute path required: codesign changes CWD when signing nested
+          // binaries (e.g. .node files), so a relative path fails to resolve.
+          macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
+          macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
+          macConfig.binaries = [
+            "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
+          ];
+          // afterSign is a root-level electron-builder property, not mac-specific.
+          buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
+        } else {
+          // Explicitly disable code signing for unsigned builds. Otherwise
+          // electron-builder falls back to ad-hoc signing, which fails at
+          // preAutoEntitlements because there is no ElectronTeamID.
+          macConfig.identity = null;
+        }
+        buildConfig.mac = macConfig;
+      }
+
+      if (platform === "linux") {
+        buildConfig.linux = {
+          target: [target],
+          executableName: identity.executableName,
+          icon: "icon.png",
+          category: "Development",
+          maintainer: "bigbud <dev@bigbud.app>",
+          desktop: {
+            entry: {
+              StartupWMClass: identity.linuxWmClass,
+            },
+          },
+        };
+      }
+
+      if (platform === "win") {
+        buildConfig.win = {
+          target: [target],
+          icon: "icon.ico",
+        };
+      }
+
+      return buildConfig;
+    }),
+);
 
 export const assertPlatformBuildResources = Effect.fn("assertPlatformBuildResources")(function* (
   platform: typeof BuildPlatform.Type,

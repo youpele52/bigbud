@@ -19,6 +19,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Routed Codex, Claude, Copilot, OpenCode, KiloCode, and Pi through one authenticated per-thread execution path instead of separate direct workspace SSH bridges.
 - Kept direct SSH as an explicit server-start compatibility mode via `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh`; there is no automatic transport switch after an agent operation is accepted.
 
+### Reliable Workspace Refresh
+
+- Unified local and remote Files refresh around one Rust agent-backed workspace-watch stream, while retaining direct SSH polling as an explicit fallback.
+- Added exact versioned events, backend identity, sequence-gap and overflow recovery, transport-loss rescans, and bounded crash recovery so refreshes remain ordered and resilient when a watcher fails.
+- Packaged native workspace watchers for every supported release target, with executable, architecture, and real protocol-handshake checks in development, CI, and release builds.
+
 ### More Reliable Claude and CLIProxyAPI Sessions
 
 - Hardened Claude Agent SDK turn handling so overlapping sends are rejected safely, stale interrupts are ignored, malformed results fail cleanly, and stream recovery stays bounded and session-aware.
