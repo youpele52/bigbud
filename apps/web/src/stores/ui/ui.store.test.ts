@@ -226,30 +226,30 @@ describe("uiStateStore pure functions", () => {
     expect(next.threadChangedFilesExpandedById).toEqual({});
   });
 
-  it("setThreadChangedFilesExpanded stores collapsed turns per thread", () => {
+  it("setThreadChangedFilesExpanded stores expanded turns per thread", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const initialState = makeUiState();
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", false);
+    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
 
     expect(next.threadChangedFilesExpandedById).toEqual({
       [thread1]: {
-        "turn-1": false,
+        "turn-1": true,
       },
     });
   });
 
-  it("setThreadChangedFilesExpanded removes thread overrides when expanded again", () => {
+  it("setThreadChangedFilesExpanded removes thread overrides when collapsed again", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const initialState = makeUiState({
       threadChangedFilesExpandedById: {
         [thread1]: {
-          "turn-1": false,
+          "turn-1": true,
         },
       },
     });
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
+    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", false);
 
     expect(next.threadChangedFilesExpandedById).toEqual({});
   });

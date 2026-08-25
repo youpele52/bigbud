@@ -72,9 +72,9 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
               )}
             />
             {isExpanded ? (
-              <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
-            ) : (
               <FolderClosedIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
+            ) : (
+              <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
             )}
             <span className="truncate font-mono text-[11px] text-muted-foreground/90 group-hover:text-foreground/90">
               {node.name}

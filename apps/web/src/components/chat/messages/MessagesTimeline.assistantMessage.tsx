@@ -232,7 +232,7 @@ function AssistantTurnDiffCard({
 
   const summaryStat = summarizeTurnDiffStats(checkpointFiles);
   const changedFileCountLabel = String(checkpointFiles.length);
-  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? true;
+  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? false;
 
   return (
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">

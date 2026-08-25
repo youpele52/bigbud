@@ -178,12 +178,12 @@ export function setThreadChangedFilesExpanded(
   expanded: boolean,
 ): UiState {
   const currentThreadState = state.threadChangedFilesExpandedById[threadId] ?? {};
-  const currentExpanded = currentThreadState[turnId] ?? true;
+  const currentExpanded = currentThreadState[turnId] ?? false;
   if (currentExpanded === expanded) {
     return state;
   }
 
-  if (expanded) {
+  if (!expanded) {
     if (!(turnId in currentThreadState)) {
       return state;
     }
@@ -214,7 +214,7 @@ export function setThreadChangedFilesExpanded(
       ...state.threadChangedFilesExpandedById,
       [threadId]: {
         ...currentThreadState,
-        [turnId]: false,
+        [turnId]: true,
       },
     },
   };
