@@ -231,6 +231,7 @@ impl PtyHandle {
         }
     }
 
+    #[cfg(unix)]
     pub fn append_output(&self, bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if state.state == PtyState::Closed {
@@ -251,6 +252,12 @@ impl PtyHandle {
         Ok(chunk)
     }
 
+    #[cfg(not(unix))]
+    pub fn append_output(&self, _bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
+        Err(PtyError::Unsupported)
+    }
+
+    #[cfg(unix)]
     pub fn acknowledge(&self, sequence: u64) -> Result<(), PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if sequence >= state.next_sequence {
@@ -267,6 +274,12 @@ impl PtyHandle {
         Ok(())
     }
 
+    #[cfg(not(unix))]
+    pub fn acknowledge(&self, _sequence: u64) -> Result<(), PtyError> {
+        Err(PtyError::Unsupported)
+    }
+
+    #[cfg(unix)]
     pub fn replay(&self, after_sequence: u64) -> Result<Vec<PtyOutputChunk>, PtyError> {
         let state = self.inner.state.lock().map_err(|_| poisoned())?;
         if after_sequence + 1 < state.first_retained_sequence {
@@ -282,6 +295,12 @@ impl PtyHandle {
             .collect())
     }
 
+    #[cfg(not(unix))]
+    pub fn replay(&self, _after_sequence: u64) -> Result<Vec<PtyOutputChunk>, PtyError> {
+        Err(PtyError::Unsupported)
+    }
+
+    #[cfg(unix)]
     pub fn snapshot(&self) -> Result<PtySnapshot, PtyError> {
         let state = self.inner.state.lock().map_err(|_| poisoned())?;
         Ok(PtySnapshot {
@@ -294,6 +313,12 @@ impl PtyHandle {
         })
     }
 
+    #[cfg(not(unix))]
+    pub fn snapshot(&self) -> Result<PtySnapshot, PtyError> {
+        Err(PtyError::Unsupported)
+    }
+
+    #[cfg(unix)]
     pub fn mark_exited(&self, exit_code: Option<i32>, signal: Option<i32>) -> Result<(), PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if state.state != PtyState::Closed {
@@ -304,6 +329,16 @@ impl PtyHandle {
         Ok(())
     }
 
+    #[cfg(not(unix))]
+    pub fn mark_exited(
+        &self,
+        _exit_code: Option<i32>,
+        _signal: Option<i32>,
+    ) -> Result<(), PtyError> {
+        Err(PtyError::Unsupported)
+    }
+
+    #[cfg(unix)]
     pub fn close(&self, terminate: bool) -> Result<(), PtyError> {
         if terminate {
             self.signal("SIGTERM")?;
@@ -311,5 +346,10 @@ impl PtyHandle {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         state.state = PtyState::Closed;
         Ok(())
+    }
+
+    #[cfg(not(unix))]
+    pub fn close(&self, _terminate: bool) -> Result<(), PtyError> {
+        Err(PtyError::Unsupported)
     }
 }

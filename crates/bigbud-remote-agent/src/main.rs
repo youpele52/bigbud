@@ -6,10 +6,13 @@ use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, protocol_error_frame,
     state::{AgentState, supervisor_socket_path},
-    supervisor::{run_proxy, run_supervisor},
+    supervisor::run_proxy,
     workspace_watch_event_frame,
 };
 use bigbud_workspace_watch::WorkspaceWatchRegistry;
+
+#[cfg(unix)]
+use bigbud_remote_agent::supervisor::run_supervisor;
 
 fn state_root() -> Option<std::path::PathBuf> {
     std::env::var_os("BIGBUD_AGENT_STATE_DIR")
@@ -128,6 +131,28 @@ fn run_check() {
     );
 }
 
+#[cfg(unix)]
+fn run_supervisor_mode(root: std::path::PathBuf) -> io::Result<()> {
+    let state = AgentState::open_for_supervisor(&root)
+        .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
+    run_supervisor(
+        AgentSession::with_epoch_and_journal(
+            state.epoch().to_owned(),
+            state.operation_journal_path(),
+        )
+        .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?,
+        &supervisor_socket_path(root),
+    )
+}
+
+#[cfg(not(unix))]
+fn run_supervisor_mode(_root: std::path::PathBuf) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "the remote agent supervisor requires Unix-domain sockets on this platform",
+    ))
+}
+
 fn main() -> io::Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("--check") => {
@@ -141,16 +166,7 @@ fn main() -> io::Result<()> {
                     "HOME is required for supervisor mode",
                 )
             })?;
-            let state = AgentState::open_for_supervisor(&root)
-                .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
-            run_supervisor(
-                AgentSession::with_epoch_and_journal(
-                    state.epoch().to_owned(),
-                    state.operation_journal_path(),
-                )
-                .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?,
-                &supervisor_socket_path(root),
-            )
+            run_supervisor_mode(root)
         }
         Some("--proxy") => {
             let root = state_root().ok_or_else(|| {

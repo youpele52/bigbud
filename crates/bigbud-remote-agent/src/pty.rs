@@ -1,7 +1,13 @@
-use std::collections::VecDeque;
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+#[cfg(unix)]
+use std::collections::VecDeque;
+#[cfg(unix)]
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::sync::Mutex;
 
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
