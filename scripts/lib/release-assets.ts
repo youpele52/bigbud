@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 
@@ -38,10 +39,24 @@ export function collectDesktopReleaseAssets(
         (name.startsWith(options.updateChannel) && name.endsWith(".yml")),
     )
     .map((name) => {
-      const destination = join(options.destinationDirectory, name);
+      const destination = join(
+        options.destinationDirectory,
+        normalizeReleaseAssetName(name, options),
+      );
       copyFileSync(join(options.sourceDirectory, name), destination);
       return destination;
     });
+
+  if (options.platform === "linux" && options.architecture === "x64") {
+    const manifest = join(options.destinationDirectory, `${options.updateChannel}-linux.yml`);
+    if (existsSync(manifest)) {
+      const contents = readFileSync(manifest, "utf8").replaceAll(
+        "-x86_64.AppImage",
+        "-x64.AppImage",
+      );
+      writeFileSync(manifest, contents);
+    }
+  }
 
   if (options.platform === "mac" && options.architecture !== "arm64") {
     const manifest = join(options.destinationDirectory, `${options.updateChannel}-mac.yml`);
@@ -57,6 +72,14 @@ export function collectDesktopReleaseAssets(
   }
 
   return copied;
+}
+
+function normalizeReleaseAssetName(
+  name: string,
+  options: Pick<CollectDesktopReleaseAssetsOptions, "architecture" | "platform">,
+): string {
+  if (options.platform !== "linux" || options.architecture !== "x64") return name;
+  return name.replace(/-x86_64(?=\.AppImage$)/, "-x64").replace(/-amd64(?=\.deb$)/, "-x64");
 }
 
 export function verifyAssembledDesktopReleaseAssets(

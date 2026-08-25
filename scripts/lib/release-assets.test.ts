@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,6 +32,38 @@ describe("desktop release assets", () => {
       }
     },
   );
+
+  it("normalizes Linux x64 artifact names and updater references", () => {
+    const root = mkdtempSync(join(tmpdir(), "bigbud-release-assets-"));
+    const sourceDirectory = join(root, "source");
+    const destinationDirectory = join(root, "destination");
+    mkdirSync(sourceDirectory);
+    writeFileSync(join(sourceDirectory, "bigbud-preview-x86_64.AppImage"), "appimage");
+    writeFileSync(join(sourceDirectory, "bigbud-preview-amd64.deb"), "deb");
+    writeFileSync(
+      join(sourceDirectory, "preview-linux.yml"),
+      "url: bigbud-preview-x86_64.AppImage\n",
+    );
+
+    const copied = collectDesktopReleaseAssets({
+      architecture: "x64",
+      destinationDirectory,
+      platform: "linux",
+      sourceDirectory,
+      updateChannel: "preview",
+    });
+
+    expect(copied).toEqual(
+      expect.arrayContaining([
+        join(destinationDirectory, "bigbud-preview-x64.AppImage"),
+        join(destinationDirectory, "bigbud-preview-x64.deb"),
+        join(destinationDirectory, "preview-linux.yml"),
+      ]),
+    );
+    expect(readFileSync(join(destinationDirectory, "preview-linux.yml"), "utf8")).toContain(
+      "bigbud-preview-x64.AppImage",
+    );
+  });
 
   it("requires the complete assembled payload", () => {
     const directory = mkdtempSync(join(tmpdir(), "bigbud-assembled-assets-"));
