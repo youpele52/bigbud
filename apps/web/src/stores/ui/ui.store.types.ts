@@ -1,16 +1,25 @@
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 
 export interface PersistedUiState {
+  chatsExpanded?: boolean;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   favouritesExpanded?: boolean;
   projectOrderCwds?: string[];
+  projectsExpanded?: boolean;
+  remoteProjectsExpanded?: boolean;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   threadLastVisitedAtById?: Record<string, string>;
 }
 
-export interface UiProjectState {
+export interface UiSidebarState {
+  chatsExpanded: boolean;
   favouritesExpanded: boolean;
+  projectsExpanded: boolean;
+  remoteProjectsExpanded: boolean;
+}
+
+export interface UiProjectState {
   projectExpandedById: Record<string, boolean>;
   projectOrder: ProjectId[];
   selectedProjectId: ProjectId | null;
@@ -21,7 +30,7 @@ export interface UiThreadState {
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
 }
 
-export interface UiState extends UiProjectState, UiThreadState {}
+export interface UiState extends UiProjectState, UiSidebarState, UiThreadState {}
 
 export interface SyncProjectInput {
   id: ProjectId;
@@ -34,9 +43,12 @@ export interface SyncThreadInput {
 }
 
 export const initialState: UiState = {
+  chatsExpanded: true,
   favouritesExpanded: true,
   projectExpandedById: {},
   projectOrder: [],
+  projectsExpanded: false,
+  remoteProjectsExpanded: false,
   selectedProjectId: null,
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},

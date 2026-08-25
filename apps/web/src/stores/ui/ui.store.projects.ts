@@ -6,6 +6,10 @@ import {
   type UiState,
   initialState,
 } from "./ui.store.types";
+import {
+  sanitizePersistedThreadChangedFilesExpanded,
+  sanitizePersistedThreadLastVisitedAt,
+} from "./ui.store.persistence";
 
 export const PERSISTED_STATE_KEY = "bigbud:ui-state:v1";
 const LEGACY_PERSISTED_STATE_KEYS = [
@@ -28,54 +32,6 @@ const persistedProjectOrderCwds: string[] = [];
 let persistedProjectStateUsesLegacyShape = false;
 const currentProjectCwdById = new Map<ProjectId, string | null>();
 let legacyKeysCleanedUp = false;
-
-export function sanitizePersistedThreadLastVisitedAt(
-  value: PersistedUiState["threadLastVisitedAtById"],
-): Record<string, string> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const nextState: Record<string, string> = {};
-  for (const [threadId, visitedAt] of Object.entries(value)) {
-    if (!threadId || typeof visitedAt !== "string") {
-      continue;
-    }
-    if (!Number.isFinite(Date.parse(visitedAt))) {
-      continue;
-    }
-    nextState[threadId] = visitedAt;
-  }
-  return nextState;
-}
-
-function sanitizePersistedThreadChangedFilesExpanded(
-  value: PersistedUiState["threadChangedFilesExpandedById"],
-): Record<string, Record<string, boolean>> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const nextState: Record<string, Record<string, boolean>> = {};
-  for (const [threadId, turns] of Object.entries(value)) {
-    if (!threadId || !turns || typeof turns !== "object") {
-      continue;
-    }
-
-    const nextTurns: Record<string, boolean> = {};
-    for (const [turnId, expanded] of Object.entries(turns)) {
-      if (turnId && typeof expanded === "boolean") {
-        nextTurns[turnId] = expanded;
-      }
-    }
-
-    if (Object.keys(nextTurns).length > 0) {
-      nextState[threadId] = nextTurns;
-    }
-  }
-
-  return nextState;
-}
 
 export function hydratePersistedProjectState(parsed: PersistedUiState): void {
   persistedCollapsedProjectCwds.clear();
@@ -120,8 +76,13 @@ export function readPersistedState(): UiState {
     hydratePersistedProjectState(parsed);
     return {
       ...initialState,
+      chatsExpanded: typeof parsed.chatsExpanded === "boolean" ? parsed.chatsExpanded : true,
       favouritesExpanded:
         typeof parsed.favouritesExpanded === "boolean" ? parsed.favouritesExpanded : true,
+      projectsExpanded:
+        typeof parsed.projectsExpanded === "boolean" ? parsed.projectsExpanded : false,
+      remoteProjectsExpanded:
+        typeof parsed.remoteProjectsExpanded === "boolean" ? parsed.remoteProjectsExpanded : false,
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -165,9 +126,12 @@ export function persistState(state: UiState): void {
       PERSISTED_STATE_KEY,
       JSON.stringify({
         collapsedProjectCwds,
+        chatsExpanded: state.chatsExpanded,
         expandedProjectCwds,
         favouritesExpanded: state.favouritesExpanded,
         projectOrderCwds,
+        projectsExpanded: state.projectsExpanded,
+        remoteProjectsExpanded: state.remoteProjectsExpanded,
         threadChangedFilesExpandedById,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
       } satisfies PersistedUiState),

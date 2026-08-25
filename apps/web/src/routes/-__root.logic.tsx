@@ -33,7 +33,6 @@ import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
-  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
   const syncThreads = useUiStateStore((store) => store.syncThreads);
   const clearThreadUi = useUiStateStore((store) => store.clearThreadUi);
@@ -93,8 +92,6 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         await handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions());
         return;
       }
-      setProjectExpanded(payload.bootstrapProjectId, true);
-
       if (readPathname() !== "/") {
         return;
       }

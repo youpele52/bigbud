@@ -56,15 +56,31 @@ export function useSidebarState(): SidebarState {
   const threadSummaryCursorByProjectId = useStore(
     (store) => store.threadSummaryCursorByProjectId ?? {},
   );
-  const { favouritesExpanded, projectExpandedById, projectOrder, setFavouritesExpanded } =
-    useUiStateStore(
-      useShallow((store) => ({
-        favouritesExpanded: store.favouritesExpanded,
-        projectExpandedById: store.projectExpandedById,
-        projectOrder: store.projectOrder,
-        setFavouritesExpanded: store.setFavouritesExpanded,
-      })),
-    );
+  const {
+    chatsExpanded,
+    favouritesExpanded,
+    projectExpandedById,
+    projectOrder,
+    projectsExpanded,
+    remoteProjectsExpanded,
+    setChatsExpanded,
+    setFavouritesExpanded,
+    setProjectsExpanded,
+    setRemoteProjectsExpanded,
+  } = useUiStateStore(
+    useShallow((store) => ({
+      chatsExpanded: store.chatsExpanded,
+      favouritesExpanded: store.favouritesExpanded,
+      projectExpandedById: store.projectExpandedById,
+      projectOrder: store.projectOrder,
+      projectsExpanded: store.projectsExpanded,
+      remoteProjectsExpanded: store.remoteProjectsExpanded,
+      setChatsExpanded: store.setChatsExpanded,
+      setFavouritesExpanded: store.setFavouritesExpanded,
+      setProjectsExpanded: store.setProjectsExpanded,
+      setRemoteProjectsExpanded: store.setRemoteProjectsExpanded,
+    })),
+  );
   const verifiedExecutionTargetIds = useRemoteAccessStore(
     (store) => store.verifiedExecutionTargetIds,
   );
@@ -287,9 +303,6 @@ export function useSidebarState(): SidebarState {
   cancelProjectRenameRef.current = projectActions.cancelProjectRename;
   cancelThreadRenameRef.current = threadActions.cancelRename;
 
-  const [areChatsExpanded, setAreChatsExpanded] = useState(true);
-  const [areProjectsExpanded, setAreProjectsExpanded] = useState(false);
-  const [areRemoteProjectsExpanded, setAreRemoteProjectsExpanded] = useState(false);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
@@ -322,7 +335,7 @@ export function useSidebarState(): SidebarState {
       sidebarThreadsById,
       visibleChatThreads,
       sidebarChatsSortOrder: appSettings.sidebarChatsSortOrder,
-      areChatsExpanded,
+      areChatsExpanded: chatsExpanded,
       showAllChats,
     });
   const authoritativeChatCount = chatThreadCount;
@@ -408,12 +421,12 @@ export function useSidebarState(): SidebarState {
     setFavouritesExpanded,
     showAllFavourites,
     setShowAllFavourites,
-    areChatsExpanded,
-    setAreChatsExpanded,
-    areProjectsExpanded,
-    setAreProjectsExpanded,
-    areRemoteProjectsExpanded,
-    setAreRemoteProjectsExpanded,
+    areChatsExpanded: chatsExpanded,
+    setAreChatsExpanded: setChatsExpanded,
+    areProjectsExpanded: projectsExpanded,
+    setAreProjectsExpanded: setProjectsExpanded,
+    areRemoteProjectsExpanded: remoteProjectsExpanded,
+    setAreRemoteProjectsExpanded: setRemoteProjectsExpanded,
     showAllChats,
     setShowAllChats,
     hasMoreChats,

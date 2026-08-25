@@ -7,13 +7,13 @@ import {
   persistState,
   readPersistedState,
   reorderProjects,
-  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
+import { sanitizePersistedThreadLastVisitedAt } from "./ui.store.persistence";
 import { type SyncProjectInput, type SyncThreadInput, type UiState } from "./ui.store.types";
 
 export {
@@ -22,18 +22,19 @@ export {
   persistState,
   readPersistedState,
   reorderProjects,
-  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
+export { sanitizePersistedThreadLastVisitedAt } from "./ui.store.persistence";
 export type {
   PersistedUiState,
   SyncProjectInput,
   SyncThreadInput,
   UiProjectState,
+  UiSidebarState,
   UiState,
   UiThreadState,
 } from "./ui.store.types";
@@ -220,6 +221,14 @@ export function setThreadChangedFilesExpanded(
   };
 }
 
+export function setSidebarSectionExpanded(
+  state: UiState,
+  section: "chatsExpanded" | "projectsExpanded" | "remoteProjectsExpanded",
+  expanded: boolean,
+): UiState {
+  return state[section] === expanded ? state : { ...state, [section]: expanded };
+}
+
 interface UiStateStore extends UiState {
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
   syncThreads: (threads: readonly SyncThreadInput[]) => void;
@@ -227,7 +236,10 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: ThreadId, latestTurnCompletedAt: string | null | undefined) => void;
   clearThreadUi: (threadId: ThreadId) => void;
   setThreadChangedFilesExpanded: (threadId: ThreadId, turnId: string, expanded: boolean) => void;
+  setChatsExpanded: (expanded: boolean) => void;
   setFavouritesExpanded: (expanded: boolean) => void;
+  setProjectsExpanded: (expanded: boolean) => void;
+  setRemoteProjectsExpanded: (expanded: boolean) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   setSelectedProject: (projectId: ProjectId | null) => void;
@@ -245,7 +257,13 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setChatsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "chatsExpanded", expanded)),
   setFavouritesExpanded: (expanded) => set((state) => setFavouritesExpanded(state, expanded)),
+  setProjectsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "projectsExpanded", expanded)),
+  setRemoteProjectsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "remoteProjectsExpanded", expanded)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

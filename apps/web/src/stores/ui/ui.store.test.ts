@@ -1,14 +1,18 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   clearThreadUi,
   markThreadUnread,
   markThreadVisited,
+  PERSISTED_STATE_KEY,
+  persistState,
+  readPersistedState,
   reorderProjects,
   sanitizePersistedThreadLastVisitedAt,
   setFavouritesExpanded,
   setProjectExpanded,
+  setSidebarSectionExpanded,
   setThreadChangedFilesExpanded,
   syncProjects,
   syncThreads,
@@ -17,9 +21,12 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    chatsExpanded: true,
     favouritesExpanded: true,
     projectExpandedById: {},
     projectOrder: [],
+    projectsExpanded: false,
+    remoteProjectsExpanded: false,
     selectedProjectId: null,
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
@@ -205,6 +212,58 @@ describe("uiStateStore pure functions", () => {
     const next = setFavouritesExpanded(initialState, false);
 
     expect(next.favouritesExpanded).toBe(false);
+  });
+
+  it("setSidebarSectionExpanded updates each persisted sidebar section", () => {
+    const initialState = makeUiState();
+
+    const chatsCollapsed = setSidebarSectionExpanded(initialState, "chatsExpanded", false);
+    const projectsExpanded = setSidebarSectionExpanded(chatsCollapsed, "projectsExpanded", true);
+    const remoteProjectsExpanded = setSidebarSectionExpanded(
+      projectsExpanded,
+      "remoteProjectsExpanded",
+      true,
+    );
+
+    expect(remoteProjectsExpanded).toMatchObject({
+      chatsExpanded: false,
+      projectsExpanded: true,
+      remoteProjectsExpanded: true,
+    });
+  });
+
+  it("persists sidebar section expansion for the next launch", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+
+    try {
+      persistState(
+        makeUiState({
+          chatsExpanded: false,
+          projectsExpanded: true,
+          remoteProjectsExpanded: true,
+        }),
+      );
+
+      expect(JSON.parse(values.get(PERSISTED_STATE_KEY)!)).toMatchObject({
+        chatsExpanded: false,
+        projectsExpanded: true,
+        remoteProjectsExpanded: true,
+      });
+      expect(readPersistedState()).toMatchObject({
+        chatsExpanded: false,
+        projectsExpanded: true,
+        remoteProjectsExpanded: true,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("clearThreadUi removes visit state for deleted threads", () => {
