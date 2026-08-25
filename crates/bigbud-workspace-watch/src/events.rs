@@ -33,6 +33,9 @@ pub(crate) fn reconcile_events(
 ) -> Vec<PathBuf> {
     let mut hinted = BTreeMap::new();
     for event in events {
+        if !tracks_event(&event.kind) {
+            continue;
+        }
         let kind = event_kind(&event.kind);
         for path in event.paths {
             if let Ok(path) = workspace.relative_path(&path) {
@@ -121,6 +124,10 @@ pub(crate) fn reconcile_events(
         }
     }
     invalidated_paths
+}
+
+fn tracks_event(kind: &EventKind) -> bool {
+    !matches!(kind, EventKind::Access(_))
 }
 
 pub(crate) fn snapshot(
@@ -223,3 +230,7 @@ impl From<WorkspaceWatchEntry> for EntryFingerprint {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "events.tests.rs"]
+mod tests;
