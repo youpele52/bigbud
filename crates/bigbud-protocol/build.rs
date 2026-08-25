@@ -5,7 +5,11 @@ fn main() {
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/pty.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/workspace.proto");
 
-    prost_build::Config::new()
+    let protoc = protoc_bin_vendored::protoc_bin_path()
+        .expect("failed to resolve the vendored protobuf compiler");
+    let mut config = prost_build::Config::new();
+    config.protoc_executable(protoc);
+    config
         .compile_protos(
             &["../../protocol/remote-agent/v1.proto"],
             &["../../protocol"],
