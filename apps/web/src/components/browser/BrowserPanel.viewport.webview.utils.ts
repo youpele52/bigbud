@@ -46,7 +46,6 @@ export const browserSameTabPopupGuardScript = String.raw`(() => {
     true,
   );
 
-  const originalWindowOpen = window.open.bind(window);
   window.open = function patchedWindowOpen(url, target, features) {
     if (typeof target === "string" && target.length > 0 && target !== "_self" && target !== "_top") {
       if (navigateCurrentTab(String(url ?? ""))) {
@@ -58,7 +57,7 @@ export const browserSameTabPopupGuardScript = String.raw`(() => {
       return window;
     }
 
-    return originalWindowOpen(url, target, features);
+    return null;
   };
 })();`;
 

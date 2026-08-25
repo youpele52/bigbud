@@ -111,7 +111,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("creates feature branch, commits, and pushes with featureBranch option", () =>
+  it.effect("keeps the Create PR CTA for an explicit local execution target", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
@@ -137,6 +137,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       const result = yield* runStackedAction(manager, {
         cwd: repoDir,
         action: "commit_push",
+        executionTargetId: "local",
         featureBranch: true,
       });
 

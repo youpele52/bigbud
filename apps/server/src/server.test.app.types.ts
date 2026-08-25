@@ -19,6 +19,7 @@ import type { ServerRuntimeStartupShape } from "./startup/serverRuntimeStartup.t
 import type { TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import type { OpenShape } from "./utils/open.ts";
 import type { ServerSettingsShape } from "./ws/serverSettings.ts";
+import type { WorkspaceRuntimeBackendShape } from "./workspace-runtime/Services/WorkspaceRuntime.ts";
 
 export interface BuildAppUnderTestOptions {
   readonly config?: Partial<ServerConfigShape>;
@@ -43,5 +44,6 @@ export interface BuildAppUnderTestOptions {
     readonly checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
     readonly serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
     readonly serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
+    readonly remoteWorkspaceRuntime?: WorkspaceRuntimeBackendShape;
   };
 }

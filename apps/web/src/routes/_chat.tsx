@@ -44,9 +44,13 @@ function deriveProjectTitleFromCwd(cwd: string): string {
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
+  onOpenFileSearch: () => boolean;
 }
 
-function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsProps) {
+function ChatRouteGlobalShortcuts({
+  onToggleSearch,
+  onOpenFileSearch,
+}: ChatRouteGlobalShortcutsProps) {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadIdsSize = useThreadSelectionStore((state) => state.selectedThreadIds.size);
   const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
@@ -137,7 +141,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "search.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        onToggleSearch();
+        if (!onOpenFileSearch()) onToggleSearch();
         return;
       }
 
@@ -269,6 +273,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     toggleSidebar,
     navigate,
     onToggleSearch,
+    onOpenFileSearch,
     serverProviders,
     location.pathname,
     exitAutomationForRightPanel,
@@ -280,10 +285,14 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
 function ChatRouteLayout() {
   const { routeThreadId } = useHandleNewThread();
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
+  const openSearchForFileContext = useSearchStore((state) => state.openSearchForFileContext);
 
   return (
     <>
-      <ChatRouteGlobalShortcuts onToggleSearch={toggleSearchOpen} />
+      <ChatRouteGlobalShortcuts
+        onToggleSearch={toggleSearchOpen}
+        onOpenFileSearch={openSearchForFileContext}
+      />
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
       <RightPanelHost activeThreadId={routeThreadId ?? null} />

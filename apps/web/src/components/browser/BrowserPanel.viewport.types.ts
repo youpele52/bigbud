@@ -7,6 +7,7 @@ export interface BrowserViewportRef {
   goForward(): void;
   reload(): void;
   reloadIgnoringCache(): void;
+  stopLoading?(): void;
   openDevTools(): void;
   inspectElement(x: number, y: number): void;
   undo(): void;
@@ -28,16 +29,19 @@ export interface BrowserPageMetadata {
 export interface BrowserViewportProps {
   url: string;
   onUrlChange?: ((url: string) => void) | undefined;
+  onNavigationCommit?: ((url: string) => void) | undefined;
   onNavigationStateChange?:
     | ((state: { canGoBack: boolean; canGoForward: boolean }) => void)
     | undefined;
   onLoadStart?: (() => void) | undefined;
+  onLoadStop?: (() => void) | undefined;
   onLoadSuccess?: (() => void) | undefined;
   onLoadFail?: ((info: BrowserLoadFailure) => void) | undefined;
+  onWebviewStateChange?: ((state: BrowserWebviewState | null) => void) | undefined;
   onCertificateChallengeChange?:
     | ((challenge: DesktopCertificateChallenge | null) => void)
     | undefined;
-  onPageMetadataChange?: ((metadata: BrowserPageMetadata) => void) | undefined;
+  onPageMetadataChange?: ((metadata: BrowserPageMetadata, url?: string) => void) | undefined;
   onContextMenu?:
     | ((event: {
         x: number;
@@ -55,6 +59,8 @@ export interface BrowserViewportProps {
       }) => void)
     | undefined;
 }
+
+export type BrowserWebviewState = "crashed" | "unresponsive";
 
 export interface BrowserEditFlags {
   canUndo: boolean;
@@ -114,3 +120,5 @@ export type FailLoadEvent = Event & {
   validatedURL: string;
   isMainFrame: boolean;
 };
+export type FrameFinishLoadEvent = Event & { isMainFrame: boolean };
+export type StartNavigationEvent = Event & { isMainFrame: boolean };

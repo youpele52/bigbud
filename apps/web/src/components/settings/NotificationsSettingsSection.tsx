@@ -60,6 +60,7 @@ export function NotificationsSettingsSection() {
           }
           control={
             <Switch
+              tone="success"
               checked={settings.enableTaskCompletionToasts}
               onCheckedChange={(checked) =>
                 updateSettings({ enableTaskCompletionToasts: Boolean(checked) })
@@ -88,6 +89,7 @@ export function NotificationsSettingsSection() {
           }
           control={
             <Switch
+              tone="success"
               checked={settings.enableSystemTaskCompletionNotifications}
               onCheckedChange={(checked) =>
                 updateSettings({

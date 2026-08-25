@@ -23,6 +23,7 @@ import {
 import { summarizeGitActionResult } from "./GitManager.commitUtils.ts";
 import type { BranchHeadContext, PullRequestInfo } from "./GitManager.types.ts";
 import type { makeBranchContext } from "./GitManager.branchContext.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
 export function makePrLookup(
   gitCore: GitCoreShape,
@@ -139,6 +140,7 @@ export function makePrLookup(
   const buildCompletionToast = Effect.fn("buildCompletionToast")(function* (
     cwd: string,
     result: Pick<GitRunStackedActionResult, "action" | "branch" | "commit" | "push" | "pr">,
+    executionTargetId?: string,
   ) {
     const summary = summarizeGitActionResult(result);
     let latestOpenPr: PullRequestInfo | null = null;
@@ -150,7 +152,7 @@ export function makePrLookup(
     } | null = null;
 
     if (result.action !== "commit") {
-      const finalStatus = yield* gitCore.statusDetails(cwd);
+      const finalStatus = yield* gitCore.statusDetails(cwd, executionTargetId);
       if (finalStatus.branch) {
         finalBranchContext = {
           branch: finalStatus.branch,
@@ -169,6 +171,7 @@ export function makePrLookup(
           }
         : null;
     const shouldLookupExistingOpenPr =
+      isLocalExecutionTarget(executionTargetId) &&
       (result.action === "commit_push" || result.action === "push") &&
       result.push.status === "pushed" &&
       result.branch.status !== "created" &&
@@ -208,7 +211,8 @@ export function makePrLookup(
               label: "View PR",
               url: openPr.url,
             }
-          : (result.action === "push" || result.action === "commit_push") &&
+          : isLocalExecutionTarget(executionTargetId) &&
+              (result.action === "push" || result.action === "commit_push") &&
               result.push.status === "pushed" &&
               !currentBranchIsDefault
             ? {

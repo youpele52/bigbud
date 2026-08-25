@@ -50,6 +50,9 @@ interface DispatchShellCommandServices {
     readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
   };
   readonly threadShellRunner: ThreadShellRunnerShape;
+  readonly remoteThreadShellRunner?: (
+    executionTargetId: string,
+  ) => ThreadShellRunnerShape | undefined;
   readonly serverCommandId: (tag: string) => OrchestrationCommand["commandId"];
   readonly toDispatchCommandError: (
     cause: unknown,
@@ -67,6 +70,7 @@ export const makeDispatchShellCommand =
     orchestrationEngine,
     serverSettings,
     threadShellRunner,
+    remoteThreadShellRunner,
     serverCommandId,
     toDispatchCommandError,
   }: DispatchShellCommandServices) =>
@@ -128,7 +132,10 @@ export const makeDispatchShellCommand =
           (activeProject ? resolveWorkspaceExecutionTargetId(activeProject) : undefined) ??
           LOCAL_EXECUTION_TARGET_ID;
 
-        if (!isLocalExecutionTarget(executionTargetId)) {
+        const shellRunner = isLocalExecutionTarget(executionTargetId)
+          ? threadShellRunner
+          : remoteThreadShellRunner?.(executionTargetId);
+        if (!shellRunner) {
           return yield* new OrchestrationDispatchCommandError({
             message: formatRemoteExecutionTargetDetail({
               executionTargetId,
@@ -227,7 +234,7 @@ export const makeDispatchShellCommand =
         });
 
         runFork(
-          threadShellRunner
+          shellRunner
             .run({
               threadId: normalizedCommand.threadId,
               cwd,

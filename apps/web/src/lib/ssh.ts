@@ -16,10 +16,13 @@ export function getPasswordProtectedSshTargetLabel(
     return null;
   }
 
-  const match = /^SSH password is required for (.+)\. Re-enter it before using this target\./.exec(
-    errorMessage.trim(),
-  );
-  return match?.[1] ?? null;
+  const normalized = errorMessage.trim();
+  const requiredMatch =
+    /^SSH password is required for (.+)\. Re-enter it before using this target\./.exec(normalized);
+  if (requiredMatch?.[1]) return requiredMatch[1];
+
+  const incorrectMatch = /^Incorrect password for (.+)\.$/.exec(normalized);
+  return incorrectMatch?.[1] ?? null;
 }
 
 export function getSshAuthFailureToastTitle(authMode: "password" | "ssh-key-passphrase"): string {

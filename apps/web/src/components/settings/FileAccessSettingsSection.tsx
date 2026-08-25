@@ -120,7 +120,11 @@ export function FileAccessSettingsSection() {
               }
             }}
           >
-            <SelectTrigger className="w-full sm:w-56" aria-label="File access permission level">
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-full sm:w-56"
+              aria-label="File access permission level"
+            >
               <SelectValue>
                 {PERMISSION_LEVEL_OPTIONS.find(
                   (o) => o.value === settings.fileAccessPermissionLevel,

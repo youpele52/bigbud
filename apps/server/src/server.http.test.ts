@@ -196,6 +196,46 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("serves remote workspace file previews through the target-aware range backend", () =>
+    Effect.gen(function* () {
+      const bytes = new TextEncoder().encode("0123456789abcdef");
+      yield* buildAppUnderTest({
+        layers: {
+          remoteWorkspaceRuntime: {
+            files: {
+              writeFile: () => Effect.die("not implemented"),
+              readFilePreview: () => Effect.die("not implemented"),
+              readFileRange: ({ offset, maxBytes }) =>
+                Effect.succeed({
+                  relativePath: "assets/demo.mp4",
+                  bytes: bytes.slice(offset, offset + maxBytes),
+                  sizeBytes: bytes.byteLength,
+                  truncated: offset + maxBytes < bytes.byteLength,
+                }),
+              listDirectory: () => Effect.succeed({ entries: [] }),
+            },
+            search: {
+              searchEntries: () => Effect.succeed({ entries: [], truncated: false }),
+              searchFileContents: () => Effect.succeed({ matches: [], truncated: false }),
+            },
+            watch: {
+              watchDirectory: () => Effect.die("not implemented"),
+            },
+          },
+        },
+      });
+
+      const url = yield* getHttpServerUrl(
+        `/api/workspace-file-preview?cwd=${encodeURIComponent("/remote/project")}&relativePath=${encodeURIComponent("assets/demo.mp4")}&executionTargetId=${encodeURIComponent("ssh:example")}`,
+      );
+      const response = yield* Effect.promise(() => fetch(url, { headers: { Range: "bytes=4-9" } }));
+
+      assert.equal(response.status, 206);
+      assert.equal(response.headers.get("content-range"), "bytes 4-9/16");
+      assert.equal(yield* Effect.promise(() => response.text()), "456789");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("serves attachment files from state dir", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

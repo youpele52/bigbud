@@ -57,6 +57,7 @@ describe("DevinAdapter startSession orchestration wiring", () => {
               acpInput?.mcpServers?.map((server) => server.name),
               ["bigbud_orchestration"],
             );
+            assert.strictEqual(sessions.get(THREAD_ID)?.sessionEpoch, 0);
           }),
         ),
         Effect.scoped,

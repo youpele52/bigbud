@@ -87,8 +87,10 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
         },
       },
       releaseServer: () => undefined,
+      remoteWorkspaceSystemPrompt: "The actual workspace root is /srv/project.",
       opencodeSessionId: "opencode-session-1",
       threadId: THREAD_ID,
+      sessionEpoch: 0,
       createdAt: new Date().toISOString(),
       runtimeMode: "full-access" as const,
       pendingPermissions: new Map(),
@@ -110,7 +112,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     const { sendTurn } = makeTurnMethods({
       provider: "opencode",
       requireSession: () => Effect.succeed(record as never),
-      syntheticEventFn: (threadId, type, payload, extra) =>
+      syntheticEventFn: (threadId, _sessionEpoch, type, payload, extra) =>
         Effect.succeed({
           eventId: "event-1",
           provider: "opencode",
@@ -158,7 +160,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
         },
       ],
       system:
-        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
+        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient. The actual workspace root is /srv/project.",
     });
     assert.isAtLeast(events.length, 1);
   });
@@ -240,6 +242,7 @@ endobj
       releaseServer: () => undefined,
       opencodeSessionId: "opencode-session-1",
       threadId: THREAD_ID,
+      sessionEpoch: 0,
       createdAt: new Date().toISOString(),
       runtimeMode: "full-access" as const,
       pendingPermissions: new Map(),
@@ -260,7 +263,7 @@ endobj
     const { sendTurn } = makeTurnMethods({
       provider: "opencode",
       requireSession: () => Effect.succeed(record as never),
-      syntheticEventFn: (threadId, type, payload, extra) =>
+      syntheticEventFn: (threadId, _sessionEpoch, type, payload, extra) =>
         Effect.succeed({
           eventId: "event-1",
           provider: "opencode",

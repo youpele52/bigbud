@@ -119,6 +119,9 @@ describe("createThreadViaOrchestration", () => {
       type: "thread.create",
       projectId: callerProjectId,
       purpose: "standard",
+      providerRuntimeExecutionTargetId: "provider-target",
+      workspaceExecutionTargetId: "workspace-target",
+      executionTargetId: "execution-target",
     });
     expect(system.dispatch.mock.calls[1]?.[0]).toMatchObject({
       type: "thread.turn.start",
@@ -140,7 +143,11 @@ describe("createThreadViaOrchestration", () => {
       projectId: targetProjectId,
       watchForCompletion: true,
     });
-    expect(system.dispatch.mock.calls[0]?.[0]).toMatchObject({ projectId: targetProjectId });
+    const createCommand = system.dispatch.mock.calls[0]?.[0];
+    expect(createCommand).toMatchObject({ projectId: targetProjectId });
+    expect(createCommand).not.toHaveProperty("providerRuntimeExecutionTargetId");
+    expect(createCommand).not.toHaveProperty("workspaceExecutionTargetId");
+    expect(createCommand).not.toHaveProperty("executionTargetId");
     expect(system.addActiveWatch).toHaveBeenCalledWith(
       expect.objectContaining({
         watcherThreadId: callerThreadId,

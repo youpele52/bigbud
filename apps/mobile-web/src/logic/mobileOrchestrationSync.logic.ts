@@ -20,6 +20,7 @@ type QueryKey = ReadonlyArray<string>;
 
 type MobileQueryClient = {
   setQueryData<T>(queryKey: QueryKey, updater: (current: T | undefined) => T | undefined): void;
+  removeQueries(input: { readonly queryKey: QueryKey }): void;
   invalidateQueries(input: { readonly queryKey: QueryKey }): Promise<unknown>;
 };
 
@@ -73,11 +74,25 @@ export function createMobileOrchestrationSyncController(input: {
 
     for (const event of coalescedEvents) {
       let eventHandled = false;
+      const detachedThreadIds: string[] = [];
       const snapshotKey = ["mobile-snapshot", sessionId] as const;
 
       queryClient.setQueryData<OrchestrationReadModel>(snapshotKey, (current) => {
         if (!current) {
           return current;
+        }
+        if (event.type === "thread.deleted") {
+          const deletedThreadIds = new Set(event.payload.threadIds ?? [event.payload.threadId]);
+          detachedThreadIds.push(
+            ...current.threads
+              .filter(
+                (thread) =>
+                  thread.parentThread !== undefined &&
+                  deletedThreadIds.has(thread.parentThread.threadId) &&
+                  !deletedThreadIds.has(thread.id),
+              )
+              .map((thread) => thread.id),
+          );
         }
         const result = applyOrchestrationEventToSnapshot(current, event);
         if (result.changed) {
@@ -86,20 +101,42 @@ export function createMobileOrchestrationSyncController(input: {
         return result.snapshot;
       });
 
-      const threadId = readThreadId(event);
-      if (threadId) {
-        const threadKey = ["mobile-thread", sessionId, threadId] as const;
-        queryClient.setQueryData<OrchestrationThread>(threadKey, (current) => {
-          if (!current) {
+      if (event.type === "thread.deleted") {
+        const deletedThreadIds = event.payload.threadIds ?? [event.payload.threadId];
+        for (const deletedThreadId of deletedThreadIds) {
+          const threadKey = ["mobile-thread", sessionId, deletedThreadId] as const;
+          queryClient.setQueryData<OrchestrationThread>(threadKey, (current) => {
+            if (current !== undefined) eventHandled = true;
             return current;
-          }
-          const nextThread = applyOrchestrationEventToThread(current, event);
-          if (nextThread !== null) {
+          });
+          queryClient.removeQueries({ queryKey: threadKey });
+        }
+        for (const detachedThreadId of detachedThreadIds) {
+          const threadKey = ["mobile-thread", sessionId, detachedThreadId] as const;
+          queryClient.setQueryData<OrchestrationThread>(threadKey, (current) => {
+            if (!current?.parentThread) return current;
+            const { parentThread: _parentThread, ...detachedThread } = current;
             eventHandled = true;
-            return nextThread;
-          }
-          return current;
-        });
+            return detachedThread;
+          });
+        }
+        void queryClient.invalidateQueries({ queryKey: ["mobile-thread", sessionId] });
+      } else {
+        const threadId = readThreadId(event);
+        if (threadId) {
+          const threadKey = ["mobile-thread", sessionId, threadId] as const;
+          queryClient.setQueryData<OrchestrationThread>(threadKey, (current) => {
+            if (!current) {
+              return current;
+            }
+            const nextThread = applyOrchestrationEventToThread(current, event);
+            if (nextThread !== null) {
+              eventHandled = true;
+              return nextThread;
+            }
+            return current;
+          });
+        }
       }
 
       if (!eventHandled) {

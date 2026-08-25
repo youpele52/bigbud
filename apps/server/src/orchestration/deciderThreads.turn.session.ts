@@ -13,12 +13,16 @@ import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
 type ThreadSessionCommand = Extract<
   OrchestrationCommand,
   | { type: "thread.turn.interrupt" }
+  | { type: "thread.turn.steer" }
   | { type: "thread.approval.respond" }
   | { type: "thread.user-input.respond" }
   | { type: "thread.session.stop" }
   | { type: "thread.session.set" }
   | { type: "thread.turn.start.failed" }
+  | { type: "thread.turn-control.set" }
 >;
+
+const terminalControlStates = new Set(["completed", "failed", "superseded", "cancelled"]);
 
 export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand")(
   function* (input: {
@@ -33,6 +37,18 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
     switch (command.type) {
       case "thread.turn.interrupt":
         yield* requireThreadReadyForMutation({ thread, command });
+        if (
+          command.sessionEpoch !== undefined &&
+          command.sessionEpoch !== (thread.session?.sessionEpoch ?? 0)
+        ) {
+          return [];
+        }
+        if (
+          thread.pendingTurnControlOperation &&
+          !terminalControlStates.has(thread.pendingTurnControlOperation.state)
+        ) {
+          return [];
+        }
         if (command.queuedPromptIdsAfterSettlement !== undefined) {
           const prefix = (thread.queuedPrompts ?? []).slice(
             0,
@@ -72,6 +88,71 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
                   },
                 }
               : {}),
+            ...(command.queuedPromptIdsAfterSettlement !== undefined
+              ? {
+                  operation: {
+                    operationId: command.commandId,
+                    action: "interrupt-and-continue" as const,
+                    reservedPromptIds: command.queuedPromptIdsAfterSettlement,
+                    sessionEpoch: thread.session?.sessionEpoch ?? 0,
+                    expectedTurnId: command.turnId ?? thread.session?.activeTurnId ?? null,
+                    strategy: "interrupt-continue" as const,
+                    state: "requested" as const,
+                    requestedAt: command.createdAt,
+                    updatedAt: command.createdAt,
+                  },
+                }
+              : {}),
+            createdAt: command.createdAt,
+          },
+        };
+      case "thread.turn.steer":
+        yield* requireThreadReadyForMutation({ thread, command });
+        if (
+          command.sessionEpoch !== undefined &&
+          command.sessionEpoch !== (thread.session?.sessionEpoch ?? 0)
+        ) {
+          return [];
+        }
+        if (
+          thread.pendingTurnControlOperation &&
+          !terminalControlStates.has(thread.pendingTurnControlOperation.state)
+        ) {
+          return [];
+        }
+        if (!thread.session?.activeTurnId || thread.session.activeTurnId !== command.turnId) {
+          return [];
+        }
+        const steerPrefix = (thread.queuedPrompts ?? []).slice(0, command.queuedPromptIds.length);
+        if (
+          steerPrefix.length !== command.queuedPromptIds.length ||
+          steerPrefix.some((prompt, index) => prompt.id !== command.queuedPromptIds[index])
+        ) {
+          return [];
+        }
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.turn-steer-requested",
+          payload: {
+            threadId: command.threadId,
+            turnId: command.turnId,
+            queuedPromptIds: command.queuedPromptIds,
+            operation: {
+              operationId: command.commandId,
+              action: "steer",
+              reservedPromptIds: command.queuedPromptIds,
+              sessionEpoch: thread.session?.sessionEpoch ?? 0,
+              expectedTurnId: command.turnId ?? null,
+              strategy: "pending-selection",
+              state: "requested",
+              requestedAt: command.createdAt,
+              updatedAt: command.createdAt,
+            },
             createdAt: command.createdAt,
           },
         };
@@ -113,6 +194,12 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
         };
       case "thread.session.stop":
         yield* requireThreadReadyForMutation({ thread, command });
+        if (
+          command.sessionEpoch !== undefined &&
+          command.sessionEpoch !== (thread.session?.sessionEpoch ?? 0)
+        ) {
+          return [];
+        }
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -121,12 +208,32 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
             commandId: command.commandId,
           }),
           type: "thread.session-stop-requested",
-          payload: { threadId: command.threadId, createdAt: command.createdAt },
+          payload: {
+            threadId: command.threadId,
+            operation: {
+              operationId: command.commandId,
+              action: "stop",
+              reservedPromptIds: [],
+              sessionEpoch: thread.session?.sessionEpoch ?? 0,
+              expectedTurnId: thread.session?.activeTurnId ?? null,
+              strategy: "stop-session",
+              state: "requested",
+              requestedAt: command.createdAt,
+              updatedAt: command.createdAt,
+            },
+            createdAt: command.createdAt,
+          },
         };
       case "thread.session.set":
         if (
           command.expectedActiveTurnId !== undefined &&
           thread.session?.activeTurnId !== command.expectedActiveTurnId
+        ) {
+          return [];
+        }
+        if (
+          command.expectedSessionEpoch !== undefined &&
+          (thread.session?.sessionEpoch ?? 0) !== command.expectedSessionEpoch
         ) {
           return [];
         }
@@ -142,7 +249,38 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
             metadata: {},
           }),
           type: "thread.session-set",
-          payload: { threadId: command.threadId, session: command.session },
+          payload: {
+            threadId: command.threadId,
+            session: {
+              ...command.session,
+              sessionEpoch: command.advanceSessionEpoch
+                ? (thread.session?.sessionEpoch ?? 0) + 1
+                : (thread.session?.sessionEpoch ?? 0),
+            },
+          },
+        };
+      case "thread.turn-control.set":
+        if (
+          command.expectedOperationId !== undefined &&
+          thread.pendingTurnControlOperation?.operationId !== command.expectedOperationId
+        ) {
+          return [];
+        }
+        if (
+          command.operation.sessionEpoch !== (thread.session?.sessionEpoch ?? 0) &&
+          command.operation.state !== "superseded" &&
+          command.operation.state !== "completed"
+        )
+          return [];
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.turn-control-set",
+          payload: { threadId: command.threadId, operation: command.operation },
         };
       case "thread.turn.start.failed":
         yield* requireThreadReadyForMutation({ thread, command });

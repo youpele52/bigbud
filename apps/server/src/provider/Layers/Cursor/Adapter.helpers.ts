@@ -98,6 +98,7 @@ export interface PendingUserInput {
 
 export interface CursorSessionContext {
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
   readonly acp: AcpSessionRuntimeShape;

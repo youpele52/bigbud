@@ -39,6 +39,7 @@ import {
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
 import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
+import { recoverTurnControlOperations } from "./ProviderRuntimeIngestion.turnControlRecovery.ts";
 
 const make = Effect.fn("make")(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -132,6 +133,12 @@ const make = Effect.fn("make")(function* () {
         (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
         { concurrency: 1 },
       ).pipe(Effect.asVoid);
+      yield* recoverTurnControlOperations({
+        orchestrationEngine,
+        readModel: yield* orchestrationEngine.getReadModel(),
+        liveSessions,
+        occurredAt,
+      });
 
       if (commands.length > 0) {
         yield* Effect.logInfo("provider runtime ingestion reconciled thread sessions at startup", {
@@ -185,6 +192,12 @@ const make = Effect.fn("make")(function* () {
           (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
           { concurrency: 4 },
         );
+        yield* recoverTurnControlOperations({
+          orchestrationEngine,
+          readModel: yield* orchestrationEngine.getReadModel(),
+          liveSessions: discovery.sessions,
+          occurredAt: new Date().toISOString(),
+        });
       }).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)

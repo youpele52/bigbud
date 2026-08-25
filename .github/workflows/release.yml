@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Desktop And Remote Agent
 
 on:
   push:
@@ -21,43 +21,13 @@ jobs:
     outputs:
       version: ${{ steps.release_meta.outputs.version }}
       tag: ${{ steps.release_meta.outputs.tag }}
+      update_channel: ${{ steps.release_meta.outputs.update_channel }}
       is_prerelease: ${{ steps.release_meta.outputs.is_prerelease }}
       make_latest: ${{ steps.release_meta.outputs.make_latest }}
       ref: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - id: release_meta
-        name: Resolve release version
-        shell: bash
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            raw="${{ github.event.inputs.version }}"
-          else
-            raw="${GITHUB_REF_NAME}"
-          fi
-
-          version="${raw#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release version: $raw" >&2
-            exit 1
-          fi
-
-          if [[ "$version" =~ - ]] && [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(beta|preview|nightly)([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Unsupported release channel in version: $raw" >&2
-            exit 1
-          fi
-
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "make_latest=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "make_latest=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -72,6 +42,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
+
+      - id: release_meta
+        name: Resolve release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            raw="${{ github.event.inputs.version }}"
+          else
+            raw="${GITHUB_REF_NAME}"
+          fi
+          bun scripts/resolve-release-metadata.ts "$raw" --github-output "$GITHUB_OUTPUT"
+
       - name: Format
         run: bun run fmt:check
 
@@ -80,6 +71,15 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Rust format
+        run: cargo fmt --all --check
+
+      - name: Rust lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cargo test --locked --workspace
 
       - name: Test
         run: bun run test
@@ -102,8 +102,6 @@ jobs:
             platform: mac
             target: dmg
             arch: x64
-          # ubuntu-22.04 is the oldest still-supported LTS and produces AppImages
-          # with broader compatibility than building on the latest release.
           - label: Linux x64
             runner: ubuntu-22.04
             platform: linux
@@ -132,14 +130,28 @@ jobs:
           node-version-file: package.json
 
       - name: Install dependencies
-        # Preflight already runs the full install, format, lint, typecheck, and
-        # test suite. The release build matrix only needs dependency
-        # resolution, and skipping lifecycle scripts avoids a Windows-only
-        # effect-language-service patch crash.
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - name: Validate macOS signing credentials
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required macOS signing secret: $name" >&2
+              exit 1
+            fi
+          done
 
       - name: Import code signing certificates
         if: matrix.platform == 'mac'
@@ -151,16 +163,9 @@ jobs:
       - name: Build desktop artifact
         shell: bash
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           args=(
             --platform "${{ matrix.platform }}"
@@ -170,55 +175,32 @@ jobs:
             --verbose
           )
 
-          has_all() {
-            for value in "$@"; do
-              if [[ -z "$value" ]]; then
-                return 1
-              fi
-            done
-            return 0
-          }
-
           if [[ "${{ matrix.platform }}" == "mac" ]]; then
-            if has_all "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
-              echo "macOS signing enabled."
-              args+=(--signed)
-            else
-              echo "macOS signing disabled (missing one or more Apple notarization secrets)."
-            fi
+            echo "macOS signing and notarization are required."
+            args+=(--signed)
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
-            if has_all \
-              "$AZURE_TENANT_ID" \
-              "$AZURE_CLIENT_ID" \
-              "$AZURE_CLIENT_SECRET" \
-              "$AZURE_TRUSTED_SIGNING_ENDPOINT" \
-              "$AZURE_TRUSTED_SIGNING_ACCOUNT_NAME" \
-              "$AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME" \
-              "$AZURE_TRUSTED_SIGNING_PUBLISHER_NAME"; then
-              echo "Windows signing enabled (Azure Trusted Signing)."
-              args+=(--signed)
-            else
-              echo "Windows signing disabled (missing one or more Azure Trusted Signing secrets)."
-            fi
+            echo "Windows artifacts are intentionally unsigned."
           else
-            echo "Signing disabled for ${{ matrix.platform }}."
+            echo "Linux artifacts do not use OS code signing."
           fi
 
           bun run dist:desktop:artifact -- "${args[@]}"
 
-      - name: Build Linux .deb fallback
-        if: matrix.platform == 'linux'
+      - name: Smoke test packaged workspace watcher
         shell: bash
         run: |
-          args=(
-            --platform linux
-            --target deb
-            --arch x64
-            --build-version "${{ needs.preflight.outputs.version }}"
-            --skip-build
-            --verbose
-          )
-          bun run dist:desktop:artifact -- "${args[@]}"
+          args=(release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish)
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+            args+=(--require-code-signature)
+          fi
+          node scripts/verify-packaged-workspace-agent.ts "${args[@]}"
+
+      - name: Build Linux .deb fallback
+        if: matrix.platform == 'linux'
+        run: >-
+          bun run dist:desktop:artifact -- --platform linux --target deb --arch x64
+          --build-version "${{ needs.preflight.outputs.version }}" --output-dir release-deb
+          --skip-build --verbose && cp release-deb/*.deb release/
 
       - name: Verify Linux desktop artifact
         if: matrix.platform == 'linux'
@@ -235,30 +217,10 @@ jobs:
           bun run verify:desktop:linux-artifact -- "$appimage_path" --verbose
 
       - name: Collect release assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-publish
-
-          shopt -s nullglob
-          for pattern in \
-            "release/*.dmg" \
-            "release/*.zip" \
-            "release/*.AppImage" \
-            "release/*.deb" \
-            "release/*.exe" \
-            "release/*.blockmap" \
-            "release/latest*.yml"; do
-            for file in $pattern; do
-              cp "$file" release-publish/
-            done
-          done
-
-          if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" != "arm64" ]]; then
-            if [[ -f release-publish/latest-mac.yml ]]; then
-              mv release-publish/latest-mac.yml "release-publish/latest-mac-${{ matrix.arch }}.yml"
-            fi
-          fi
+        run: >-
+          node scripts/collect-desktop-release-assets.ts release release-publish
+          "${{ matrix.platform }}" "${{ matrix.arch }}"
+          "${{ needs.preflight.outputs.update_channel }}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -267,9 +229,75 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  remote_agent_build:
+    name: Build remote agent ${{ matrix.label }}
+    needs: preflight
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            strip: strip
+          - label: Linux arm64
+            target: aarch64-unknown-linux-gnu
+            strip: aarch64-linux-gnu-strip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(protobuf-compiler)
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            packages+=(gcc-aarch64-linux-gnu)
+          fi
+          sudo apt-get update
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Build remote agent
+        shell: bash
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: ${{ needs.preflight.outputs.version }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --locked --release --package bigbud-remote-agent --target "${{ matrix.target }}"
+
+      - name: Prepare remote agent release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          target='${{ matrix.target }}'
+          asset_name="bigbud-remote-agent-${version}-${target}"
+          mkdir -p release-publish
+          cp "target/${target}/release/bigbud-remote-agent" "release-publish/${asset_name}"
+          '${{ matrix.strip }}' "release-publish/${asset_name}"
+          chmod 755 "release-publish/${asset_name}"
+          (cd release-publish && sha256sum "${asset_name}" > "${asset_name}.sha256")
+
+      - name: Upload remote agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-agent-${{ matrix.target }}
+          path: release-publish/*
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: [preflight, build]
+    needs: [preflight, build, remote_agent_build]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -289,17 +317,59 @@ jobs:
           merge-multiple: true
           path: release-assets
 
+      - name: Download all remote agent artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-agent-*
+          merge-multiple: true
+          path: release-assets
+
       - name: Merge macOS updater manifests
         run: |
           node scripts/merge-mac-update-manifests.ts \
-            release-assets/latest-mac.yml \
-            release-assets/latest-mac-x64.yml
-          rm -f release-assets/latest-mac-x64.yml
+            "release-assets/${{ needs.preflight.outputs.update_channel }}-mac.yml" \
+            "release-assets/${{ needs.preflight.outputs.update_channel }}-mac-x64.yml"
+          rm -f "release-assets/${{ needs.preflight.outputs.update_channel }}-mac-x64.yml"
 
       - name: Stage bootstrap installers
         run: |
           cp apps/marketing/public/install.sh release-assets/install.sh
           cp apps/marketing/public/install.ps1 release-assets/install.ps1
+
+      - name: Build signed remote agent manifest
+        env:
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          node scripts/build-remote-agent-release-manifest.ts \
+            --version "$version" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output release-assets/remote-agent-manifest.json \
+            --install-source-output release-assets/remote-agent-install-source.json \
+            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
+            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
+
+      - name: Verify packaged remote agent assets
+        env:
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          node scripts/verify-remote-agent-release-assets.ts \
+            --manifest release-assets/remote-agent-manifest.json \
+            --install-source release-assets/remote-agent-install-source.json \
+            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
+            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
+
+      - name: Verify assembled release payload
+        run: >-
+          node scripts/verify-desktop-release-assets.ts release-assets
+          "${{ needs.preflight.outputs.update_channel }}"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -317,7 +387,11 @@ jobs:
             release-assets/*.deb
             release-assets/*.exe
             release-assets/*.blockmap
-            release-assets/latest*.yml
+            release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
             release-assets/install.sh
             release-assets/install.ps1
+            release-assets/bigbud-remote-agent-*
+            release-assets/remote-agent-install-source.json
+            release-assets/remote-agent-manifest.json
+            release-assets/server-workspace-agent-*
           fail_on_unmatched_files: true

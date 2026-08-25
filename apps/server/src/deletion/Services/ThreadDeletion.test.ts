@@ -10,9 +10,10 @@ import {
   resolveThreadSubtree,
 } from "./ThreadDeletion.ts";
 
-const thread = (id: string, parentThreadId?: string) =>
+const thread = (id: string, parentThreadId?: string, projectId = "project-1") =>
   ({
     id: ThreadId.makeUnsafe(id),
+    projectId,
     deletedAt: null,
     ...(parentThreadId === undefined
       ? {}
@@ -37,6 +38,66 @@ describe("ThreadDeletion", () => {
     expect(
       resolveThreadSubtree(ThreadId.makeUnsafe("root"), threads).map((entry) => entry.id),
     ).toEqual(["root", "child", "grandchild"]);
+  });
+
+  it("keeps cross-project descendants outside a subtree", () => {
+    const threads = [
+      thread("root"),
+      thread("same-project-child", "root"),
+      thread("other-project-child", "root", "project-2"),
+    ];
+
+    expect(
+      resolveThreadSubtree(ThreadId.makeUnsafe("root"), threads).map((entry) => entry.id),
+    ).toEqual(["root", "same-project-child"]);
+  });
+
+  it("does not fence descendants that belong to another project", async () => {
+    const deletion = await Effect.runPromise(
+      Effect.service(ThreadDeletion).pipe(Effect.provide(ThreadDeletionLive)),
+    );
+    const rootThreadId = ThreadId.makeUnsafe("root");
+    const sameProjectChildId = ThreadId.makeUnsafe("same-project-child");
+    const otherProjectChildId = ThreadId.makeUnsafe("other-project-child");
+    const readModel = {
+      ...createEmptyReadModel(new Date().toISOString()),
+      threads: [
+        thread("root"),
+        thread("same-project-child", "root"),
+        thread("other-project-child", "root", "project-2"),
+      ],
+    };
+
+    await Effect.runPromise(deletion.acquireFence(rootThreadId, "subtree"));
+
+    await expect(
+      Effect.runPromise(deletion.isFenced({ threadId: sameProjectChildId, readModel })),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(deletion.isFenced({ threadId: otherProjectChildId, readModel })),
+    ).resolves.toBe(false);
+  });
+
+  it("selects only the requested thread in single mode", async () => {
+    const deletion = await Effect.runPromise(
+      Effect.service(ThreadDeletion).pipe(Effect.provide(ThreadDeletionLive)),
+    );
+    const threads = [thread("root"), thread("child", "root")];
+    const finalized: string[][] = [];
+
+    const result = await Effect.runPromise(
+      deletion.deleteNow({
+        rootThreadId: ThreadId.makeUnsafe("root"),
+        mode: "single",
+        resolveThreads: () => Effect.succeed(threads),
+        preflight: () => Effect.void,
+        teardown: () => Effect.void,
+        finalize: (threadIds) => Effect.sync(() => finalized.push([...threadIds])),
+      }),
+    );
+
+    expect(result).toEqual({ type: "deleted", threadIds: ["root"] });
+    expect(finalized).toEqual([["root"]]);
   });
 
   it("fences descendants and releases the fence when preflight skips the subtree", async () => {
@@ -66,6 +127,35 @@ describe("ThreadDeletion", () => {
     await expect(
       Effect.runPromise(deletion.isFenced({ threadId: ThreadId.makeUnsafe("child"), readModel })),
     ).resolves.toBe(false);
+  });
+
+  it("upgrades a single-thread fence when subtree deletion takes ownership", async () => {
+    const deletion = await Effect.runPromise(
+      Effect.service(ThreadDeletion).pipe(Effect.provide(ThreadDeletionLive)),
+    );
+    const rootThreadId = ThreadId.makeUnsafe("root");
+    const childThreadId = ThreadId.makeUnsafe("child");
+    const readModel = {
+      ...createEmptyReadModel(new Date().toISOString()),
+      threads: [thread("root"), thread("child", "root")],
+    };
+
+    await expect(Effect.runPromise(deletion.acquireFence(rootThreadId, "single"))).resolves.toBe(
+      true,
+    );
+    await expect(Effect.runPromise(deletion.isFenceRoot(rootThreadId, "subtree"))).resolves.toBe(
+      false,
+    );
+    await expect(Effect.runPromise(deletion.acquireFence(rootThreadId, "subtree"))).resolves.toBe(
+      true,
+    );
+    await expect(
+      Effect.runPromise(deletion.isFenced({ threadId: childThreadId, readModel })),
+    ).resolves.toBe(true);
+    await Effect.runPromise(deletion.releaseFence(rootThreadId, "single"));
+    await expect(Effect.runPromise(deletion.isFenceRoot(rootThreadId, "subtree"))).resolves.toBe(
+      true,
+    );
   });
 
   it("rechecks the subtree before finalizing its complete deletion unit", async () => {

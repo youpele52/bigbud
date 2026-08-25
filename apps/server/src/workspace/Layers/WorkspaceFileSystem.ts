@@ -1,7 +1,6 @@
-import { Cause, Duration, Effect, Exit, FileSystem, Layer, Path, Queue, Stream } from "effect";
-import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts";
+import { Cause, Effect, Exit, FileSystem, Layer, Path } from "effect";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
-import { open, stat, watch } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 
 import {
   WorkspaceFileSystem,
@@ -22,82 +21,41 @@ import {
   WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES,
   WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
 } from "./WorkspaceFileSystem.search.ts";
+import { makeWorkspaceFileRange } from "./WorkspaceFileSystem.range.ts";
+import { watchRemoteDirectoryViaSsh } from "./WorkspaceFileSystem.remoteWatch.ts";
+import { makeWorkspaceWriteFile } from "./WorkspaceFileSystem.write.ts";
 
-const DEFAULT_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
-const WORKSPACE_DIRECTORY_WATCH_RECURSIVE = process.platform !== "linux";
-
-export function createDirectoryChangedStream(input: {
-  readonly cwd: string;
-  readonly relativePath: string;
-  readonly watcher: (signal: AbortSignal) => AsyncIterable<unknown>;
-}): Stream.Stream<ProjectDirectoryWatchEvent, WorkspaceFileSystemError> {
-  return Stream.callback<ProjectDirectoryWatchEvent, WorkspaceFileSystemError>((queue) =>
-    Effect.gen(function* () {
-      const abortController = new AbortController();
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          abortController.abort();
-          Queue.endUnsafe(queue);
-        }),
-      );
-
-      yield* Effect.promise(async () => {
-        try {
-          for await (const _event of input.watcher(abortController.signal)) {
-            Queue.offerUnsafe(queue, {
-              version: 1 as const,
-              type: "directoryChanged" as const,
-              relativePath: input.relativePath,
-            });
-          }
-
-          Queue.endUnsafe(queue);
-        } catch (cause) {
-          if (abortController.signal.aborted) {
-            Queue.endUnsafe(queue);
-            return;
-          }
-
-          Queue.failCauseUnsafe(
-            queue,
-            Cause.fail(
-              new WorkspaceFileSystemError({
-                cwd: input.cwd,
-                relativePath: input.relativePath,
-                operation: "workspaceFileSystem.watchDirectory",
-                detail: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-            ),
-          );
-        }
-      });
-    }),
-  ).pipe(Stream.debounce(Duration.millis(100)));
-}
+const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 
 async function readTextFilePreview(
   absolutePath: string,
-  maxBytes: number,
 ): Promise<{ contents: string; sizeBytes: number; truncated: boolean }> {
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
     throw new Error("Workspace preview target is not a file.");
   }
+  if (fileStat.size > DEFAULT_FILE_PREVIEW_MAX_BYTES) {
+    throw new Error("File is too large to preview (maximum 5 MiB).");
+  }
 
-  const bytesToRead = Math.min(fileStat.size, maxBytes);
-  const buffer = Buffer.alloc(bytesToRead);
+  const buffer = Buffer.alloc(fileStat.size);
   const fileHandle = await open(absolutePath, "r");
   try {
-    const { bytesRead } = await fileHandle.read(buffer, 0, bytesToRead, 0);
+    const { bytesRead } = await fileHandle.read(buffer, 0, fileStat.size, 0);
     const bytes = buffer.subarray(0, bytesRead);
     if (bytes.includes(0)) {
-      throw new Error("Binary files cannot be previewed.");
+      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
+    }
+    let contents: string;
+    try {
+      contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
     }
     return {
-      contents: new TextDecoder("utf-8").decode(bytes),
+      contents,
       sizeBytes: fileStat.size,
-      truncated: fileStat.size > maxBytes,
+      truncated: false,
     };
   } finally {
     await fileHandle.close();
@@ -119,23 +77,50 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
       relativePath: input.relativePath,
     });
 
-    if (!isLocalExecutionTarget(executionTargetId)) {
-      return yield* new WorkspaceFileSystemError({
-        cwd: input.cwd,
-        relativePath: input.relativePath,
-        operation: "workspaceFileSystem.readFilePreviewRemote",
-        detail: "Remote workspace file preview is not supported yet.",
-      });
-    }
-
     const preview = yield* Effect.tryPromise({
-      try: () =>
-        readTextFilePreview(target.absolutePath, input.maxBytes ?? DEFAULT_FILE_PREVIEW_MAX_BYTES),
+      try: async () => {
+        if (isLocalExecutionTarget(executionTargetId)) {
+          return readTextFilePreview(target.absolutePath);
+        }
+
+        const workspaceTarget = resolveWorkspaceTarget({
+          executionTargetId,
+          cwd: input.cwd,
+        });
+        const result = await runToolCommand({
+          target: resolveToolTransportTarget(workspaceTarget),
+          command: "cat",
+          args: [target.relativePath],
+          timeoutMs: 30_000,
+          maxBufferBytes: DEFAULT_FILE_PREVIEW_MAX_BYTES + 1,
+          outputMode: "truncate",
+        });
+        const bytes = new TextEncoder().encode(result.stdout);
+        if (result.stdoutTruncated || bytes.byteLength > DEFAULT_FILE_PREVIEW_MAX_BYTES) {
+          throw new Error("File is too large to preview (maximum 5 MiB).");
+        }
+        if (bytes.includes(0)) {
+          throw new Error("File is not valid UTF-8 text and cannot be previewed.");
+        }
+        let contents: string;
+        try {
+          contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch {
+          throw new Error("File is not valid UTF-8 text and cannot be previewed.");
+        }
+        return {
+          contents,
+          sizeBytes: bytes.byteLength,
+          truncated: false,
+        };
+      },
       catch: (cause) =>
         new WorkspaceFileSystemError({
           cwd: input.cwd,
           relativePath: input.relativePath,
-          operation: "workspaceFileSystem.readFilePreview",
+          operation: isLocalExecutionTarget(executionTargetId)
+            ? "workspaceFileSystem.readFilePreview"
+            : "workspaceFileSystem.readFilePreviewRemote",
           detail: cause instanceof Error ? cause.message : String(cause),
           cause,
         }),
@@ -144,28 +129,33 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     return { relativePath: target.relativePath, ...preview };
   });
 
+  const readFileRange = makeWorkspaceFileRange(workspacePaths);
+
   const searchFileContents: WorkspaceFileSystemShape["searchFileContents"] = Effect.fn(
     "WorkspaceFileSystem.searchFileContents",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-    const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            operation: "workspaceFileSystem.searchFileContents",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
-
-    if (!isLocalExecutionTarget(executionTargetId)) {
+    if (input.cwd.includes("\0")) {
       return yield* new WorkspaceFileSystemError({
         cwd: input.cwd,
-        operation: "workspaceFileSystem.searchFileContentsRemote",
-        detail: "Remote workspace file content search is not supported yet.",
+        operation: "workspaceFileSystem.searchFileContents",
+        detail: "Workspace root cannot contain NUL bytes.",
       });
+    }
+
+    let normalizedWorkspaceRoot = input.cwd;
+    if (isLocalExecutionTarget(executionTargetId)) {
+      normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
+        Effect.mapError(
+          (cause) =>
+            new WorkspaceFileSystemError({
+              cwd: input.cwd,
+              operation: "workspaceFileSystem.searchFileContents",
+              detail: cause.message,
+              cause,
+            }),
+        ),
+      );
     }
 
     const workspaceTarget = resolveWorkspaceTarget({
@@ -200,6 +190,14 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     if (Exit.isFailure(searchResultOrError)) {
       const failure = normalizeSearchCommandError(Cause.squash(searchResultOrError.cause));
       if (isRipgrepCommandNotFound(failure)) {
+        if (!isLocalExecutionTarget(executionTargetId)) {
+          return yield* new WorkspaceFileSystemError({
+            cwd: input.cwd,
+            operation: "workspaceFileSystem.searchFileContentsRemote",
+            detail: "Remote content search requires ripgrep on the SSH host.",
+            cause: failure,
+          });
+        }
         return yield* Effect.tryPromise({
           try: () =>
             searchFileContentsWithoutRipgrep({
@@ -247,116 +245,32 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     "WorkspaceFileSystem.watchDirectory",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-    const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "workspaceFileSystem.watchDirectory",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
-    const target = input.relativePath
-      ? yield* workspacePaths.resolveRelativePathWithinRoot({
-          workspaceRoot: normalizedWorkspaceRoot,
-          relativePath: input.relativePath,
-        })
-      : {
-          absolutePath: normalizedWorkspaceRoot,
-          relativePath: "",
-        };
-
-    if (!isLocalExecutionTarget(executionTargetId)) {
+    if (isLocalExecutionTarget(executionTargetId)) {
       return yield* new WorkspaceFileSystemError({
         cwd: input.cwd,
         relativePath: input.relativePath,
-        operation: "workspaceFileSystem.watchDirectoryRemote",
-        detail: "Remote workspace directory watching is not supported yet.",
+        operation: "workspaceFileSystem.watchDirectory",
+        detail: "Local directory watching is owned by the Rust workspace watcher.",
+        retryable: false,
       });
     }
-
-    return createDirectoryChangedStream({
+    const target = input.relativePath
+      ? yield* workspacePaths.resolveRelativePathWithinRoot({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+        })
+      : { relativePath: "" };
+    return watchRemoteDirectoryViaSsh({
+      executionTargetId,
       cwd: input.cwd,
       relativePath: target.relativePath,
-      watcher: (signal) =>
-        watch(target.absolutePath, {
-          recursive: WORKSPACE_DIRECTORY_WATCH_RECURSIVE,
-          signal,
-        }),
     });
   });
 
-  const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
-    "WorkspaceFileSystem.writeFile",
-  )(function* (input) {
-    const workspaceTarget = resolveWorkspaceTarget({
-      executionTargetId: input.executionTargetId,
-      cwd: input.cwd,
-    });
-    const toolTransportTarget = resolveToolTransportTarget(workspaceTarget);
-    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-    const target = yield* workspacePaths.resolveRelativePathWithinRoot({
-      workspaceRoot: input.cwd,
-      relativePath: input.relativePath,
-    });
-
-    if (!isLocalExecutionTarget(executionTargetId)) {
-      yield* Effect.tryPromise({
-        try: () =>
-          runToolCommand({
-            target: toolTransportTarget,
-            command: "sh",
-            args: ["-lc", 'mkdir -p "$(dirname -- "$1")" && cat > "$1"', "sh", target.relativePath],
-            stdin: input.contents,
-            timeoutMs: 30_000,
-            maxBufferBytes: 256 * 1024,
-            outputMode: "truncate",
-          }),
-        catch: (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "workspaceFileSystem.writeFileRemote",
-            detail: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      yield* workspaceEntries.invalidate(input.cwd);
-      return { relativePath: target.relativePath };
-    }
-
-    yield* fileSystem.makeDirectory(path.dirname(target.absolutePath), { recursive: true }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "workspaceFileSystem.makeDirectory",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
-    yield* fileSystem.writeFileString(target.absolutePath, input.contents).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "workspaceFileSystem.writeFile",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
-    yield* workspaceEntries.invalidate(input.cwd);
-    return { relativePath: target.relativePath };
-  });
+  const writeFile = makeWorkspaceWriteFile({ fileSystem, path, workspacePaths, workspaceEntries });
   return {
     readFilePreview,
+    readFileRange,
     searchFileContents,
     watchDirectory,
     writeFile,

@@ -18,6 +18,7 @@ import { Effect } from "effect";
 import { isThinkingActivity } from "./ProviderRuntimeIngestion.processor.thinking.ts";
 import { toTurnId } from "./ProviderRuntimeIngestion.helpers.ts";
 import type { RuntimeProcessorServices } from "./ProviderRuntimeIngestion.processor.ts";
+import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
 
 export type TaskRuntimeEvent =
   | ProviderRuntimeTaskStartedEvent
@@ -100,6 +101,19 @@ export function makeRuntimeProcessorEventHelpers(input: {
       assistantMessageId,
       checkpointTurnCount: maxTurnCount + 1,
       createdAt: deps.now,
+    });
+  });
+
+  const handleThreadMetadataUpdated = Effect.fn("handleThreadMetadataUpdated")(function* (deps: {
+    readonly event: Extract<ProviderRuntimeEvent, { type: "thread.metadata.updated" }>;
+    readonly threadId: ThreadId;
+  }) {
+    if (!deps.event.payload.name || isThreadTitleLocked(deps.threadId)) return;
+    yield* input.orchestrationEngine.dispatch({
+      type: "thread.meta.update",
+      commandId: input.providerCommandId(deps.event, "thread-meta-update"),
+      threadId: deps.threadId,
+      title: deps.event.payload.name,
     });
   });
 
@@ -245,6 +259,7 @@ export function makeRuntimeProcessorEventHelpers(input: {
 
   return {
     appendActivities,
+    handleThreadMetadataUpdated,
     handleTurnDiffUpdated,
     upsertTask,
   };

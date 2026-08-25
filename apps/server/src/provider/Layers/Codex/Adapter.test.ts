@@ -118,7 +118,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
       expect(startInput?.configArgs?.[1]).toBe("app.default_tools_enabled=false");
       expect(startInput?.configArgs?.[2]).toBe("-c");
       expect(startInput?.configArgs?.[3]).toContain("mcp_servers.bigbud_remote_workspace.command=");
-      expect(startInput?.developerInstructions).toContain("Bigbud remote workspace mode");
+      expect(startInput?.developerInstructions).toContain("bigbud remote workspace mode");
     }),
   );
 });

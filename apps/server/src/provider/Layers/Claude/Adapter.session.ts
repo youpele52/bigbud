@@ -29,7 +29,7 @@ import {
   prepareThreadOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
-import { readClaudeResumeState, toMessage } from "./Adapter.utils.ts";
+import { readClaudeResumeState, toMessage, validateClaudeResumeBoundary } from "./Adapter.utils.ts";
 import { buildClaudeQueryOptions } from "./Adapter.session.options.ts";
 import { makeClaudeTaskState } from "./Adapter.tasks.ts";
 import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
@@ -55,6 +55,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     makeEventStamp,
     offerRuntimeEvent,
     streamHandlers,
+    sessions,
   });
 
   return Effect.fn("startSession")(function* (input: ProviderSessionStartInput) {
@@ -68,8 +69,19 @@ export const makeStartSession = (deps: SessionStartDeps) => {
 
     const harness = deps.resolveHarness ? yield* deps.resolveHarness(input) : deps.harness;
     const startedAt = yield* nowIso;
+    const sessionEpoch = input.sessionEpoch ?? 0;
     const resumeStateData = readClaudeResumeState(input.resumeCursor);
-    const existingResumeSessionId = resumeStateData?.resume;
+    const persistedResumeBoundary =
+      input.resumeCursor && typeof input.resumeCursor === "object"
+        ? (input.resumeCursor as { readonly resumeSessionAt?: unknown }).resumeSessionAt
+        : undefined;
+    const validResumeState =
+      persistedResumeBoundary !== undefined &&
+      (typeof persistedResumeBoundary !== "string" ||
+        !validateClaudeResumeBoundary({ resumeSessionAt: persistedResumeBoundary }).ok)
+        ? undefined
+        : resumeStateData;
+    const existingResumeSessionId = validResumeState?.resume;
 
     const threadId = input.threadId;
     const newSessionId =
@@ -142,20 +154,6 @@ export const makeStartSession = (deps: SessionStartDeps) => {
         : undefined,
       useLegacyExecutionTargetForProviderRuntime: false,
     });
-    const remoteWorkspaceBridge =
-      isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
-      isRemoteWorkspaceTarget(executionContext.workspaceTarget)
-        ? yield* Effect.tryPromise({
-            try: () => createClaudeRemoteWorkspaceBridge(executionContext.workspaceTarget),
-            catch: (cause) =>
-              new ProviderAdapterProcessError({
-                provider: PROVIDER,
-                threadId: input.threadId,
-                detail: toMessage(cause, "Failed to prepare Claude remote workspace bridge."),
-                cause,
-              }),
-          })
-        : undefined;
     const orchestrationBridge = yield* Effect.tryPromise({
       try: () =>
         prepareThreadOrchestrationMcpBridge({
@@ -172,6 +170,28 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           cause,
         }),
     });
+    const remoteWorkspaceBridge =
+      isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+      isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+        ? yield* Effect.tryPromise({
+            try: () =>
+              createClaudeRemoteWorkspaceBridge(
+                executionContext.workspaceTarget,
+                orchestrationBridge.httpConfig,
+              ),
+            catch: (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: toMessage(cause, "Failed to prepare Claude remote workspace bridge."),
+                cause,
+              }),
+          }).pipe(
+            Effect.tapError(() =>
+              Effect.promise(() => orchestrationBridge.cleanup()).pipe(Effect.ignore),
+            ),
+          )
+        : undefined;
     const orchestrationConfig = buildClaudeSessionOrchestrationConfig(orchestrationBridge);
     const cleanupBridge = composeBridgeCleanups(
       remoteWorkspaceBridge?.cleanup,
@@ -196,7 +216,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       remoteQueryOptions: remoteWorkspaceBridge?.queryOptions,
       hasRemoteWorkspaceBridge: remoteWorkspaceBridge !== undefined,
       existingResumeSessionId,
-      resumeSessionAt: resumeStateData?.resumeSessionAt,
+      resumeSessionAt: validResumeState?.resumeSessionAt,
       newSessionId,
       canUseTool,
       onElicitation,
@@ -233,6 +253,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     const session: ProviderSession = {
       threadId,
       provider: PROVIDER,
+      sessionEpoch,
       status: "ready",
       runtimeMode: input.runtimeMode,
       ...(input.cwd ? { cwd: input.cwd } : {}),
@@ -253,10 +274,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       resumeCursor: {
         ...(threadId ? { threadId } : {}),
         ...(sessionId ? { resume: sessionId } : {}),
-        ...(resumeStateData?.resumeSessionAt
-          ? { resumeSessionAt: resumeStateData.resumeSessionAt }
+        ...(validResumeState?.resumeSessionAt
+          ? { resumeSessionAt: validResumeState.resumeSessionAt }
           : {}),
-        turnCount: resumeStateData?.turnCount ?? 0,
+        turnCount: validResumeState?.turnCount ?? 0,
       },
       createdAt: startedAt,
       updatedAt: startedAt,
@@ -264,6 +285,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
 
     const context: ClaudeSessionContext = {
       session,
+      sessionEpoch,
       promptQueue,
       query: queryRuntime,
       ...(cleanupBridge ? { cleanupRemoteWorkspaceBridge: cleanupBridge } : {}),
@@ -291,7 +313,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       turnState: undefined,
       lastKnownContextWindow: undefined,
       lastKnownTokenUsage: undefined,
-      lastAssistantUuid: resumeStateData?.resumeSessionAt,
+      lastAssistantUuid: validResumeState?.resumeSessionAt,
       lastInterruptReceipt: undefined,
       queuedUserMessageIds: new Set(),
       lastThreadStartedId: undefined,
@@ -306,27 +328,24 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       refreshMcpStatuses: undefined,
       recoverStream: undefined,
       recoveryInFlight: undefined,
+      recoveryAttempts: 0,
       stopped: false,
     };
     yield* Ref.set(contextRef, context);
     sessions.set(threadId, context);
 
+    const cleanupRegisteredSession = Effect.sync(() => {
+      sessions.delete(threadId);
+      try {
+        queryRuntime.close();
+      } catch {
+        // Preserve the startup error; shutdown is best effort here.
+      }
+      void cleanupBridge().catch(() => undefined);
+    }).pipe(Effect.tap(() => Ref.set(contextRef, undefined)));
+
     yield* initializeClaudeMcpLifecycle({ context, query: queryRuntime, threadId }).pipe(
-      Effect.tapError(() =>
-        Ref.set(contextRef, undefined).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              sessions.delete(threadId);
-              try {
-                queryRuntime.close();
-              } catch {
-                // Preserve the readiness error; shutdown is best effort here.
-              }
-              void cleanupBridge().catch(() => undefined);
-            }),
-          ),
-        ),
-      ),
+      Effect.tapError(() => cleanupRegisteredSession),
     );
 
     yield* emitRuntimeEvents({
@@ -338,9 +357,11 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       permissionMode,
       dangerousPermissionBypass: permissionMode === "bypassPermissions",
       fastMode,
-    });
+    }).pipe(Effect.tapError(() => cleanupRegisteredSession));
 
-    yield* startRuntimeStream({ context, logNativeSdkMessage, runFork });
+    yield* startRuntimeStream({ context, logNativeSdkMessage, runFork }).pipe(
+      Effect.tapError(() => cleanupRegisteredSession),
+    );
 
     return {
       ...session,

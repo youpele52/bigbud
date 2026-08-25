@@ -1,13 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path } from "effect";
 
 import { ServerConfig } from "../../startup/config.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "../Services/WorkspaceFileSystem.ts";
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
-import { createDirectoryChangedStream, WorkspaceFileSystemLive } from "./WorkspaceFileSystem.ts";
+import { WorkspaceFileSystemLive } from "./WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
 
 const ProjectLayer = WorkspaceFileSystemLive.pipe(
@@ -71,23 +71,66 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
       }),
     );
 
-    it.effect("truncates previews to the requested max bytes", () =>
+    it.effect("reads text files at the 5 MiB size limit", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem;
         const cwd = yield* makeTempDir;
-        yield* writeTextFile(cwd, "src/large.ts", "1234567890");
+        const contents = "a".repeat(5 * 1024 * 1024);
+        yield* writeTextFile(cwd, "src/large.ts", contents);
 
         const result = yield* workspaceFileSystem.readFilePreview({
           cwd,
           relativePath: "src/large.ts",
-          maxBytes: 4,
         });
 
-        expect(result).toEqual({
-          relativePath: "src/large.ts",
-          contents: "1234",
-          sizeBytes: 10,
-          truncated: true,
+        expect(result.contents).toBe(contents);
+        expect(result.sizeBytes).toBe(contents.length);
+        expect(result.truncated).toBe(false);
+      }),
+    );
+
+    it.effect("rejects previews larger than 5 MiB", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "large.txt", "a".repeat(5 * 1024 * 1024 + 1));
+
+        const error = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "large.txt" })
+          .pipe(Effect.flip);
+
+        expect(error).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is too large to preview (maximum 5 MiB).",
+        });
+      }),
+    );
+
+    it.effect("rejects NUL bytes and invalid UTF-8 previews", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* makeTempDir;
+
+        yield* fileSystem.writeFile(path.join(cwd, "nul.txt"), new Uint8Array([0x61, 0, 0x62]));
+        const nulError = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "nul.txt" })
+          .pipe(Effect.flip);
+
+        expect(nulError).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is not valid UTF-8 text and cannot be previewed.",
+        });
+
+        yield* fileSystem.writeFile(path.join(cwd, "invalid.txt"), new Uint8Array([0xc3, 0x28]));
+        const invalidError = yield* workspaceFileSystem
+          .readFilePreview({ cwd, relativePath: "invalid.txt" })
+          .pipe(Effect.flip);
+
+        expect(invalidError).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "File is not valid UTF-8 text and cannot be previewed.",
         });
       }),
     );
@@ -274,83 +317,6 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
           .stat(escapedPath)
           .pipe(Effect.catch(() => Effect.succeed(null)));
         expect(escapedStat).toBeNull();
-      }),
-    );
-  });
-
-  describe("watchDirectory", () => {
-    it.effect("allows watching the workspace root when relativePath is omitted", () =>
-      Effect.gen(function* () {
-        const workspaceFileSystem = yield* WorkspaceFileSystem;
-        const cwd = yield* makeTempDir;
-
-        const stream = yield* workspaceFileSystem.watchDirectory({ cwd });
-
-        expect(stream).toBeDefined();
-      }),
-    );
-
-    it.effect("maps mkdir-style watcher events to a directory refresh", () =>
-      Effect.gen(function* () {
-        const stream = createDirectoryChangedStream({
-          cwd: "/tmp/project",
-          relativePath: "docs",
-          watcher: async function* (_signal) {
-            yield { eventType: "rename", filename: "plans" };
-          },
-        });
-
-        const event = yield* Stream.runHead(stream);
-        expect(Option.isSome(event)).toBe(true);
-        if (!Option.isSome(event)) {
-          throw new Error("Expected a directoryChanged event for mkdir-style watcher events.");
-        }
-        expect(event.value).toEqual({
-          version: 1,
-          type: "directoryChanged",
-          relativePath: "docs",
-        });
-      }),
-    );
-
-    it.effect("maps child type changes to a directory refresh", () =>
-      Effect.gen(function* () {
-        const stream = createDirectoryChangedStream({
-          cwd: "/tmp/project",
-          relativePath: "docs",
-          watcher: async function* (_signal) {
-            yield { eventType: "change", filename: "item" };
-          },
-        });
-
-        const event = yield* Stream.runHead(stream);
-        expect(Option.isSome(event)).toBe(true);
-        if (!Option.isSome(event)) {
-          throw new Error("Expected a directoryChanged event for child type changes.");
-        }
-        expect(event.value).toEqual({
-          version: 1,
-          type: "directoryChanged",
-          relativePath: "docs",
-        });
-      }),
-    );
-
-    it.effect("rejects watches outside the workspace root", () =>
-      Effect.gen(function* () {
-        const workspaceFileSystem = yield* WorkspaceFileSystem;
-        const cwd = yield* makeTempDir;
-
-        const error = yield* workspaceFileSystem
-          .watchDirectory({
-            cwd,
-            relativePath: "../escape",
-          })
-          .pipe(Effect.flip);
-
-        expect(error.message).toContain(
-          "Workspace file path must be relative to the project root: ../escape",
-        );
       }),
     );
   });

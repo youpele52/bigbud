@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ExecutionTargetId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ExecutionTargetId, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import {
   ApprovalRequestId,
   EventId,
@@ -43,6 +43,7 @@ export const ProviderSession = Schema.Struct({
   threadId: ThreadId,
   resumeCursor: Schema.optional(Schema.Unknown),
   activeTurnId: Schema.optional(TurnId),
+  sessionEpoch: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   lastError: Schema.optional(TrimmedNonEmptyString),
@@ -61,6 +62,7 @@ export const ProviderSessionStartInput = Schema.Struct({
   approvalPolicy: Schema.optional(ProviderApprovalPolicy),
   sandboxMode: Schema.optional(ProviderSandboxMode),
   runtimeMode: RuntimeMode,
+  sessionEpoch: Schema.optional(NonNegativeInt),
 });
 export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 
@@ -74,6 +76,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   ),
   modelSelection: Schema.optional(ModelSelection),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  sessionEpoch: Schema.optional(NonNegativeInt),
 });
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 
@@ -87,8 +90,17 @@ export type ProviderTurnStartResult = typeof ProviderTurnStartResult.Type;
 export const ProviderInterruptTurnInput = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
+  sessionEpoch: Schema.optional(NonNegativeInt),
 });
 export type ProviderInterruptTurnInput = typeof ProviderInterruptTurnInput.Type;
+
+export const ProviderSteerTurnInput = Schema.Struct({
+  threadId: ThreadId,
+  turnId: Schema.optional(TurnId),
+  input: TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
+  sessionEpoch: Schema.optional(NonNegativeInt),
+});
+export type ProviderSteerTurnInput = typeof ProviderSteerTurnInput.Type;
 
 export const ProviderActiveTurnInspectionStatus = Schema.Literals([
   "running",
@@ -117,6 +129,7 @@ export type ProviderActiveTurnInspection = typeof ProviderActiveTurnInspection.T
 
 export const ProviderStopSessionInput = Schema.Struct({
   threadId: ThreadId,
+  sessionEpoch: Schema.optional(NonNegativeInt),
 });
 export type ProviderStopSessionInput = typeof ProviderStopSessionInput.Type;
 
@@ -142,6 +155,7 @@ export const ProviderEvent = Schema.Struct({
   provider: ProviderKind,
   threadId: ThreadId,
   createdAt: IsoDateTime,
+  sessionEpoch: Schema.optional(NonNegativeInt),
   method: TrimmedNonEmptyString,
   message: Schema.optional(TrimmedNonEmptyString),
   turnId: Schema.optional(TurnId),

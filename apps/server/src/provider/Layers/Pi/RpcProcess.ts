@@ -82,7 +82,10 @@ async function preparePiRpcProcessBridge(
     return undefined;
   }
 
-  return createPiRemoteWorkspaceBridge(options.workspaceTarget);
+  return createPiRemoteWorkspaceBridge(
+    options.workspaceTarget,
+    options.orchestrationBridge?.httpConfig,
+  );
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;

@@ -1,6 +1,7 @@
 import { type ApprovalRequestId, type ProviderApprovalDecision } from "@bigbud/contracts";
 import { memo } from "react";
 import { Button } from "../../ui/button";
+import { getPendingApprovalActions } from "./pendingApprovalActions.logic";
 
 interface ComposerPendingApprovalActionsProps {
   requestId: ApprovalRequestId;
@@ -20,46 +21,29 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
   sessionApprovalLabel,
   onRespondToApproval,
 }: ComposerPendingApprovalActionsProps) {
-  const isLearningSkillProposal = requestId.startsWith("learning-skill:");
+  const actions = getPendingApprovalActions({
+    requestId,
+    sessionApprovalAvailable,
+    sessionApprovalLabel,
+  });
   return (
     <>
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "decline")}
-        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-      >
-        {isLearningSkillProposal ? "Reject patch" : "Decline"}
-      </Button>
-      {!isLearningSkillProposal ? (
+      {actions.map((action) => (
         <Button
+          key={action.decision}
           size="sm"
-          variant="ghost"
+          variant={action.variant}
           disabled={isResponding}
-          onClick={() => void onRespondToApproval(requestId, "cancel")}
+          onClick={() => void onRespondToApproval(requestId, action.decision)}
+          className={
+            action.decision === "decline"
+              ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+              : undefined
+          }
         >
-          Cancel turn
+          {action.label}
         </Button>
-      ) : null}
-      {sessionApprovalAvailable !== false ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isResponding}
-          onClick={() => void onRespondToApproval(requestId, "acceptForSession")}
-        >
-          {sessionApprovalLabel ?? "Always allow this session"}
-        </Button>
-      ) : null}
-      <Button
-        size="sm"
-        variant="default"
-        disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "accept")}
-      >
-        {isLearningSkillProposal ? "Approve patch" : "Approve once"}
-      </Button>
+      ))}
     </>
   );
 });

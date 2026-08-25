@@ -1,4 +1,9 @@
-import type { OrchestrationReadModel, OrchestrationThread, ThreadId } from "@bigbud/contracts";
+import type {
+  OrchestrationReadModel,
+  OrchestrationThread,
+  ProjectId,
+  ThreadId,
+} from "@bigbud/contracts";
 import { Cause, Data, Effect, Layer, Option, Ref, ServiceMap } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -28,6 +33,7 @@ export function resolveThreadSubtree(
   threads: ReadonlyArray<OrchestrationThread>,
 ): ReadonlyArray<OrchestrationThread> {
   const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
+  const rootProjectId = threadsById.get(rootThreadId)?.projectId;
   const descendants = new Map<ThreadId, OrchestrationThread[]>();
   for (const thread of threads) {
     const parentId = thread.parentThread?.threadId;
@@ -46,23 +52,60 @@ export function resolveThreadSubtree(
     if (seen.has(threadId)) continue;
     seen.add(threadId);
     const thread = threadsById.get(threadId);
-    if (!thread || thread.deletedAt !== null) continue;
+    if (!thread || thread.deletedAt !== null || thread.projectId !== rootProjectId) continue;
     subtree.push(thread);
     for (const child of descendants.get(threadId) ?? []) pending.push(child.id);
   }
   return subtree;
 }
 
-function hasFencedAncestor(input: {
+export function resolveProjectDeletionRoots(
+  projectId: ProjectId,
+  threads: ReadonlyArray<OrchestrationThread>,
+): ReadonlyArray<OrchestrationThread> {
+  const activeThreads = threads.filter(
+    (thread) => thread.projectId === projectId && thread.deletedAt === null,
+  );
+  const activeThreadIds = new Set(activeThreads.map((thread) => thread.id));
+  return activeThreads.filter(
+    (thread) =>
+      thread.parentThread === undefined || !activeThreadIds.has(thread.parentThread.threadId),
+  );
+}
+
+export function resolveProjectDeletionRequests(
+  projectId: ProjectId,
+  threads: ReadonlyArray<OrchestrationThread>,
+): ReadonlyArray<OrchestrationThread> {
+  const roots = resolveProjectDeletionRoots(projectId, threads);
+  const deletingRootIds = new Set(
+    roots.filter((thread) => thread.deletingAt != null).map((thread) => thread.id),
+  );
+  const takeoverChildren = threads.filter(
+    (thread) =>
+      thread.projectId === projectId &&
+      thread.deletedAt === null &&
+      thread.parentThread !== undefined &&
+      deletingRootIds.has(thread.parentThread.threadId),
+  );
+  return [...roots, ...takeoverChildren];
+}
+
+type ThreadDeletionFenceMode = "single" | "subtree";
+
+function isThreadFenced(input: {
   readonly threadId: ThreadId;
   readonly readModel: OrchestrationReadModel;
-  readonly fencedRoots: ReadonlySet<ThreadId>;
+  readonly fences: ReadonlyMap<ThreadId, ThreadDeletionFenceMode>;
 }): boolean {
   const threads = new Map(input.readModel.threads.map((thread) => [thread.id, thread]));
+  const threadProjectId = threads.get(input.threadId)?.projectId;
   let currentId: ThreadId | undefined = input.threadId;
   const seen = new Set<ThreadId>();
   while (currentId && !seen.has(currentId)) {
-    if (input.fencedRoots.has(currentId)) return true;
+    const mode = input.fences.get(currentId);
+    if (mode === "single" && currentId === input.threadId) return true;
+    if (mode === "subtree" && threads.get(currentId)?.projectId === threadProjectId) return true;
     seen.add(currentId);
     currentId = threads.get(currentId)?.parentThread?.threadId;
   }
@@ -70,16 +113,29 @@ function hasFencedAncestor(input: {
 }
 
 export interface ThreadDeletionShape {
-  readonly acquireFence: (rootThreadId: ThreadId) => Effect.Effect<boolean>;
-  readonly acquireFences: (rootThreadIds: ReadonlyArray<ThreadId>) => Effect.Effect<boolean>;
-  readonly isFenceRoot: (threadId: ThreadId) => Effect.Effect<boolean>;
-  readonly releaseFence: (rootThreadId: ThreadId) => Effect.Effect<void>;
+  readonly acquireFence: (
+    rootThreadId: ThreadId,
+    mode?: ThreadDeletionFenceMode,
+  ) => Effect.Effect<boolean>;
+  readonly acquireFences: (
+    rootThreadIds: ReadonlyArray<ThreadId>,
+    mode?: ThreadDeletionFenceMode,
+  ) => Effect.Effect<boolean>;
+  readonly isFenceRoot: (
+    threadId: ThreadId,
+    requiredMode?: ThreadDeletionFenceMode,
+  ) => Effect.Effect<boolean>;
+  readonly releaseFence: (
+    rootThreadId: ThreadId,
+    expectedMode?: ThreadDeletionFenceMode,
+  ) => Effect.Effect<void>;
   readonly isFenced: (input: {
     readonly threadId: ThreadId;
     readonly readModel: OrchestrationReadModel;
   }) => Effect.Effect<boolean>;
   readonly deleteNow: (input: {
     readonly rootThreadId: ThreadId;
+    readonly mode?: "single" | "subtree";
     /** The command processor acquires this before emitting thread.deletion-requested. */
     readonly fenceAlreadyHeld?: boolean;
     readonly resolveThreads: () => Effect.Effect<ReadonlyArray<OrchestrationThread>>;
@@ -112,37 +168,65 @@ export class ThreadDeletion extends ServiceMap.Service<ThreadDeletion, ThreadDel
 const makeThreadDeletion = Effect.gen(function* () {
   const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
   const config = yield* Effect.serviceOption(ServerConfig);
-  const fencedRoots = yield* Ref.make<ReadonlySet<ThreadId>>(new Set());
-  const acquireFences = (rootThreadIds: ReadonlyArray<ThreadId>) =>
-    Ref.modify(fencedRoots, (roots) =>
-      rootThreadIds.some((rootThreadId) => roots.has(rootThreadId))
-        ? [false, roots]
-        : [true, new Set([...roots, ...rootThreadIds]) as ReadonlySet<ThreadId>],
+  const fences = yield* Ref.make<ReadonlyMap<ThreadId, ThreadDeletionFenceMode>>(new Map());
+  const acquireFences = (
+    rootThreadIds: ReadonlyArray<ThreadId>,
+    mode: ThreadDeletionFenceMode = "subtree",
+  ) =>
+    Ref.modify(fences, (current) => {
+      const canAcquire = rootThreadIds.every((rootThreadId) => {
+        const heldMode = current.get(rootThreadId);
+        return heldMode === undefined || (heldMode === "single" && mode === "subtree");
+      });
+      if (!canAcquire) return [false, current];
+      return [
+        true,
+        new Map([
+          ...current,
+          ...rootThreadIds.map((rootThreadId) => [rootThreadId, mode] as const),
+        ]),
+      ];
+    });
+  const acquireFence = (rootThreadId: ThreadId, mode: ThreadDeletionFenceMode = "subtree") =>
+    acquireFences([rootThreadId], mode);
+  const isFenceRoot = (threadId: ThreadId, requiredMode?: ThreadDeletionFenceMode) =>
+    Ref.get(fences).pipe(
+      Effect.map((current) => {
+        const heldMode = current.get(threadId);
+        return requiredMode === undefined ? heldMode !== undefined : heldMode === requiredMode;
+      }),
     );
-  const acquireFence = (rootThreadId: ThreadId) => acquireFences([rootThreadId]);
-  const isFenceRoot = (threadId: ThreadId) =>
-    Ref.get(fencedRoots).pipe(Effect.map((roots) => roots.has(threadId)));
-  const releaseFence = (rootThreadId: ThreadId) =>
-    Ref.update(fencedRoots, (roots) => {
-      const next = new Set(roots);
+  const releaseFence = (rootThreadId: ThreadId, expectedMode?: ThreadDeletionFenceMode) =>
+    Ref.update(fences, (current) => {
+      const heldMode = current.get(rootThreadId);
+      if (expectedMode !== undefined && heldMode !== expectedMode) return current;
+      const next = new Map(current);
       next.delete(rootThreadId);
       return next;
     });
   const isFenced: ThreadDeletionShape["isFenced"] = (input) =>
-    Ref.get(fencedRoots).pipe(
-      Effect.map((roots) =>
-        hasFencedAncestor({
+    Ref.get(fences).pipe(
+      Effect.map((current) =>
+        isThreadFenced({
           threadId: input.threadId,
           readModel: input.readModel,
-          fencedRoots: roots,
+          fences: current,
         }),
       ),
     );
 
   const deleteNow: ThreadDeletionShape["deleteNow"] = (input) =>
     Effect.gen(function* () {
-      if (!input.fenceAlreadyHeld && !(yield* acquireFence(input.rootThreadId))) {
-        const threads = resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
+      if (
+        !input.fenceAlreadyHeld &&
+        !(yield* acquireFence(input.rootThreadId, input.mode ?? "subtree"))
+      ) {
+        const threads =
+          input.mode === "single"
+            ? (yield* input.resolveThreads()).filter(
+                (thread) => thread.id === input.rootThreadId && thread.deletedAt === null,
+              )
+            : resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
         return {
           type: "failed",
           threadIds: threads.map((thread) => thread.id),
@@ -152,7 +236,13 @@ const makeThreadDeletion = Effect.gen(function* () {
 
       let knownThreadIds: ReadonlyArray<ThreadId> = [input.rootThreadId];
       return yield* Effect.gen(function* () {
-        const initial = resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
+        const initialThreads = yield* input.resolveThreads();
+        const initial =
+          input.mode === "single"
+            ? initialThreads.filter(
+                (thread) => thread.id === input.rootThreadId && thread.deletedAt === null,
+              )
+            : resolveThreadSubtree(input.rootThreadId, initialThreads);
         const initialIds = initial.map((thread) => thread.id);
         knownThreadIds = initialIds;
         const firstPreflight = yield* input.preflight(initial);
@@ -161,7 +251,13 @@ const makeThreadDeletion = Effect.gen(function* () {
         if (firstPreflight === "pinned")
           return { type: "skipped_pinned" as const, threadIds: initialIds };
 
-        const current = resolveThreadSubtree(input.rootThreadId, yield* input.resolveThreads());
+        const currentThreads = yield* input.resolveThreads();
+        const current =
+          input.mode === "single"
+            ? currentThreads.filter(
+                (thread) => thread.id === input.rootThreadId && thread.deletedAt === null,
+              )
+            : resolveThreadSubtree(input.rootThreadId, currentThreads);
         const currentIds = current.map((thread) => thread.id);
         knownThreadIds = currentIds;
         if (
@@ -188,7 +284,9 @@ const makeThreadDeletion = Effect.gen(function* () {
           }),
         ),
         Effect.tap((outcome) =>
-          outcome.type === "deleted" ? Effect.void : releaseFence(input.rootThreadId),
+          outcome.type === "deleted"
+            ? Effect.void
+            : releaseFence(input.rootThreadId, input.mode ?? "subtree"),
         ),
       );
     });

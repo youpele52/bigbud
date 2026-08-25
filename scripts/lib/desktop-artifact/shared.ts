@@ -193,20 +193,6 @@ export interface StagePackageJson {
   };
 }
 
-export const AzureTrustedSigningOptionsConfig = Config.all({
-  publisherName: Config.string("AZURE_TRUSTED_SIGNING_PUBLISHER_NAME"),
-  endpoint: Config.string("AZURE_TRUSTED_SIGNING_ENDPOINT"),
-  certificateProfileName: Config.string("AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"),
-  codeSigningAccountName: Config.string("AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"),
-  fileDigest: Config.string("AZURE_TRUSTED_SIGNING_FILE_DIGEST").pipe(Config.withDefault("SHA256")),
-  timestampDigest: Config.string("AZURE_TRUSTED_SIGNING_TIMESTAMP_DIGEST").pipe(
-    Config.withDefault("SHA256"),
-  ),
-  timestampRfc3161: Config.string("AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161").pipe(
-    Config.withDefault("http://timestamp.acs.microsoft.com"),
-  ),
-});
-
 const BuildEnvConfig = Config.all({
   platform: aliasedOptional(
     Config.schema(BuildPlatform, "BIGBUD_DESKTOP_PLATFORM"),

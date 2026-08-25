@@ -76,6 +76,7 @@ export const WS_METHODS = {
   serverRefreshProviders: "server.refreshProviders",
   serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
+  serverInstallRemoteAgent: "server.installRemoteAgent",
   serverUnlockSshKey: "server.unlockSshKey",
   serverUnlockSshPassword: "server.unlockSshPassword",
   serverUpsertKeybinding: "server.upsertKeybinding",

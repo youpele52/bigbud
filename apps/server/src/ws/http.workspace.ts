@@ -3,8 +3,14 @@ import { Effect, FileSystem, Option, Path } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../startup/config";
+import { isLocalExecutionTarget } from "../executionTargets.ts";
+import {
+  RemoteWorkspaceRuntime,
+  WorkspaceRuntime,
+} from "../workspace-runtime/Services/WorkspaceRuntime.ts";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
 import { serveLocalFile } from "./http.fileResponse.ts";
+import { serveRemoteWorkspaceFile } from "./http.workspace.remote.ts";
 
 const WORKSPACE_FILE_PREVIEW_CACHE_CONTROL = "no-store";
 
@@ -131,8 +137,23 @@ export const workspaceFilePreviewRouteLayer = HttpRouter.add(
 
     const projectCwd = url.value.searchParams.get("cwd");
     const relativePath = url.value.searchParams.get("relativePath");
+    const executionTargetId = url.value.searchParams.get("executionTargetId") ?? undefined;
     if (!projectCwd || !relativePath) {
       return HttpServerResponse.text("Missing cwd or relativePath parameter", { status: 400 });
+    }
+
+    if (executionTargetId && !isLocalExecutionTarget(executionTargetId)) {
+      const remoteRuntime = yield* Effect.serviceOption(RemoteWorkspaceRuntime);
+      const workspaceRuntime = yield* WorkspaceRuntime;
+      return yield* serveRemoteWorkspaceFile({
+        request,
+        files: Option.isSome(remoteRuntime) ? remoteRuntime.value.files : workspaceRuntime.files,
+        executionTargetId,
+        cwd: projectCwd,
+        relativePath,
+        contentType: Mime.getType(relativePath) ?? "application/octet-stream",
+        cacheControl: WORKSPACE_FILE_PREVIEW_CACHE_CONTROL,
+      });
     }
 
     const resolvedPath = yield* resolveWorkspacePreviewFile(projectCwd, relativePath);
@@ -172,8 +193,27 @@ export const workspacePdfViewerRouteLayer = HttpRouter.add(
 
     const projectCwd = url.value.searchParams.get("cwd");
     const relativePath = url.value.searchParams.get("relativePath");
+    const executionTargetId = url.value.searchParams.get("executionTargetId") ?? undefined;
     if (!projectCwd || !relativePath) {
       return HttpServerResponse.text("Missing cwd or relativePath parameter", { status: 400 });
+    }
+
+    if (executionTargetId && !isLocalExecutionTarget(executionTargetId)) {
+      const path = yield* Path.Path;
+      const pdfUrl = `/api/workspace-file-preview?cwd=${encodeURIComponent(projectCwd)}&relativePath=${encodeURIComponent(relativePath)}&executionTargetId=${encodeURIComponent(executionTargetId)}`;
+      return HttpServerResponse.text(
+        buildWorkspacePdfViewerHtml({
+          title: path.basename(relativePath),
+          pdfUrl,
+        }),
+        {
+          status: 200,
+          contentType: "text/html; charset=utf-8",
+          headers: {
+            "Cache-Control": WORKSPACE_FILE_PREVIEW_CACHE_CONTROL,
+          },
+        },
+      );
     }
 
     const resolvedPath = yield* resolveWorkspacePreviewFile(projectCwd, relativePath);

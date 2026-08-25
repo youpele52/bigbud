@@ -1,20 +1,20 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { DesktopCertificateChallenge } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 
-import { randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
-import { useComposerDraftStore } from "~/stores/composer";
-import { normalizeAnnotationComment } from "~/stores/composer/types.annotation.store";
-import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { closeBrowserTab, openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
-import { dataUrlToFile } from "./BrowserPanel.annotation";
-import { cropBrowserAnnotationImage } from "./BrowserPanel.annotation.image";
+import { useBrowserAnnotation } from "./BrowserPanel.annotation.hook";
+import {
+  getUnsupportedBrowserOmniboxScheme,
+  resolveBrowserOmniboxInput,
+} from "./BrowserPanel.omnibox";
 import {
   BrowserViewport,
   type BrowserPageMetadata,
   type BrowserViewportRef,
 } from "./BrowserPanel.viewport";
+import { isWebviewTagSupported } from "./BrowserPanel.viewport.webview.utils";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
 import { useBrowserContextMenu } from "./BrowserPanel.contextMenu.hook";
@@ -23,7 +23,15 @@ import {
   executeBrowserTabActionWhenReady,
   registerBrowserTabAgentHandler,
 } from "./browserAgentControl";
-import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
+import {
+  getBrowserBookmarks,
+  getBrowserHistory,
+  isBrowserBookmarked,
+  recordBrowserHistoryVisit,
+  subscribeBrowserData,
+  toggleBrowserBookmark,
+  updateBrowserHistoryVisitTitle,
+} from "./BrowserPanel.history";
 import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { reloadBrowserViewport } from "./BrowserPanel.reload";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
@@ -32,6 +40,8 @@ import { BrowserAgentCursor } from "./BrowserPanel.agentCursor";
 import { BrowserAgentStatus } from "./BrowserPanel.agentStatus";
 import type { BrowserLoadFailure } from "./BrowserPanel.navigationError";
 import { BrowserPanelNavigationErrorPage } from "./BrowserPanel.navigationErrorPage";
+import type { BrowserWebviewState } from "./BrowserPanel.viewport";
+import { BrowserPanelWebviewStateErrorPage } from "./BrowserPanel.webviewStateErrorPage";
 import type { BrowserPanelProps } from "./BrowserPanel.types";
 
 export const BrowserPanelContent = memo(function BrowserPanelContent({
@@ -45,29 +55,43 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const agentCursor = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentCursor);
   const agentHandoff = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentHandoff);
   const ensureTab = useBrowserPanelStore((state) => state.ensureTab);
+  const setTabFavicon = useBrowserPanelStore((state) => state.setTabFavicon);
   const setTabTitle = useBrowserPanelStore((state) => state.setTabTitle);
   const setTabUrl = useBrowserPanelStore((state) => state.setTabUrl);
-  const addComposerImage = useComposerDraftStore((state) => state.addImage);
-  const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const [inputUrl, setInputUrl] = useState(url);
   const viewportRef = useRef<BrowserViewportRef>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [loadError, setLoadError] = useState<BrowserLoadFailure | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [webviewState, setWebviewState] = useState<BrowserWebviewState | null>(null);
   const [certificateChallenge, setCertificateChallenge] =
     useState<DesktopCertificateChallenge | null>(null);
   const [pageMetadata, setPageMetadata] = useState<BrowserPageMetadata>({
     title: "",
     faviconUrl: null,
   });
-  const [annotationActive, setAnnotationActive] = useState(false);
+  const { annotationActive, cancelAnnotation, handleAnnotate } = useBrowserAnnotation({
+    activeThreadId: activeThreadId ?? null,
+    viewportRef,
+  });
   const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
+  const [bookmarks, setBookmarks] = useState(() => getBrowserBookmarks());
   const contextMenu = useBrowserContextMenu(visible && Boolean(url.trim()));
   const closeContextMenu = contextMenu.close;
   const toggleContextMenuCentered = contextMenu.toggleCentered;
   const [queuedDesktopReload, setQueuedDesktopReload] = useState<
     "normal" | "ignoring-cache" | null
   >(null);
+
+  useEffect(
+    () =>
+      subscribeBrowserData(() => {
+        setBrowserHistory(getBrowserHistory());
+        setBookmarks(getBrowserBookmarks());
+      }),
+    [],
+  );
 
   useEffect(() => {
     ensureTab(tabId, url);
@@ -80,7 +104,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
           if (action.action === "navigate") {
             setInputUrl(action.url);
             setTabUrl(tabId, action.url);
-            setBrowserHistory(recordBrowserHistoryUrl(action.url));
             const pageResult = await waitForVisibleBrowserNavigation({
               url: action.url,
               viewportRef,
@@ -107,21 +130,30 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     setTabTitle(tabId, pageMetadata.title.trim());
   }, [pageMetadata.title, setTabTitle, tabId]);
 
+  useEffect(() => {
+    setTabFavicon(tabId, pageMetadata.faviconUrl);
+  }, [pageMetadata.faviconUrl, setTabFavicon, tabId]);
+
   const reloadViewport = useCallback(
     (mode: "normal" | "ignoring-cache") => reloadBrowserViewport(viewportRef, mode),
     [],
   );
 
   const handleNavigate = useCallback(() => {
-    let nextUrl = inputUrl.trim();
-    if (!nextUrl) return;
-    if (!/^https?:\/\//i.test(nextUrl)) {
-      nextUrl = `https://${nextUrl}`;
+    const nextUrl = resolveBrowserOmniboxInput(inputUrl);
+    if (!nextUrl) {
+      if (getUnsupportedBrowserOmniboxScheme(inputUrl)) {
+        setLoadError({
+          errorCode: -1,
+          errorDescription: "ERR_UNSUPPORTED_SCHEME",
+          validatedURL: inputUrl,
+        });
+      }
+      return;
     }
     setInputUrl(nextUrl);
     setLoadError(null);
     setTabUrl(tabId, nextUrl);
-    setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
   }, [inputUrl, setTabUrl, tabId]);
 
   const handleSelectHistoryUrl = useCallback(
@@ -129,7 +161,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       setInputUrl(nextUrl);
       setLoadError(null);
       setTabUrl(tabId, nextUrl);
-      setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
     [setTabUrl, tabId],
   );
@@ -143,18 +174,35 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       setInputUrl(nextUrl);
       setLoadError(null);
       setTabUrl(tabId, nextUrl);
-      setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
     [setTabUrl, tabId],
   );
 
+  const handleNavigationCommit = useCallback((nextUrl: string) => {
+    setBrowserHistory(recordBrowserHistoryVisit({ url: nextUrl, title: "" }));
+  }, []);
+
+  const handlePageMetadataChange = useCallback(
+    (metadata: BrowserPageMetadata, metadataUrl?: string) => {
+      setPageMetadata(metadata);
+      if (metadata.title.trim() && metadataUrl) {
+        setBrowserHistory(updateBrowserHistoryVisitTitle(metadataUrl, metadata.title));
+      }
+    },
+    [],
+  );
+
+  const bookmarked = isBrowserBookmarked(bookmarks, url);
+  const handleToggleBookmark = useCallback(() => {
+    setBookmarks(toggleBrowserBookmark({ url, title: pageMetadata.title }));
+  }, [pageMetadata.title, url]);
+
   const handleClose = useCallback(() => {
     if (annotationActive) {
-      void viewportRef.current?.cancelAnnotation();
-      setAnnotationActive(false);
+      void cancelAnnotation().catch(() => undefined);
     }
     closeBrowserTab(tabId);
-  }, [annotationActive, tabId]);
+  }, [annotationActive, cancelAnnotation, tabId]);
 
   const handleOpenInExternalBrowser = useCallback(() => {
     const externalUrl = url.trim();
@@ -168,84 +216,11 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     window.open(externalUrl, "_blank", "noopener,noreferrer");
   }, [url]);
 
-  const handleAnnotate = useCallback(async () => {
-    if (annotationActive) {
-      await viewportRef.current?.cancelAnnotation();
-      setAnnotationActive(false);
-      return;
-    }
-
-    if (!activeThreadId) {
-      toastManager.add({ type: "error", title: "Open a thread before annotating." });
-      return;
-    }
-
-    setAnnotationActive(true);
-    try {
-      const annotation = await viewportRef.current?.startAnnotation();
-      setAnnotationActive(false);
-      if (!annotation) return;
-
-      const screenshotDataUrl =
-        (await cropBrowserAnnotationImage({
-          dataUrl: annotation.screenshot.dataUrl,
-          element: annotation.element,
-          viewport: annotation.viewport,
-        })) ?? annotation.screenshot.dataUrl;
-
-      const file = dataUrlToFile(
-        screenshotDataUrl,
-        "browser-annotation.png",
-        annotation.screenshot.mime,
-      );
-      if (!file) {
-        toastManager.add({ type: "error", title: "Could not capture browser screenshot." });
-        return;
-      }
-
-      const previewUrl = URL.createObjectURL(file);
-      const imageId = randomUUID();
-      addComposerImage(activeThreadId, {
-        type: "image",
-        id: imageId,
-        name: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        previewUrl,
-        file,
-      });
-      addComposerAnnotation(activeThreadId, {
-        id: randomUUID(),
-        imageId,
-        comment: normalizeAnnotationComment(annotation.comment),
-        intent: annotation.intent,
-        page: annotation.page,
-        element: annotation.element,
-        viewport: annotation.viewport,
-        createdAt: new Date().toISOString(),
-      });
-      toastManager.add({
-        type: "success",
-        title: "Annotation added to composer",
-        data: { threadId: activeThreadId, dismissAfterVisibleMs: 3000 },
-      });
-    } catch (error) {
-      setAnnotationActive(false);
-      toastManager.add({
-        type: "error",
-        title: "Browser annotation failed",
-        description: error instanceof Error ? error.message : String(error),
-        data: { threadId: activeThreadId },
-      });
-    }
-  }, [activeThreadId, addComposerAnnotation, addComposerImage, annotationActive]);
-
   useEffect(() => {
-    if (!open && annotationActive) {
-      void viewportRef.current?.cancelAnnotation();
-      setAnnotationActive(false);
+    if ((!open || !visible) && annotationActive) {
+      void cancelAnnotation().catch(() => undefined);
     }
-  }, [annotationActive, open]);
+  }, [annotationActive, cancelAnnotation, open, visible]);
 
   useEffect(() => {
     const nextUrl = url.trim();
@@ -334,6 +309,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         onGoBack={() => viewportRef.current?.goBack()}
         onGoForward={() => viewportRef.current?.goForward()}
         onReload={() => viewportRef.current?.reload()}
+        onStopLoading={() => viewportRef.current?.stopLoading?.()}
         onOpenInExternalBrowser={handleOpenInExternalBrowser}
         onAnnotate={handleAnnotate}
         annotationActive={annotationActive}
@@ -341,6 +317,10 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         historyUrls={browserHistory}
         annotationDisabled={!isElectron || !url.trim()}
         agentControlled={isAgentControlled}
+        bookmarked={bookmarked}
+        loading={loading}
+        canStopLoading={isWebviewTagSupported()}
+        onToggleBookmark={url.trim() ? handleToggleBookmark : undefined}
       />
       <BrowserAgentStatus tabId={tabId} controlled={isAgentControlled} handoff={agentHandoff} />
       <div
@@ -362,15 +342,28 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
               ref={viewportRef}
               url={url}
               onUrlChange={handleUrlChange}
+              onNavigationCommit={handleNavigationCommit}
               onNavigationStateChange={({ canGoBack: back, canGoForward: forward }) => {
                 setCanGoBack(back);
                 setCanGoForward(forward);
               }}
-              onLoadStart={() => setLoadError(null)}
-              onLoadSuccess={() => setLoadError(null)}
-              onLoadFail={setLoadError}
+              onLoadStart={() => {
+                setLoading(true);
+                setLoadError(null);
+                setWebviewState(null);
+              }}
+              onLoadStop={() => setLoading(false)}
+              onLoadSuccess={() => {
+                setLoading(false);
+                setLoadError(null);
+              }}
+              onLoadFail={(failure) => {
+                setLoading(false);
+                setLoadError(failure);
+              }}
+              onWebviewStateChange={setWebviewState}
               onCertificateChallengeChange={setCertificateChallenge}
-              onPageMetadataChange={setPageMetadata}
+              onPageMetadataChange={handlePageMetadataChange}
               onContextMenu={isElectron ? contextMenu.openAtHostPoint : undefined}
             />
             <BrowserPanelNavigationErrorPage
@@ -379,6 +372,10 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
               agentControlled={isAgentControlled}
               onReload={() => viewportRef.current?.reload()}
               onGoBack={canGoBack ? () => viewportRef.current?.goBack() : undefined}
+            />
+            <BrowserPanelWebviewStateErrorPage
+              state={webviewState}
+              onReload={() => viewportRef.current?.reload()}
             />
             <BrowserContextMenu
               anchor={contextMenu.anchor}

@@ -1,7 +1,6 @@
 import { ProviderInterruptTurnInput } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 
-import type { ProviderTurnLivenessRepositoryShape } from "../../persistence/Services/ProviderTurnLiveness.ts";
 import {
   providerMetricAttributes,
   providerTurnsTotal,
@@ -12,12 +11,10 @@ import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
 import { decodeInputOrValidationError } from "./ProviderServiceHelpers.ts";
 import type { ResolveRoutableSession } from "./ProviderService.operations.ts";
-import { markProviderTurnTerminal } from "./ProviderService.turnLiveness.ts";
 
 export function makeInterruptTurn(input: {
   readonly resolveRoutableSession: ResolveRoutableSession;
   readonly analytics: AnalyticsServiceShape;
-  readonly liveness: Option.Option<ProviderTurnLivenessRepositoryShape>;
 }): ProviderServiceShape["interruptTurn"] {
   return Effect.fn("interruptTurn")(function* (rawInput) {
     const parsed = yield* decodeInputOrValidationError({
@@ -31,14 +28,10 @@ export function makeInterruptTurn(input: {
         threadId: parsed.threadId,
         operation: "ProviderService.interruptTurn",
         allowRecovery: true,
+        ...(parsed.sessionEpoch !== undefined ? { expectedSessionEpoch: parsed.sessionEpoch } : {}),
       });
       metricProvider = routed.adapter.provider;
       yield* routed.adapter.interruptTurn(routed.threadId, parsed.turnId);
-      yield* markProviderTurnTerminal(input.liveness, {
-        threadId: parsed.threadId,
-        ...(parsed.turnId ? { turnId: parsed.turnId } : {}),
-        terminalAt: new Date().toISOString(),
-      });
       yield* input.analytics.record("provider.turn.interrupted", {
         provider: routed.adapter.provider,
       });

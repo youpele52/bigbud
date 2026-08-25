@@ -1,6 +1,7 @@
 import { FileDiff } from "@pierre/diffs/react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
+import { TriangleIcon } from "lucide-react";
 
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { DIFF_PANEL_UNSAFE_CSS } from "./DiffPanel.styles";
@@ -44,6 +45,13 @@ export function DiffPanelFile({
     >
       <FileDiff
         fileDiff={fileDiff}
+        renderHeaderPrefix={(diff) =>
+          diff.type === "change" ||
+          diff.type === "rename-changed" ||
+          diff.type === "rename-pure" ? (
+            <TriangleIcon aria-hidden="true" className="size-3 text-amber-500" strokeWidth={3} />
+          ) : null
+        }
         options={{
           diffStyle: diffRenderMode === "split" ? "split" : "unified",
           lineDiffType: "none",

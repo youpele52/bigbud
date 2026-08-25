@@ -1,4 +1,5 @@
 import { WS_METHODS } from "@bigbud/contracts";
+import { Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +16,26 @@ const transports: WsTransport[] = [];
 registerTestHooks(sockets, transports);
 
 describe("WsTransport stream subscriptions", () => {
+  it("does not reconnect a subscription after a non-retryable failure", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    const shouldRetry = vi.fn(() => false);
+    const onError = vi.fn();
+    const unsubscribe = transport.subscribe(
+      () => Stream.fail(new Error("watch unavailable")),
+      vi.fn(),
+      { retryDelay: 1, shouldRetry, onError },
+    );
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    getSocket(sockets).open();
+    await waitFor(() => expect(shouldRetry).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(shouldRetry).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "watch unavailable" }));
+
+    unsubscribe();
+    await transport.dispose();
+  });
+
   it("delivers stream chunks to subscribers", async () => {
     const transport = createTransport(transports, "ws://localhost:3020");
     const listener = vi.fn();

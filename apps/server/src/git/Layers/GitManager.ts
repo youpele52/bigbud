@@ -13,6 +13,7 @@ import { GitHubCli } from "../Services/GitHubCli.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ProjectSetupScriptRunner } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import {
   normalizePullRequestReference,
   toResolvedPullRequest,
@@ -93,12 +94,13 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const serverSettingsService = yield* ServerSettingsService;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const config = yield* ServerConfig;
 
   // ── Sub-module factories ────────────────────────────────────────────────
   const prHelpers = makePrHelpers(gitCore, gitHubCli);
   const branchContext = makeBranchContext(gitCore, gitHubCli);
   const prLookup = makePrLookup(gitCore, gitHubCli, branchContext);
-  const commitStep = makeCommitStep(gitCore, textGeneration, fileSystem);
+  const commitStep = makeCommitStep(gitCore, textGeneration, fileSystem, config.cwd);
   const prStep = makePrStep(
     gitCore,
     gitHubCli,
@@ -296,7 +298,23 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fn("runStackedAction")(
     function* (input, options) {
-      yield* assertLocalExecutionTarget("git.runStackedAction", input.cwd, input.executionTargetId);
+      if (!isLocalExecutionTarget(input.executionTargetId)) {
+        if (input.action === "create_pr" || input.action === "commit_push_pr") {
+          return yield* new GitCommandError({
+            operation: "git.runStackedAction",
+            command: input.action,
+            cwd: input.cwd,
+            detail:
+              "Remote stacked actions support commit and push only; pull-request creation remains local.",
+          });
+        }
+      } else {
+        yield* assertLocalExecutionTarget(
+          "git.runStackedAction",
+          input.cwd,
+          input.executionTargetId,
+        );
+      }
       return yield* runStackedActionStep(input, options);
     },
   );

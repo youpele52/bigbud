@@ -1,5 +1,5 @@
 import { type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
+import { type EventId, type ThreadId } from "@bigbud/contracts";
 import { Deferred, Effect, Fiber, Stream, type Exit } from "effect";
 
 import { ProviderAdapterProcessError } from "../../Errors.ts";
@@ -8,17 +8,20 @@ import {
   claudeModernizationMetricAttributes,
   increment,
 } from "../../../observability/Metrics.ts";
-import { PROVIDER } from "./Adapter.types.ts";
+import { PROVIDER, type UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { toError } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import { rehydrateRequestLedger } from "./Adapter.requestLedger.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 
+const RECOVERY_RETRY_DELAYS_MS = [0, 100] as const;
+
 export interface SessionRuntimeDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly streamHandlers: StreamHandlers;
+  readonly sessions: Map<ThreadId, ClaudeSessionContext>;
 }
 
 export function claimNativeMessageId(seen: Set<string>, message: SDKMessage): boolean {
@@ -109,6 +112,7 @@ export const startSessionRuntimeStream =
       const wrappedHandleSdkMessage = Effect.fn("wrappedHandleSdkMessage")(function* (
         message: SDKMessage,
       ) {
+        if (deps.sessions.get(input.context.session.threadId) !== input.context) return;
         if (!claimNativeMessageId(input.context.seenNativeMessageIds, message)) return;
         yield* input.logNativeSdkMessage(input.context, message);
         yield* deps.streamHandlers.handleSdkMessage(input.context, message);
@@ -177,19 +181,31 @@ export const startSessionRuntimeStream =
           }
           input.context.pendingUserInputs.clear();
 
-          const recovery = input.context.query
-            .reinitialize()
-            .then(() => {
-              if (!input.context.stopped) {
-                startStream();
-                if (input.context.refreshMcpStatuses) {
-                  input.runFork(input.context.refreshMcpStatuses().pipe(Effect.ignore));
-                }
+          const recovery = (async () => {
+            for (let attempt = 0; attempt < RECOVERY_RETRY_DELAYS_MS.length; attempt += 1) {
+              input.context.recoveryAttempts = attempt + 1;
+              const delayMs = RECOVERY_RETRY_DELAYS_MS[attempt] ?? 0;
+              if (delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
               }
-            })
-            .finally(() => {
-              input.context.recoveryInFlight = undefined;
-            });
+              try {
+                await input.context.query.reinitialize();
+                input.context.recoveryAttempts = 0;
+                if (!input.context.stopped) {
+                  startStream();
+                  if (input.context.refreshMcpStatuses) {
+                    input.runFork(input.context.refreshMcpStatuses().pipe(Effect.ignore));
+                  }
+                }
+                return;
+              } catch (cause) {
+                if (attempt === RECOVERY_RETRY_DELAYS_MS.length - 1) throw cause;
+              }
+            }
+            throw new Error("Claude runtime stream recovery retry budget exhausted.");
+          })().finally(() => {
+            input.context.recoveryInFlight = undefined;
+          });
           input.context.recoveryInFlight = recovery;
           yield* Effect.tryPromise({
             try: () => recovery,

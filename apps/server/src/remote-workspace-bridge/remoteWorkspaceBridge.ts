@@ -2,23 +2,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { buildSshTransportArgs } from "../ssh/sshCommand.ts";
-import { formatSshDestination, parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
-import { assertSshExecutionTargetReady } from "../ssh/sshVerification.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { isRemoteWorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
-
-export interface RemoteWorkspaceBridgeConfig {
-  readonly executionTargetId: string;
-  readonly cwd: string | undefined;
-  readonly destination: string;
-  readonly transportArgs: ReadonlyArray<string>;
-}
 
 export interface RemoteWorkspaceBridge {
   readonly cwd: string;
   readonly bridgeDir: string;
-  readonly config: RemoteWorkspaceBridgeConfig;
   writeWorkspaceFile(relativePath: string, source: string): Promise<string>;
   cleanup(): Promise<void>;
 }
@@ -37,39 +26,12 @@ function assertRemoteWorkspaceTarget(workspaceTarget: WorkspaceTarget): void {
   }
 }
 
-export function resolveRemoteWorkspaceBridgeConfig(
-  workspaceTarget: WorkspaceTarget,
-): RemoteWorkspaceBridgeConfig | undefined {
-  if (!isRemoteWorkspaceTarget(workspaceTarget)) {
-    return undefined;
-  }
-
-  assertSshExecutionTargetReady(workspaceTarget.executionTargetId);
-  const target = parseSshExecutionTarget(workspaceTarget.executionTargetId);
-  if (!target) {
-    throw new Error(`Invalid SSH execution target '${workspaceTarget.executionTargetId}'.`);
-  }
-
-  return {
-    executionTargetId: workspaceTarget.executionTargetId,
-    cwd: workspaceTarget.cwd,
-    destination: formatSshDestination(target),
-    transportArgs: buildSshTransportArgs({
-      executionTargetId: workspaceTarget.executionTargetId,
-    }),
-  };
-}
-
 export async function createRemoteWorkspaceBridge(input: {
   readonly workspaceTarget: WorkspaceTarget;
   readonly prefix: string;
   readonly readmeLines?: ReadonlyArray<string>;
 }): Promise<RemoteWorkspaceBridge> {
   assertRemoteWorkspaceTarget(input.workspaceTarget);
-  const config = resolveRemoteWorkspaceBridgeConfig(input.workspaceTarget);
-  if (!config) {
-    throw new Error("Remote workspace bridge config was not available.");
-  }
 
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), input.prefix));
   const bridgeDir = path.join(cwd, ".bigbud");
@@ -83,7 +45,6 @@ export async function createRemoteWorkspaceBridge(input: {
   return {
     cwd,
     bridgeDir,
-    config,
     async writeWorkspaceFile(relativePath: string, source: string): Promise<string> {
       const normalizedRelativePath = relativePath.replace(/^[/\\]+/, "");
       const absolutePath = path.join(cwd, normalizedRelativePath);

@@ -1,5 +1,3 @@
-import { EventEmitter } from "node:events";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { spawnMock, createPiRemoteWorkspaceBridgeMock, assertSshExecutionTargetReadyMock } =
@@ -26,34 +24,7 @@ vi.mock("../../../ssh/sshVerification.ts", () => ({
 }));
 
 import { createPiRpcProcess } from "./RpcProcess.ts";
-
-function createFakeChildProcess() {
-  const stdout = new EventEmitter() as EventEmitter & { setEncoding: ReturnType<typeof vi.fn> };
-  stdout.setEncoding = vi.fn();
-  const stderr = new EventEmitter() as EventEmitter & { setEncoding: ReturnType<typeof vi.fn> };
-  stderr.setEncoding = vi.fn();
-  const stdin = Object.assign(new EventEmitter(), {
-    writable: true,
-    end: vi.fn(),
-    write: vi.fn((_data: string, callback?: (error?: Error | null) => void) => {
-      callback?.(null);
-      return true;
-    }),
-  });
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: typeof stdout;
-    stderr: typeof stderr;
-    stdin: typeof stdin;
-    exitCode: number | null;
-    kill: ReturnType<typeof vi.fn>;
-  };
-  child.stdout = stdout;
-  child.stderr = stderr;
-  child.stdin = stdin;
-  child.exitCode = null;
-  child.kill = vi.fn();
-  return child;
-}
+import { createFakeChildProcess } from "./RpcProcess.testHelpers.ts";
 
 async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> {
   const originalPlatform = process.platform;
@@ -145,11 +116,14 @@ describe("createPiRpcProcess", () => {
       env: globalThis.process.env,
     });
 
-    expect(createPiRemoteWorkspaceBridgeMock).toHaveBeenCalledWith({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    expect(createPiRemoteWorkspaceBridgeMock).toHaveBeenCalledWith(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      undefined,
+    );
     expect(spawnMock).toHaveBeenCalledWith(
       "/custom/pi",
       [
@@ -210,6 +184,12 @@ describe("createPiRpcProcess", () => {
         extensionPath: orchestrationExtensionPath,
         bridgeDir: "/tmp/pi-orchestration",
         extraArgs: ["--extension", orchestrationExtensionPath],
+        httpConfig: {
+          host: "127.0.0.1",
+          port: 3000,
+          threadId: "thread-remote-pi",
+          token: "thread-tool-token",
+        },
         cleanup: orchestrationCleanup,
       },
       env: globalThis.process.env,
@@ -374,86 +354,5 @@ describe("createPiRpcProcess", () => {
       child.emit("exit", 0, null);
       await expect(rpcProcess.stop()).resolves.toBeUndefined();
     });
-  });
-
-  it("stop sends SIGTERM and resolves once the child exits", async () => {
-    const child = createFakeChildProcess();
-    spawnMock.mockReturnValueOnce(child);
-    createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce(undefined);
-
-    const rpcProcess = await createPiRpcProcess({
-      binaryPath: "/custom/pi",
-      providerRuntimeTarget: {
-        location: "local",
-        executionTargetId: "local",
-      },
-      workspaceTarget: {
-        location: "local",
-        executionTargetId: "local",
-        cwd: "/tmp/project",
-      },
-      env: globalThis.process.env,
-    });
-
-    const stopPromise = rpcProcess.stop();
-
-    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
-
-    child.emit("exit", 0, null);
-    await expect(stopPromise).resolves.toBeUndefined();
-  });
-
-  it("stop is idempotent", async () => {
-    const child = createFakeChildProcess();
-    spawnMock.mockReturnValueOnce(child);
-    createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce(undefined);
-
-    const rpcProcess = await createPiRpcProcess({
-      binaryPath: "/custom/pi",
-      providerRuntimeTarget: {
-        location: "local",
-        executionTargetId: "local",
-      },
-      workspaceTarget: {
-        location: "local",
-        executionTargetId: "local",
-        cwd: "/tmp/project",
-      },
-      env: globalThis.process.env,
-    });
-
-    const first = rpcProcess.stop();
-    const second = rpcProcess.stop();
-
-    // Both calls resolve at the same time and only one SIGTERM is sent.
-    child.emit("exit", 0, null);
-    await expect(first).resolves.toBeUndefined();
-    await expect(second).resolves.toBeUndefined();
-    expect(child.kill).toHaveBeenCalledTimes(1);
-  });
-
-  it("stop resolves immediately if the child has already exited", async () => {
-    const child = createFakeChildProcess();
-    spawnMock.mockReturnValueOnce(child);
-    createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce(undefined);
-
-    const rpcProcess = await createPiRpcProcess({
-      binaryPath: "/custom/pi",
-      providerRuntimeTarget: {
-        location: "local",
-        executionTargetId: "local",
-      },
-      workspaceTarget: {
-        location: "local",
-        executionTargetId: "local",
-        cwd: "/tmp/project",
-      },
-      env: globalThis.process.env,
-    });
-
-    child.emit("exit", 0, null);
-
-    await expect(rpcProcess.stop()).resolves.toBeUndefined();
-    expect(child.kill).not.toHaveBeenCalled();
   });
 });

@@ -64,7 +64,11 @@ export interface NativeApi {
     onDirectoryChange: (
       input: Project.ProjectDirectoryWatchInput,
       callback: (event: Project.ProjectDirectoryWatchEvent) => void,
-      options?: { onResubscribe?: () => void },
+      options?: {
+        onError?: (error: unknown) => void;
+        onResubscribe?: () => void;
+        shouldRetry?: (error: unknown) => boolean;
+      },
     ) => () => void;
     readFilePreview: (
       input: Project.ProjectReadFilePreviewInput,
@@ -146,6 +150,9 @@ export interface NativeApi {
     verifyExecutionTarget: (
       input: Server.ServerVerifyExecutionTargetInput,
     ) => Promise<Server.ServerVerifyExecutionTargetResult>;
+    installRemoteAgent: (
+      input: Server.ServerInstallRemoteAgentInput,
+    ) => Promise<Server.ServerInstallRemoteAgentResult>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;

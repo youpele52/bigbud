@@ -25,11 +25,11 @@ export function makePiSessionControlMethods(deps: {
     deps.sessions.delete(threadId);
     yield* deps.stopSessionRecord(session);
     yield* deps.emit([
-      yield* deps.makeSyntheticEvent(threadId, "session.state.changed", {
+      yield* deps.makeSyntheticEvent(threadId, session.sessionEpoch, "session.state.changed", {
         state: "stopped",
         reason: "session.stopped",
       }),
-      yield* deps.makeSyntheticEvent(threadId, "session.exited", {
+      yield* deps.makeSyntheticEvent(threadId, session.sessionEpoch, "session.exited", {
         reason: "session.stopped",
         recoverable: true,
         exitKind: "graceful",
@@ -50,6 +50,7 @@ export function makePiSessionControlMethods(deps: {
               workspaceExecutionTargetId: session.workspaceExecutionTargetId,
               executionTargetId: session.executionTargetId,
               threadId: session.threadId,
+              sessionEpoch: session.sessionEpoch,
               resumeCursor: buildResumeCursor(session),
               createdAt: session.createdAt,
               updatedAt: session.updatedAt,
@@ -87,15 +88,25 @@ export function makePiSessionControlMethods(deps: {
           deps.sessions.delete(session.threadId);
           yield* deps.stopSessionRecord(session);
           yield* deps.emit([
-            yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
-              state: "stopped",
-              reason: "session.stopped",
-            }),
-            yield* deps.makeSyntheticEvent(session.threadId, "session.exited", {
-              reason: "session.stopped",
-              recoverable: true,
-              exitKind: "graceful",
-            }),
+            yield* deps.makeSyntheticEvent(
+              session.threadId,
+              session.sessionEpoch,
+              "session.state.changed",
+              {
+                state: "stopped",
+                reason: "session.stopped",
+              },
+            ),
+            yield* deps.makeSyntheticEvent(
+              session.threadId,
+              session.sessionEpoch,
+              "session.exited",
+              {
+                reason: "session.stopped",
+                recoverable: true,
+                exitKind: "graceful",
+              },
+            ),
           ]);
         }),
       { concurrency: "unbounded" },

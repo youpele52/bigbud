@@ -52,6 +52,7 @@ export function AiSettingsSection() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.enableAssistantStreaming}
             onCheckedChange={(checked) =>
               updateSettings({ enableAssistantStreaming: Boolean(checked) })
@@ -78,6 +79,7 @@ export function AiSettingsSection() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.enableThinkingStreaming}
             onCheckedChange={(checked) =>
               updateSettings({ enableThinkingStreaming: Boolean(checked) })

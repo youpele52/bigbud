@@ -23,11 +23,14 @@ function expectTranspiles(relativePath: string, source: string): void {
 
 describe("OpencodeRemoteWorkspaceBridge", () => {
   it("creates transpileable override tools in a synthetic cwd", async () => {
-    const bridge = await createOpencodeRemoteWorkspaceBridge({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    const bridge = await createOpencodeRemoteWorkspaceBridge(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+    );
 
     const generatedFiles = [
       ".bigbud/opencode-remote-runtime.ts",
@@ -51,9 +54,15 @@ describe("OpencodeRemoteWorkspaceBridge", () => {
       path.join(bridge.cwd, ".bigbud/opencode-remote-runtime.ts"),
       "utf8",
     );
-    expect(runtimeSource).toContain("/srv/project");
-    expect(runtimeSource).toContain("root@devbox");
+    expect(runtimeSource).toContain("remote_workspace_process");
+    expect(runtimeSource).toContain("token-1");
+    expect(runtimeSource).not.toContain("root@devbox");
     expect(runtimeSource).toContain("readRemoteFileContents");
+    expect(runtimeSource).toContain("git apply --check");
+    expect(runtimeSource).toContain("patch --dry-run");
+    expect(runtimeSource).toContain("OpenCode patch syntax is not a unified diff");
+    expect(bridge.systemPrompt).toContain("The actual workspace root is /srv/project");
+    expect(bridge.systemPrompt).toContain("prefer edit or write");
 
     const readToolSource = await fs.readFile(
       path.join(bridge.cwd, ".opencode/tools/read.ts"),
@@ -66,6 +75,12 @@ describe("OpencodeRemoteWorkspaceBridge", () => {
       "utf8",
     );
     expect(editToolSource).toContain("readRemoteFileContents");
+
+    const patchToolSource = await fs.readFile(
+      path.join(bridge.cwd, ".opencode/tools/apply_patch.ts"),
+      "utf8",
+    );
+    expect(patchToolSource).toContain("OpenCode *** Begin Patch syntax is not accepted");
 
     await bridge.cleanup();
     await expect(fs.access(bridge.cwd)).rejects.toThrow();

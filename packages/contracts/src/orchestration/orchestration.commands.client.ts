@@ -29,6 +29,9 @@ import {
   SourceProposedPlanReference,
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
+import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+
+export { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -158,33 +161,6 @@ const ThreadInteractionModeSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
-const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
-  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
-  executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: ModelSelection,
-  runtimeMode: RuntimeMode,
-  interactionMode: ProviderInteractionMode,
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  createdAt: IsoDateTime,
-});
-
-const ThreadTurnStartBootstrapPrepareWorktree = Schema.Struct({
-  projectCwd: TrimmedNonEmptyString,
-  baseBranch: TrimmedNonEmptyString,
-  branch: Schema.optional(TrimmedNonEmptyString),
-});
-
-export const ThreadTurnStartBootstrap = Schema.Struct({
-  createThread: Schema.optional(ThreadTurnStartBootstrapCreateThread),
-  prepareWorktree: Schema.optional(ThreadTurnStartBootstrapPrepareWorktree),
-  runSetupScript: Schema.optional(Schema.Boolean),
-});
-export type ThreadTurnStartBootstrap = typeof ThreadTurnStartBootstrap.Type;
-
 export const ThreadTurnStartCommand = Schema.Struct({
   type: Schema.Literal("thread.turn.start"),
   commandId: CommandId,
@@ -233,6 +209,9 @@ export const ThreadQueuedPromptFlushCommand = Schema.Struct({
   threadId: ThreadId,
   messageIds: Schema.Array(MessageId),
   messageId: MessageId,
+  acknowledged: Schema.optional(Schema.Boolean),
+  consumeOnly: Schema.optional(Schema.Boolean),
+  controlOperationId: Schema.optional(CommandId),
   createdAt: IsoDateTime,
 });
 
@@ -293,6 +272,17 @@ const ThreadTurnInterruptCommand = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
   queuedPromptIdsAfterSettlement: Schema.optional(Schema.Array(MessageId)),
+  sessionEpoch: Schema.optional(NonNegativeInt),
+  createdAt: IsoDateTime,
+});
+
+const ThreadTurnSteerCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn.steer"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  turnId: Schema.optional(TurnId),
+  queuedPromptIds: Schema.Array(MessageId),
+  sessionEpoch: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
 });
 
@@ -342,6 +332,7 @@ const ThreadSessionStopCommand = Schema.Struct({
   type: Schema.Literal("thread.session.stop"),
   commandId: CommandId,
   threadId: ThreadId,
+  sessionEpoch: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
 });
 
@@ -365,6 +356,7 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadQueuedPromptFlushCommand,
   ThreadShellRunCommand,
   ThreadTurnInterruptCommand,
+  ThreadTurnSteerCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
@@ -395,6 +387,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadQueuedPromptFlushCommand,
   ClientThreadShellRunCommand,
   ThreadTurnInterruptCommand,
+  ThreadTurnSteerCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,

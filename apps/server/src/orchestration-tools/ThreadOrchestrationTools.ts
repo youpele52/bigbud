@@ -13,6 +13,7 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import { lockThreadTitle } from "./ThreadTitleLock.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
@@ -140,6 +141,14 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         .pipe(Effect.mapError(delegationError));
 
     yield* updateState("project_resolved");
+    const callerExecutionTargets =
+      targetProjectId === callerThread.projectId
+        ? {
+            providerRuntimeExecutionTargetId: callerThread.providerRuntimeExecutionTargetId,
+            workspaceExecutionTargetId: callerThread.workspaceExecutionTargetId,
+            executionTargetId: callerThread.executionTargetId,
+          }
+        : {};
     const createResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.create",
@@ -148,9 +157,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         projectId: targetProjectId,
         title,
         purpose: "standard",
-        providerRuntimeExecutionTargetId: callerThread.providerRuntimeExecutionTargetId,
-        workspaceExecutionTargetId: callerThread.workspaceExecutionTargetId,
-        executionTargetId: callerThread.executionTargetId,
+        ...callerExecutionTargets,
         modelSelection: callerThread.modelSelection,
         runtimeMode: callerThread.runtimeMode,
         interactionMode: callerThread.interactionMode,
@@ -291,16 +298,11 @@ export const getThreadStatusViaOrchestration = Effect.fn("getThreadStatusViaOrch
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
     }
 
-    if (targetThread.projectId !== callerThread.projectId) {
-      const delegation = yield* input.threadDelegationRepository
-        .findDirectByChild({ childThreadId: targetThread.id })
-        .pipe(Effect.mapError(delegationError));
-      if (Option.isNone(delegation) || delegation.value.callerThreadId !== callerThread.id) {
-        return yield* Effect.fail(
-          new Error(`Thread '${input.threadId}' is not accessible from the current project.`),
-        );
-      }
-    }
+    yield* requireThreadCoordinationAccess({
+      threadDelegationRepository: input.threadDelegationRepository,
+      callerThread,
+      targetThread,
+    });
 
     return resolveThreadWorkflowStatus(targetThread);
   },

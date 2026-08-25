@@ -86,7 +86,9 @@ type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
+  readonly shouldRetry?: (error: unknown) => boolean;
 }
 
 export type RpcUnaryMethod<TTag extends RpcTag> =
@@ -214,6 +216,7 @@ export interface WsRpcClient {
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
+    readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly unlockSshKey: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshKey>;
     readonly unlockSshPassword: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshPassword>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;

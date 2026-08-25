@@ -98,6 +98,10 @@ import Migration0094 from "./Migrations/094_RepairProjectionThreadSessionIdentit
 import Migration0095 from "./Migrations/095_RepairProjectionThreadProposedPlanImplementation.ts";
 import Migration0096 from "./Migrations/096_RepairOrchestrationThreadIdentityIndependence.ts";
 import Migration0097 from "./Migrations/097_ThreadRetentionFinitePolicies.ts";
+import Migration0098 from "./Migrations/098_ThreadDelegationReservationOwnership.ts";
+import Migration0099 from "./Migrations/099_ParentDeletionUpdateGuard.ts";
+import Migration0100 from "./Migrations/100_ProviderTurnLivenessSessionEpoch.ts";
+import Migration0101 from "./Migrations/101_ProviderRuntimeEpochAndTurnControl.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -196,6 +200,10 @@ export const migrationEntries = [
   [95, "RepairProjectionThreadProposedPlanImplementation", Migration0095],
   [96, "RepairOrchestrationThreadIdentityIndependence", Migration0096],
   [97, "ThreadRetentionFinitePolicies", Migration0097],
+  [98, "ThreadDelegationReservationOwnership", Migration0098],
+  [99, "ParentDeletionUpdateGuard", Migration0099],
+  [100, "ProviderTurnLivenessSessionEpoch", Migration0100],
+  [101, "ProviderRuntimeEpochAndTurnControl", Migration0101],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

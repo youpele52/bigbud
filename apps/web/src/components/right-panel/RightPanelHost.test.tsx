@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const openNewBrowserTabMock = vi.hoisted(() => vi.fn());
 const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
+const browserPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
@@ -94,7 +95,10 @@ vi.mock("./RightPanelLauncher", () => ({
 }));
 
 vi.mock("../browser/BrowserPanel", () => ({
-  BrowserPanelContent: () => <div data-testid="browser-panel">browser</div>,
+  BrowserPanelContent: (props: Record<string, unknown>) => {
+    browserPanelPropsMock.props.push(props);
+    return <div data-testid="browser-panel">browser</div>;
+  },
 }));
 
 vi.mock("../files/FilesPanel", () => ({
@@ -140,6 +144,7 @@ describe("RightPanelHost", () => {
 
   afterEach(() => {
     launcherPropsMock.props = null;
+    browserPanelPropsMock.props = [];
     openNewBrowserTabMock.mockReset();
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
@@ -164,6 +169,12 @@ describe("RightPanelHost", () => {
     expect(browserMarkup).toContain('inert=""><div data-testid="files-panel">files</div>');
     expect(browserMarkup).toContain('inert=""><div data-testid="notes-panel">notes</div>');
     expect(browserMarkup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
+    expect(browserPanelPropsMock.props).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tabId: "browser:1", visible: true }),
+        expect.objectContaining({ tabId: "browser:2", visible: false }),
+      ]),
+    );
 
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
@@ -182,6 +193,12 @@ describe("RightPanelHost", () => {
     expect(filesMarkup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
     expect(filesMarkup).toMatch(/<div class="[^"]*"><div data-testid="files-panel">files<\/div>/);
     expect(filesMarkup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
+    expect(browserPanelPropsMock.props).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tabId: "browser:1", visible: false }),
+        expect.objectContaining({ tabId: "browser:2", visible: false }),
+      ]),
+    );
   });
 
   it("shows the launcher while preserving existing tab bodies when no tab is active", () => {

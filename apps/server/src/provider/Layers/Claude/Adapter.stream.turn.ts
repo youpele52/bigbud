@@ -7,12 +7,12 @@
  * @module ClaudeAdapter.stream.turn
  */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
+import { type EventId, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { asCanonicalTurnId, exitPlanCaptureKey, nativeProviderRefs } from "./Adapter.utils.ts";
 import { claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
-import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnCompletionHandlers } from "./Adapter.stream.turn.complete.ts";
@@ -22,7 +22,7 @@ export interface TurnHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
   readonly blocks: BlockHandlers;

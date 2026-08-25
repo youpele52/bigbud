@@ -1,5 +1,8 @@
-import { PlusIcon, TriangleAlertIcon } from "lucide-react";
-import { type RefObject } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { CloudIcon } from "@hugeicons/core-free-icons";
+import { autoAnimate } from "@formkit/auto-animate";
+import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
+import { useCallback, type RefObject } from "react";
 import {
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
@@ -9,7 +12,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarGroup } from "../ui/sidebar";
 import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProjectItem";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem } from "./SidebarRenderedProjectItem";
@@ -53,6 +56,10 @@ interface SidebarProjectsSectionProps {
   onCancelAdd: () => void;
   // Project list
   renderedProjects: RenderedProjectEntry[];
+  isExpanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  isRemoteProjectsExpanded: boolean;
+  onRemoteProjectsExpandedChange: (expanded: boolean) => void;
   isManualProjectSorting: boolean;
   onDragStart: (event: import("@dnd-kit/core").DragStartEvent) => void;
   onDragEnd: (event: import("@dnd-kit/core").DragEndEvent) => void;
@@ -85,12 +92,22 @@ export function SidebarProjectsSection({
   onAdd,
   onCancelAdd,
   renderedProjects,
+  isExpanded,
+  onExpandedChange,
+  isRemoteProjectsExpanded,
+  onRemoteProjectsExpandedChange,
   isManualProjectSorting,
   onDragStart,
   onDragEnd,
   onDragCancel,
   sharedProjectItemProps,
 }: SidebarProjectsSectionProps) {
+  const attachProjectsContentRef = useCallback((node: HTMLElement | null) => {
+    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
+  }, []);
+  const attachRemoteProjectsContentRef = useCallback((node: HTMLElement | null) => {
+    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
+  }, []);
   const localProjects = renderedProjects.filter(
     (entry) => !isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
   );
@@ -125,6 +142,8 @@ export function SidebarProjectsSection({
       ) : null}
       <SidebarGroup className="px-2 py-2">
         <SidebarSectionLabel
+          isExpanded={isExpanded}
+          onExpandedChange={onExpandedChange}
           actions={
             <>
               <ProjectSortMenu
@@ -161,46 +180,55 @@ export function SidebarProjectsSection({
             </>
           }
         >
-          Projects
+          <span className="inline-flex items-center gap-1.5">
+            <LaptopMinimalIcon aria-hidden="true" className={SIDEBAR_ICON_SIZE_CLASS} />
+            Projects
+          </span>
         </SidebarSectionLabel>
 
-        {shouldShowProjectPathEntry && (
-          <SidebarNewProjectFlow
-            isElectron={isElectron}
-            newCwd={newCwd}
-            isPickingFolder={isPickingFolder}
-            isAddingProject={isAddingProject}
-            addProjectError={addProjectError}
-            addProjectInputRef={addProjectInputRef}
-            onCwdChange={onCwdChange}
-            onClearError={onClearError}
-            onPickFolder={onPickFolder}
-            onAdd={onAdd}
-            onCancel={onCancelAdd}
-          />
-        )}
-
-        <SidebarProjectList
-          renderedProjects={localProjects as unknown as RenderedProject[]}
-          isManualSorting={isManualProjectSorting}
-          hasProjects={localProjects.length > 0}
-          showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
-          showLoadMore
-          catalogScope="local"
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragCancel={onDragCancel}
-          renderProjectItem={(rp, dragHandleProps) => (
-            <SidebarRenderedProjectItem
-              {...sharedProjectItemProps}
-              {...(rp as unknown as RenderedProjectData)}
-              dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+        <div ref={attachProjectsContentRef}>
+          {isExpanded && shouldShowProjectPathEntry && (
+            <SidebarNewProjectFlow
+              isElectron={isElectron}
+              newCwd={newCwd}
+              isPickingFolder={isPickingFolder}
+              isAddingProject={isAddingProject}
+              addProjectError={addProjectError}
+              addProjectInputRef={addProjectInputRef}
+              onCwdChange={onCwdChange}
+              onClearError={onClearError}
+              onPickFolder={onPickFolder}
+              onAdd={onAdd}
+              onCancel={onCancelAdd}
             />
           )}
-        />
+
+          {isExpanded ? (
+            <SidebarProjectList
+              renderedProjects={localProjects as unknown as RenderedProject[]}
+              isManualSorting={isManualProjectSorting}
+              hasProjects={localProjects.length > 0}
+              showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
+              showLoadMore
+              catalogScope="local"
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDragCancel={onDragCancel}
+              renderProjectItem={(rp, dragHandleProps) => (
+                <SidebarRenderedProjectItem
+                  {...sharedProjectItemProps}
+                  {...(rp as unknown as RenderedProjectData)}
+                  dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+                />
+              )}
+            />
+          ) : null}
+        </div>
 
         <div className="mt-3">
           <SidebarSectionLabel
+            isExpanded={isRemoteProjectsExpanded}
+            onExpandedChange={onRemoteProjectsExpandedChange}
             actions={
               <>
                 <ProjectSortMenu
@@ -230,32 +258,48 @@ export function SidebarProjectsSection({
               </>
             }
           >
-            Remote Projects
+            <span className="inline-flex items-center gap-1.5">
+              <HugeiconsIcon
+                aria-hidden="true"
+                className={SIDEBAR_ICON_SIZE_CLASS}
+                icon={CloudIcon}
+                size={14}
+                strokeWidth={1.5}
+              />
+              Remote Projects
+            </span>
           </SidebarSectionLabel>
 
-          <SidebarProjectList
-            renderedProjects={remoteProjects as unknown as RenderedProject[]}
-            isManualSorting={isManualProjectSorting}
-            hasProjects={remoteProjects.length > 0}
-            showEmptyState={false}
-            showLoadMore
-            catalogScope="remote"
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            onDragCancel={onDragCancel}
-            renderProjectItem={(rp, dragHandleProps) => (
-              <SidebarRenderedProjectItem
-                {...sharedProjectItemProps}
-                {...(rp as unknown as RenderedProjectData)}
-                dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+          <div ref={attachRemoteProjectsContentRef}>
+            {isRemoteProjectsExpanded ? (
+              <SidebarProjectList
+                renderedProjects={remoteProjects as unknown as RenderedProject[]}
+                isManualSorting={isManualProjectSorting}
+                hasProjects={remoteProjects.length > 0}
+                showEmptyState={false}
+                showLoadMore
+                catalogScope="remote"
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragCancel={onDragCancel}
+                renderProjectItem={(rp, dragHandleProps) => (
+                  <SidebarRenderedProjectItem
+                    {...sharedProjectItemProps}
+                    {...(rp as unknown as RenderedProjectData)}
+                    dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+                  />
+                )}
               />
-            )}
-          />
+            ) : null}
 
-          {remoteProjects.length === 0 &&
-          (localProjects.length > 0 || shouldShowProjectPathEntry) ? (
-            <div className="px-4 py-2 text-xs text-muted-foreground/60">No remote projects yet</div>
-          ) : null}
+            {isRemoteProjectsExpanded &&
+            remoteProjects.length === 0 &&
+            (localProjects.length > 0 || shouldShowProjectPathEntry) ? (
+              <div className="px-4 py-2 text-xs text-muted-foreground/60">
+                No remote projects yet
+              </div>
+            ) : null}
+          </div>
         </div>
       </SidebarGroup>
     </>

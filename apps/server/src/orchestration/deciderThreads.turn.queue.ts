@@ -16,11 +16,19 @@ import {
 import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
 
 const MAX_QUEUED_PROMPTS = 5;
+const hasActiveReservation = (thread: OrchestrationReadModel["threads"][number]) =>
+  Boolean(
+    thread.pendingTurnControlOperation?.reservedPromptIds.length &&
+    !["completed", "failed", "superseded", "cancelled"].includes(
+      thread.pendingTurnControlOperation.state,
+    ),
+  );
 type QueueCommand = Extract<
   OrchestrationCommand,
   | { type: "thread.message.submit" }
   | { type: "thread.queued-prompt.remove" }
   | { type: "thread.queued-prompt.flush" }
+  | { type: "thread.queued-prompt.flush-cancel" }
 >;
 
 const queuedFollowUpText = (texts: ReadonlyArray<string>): string =>
@@ -62,7 +70,26 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
   yield* requireThreadReadyForMutation({ thread, command });
 
+  if (command.type === "thread.queued-prompt.flush-cancel") {
+    if (thread.pendingInterruptFlushIntent?.intentId !== command.intentId) return [];
+    return {
+      ...withEventBase({
+        aggregateKind: "thread",
+        aggregateId: thread.id,
+        occurredAt: command.createdAt,
+        commandId: command.commandId,
+      }),
+      type: "thread.queued-prompt-flush-cancelled",
+      payload: { threadId: thread.id, intentId: command.intentId },
+    };
+  }
+
   if (command.type === "thread.queued-prompt.remove") {
+    if (
+      hasActiveReservation(thread) &&
+      thread.pendingTurnControlOperation?.reservedPromptIds.includes(command.messageId)
+    )
+      return [];
     return {
       ...withEventBase({
         aggregateKind: "thread",
@@ -86,7 +113,12 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   if (command.type === "thread.message.submit") {
     const queuedPrompts = thread.queuedPrompts ?? [];
     if (queuedPrompts.some((prompt) => prompt.id === command.message.messageId)) return [];
-    if (command.delivery === "auto" && safelyIdle && queuedPrompts.length === 0) {
+    if (
+      command.delivery === "auto" &&
+      safelyIdle &&
+      !thread.queueHold &&
+      queuedPrompts.length === 0
+    ) {
       return yield* decideThreadTurnStartCommand({
         readModel,
         command: {
@@ -116,7 +148,7 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       threadId: thread.id,
       queuePosition: queuedPrompts.length + 1,
     });
-    if (command.delivery !== "auto" || !safelyIdle) return queuedEvent;
+    if (command.delivery !== "auto" || !safelyIdle || thread.queueHold) return queuedEvent;
 
     // The queue existed while the thread was idle. Persist the new prompt and
     // consume the exact combined prefix in this one command, preventing a
@@ -152,7 +184,14 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     return [queuedEvent, flushedEvent, ...startEvents];
   }
 
-  if (!safelyIdle) return [];
+  if (!safelyIdle && command.type === "thread.queued-prompt.flush" && !command.acknowledged)
+    return [];
+  if (
+    hasActiveReservation(thread) &&
+    thread.pendingTurnControlOperation?.operationId !== command.controlOperationId
+  ) {
+    return [];
+  }
   const pendingIntent = thread.pendingInterruptFlushIntent;
   if (
     pendingIntent !== null &&
@@ -179,6 +218,7 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     type: "thread.queued-prompts-flushed",
     payload: { threadId: thread.id, messageIds: command.messageIds },
   };
+  if (command.consumeOnly) return flushedEvent;
   const startEvents = yield* decideThreadTurnStartCommand({
     readModel,
     command: {

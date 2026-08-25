@@ -39,7 +39,11 @@ export function AgentBrowserSettingsSection() {
               }
             }}
           >
-            <SelectTrigger className="w-full text-sm sm:w-60" aria-label="Default agent browser">
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-full text-sm sm:w-60"
+              aria-label="Default agent browser"
+            >
               <SelectValue>
                 {BROWSER_OPTIONS.find((option) => option.value === settings.agentBrowserPreference)
                   ?.label ?? "bigbud browser — Recommended"}

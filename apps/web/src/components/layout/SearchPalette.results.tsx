@@ -6,6 +6,8 @@ import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
 import { cn } from "~/lib/utils";
 import { ProjectSearchResultGroup, type ProjectSearchResult } from "./SearchPalette.projectResults";
+import { SearchPaletteCurrentFileResults } from "./SearchPalette.currentFileResults";
+import type { FileSearchMatch } from "./SearchPalette.logic";
 
 export interface ThreadSearchResult {
   id: string;
@@ -68,6 +70,10 @@ interface SearchPaletteResultsProps {
   isSearchPending: boolean;
   isFileSearchPending: boolean;
   isProjectSearchPending: boolean;
+  currentFilePath: string | null;
+  currentFileMatches: readonly FileSearchMatch[];
+  visibleCurrentFileMatches: readonly FileSearchMatch[];
+  setVisibleCurrentFileMatchCount: React.Dispatch<React.SetStateAction<number>>;
   inThreadMessageResults: MessageSearchResult[];
   otherThreadMessageResults: MessageSearchResult[];
   visibleOtherThreadMessageResults: MessageSearchResult[];
@@ -90,6 +96,7 @@ interface SearchPaletteResultsProps {
   onSelectThread: (threadId: ThreadId) => void;
   onSelectProject: (result: ProjectSearchResult) => void;
   onSelectFile: (result: FileSearchResult) => void;
+  onSelectCurrentFileMatch: (line: number) => void;
   initialVisibleResultCount: number;
 }
 
@@ -99,6 +106,10 @@ export function SearchPaletteResults({
   isSearchPending,
   isFileSearchPending,
   isProjectSearchPending,
+  currentFilePath,
+  currentFileMatches,
+  visibleCurrentFileMatches,
+  setVisibleCurrentFileMatchCount,
   inThreadMessageResults,
   otherThreadMessageResults,
   visibleOtherThreadMessageResults,
@@ -120,12 +131,26 @@ export function SearchPaletteResults({
   onSelectThread,
   onSelectProject,
   onSelectFile,
+  onSelectCurrentFileMatch,
   initialVisibleResultCount,
 }: SearchPaletteResultsProps) {
   const hasResults = hasMessageResults || hasProjectResults || hasThreadResults || hasFileResults;
 
   return (
     <>
+      {!isSearchPending && currentFilePath ? (
+        <SearchPaletteCurrentFileResults
+          path={currentFilePath}
+          query={query}
+          matches={currentFileMatches}
+          visibleMatches={visibleCurrentFileMatches}
+          onSelect={onSelectCurrentFileMatch}
+          onShowMore={() =>
+            setVisibleCurrentFileMatchCount((current) => current + initialVisibleResultCount)
+          }
+        />
+      ) : null}
+
       {(isSearchPending || isFileSearchPending || isProjectSearchPending) && normalizedQuery && (
         <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
       )}
@@ -134,6 +159,7 @@ export function SearchPaletteResults({
         !isFileSearchPending &&
         !isProjectSearchPending &&
         !hasResults &&
+        !currentFilePath &&
         normalizedQuery && (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">
             No matching results

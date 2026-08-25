@@ -19,10 +19,12 @@ describe("ProviderCommandReactor canonical thread deletion", () => {
     const now = new Date().toISOString();
     const rootThreadId = ThreadId.makeUnsafe("thread-1");
     const childThreadId = ThreadId.makeUnsafe("thread-delete-child");
+    const grandchildThreadId = ThreadId.makeUnsafe("thread-delete-grandchild");
     const retainedThreadId = ThreadId.makeUnsafe("thread-delete-retained");
 
     for (const [threadId, title, parentThread] of [
-      [childThreadId, "Deleted child", rootThreadId],
+      [childThreadId, "Surviving child", rootThreadId],
+      [grandchildThreadId, "Surviving grandchild", childThreadId],
       [retainedThreadId, "Retained thread", undefined],
     ] as const) {
       await Effect.runPromise(
@@ -87,19 +89,27 @@ describe("ProviderCommandReactor canonical thread deletion", () => {
         }>`
           SELECT
             (SELECT COUNT(*) FROM orchestration_command_receipts
-              WHERE aggregate_kind = 'thread' AND aggregate_id IN (${rootThreadId}, ${childThreadId})) AS receipts,
+              WHERE aggregate_kind = 'thread' AND aggregate_id = ${rootThreadId}) AS receipts,
             (SELECT COUNT(*) FROM orchestration_event_ids
               WHERE event_id IN (SELECT event_id FROM orchestration_event_gaps)) AS "eventIds",
             (SELECT COUNT(*) FROM orchestration_stream_state
-              WHERE aggregate_kind = 'thread' AND stream_id IN (${rootThreadId}, ${childThreadId})) AS "streamState",
+              WHERE aggregate_kind = 'thread' AND stream_id = ${rootThreadId}) AS "streamState",
             (SELECT COUNT(*) FROM orchestration_deletion_markers
-              WHERE entity_kind = 'thread' AND entity_id IN (${rootThreadId}, ${childThreadId})) AS markers
+              WHERE entity_kind = 'thread' AND entity_id = ${rootThreadId}) AS markers
         `,
       ]),
     );
-    expect(retainedEvents).toEqual([{ threadId: retainedThreadId }]);
+    expect(retainedEvents).toEqual([
+      { threadId: childThreadId },
+      { threadId: grandchildThreadId },
+      { threadId: retainedThreadId },
+    ]);
     expect(gaps[0]?.count).toBeGreaterThan(0);
-    expect(identities).toEqual([{ threadId: retainedThreadId }]);
+    expect(identities).toEqual([
+      { threadId: childThreadId },
+      { threadId: grandchildThreadId },
+      { threadId: retainedThreadId },
+    ]);
     expect(deletedCanonical).toEqual([{ receipts: 0, eventIds: 0, streamState: 0, markers: 0 }]);
 
     await Effect.runPromise(
@@ -109,10 +119,15 @@ describe("ProviderCommandReactor canonical thread deletion", () => {
       ),
     );
     const restored = await Effect.runPromise(
-      harness.sql<{ readonly threadId: string }>`
-        SELECT thread_id AS "threadId" FROM projection_threads ORDER BY thread_id
+      harness.sql<{ readonly parentThreadId: string | null; readonly threadId: string }>`
+        SELECT thread_id AS "threadId", parent_thread_id AS "parentThreadId"
+        FROM projection_threads ORDER BY thread_id
       `,
     );
-    expect(restored).toEqual([{ threadId: retainedThreadId }]);
+    expect(restored).toEqual([
+      { threadId: childThreadId, parentThreadId: null },
+      { threadId: grandchildThreadId, parentThreadId: childThreadId },
+      { threadId: retainedThreadId, parentThreadId: null },
+    ]);
   });
 });

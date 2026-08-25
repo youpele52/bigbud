@@ -13,7 +13,6 @@ const DEFAULT_REMOTE_TIMEOUT_MS = 30_000;
 
 export interface RemoteWorkspaceSessionFsBridge {
   readonly cwd: string;
-  readonly destination: string;
   readonly initialCwd: string;
   readonly sessionFsConfig: SessionFsConfig;
   createSessionFsHandler(): SessionFsProvider;
@@ -367,7 +366,6 @@ export async function createRemoteWorkspaceSessionFsBridge(
 
   return {
     cwd: bridge.cwd,
-    destination: bridge.config.destination,
     initialCwd,
     sessionFsConfig: {
       initialCwd,

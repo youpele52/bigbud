@@ -26,6 +26,7 @@ function makeDeps(): MapEventDeps {
 function makeSession(): ActiveCopilotSession {
   return {
     threadId: threadId("thread-1"),
+    sessionEpoch: 7,
     createdAt: "2026-05-14T00:00:00.000Z",
     runtimeMode: "approval-required",
     providerRuntimeExecutionTargetId: "local",
@@ -73,6 +74,7 @@ describe("CopilotAdapter.mapEvent", () => {
       type: "content.delta",
       provider: "copilot",
       threadId: "thread-1",
+      sessionEpoch: 7,
       turnId: "turn-1",
       itemId: "reasoning-1",
       payload: {

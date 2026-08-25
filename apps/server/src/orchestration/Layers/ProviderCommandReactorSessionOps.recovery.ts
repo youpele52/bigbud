@@ -61,6 +61,7 @@ export const rolloverProviderSessionAtHighWater = Effect.fn("rolloverProviderSes
     readonly providerService: ProviderServiceShape;
     readonly states: Map<string, ProviderCapabilityContextState>;
     readonly threadId: ThreadId;
+    readonly sessionEpoch?: number;
     readonly activeSession: ProviderSession | undefined;
     readonly activities: ReadonlyArray<{ readonly kind: string; readonly payload: unknown }>;
   }) {
@@ -82,7 +83,10 @@ export const rolloverProviderSessionAtHighWater = Effect.fn("rolloverProviderSes
       threadId: input.threadId,
       provider: input.activeSession.provider,
     });
-    yield* input.providerService.stopSession({ threadId: input.threadId });
+    yield* input.providerService.stopSession({
+      threadId: input.threadId,
+      sessionEpoch: input.sessionEpoch ?? 0,
+    });
     input.states.delete(input.threadId);
     return undefined;
   },

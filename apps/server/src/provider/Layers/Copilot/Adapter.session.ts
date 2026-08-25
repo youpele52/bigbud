@@ -252,6 +252,7 @@ export const makeListSessions =
             status: record.activeTurnId ? ("running" as const) : ("ready" as const),
             runtimeMode: record.runtimeMode,
             threadId: record.threadId,
+            sessionEpoch: record.sessionEpoch,
             ...(record.providerRuntimeExecutionTargetId
               ? { providerRuntimeExecutionTargetId: record.providerRuntimeExecutionTargetId }
               : {}),

@@ -13,6 +13,11 @@ import {
 import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog.ts";
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import serverPackageJson from "../package.json" with { type: "json" };
+import {
+  assertCompleteServerWorkspaceAgentSet,
+  stageHostServerWorkspaceAgent,
+  stageReleasedServerWorkspaceAgents,
+} from "./workspaceAgent.ts";
 
 // Keep the Node-run build CLI independent from the contracts source barrel.
 const APP_SERVER_NAME = "bigbud server";
@@ -171,6 +176,13 @@ const buildCmd = Command.make(
           "[cli] Mobile web dist not found — skipping mobile companion bundle.",
         );
       }
+
+      yield* Effect.try({
+        try: () => stageHostServerWorkspaceAgent(repoRoot, serverDir),
+        catch: (cause) =>
+          new CliError({ message: "Failed to stage the server workspace watcher agent.", cause }),
+      });
+      yield* Effect.log("[cli] Bundled the native workspace watcher agent");
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 
@@ -206,6 +218,18 @@ const publishCmd = Command.make(
           });
         }
       }
+      yield* Effect.try({
+        try: () => {
+          stageReleasedServerWorkspaceAgents(repoRoot, serverDir);
+          assertCompleteServerWorkspaceAgentSet(serverDir);
+        },
+        catch: (cause) =>
+          new CliError({
+            message:
+              "Server publish requires verified workspace watcher agents for macOS arm64/x64, Linux x64, and Windows x64.",
+            cause,
+          }),
+      });
 
       yield* Effect.acquireUseRelease(
         // Acquire: backup package.json, resolve catalog: deps, strip devDependencies/scripts

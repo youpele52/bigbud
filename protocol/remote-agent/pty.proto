@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+import "remote-agent/process.proto";
+
+message PtyCreateRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string cwd = 5;
+  string shell = 6;
+  repeated string args = 7;
+  uint32 cols = 8;
+  uint32 rows = 9;
+  repeated ProcessEnvironment environment = 10;
+}
+
+message PtyCreateResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  uint64 pid = 4;
+  string error_code = 5;
+  string error_message = 6;
+}
+
+message PtyInput {
+  string request_id = 1;
+  string pty_id = 2;
+  uint64 sequence = 3;
+  bytes bytes = 4;
+}
+
+message PtyOutput {
+  string pty_id = 1;
+  uint64 sequence = 2;
+  bytes bytes = 3;
+}
+
+message PtyOutputAck {
+  string request_id = 1;
+  string pty_id = 2;
+  uint64 acknowledged_sequence = 3;
+}
+
+message PtyResizeRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+}
+
+message PtyResizeResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtySignalRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  string signal = 3;
+}
+
+message PtySignalResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtyAttachRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  uint64 after_sequence = 3;
+}
+
+message PtyAttachResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  string state = 3;
+  uint64 pid = 4;
+  uint64 next_sequence = 5;
+  uint64 first_retained_sequence = 6;
+  bool replay_gap = 7;
+}
+
+message PtyCloseRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  bool terminate = 3;
+}
+
+message PtyCloseResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtyExited {
+  string pty_id = 1;
+  int32 exit_code = 2;
+  bool has_exit_code = 3;
+  int32 signal = 4;
+  bool has_signal = 5;
+}
+
+message PtyInputResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtyOutputAckResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}

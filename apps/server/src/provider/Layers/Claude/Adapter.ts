@@ -33,17 +33,15 @@ import {
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
-import type {
-  PendingApprovalLedgerEntry,
-  PendingUserInputLedgerEntry,
-} from "./Adapter.requestLedger.ts";
-import type {
-  ClaudeAdapterLiveOptions,
-  ClaudeQueryRuntime,
-  ClaudeSessionContext,
-  ClaudeTurnState,
+import type * as RequestLedger from "./Adapter.requestLedger.ts";
+import {
+  PROVIDER,
+  type ClaudeAdapterLiveOptions,
+  type ClaudeQueryRuntime,
+  type ClaudeSessionContext,
+  type ClaudeTurnState,
+  type UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { makeStartSession } from "./Adapter.session.ts";
@@ -82,8 +80,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
   const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
 
-  const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+  const offerRuntimeEvent = (event: UnstampedProviderRuntimeEvent): Effect.Effect<void> => {
+    const session = sessions.get(event.threadId);
+    if (!session) return Effect.die("No active Claude session.");
+    return Queue.offer(runtimeEventQueue, {
+      ...event,
+      sessionEpoch: session.sessionEpoch,
+    }).pipe(Effect.asVoid);
+  };
 
   const streamHandlers = makeStreamHandlers({
     makeEventStamp,
@@ -146,8 +150,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     if (context.turnState) {
-      // Auto-close a stale synthetic turn (from background agent responses
-      // between user prompts) to prevent blocking the user's next turn.
+      if (!context.turnState.synthetic) {
+        return yield* new ProviderAdapterValidationError({
+          provider: PROVIDER,
+          operation: "sendTurn",
+          issue: `Turn '${context.turnState.turnId}' is already active. Interrupt or wait for it to complete before starting another turn.`,
+        });
+      }
+      // Only the explicitly marked background turn is safe to close here.
       yield* streamHandlers.completeTurn(context, "completed");
     }
 
@@ -191,6 +201,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const turnId = TurnId.makeUnsafe(yield* Random.nextUUIDv4);
     const turnState: ClaudeTurnState = {
       turnId,
+      synthetic: false,
       startedAt: yield* nowIso,
       items: [],
       assistantTextBlocks: new Map(),
@@ -267,7 +278,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
       const ledgerEntry = context.requestLedger.get(requestId);
       if (ledgerEntry?.kind === "approval" && ledgerEntry.state === "pending") {
-        (ledgerEntry as PendingApprovalLedgerEntry).uiDecision = decision;
+        (ledgerEntry as RequestLedger.PendingApprovalLedgerEntry).uiDecision = decision;
       }
 
       context.pendingApprovals.delete(requestId);
@@ -308,7 +319,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     const ledgerEntry = context.requestLedger.get(requestId);
     if (ledgerEntry?.kind === "user-input" && ledgerEntry.state === "pending") {
-      (ledgerEntry as PendingUserInputLedgerEntry).uiAnswers = answers;
+      (ledgerEntry as RequestLedger.PendingUserInputLedgerEntry).uiAnswers = answers;
     }
 
     context.pendingUserInputs.delete(requestId);

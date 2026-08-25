@@ -192,7 +192,7 @@ export function ArchivedThreadsPanel() {
               description={
                 pendingDeleteConfirmation.automationId
                   ? "Deletion requires deleting the automation first. This thread deletes automatically after its final owner is deleted."
-                  : "This deletes this thread and any child threads from bigbud's local views and cleans up associated bigbud-managed local resources."
+                  : "This deletes only this thread and its bigbud-managed resources. Child threads remain available as standalone threads."
               }
               cancelLabel="Cancel"
               confirmLabel={pendingDeleteConfirmation.automationId ? "View automation" : "Delete"}

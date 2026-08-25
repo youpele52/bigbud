@@ -5,9 +5,10 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@bigbud/contracts";
+import { SidebarLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -154,9 +155,21 @@ export const ChatHeader = memo(function ChatHeader({
                   size="xs"
                 >
                   {sidebarOpen ? (
-                    <PanelLeftCloseIcon className="size-3" />
+                    <HugeiconsIcon
+                      aria-hidden="true"
+                      className="size-3.5"
+                      icon={SidebarLeft01Icon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
                   ) : (
-                    <PanelLeftIcon className="size-3" />
+                    <HugeiconsIcon
+                      aria-hidden="true"
+                      className="size-3.5"
+                      icon={SidebarLeftIcon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
                   )}
                 </Toggle>
               }

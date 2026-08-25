@@ -7,6 +7,7 @@ import {
   resolveBackendModulesLinkPlan,
   resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
+  resolvePackagedWorkspaceAgentPlan,
 } from "./pathResolver.platform";
 
 describe("resolveBackendModulesLinkPlan", () => {
@@ -102,6 +103,22 @@ describe("resolvePackagedOpencodeBinaryPlan", () => {
     const plan = resolvePackagedOpencodeBinaryPlan("darwin", resourcesPath);
     expect(plan.binaryName).toBe("opencode");
     expect(plan.binaryPath).toBe(Path.join(resourcesPath, "server", "opencode", "bin", "opencode"));
+  });
+});
+
+describe("resolvePackagedWorkspaceAgentPlan", () => {
+  const resourcesPath = "/Applications/bigbud.app/Contents/Resources";
+
+  it.each([
+    ["darwin", "bigbud-remote-agent"],
+    ["linux", "bigbud-remote-agent"],
+    ["win32", "bigbud-remote-agent.exe"],
+  ])("resolves the native %s binary", (platform, binaryName) => {
+    const plan = resolvePackagedWorkspaceAgentPlan(platform, resourcesPath);
+    expect(plan.binaryName).toBe(binaryName);
+    expect(plan.binaryPath).toBe(
+      Path.join(resourcesPath, "server", "workspace-agent", "bin", binaryName),
+    );
   });
 });
 

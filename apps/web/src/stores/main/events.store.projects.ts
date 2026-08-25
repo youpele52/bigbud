@@ -300,7 +300,27 @@ export function applyProjectEvent(
 
     case "thread.deleted": {
       const deletedThreadIds = new Set(getDeletedThreadIds(event.payload));
-      const threads = state.threads.filter((thread) => !deletedThreadIds.has(thread.id));
+      const hasDetachedThread = state.threads.some(
+        (thread) =>
+          thread.parentThread !== undefined &&
+          deletedThreadIds.has(thread.parentThread.threadId) &&
+          !deletedThreadIds.has(thread.id),
+      );
+      const hasDetachedSidebarThread = Object.values(state.sidebarThreadsById).some(
+        (thread) =>
+          thread?.parentThread !== undefined &&
+          deletedThreadIds.has(thread.parentThread.threadId) &&
+          !deletedThreadIds.has(thread.id),
+      );
+      const threads = state.threads
+        .filter((thread) => !deletedThreadIds.has(thread.id))
+        .map((thread) => {
+          if (!thread.parentThread || !deletedThreadIds.has(thread.parentThread.threadId)) {
+            return thread;
+          }
+          const { parentThread: _parentThread, ...detachedThread } = thread;
+          return detachedThread;
+        });
       const hasCachedThread = [...deletedThreadIds].some(
         (threadId) =>
           Object.hasOwn(state.sidebarThreadsById, threadId) ||
@@ -311,7 +331,12 @@ export function applyProjectEvent(
             threadIds.includes(threadId),
           ),
       );
-      if (threads.length === state.threads.length && !hasCachedThread) {
+      if (
+        threads.length === state.threads.length &&
+        !hasCachedThread &&
+        !hasDetachedThread &&
+        !hasDetachedSidebarThread
+      ) {
         return state;
       }
       let projects = state.projects;
@@ -322,6 +347,12 @@ export function applyProjectEvent(
       }
       const sidebarThreadsById = { ...state.sidebarThreadsById };
       const threadHydrationById = { ...state.threadHydrationById };
+      for (const [threadId, summary] of Object.entries(sidebarThreadsById)) {
+        if (summary?.parentThread && deletedThreadIds.has(summary.parentThread.threadId)) {
+          const { parentThread: _parentThread, ...detachedSummary } = summary;
+          sidebarThreadsById[threadId] = detachedSummary;
+        }
+      }
       let threadIdsByProjectId = state.threadIdsByProjectId;
       for (const threadId of deletedThreadIds) {
         delete sidebarThreadsById[threadId];

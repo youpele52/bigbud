@@ -5,6 +5,7 @@ import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { useComposerDraftStore } from "~/stores/composer";
 import { toastManager } from "../ui/toast";
 import type { BrowserContextMenuContext } from "./BrowserPanel.contextMenu.hook";
+import { buildGoogleSearchUrl } from "./BrowserPanel.omnibox";
 import type { BrowserViewportRef } from "./BrowserPanel.viewport";
 import type { ContextMenuItem } from "./BrowserPanel.contextMenu";
 
@@ -94,8 +95,7 @@ export function createBrowserContextMenuItems(
       {
         id: "search-selection",
         label: "Search the web",
-        onClick: () =>
-          input.onOpenNewTab(`https://www.google.com/search?q=${encodeURIComponent(selection)}`),
+        onClick: () => input.onOpenNewTab(buildGoogleSearchUrl(selection)),
       },
       {
         id: "send-selection",

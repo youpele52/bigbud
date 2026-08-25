@@ -1,5 +1,4 @@
 import {
-  isCodeRelatedFilePath,
   parsePathPositionSuffix,
   openPathInPreferredApp,
   stripPathPositionSuffix,
@@ -10,7 +9,6 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
-  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
@@ -156,9 +154,7 @@ export function canOpenPathInFilesPanel(
   if (openTarget === null) {
     return false;
   }
-  return (
-    isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath) || isVideoFilePath(targetPath)
-  );
+  return true;
 }
 
 export function canOpenPathInBrowserPanel(
@@ -225,14 +221,6 @@ export function openPathInFilesPanelIfSupported(
     return false;
   }
   const { relativePath, workspaceRootOverride } = openTarget;
-  if (
-    !isCodeRelatedFilePath(targetPath) &&
-    !isImageFilePath(targetPath) &&
-    !isVideoFilePath(targetPath)
-  ) {
-    return false;
-  }
-
   openFileInFilesPanel(relativePath, parsePathPositionSuffix(targetPath), workspaceRootOverride);
   return true;
 }

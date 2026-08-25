@@ -25,6 +25,7 @@ import {
   requireProjectWorktreesVerified,
 } from "./commandInvariants.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
+import { resolveProjectDeletionRequests } from "../deletion/Services/ThreadDeletion.ts";
 
 export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* ({
   command,
@@ -212,36 +213,26 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         projectId: command.projectId,
       });
       const occurredAt = nowIso();
-      const activeThreads = listThreadsByProjectId(readModel, command.projectId).filter(
-        (thread) => {
-          return thread.deletedAt === null;
-        },
-      );
-      const activeThreadIds = new Set(activeThreads.map((thread) => thread.id));
-      const rootThreads = activeThreads.filter(
-        (thread) =>
-          thread.parentThread === undefined || !activeThreadIds.has(thread.parentThread.threadId),
-      );
+      const deletionRequests = resolveProjectDeletionRequests(command.projectId, readModel.threads);
       return [
-        ...rootThreads
-          .filter((thread) => thread.deletingAt === null || thread.deletingAt === undefined)
-          .map((thread) =>
-            Object.assign(
-              withEventBase({
-                aggregateKind: "thread",
-                aggregateId: thread.id,
-                occurredAt,
-                commandId: command.commandId,
-              }),
-              {
-                type: "thread.deletion-requested" as const,
-                payload: {
-                  threadId: thread.id,
-                  deletingAt: occurredAt,
-                },
+        ...deletionRequests.map((thread) =>
+          Object.assign(
+            withEventBase({
+              aggregateKind: "thread",
+              aggregateId: thread.id,
+              occurredAt,
+              commandId: command.commandId,
+            }),
+            {
+              type: "thread.deletion-requested" as const,
+              payload: {
+                threadId: thread.id,
+                mode: "subtree" as const,
+                deletingAt: occurredAt,
               },
-            ),
+            },
           ),
+        ),
         {
           ...withEventBase({
             aggregateKind: "project",

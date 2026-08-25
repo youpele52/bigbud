@@ -11,10 +11,11 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
+import type { ThreadDelegationRepositoryShape } from "../../persistence/Services/ThreadDelegations.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { makeSqlitePersistenceLive } from "../../persistence/Layers/Sqlite.ts";
@@ -26,6 +27,10 @@ import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
+
+const sameProjectDelegationRepository = {
+  findDirectByChild: () => Effect.succeed(Option.none()),
+} as unknown as ThreadDelegationRepositoryShape;
 
 function createRuntime(dbPath: string) {
   const layer = OrchestrationEngineLive.pipe(
@@ -266,7 +271,11 @@ describe("OrchestrationEngine queued prompt recovery", () => {
       ]);
       await expect(
         first.runPromise(
-          sendThreadMessageViaOrchestration({ orchestrationEngine: firstEngine, ...input }),
+          sendThreadMessageViaOrchestration({
+            orchestrationEngine: firstEngine,
+            threadDelegationRepository: sameProjectDelegationRepository,
+            ...input,
+          }),
         ),
       ).resolves.toEqual({ delivery: "queued", queuePosition: 1 });
       await first.dispose();
@@ -275,7 +284,11 @@ describe("OrchestrationEngine queued prompt recovery", () => {
       const secondEngine = await engineFor(second);
       await expect(
         second.runPromise(
-          sendThreadMessageViaOrchestration({ orchestrationEngine: secondEngine, ...input }),
+          sendThreadMessageViaOrchestration({
+            orchestrationEngine: secondEngine,
+            threadDelegationRepository: sameProjectDelegationRepository,
+            ...input,
+          }),
         ),
       ).resolves.toEqual({ delivery: "queued", queuePosition: 1 });
       expect(

@@ -71,6 +71,7 @@ export function toRuntimePayloadFromSession(
     model?: string | null | undefined;
     activeTurnId?: string | null | undefined;
     lastError?: string | null | undefined;
+    sessionEpoch?: number | undefined;
   },
   extra?: {
     readonly modelSelection?: unknown;
@@ -91,12 +92,23 @@ export function toRuntimePayloadFromSession(
     model: session.model ?? null,
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
+    ...(session.sessionEpoch !== undefined ? { sessionEpoch: session.sessionEpoch } : {}),
     ...(extra?.modelSelection !== undefined ? { modelSelection: extra.modelSelection } : {}),
     ...(extra?.lastRuntimeEvent !== undefined ? { lastRuntimeEvent: extra.lastRuntimeEvent } : {}),
     ...(extra?.lastRuntimeEventAt !== undefined
       ? { lastRuntimeEventAt: extra.lastRuntimeEventAt }
       : {}),
   };
+}
+
+export function readPersistedSessionEpoch(
+  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
+): number | undefined {
+  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
+    return undefined;
+  }
+  const value = "sessionEpoch" in runtimePayload ? runtimePayload.sessionEpoch : undefined;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 export function readPersistedModelSelection(

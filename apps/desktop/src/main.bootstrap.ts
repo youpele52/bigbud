@@ -36,6 +36,7 @@ import {
   updaterConfigured,
 } from "./updater/autoUpdater";
 import { registerIpcHandlers } from "./window/ipcHandlers";
+import { initializeBrowserSession } from "./window/browserSession";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
 import type { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
@@ -101,6 +102,8 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
   };
 
+  initializeBrowserSession();
+  logHeader("bootstrap browser session initialized");
   logHeader("bootstrap start");
   const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
     serverSettingsPath,

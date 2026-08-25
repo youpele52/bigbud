@@ -72,13 +72,17 @@ export function useTurnActions({
               turnId: activeTurnId,
               commandId: newCommandId(),
               queuedPromptIds: options.queuedPromptIdsAfterSettlement,
+              sessionEpoch: activeThread.session?.sessionEpoch,
               createdAt,
             })
           : {
               type: "thread.turn.interrupt" as const,
               commandId: newCommandId(),
               threadId: activeThread.id,
-              ...(activeTurnId !== undefined ? { turnId: activeTurnId } : {}),
+              ...(activeTurnId ? { turnId: activeTurnId } : {}),
+              ...(activeThread.session?.sessionEpoch !== undefined
+                ? { sessionEpoch: activeThread.session.sessionEpoch }
+                : {}),
               createdAt,
             },
       );

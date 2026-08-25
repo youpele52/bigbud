@@ -33,6 +33,7 @@ vi.mock("./SidebarThreadRow", () => ({
 
 function renderChatsSection(input: {
   renderedChats: SidebarRenderedThreadEntry[];
+  isExpanded?: boolean;
   showAll: boolean;
   hasMoreChats: boolean;
   collapsedHiddenChatCount: number | null;
@@ -41,7 +42,7 @@ function renderChatsSection(input: {
   return renderToStaticMarkup(
     <SidebarChatsSection
       {...input}
-      isExpanded
+      isExpanded={input.isExpanded ?? true}
       onExpandedChange={vi.fn()}
       onShowAllChange={vi.fn()}
       isLoadingMoreChats={false}
@@ -94,5 +95,19 @@ describe("SidebarChatsSection", () => {
     expect(html).toContain("thread:chat-6");
     expect(html).toContain("Show less");
     expect(html).toContain("Load more (1)");
+  });
+
+  it("hides the nested Recents content when Chats is collapsed", () => {
+    const html = renderChatsSection({
+      renderedChats,
+      isExpanded: false,
+      showAll: false,
+      hasMoreChats: true,
+      collapsedHiddenChatCount: 2,
+      unloadedChatCount: 1,
+    });
+
+    expect(html).not.toContain("Recents");
+    expect(html).not.toContain("thread:chat-1");
   });
 });

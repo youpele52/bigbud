@@ -67,6 +67,7 @@ export function makeSendTurnEffect(
     yield* deps.offerRuntimeEvent({
       type: "turn.started",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch: ctx.sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       turnId,
@@ -136,6 +137,7 @@ export function makeSendTurnEffect(
     yield* deps.offerRuntimeEvent({
       type: "turn.completed",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch: ctx.sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       turnId,

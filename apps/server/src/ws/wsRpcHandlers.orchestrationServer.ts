@@ -35,7 +35,11 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
     const message = Schema.is(WorkspacePathOutsideRootError)(cause)
       ? "Workspace directory path must stay within the project root."
       : `Failed to watch workspace directory: ${cause.detail}`;
-    return new ProjectDirectoryWatchError({ message, cause });
+    return new ProjectDirectoryWatchError({
+      message,
+      retryable: Schema.is(WorkspaceFileSystemError)(cause) ? cause.retryable !== false : false,
+      cause,
+    });
   };
 
   return {

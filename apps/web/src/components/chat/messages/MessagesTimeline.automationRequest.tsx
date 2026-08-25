@@ -199,7 +199,7 @@ function AutomationRequestStatus(props: {
           <XCircleIcon className="size-3 shrink-0" />
           <span className="truncate">{props.state.message}</span>
         </span>
-        <Button type="button" size="xs" variant="outline" onClick={props.onCreate}>
+        <Button size="xs" variant="text" type="button" onClick={props.onCreate}>
           Retry
         </Button>
       </div>
@@ -207,7 +207,7 @@ function AutomationRequestStatus(props: {
   }
 
   return (
-    <Button type="button" size="xs" variant="outline" onClick={props.onCreate}>
+    <Button size="xs" variant="text" type="button" onClick={props.onCreate}>
       Create automation
     </Button>
   );

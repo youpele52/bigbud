@@ -2,6 +2,8 @@ import { CommandId, MessageId, type ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import { stableThreadToolId } from "./ThreadOrchestrationTools.ts";
 
 type SendThreadMessageOutcome =
@@ -29,6 +31,7 @@ function outcomeFromEvents(input: {
 export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageViaOrchestration")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
+    readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly message: string;
@@ -48,11 +51,11 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
     if (!target || target.deletedAt !== null) {
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
     }
-    if (caller.projectId !== target.projectId) {
-      return yield* Effect.fail(
-        new Error(`Thread '${input.threadId}' is not accessible from the current project.`),
-      );
-    }
+    yield* requireThreadCoordinationAccess({
+      threadDelegationRepository: input.threadDelegationRepository,
+      callerThread: caller,
+      targetThread: target,
+    });
     if (target.archivedAt !== null || target.deletingAt) {
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' is not available.`));
     }

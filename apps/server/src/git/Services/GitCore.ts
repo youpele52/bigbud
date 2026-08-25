@@ -36,7 +36,9 @@ import type { GitCommandError } from "@bigbud/contracts";
 
 export interface ExecuteGitInput {
   readonly operation: string;
+  readonly operationId?: string | undefined;
   readonly cwd: string;
+  readonly executionTargetId?: string | undefined;
   readonly args: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly env?: NodeJS.ProcessEnv;
@@ -91,6 +93,7 @@ export interface GitCommitProgress {
 export interface GitCommitOptions {
   readonly timeoutMs?: number;
   readonly progress?: GitCommitProgress;
+  readonly executionTargetId?: string | undefined;
 }
 
 export interface GitPushResult {
@@ -132,12 +135,14 @@ export interface GitFetchPullRequestBranchInput {
   cwd: string;
   prNumber: number;
   branch: string;
+  executionTargetId?: string | undefined;
 }
 
 export interface GitEnsureRemoteInput {
   cwd: string;
   preferredName: string;
   url: string;
+  executionTargetId?: string | undefined;
 }
 
 export interface GitFetchRemoteBranchInput {
@@ -145,6 +150,7 @@ export interface GitFetchRemoteBranchInput {
   remoteName: string;
   remoteBranch: string;
   localBranch: string;
+  executionTargetId?: string | undefined;
 }
 
 export interface GitSetBranchUpstreamInput {
@@ -152,6 +158,7 @@ export interface GitSetBranchUpstreamInput {
   branch: string;
   remoteName: string;
   remoteBranch: string;
+  executionTargetId?: string | undefined;
 }
 
 /**
@@ -171,14 +178,20 @@ export interface GitCoreShape {
   /**
    * Read detailed working tree / branch status for a repository.
    */
-  readonly statusDetails: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
+  readonly statusDetails: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
   /**
    * Like `statusDetails` but skips the upstream fetch refresh — reads only local state.
    * Used by the broadcaster to publish low-latency local status without triggering
    * a remote fetch on every call.
    */
-  readonly statusDetailsLocal: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
+  readonly statusDetailsLocal: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
   /**
    * Build staged change context for commit generation.
@@ -186,6 +199,7 @@ export interface GitCoreShape {
   readonly prepareCommitContext: (
     cwd: string,
     filePaths?: readonly string[],
+    executionTargetId?: string,
   ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
 
   /**
@@ -204,6 +218,7 @@ export interface GitCoreShape {
   readonly pushCurrentBranch: (
     cwd: string,
     fallbackBranch: string | null,
+    executionTargetId?: string,
   ) => Effect.Effect<GitPushResult, GitCommandError>;
 
   /**
@@ -212,6 +227,7 @@ export interface GitCoreShape {
   readonly readRangeContext: (
     cwd: string,
     baseBranch: string,
+    executionTargetId?: string,
   ) => Effect.Effect<GitRangeContext, GitCommandError>;
 
   /**
@@ -220,18 +236,23 @@ export interface GitCoreShape {
   readonly readConfigValue: (
     cwd: string,
     key: string,
+    executionTargetId?: string,
   ) => Effect.Effect<string | null, GitCommandError>;
 
   /**
    * Determine whether the provided cwd is inside a git work tree.
    */
-  readonly isInsideWorkTree: (cwd: string) => Effect.Effect<boolean, GitCommandError>;
+  readonly isInsideWorkTree: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<boolean, GitCommandError>;
 
   /**
    * List tracked and untracked workspace file paths relative to cwd.
    */
   readonly listWorkspaceFiles: (
     cwd: string,
+    executionTargetId?: string,
   ) => Effect.Effect<GitListWorkspaceFilesResult, GitCommandError>;
 
   /**
@@ -240,6 +261,7 @@ export interface GitCoreShape {
   readonly filterIgnoredPaths: (
     cwd: string,
     relativePaths: ReadonlyArray<string>,
+    executionTargetId?: string,
   ) => Effect.Effect<ReadonlyArray<string>, GitCommandError>;
 
   /**
@@ -273,17 +295,26 @@ export interface GitCoreShape {
   /**
    * Pull current branch from upstream using fast-forward only.
    */
-  readonly pullCurrentBranch: (cwd: string) => Effect.Effect<GitPullResult, GitCommandError>;
+  readonly pullCurrentBranch: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<GitPullResult, GitCommandError>;
 
   /**
    * Fetch from the origin remote for the current repository.
    */
-  readonly fetch: (cwd: string) => Effect.Effect<GitFetchResult, GitCommandError>;
+  readonly fetch: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<GitFetchResult, GitCommandError>;
 
   /**
    * Discard all working tree changes (reset to HEAD).
    */
-  readonly discardChanges: (cwd: string) => Effect.Effect<void, GitCommandError>;
+  readonly discardChanges: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a worktree and branch from a base branch.
@@ -296,7 +327,7 @@ export interface GitCoreShape {
    * Materialize a GitHub pull request head as a local branch without switching checkout.
    */
   readonly fetchPullRequestBranch: (
-    input: GitFetchPullRequestBranchInput,
+    input: GitFetchPullRequestBranchInput & { executionTargetId?: string | undefined },
   ) => Effect.Effect<void, GitCommandError>;
 
   /**
@@ -354,7 +385,10 @@ export interface GitCoreShape {
   /**
    * List local branch names (short format).
    */
-  readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
+  readonly listLocalBranchNames: (
+    cwd: string,
+    executionTargetId?: string,
+  ) => Effect.Effect<string[], GitCommandError>;
 }
 
 /**

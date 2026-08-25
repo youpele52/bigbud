@@ -18,6 +18,7 @@ type ProviderIntentEvent = Extract<
       | "thread.turn-start-requested"
       | "thread.message-sent"
       | "thread.turn-interrupt-requested"
+      | "thread.turn-steer-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
       | "thread.session-stop-requested"
@@ -72,6 +73,7 @@ const make = Effect.gen(function* () {
         event.type === "thread.turn-start-requested" ||
         event.type === "thread.message-sent" ||
         event.type === "thread.turn-interrupt-requested" ||
+        event.type === "thread.turn-steer-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||
         event.type === "thread.session-stop-requested" ||

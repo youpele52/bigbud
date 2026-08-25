@@ -1,0 +1,13 @@
+[package]
+name = "bigbud-workspace-watch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+notify.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

@@ -1,9 +1,13 @@
 import type { ProjectEntry } from "@bigbud/contracts";
+import type { Dispatch, SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  applyFileOpenRequest,
+  applyPreviewDirectoryNavigation,
   getRemovedEntryPaths,
+  getParentDirectoryPath,
   reconcilePreviewPathAfterDirectoryRefresh,
 } from "./FilesPanel.logic";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
@@ -143,5 +147,107 @@ describe("getRemovedEntryPaths", () => {
         ],
       ),
     ).toEqual(["docs/old.md"]);
+  });
+});
+
+describe("preview directory navigation", () => {
+  it("returns the immediate parent directory", () => {
+    expect(getParentDirectoryPath("src/components/FilesPanel.tsx")).toBe("src/components");
+    expect(getParentDirectoryPath("README.md")).toBe("");
+  });
+
+  it("expands the parent chain and loads only missing directories", () => {
+    const loadedDirectories: string[] = [];
+    let expandedDirectories: Record<string, boolean> = { src: false, test: true };
+
+    applyPreviewDirectoryNavigation(
+      "src/components/FilesPanel.tsx",
+      { src: {} },
+      (path) => {
+        loadedDirectories.push(path);
+      },
+      (update) => {
+        expandedDirectories = typeof update === "function" ? update(expandedDirectories) : update;
+      },
+    );
+
+    expect(expandedDirectories).toEqual({ src: true, "src/components": true, test: true });
+    expect(loadedDirectories).toEqual(["src/components"]);
+  });
+
+  it("does nothing for a root-level preview", () => {
+    let expansionUpdates = 0;
+    const loadedDirectories: string[] = [];
+
+    applyPreviewDirectoryNavigation(
+      "README.md",
+      {},
+      (path) => {
+        loadedDirectories.push(path);
+      },
+      () => {
+        expansionUpdates += 1;
+      },
+    );
+
+    expect(expansionUpdates).toBe(0);
+    expect(loadedDirectories).toEqual([]);
+  });
+
+  it("preserves the expansion state reference when the parent chain is already open", () => {
+    const expandedDirectories = { src: true, "src/components": true };
+    let nextExpandedDirectories: Record<string, boolean> | undefined;
+
+    applyPreviewDirectoryNavigation(
+      "src/components/FilesPanel.tsx",
+      { src: {}, "src/components": {} },
+      () => undefined,
+      (update) => {
+        nextExpandedDirectories =
+          typeof update === "function" ? update(expandedDirectories) : update;
+      },
+    );
+
+    expect(nextExpandedDirectories).toBe(expandedDirectories);
+  });
+});
+
+describe("file open request", () => {
+  it("reveals the parent again when the active file is explicitly reopened", () => {
+    const openedPaths: string[] = [];
+    const consumedRequestIds: number[] = [];
+    const loadedDirectories: string[] = [];
+    let expandedDirectories: Record<string, boolean> = { src: true };
+    const setExpandedDirectories: Dispatch<SetStateAction<Record<string, boolean>>> = (update) => {
+      expandedDirectories = typeof update === "function" ? update(expandedDirectories) : update;
+    };
+    const applyRequest = (requestId: number) =>
+      applyFileOpenRequest({
+        request: {
+          path: "src/index.ts",
+          position: null,
+          requestId,
+        },
+        directoryStateByPath: { src: {} },
+        loadDirectory: (path) => {
+          loadedDirectories.push(path);
+        },
+        setExpandedDirectories,
+        openPreview: (entry) => {
+          openedPaths.push(entry.path);
+        },
+        consumeRequest: (consumedRequestId) => {
+          consumedRequestIds.push(consumedRequestId);
+        },
+      });
+
+    applyRequest(1);
+    expandedDirectories = { src: false };
+    applyRequest(2);
+
+    expect(expandedDirectories).toEqual({ src: true });
+    expect(openedPaths).toEqual(["src/index.ts", "src/index.ts"]);
+    expect(consumedRequestIds).toEqual([1, 2]);
+    expect(loadedDirectories).toEqual([]);
   });
 });

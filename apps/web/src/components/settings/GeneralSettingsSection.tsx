@@ -85,7 +85,11 @@ export function GeneralSettingsSection() {
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Theme preference">
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-40"
+                aria-label="Theme preference"
+              >
                 <SelectValue>
                   {THEME_OPTIONS.find((option) => option.value === theme)?.label ?? "System"}
                 </SelectValue>
@@ -130,7 +134,11 @@ export function GeneralSettingsSection() {
                   }
                 }}
               >
-                <SelectTrigger className="w-full sm:w-40" aria-label="Window material preference">
+                <SelectTrigger
+                  variant="muted-outline"
+                  className="w-full sm:w-40"
+                  aria-label="Window material preference"
+                >
                   <SelectValue>
                     {WINDOW_MATERIAL_OPTIONS.find(
                       (option) => option.value === settings.windowMaterial,
@@ -173,7 +181,11 @@ export function GeneralSettingsSection() {
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Timestamp format">
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-40"
+                aria-label="Timestamp format"
+              >
                 <SelectValue>{TIMESTAMP_FORMAT_LABELS[settings.timestampFormat]}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -215,7 +227,11 @@ export function GeneralSettingsSection() {
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-52" aria-label="Terminal font family">
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-52"
+                aria-label="Terminal font family"
+              >
                 <SelectValue>
                   {TERMINAL_FONT_OPTIONS.find(
                     (option) => option.value === settings.terminalFontFamily,
@@ -261,7 +277,11 @@ export function GeneralSettingsSection() {
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-32" aria-label="Terminal font size">
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-32"
+                aria-label="Terminal font size"
+              >
                 <SelectValue>{`${settings.terminalFontSize}px`}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -292,6 +312,7 @@ export function GeneralSettingsSection() {
           }
           control={
             <Switch
+              tone="success"
               checked={settings.diffWordWrap}
               onCheckedChange={(checked) => updateSettings({ diffWordWrap: Boolean(checked) })}
               aria-label="Wrap diff lines by default"

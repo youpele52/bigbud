@@ -1,13 +1,14 @@
-import { RuntimeTaskId, type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { RuntimeTaskId, type EventId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { buildBigbudPlanTrackingFingerprint } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import {
   claudeTaskPlanPayload,
   claudeTaskRuntimeUpdates,
+  isClaudeTaskTool,
   reduceClaudeTaskState,
 } from "./Adapter.tasks.ts";
-import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { nativeProviderRefs } from "./Adapter.utils.ts";
 
@@ -19,8 +20,9 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
   readonly authoritativeSnapshot?: boolean;
   readonly now: string;
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
 }) {
+  if (!isClaudeTaskTool(deps.toolName)) return;
   if (!deps.context.modernTaskExposure && deps.toolName !== "TodoWrite") return;
   const reduction = reduceClaudeTaskState({
     state: deps.context.taskState,
@@ -38,7 +40,22 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
   const turnId = deps.context.turnState?.turnId;
   for (const taskId of reduction.removedTaskIds) {
     const stamp = yield* deps.makeEventStamp();
-    const removalSource = deps.toolName === "TaskList" ? "taskList" : "background";
+    const removalSource =
+      deps.toolName === "TaskList"
+        ? "taskList"
+        : deps.toolName === "background_tasks_changed"
+          ? "background"
+          : deps.toolName === "task_notification"
+            ? "lifecycle"
+            : "observed";
+    const sourcePriority =
+      removalSource === "taskList"
+        ? 3
+        : removalSource === "background"
+          ? 2
+          : removalSource === "lifecycle"
+            ? 4
+            : 1;
     yield* deps.offerRuntimeEvent({
       type: "task.removed",
       eventId: stamp.eventId,
@@ -51,15 +68,16 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
         source: removalSource,
         freshness: {
           sessionEpoch: deps.context.taskState.sessionEpoch,
-          sourcePriority: removalSource === "taskList" ? 3 : 2,
-          snapshotGeneration:
-            removalSource === "taskList"
-              ? deps.context.taskState.taskListGeneration
-              : deps.context.taskState.backgroundGeneration,
+          sourcePriority,
+          ...(removalSource === "taskList"
+            ? { snapshotGeneration: deps.context.taskState.taskListGeneration }
+            : removalSource === "background"
+              ? { snapshotGeneration: deps.context.taskState.backgroundGeneration }
+              : {}),
           providerMessageId: deps.toolUseId,
           observedOrdinal: deps.context.taskState.nextObservedOrdinal,
         },
-        replacement: "snapshot",
+        replacement: removalSource === "observed" ? "explicit" : "snapshot",
       },
       providerRefs: nativeProviderRefs(deps.context, { providerItemId: deps.toolUseId }),
     });

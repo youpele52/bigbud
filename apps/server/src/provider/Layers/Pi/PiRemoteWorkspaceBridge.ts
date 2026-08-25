@@ -2,6 +2,7 @@ import path from "node:path";
 
 import { createRemoteWorkspaceBridge } from "../../../remote-workspace-bridge/remoteWorkspaceBridge.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+import type { ThreadOrchestrationHttpConfig } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import { renderPiRemoteWorkspaceBridgeSource } from "./PiRemoteWorkspaceBridge.template.ts";
 
 const PI_REMOTE_WORKSPACE_BRIDGE_PREFIX = "bigbud-pi-remote-workspace-";
@@ -15,7 +16,11 @@ export interface PiRemoteWorkspaceExtensionBridge {
 
 export async function createPiRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
+  httpConfig: ThreadOrchestrationHttpConfig | undefined,
 ): Promise<PiRemoteWorkspaceExtensionBridge> {
+  if (!httpConfig) {
+    throw new Error("Pi remote workspace bridge requires thread bridge authentication.");
+  }
   const bridge = await createRemoteWorkspaceBridge({
     workspaceTarget,
     prefix: PI_REMOTE_WORKSPACE_BRIDGE_PREFIX,
@@ -26,7 +31,7 @@ export async function createPiRemoteWorkspaceBridge(
     ],
   });
   const extensionPath = path.join(bridge.bridgeDir, "bigbud-remote-workspace-bridge.ts");
-  const extensionSource = renderPiRemoteWorkspaceBridgeSource(bridge.config);
+  const extensionSource = renderPiRemoteWorkspaceBridgeSource(httpConfig, workspaceTarget.cwd);
   await bridge.writeWorkspaceFile(".bigbud/bigbud-remote-workspace-bridge.ts", extensionSource);
 
   return {

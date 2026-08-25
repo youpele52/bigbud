@@ -49,6 +49,7 @@ export function runtimeEventBase(
     provider: event.provider,
     threadId: canonicalThreadId,
     createdAt: event.createdAt,
+    sessionEpoch: event.sessionEpoch,
     ...(event.turnId ? { turnId: event.turnId } : {}),
     ...(event.itemId ? { itemId: asRuntimeItemId(event.itemId) } : {}),
     ...(event.requestId ? { requestId: asRuntimeRequestId(event.requestId) } : {}),

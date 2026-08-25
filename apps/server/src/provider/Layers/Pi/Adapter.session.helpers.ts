@@ -258,6 +258,7 @@ export function makeStopSessionRecord(deps: {
       yield* deps.emit([
         yield* deps.makeSyntheticEvent(
           session.threadId,
+          session.sessionEpoch,
           "user-input.resolved",
           { answers: {} },
           {

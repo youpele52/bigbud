@@ -145,7 +145,10 @@ export function BranchToolbarBranchSelector({
   const runBranchAction = (action: () => Promise<void>) => {
     startBranchActionTransition(async () => {
       await action().catch(() => undefined);
-      await invalidateGitQueries(queryClient).catch(() => undefined);
+      await invalidateGitQueries(queryClient, {
+        cwd: branchCwd,
+        executionTargetId,
+      }).catch(() => undefined);
     });
   };
 
@@ -186,7 +189,10 @@ export function BranchToolbarBranchSelector({
           ...(executionTargetId ? { executionTargetId } : {}),
           branch: branch.name,
         });
-        await invalidateGitQueries(queryClient);
+        await invalidateGitQueries(queryClient, {
+          cwd: selectionTarget.checkoutCwd,
+          executionTargetId,
+        });
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -269,7 +275,7 @@ export function BranchToolbarBranchSelector({
       oldBranch: branch.name,
       newBranch: newName,
     });
-    await invalidateGitQueries(queryClient);
+    await invalidateGitQueries(queryClient, { cwd: branchCwd, executionTargetId });
     if (branch.current || activeThreadBranch === branch.name) {
       onSetThreadBranch(result.branch, activeWorktreePath);
     }
@@ -283,7 +289,7 @@ export function BranchToolbarBranchSelector({
       ...(executionTargetId ? { executionTargetId } : {}),
       branch: branch.name,
     });
-    await invalidateGitQueries(queryClient);
+    await invalidateGitQueries(queryClient, { cwd: branchCwd, executionTargetId });
   };
 
   const checkoutPullRequest = () => {

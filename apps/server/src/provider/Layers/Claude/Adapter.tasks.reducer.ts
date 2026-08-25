@@ -268,6 +268,29 @@ function reduceSnapshot(
   applySnapshotMembership({ ...input, member, nextIds });
 }
 
+function removeDeletedRecord(context: ReductionContext, record: Record<string, unknown>): boolean {
+  const nativeStatus = stringValue(record.status)?.toLowerCase();
+  if (nativeStatus !== "deleted") return false;
+  const key = taskId(record) ?? `tool:${context.toolUseId}`;
+  const existing = context.state.tasks.get(key);
+  if (!existing) return true;
+  const nextFreshness = freshness({
+    state: context.state,
+    source: context.source,
+    ordinal: context.ordinal,
+    record: {
+      ...record,
+      timestamp: fieldString(record, "timestamp", "created_at", "createdAt") ?? context.updatedAt,
+    },
+    snapshotGeneration: context.snapshotGeneration,
+  });
+  if (isTaskFreshnessNewer(nextFreshness, existing.freshness)) {
+    context.state.tasks.delete(key);
+    context.removed.add(key);
+  }
+  return true;
+}
+
 export function reduceClaudeTaskState(input: {
   readonly state: ClaudeTaskState;
   readonly toolUseId: string;
@@ -293,13 +316,16 @@ export function reduceClaudeTaskState(input: {
 
   const isTaskList = input.toolName === "TaskList" && input.authoritativeSnapshot === true;
   const isBackground = input.toolName === "background_tasks_changed";
+  const isLifecycle = input.toolName === "task_notification";
   const snapshotSource = isTaskList
     ? "taskList"
     : isBackground
       ? "background"
-      : input.toolName === "TodoWrite"
-        ? "legacy"
-        : undefined;
+      : isLifecycle
+        ? "lifecycle"
+        : input.toolName === "TodoWrite"
+          ? "legacy"
+          : undefined;
   const snapshotRecords = snapshotSource ? taskRecords(input.value) : [];
   const snapshotFingerprint = snapshotSource ? JSON.stringify(snapshotRecords) : undefined;
   if (
@@ -347,7 +373,13 @@ export function reduceClaudeTaskState(input: {
     value: input.value,
     updatedAt: input.updatedAt,
     ordinal: input.state.nextObservedOrdinal++,
-    source: isTaskList ? "taskList" : isBackground ? "background" : "observed",
+    source: isTaskList
+      ? "taskList"
+      : isBackground
+        ? "background"
+        : isLifecycle
+          ? "lifecycle"
+          : "observed",
     ...(isTaskList ? { snapshotGeneration: ++input.state.taskListGeneration } : {}),
     ...(isBackground ? { snapshotGeneration: ++input.state.backgroundGeneration } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
@@ -365,6 +397,7 @@ export function reduceClaudeTaskState(input: {
     reduceSnapshot(context, "backgroundMember", taskRecords(input.value));
   } else {
     for (const record of taskRecords(input.value)) {
+      if (removeDeletedRecord(context, record)) continue;
       const changed = updateRecord({
         context,
         record,

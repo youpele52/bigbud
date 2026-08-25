@@ -17,7 +17,6 @@ import {
   isProviderLifecycleEvent,
   resolveProviderLifecycleGuard,
 } from "./ProviderRuntimeIngestion.lifecycle.ts";
-import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
 import {
@@ -61,12 +60,13 @@ export function makeRuntimeEventProcessor(
     finalizeThinkingForTurn,
     finalizeThinkingForThread,
   } = makeThinkingProcessorHelpers(services, cacheHelpers, providerCommandId);
-  const { appendActivities, handleTurnDiffUpdated, upsertTask } = makeRuntimeProcessorEventHelpers({
-    orchestrationEngine,
-    serverSettingsService,
-    isGitRepoForThread,
-    providerCommandId,
-  });
+  const { appendActivities, handleThreadMetadataUpdated, handleTurnDiffUpdated, upsertTask } =
+    makeRuntimeProcessorEventHelpers({
+      orchestrationEngine,
+      serverSettingsService,
+      isGitRepoForThread,
+      providerCommandId,
+    });
   return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
     yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
     const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
@@ -74,6 +74,8 @@ export function makeRuntimeEventProcessor(
     );
     if (!thread) return;
     const now = event.createdAt;
+    const sessionEpoch = event.sessionEpoch;
+    const projectedSessionEpoch = thread.session?.sessionEpoch ?? 0;
     const eventTurnId = toTurnId(event.turnId);
     const activeTurnId = thread.session?.activeTurnId ?? null;
     const isLifecycleEvent = isProviderLifecycleEvent(event);
@@ -107,12 +109,15 @@ export function makeRuntimeEventProcessor(
       event.type === "session.exited" ||
       event.type === "thread.started" ||
       event.type === "turn.started" ||
-      event.type === "turn.completed"
+      event.type === "turn.completed" ||
+      event.type === "turn.aborted"
     ) {
       const nextActiveTurnId =
         event.type === "turn.started"
           ? (eventTurnId ?? null)
-          : event.type === "turn.completed" || event.type === "session.exited"
+          : event.type === "turn.completed" ||
+              event.type === "turn.aborted" ||
+              event.type === "session.exited"
             ? null
             : activeTurnId;
       const status = (() => {
@@ -125,6 +130,8 @@ export function makeRuntimeEventProcessor(
             return "stopped";
           case "turn.completed":
             return normalizeRuntimeTurnState(event.payload.state) === "failed" ? "error" : "ready";
+          case "turn.aborted":
+            return "ready";
           case "session.started":
           case "thread.started":
             return activeTurnId !== null ? "running" : "ready";
@@ -161,6 +168,7 @@ export function makeRuntimeEventProcessor(
             providerName: event.provider,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
+            sessionEpoch: sessionEpoch ?? 0,
             reason:
               event.type === "session.state.changed"
                 ? (event.payload.reason ?? thread.session?.reason ?? null)
@@ -170,6 +178,8 @@ export function makeRuntimeEventProcessor(
             lastError,
             updatedAt: now,
           },
+          expectedSessionEpoch: thread.session?.sessionEpoch ?? 0,
+          ...(activeTurnId ? { expectedActiveTurnId: activeTurnId } : {}),
           createdAt: now,
         });
       } else {
@@ -203,7 +213,19 @@ export function makeRuntimeEventProcessor(
         ) {
           yield* orchestrationEngine.dispatch(reconciliation).pipe(Effect.asVoid);
         }
+        // A rejected lifecycle event belongs to an older provider session. Do not
+        // let its non-lifecycle payload mutate messages, tasks, or activities.
+        return;
       }
+    }
+
+    // Providers that do not emit lifecycle events still carry the session epoch.
+    // Reject their late output before it reaches any projection helper.
+    if (
+      (sessionEpoch === undefined && projectedSessionEpoch !== 0) ||
+      (sessionEpoch !== undefined && projectedSessionEpoch !== sessionEpoch)
+    ) {
+      return;
     }
 
     const proposedPlanDelta =
@@ -298,6 +320,7 @@ export function makeRuntimeEventProcessor(
       const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
         ? true
         : !lifecycleGuard?.providerConflictsWithLiveSession &&
+          !lifecycleGuard?.sessionEpochMismatch &&
           !lifecycleGuard?.conflictsWithLiveTurn &&
           !lifecycleGuard?.missingTurnForLiveTurn &&
           (activeTurnId === null || eventTurnId === undefined || sameId(activeTurnId, eventTurnId));
@@ -313,9 +336,12 @@ export function makeRuntimeEventProcessor(
             providerName: event.provider,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: eventTurnId ?? null,
+            sessionEpoch: sessionEpoch ?? 0,
             lastError: runtimeErrorMessage,
             updatedAt: now,
           },
+          expectedSessionEpoch: thread.session?.sessionEpoch ?? 0,
+          ...(activeTurnId ? { expectedActiveTurnId: activeTurnId } : {}),
           createdAt: now,
         });
       } else {
@@ -341,15 +367,8 @@ export function makeRuntimeEventProcessor(
       }
     }
 
-    if (event.type === "thread.metadata.updated" && event.payload.name) {
-      if (!isThreadTitleLocked(thread.id)) {
-        yield* orchestrationEngine.dispatch({
-          type: "thread.meta.update",
-          commandId: providerCommandId(event, "thread-meta-update"),
-          threadId: thread.id,
-          title: event.payload.name,
-        });
-      }
+    if (event.type === "thread.metadata.updated") {
+      yield* handleThreadMetadataUpdated({ event, threadId: thread.id });
     }
 
     if (event.type === "turn.diff.updated") {

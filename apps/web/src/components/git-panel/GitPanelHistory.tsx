@@ -6,6 +6,7 @@ import type {
 import { CloudUploadIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { formatRelativeTimeLabel } from "~/utils/timestamp/timestamp.utils";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
@@ -22,6 +23,7 @@ interface GitPanelHistoryProps {
   history: GitListCommitsResult["commits"];
   historyError: string | null;
   isLoadingDetails: boolean;
+  isLoadingHistory: boolean;
   isLoadingMoreHistory: boolean;
   onLoadMoreHistory: () => Promise<unknown>;
   onSelectCommit: (sha: string) => void;
@@ -36,6 +38,7 @@ export function GitPanelHistory({
   history,
   historyError,
   isLoadingDetails,
+  isLoadingHistory,
   isLoadingMoreHistory,
   onLoadMoreHistory,
   onSelectCommit,
@@ -105,8 +108,12 @@ export function GitPanelHistory({
     return () => observer.disconnect();
   }, [hasMoreHistory, isLoadingMoreHistory, onLoadMoreHistory]);
 
-  if (historyError) {
+  if (historyError && history.length === 0) {
     return <div className="p-4 text-sm text-destructive">{historyError}</div>;
+  }
+
+  if (history.length === 0 && isLoadingHistory) {
+    return <BigbudLoader label="Loading commit history..." />;
   }
 
   if (history.length === 0) {
@@ -194,10 +201,10 @@ export function GitPanelHistory({
         </div>
       }
       main={
-        detailError ? (
+        detailError && !commitDetails ? (
           <div className="p-4 text-sm text-destructive">{detailError}</div>
         ) : isLoadingDetails ? (
-          <div className="p-4 text-sm text-muted-foreground">Loading commit...</div>
+          <BigbudLoader label="Loading commit..." />
         ) : commitDetails ? (
           <div ref={detailContainerRef} className="flex h-full min-h-0 flex-col overflow-hidden">
             <div

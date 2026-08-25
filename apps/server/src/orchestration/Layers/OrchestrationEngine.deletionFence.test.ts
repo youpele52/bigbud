@@ -3,15 +3,20 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
   ThreadId,
+  type OrchestrationThread,
 } from "@bigbud/contracts";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { makeDeletionFence } from "./OrchestrationEngine.deletionFence.ts";
+import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion.ts";
+import { createEmptyReadModel } from "../projectorReadModel.ts";
 import { asProjectId, createOrchestrationSystem, now } from "./OrchestrationEngine.test.helpers.ts";
 
 const modelSelection = { provider: "codex" as const, model: "gpt-5-codex" };
 
 describe("OrchestrationEngine deletion fence", () => {
-  it("blocks child creation, prompts, and runtime startup until deletion aborts", async () => {
+  it("blocks the deleting thread while allowing existing descendants to continue", async () => {
     const system = await createOrchestrationSystem();
     const projectId = asProjectId("deletion-fence-project");
     const rootThreadId = ThreadId.makeUnsafe("deletion-fence-root");
@@ -73,21 +78,39 @@ describe("OrchestrationEngine deletion fence", () => {
       await expect(
         system.run(
           system.engine.dispatch({
+            type: "thread.turn.start",
+            commandId: CommandId.makeUnsafe("prompt-fenced-root"),
+            threadId: rootThreadId,
+            message: {
+              messageId: MessageId.makeUnsafe("fenced-root-message"),
+              role: "user",
+              text: "blocked",
+              attachments: [],
+            },
+            runtimeMode: "full-access",
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            createdAt,
+          }),
+        ),
+      ).rejects.toThrow("being deleted");
+      await expect(
+        system.run(
+          system.engine.dispatch({
             type: "thread.create",
-            commandId: CommandId.makeUnsafe("create-fenced-grandchild"),
-            threadId: ThreadId.makeUnsafe("deletion-fence-grandchild"),
+            commandId: CommandId.makeUnsafe("create-child-on-fenced-root"),
+            threadId: ThreadId.makeUnsafe("deletion-fence-late-child"),
             projectId,
-            title: "Grandchild",
+            title: "Late child",
             modelSelection,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
             runtimeMode: "full-access",
             branch: null,
             worktreePath: null,
-            parentThread: { threadId: childThreadId, projectId, title: "Child" },
+            parentThread: { threadId: rootThreadId, projectId, title: "Root" },
             createdAt,
           }),
         ),
-      ).rejects.toThrow("ancestor is being deleted");
+      ).rejects.toThrow("being deleted");
       await expect(
         system.run(
           system.engine.dispatch({
@@ -105,7 +128,7 @@ describe("OrchestrationEngine deletion fence", () => {
             createdAt,
           }),
         ),
-      ).rejects.toThrow("ancestor is being deleted");
+      ).resolves.toBeDefined();
       await expect(
         system.run(
           system.engine.dispatch({
@@ -124,7 +147,7 @@ describe("OrchestrationEngine deletion fence", () => {
             createdAt,
           }),
         ),
-      ).rejects.toThrow("ancestor is being deleted");
+      ).resolves.toBeDefined();
 
       await system.run(
         system.engine.dispatch({
@@ -157,5 +180,49 @@ describe("OrchestrationEngine deletion fence", () => {
     } finally {
       await system.dispose();
     }
+  });
+
+  it("upgrades a single fence before accepting retention for an already deleting thread", async () => {
+    const rootThreadId = ThreadId.makeUnsafe("retention-upgrade-root");
+    let mode: "single" | "subtree" = "single";
+    const threadDeletion = {
+      acquireFence: (_threadId: ThreadId, requestedMode = "subtree" as const) =>
+        Effect.sync(() => {
+          if (mode === "single" && requestedMode === "subtree") mode = "subtree";
+          return true;
+        }),
+      isFenceRoot: (_threadId: ThreadId, requiredMode?: "single" | "subtree") =>
+        Effect.succeed(requiredMode === undefined || mode === requiredMode),
+    } as const;
+    const readModel = {
+      ...createEmptyReadModel(now()),
+      threads: [
+        {
+          id: rootThreadId,
+          projectId: asProjectId("retention-upgrade-project"),
+          deletingAt: now(),
+          deletedAt: null,
+        } as OrchestrationThread,
+      ],
+    } as ReturnType<typeof createEmptyReadModel>;
+    const fence = makeDeletionFence({
+      threadDeletion: threadDeletion as unknown as ThreadDeletionShape,
+      readModel: () => readModel,
+    });
+
+    await expect(
+      Effect.runPromise(
+        fence.acquire({
+          type: "thread.retention-delete",
+          commandId: CommandId.makeUnsafe("retention-upgrade-command"),
+          threadId: rootThreadId,
+          runId: "retention-upgrade-run",
+          expectedLastActivityAt: now(),
+          cutoffAt: now(),
+          createdAt: now(),
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(mode).toBe("subtree");
   });
 });

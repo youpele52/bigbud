@@ -47,7 +47,7 @@ export function useSidebarThreadDeleteActions(input: {
         setPendingDeleteConfirmation({
           title: `Delete thread "${thread.title}"?`,
           description:
-            "This deletes this thread and any child threads from bigbud's local views and cleans up associated bigbud-managed local resources.",
+            "This deletes only this thread and its bigbud-managed resources. Child threads remain available as standalone threads.",
           threadIds: [threadId],
         });
         return;

@@ -35,6 +35,12 @@ interface DeletionDeps {
   }) => Effect.Effect<void, OrchestrationDispatchError>;
 }
 
+export function resolveDeletionRequestMode(
+  requestedMode: "single" | "subtree" | undefined,
+): "single" | "subtree" {
+  return requestedMode ?? "subtree";
+}
+
 const STEP_TIMEOUT = Duration.seconds(15);
 
 function describeFailures(
@@ -124,14 +130,27 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
     deps: DeletionDeps,
     event: DeleteRequestedEvent,
   ) {
+    const mode = resolveDeletionRequestMode(event.payload.mode);
     const thread = yield* deps.resolveThread(event.payload.threadId);
     if (!thread || thread.deletedAt !== null) {
+      yield* orchestrationEngine.threadDeletion!.releaseFence(event.payload.threadId, mode);
       return;
     }
+    if (
+      mode === "single" &&
+      (yield* orchestrationEngine.threadDeletion!.isFenceRoot(thread.id, "subtree"))
+    ) {
+      return;
+    }
+    const fenceAlreadyHeld = yield* orchestrationEngine.threadDeletion!.isFenceRoot(
+      thread.id,
+      mode,
+    );
 
     const outcome = yield* orchestrationEngine.threadDeletion!.deleteNow({
       rootThreadId: thread.id,
-      fenceAlreadyHeld: true,
+      mode,
+      fenceAlreadyHeld,
       resolveThreads: () =>
         orchestrationEngine.getReadModel().pipe(Effect.map((model) => model.threads)),
       preflight: (threads) =>
@@ -209,6 +228,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             commandId: serverCommandId("thread-delete-finalize"),
             threadId: thread.id,
             threadIds,
+            mode,
             createdAt: new Date().toISOString(),
           });
           yield* finalizeThreadCanonicalHistory({
@@ -265,6 +285,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
         type: "thread.delete.abort",
         commandId: serverCommandId("thread-delete-abort"),
         threadId: thread.id,
+        mode,
         createdAt,
       });
       if (outcome.type === "failed") {

@@ -74,6 +74,7 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("invocationId: `mcp:${String(requestId)}`");
     expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
     expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
+    expect(source).not.toContain("workspacePath");
     expect(source).not.toContain('name: "invocationId"');
     expect(source).not.toContain('name: "sourceMessageId"');
     expect(source).toContain("get_thread_status");

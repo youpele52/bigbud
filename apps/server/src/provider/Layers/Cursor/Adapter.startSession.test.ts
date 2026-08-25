@@ -48,6 +48,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
           provider: "cursor",
           cwd: "/tmp/cursor-project",
           runtimeMode: "approval-required",
+          sessionEpoch: 42,
         },
       ).pipe(
         Effect.flatMap(() =>
@@ -57,6 +58,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
               acpInput?.mcpServers?.map((server) => server.name),
               ["bigbud_orchestration"],
             );
+            assert.strictEqual(sessions.get(THREAD_ID)?.sessionEpoch, 42);
           }),
         ),
         Effect.scoped,

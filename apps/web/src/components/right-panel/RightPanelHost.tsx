@@ -52,7 +52,10 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
     enabled: rightPanelOpen && cwd !== null,
   });
   const workspaceRoot = cwd;
-  const isGitRepo = gitStatusQuery.data?.isRepo ?? false;
+  // Keep Git and Diff actionable while their shared status query is loading or
+  // has failed so the panel can show its loader or the request error.
+  const isGitRepo =
+    gitStatusQuery.data?.isRepo ?? (gitStatusQuery.isLoading || Boolean(gitStatusQuery.error));
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");

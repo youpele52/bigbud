@@ -14,7 +14,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 
 import { CompactChatPicker } from "./CompactChatPicker";
+import { FloatingPendingApprovalCard } from "./FloatingPendingApprovalCard";
 import { MASCOT_ANIMATIONS } from "./mascotAssets";
+import { createMascotClickHandler } from "./mascotClick.logic";
 import { useMascotAnimation } from "./useMascotAnimation";
 
 const COMPACT_CHAT_TITLE_MAX_LENGTH = 40;
@@ -55,6 +57,12 @@ export function MascotShell() {
   const bridge = window.desktopBridge;
   const dragState = useRef<{ moved: boolean; startX: number; startY: number } | null>(null);
   const didDrag = useRef(false);
+  const clickHandler = useRef(
+    createMascotClickHandler({
+      onOpenChat: () => void bridge?.openCompactChat?.(),
+      onOpenMain: () => void bridge?.openMainWindow?.(),
+    }),
+  );
   const [caller, setCaller] = useState<FloatingAssistantCaller>("matte");
   const [isHovered, setIsHovered] = useState(false);
   const { animation, animationKey } = useMascotAnimation(isHovered);
@@ -64,6 +72,8 @@ export function MascotShell() {
     void bridge.getFloatingAssistantCaller().then(setCaller);
     return bridge.onFloatingAssistantCallerChange?.(setCaller);
   }, [bridge]);
+
+  useEffect(() => () => clickHandler.current.cancel(), []);
 
   const finish = caller === "chrome" ? "chrome" : "matte";
 
@@ -88,6 +98,7 @@ export function MascotShell() {
         onPointerLeave={() => setIsHovered(false)}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
+          clickHandler.current.cancel();
           event.currentTarget.setPointerCapture(event.pointerId);
           didDrag.current = false;
           dragState.current = { moved: false, startX: event.screenX, startY: event.screenY };
@@ -122,7 +133,7 @@ export function MascotShell() {
             return;
           }
           dragState.current = null;
-          void bridge?.openCompactChat?.();
+          clickHandler.current.handleClick(event.detail);
         }}
       >
         {caller === "logo" ? (
@@ -243,6 +254,7 @@ export function CompactChatShell({
               {...context}
               composerClassName="max-w-[calc(52rem*2/3)]"
               projectPicker={<CompactChatPicker compactChat={compactChat} />}
+              renderPendingApproval={(approval) => <FloatingPendingApprovalCard {...approval} />}
               workspaceRoot={workspaceRoot}
               onMarkdownAnchorClick={canSendCompactLinkHandoff ? onMarkdownAnchorClick : undefined}
             />

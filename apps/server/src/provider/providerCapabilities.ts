@@ -5,14 +5,18 @@ import type {
   ProviderCapabilities,
   ProviderToolInjectionMode,
 } from "./ProviderRegistration.ts";
+import { getProviderRemoteWorkspaceConformance } from "./providerRemoteWorkspaceConformance.ts";
 
 export type { ProviderCapabilities, ProviderToolInjectionMode };
 export type ProviderCapabilitiesResolver = (provider: ProviderKind) => ProviderCapabilities;
 
+const supportsLocalRuntimeRemoteWorkspace = (provider: ProviderKind): boolean =>
+  getProviderRemoteWorkspaceConformance(provider).supportsLocalRuntimeRemoteWorkspace;
+
 const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilities>> = {
   claudeAgent: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("claudeAgent"),
     toolInjectionMode: "mcp",
     needsBuiltinsDisabled: true,
     compactionBehavior: "signaled",
@@ -21,7 +25,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   codex: {
     supportsRemoteProviderRuntime: true,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("codex"),
     toolInjectionMode: "mcp",
     needsBuiltinsDisabled: false,
     compactionBehavior: "signaled",
@@ -30,7 +34,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   copilot: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("copilot"),
     toolInjectionMode: "mcp",
     needsBuiltinsDisabled: true,
     compactionBehavior: "unknown",
@@ -39,7 +43,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   cursor: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: false,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("cursor"),
     toolInjectionMode: "custom-tools",
     needsBuiltinsDisabled: false,
     compactionBehavior: "unknown",
@@ -48,7 +52,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   opencode: {
     supportsRemoteProviderRuntime: true,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("opencode"),
     toolInjectionMode: "builtin-override",
     needsBuiltinsDisabled: false,
     compactionBehavior: "unknown",
@@ -57,7 +61,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   kilocode: {
     supportsRemoteProviderRuntime: true,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("kilocode"),
     toolInjectionMode: "builtin-override",
     needsBuiltinsDisabled: false,
     compactionBehavior: "signaled",
@@ -66,7 +70,7 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   pi: {
     supportsRemoteProviderRuntime: true,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("pi"),
     toolInjectionMode: "custom-tools",
     needsBuiltinsDisabled: true,
     compactionBehavior: "signaled",
@@ -75,7 +79,10 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   devin: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: true,
+    // Devin ACP currently starts with the local cwd and has no remote
+    // workspace bridge. Keep the declaration honest until its adapter uses
+    // WorkspaceRuntime for remote targets.
+    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("devin"),
     toolInjectionMode: "custom-tools",
     needsBuiltinsDisabled: false,
     compactionBehavior: "unknown",

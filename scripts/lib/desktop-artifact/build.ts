@@ -5,6 +5,7 @@ import { delimiter } from "node:path";
 
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
+import { resolveDesktopReleaseIdentity } from "@bigbud/shared/desktopReleaseIdentity";
 
 import {
   BuildScriptError,
@@ -43,6 +44,7 @@ import {
 } from "./linuxArtifactVerify.ts";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
+import { stagePackagedWorkspaceAgent } from "./workspaceAgent.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -92,6 +94,11 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   });
 
   const appVersion = options.version ?? serverPackageJson.version;
+  const releaseIdentity = yield* Effect.try({
+    try: () => resolveDesktopReleaseIdentity(appVersion),
+    catch: (cause) =>
+      new BuildScriptError({ message: `Unsupported desktop version '${appVersion}'.`, cause }),
+  });
   const commitHash = resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({ prefix: `bigbud-desktop-${options.platform}-stage-` });
@@ -135,6 +142,14 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });
   yield* fs.makeDirectory(stageServerDir, { recursive: true });
+  yield* stagePackagedWorkspaceAgent({
+    repoRoot,
+    stageServerDir,
+    platform: options.platform,
+    arch: options.arch,
+    skipBuild: options.skipBuild,
+    verbose: options.verbose,
+  });
 
   yield* Effect.log("[desktop-artifact] Staging release app...");
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
@@ -170,7 +185,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // need to be installed in the staged server directory.
   const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
   const stagePackageJson: StagePackageJson = {
-    name: "bigbud-desktop",
+    name: releaseIdentity.packageName,
     version: appVersion,
     buildVersion: appVersion,
     bigbudCommitHash: commitHash,
@@ -181,7 +196,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     build: yield* createBuildConfig(
       options.platform,
       options.target,
-      desktopPackageJson.productName ?? "bigbud",
+      releaseIdentity,
       options.signed,
       options.mockUpdates,
       options.mockUpdateServerPort,

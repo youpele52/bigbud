@@ -65,6 +65,9 @@ import {
   ServerExportThreadContextError,
   ServerExportThreadContextInput,
   ServerExportThreadContextResult,
+  ServerInstallRemoteAgentError,
+  ServerInstallRemoteAgentInput,
+  ServerInstallRemoteAgentResult,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
   ServerUnlockSshKeyInput,
@@ -123,6 +126,12 @@ export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerify
   payload: ServerVerifyExecutionTargetInput,
   success: ServerVerifyExecutionTargetResult,
   error: ServerVerifyExecutionTargetError,
+});
+
+export const WsServerInstallRemoteAgentRpc = Rpc.make(WS_METHODS.serverInstallRemoteAgent, {
+  payload: ServerInstallRemoteAgentInput,
+  success: ServerInstallRemoteAgentResult,
+  error: ServerInstallRemoteAgentError,
 });
 
 export const WsServerUnlockSshKeyRpc = Rpc.make(WS_METHODS.serverUnlockSshKey, {

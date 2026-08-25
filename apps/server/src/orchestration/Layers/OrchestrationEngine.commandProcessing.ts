@@ -151,15 +151,24 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 committedEvents.push(savedEvent);
               }
               const lastSavedEvent = committedEvents.at(-1) ?? null;
-              yield* commandReceiptRepository.upsert({
-                commandId: envelope.command.commandId,
-                aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
-                aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
-                acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
-                resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                status: "accepted",
-                error: null,
-              });
+              // A lifecycle flush can race with a new turn between command
+              // creation and processing. An empty decision is retryable, not
+              // successful work; receipt-caching it would poison the stable
+              // flush command ID forever.
+              if (
+                envelope.command.type !== "thread.queued-prompt.flush" ||
+                committedEvents.length > 0
+              ) {
+                yield* commandReceiptRepository.upsert({
+                  commandId: envelope.command.commandId,
+                  aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
+                  aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
+                  acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
+                  resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
+                  status: "accepted",
+                  error: null,
+                });
+              }
               return {
                 committedEvents,
                 lastSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,

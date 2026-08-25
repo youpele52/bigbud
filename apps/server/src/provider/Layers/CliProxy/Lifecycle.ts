@@ -124,83 +124,109 @@ export function makeCliProxyLifecycle(
             detail: `activation: CLIProxyAPI activation is already in progress for config '${starting.configPath}'.`,
           });
     }
-    const promise = (async () => {
-      const homebrew =
-        platform === "darwin"
-          ? await commandRunner("brew", ["list", "--versions", "cliproxyapi"])
-          : ({ _tag: "missing", command: "brew" } as const);
-      const systemd =
-        platform === "linux"
-          ? await commandRunner("systemctl", ["--user", "cat", "cli-proxy-api.service"])
-          : ({ _tag: "missing", command: "systemctl" } as const);
-      const direct = await commandRunner("cli-proxy-api", ["--version"]);
-      const strategy = selectCliProxyLaunchStrategy({
-        platform,
-        hasHomebrewService: resultIsAvailable(homebrew),
-        hasSystemdUserUnit: resultIsAvailable(systemd),
-        hasDirectBinary: resultIsAvailable(direct),
-      });
+    const promise: Promise<CliProxyActivationResult> =
+      (async (): Promise<CliProxyActivationResult> => {
+        const homebrew =
+          platform === "darwin"
+            ? await commandRunner("brew", ["list", "--versions", "cliproxyapi"])
+            : ({ _tag: "missing", command: "brew" } as const);
+        const systemd =
+          platform === "linux"
+            ? await commandRunner("systemctl", ["--user", "cat", "cli-proxy-api.service"])
+            : ({ _tag: "missing", command: "systemctl" } as const);
+        const direct = await commandRunner("cli-proxy-api", ["--version"]);
+        const strategy = selectCliProxyLaunchStrategy({
+          platform,
+          hasHomebrewService: resultIsAvailable(homebrew),
+          hasSystemdUserUnit: resultIsAvailable(systemd),
+          hasDirectBinary: resultIsAvailable(direct),
+        });
 
-      if (strategy === "homebrew") {
-        const result = await commandRunner("brew", ["services", "start", "cliproxyapi"]);
-        return resultIsAvailable(result)
-          ? ({ _tag: "started", strategy } as const)
-          : activationFailure(strategy, result);
-      }
-      if (strategy === "systemd-user") {
-        const result = await commandRunner("systemctl", ["--user", "start", "cli-proxy-api"]);
-        return resultIsAvailable(result)
-          ? ({ _tag: "started", strategy } as const)
-          : activationFailure(strategy, result);
-      }
-      if (strategy === "direct") {
-        if (closed) {
+        if (strategy === "homebrew") {
           return {
             _tag: "unavailable",
             strategy: "none",
-            detail: "direct: CLIProxyAPI lifecycle was closed during activation.",
-          } as const;
+            detail: `${strategy}: the selected config '${input.configPath}' cannot be verified for the service-managed process.`,
+          };
         }
-        if (ownedChild && ownedChild.exitCode !== null) {
-          ownedChild = undefined;
-          ownedConfigPath = undefined;
+        if (strategy === "systemd-user") {
+          return {
+            _tag: "unavailable",
+            strategy: "none",
+            detail: `${strategy}: the selected config '${input.configPath}' cannot be verified for the service-managed process.`,
+          };
         }
-        if (!ownedChild) {
-          try {
-            const child = spawnDirect("cli-proxy-api", ["--config", input.configPath], {
-              detached: platform !== "win32",
-              stdio: "ignore",
-              windowsHide: true,
-            });
-            ownedChild = child;
-            ownedConfigPath = input.configPath;
-            child.once("error", () => {
-              if (ownedChild === child) {
-                ownedChild = undefined;
-                ownedConfigPath = undefined;
-              }
-            });
-            child.once("exit", () => {
-              if (ownedChild === child) {
-                ownedChild = undefined;
-                ownedConfigPath = undefined;
-              }
-            });
-          } catch (cause) {
-            return activationFailure(strategy, {
-              _tag: "failed",
-              command: "cli-proxy-api",
-              detail:
-                cause instanceof Error ? cause.message.slice(0, 400) : "Process start failed.",
-            });
+        if (strategy === "direct") {
+          if (closed) {
+            return {
+              _tag: "unavailable",
+              strategy: "none",
+              detail: "direct: CLIProxyAPI lifecycle was closed during activation.",
+            } as const;
           }
+          if (ownedChild && ownedChild.exitCode !== null) {
+            ownedChild = undefined;
+            ownedConfigPath = undefined;
+          }
+          let earlyExitDetail = "CLIProxyAPI exited before startup could be verified.";
+          if (!ownedChild) {
+            try {
+              const child = spawnDirect("cli-proxy-api", ["--config", input.configPath], {
+                detached: platform !== "win32",
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
+              });
+              let output = "";
+              const appendOutput = (chunk: Buffer | string) => {
+                output = `${output}${chunk.toString()}`.slice(0, COMMAND_OUTPUT_LIMIT_BYTES);
+              };
+              child.stderr?.on("data", appendOutput);
+              child.stdout?.on("data", appendOutput);
+              ownedChild = child;
+              ownedConfigPath = input.configPath;
+              child.once("error", () => {
+                if (ownedChild === child) {
+                  ownedChild = undefined;
+                  ownedConfigPath = undefined;
+                }
+              });
+              child.once("exit", (code, signal) => {
+                earlyExitDetail = `CLIProxyAPI exited before startup could be verified (code ${code ?? "unknown"}, signal ${signal ?? "none"}).${output ? ` ${output.trim()}` : ""}`;
+                if (ownedChild === child) {
+                  ownedChild = undefined;
+                  ownedConfigPath = undefined;
+                }
+              });
+            } catch (cause) {
+              return activationFailure(strategy, {
+                _tag: "failed",
+                command: "cli-proxy-api",
+                detail:
+                  cause instanceof Error ? cause.message.slice(0, 400) : "Process start failed.",
+              });
+            }
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            if (closed) {
+              return {
+                _tag: "unavailable",
+                strategy: "none",
+                detail: "direct: CLIProxyAPI lifecycle was closed during activation.",
+              } as const;
+            }
+            if (!ownedChild || ownedChild.exitCode !== null) {
+              return activationFailure(strategy, {
+                _tag: "failed",
+                command: "cli-proxy-api",
+                detail: earlyExitDetail,
+              });
+            }
+          }
+          return { _tag: "started", strategy } as const;
         }
-        return { _tag: "started", strategy } as const;
-      }
-      return activationFailure(strategy);
-    })().finally(() => {
-      if (starting?.configPath === input.configPath) starting = undefined;
-    });
+        return activationFailure(strategy);
+      })().finally(() => {
+        if (starting?.configPath === input.configPath) starting = undefined;
+      });
     starting = { configPath: input.configPath, promise };
     return promise;
   };

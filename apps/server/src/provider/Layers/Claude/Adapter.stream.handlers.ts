@@ -1,6 +1,6 @@
 /** ClaudeAdapter SDK message dispatchers. Routes raw SDK messages to specialized handlers. @module ClaudeAdapter.stream.handlers */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { type EventId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import {
@@ -18,6 +18,7 @@ import type {
   AssistantTextBlockState,
   ClaudeSessionContext,
   ToolInFlight,
+  UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
@@ -34,7 +35,7 @@ export interface MessageHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
@@ -174,7 +175,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
           ),
         });
 
-        if (parsedInput) {
+        if (parsedInput && nextTool.toolName !== "TaskList" && nextTool.toolName !== "TaskGet") {
           yield* updateClaudeTaskPlan({
             context,
             toolUseId: nextTool.itemId,
@@ -266,16 +267,17 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         return;
       }
 
-      yield* updateClaudeTaskPlan({
-        context,
-        toolUseId: tool.itemId,
-        toolName: tool.toolName,
-        input: tool.input,
-        ...(tool.toolName === "TaskList" ? { authoritativeSnapshot: true } : {}),
-        now: yield* nowIso,
-        makeEventStamp,
-        offerRuntimeEvent,
-      });
+      if (tool.toolName !== "TaskList" && tool.toolName !== "TaskGet") {
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: tool.itemId,
+          toolName: tool.toolName,
+          input: tool.input,
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
+      }
     }
   });
 

@@ -7,6 +7,8 @@ function renderToolbar(options?: {
   title?: string;
   faviconUrl?: string | null;
   annotationActive?: boolean;
+  loading?: boolean;
+  canStopLoading?: boolean;
 }) {
   return renderToStaticMarkup(
     <BrowserToolbar
@@ -21,6 +23,7 @@ function renderToolbar(options?: {
       onGoBack={() => {}}
       onGoForward={() => {}}
       onReload={() => {}}
+      onStopLoading={() => {}}
       onOpenInExternalBrowser={() => {}}
       onAnnotate={() => {}}
       annotationActive={options?.annotationActive ?? false}
@@ -32,16 +35,21 @@ function renderToolbar(options?: {
             : "https://nairaland.com/favicon.ico",
       }}
       historyUrls={[]}
+      loading={options?.loading ?? false}
+      canStopLoading={options?.canStopLoading ?? true}
     />,
   );
 }
 
 describe("BrowserToolbar page identity", () => {
-  it("shows favicon and page title in the idle address bar", () => {
+  it("shows a centered page title without duplicating the tab favicon", () => {
     const markup = renderToolbar();
 
     expect(markup).toContain("Nairaland Forum");
-    expect(markup).toContain('src="https://nairaland.com/favicon.ico"');
+    expect(markup).not.toContain('src="https://nairaland.com/favicon.ico"');
+    expect(markup).toContain("justify-center");
+    expect(markup).toContain("text-left");
+    expect(markup).toContain("border-transparent bg-transparent");
     expect(markup).toContain("text-transparent");
     expect(markup).toContain("placeholder:text-transparent");
   });
@@ -53,11 +61,19 @@ describe("BrowserToolbar page identity", () => {
     expect(markup).not.toContain("<img");
   });
 
-  it("renders the external-browser action inside the address bar", () => {
+  it("hides the external-browser action until the address bar is hovered", () => {
     const markup = renderToolbar();
 
-    expect(markup).toContain("Open in default browser");
-    expect(markup).toContain("absolute right-1 top-1/2");
+    expect(markup).not.toContain("Open in default browser");
+    expect(markup).not.toContain("absolute right-1 top-1/2");
+  });
+
+  it("keeps an empty address bar expanded and ready to edit", () => {
+    const markup = renderToolbar({ inputUrl: "", title: "", faviconUrl: null });
+
+    expect(markup).toContain("border-input bg-background");
+    expect(markup).toContain('placeholder="Enter a URL or search"');
+    expect(markup).not.toContain("text-transparent caret-transparent");
   });
 
   it("renders the annotation button in its active info state", () => {
@@ -65,5 +81,16 @@ describe("BrowserToolbar page identity", () => {
 
     expect(markup).toContain("text-info-foreground");
     expect(markup).toContain('data-pressed="true"');
+  });
+
+  it("replaces reload with stop loading only while a page is loading", () => {
+    expect(renderToolbar({ loading: true })).toContain('aria-label="Stop loading"');
+    expect(renderToolbar()).toContain('aria-label="Reload"');
+  });
+
+  it("keeps reload available when loading cannot be stopped", () => {
+    expect(renderToolbar({ loading: true, canStopLoading: false })).toContain(
+      'aria-label="Reload"',
+    );
   });
 });

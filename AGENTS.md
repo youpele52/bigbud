@@ -4,6 +4,7 @@
 
 - All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
 - **NEVER run `bun test`.** Always use `bun run test` (runs Vitest via Turbo). `bun test` invokes Bun's native test runner and bypasses Vitest entirely.
+- Rust changes must also pass `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, and `cargo test --locked --workspace`.
 
 ## Core Priorities
 
@@ -17,11 +18,7 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 
 Long term maintainability is a core priority. Before adding new functionality, check for shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
-**File length limit:** Non-test TypeScript source files must not exceed **400 lines**. Treat this as a hard limit for new non-test files. Existing non-test TypeScript files over 400 lines should be split by concern using dot-notation (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, etc.) rather than extended inline, and files over 500 lines are priority cleanup debt that should be reduced to 400 lines or less.
-
-**Test file limit:** TypeScript test files should target **400 lines or less**. New or heavily edited test files must stay at or below **400 lines** unless there is a concrete, documented reason they cannot be split further. No test file may exceed **500 lines** under any circumstance; files over 500 lines must be split by concern using the repo's dot-notation test pattern.
-
-**Generated files:** Generated files are exempt from the file length limit, but their generators should still prefer smaller outputs when feasible.
+**File length limit:** Every authored source and test code file must be **400 lines or fewer**. This is a formal hard limit for TypeScript, TSX, JavaScript, Rust, and every other code language in the repository. Existing violations are cleanup debt; any file that is added or materially edited must be split by concern before the task is complete. Use the repository's dot-notation pattern (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, and the equivalent Rust module layout). Generated outputs must be split at their generator/source boundary rather than hand-edited, and their generators should prefer outputs that also respect this limit.
 
 ## Package Roles
 
@@ -45,6 +42,9 @@ bun typecheck        # tsc --noEmit across all packages (via turbo)
 bun run test         # all tests via Vitest (via turbo) — NEVER use bun test
 bun build:contracts  # build @bigbud/contracts (required before server/web if not using bun dev)
 bun clean            # remove node_modules, dist, .turbo everywhere
+cargo fmt --all --check                              # Rust formatting check
+cargo clippy --locked --workspace --all-targets -- -D warnings  # Rust lint
+cargo test --locked --workspace                      # Rust workspace tests
 ```
 
 **Focused test runs:**

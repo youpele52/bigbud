@@ -47,6 +47,7 @@ function record(
     releaseServer: () => undefined,
     opencodeSessionId: SESSION_ID,
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: "2026-08-18T00:00:00.000Z",
     runtimeMode: "full-access",
     providerRuntimeExecutionTargetId: "local",

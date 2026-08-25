@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildWorkspaceFilePreviewUrl,
   isHtmlFilePath,
   isImageFilePath,
   isVideoFilePath,
@@ -65,5 +66,17 @@ describe("isVideoMimeType", () => {
   it("ignores non-video mime types", () => {
     expect(isVideoMimeType("image/png")).toBe(false);
     expect(isVideoMimeType("application/pdf")).toBe(false);
+  });
+});
+
+describe("buildWorkspaceFilePreviewUrl", () => {
+  it("includes a non-local execution target in preview URLs", () => {
+    expect(
+      buildWorkspaceFilePreviewUrl({
+        cwd: "/remote/project",
+        relativePath: "assets/demo.mp4",
+        executionTargetId: "ssh:example",
+      }),
+    ).toContain("executionTargetId=ssh%3Aexample");
   });
 });

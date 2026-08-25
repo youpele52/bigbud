@@ -6,12 +6,9 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
-  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
-import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
-import { readNativeApi } from "../../rpc/nativeApi";
 import { openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
-import { joinWorkspaceEntryPath } from "./filesPanel.dnd";
+import type { FileHistoryEntry } from "../../stores/files/filesPanel.history";
 
 interface ReconcilePreviewPathAfterDirectoryRefreshInput {
   readonly previewPath: string | null;
@@ -50,6 +47,11 @@ export function getRemovedEntryPaths(
   return previousEntries.filter((entry) => !nextPaths.has(entry.path)).map((entry) => entry.path);
 }
 
+export function getParentDirectoryPath(path: string): string {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex < 0 ? "" : path.slice(0, separatorIndex);
+}
+
 export function applyDirectoryNavigationRequest(
   requestPath: string,
   directoryStateByPath: Readonly<Record<string, unknown>>,
@@ -68,7 +70,54 @@ export function applyDirectoryNavigationRequest(
     }
   }
 
-  setExpandedDirectories((current) => ({ ...current, ...nextExpanded }));
+  setExpandedDirectories((current) => {
+    const requiresUpdate = Object.keys(nextExpanded).some((path) => current[path] !== true);
+    return requiresUpdate ? { ...current, ...nextExpanded } : current;
+  });
+}
+
+export function applyPreviewDirectoryNavigation(
+  previewPath: string,
+  directoryStateByPath: Readonly<Record<string, unknown>>,
+  loadDirectory: (relativePath: string) => void | Promise<void>,
+  setExpandedDirectories: Dispatch<SetStateAction<Record<string, boolean>>>,
+): void {
+  const parentDirectoryPath = getParentDirectoryPath(previewPath);
+  if (!parentDirectoryPath) return;
+
+  applyDirectoryNavigationRequest(
+    parentDirectoryPath,
+    directoryStateByPath,
+    loadDirectory,
+    setExpandedDirectories,
+  );
+}
+
+interface ApplyFileOpenRequestInput {
+  readonly request: Pick<FileHistoryEntry, "path" | "position"> & { readonly requestId: number };
+  readonly directoryStateByPath: Readonly<Record<string, unknown>>;
+  readonly loadDirectory: (relativePath: string) => void | Promise<void>;
+  readonly setExpandedDirectories: Dispatch<SetStateAction<Record<string, boolean>>>;
+  readonly openPreview: (entry: FileHistoryEntry) => void;
+  readonly consumeRequest: (requestId: number) => void;
+}
+
+export function applyFileOpenRequest({
+  request,
+  directoryStateByPath,
+  loadDirectory,
+  setExpandedDirectories,
+  openPreview,
+  consumeRequest,
+}: ApplyFileOpenRequestInput): void {
+  applyPreviewDirectoryNavigation(
+    request.path,
+    directoryStateByPath,
+    loadDirectory,
+    setExpandedDirectories,
+  );
+  openPreview({ path: request.path, position: request.position, scrollTop: null });
+  consumeRequest(request.requestId);
 }
 
 export function openFilesPanelEntry(
@@ -77,32 +126,23 @@ export function openFilesPanelEntry(
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
   openPreview?: (path: string) => void,
+  executionTargetId?: string | undefined,
 ): void {
   if (isPdfFilePath(entry.path) || isImageFilePath(entry.path) || isHtmlFilePath(entry.path)) {
     openNewBrowserTab({
       url: buildWorkspaceFilePreviewUrl({
         cwd: workspaceRoot,
         relativePath: entry.path,
+        executionTargetId,
       }),
     });
     return;
   }
 
-  if (isVideoFilePath(entry.path) || isCodeRelatedFilePath(entry.path)) {
-    if (openPreview) {
-      openPreview(entry.path);
-    } else {
-      setPreviewPath(entry.path);
-      setPreviewPosition(null);
-    }
-    return;
+  if (openPreview) {
+    openPreview(entry.path);
+  } else {
+    setPreviewPath(entry.path);
+    setPreviewPosition(null);
   }
-
-  const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
-  const api = readNativeApi();
-  if (!api) return;
-
-  void openPathInPreferredApp(api, absolutePath).catch((error) => {
-    console.error("Failed to open file:", error);
-  });
 }

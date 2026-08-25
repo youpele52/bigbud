@@ -297,7 +297,10 @@ export function gitInitMutationOptions(input: {
       });
     },
     onSuccess: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }
@@ -339,7 +342,10 @@ export function gitRunStackedActionMutationOptions(input: {
       );
     },
     onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }
@@ -360,7 +366,10 @@ export function gitPullMutationOptions(input: {
       });
     },
     onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }
@@ -381,7 +390,10 @@ export function gitFetchMutationOptions(input: {
       });
     },
     onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }
@@ -402,7 +414,10 @@ export function gitDiscardChangesMutationOptions(input: {
       });
     },
     onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }
@@ -430,8 +445,11 @@ export function gitRemoveWorktreeMutationOptions(input: { queryClient: QueryClie
       });
     },
     mutationKey: ["git", "mutation", "remove-worktree"] as const,
-    onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+    onSettled: async (_data, _error, variables) => {
+      await invalidateGitQueries(input.queryClient, {
+        cwd: variables?.cwd ?? null,
+        executionTargetId: variables?.executionTargetId,
+      });
     },
   });
 }
@@ -463,7 +481,10 @@ export function gitPreparePullRequestThreadMutationOptions(input: {
     },
     mutationKey: gitMutationKeys.preparePullRequestThread(input.cwd, input.executionTargetId),
     onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+      await invalidateGitQueries(input.queryClient, {
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+      });
     },
   });
 }

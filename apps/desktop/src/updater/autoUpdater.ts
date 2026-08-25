@@ -3,8 +3,13 @@ import type { DesktopUpdateState } from "@bigbud/contracts";
 import { autoUpdater } from "electron-updater";
 
 import { formatErrorMessage } from "../logging/logging";
-import { readAppUpdateYml } from "../env/pathResolver";
 import { isArm64HostRunningIntelBuild } from "../env/runtimeArch";
+import { configureUpdaterFeed } from "./autoUpdater.feed";
+import {
+  isUpdateVersionAllowed,
+  resolveDesktopUpdaterChannelPolicy,
+  type DesktopUpdaterChannelPolicy,
+} from "./updaterChannelPolicy";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
 import {
   createInitialDesktopUpdateState,
@@ -27,8 +32,6 @@ import type { DesktopRuntimeInfo } from "@bigbud/contracts";
 
 const AUTO_UPDATE_STARTUP_DELAY_MS = 15_000;
 const AUTO_UPDATE_POLL_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const DESKTOP_UPDATE_CHANNEL = "latest";
-const DESKTOP_UPDATE_ALLOW_PRERELEASE = false;
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -50,6 +53,8 @@ type DesktopUpdateErrorContext = DesktopUpdateState["errorContext"];
 let _updateState: DesktopUpdateState | null = null;
 let _updateStateChannel = "";
 let _desktopRuntimeInfo: DesktopRuntimeInfo | null = null;
+let _updaterChannelPolicy: DesktopUpdaterChannelPolicy | null = null;
+let _prepareUpdaterFeedForCheck: (() => Promise<void>) | null = null;
 let _isDevelopment = false;
 let _getIsQuitting: (() => boolean) | null = null;
 let _setIsQuitting: ((v: boolean) => void) | null = null;
@@ -129,6 +134,7 @@ export async function checkForUpdates(reason: string): Promise<boolean> {
   console.info(`[desktop-updater] Checking for updates (${reason})...`);
 
   try {
+    await _prepareUpdaterFeedForCheck?.();
     await autoUpdater.checkForUpdates();
     return true;
   } catch (error: unknown) {
@@ -149,6 +155,14 @@ export async function downloadAvailableUpdate(): Promise<{
 }> {
   if (!_updateState || !_desktopRuntimeInfo) return { accepted: false, completed: false };
   if (!updaterConfigured || updateDownloadInFlight || _updateState.status !== "available") {
+    return { accepted: false, completed: false };
+  }
+  if (
+    !_updaterChannelPolicy ||
+    !_updateState.availableVersion ||
+    !isUpdateVersionAllowed(_updaterChannelPolicy, _updateState.availableVersion)
+  ) {
+    console.error("[desktop-updater] Refusing to download a cross-channel update.");
     return { accepted: false, completed: false };
   }
   updateDownloadInFlight = true;
@@ -252,6 +266,7 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
   _getIsQuitting = deps.getIsQuitting;
   _setIsQuitting = deps.setIsQuitting;
   _stopBackendAndWaitForExit = deps.stopBackendAndWaitForExit;
+  _updaterChannelPolicy = resolveDesktopUpdaterChannelPolicy(app.getVersion());
 
   // Register cleanup on the Electron built-in autoUpdater. electron-updater's
   // quitAndInstall emits this event via require("electron").autoUpdater; it is
@@ -273,38 +288,12 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
   }
   updaterConfigured = true;
 
-  const githubToken =
-    process.env.BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() ||
-    process.env.T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() ||
-    process.env.GH_TOKEN?.trim() ||
-    "";
-  if (githubToken) {
-    // When a token is provided, re-configure the feed with `private: true` so
-    // electron-updater uses the GitHub API (api.github.com) instead of the
-    // public Atom feed (github.com/…/releases.atom) which rejects Bearer auth.
-    const appUpdateYml = readAppUpdateYml();
-    if (appUpdateYml?.provider === "github") {
-      autoUpdater.setFeedURL({
-        ...appUpdateYml,
-        provider: "github" as const,
-        private: true,
-        token: githubToken,
-      });
-    }
-  }
-
-  if (process.env.BIGBUD_DESKTOP_MOCK_UPDATES || process.env.T3CODE_DESKTOP_MOCK_UPDATES) {
-    autoUpdater.setFeedURL({
-      provider: "generic",
-      url: `http://localhost:${process.env.BIGBUD_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? process.env.T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? 3000}`,
-    });
-  }
+  _prepareUpdaterFeedForCheck = configureUpdaterFeed(autoUpdater, _updaterChannelPolicy);
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
-  // Release channels affect identity only; all installs use the stable update track.
-  autoUpdater.channel = DESKTOP_UPDATE_CHANNEL;
-  autoUpdater.allowPrerelease = DESKTOP_UPDATE_ALLOW_PRERELEASE;
+  autoUpdater.channel = _updaterChannelPolicy.updateChannel;
+  autoUpdater.allowPrerelease = _updaterChannelPolicy.allowPrerelease;
   autoUpdater.allowDowngrade = false;
   autoUpdater.disableDifferentialDownload = isArm64HostRunningIntelBuild(deps.runtimeInfo);
   let lastLoggedDownloadMilestone = -1;
@@ -319,7 +308,14 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
     console.info("[desktop-updater] Looking for updates...");
   });
   autoUpdater.on("update-available", (info) => {
-    if (!_updateState) return;
+    if (!_updateState || !_updaterChannelPolicy) return;
+    if (!isUpdateVersionAllowed(_updaterChannelPolicy, info.version)) {
+      setUpdateState(reduceDesktopUpdateStateOnNoUpdate(_updateState, new Date().toISOString()));
+      console.warn(
+        `[desktop-updater] Rejected cross-channel or unsupported update ${info.version} for ${_updaterChannelPolicy.releaseChannel}.`,
+      );
+      return;
+    }
     setUpdateState(
       reduceDesktopUpdateStateOnUpdateAvailable(
         _updateState,
@@ -374,7 +370,12 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
     }
   });
   autoUpdater.on("update-downloaded", (info) => {
-    if (!_updateState) return;
+    if (!_updateState || !_updaterChannelPolicy) return;
+    if (!isUpdateVersionAllowed(_updaterChannelPolicy, info.version)) {
+      setUpdateState(reduceDesktopUpdateStateOnNoUpdate(_updateState, new Date().toISOString()));
+      console.error(`[desktop-updater] Rejected downloaded cross-channel update ${info.version}.`);
+      return;
+    }
     setUpdateState(reduceDesktopUpdateStateOnDownloadComplete(_updateState, info.version));
     console.info(`[desktop-updater] Update downloaded: ${info.version}`);
   });

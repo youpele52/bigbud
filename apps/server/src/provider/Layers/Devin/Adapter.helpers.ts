@@ -89,6 +89,7 @@ export interface PendingUserInput {
 
 export interface DevinSessionContext {
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
   readonly acp: AcpSessionRuntimeShape;

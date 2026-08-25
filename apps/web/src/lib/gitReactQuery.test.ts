@@ -180,4 +180,24 @@ describe("invalidateGitStatusQuery", () => {
       queryClient.getQueryState(gitStatusQueryOptions("/repo/b").queryKey)?.isInvalidated,
     ).toBe(false);
   });
+
+  it("invalidates the selected remote target instead of the local target", async () => {
+    const queryClient = new QueryClient();
+    const remoteTarget = "ssh:example";
+
+    queryClient.setQueryData(gitQueryKeys.status("/repo/a", remoteTarget), {
+      ok: "remote",
+    });
+    queryClient.setQueryData(gitQueryKeys.status("/repo/a"), { ok: "local" });
+
+    await invalidateGitStatusQuery(queryClient, "/repo/a", remoteTarget);
+
+    expect(
+      queryClient.getQueryState(gitStatusQueryOptions("/repo/a", remoteTarget).queryKey)
+        ?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(gitStatusQueryOptions("/repo/a").queryKey)?.isInvalidated,
+    ).toBe(false);
+  });
 });
