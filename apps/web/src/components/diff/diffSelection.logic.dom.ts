@@ -22,6 +22,12 @@ export interface ResolvedDiffContextMenuTarget {
   readonly fileContainer: HTMLElement;
 }
 
+export const DIFF_ANNOTATION_HEADER = [
+  'Diff legend: "-" deleted, "+" added, " " unchanged.',
+  "--- before",
+  "+++ after",
+] as const;
+
 const TEXT_NODE = 3;
 
 export function parseDiffLineNumber(element: HTMLElement): number | null {
@@ -252,7 +258,7 @@ function formatSelectedDiffText(
     }
     return `${prefix}${removeStructuralLineEnding(text)}`;
   });
-  return ["--- before", "+++ after", ...rows].join("\n");
+  return [...DIFF_ANNOTATION_HEADER, ...rows].join("\n");
 }
 
 function selectionFitsSingleHunk(

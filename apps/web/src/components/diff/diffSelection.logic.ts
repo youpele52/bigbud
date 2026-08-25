@@ -10,11 +10,15 @@ import {
 } from "./diffSelection.logic.dom";
 import { resolveDiffSelectionFromPierreLineRange } from "./diffSelection.logic.pierre";
 
+export { resolveDiffSelectionFromVisualLine } from "./diffSelection.logic.pierre";
+
 export {
+  DIFF_ANNOTATION_HEADER,
   normalizeDiffLineRange,
   parseDiffLineNumber,
   resolveDiffContextMenuTarget,
   resolveDiffSelectionFromDom,
+  resolveFilePathFromPath,
   walkToDiffFileContainer,
   walkToDiffLineElement,
 } from "./diffSelection.logic.dom";
@@ -30,6 +34,7 @@ export function resolveDiffSelectionFromContextMenu(input: {
   readonly selection: Selection | null;
   readonly fileDiffByPath: ReadonlyMap<string, FileDiffMetadata>;
   readonly pierreLineSelectionByPath?: ReadonlyMap<string, SelectedLineRange | null> | null;
+  readonly diffStyle?: "unified" | "split";
 }): ResolvedDiffSelection | null {
   const filePath = resolveFilePathFromPath(input.event.composedPath(), input.fileDiffByPath);
   if (!filePath) return null;
@@ -52,5 +57,5 @@ export function resolveDiffSelectionFromContextMenu(input: {
   const pierreRange = input.pierreLineSelectionByPath?.get(filePath) ?? null;
   if (!fileDiff || !pierreRange) return null;
 
-  return resolveDiffSelectionFromPierreLineRange(filePath, fileDiff, pierreRange);
+  return resolveDiffSelectionFromPierreLineRange(filePath, fileDiff, pierreRange, input.diffStyle);
 }

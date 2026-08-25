@@ -3,13 +3,15 @@ import "../../index.css";
 import type { ContextMenuItem, NativeApi } from "@bigbud/contracts";
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import type { PendingDiffAnnotation } from "./DiffPanel.annotations";
+import { DIFF_ANNOTATION_HEADER } from "./diffSelection.logic";
 import { useDiffAnnotateContextMenu } from "./useDiffAnnotateContextMenu";
+import { useDiffAnnotateSelection } from "./useDiffAnnotateSelection";
 
 const FILE_PATH = "src/example.ts";
 const PATCH = [
@@ -35,6 +37,21 @@ function DiffAnnotationHarness({
   const viewportRef = useRef<HTMLDivElement>(null);
   const pierreLineSelectionsRef = useRef(new Map());
   const fileDiffByPath = useMemo(() => new Map([[FILE_PATH, fileDiff]]), [fileDiff]);
+  const handleDirectAnnotation = useCallback(
+    (selection: {
+      filePath: string;
+      range: { startLine: number; endLine: number };
+      selectedText: string;
+    }) =>
+      onAnnotateRequest({
+        ...selection,
+        anchorX: 0,
+        anchorY: 0,
+        viewportHeight: 400,
+        viewportWidth: 600,
+      }),
+    [onAnnotateRequest],
+  );
 
   useDiffAnnotateContextMenu({
     viewportRef,
@@ -43,6 +60,12 @@ function DiffAnnotationHarness({
     fileDiffByPath,
     pierreLineSelectionsRef,
     onAnnotateRequest,
+  });
+  useDiffAnnotateSelection({
+    viewportRef,
+    canAnnotate: true,
+    fileDiffByPath,
+    onAnnotateRequest: handleDirectAnnotation,
   });
 
   return (
@@ -220,7 +243,7 @@ describe("DiffPanel native text annotation", () => {
     const items = showContextMenu.mock.calls[0]![0] as ReadonlyArray<ContextMenuItem>;
     expect(items.map((item) => item.label)).toContain("Annotate selection");
     await vi.waitFor(() => expect(onAnnotateRequest).toHaveBeenCalledOnce());
-    const expectedDiffText = ["--- before", "+++ after", "-removed = true;", "+const added"].join(
+    const expectedDiffText = [...DIFF_ANNOTATION_HEADER, "-removed = true;", "+const added"].join(
       "\n",
     );
     expect(onAnnotateRequest).toHaveBeenCalledWith(
@@ -263,7 +286,45 @@ describe("DiffPanel native text annotation", () => {
     await vi.waitFor(() => expect(onAnnotateRequest).toHaveBeenCalledOnce());
     expect(onAnnotateRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        selectedText: ["--- before", "+++ after", " const after = true;"].join("\n"),
+        selectedText: [...DIFF_ANNOTATION_HEADER, " const after = true;"].join("\n"),
+      }),
+    );
+  });
+
+  it("opens annotation immediately when a qualifying text selection completes", async () => {
+    const onAnnotateRequest = vi.fn();
+    const fileDiff = parsePatchFiles(PATCH, "direct-native-selection")[0]?.files[0];
+    await render(
+      <DiffAnnotationHarness fileDiff={fileDiff!} onAnnotateRequest={onAnnotateRequest} />,
+    );
+
+    let additionLine: HTMLElement | null = null;
+    await vi.waitFor(() => {
+      additionLine =
+        Array.from(
+          document
+            .querySelector("diffs-container")
+            ?.shadowRoot?.querySelectorAll<HTMLElement>("[data-content] [data-line]") ?? [],
+        ).find((line) => line.textContent?.includes("const added")) ?? null;
+      expect(additionLine).not.toBeNull();
+    });
+
+    selectText(additionLine!, "const added = true;");
+    additionLine!.dispatchEvent(
+      new MouseEvent("mouseup", {
+        bubbles: true,
+        composed: true,
+        button: 0,
+        clientX: 40,
+        clientY: 60,
+      }),
+    );
+
+    await vi.waitFor(() => expect(onAnnotateRequest).toHaveBeenCalledOnce());
+    expect(onAnnotateRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        range: { startLine: 2, endLine: 2 },
+        selectedText: [...DIFF_ANNOTATION_HEADER, "+const added = true;"].join("\n"),
       }),
     );
   });
@@ -318,7 +379,7 @@ describe("DiffPanel native text annotation", () => {
       expect.objectContaining({
         filePath: FILE_PATH,
         range: { startLine: 2, endLine: 2 },
-        selectedText: ["--- before", "+++ after", `+${selectedCode}`].join("\n"),
+        selectedText: [...DIFF_ANNOTATION_HEADER, `+${selectedCode}`].join("\n"),
       }),
     );
   });

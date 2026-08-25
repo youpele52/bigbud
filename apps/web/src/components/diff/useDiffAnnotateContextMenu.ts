@@ -20,6 +20,7 @@ export function useDiffAnnotateContextMenu(input: {
   readonly cwd: string | null | undefined;
   readonly fileDiffByPath: ReadonlyMap<string, FileDiffMetadata>;
   readonly pierreLineSelectionsRef: RefObject<ReadonlyMap<string, SelectedLineRange | null>>;
+  readonly diffStyle?: "unified" | "split";
   readonly onAnnotateRequest: (annotation: PendingDiffAnnotation) => void;
 }) {
   const {
@@ -28,6 +29,7 @@ export function useDiffAnnotateContextMenu(input: {
     cwd,
     fileDiffByPath,
     pierreLineSelectionsRef,
+    diffStyle,
     onAnnotateRequest,
   } = input;
 
@@ -47,14 +49,17 @@ export function useDiffAnnotateContextMenu(input: {
             selection,
             fileDiffByPath,
             pierreLineSelectionByPath: pierreLineSelectionsRef.current,
+            ...(diffStyle ? { diffStyle } : {}),
           })
         : null;
       return { selection, resolved };
     };
 
     const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 2 || !resolveDiffContextMenuTarget(event, fileDiffByPath)) {
+      if (event.button !== 2) {
         cachedSelection = null;
+      }
+      if (event.button !== 2 || !resolveDiffContextMenuTarget(event, fileDiffByPath)) {
         return;
       }
       cachedSelection = resolveSelection(event).resolved;
@@ -109,5 +114,13 @@ export function useDiffAnnotateContextMenu(input: {
       viewport.removeEventListener("mousedown", handleMouseDown, true);
       viewport.removeEventListener("contextmenu", handleContextMenu, true);
     };
-  }, [canAnnotate, cwd, fileDiffByPath, onAnnotateRequest, pierreLineSelectionsRef, viewportRef]);
+  }, [
+    canAnnotate,
+    cwd,
+    diffStyle,
+    fileDiffByPath,
+    onAnnotateRequest,
+    pierreLineSelectionsRef,
+    viewportRef,
+  ]);
 }

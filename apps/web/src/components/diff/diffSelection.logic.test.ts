@@ -2,6 +2,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 
 import {
+  DIFF_ANNOTATION_HEADER,
   normalizeDiffLineRange,
   parseDiffLineNumber,
   resolveDiffSelectionFromContextMenu,
@@ -95,7 +96,7 @@ describe("diffSelection.logic", () => {
     expect(resolveDiffSelectionFromDom(selection)).toEqual({
       filePath: "apps/web/src/App.tsx",
       range: { startLine: 10, endLine: 12 },
-      selectedText: ["--- before", "+++ after", "-const value = 1;", "+return value;"].join("\n"),
+      selectedText: [...DIFF_ANNOTATION_HEADER, "-const value = 1;", "+return value;"].join("\n"),
     });
   });
 
@@ -118,7 +119,7 @@ describe("diffSelection.logic", () => {
     expect(resolveDiffSelectionFromDom(selection)).toEqual({
       filePath: "src/example.ts",
       range: { startLine: 7, endLine: 7 },
-      selectedText: ["--- before", "+++ after", "-  removed();"].join("\n"),
+      selectedText: [...DIFF_ANNOTATION_HEADER, "-  removed();"].join("\n"),
     });
   });
 
@@ -157,7 +158,7 @@ describe("diffSelection.logic", () => {
     ).toEqual({
       filePath,
       range: { startLine: 10, endLine: 12 },
-      selectedText: ["--- before", "+++ after", " const value = 1;", " return value;"].join("\n"),
+      selectedText: [...DIFF_ANNOTATION_HEADER, " const value = 1;", " return value;"].join("\n"),
     });
   });
 

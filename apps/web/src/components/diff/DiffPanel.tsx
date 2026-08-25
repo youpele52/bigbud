@@ -21,6 +21,8 @@ import { DiffPanelAnnotationComposer, type PendingDiffAnnotation } from "./DiffP
 import { DiffPanelFile } from "./DiffPanelFile";
 import { DiffPanelHeader } from "./DiffPanelHeader";
 import { useDiffAnnotateContextMenu } from "./useDiffAnnotateContextMenu";
+import { useDiffAnnotateSelection } from "./useDiffAnnotateSelection";
+import type { ResolvedDiffSelection } from "./diffSelection.logic";
 
 interface DiffPanelProps {
   mode?: DiffPanelMode;
@@ -34,8 +36,10 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
   const [diffWordWrap, setDiffWordWrap] = useState(settings.diffWordWrap);
   const [pendingAnnotation, setPendingAnnotation] = useState<PendingDiffAnnotation | null>(null);
+  const [selectionOwnerFilePath, setSelectionOwnerFilePath] = useState<string | null>(null);
   const patchViewportRef = useRef<HTMLDivElement>(null);
   const pierreLineSelectionsRef = useRef(new Map<string, SelectedLineRange | null>());
+  const ignoreNextDiffClickRef = useRef(false);
   const previousDiffOpenRef = useRef(false);
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
 
@@ -100,9 +104,51 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
 
   const handlePierreLineSelectionChange = useCallback(
     (filePath: string, range: SelectedLineRange | null) => {
+      if (range === null) {
+        pierreLineSelectionsRef.current.delete(filePath);
+        setSelectionOwnerFilePath((current) => (current === filePath ? null : current));
+        return;
+      }
+      for (const path of pierreLineSelectionsRef.current.keys()) {
+        if (path !== filePath) pierreLineSelectionsRef.current.delete(path);
+      }
       pierreLineSelectionsRef.current.set(filePath, range);
+      setSelectionOwnerFilePath(filePath);
+      ignoreNextDiffClickRef.current = true;
     },
     [],
+  );
+
+  const clearDiffSelection = useCallback(() => {
+    setPendingAnnotation(null);
+    setSelectionOwnerFilePath(null);
+    pierreLineSelectionsRef.current.clear();
+  }, []);
+
+  const handleDirectAnnotationRequest = useCallback(
+    (
+      selection: ResolvedDiffSelection,
+      position: { readonly clientX: number; readonly clientY: number },
+    ) => {
+      const viewport = patchViewportRef.current;
+      if (!viewport || !canAnnotate) return;
+      ignoreNextDiffClickRef.current = true;
+      for (const path of pierreLineSelectionsRef.current.keys()) {
+        if (path !== selection.filePath) pierreLineSelectionsRef.current.delete(path);
+      }
+      setSelectionOwnerFilePath(selection.filePath);
+      const bounds = viewport.getBoundingClientRect();
+      setPendingAnnotation({
+        filePath: selection.filePath,
+        range: selection.range,
+        selectedText: selection.selectedText,
+        anchorX: position.clientX - bounds.left,
+        anchorY: position.clientY - bounds.top,
+        viewportHeight: viewport.clientHeight,
+        viewportWidth: viewport.clientWidth,
+      });
+    },
+    [canAnnotate],
   );
 
   useDiffAnnotateContextMenu({
@@ -111,7 +157,15 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     cwd: activeCwd,
     fileDiffByPath,
     pierreLineSelectionsRef,
+    diffStyle: diffRenderMode === "split" ? "split" : "unified",
     onAnnotateRequest: setPendingAnnotation,
+  });
+
+  useDiffAnnotateSelection({
+    viewportRef: patchViewportRef,
+    canAnnotate,
+    fileDiffByPath,
+    onAnnotateRequest: handleDirectAnnotationRequest,
   });
 
   useEffect(() => {
@@ -220,6 +274,23 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
           <div
             ref={patchViewportRef}
             className="diff-panel-viewport relative min-h-0 min-w-0 flex-1 overflow-hidden"
+            onClickCapture={(event) => {
+              const path = event.nativeEvent.composedPath();
+              if (
+                path.some(
+                  (target) =>
+                    target instanceof HTMLElement &&
+                    (target.hasAttribute("data-annotation-gutter-trigger") ||
+                      target.hasAttribute("data-annotation-composer")),
+                )
+              )
+                return;
+              if (ignoreNextDiffClickRef.current) {
+                ignoreNextDiffClickRef.current = false;
+                return;
+              }
+              clearDiffSelection();
+            }}
           >
             {checkpointDiffError && !renderablePatch && (
               <div className="px-3">
@@ -262,8 +333,15 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                       diffWordWrap={diffWordWrap}
                       resolvedTheme={resolvedTheme}
                       canAnnotate={canAnnotate}
+                      activeAnnotationRange={
+                        pendingAnnotation?.filePath === filePath
+                          ? pendingAnnotation.range
+                          : undefined
+                      }
+                      selectionOwnerFilePath={selectionOwnerFilePath}
                       onOpenInFilesPanel={openDiffFileInViewer}
                       onPierreLineSelectionChange={handlePierreLineSelectionChange}
+                      onAnnotationRequest={handleDirectAnnotationRequest}
                     />
                   );
                 })}

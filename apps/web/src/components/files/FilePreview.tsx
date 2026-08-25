@@ -2,8 +2,8 @@ import { AlertCircleIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
-import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
 import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
+import { FilePreviewCode } from "./FilePreview.code";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import {
   FilePreviewMarkdownToggle,
@@ -13,7 +13,6 @@ import {
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { isCodeRelatedFilePath } from "../../models/editor";
-import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import {
   buildAbsolutePreviewPath,
   buildFilePreviewBreadcrumb,
@@ -169,12 +168,6 @@ export const FilePreview = memo(function FilePreview({
     () => buildAbsolutePreviewPath(cwd, relativePath),
     [cwd, relativePath],
   );
-  const plainFallback = useMemo(
-    () => (
-      <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85">{state.contents}</pre>
-    ),
-    [state.contents],
-  );
   const selectedText = useMemo(() => {
     if (!selectedRange) return "";
     return lines
@@ -301,69 +294,25 @@ export const FilePreview = memo(function FilePreview({
           onScroll={handleScroll}
         />
       ) : (
-        <div
-          ref={scrollContainerRef}
-          className="relative min-h-0 flex-1 overflow-auto"
-          onContextMenu={handlePreviewContextMenu}
+        <FilePreviewCode
+          contents={state.contents}
+          language={language}
+          themeName={themeName}
+          isPlainTextFile={isPlainTextFile}
+          truncated={state.truncated}
+          targetLine={targetLine}
+          selectedRange={selectedRange}
+          selectedText={selectedText}
+          scrollContainerRef={scrollContainerRef}
+          linesContainerRef={linesContainerRef}
+          codeContainerRef={codeContainerRef}
           onScroll={handleScroll}
-        >
-          {state.truncated ? (
-            <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
-              Preview truncated.
-            </div>
-          ) : null}
-          <div
-            ref={linesContainerRef}
-            className="flex w-max min-w-full select-text font-mono text-xs leading-5"
-          >
-            <div className="shrink-0 select-none border-r border-border/70">
-              {lines.map((line) => (
-                <button
-                  key={line.id}
-                  type="button"
-                  className={
-                    targetLine === line.lineNumber
-                      ? "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground bg-primary/15 text-foreground"
-                      : selectedRange &&
-                          line.lineNumber >= selectedRange.startLine &&
-                          line.lineNumber <= selectedRange.endLine
-                        ? "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground bg-info/15 text-info"
-                        : "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground"
-                  }
-                  onClick={(event) => selectLine(line.lineNumber, event.shiftKey)}
-                  title="Click to annotate this line. Shift-click to extend selection."
-                >
-                  {line.lineNumber}
-                </button>
-              ))}
-            </div>
-            <div
-              ref={codeContainerRef}
-              className="file-preview-code min-w-0 px-3 text-foreground/85"
-            >
-              {isPlainTextFile ? (
-                plainFallback
-              ) : (
-                <SyntaxHighlightedCode
-                  code={state.contents}
-                  language={language}
-                  themeName={themeName}
-                  fallback={plainFallback}
-                />
-              )}
-            </div>
-          </div>
-          {selectedRange && onCreateAnnotation ? (
-            <FilePreviewAnnotationComposer
-              scrollContainerRef={scrollContainerRef}
-              linesContainerRef={linesContainerRef}
-              selectedRange={selectedRange}
-              selectedText={selectedText}
-              onCreateAnnotation={onCreateAnnotation}
-              onCancel={() => setSelectedRange(null)}
-            />
-          ) : null}
-        </div>
+          onContextMenu={handlePreviewContextMenu}
+          onSelectRange={setSelectedRange}
+          onSelectLine={selectLine}
+          onCreateAnnotation={onCreateAnnotation}
+          onCancelAnnotation={() => setSelectedRange(null)}
+        />
       )}
     </FilePreviewSearchFocus>
   );
