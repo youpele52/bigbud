@@ -118,6 +118,14 @@ try {
   if (ciWorkflow.includes("secrets.APPLE_") || ciWorkflow.includes("--signed")) {
     throw new Error("CI must remain unsigned and free of Apple signing credentials.");
   }
+  const publishJobStart = releaseWorkflow.indexOf("\n  release:\n");
+  if (publishJobStart < 0) throw new Error("Release workflow is missing the publish job.");
+  const publishJob = releaseWorkflow.slice(publishJobStart);
+  assertContains(
+    publishJob,
+    "bun install --frozen-lockfile --ignore-scripts",
+    "Release publish job must install workspace dependencies before running release scripts.",
+  );
 
   copyWorkspaceManifestFixture(tempRoot);
 
