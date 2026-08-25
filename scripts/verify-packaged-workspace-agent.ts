@@ -42,7 +42,7 @@ if (requireCodeSignature) {
 
 const result = spawnSync(binaryPath, ["--check"], { encoding: "utf8" });
 const fields = result.stdout.trim().split("\t");
-const expectedOs = platform === "win32" ? "windows" : platform;
+const expectedOs = platform === "darwin" ? "macos" : platform === "win32" ? "windows" : platform;
 const expectedArch = architecture === "arm64" ? "aarch64" : "x86_64";
 if (
   result.status !== 0 ||
