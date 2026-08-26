@@ -291,9 +291,7 @@ export const PluginRegistryLive = Layer.effect(
             current.items.find((candidate) => candidate.id === pluginId) ??
             stored.registry.installations.find((entry) => entry.pluginId === pluginId)?.item;
           if (!item)
-            return yield* Effect.fail(
-              new PluginError({ code: "not-found", message: "Plugin not found" }),
-            );
+            return yield* new PluginError({ code: "not-found", message: "Plugin not found" });
           return {
             item,
             installation: current.installed.find((entry) => entry.pluginId === pluginId),
