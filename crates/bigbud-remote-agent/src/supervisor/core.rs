@@ -20,13 +20,13 @@ pub(super) type Writer = Arc<Mutex<BufWriter<UnixStream>>>;
 pub(super) type Subscribers = Arc<Mutex<HashMap<String, Vec<Writer>>>>;
 
 #[cfg(unix)]
-#[path = "supervisor.io.rs"]
+#[path = "io.rs"]
 mod io_helpers;
 #[cfg(unix)]
 use io_helpers::*;
 
 #[cfg(test)]
-#[path = "supervisor.test_hooks.rs"]
+#[path = "test_hooks.rs"]
 mod test_hooks;
 
 #[cfg(unix)]
@@ -375,12 +375,12 @@ fn pty_attach_response_is_live(responses: &[bigbud_protocol::v1::Frame]) -> bool
     })
 }
 
-#[path = "supervisor.proxy.rs"]
+#[path = "proxy.rs"]
 mod proxy;
 
 pub use proxy::run_proxy;
 
-#[path = "supervisor.prepare.rs"]
+#[path = "prepare.rs"]
 mod prepare;
 
 pub use prepare::{SupervisorPreparation, prepare_supervisor};

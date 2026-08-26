@@ -7,7 +7,7 @@ use notify::{Config, EventHandler, RecursiveMode, Watcher, WatcherKind};
 use super::tests::temporary_workspace;
 use crate::backend::WatchBackend;
 use crate::manager::ManagerCommand;
-use crate::manager_helpers::subscribe_interest;
+use crate::manager::helpers::subscribe_interest;
 use crate::{
     WorkspaceWatchBackend, WorkspaceWatchEntry, WorkspaceWatchError, WorkspaceWatchHost,
     WorkspaceWatchHostError,

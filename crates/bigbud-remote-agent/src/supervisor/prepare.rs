@@ -349,5 +349,5 @@ pub fn prepare_supervisor(_socket_path: &Path) -> io::Result<SupervisorPreparati
 }
 
 #[cfg(all(test, target_os = "linux"))]
-#[path = "supervisor.prepare.tests.rs"]
+#[path = "prepare_tests.rs"]
 mod tests;

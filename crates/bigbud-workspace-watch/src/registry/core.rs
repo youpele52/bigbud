@@ -165,17 +165,17 @@ fn normalize_path(path: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "registry.behavior.tests.rs"]
+#[path = "behavior_tests.rs"]
 mod behavior_tests;
 #[cfg(test)]
-#[path = "registry.race.tests.rs"]
+#[path = "race_tests.rs"]
 mod race_tests;
 #[cfg(test)]
-#[path = "registry.recovery.tests.rs"]
+#[path = "recovery_tests.rs"]
 mod recovery_tests;
 #[cfg(test)]
-#[path = "registry.subscription.tests.rs"]
+#[path = "subscription_tests.rs"]
 mod subscription_tests;
 #[cfg(test)]
-#[path = "registry.tests.rs"]
+#[path = "tests.rs"]
 mod tests;

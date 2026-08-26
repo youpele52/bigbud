@@ -331,7 +331,7 @@ fn fake_supervisor_helper() {
     }
 }
 
-#[path = "supervisor.prepare.process_race.tests.rs"]
+#[path = "prepare_process_race_tests.rs"]
 mod process_race_tests;
 
 fn serve_helper_connection(mut stream: UnixStream, version: &str, digest: &str) -> io::Result<()> {

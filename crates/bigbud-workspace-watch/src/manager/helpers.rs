@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use super::Interest;
+use super::recovery::restore_invalidated;
 use crate::backend::WatchBackend;
 use crate::events::{Snapshot, emit_rescan, snapshot};
-use crate::manager::Interest;
-use crate::recovery::restore_invalidated;
 use crate::registry::EventSink;
 use crate::{
     WorkspaceRescanReason, WorkspaceWatchBackend, WorkspaceWatchError, WorkspaceWatchHost,

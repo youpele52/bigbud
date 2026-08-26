@@ -79,5 +79,5 @@ pub fn inspect_active_operations(path: &Path) -> Result<bool, OperationJournalEr
 }
 
 #[cfg(test)]
-#[path = "operations.journal.inspect.tests.rs"]
+#[path = "inspect.tests.rs"]
 mod tests;

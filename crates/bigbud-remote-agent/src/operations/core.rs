@@ -1,10 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-#[path = "operations.journal.rs"]
-pub mod journal;
-
-pub use journal::{JournalRecord, OperationJournal, OperationJournalError};
+use super::journal::JournalRecord;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationState {
@@ -97,7 +94,7 @@ pub struct OperationRegistry {
     operations: HashMap<String, OperationRecord>,
 }
 
-#[path = "operations.registry.rs"]
+#[path = "registry.rs"]
 mod registry;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,5 +104,5 @@ pub enum AcceptResult {
 }
 
 #[cfg(test)]
-#[path = "operations.tests.rs"]
+#[path = "tests.rs"]
 mod tests;

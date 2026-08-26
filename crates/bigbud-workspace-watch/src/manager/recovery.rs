@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
+use super::{Interest, ManagerCommand};
 use crate::backend::{WatchBackend, WatchBackendFactory};
 use crate::events::snapshot;
-use crate::manager::{Interest, ManagerCommand};
 use crate::{WorkspaceWatchBackend, WorkspaceWatchHost};
 
 pub(crate) fn rebuild_backend(

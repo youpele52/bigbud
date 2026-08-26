@@ -101,15 +101,15 @@ pub enum PtyEvent {
     },
 }
 
-#[path = "pty.handle.rs"]
+#[path = "handle.rs"]
 mod handle;
 
 #[cfg(unix)]
-#[path = "pty.environment.rs"]
+#[path = "environment.rs"]
 mod environment;
 
 #[cfg(test)]
-#[path = "pty.tests.rs"]
+#[path = "tests.rs"]
 mod tests;
 
 #[cfg(unix)]

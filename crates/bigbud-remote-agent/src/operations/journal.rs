@@ -6,11 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{OperationState, OutputStream};
 
-#[path = "operations.journal.codec.rs"]
+#[path = "journal/codec.rs"]
 mod codec;
-#[path = "operations.journal.inspect.rs"]
+#[path = "journal/inspect.rs"]
 mod inspect;
-#[path = "operations.journal.recovery.rs"]
+#[path = "journal/recovery.rs"]
 mod recovery;
 
 pub use inspect::inspect_active_operations;
@@ -382,5 +382,5 @@ impl OperationJournal {
 }
 
 #[cfg(test)]
-#[path = "operations.journal.tests.rs"]
+#[path = "journal/tests.rs"]
 mod tests;

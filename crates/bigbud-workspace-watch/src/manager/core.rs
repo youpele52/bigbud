@@ -5,12 +5,10 @@ use std::time::{Duration, Instant};
 
 use notify::Event;
 
+use super::helpers::{emit_overflow, emit_rescan_all, restore_interests, subscribe_interest};
+use super::recovery::rebuild_backend;
 use crate::backend::{WatchBackend, WatchBackendFactory};
 use crate::events::{Snapshot, reconcile_events};
-use crate::manager_helpers::{
-    emit_overflow, emit_rescan_all, restore_interests, subscribe_interest,
-};
-use crate::recovery::rebuild_backend;
 use crate::registry::EventSink;
 use crate::{WorkspaceRescanReason, WorkspaceWatchError, WorkspaceWatchHost, WorkspaceWatchStart};
 
@@ -80,7 +78,7 @@ impl BackendRecovery {
 }
 
 #[cfg(test)]
-#[path = "manager.tests.rs"]
+#[path = "tests.rs"]
 mod tests;
 
 pub(crate) fn spawn_manager(

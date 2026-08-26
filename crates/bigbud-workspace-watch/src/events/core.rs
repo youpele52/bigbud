@@ -232,5 +232,5 @@ impl From<WorkspaceWatchEntry> for EntryFingerprint {
 }
 
 #[cfg(test)]
-#[path = "events.tests.rs"]
+#[path = "tests.rs"]
 mod tests;
