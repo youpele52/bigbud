@@ -31,6 +31,8 @@ Long term maintainability is a core priority. Before adding new functionality, c
 
 ## Developer Commands
 
+Rust-specific instructions are in [crates/AGENTS.md](crates/AGENTS.md).
+
 ```sh
 bun dev              # full-stack dev (contracts build → server + web in parallel)
 bun dev:server       # server only
