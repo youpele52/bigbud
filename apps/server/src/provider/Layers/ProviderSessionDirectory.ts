@@ -2,6 +2,7 @@ import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
+import type { ProviderSessionRuntime } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { ProviderSessionDirectoryPersistenceError, ProviderValidationError } from "../Errors.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import {
@@ -47,6 +48,30 @@ function mergeRuntimePayload(
   return next;
 }
 
+const toRuntimeBinding = (
+  value: ProviderSessionRuntime,
+  provider: ProviderKind,
+): ProviderRuntimeBinding => {
+  const executionTargets = resolveProviderSessionExecutionTargets({
+    providerRuntimeExecutionTargetId: value.providerRuntimeExecutionTargetId,
+    workspaceExecutionTargetId: value.workspaceExecutionTargetId,
+    executionTargetId: value.executionTargetId,
+  });
+  return {
+    threadId: value.threadId,
+    provider,
+    providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+    workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+    executionTargetId: executionTargets.executionTargetId,
+    adapterKey: value.adapterKey,
+    runtimeMode: value.runtimeMode,
+    status: value.status,
+    lastSeenAt: value.lastSeenAt,
+    resumeCursor: value.resumeCursor,
+    runtimePayload: value.runtimePayload,
+  };
+};
+
 const makeProviderSessionDirectory = Effect.gen(function* () {
   const repository = yield* ProviderSessionRuntimeRepository;
 
@@ -58,30 +83,7 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
           onNone: () => Effect.succeed(Option.none<ProviderRuntimeBinding>()),
           onSome: (value) =>
             decodeProviderKind(value.providerName, "ProviderSessionDirectory.getBinding").pipe(
-              Effect.map((provider) =>
-                Option.some(
-                  (() => {
-                    const executionTargets = resolveProviderSessionExecutionTargets({
-                      providerRuntimeExecutionTargetId: value.providerRuntimeExecutionTargetId,
-                      workspaceExecutionTargetId: value.workspaceExecutionTargetId,
-                      executionTargetId: value.executionTargetId,
-                    });
-                    return {
-                      threadId: value.threadId,
-                      provider,
-                      providerRuntimeExecutionTargetId:
-                        executionTargets.providerRuntimeExecutionTargetId,
-                      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
-                      executionTargetId: executionTargets.executionTargetId,
-                      adapterKey: value.adapterKey,
-                      runtimeMode: value.runtimeMode,
-                      status: value.status,
-                      resumeCursor: value.resumeCursor,
-                      runtimePayload: value.runtimePayload,
-                    };
-                  })(),
-                ),
-              ),
+              Effect.map((provider) => Option.some(toRuntimeBinding(value, provider))),
             ),
         }),
       ),
@@ -166,12 +168,25 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
       Effect.map((rows) => rows.map((row) => row.threadId)),
     );
 
+  const listBindings: ProviderSessionDirectoryShape["listBindings"] = (input) =>
+    repository.list(input).pipe(
+      Effect.mapError(toPersistenceError("ProviderSessionDirectory.listBindings:list")),
+      Effect.flatMap((rows) =>
+        Effect.forEach(rows, (row) =>
+          decodeProviderKind(row.providerName, "ProviderSessionDirectory.listBindings").pipe(
+            Effect.map((provider) => toRuntimeBinding(row, provider)),
+          ),
+        ),
+      ),
+    );
+
   return {
     upsert,
     getProvider,
     getBinding,
     remove,
     listThreadIds,
+    listBindings,
   } satisfies ProviderSessionDirectoryShape;
 });
 

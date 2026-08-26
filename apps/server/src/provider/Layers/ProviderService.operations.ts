@@ -26,6 +26,7 @@ import type {
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
 import type {
   ProviderSessionDiscoveryDiagnostic,
+  ProviderSessionReconciliationOptions,
   ProviderSessionDiscoveryResult,
 } from "../Services/ProviderService.ts";
 import {
@@ -42,6 +43,7 @@ export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSessio
 type Adapter = ProviderAdapterShape<ProviderAdapterError>;
 
 const RECONCILIATION_DISCOVERY_TIMEOUT = "5 seconds";
+const RECONCILIATION_RECENT_WINDOW_MS = 15 * 60 * 1000;
 
 type UpsertSessionBinding = (
   session: ProviderSession,
@@ -64,24 +66,9 @@ export function makeListSessions(
   return Effect.fn("listSessions")(function* () {
     const sessionsByProvider = yield* Effect.forEach(adapters, (adapter) => adapter.listSessions());
     const activeSessions = sessionsByProvider.flatMap((sessions) => sessions);
-    const persistedBindings = yield* directory.listThreadIds().pipe(
-      Effect.flatMap((threadIds) =>
-        Effect.forEach(
-          threadIds,
-          (threadId) =>
-            directory.getBinding(threadId).pipe(Effect.orElseSucceed(() => Option.none<any>())),
-          { concurrency: "unbounded" },
-        ),
-      ),
-      Effect.orElseSucceed(() => [] as Array<Option.Option<any>>),
-    );
-    const bindingsByThreadId = new Map<ThreadId, any>();
-    for (const bindingOption of persistedBindings) {
-      const binding = Option.getOrUndefined(bindingOption);
-      if (binding) {
-        bindingsByThreadId.set(binding.threadId, binding);
-      }
-    }
+    const persistedBindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
+    const bindingsByThreadId = new Map<ThreadId, ProviderRuntimeBinding>();
+    for (const binding of persistedBindings) bindingsByThreadId.set(binding.threadId, binding);
 
     return enrichSessionsWithBindings(activeSessions, bindingsByThreadId);
   });
@@ -134,9 +121,11 @@ export function makeListSessionsForReconciliation(
   adapters: ReadonlyArray<Adapter>,
   directory: ProviderSessionDirectoryShape,
 ): ProviderServiceShape["listSessionsForReconciliation"] {
-  return Effect.fn("listSessionsForReconciliation")(function* () {
+  return Effect.fn("listSessionsForReconciliation")(function* (
+    options: ProviderSessionReconciliationOptions = {},
+  ) {
     const adapterResults = yield* Effect.forEach(
-      adapters,
+      options.includeAdapters === false ? [] : adapters,
       (adapter) =>
         adapter.listSessions().pipe(
           Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
@@ -183,38 +172,34 @@ export function makeListSessionsForReconciliation(
       }
     }
 
-    const directoryResult = yield* directory.listThreadIds().pipe(
-      Effect.flatMap((threadIds) =>
-        Effect.forEach(
-          threadIds,
-          (threadId) =>
-            directory.getBinding(threadId).pipe(
-              Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
-              Effect.matchCause({
-                onFailure: () => Option.none(),
-                onSuccess: (binding) => Option.getOrElse(binding, () => Option.none()),
-              }),
-            ),
-          { concurrency: "unbounded" },
-        ),
-      ),
-      Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
-      Effect.matchCause({
-        onFailure: (cause) => ({
-          available: false as const,
-          bindings: [],
-          detail: Cause.pretty(cause),
+    const directoryMode = options.directoryMode ?? "all";
+    const directoryResult = yield* directory
+      .listBindings({
+        mode: directoryMode,
+        recentSince:
+          options.recentSince ??
+          new Date(Date.now() - RECONCILIATION_RECENT_WINDOW_MS).toISOString(),
+        limit: options.limit ?? 250,
+        ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+      })
+      .pipe(
+        Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
+        Effect.matchCause({
+          onFailure: (cause) => ({
+            available: false as const,
+            bindings: [],
+            detail: Cause.pretty(cause),
+          }),
+          onSuccess: (result) =>
+            Option.isSome(result)
+              ? { available: true as const, bindings: result.value, detail: null }
+              : {
+                  available: false as const,
+                  bindings: [],
+                  detail: `Directory listing timed out after ${RECONCILIATION_DISCOVERY_TIMEOUT}.`,
+                },
         }),
-        onSuccess: (result) =>
-          Option.isSome(result)
-            ? { available: true as const, bindings: result.value, detail: null }
-            : {
-                available: false as const,
-                bindings: [],
-                detail: `Directory listing timed out after ${RECONCILIATION_DISCOVERY_TIMEOUT}.`,
-              },
-      }),
-    );
+      );
     if (!directoryResult.available) {
       diagnostics.push({
         provider: null,
@@ -225,10 +210,14 @@ export function makeListSessionsForReconciliation(
     }
 
     const bindingsByThreadId = new Map<ThreadId, ProviderRuntimeBinding>();
-    for (const bindingOption of directoryResult.bindings) {
-      const binding = Option.getOrUndefined(bindingOption);
-      if (binding) bindingsByThreadId.set(binding.threadId, binding);
-    }
+    for (const binding of directoryResult.bindings)
+      bindingsByThreadId.set(binding.threadId, binding);
+
+    const lastBinding = directoryResult.bindings.at(-1);
+    const directoryCursor =
+      directoryMode === "audit" && lastBinding?.lastSeenAt
+        ? { lastSeenAt: lastBinding.lastSeenAt, threadId: lastBinding.threadId }
+        : null;
 
     return {
       sessions: enrichSessionsWithBindings(activeSessions, bindingsByThreadId),
@@ -236,6 +225,8 @@ export function makeListSessionsForReconciliation(
       unavailableProviders,
       directoryAvailable: directoryResult.available,
       diagnostics,
+      ...(directoryMode === "audit" ? { directoryCursor } : {}),
+      directoryThreadIds: directoryResult.bindings.map((binding) => binding.threadId),
     } satisfies ProviderSessionDiscoveryResult;
   });
 }

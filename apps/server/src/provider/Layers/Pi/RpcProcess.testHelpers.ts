@@ -2,10 +2,24 @@ import { EventEmitter } from "node:events";
 
 import { vi } from "vitest";
 
-export function createFakeChildProcess() {
-  const stdout = new EventEmitter() as EventEmitter & { setEncoding: ReturnType<typeof vi.fn> };
+type FakeStream = EventEmitter & { setEncoding: (encoding: string) => void };
+type FakeStdin = EventEmitter & {
+  writable: boolean;
+  end: () => void;
+  write: (data: string, callback?: (error?: Error | null) => void) => boolean;
+};
+export type FakeChildProcess = EventEmitter & {
+  stdout: FakeStream;
+  stderr: FakeStream;
+  stdin: FakeStdin;
+  exitCode: number | null;
+  kill: () => void;
+};
+
+export function createFakeChildProcess(): FakeChildProcess {
+  const stdout = new EventEmitter() as FakeStream;
   stdout.setEncoding = vi.fn();
-  const stderr = new EventEmitter() as EventEmitter & { setEncoding: ReturnType<typeof vi.fn> };
+  const stderr = new EventEmitter() as FakeStream;
   stderr.setEncoding = vi.fn();
   const stdin = Object.assign(new EventEmitter(), {
     writable: true,
@@ -14,14 +28,8 @@ export function createFakeChildProcess() {
       callback?.(null);
       return true;
     }),
-  });
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: typeof stdout;
-    stderr: typeof stderr;
-    stdin: typeof stdin;
-    exitCode: number | null;
-    kill: ReturnType<typeof vi.fn>;
-  };
+  }) as FakeStdin;
+  const child = new EventEmitter() as FakeChildProcess;
   child.stdout = stdout;
   child.stderr = stderr;
   child.stdin = stdin;

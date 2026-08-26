@@ -34,6 +34,10 @@ import type { Effect, Stream } from "effect";
 
 import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+import type {
+  ProviderSessionRuntimeListCursor,
+  ProviderSessionRuntimeListInput,
+} from "../../persistence/Services/ProviderSessionRuntime.ts";
 
 export interface ProviderSessionDiscoveryDiagnostic {
   readonly provider: ProviderKind | null;
@@ -48,7 +52,19 @@ export interface ProviderSessionDiscoveryResult {
   readonly unavailableProviders: ReadonlySet<ProviderKind>;
   readonly directoryAvailable: boolean;
   readonly diagnostics: ReadonlyArray<ProviderSessionDiscoveryDiagnostic>;
+  /** Cursor returned by a bounded directory safety-audit page. */
+  readonly directoryCursor?: ProviderSessionRuntimeListCursor | null;
+  /** Thread ids observed in the bounded persisted-directory page. */
+  readonly directoryThreadIds?: ReadonlyArray<ThreadId>;
 }
+
+export type ProviderSessionReconciliationOptions = Pick<
+  ProviderSessionRuntimeListInput,
+  "recentSince" | "limit" | "cursor"
+> & {
+  readonly directoryMode?: "all" | "hot" | "audit";
+  readonly includeAdapters?: boolean;
+};
 
 /**
  * ProviderServiceShape - Service API for provider session and turn orchestration.
@@ -145,7 +161,9 @@ export interface ProviderServiceShape {
   readonly listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
 
   /** Failure-isolated provider discovery used only by reconciliation. */
-  readonly listSessionsForReconciliation: () => Effect.Effect<ProviderSessionDiscoveryResult>;
+  readonly listSessionsForReconciliation: (
+    options?: ProviderSessionReconciliationOptions,
+  ) => Effect.Effect<ProviderSessionDiscoveryResult>;
 
   /**
    * Read static capabilities for a provider adapter.

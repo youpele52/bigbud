@@ -10,8 +10,17 @@
 import { Clock, Effect, Layer, Schedule, Scope, Stream } from "effect";
 import { Cause } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
+import { increment } from "../../observability/Metrics.ts";
+import {
+  providerReconciliationDiscoveryTotal,
+  providerReconciliationPassesTotal,
+} from "../../observability/Metrics.load.ts";
 
-import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import {
+  ProviderService,
+  type ProviderSessionReconciliationOptions,
+  type ProviderSessionDiscoveryResult,
+} from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
@@ -36,10 +45,31 @@ import {
 } from "./ProviderRuntimeIngestion.reconcile.ts";
 import {
   makePeriodicReconciliationState,
+  markPeriodicReconciliationDirty,
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
 import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
 import { recoverTurnControlOperations } from "./ProviderRuntimeIngestion.turnControlRecovery.ts";
+
+const RECONCILIATION_RUNTIME_EVENT_TYPES = new Set([
+  "session.started",
+  "session.configured",
+  "session.state.changed",
+  "session.exited",
+  "turn.started",
+  "turn.completed",
+  "turn.aborted",
+  "runtime.error",
+]);
+
+const RECONCILIATION_DOMAIN_EVENT_TYPES = new Set([
+  "thread.turn-start-requested",
+  "thread.turn-start-failed",
+  "thread.turn-interrupt-requested",
+  "thread.turn-control-set",
+  "thread.session-stop-requested",
+  "thread.session-set",
+]);
 
 const make = Effect.fn("make")(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -79,10 +109,34 @@ const make = Effect.fn("make")(function* () {
   const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionInput>>();
   const outerScope = yield* Effect.scope;
   let reconciliationPassRunning = false;
+  const discoveryCacheTtlMs = 15_000;
+  let discoveryCache: {
+    readonly key: string;
+    readonly expiresAt: number;
+    readonly result: ProviderSessionDiscoveryResult;
+  } | null = null;
   const periodicReconciliationState = makePeriodicReconciliationState();
 
-  const discoverProviderSessions = Effect.fn("discoverProviderSessions")(function* () {
-    const discovery = yield* providerService.listSessionsForReconciliation();
+  const discoverProviderSessions = Effect.fn("discoverProviderSessions")(function* (
+    options: ProviderSessionReconciliationOptions = {},
+  ) {
+    const now = Date.now();
+    const cursorKey =
+      options.directoryMode === "audit"
+        ? `${options.cursor?.lastSeenAt ?? ""}:${options.cursor?.threadId ?? ""}`
+        : "";
+    const key = `${options.directoryMode ?? "all"}:${options.limit ?? ""}:${options.includeAdapters ?? true}:${cursorKey}`;
+    if (discoveryCache !== null && discoveryCache.key === key && discoveryCache.expiresAt > now) {
+      yield* increment(providerReconciliationDiscoveryTotal, { outcome: "cache-hit" });
+      return discoveryCache.result;
+    }
+    const discovery = yield* providerService.listSessionsForReconciliation(options);
+    if (discovery.diagnostics.length === 0 && discovery.directoryAvailable) {
+      discoveryCache = { key, expiresAt: now + discoveryCacheTtlMs, result: discovery };
+    } else {
+      discoveryCache = null;
+    }
+    yield* increment(providerReconciliationDiscoveryTotal, { outcome: "refresh" });
     if (discovery.diagnostics.length > 0) {
       yield* Effect.logWarning(
         "provider runtime reconciliation discovery was partially unavailable",
@@ -152,19 +206,38 @@ const make = Effect.fn("make")(function* () {
   const reconcileActiveThreadSessions = Effect.fn("reconcileActiveThreadSessions")(function* () {
     if (reconciliationPassRunning) return;
     reconciliationPassRunning = true;
+    yield* increment(providerReconciliationPassesTotal, { outcome: "started" });
     yield* Effect.ensuring(
       Effect.gen(function* () {
+        const observedAt = yield* Clock.currentTimeMillis;
         const [readModel, discovery] = yield* Effect.all([
           orchestrationEngine.getReadModel(),
-          discoverProviderSessions(),
+          discoverProviderSessions({
+            directoryMode: "hot",
+            recentSince: new Date(observedAt - 15 * 60 * 1000).toISOString(),
+            limit: 250,
+          }),
         ]);
+        if (observedAt - periodicReconciliationState.lastSafetyAuditAt >= 60_000) {
+          const audit = yield* discoverProviderSessions({
+            directoryMode: "audit",
+            includeAdapters: false,
+            cursor: periodicReconciliationState.auditCursor,
+            limit: 250,
+          });
+          for (const threadId of audit.directoryThreadIds ?? []) {
+            markPeriodicReconciliationDirty(periodicReconciliationState, threadId);
+          }
+          periodicReconciliationState.auditCursor = audit.directoryCursor ?? null;
+          periodicReconciliationState.lastSafetyAuditAt = observedAt;
+        }
         const sessionsByThreadId = new Map(
           discovery.sessions.map((session) => [session.threadId, session]),
         );
-        const observedAt = yield* Clock.currentTimeMillis;
         const commands = selectPeriodicReconciliationThreads(
           readModel.threads,
           periodicReconciliationState,
+          observedAt,
         ).flatMap((thread) => {
           if (!discovery.availableProviders.has(thread.modelSelection.provider)) return [];
           const liveSession = sessionsByThreadId.get(thread.id);
@@ -202,10 +275,15 @@ const make = Effect.fn("make")(function* () {
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
-            : Effect.logWarning("provider runtime periodic reconciliation failed", {
-                cause: Cause.pretty(cause),
-              }),
+            : increment(providerReconciliationPassesTotal, { outcome: "failed" }).pipe(
+                Effect.andThen(
+                  Effect.logWarning("provider runtime periodic reconciliation failed", {
+                    cause: Cause.pretty(cause),
+                  }),
+                ),
+              ),
         ),
+        Effect.tap(() => increment(providerReconciliationPassesTotal, { outcome: "completed" })),
       ),
       Effect.sync(() => {
         reconciliationPassRunning = false;
@@ -229,11 +307,15 @@ const make = Effect.fn("make")(function* () {
       ),
     );
     yield* Effect.forkScoped(
-      Stream.runForEach(providerService.streamEvents, (event) =>
-        getOrCreateThreadWorker(event.threadId).pipe(
+      Stream.runForEach(providerService.streamEvents, (event) => {
+        if (RECONCILIATION_RUNTIME_EVENT_TYPES.has(event.type)) {
+          markPeriodicReconciliationDirty(periodicReconciliationState, event.threadId);
+          discoveryCache = null;
+        }
+        return getOrCreateThreadWorker(event.threadId).pipe(
           Effect.flatMap((worker) => worker.enqueue({ source: "runtime", event })),
-        ),
-      ),
+        );
+      }),
     );
     yield* Effect.forkScoped(
       Effect.all([reconcileActiveThreadSessions(), superviseActiveTurns()], {
@@ -243,6 +325,13 @@ const make = Effect.fn("make")(function* () {
     );
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {
+        if (event.aggregateKind !== "thread") {
+          return Effect.void;
+        }
+        if (RECONCILIATION_DOMAIN_EVENT_TYPES.has(event.type)) {
+          markPeriodicReconciliationDirty(periodicReconciliationState, String(event.aggregateId));
+          discoveryCache = null;
+        }
         if (event.type !== "thread.turn-start-requested") {
           return Effect.void;
         }

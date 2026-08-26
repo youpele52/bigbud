@@ -79,12 +79,20 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
         });
       }
     } else {
+      const coalescedDelta = yield* input.cacheHelpers.appendBufferedAssistantText(
+        assistantMessageId,
+        assistantDelta,
+        true,
+      );
+      if (coalescedDelta.length === 0) {
+        return;
+      }
       yield* orchestrationEngine.dispatch({
         type: "thread.message.assistant.delta",
         commandId: input.providerCommandId(event, "assistant-delta"),
         threadId: thread.id,
         messageId: assistantMessageId,
-        delta: assistantDelta,
+        delta: coalescedDelta,
         ...(turnId ? { turnId } : {}),
         createdAt: now,
       });

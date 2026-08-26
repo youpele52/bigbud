@@ -17,6 +17,7 @@ import {
   BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY,
   BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY,
   MAX_BUFFERED_ASSISTANT_CHARS,
+  STREAMING_ASSISTANT_COALESCE_CHARS,
   TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import type { RuntimeProcessorCacheHelpers } from "./ProviderRuntimeIngestion.processor.ts";
@@ -29,6 +30,11 @@ const BUFFERED_THINKING_BY_ACTIVITY_ID_CAPACITY = 10_000;
 
 const providerTurnKey = (threadId: ThreadId, turnId: string) => `${threadId}:${turnId}`;
 
+interface BufferedAssistantTextState {
+  readonly text: string;
+  readonly hasEmitted: boolean;
+}
+
 export const makeRuntimeProcessorCacheHelpers = Effect.fn("makeRuntimeProcessorCacheHelpers")(
   function* (): Effect.fn.Return<RuntimeProcessorCacheHelpers> {
     const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
@@ -37,10 +43,13 @@ export const makeRuntimeProcessorCacheHelpers = Effect.fn("makeRuntimeProcessorC
       lookup: () => Effect.succeed(new Set<MessageId>()),
     });
 
-    const bufferedAssistantTextByMessageId = yield* Cache.make<MessageId, string>({
+    const bufferedAssistantTextByMessageId = yield* Cache.make<
+      MessageId,
+      BufferedAssistantTextState
+    >({
       capacity: BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY,
       timeToLive: BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_TTL,
-      lookup: () => Effect.succeed(""),
+      lookup: () => Effect.succeed({ text: "", hasEmitted: false }),
     });
 
     const bufferedProposedPlanById = yield* Cache.make<string, { text: string; createdAt: string }>(
@@ -103,16 +112,39 @@ export const makeRuntimeProcessorCacheHelpers = Effect.fn("makeRuntimeProcessorC
     const clearAssistantMessageIdsForTurn = (threadId: ThreadId, turnId: string) =>
       Cache.invalidate(turnMessageIdsByTurnKey, providerTurnKey(threadId, turnId));
 
-    const appendBufferedAssistantText = (messageId: MessageId, delta: string) =>
+    const appendBufferedAssistantText = (messageId: MessageId, delta: string, streaming = false) =>
       Cache.getOption(bufferedAssistantTextByMessageId, messageId).pipe(
         Effect.flatMap(
-          Effect.fn("appendBufferedAssistantText")(function* (existingText) {
-            const nextText = Option.match(existingText, {
-              onNone: () => delta,
-              onSome: (text) => `${text}${delta}`,
-            });
+          Effect.fn("appendBufferedAssistantText")(function* (existingState) {
+            const state = Option.getOrElse(existingState, () => ({ text: "", hasEmitted: false }));
+            if (streaming) {
+              if (!state.hasEmitted && state.text.length === 0) {
+                yield* Cache.set(bufferedAssistantTextByMessageId, messageId, {
+                  text: "",
+                  hasEmitted: true,
+                });
+                return delta;
+              }
+              const nextStreamingText = `${state.text}${delta}`;
+              if (nextStreamingText.length < STREAMING_ASSISTANT_COALESCE_CHARS) {
+                yield* Cache.set(bufferedAssistantTextByMessageId, messageId, {
+                  text: nextStreamingText,
+                  hasEmitted: true,
+                });
+                return "";
+              }
+              yield* Cache.set(bufferedAssistantTextByMessageId, messageId, {
+                text: "",
+                hasEmitted: true,
+              });
+              return nextStreamingText;
+            }
+            const nextText = `${state.text}${delta}`;
             if (nextText.length <= MAX_BUFFERED_ASSISTANT_CHARS) {
-              yield* Cache.set(bufferedAssistantTextByMessageId, messageId, nextText);
+              yield* Cache.set(bufferedAssistantTextByMessageId, messageId, {
+                text: nextText,
+                hasEmitted: false,
+              });
               return "";
             }
 
@@ -124,9 +156,11 @@ export const makeRuntimeProcessorCacheHelpers = Effect.fn("makeRuntimeProcessorC
 
     const takeBufferedAssistantText = (messageId: MessageId) =>
       Cache.getOption(bufferedAssistantTextByMessageId, messageId).pipe(
-        Effect.flatMap((existingText) =>
+        Effect.flatMap((existingState) =>
           Cache.invalidate(bufferedAssistantTextByMessageId, messageId).pipe(
-            Effect.as(Option.getOrElse(existingText, () => "")),
+            Effect.as(
+              Option.getOrElse(existingState, () => ({ text: "", hasEmitted: false })).text,
+            ),
           ),
         ),
       );

@@ -2,6 +2,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationSession,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -23,6 +24,27 @@ type ThreadSessionCommand = Extract<
 >;
 
 const terminalControlStates = new Set(["completed", "failed", "superseded", "cancelled"]);
+
+/**
+ * Session `updatedAt` is operational metadata. Provider lifecycle polling can
+ * report the same state repeatedly with a fresh timestamp, but those reports
+ * do not represent a new canonical state transition.
+ */
+function hasSameCanonicalSessionState(
+  current: OrchestrationSession,
+  next: OrchestrationSession,
+): boolean {
+  return (
+    current.threadId === next.threadId &&
+    current.status === next.status &&
+    current.providerName === next.providerName &&
+    current.runtimeMode === next.runtimeMode &&
+    current.activeTurnId === next.activeTurnId &&
+    (current.sessionEpoch ?? 0) === (next.sessionEpoch ?? 0) &&
+    (current.reason ?? null) === (next.reason ?? null) &&
+    current.lastError === next.lastError
+  );
+}
 
 export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand")(
   function* (input: {
@@ -240,6 +262,15 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
         if (command.session.status !== "stopped" || thread.deletedAt !== null) {
           yield* requireThreadReadyForMutation({ thread, command });
         }
+        const nextSession: OrchestrationSession = {
+          ...command.session,
+          sessionEpoch: command.advanceSessionEpoch
+            ? (thread.session?.sessionEpoch ?? 0) + 1
+            : (thread.session?.sessionEpoch ?? 0),
+        };
+        if (thread.session && hasSameCanonicalSessionState(thread.session, nextSession)) {
+          return [];
+        }
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -251,12 +282,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           type: "thread.session-set",
           payload: {
             threadId: command.threadId,
-            session: {
-              ...command.session,
-              sessionEpoch: command.advanceSessionEpoch
-                ? (thread.session?.sessionEpoch ?? 0) + 1
-                : (thread.session?.sessionEpoch ?? 0),
-            },
+            session: nextSession,
           },
         };
       case "thread.turn-control.set":

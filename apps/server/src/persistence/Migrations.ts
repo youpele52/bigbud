@@ -103,6 +103,7 @@ import Migration0099 from "./Migrations/099_ParentDeletionUpdateGuard.ts";
 import Migration0100 from "./Migrations/100_ProviderTurnLivenessSessionEpoch.ts";
 import Migration0101 from "./Migrations/101_ProviderRuntimeEpochAndTurnControl.ts";
 import Migration0102 from "./Migrations/102_ThreadRuntimeLeaseTerminalMultiplicity.ts";
+import Migration0103 from "./Migrations/103_ProviderSessionRuntimeReconciliationIndex.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -206,6 +207,7 @@ export const migrationEntries = [
   [100, "ProviderTurnLivenessSessionEpoch", Migration0100],
   [101, "ProviderRuntimeEpochAndTurnControl", Migration0101],
   [102, "ThreadRuntimeLeaseTerminalMultiplicity", Migration0102],
+  [103, "ProviderSessionRuntimeReconciliationIndex", Migration0103],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

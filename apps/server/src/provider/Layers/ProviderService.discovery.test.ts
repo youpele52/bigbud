@@ -18,6 +18,7 @@ const session: ProviderSession = {
 
 const directory = {
   listThreadIds: () => Effect.succeed([]),
+  listBindings: () => Effect.succeed([]),
   getBinding: () => Effect.succeed(Option.none()),
 } as unknown as ProviderSessionDirectoryShape;
 
@@ -49,4 +50,42 @@ describe("provider reconciliation discovery", () => {
       expect.objectContaining({ provider: "claudeAgent", source: "adapter", kind: "error" }),
     ]);
   });
+
+  it("reads persisted bindings through one bulk directory operation", async () => {
+    let listThreadIdsCalls = 0;
+    let getBindingCalls = 0;
+    const bulkDirectory = {
+      listThreadIds: () => {
+        listThreadIdsCalls += 1;
+        return Effect.succeed([ThreadId.makeUnsafe("historical-thread")]);
+      },
+      getBinding: () => {
+        getBindingCalls += 1;
+        return Effect.succeed(Option.none());
+      },
+      listBindings: () =>
+        Effect.succeed([
+          {
+            threadId: ThreadId.makeUnsafe("historical-thread"),
+            provider: "codex" as const,
+            runtimeMode: "full-access" as const,
+          },
+        ]),
+    } as unknown as ProviderSessionDirectoryShape;
+
+    const result = await Effect.runPromise(
+      makeListSessionsForReconciliation([healthyAdapter()], bulkDirectory)(),
+    );
+
+    expect(result.directoryAvailable).toBe(true);
+    expect(listThreadIdsCalls).toBe(0);
+    expect(getBindingCalls).toBe(0);
+  });
 });
+
+function healthyAdapter(): ProviderAdapterShape<never> {
+  return {
+    provider: "codex",
+    listSessions: () => Effect.succeed([session]),
+  } as unknown as ProviderAdapterShape<never>;
+}

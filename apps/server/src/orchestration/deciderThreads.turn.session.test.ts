@@ -146,3 +146,59 @@ describe("thread.session.set expected active turn", () => {
     },
   );
 });
+
+describe("thread.session.set canonical deduplication", () => {
+  it("does not persist a new event when only updatedAt changed", async () => {
+    const currentSession = readModel.threads[0]!.session!;
+    const events = await Effect.runPromise(
+      decideThreadSessionCommand({
+        command: {
+          type: "thread.session.set",
+          commandId: CommandId.makeUnsafe("session-health-refresh"),
+          threadId,
+          session: {
+            ...currentSession,
+            updatedAt: "2026-08-11T00:00:05.000Z",
+          },
+          expectedActiveTurnId: turnId,
+          expectedSessionEpoch: 0,
+          createdAt: "2026-08-11T00:00:05.000Z",
+        },
+        readModel,
+      }),
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("still persists a transition when a canonical field changes", async () => {
+    const currentSession = readModel.threads[0]!.session!;
+    const event = await Effect.runPromise(
+      decideThreadSessionCommand({
+        command: {
+          type: "thread.session.set",
+          commandId: CommandId.makeUnsafe("session-state-change"),
+          threadId,
+          session: {
+            ...currentSession,
+            status: "ready",
+            activeTurnId: null,
+            updatedAt: "2026-08-11T00:00:05.000Z",
+          },
+          createdAt: "2026-08-11T00:00:05.000Z",
+        },
+        readModel,
+      }),
+    );
+
+    expect(event).toMatchObject({
+      type: "thread.session-set",
+      payload: {
+        session: {
+          status: "ready",
+          activeTurnId: null,
+        },
+      },
+    });
+  });
+});

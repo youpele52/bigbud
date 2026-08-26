@@ -1,8 +1,9 @@
 import type * as Exit from "effect/Exit";
 import { Effect, Option, Tracer } from "effect";
 
-import { EffectTraceRecord, spanToTraceRecord } from "./TraceRecord.ts";
+import { spanToTraceRecord, type TraceRecord } from "./TraceRecord.ts";
 import { makeTraceSink, type TraceSink } from "./TraceSink.ts";
+import { makeTraceRecordRecorder, type TracePolicy } from "./TracePolicy.ts";
 
 export interface LocalFileTracerOptions {
   readonly filePath: string;
@@ -11,6 +12,9 @@ export interface LocalFileTracerOptions {
   readonly batchWindowMs: number;
   readonly delegate?: Tracer.Tracer;
   readonly sink?: TraceSink;
+  /** Omit to retain the historical all-spans behavior for embedded callers/tests. */
+  readonly tracePolicy?: TracePolicy;
+  readonly onTraceDecision?: (decision: "retained" | "dropped", record: TraceRecord) => void;
 }
 
 class LocalFileSpan implements Tracer.Span {
@@ -31,7 +35,7 @@ class LocalFileSpan implements Tracer.Span {
   constructor(
     options: Parameters<Tracer.Tracer["span"]>[0],
     private readonly delegate: Tracer.Span,
-    private readonly push: (record: EffectTraceRecord) => void,
+    private readonly record: (record: TraceRecord) => void,
   ) {
     this.name = delegate.name;
     this.spanId = delegate.spanId;
@@ -59,7 +63,7 @@ class LocalFileSpan implements Tracer.Span {
     this.delegate.end(endTime, exit);
 
     if (this.sampled) {
-      this.push(spanToTraceRecord(this));
+      this.record(spanToTraceRecord(this));
     }
   }
 
@@ -97,10 +101,14 @@ export const makeLocalFileTracer = Effect.fn("makeLocalFileTracer")(function* (
     Tracer.make({
       span: (spanOptions) => new Tracer.NativeSpan(spanOptions),
     });
+  const record =
+    options.tracePolicy === undefined
+      ? sink.push
+      : makeTraceRecordRecorder(sink.push, options.tracePolicy, options.onTraceDecision);
 
   return Tracer.make({
     span(spanOptions) {
-      return new LocalFileSpan(spanOptions, delegate.span(spanOptions), sink.push);
+      return new LocalFileSpan(spanOptions, delegate.span(spanOptions), record);
     },
     ...(delegate.context ? { context: delegate.context } : {}),
   });

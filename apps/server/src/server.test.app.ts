@@ -119,7 +119,7 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             update: () => Effect.die("not implemented"),
             uninstall: () => Effect.die("not implemented"),
             streamChanges: Stream.empty,
-            resolveAsset: () => Effect.succeed(undefined),
+            resolveAsset: () => Effect.sync(() => undefined),
             getInstalledSkillRoots: Effect.succeed([]),
             ...options?.layers?.pluginRegistry,
           }),

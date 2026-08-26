@@ -26,6 +26,10 @@ import {
   orchestrationCommandDuration,
   orchestrationCommandsTotal,
 } from "../../observability/Metrics.ts";
+import {
+  orchestrationEventPayloadBytes,
+  orchestrationEventsAppendedTotal,
+} from "../../observability/Metrics.load.ts";
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
@@ -40,6 +44,8 @@ import {
 import { projectEvent } from "../projector.ts";
 import { makeLifecycleQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
+
+const eventPayloadEncoder = new TextEncoder();
 
 export interface CommandEnvelope {
   readonly command: OrchestrationCommand;
@@ -146,6 +152,15 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               let nextReadModel = currentReadModel;
               for (const nextEvent of retentionClaim?.claimed === false ? [] : eventBases) {
                 const savedEvent = yield* eventStore.append(nextEvent);
+                const eventAttributes = metricAttributes({ eventType: savedEvent.type });
+                yield* Metric.update(
+                  Metric.withAttributes(orchestrationEventsAppendedTotal, eventAttributes),
+                  1,
+                );
+                yield* Metric.update(
+                  Metric.withAttributes(orchestrationEventPayloadBytes, eventAttributes),
+                  eventPayloadEncoder.encode(JSON.stringify(savedEvent.payload)).byteLength,
+                );
                 nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
                 yield* projectionPipeline.projectEvent(savedEvent);
                 committedEvents.push(savedEvent);

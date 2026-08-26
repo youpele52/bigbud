@@ -52,4 +52,17 @@ describe("selectPeriodicReconciliationThreads", () => {
 
     expect(selectPeriodicReconciliationThreads([starting], state)).toEqual([]);
   });
+
+  it("excludes stale idle running sessions until a dirty or audit event opts them in", () => {
+    const state = makePeriodicReconciliationState();
+    const stale = {
+      ...runningThread("stale"),
+      session: { status: "running", activeTurnId: null, updatedAt: "2025-01-01T00:00:00.000Z" },
+    } as unknown as OrchestrationThread;
+    const observedAt = Date.parse("2026-08-01T00:00:00.000Z");
+
+    expect(selectPeriodicReconciliationThreads([stale], state, observedAt)).toEqual([]);
+    state.dirtyThreadIds.add(stale.id);
+    expect(selectPeriodicReconciliationThreads([stale], state, observedAt)).toEqual([stale]);
+  });
 });

@@ -153,4 +153,5 @@ export const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDi
   getBinding: () => Effect.succeed(Option.none()),
   remove: () => Effect.void,
   listThreadIds: () => Effect.succeed([]),
+  listBindings: () => Effect.succeed([]),
 });
