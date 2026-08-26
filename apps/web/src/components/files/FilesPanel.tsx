@@ -29,6 +29,7 @@ import {
 } from "./useFilesPanelHistory";
 import { createFilesPanelWorkspaceKey } from "./FilesPanel.workspace";
 import { renderFilesPanelPreviewBody } from "./FilesPanel.previewBody";
+import { pruneRemovedPaths } from "./FilesPanel.pathState";
 
 interface FilesPanelProps {
   activeThreadId?: ThreadId | null;
@@ -83,8 +84,10 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const previewPositionRef = useRef(previewPosition);
   const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
   const handleDirectoryEntriesRemoved = useCallback(
-    (paths: ReadonlyArray<string>) =>
-      notifyRemovedFileHistoryEntries(removeHistoryPaths(workspaceKey, paths)),
+    (paths: ReadonlyArray<string>) => {
+      setExpandedDirectories((current) => pruneRemovedPaths(current, paths));
+      notifyRemovedFileHistoryEntries(removeHistoryPaths(workspaceKey, paths));
+    },
     [removeHistoryPaths, workspaceKey],
   );
   const { directoryStateByPath, setDirectoryStateByPath, loadDirectory } =

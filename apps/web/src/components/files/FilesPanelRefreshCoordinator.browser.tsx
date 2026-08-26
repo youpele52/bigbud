@@ -7,6 +7,7 @@ import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts/workspace/pro
 const mocks = vi.hoisted(() => ({
   callbacks: new Map<string, (event: ProjectDirectoryWatchEvent) => void>(),
   errors: new Map<string, (error: unknown) => void>(),
+  subscribe: vi.fn(),
   toast: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("../../rpc/nativeApi", () => ({
         options: { readonly onError?: (error: unknown) => void },
       ) => {
         const path = input.relativePath ?? "";
+        mocks.subscribe(path);
         mocks.callbacks.set(path, callback);
         if (options.onError) mocks.errors.set(path, options.onError);
         return () => {
@@ -38,6 +40,14 @@ import {
 } from "./FilesPanelRefreshCoordinator";
 
 const directoryState = {
+  "": {
+    entries: [
+      { path: "docs", kind: "directory" as const },
+      { path: "src", kind: "directory" as const },
+    ],
+    loading: false,
+    error: null,
+  },
   docs: { entries: [], loading: false, error: null },
   src: { entries: [], loading: false, error: null },
 };
@@ -68,27 +78,36 @@ function rescan(): ProjectDirectoryWatchEvent {
   };
 }
 
-async function renderCoordinator(input: {
+interface CoordinatorInput {
   readonly refresh: () => Promise<void>;
   readonly loadDirectory: (path: string) => Promise<void>;
-}) {
-  return render(
+  readonly previewPath?: string;
+  readonly directoryStateByPath?: typeof directoryState;
+}
+
+function coordinatorView(input: CoordinatorInput) {
+  return (
     <FilesPanelRefreshCoordinator
       workspaceRoot="/project"
-      previewPath="docs/readme.md"
+      previewPath={input.previewPath ?? "docs/readme.md"}
       expandedDirectories={{ docs: true, src: true }}
-      directoryStateByPath={directoryState}
+      directoryStateByPath={input.directoryStateByPath ?? directoryState}
       loadDirectory={input.loadDirectory}
     >
       <PreviewRegistration refresh={input.refresh} />
-    </FilesPanelRefreshCoordinator>,
+    </FilesPanelRefreshCoordinator>
   );
+}
+
+async function renderCoordinator(input: CoordinatorInput) {
+  return render(coordinatorView(input));
 }
 
 describe("FilesPanelRefreshCoordinator integration", () => {
   afterEach(() => {
     mocks.callbacks.clear();
     mocks.errors.clear();
+    mocks.subscribe.mockClear();
     mocks.toast.mockClear();
     document.body.innerHTML = "";
   });
@@ -169,5 +188,43 @@ describe("FilesPanelRefreshCoordinator integration", () => {
       title: "Automatic file refresh unavailable",
       description: error.message,
     });
+  });
+
+  it("keeps equivalent path subscriptions stable across directory state updates", async () => {
+    const input = { refresh: async () => {}, loadDirectory: async () => {} };
+    const screen = await renderCoordinator(input);
+    await vi.waitFor(() => expect(mocks.subscribe).toHaveBeenCalledTimes(3));
+
+    await screen.rerender(
+      coordinatorView({ ...input, directoryStateByPath: { ...directoryState } }),
+    );
+
+    expect(mocks.subscribe).toHaveBeenCalledTimes(3);
+  });
+
+  it("deduplicates availability failures across effect generations in one workspace", async () => {
+    const input = { refresh: async () => {}, loadDirectory: async () => {} };
+    const screen = await renderCoordinator(input);
+    await vi.waitFor(() => expect(mocks.errors.has("docs")).toBe(true));
+    const error = new Error("Native workspace watcher is unavailable.");
+    mocks.errors.get("docs")!(error);
+    expect(mocks.toast).toHaveBeenCalledOnce();
+
+    await screen.rerender(coordinatorView({ ...input, previewPath: "docs/other.md" }));
+    await vi.waitFor(() => expect(mocks.errors.has("")).toBe(true));
+    mocks.errors.get("")!(error);
+
+    expect(mocks.toast).toHaveBeenCalledOnce();
+  });
+
+  it("reconciles a vanished child through its parent without a global error toast", async () => {
+    const loadDirectory = vi.fn(async () => {});
+    await renderCoordinator({ refresh: async () => {}, loadDirectory });
+    await vi.waitFor(() => expect(mocks.errors.has("docs")).toBe(true));
+
+    mocks.errors.get("docs")!(new Error("NOT_FOUND: workspace path was not found: docs"));
+
+    await vi.waitFor(() => expect(loadDirectory).toHaveBeenCalledWith("", { force: true }));
+    expect(mocks.toast).not.toHaveBeenCalled();
   });
 });

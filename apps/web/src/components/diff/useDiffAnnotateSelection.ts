@@ -7,12 +7,6 @@ import {
   type ResolvedDiffSelection,
 } from "./diffSelection.logic";
 
-function isDiffContentPath(path: readonly EventTarget[]): boolean {
-  return path.some(
-    (target) => target instanceof HTMLElement && target.hasAttribute("data-content"),
-  );
-}
-
 export function useDiffAnnotateSelection(input: {
   readonly viewportRef: RefObject<HTMLElement | null>;
   readonly canAnnotate: boolean;
@@ -30,7 +24,7 @@ export function useDiffAnnotateSelection(input: {
 
     const handleMouseUp = (event: MouseEvent) => {
       const path = event.composedPath();
-      if (event.button !== 0 || !path.includes(viewport) || !isDiffContentPath(path)) return;
+      if (event.button !== 0 || !path.includes(viewport)) return;
 
       const selection = window.getSelection();
       if ((selection?.toString().trim().length ?? 0) < 2) return;

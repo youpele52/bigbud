@@ -5,6 +5,8 @@ import {
   FILES_PANEL_REFRESH_DEBOUNCE_MS,
   FILES_PANEL_REFRESH_MAX_WAIT_MS,
   getPrioritizedWatchedDirectoryPaths,
+  getWatchedDirectoryPathSetKey,
+  getWorkspaceDirectoryWatchErrorAction,
   shouldRefreshPreviewForDirectoryEvent,
 } from "./FilesPanelRefreshCoordinator.logic";
 
@@ -17,6 +19,33 @@ describe("createFilesPanelRefreshCoordinator", () => {
       "src",
     ]);
     expect(getPrioritizedWatchedDirectoryPaths(["", "src"], "")).toEqual(["", "src"]);
+  });
+
+  it("uses a stable key for equivalent ordered watch path sets", () => {
+    expect(getWatchedDirectoryPathSetKey(["docs", "", "src"])).toBe(
+      getWatchedDirectoryPathSetKey(["docs", "", "src"]),
+    );
+    expect(getWatchedDirectoryPathSetKey(["", "docs"])).not.toBe(
+      getWatchedDirectoryPathSetKey(["docs", ""]),
+    );
+  });
+
+  it("reconciles only confirmed missing child watches", () => {
+    expect(
+      getWorkspaceDirectoryWatchErrorAction(
+        "workspace",
+        new Error("NOT_FOUND: workspace path was not found: workspace"),
+      ),
+    ).toBe("reconcileChild");
+    expect(
+      getWorkspaceDirectoryWatchErrorAction(
+        "",
+        new Error("NOT_FOUND: workspace path was not found"),
+      ),
+    ).toBe("reportUnavailable");
+    expect(getWorkspaceDirectoryWatchErrorAction("docs", new Error("WebSocket disconnected"))).toBe(
+      "reportUnavailable",
+    );
   });
 
   it("uses exact remote paths while retaining broad local invalidations", () => {

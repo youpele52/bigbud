@@ -5,6 +5,7 @@ import { canMoveFileHistory } from "../../stores/files/filesPanel.history";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
 import { getParentDirectoryPath } from "./FilesPanel.logic";
+import { isConfirmedMissingWorkspacePathError } from "./FilesPanel.errors";
 
 interface FilesPanelHistoryInput {
   readonly workspaceKey: string;
@@ -85,8 +86,7 @@ export function useFilesPanelScrollPersistence(workspaceKey: string, path: strin
 }
 
 export function isConfirmedMissingFileError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /\b(?:ENOENT|ENOTDIR)\b|no such file or directory/i.test(message);
+  return isConfirmedMissingWorkspacePathError(error);
 }
 
 async function checkFileExists(

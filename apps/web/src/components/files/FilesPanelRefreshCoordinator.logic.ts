@@ -1,5 +1,7 @@
 import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts/workspace/project";
 
+import { isConfirmedMissingWorkspacePathError } from "./FilesPanel.errors";
+
 export const FILES_PANEL_REFRESH_DEBOUNCE_MS = 0;
 export const FILES_PANEL_REFRESH_MAX_WAIT_MS = 500;
 
@@ -28,6 +30,21 @@ export interface FilesPanelRefreshCoordinator {
   readonly cancel: (key: string) => void;
   readonly cancelAll: () => void;
   readonly dispose: () => void;
+}
+
+export type WorkspaceDirectoryWatchErrorAction = "reconcileChild" | "reportUnavailable";
+
+export function getWorkspaceDirectoryWatchErrorAction(
+  relativePath: string,
+  error: unknown,
+): WorkspaceDirectoryWatchErrorAction {
+  return relativePath.length > 0 && isConfirmedMissingWorkspacePathError(error)
+    ? "reconcileChild"
+    : "reportUnavailable";
+}
+
+export function getWatchedDirectoryPathSetKey(paths: ReadonlyArray<string>): string {
+  return JSON.stringify(paths);
 }
 
 export function shouldRefreshPreviewForDirectoryEvent(
