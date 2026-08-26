@@ -4,10 +4,45 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
 - Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
+- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
+- Keep your workspace organized across launches and switches: the sidebar remembers which sections and projects you left open, while the Files panel stays in sync as you move between workspaces.
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
+
+## v0.2.206 (26 August, 2026)
+
+### Remote Workspace Reliability and Agent Upgrades
+
+- Added remote-agent identity checks and an explicit upgrade flow that compares the installed build with the trusted release, distinguishes missing agents from outdated ones, and shows the current and target versions before making a change.
+- Made remote-agent installation and activation transactional, with recovery that can restore the previous agent or safely remove an incomplete candidate instead of leaving the remote workspace uncertain.
+- Hardened remote-agent paths, activation links, supervisor sockets, process handoffs, and connection recovery against unsafe permissions, unexpected symlinks, stale supervisors, protocol mismatches, incomplete handshakes, and concurrent work.
+- Prevented desktop connections and remote projects from proceeding before their backends and execution targets are ready, while preserving terminal, shell, and workspace operation state across agent restarts and bounded journal recovery.
+
+### Files Panel Reliability
+
+- Prevented cached directories, expanded folders, previews, and history from leaking between workspaces when you switch projects or execution targets.
+- Removed deleted folders and their descendants from the expanded Files tree, preview history, and active preview instead of leaving stale paths visible after a refresh.
+- Stabilized directory-watch subscriptions so equivalent state updates do not repeatedly reconnect watchers, while a vanished child folder is reconciled through its parent without producing a misleading global error.
+- Kept preview and directory loading bounded and ordered during workspace changes, forced refreshes, reconnects, and stale response races.
+
+### Sidebar and Diff Improvements
+
+- Persisted the expanded or collapsed state of Chats, Projects, Remote Projects, and individual projects between launches, while keeping disconnected remote projects temporarily closed until they reconnect.
+- Stopped startup thread restoration from reopening a project that you deliberately collapsed.
+- Changed changed-file trees to start collapsed by default while preserving an explicit expanded choice for later visits.
+- Made native text selection in the Diff panel open the annotation composer automatically, matching the file viewer without removing the existing mouse-icon and context-menu actions.
+
+### Terminal Runtime Reliability
+
+- Allowed multiple terminal leases for the same thread and workspace while keeping provider and shell runtime identities protected from conflicting duplicates.
+- Added structured terminal lease errors for storage-full, database-busy, and runtime-conflict failures, with clearer diagnostics when a terminal cannot reserve its workspace runtime.
+- Improved terminal environment handling and remote workspace metadata reporting, including safer locale values and bounded modification timestamps when filesystem clocks or metadata are unusual.
+
+### Validation
+
+- Added regression coverage for remote-agent identity, installation transactions, activation recovery, supervisor takeover races, remote access prompts, desktop backend readiness, terminal runtime leases, workspace metadata, Files-panel reconciliation, sidebar persistence, and automatic Diff annotations.
+- Verified formatting, linting, and workspace type checks.
 
 ## v0.2.205 (25 August, 2026)
 
