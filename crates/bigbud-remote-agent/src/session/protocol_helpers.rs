@@ -3,7 +3,7 @@ use super::*;
 const MAX_ENVIRONMENT_ENTRIES: usize = 64;
 const MAX_ENVIRONMENT_VALUE_BYTES: usize = 16 * 1024;
 const MAX_ENVIRONMENT_BYTES: usize = 256 * 1024;
-const ALLOWED_ENVIRONMENT_NAMES: [&str; 21] = [
+const ALLOWED_ENVIRONMENT_NAMES: [&str; 22] = [
     "BIGBUD_TEST",
     "CI",
     "COLUMNS",
@@ -20,6 +20,7 @@ const ALLOWED_ENVIRONMENT_NAMES: [&str; 21] = [
     "GIT_SSH_COMMAND",
     "GIT_TERMINAL_PROMPT",
     "LANG",
+    "COLORTERM",
     "LC_ALL",
     "LC_CTYPE",
     "TERM",
@@ -71,6 +72,7 @@ pub(super) fn process_environment_from_entries(
 
 fn is_allowed_environment_name(name: &str) -> bool {
     ALLOWED_ENVIRONMENT_NAMES.contains(&name)
+        || name.starts_with("LC_")
         || (name.starts_with("GIT_CONFIG_")
             && (name == "GIT_CONFIG_COUNT"
                 || name.strip_prefix("GIT_CONFIG_KEY_").is_some_and(|suffix| {
@@ -81,12 +83,6 @@ fn is_allowed_environment_name(name: &str) -> bool {
                     .is_some_and(|suffix| {
                         !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
                     })))
-}
-
-impl Default for AgentSession {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 pub fn protocol_error_frame(error: &SessionError) -> v1::Frame {
@@ -104,6 +100,7 @@ pub fn protocol_error_frame(error: &SessionError) -> v1::Frame {
         SessionError::ProcessReplay(_) => "PROCESS_REPLAY_ERROR",
         SessionError::ProcessJournal(_) => "PROCESS_JOURNAL_ERROR",
         SessionError::Pty(_) => "PTY_ERROR",
+        SessionError::ClockBeforeUnixEpoch(_) => "CLOCK_BEFORE_UNIX_EPOCH",
         SessionError::UnexpectedMessage => "UNEXPECTED_MESSAGE",
     };
     v1::Frame {

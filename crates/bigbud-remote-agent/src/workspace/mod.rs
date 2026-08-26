@@ -56,6 +56,16 @@ pub(super) fn map_io(error: io::Error) -> WorkspaceError {
     WorkspaceError::Io(error)
 }
 
+pub(super) fn metadata_modified_unix_ms(
+    metadata: &std::fs::Metadata,
+) -> Result<u64, WorkspaceError> {
+    let modified = metadata.modified().map_err(map_io)?;
+    let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) else {
+        return Ok(0);
+    };
+    Ok(duration.as_millis().min(u128::from(u64::MAX)) as u64)
+}
+
 impl bigbud_workspace_watch::WorkspaceWatchHost for WorkspaceRoot {
     fn canonical_root(&self) -> &std::path::Path {
         self.root()

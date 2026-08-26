@@ -222,16 +222,24 @@ impl<'a> Cursor<'a> {
 
     fn u64(&mut self) -> Result<u64, OperationJournalError> {
         let bytes = self.take(8)?;
-        Ok(u64::from_be_bytes(bytes.try_into().unwrap()))
+        let bytes = <[u8; 8]>::try_from(bytes)
+            .map_err(|_| OperationJournalError::Corrupt("invalid u64 field length"))?;
+        Ok(u64::from_be_bytes(bytes))
     }
 
     fn i32(&mut self) -> Result<i32, OperationJournalError> {
         let bytes = self.take(4)?;
-        Ok(i32::from_be_bytes(bytes.try_into().unwrap()))
+        let bytes = <[u8; 4]>::try_from(bytes)
+            .map_err(|_| OperationJournalError::Corrupt("invalid i32 field length"))?;
+        Ok(i32::from_be_bytes(bytes))
     }
 
     fn bytes(&mut self) -> Result<Vec<u8>, OperationJournalError> {
-        let length = u32::from_be_bytes(self.take(4)?.try_into().unwrap()) as usize;
+        let length = <[u8; 4]>::try_from(self.take(4)?)
+            .map(u32::from_be_bytes)
+            .map_err(|_| OperationJournalError::Corrupt("invalid field length"))?;
+        let length = usize::try_from(length)
+            .map_err(|_| OperationJournalError::Corrupt("field length overflow"))?;
         if length > MAX_FIELD_BYTES {
             return Err(OperationJournalError::Corrupt("field exceeds maximum"));
         }

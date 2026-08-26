@@ -8,8 +8,12 @@ use super::{OperationState, OutputStream};
 
 #[path = "operations.journal.codec.rs"]
 mod codec;
+#[path = "operations.journal.inspect.rs"]
+mod inspect;
 #[path = "operations.journal.recovery.rs"]
 mod recovery;
+
+pub use inspect::inspect_active_operations;
 
 use codec::{
     CompactOperation, append_encoded, decode_record, encode_record, set_private_permissions,
@@ -18,6 +22,7 @@ use recovery::decode_complete_records;
 
 const MAGIC: &[u8] = b"BBRJ1";
 const MAX_FIELD_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_OPERATION_JOURNAL_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JournalRecord {

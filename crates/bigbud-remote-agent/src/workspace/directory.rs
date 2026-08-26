@@ -180,12 +180,7 @@ fn list_directory_fallback(
             is_directory: metadata.is_dir(),
             is_file: metadata.is_file(),
             size_bytes: metadata.len(),
-            modified_unix_ms: metadata
-                .modified()
-                .ok()
-                .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|value| value.as_millis() as u64)
-                .unwrap_or_default(),
+            modified_unix_ms: super::metadata_modified_unix_ms(&metadata)?,
         });
     }
     entries.sort_by(|left, right| left.path.cmp(&right.path));

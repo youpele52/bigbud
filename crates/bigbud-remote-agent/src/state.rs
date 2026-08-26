@@ -17,6 +17,8 @@ pub enum AgentStateError {
     InsecurePermissions,
     #[error("agent state I/O failed: {0}")]
     Io(#[source] io::Error),
+    #[error("system clock is before Unix epoch")]
+    ClockBeforeUnixEpoch(#[source] std::time::SystemTimeError),
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +36,7 @@ impl AgentState {
             fs::create_dir_all(&root).map_err(AgentStateError::Io)?;
             set_private_permissions(&root)?;
         }
-        let epoch = format_epoch();
+        let epoch = format_epoch()?;
         let temporary = root.join(format!(".epoch.{}.tmp", std::process::id()));
         let mut file = OpenOptions::new()
             .create(true)
@@ -53,8 +55,12 @@ impl AgentState {
     #[cfg(unix)]
     pub fn open_for_supervisor(root: impl AsRef<Path>) -> Result<Self, AgentStateError> {
         let root = root.as_ref().to_path_buf();
+        if root.exists() {
+            assert_secure_directory(&root)?;
+        }
         let socket = supervisor_socket_path(&root);
-        if socket.exists() {
+        if let Ok(metadata) = fs::symlink_metadata(&socket) {
+            assert_secure_socket(&metadata)?;
             if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
                 return Err(AgentStateError::AlreadyRunning);
             }
@@ -76,16 +82,37 @@ impl AgentState {
     }
 }
 
+#[cfg(unix)]
+fn assert_secure_socket(metadata: &fs::Metadata) -> Result<(), AgentStateError> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+    if metadata.file_type().is_symlink() {
+        return Err(AgentStateError::Symlink);
+    }
+    if !metadata.file_type().is_socket() {
+        return Err(AgentStateError::NotDirectory);
+    }
+    if metadata.uid() != unsafe { libc::geteuid() } {
+        return Err(AgentStateError::WrongOwner);
+    }
+    if metadata.mode() & 0o077 != 0 {
+        return Err(AgentStateError::InsecurePermissions);
+    }
+    Ok(())
+}
+
 pub fn supervisor_socket_path(root: impl AsRef<Path>) -> PathBuf {
     root.as_ref().join("supervisor.sock")
 }
 
-fn format_epoch() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock is before Unix epoch")
-        .as_nanos()
-        .to_string()
+fn format_epoch() -> Result<String, AgentStateError> {
+    format_epoch_at(SystemTime::now())
+}
+
+fn format_epoch_at(now: SystemTime) -> Result<String, AgentStateError> {
+    now.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos().to_string())
+        .map_err(AgentStateError::ClockBeforeUnixEpoch)
 }
 
 fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
@@ -169,5 +196,13 @@ mod tests {
         ));
         let _ = fs::remove_file(link);
         let _ = fs::remove_dir_all(target);
+    }
+
+    #[test]
+    fn rejects_a_clock_before_unix_epoch() {
+        assert!(matches!(
+            format_epoch_at(UNIX_EPOCH - std::time::Duration::from_secs(1)),
+            Err(AgentStateError::ClockBeforeUnixEpoch(_))
+        ));
     }
 }

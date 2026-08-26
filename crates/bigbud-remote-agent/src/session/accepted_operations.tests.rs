@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn expired_mutation_identities_release_capacity() {
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     for index in 0..MAX_ACCEPTED_OPERATIONS {
         assert!(
             !session

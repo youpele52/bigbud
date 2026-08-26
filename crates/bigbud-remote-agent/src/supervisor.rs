@@ -25,23 +25,12 @@ mod io_helpers;
 #[cfg(unix)]
 use io_helpers::*;
 
+#[cfg(test)]
+#[path = "supervisor.test_hooks.rs"]
+mod test_hooks;
+
 #[cfg(unix)]
 pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<()> {
-    if let Ok(metadata) = std::fs::symlink_metadata(socket_path) {
-        if metadata.file_type().is_symlink() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "supervisor socket is a symlink",
-            ));
-        }
-        if UnixStream::connect(socket_path).is_ok() {
-            return Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                "remote agent supervisor is already running",
-            ));
-        }
-        std::fs::remove_file(socket_path)?;
-    }
     let listener = UnixListener::bind(socket_path)?;
     set_private_socket_permissions(socket_path)?;
     let sessions = Arc::new(Mutex::new(session));
@@ -185,6 +174,8 @@ fn serve_connection_loop(
                         let response_result = write_responses(&writer, prepared.responses);
                         if let Some(job) = prepared.job {
                             let operation_id = job.operation_id.clone();
+                            #[cfg(test)]
+                            test_hooks::wait_before_process_spawn(&operation_id);
                             add_subscriber(&subscribers, &operation_id, Arc::clone(&writer))?;
                             spawn_process_job(Arc::clone(&sessions), Arc::clone(&subscribers), job);
                         }
@@ -388,3 +379,8 @@ fn pty_attach_response_is_live(responses: &[bigbud_protocol::v1::Frame]) -> bool
 mod proxy;
 
 pub use proxy::run_proxy;
+
+#[path = "supervisor.prepare.rs"]
+mod prepare;
+
+pub use prepare::{SupervisorPreparation, prepare_supervisor};

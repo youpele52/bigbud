@@ -12,7 +12,7 @@ fn duplicate_pty_create_reuses_the_existing_process() {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("bigbud-agent-pty-create-{suffix}"));
     fs::create_dir_all(&root).unwrap();
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     session
         .handle(v1::Frame {
             payload: Some(v1::frame::Payload::ClientHello(v1::ClientHello {

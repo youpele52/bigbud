@@ -133,6 +133,11 @@ export const ServerVerifyExecutionTargetResult = Schema.Struct({
       Schema.Struct({ status: Schema.Literal("disabled") }),
       Schema.Struct({ status: Schema.Literal("install-required") }),
       Schema.Struct({
+        status: Schema.Literal("upgrade-required"),
+        currentVersion: TrimmedNonEmptyString,
+        targetVersion: TrimmedNonEmptyString,
+      }),
+      Schema.Struct({
         status: Schema.Literal("ready"),
         version: TrimmedNonEmptyString,
       }),

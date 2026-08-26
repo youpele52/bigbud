@@ -50,24 +50,30 @@ impl PtyHandle {
                 "cwd contains NUL",
             ))
         })?;
+        let environment = super::environment::remote_environment(environment)?;
         let environment = environment
             .iter()
             .map(|(name, value)| {
-                let name = std::ffi::CString::new(name.as_str()).map_err(|_| {
+                let mut entry = name.as_bytes().to_vec();
+                entry.push(b'=');
+                entry.extend_from_slice(value.as_bytes());
+                std::ffi::CString::new(entry).map_err(|_| {
                     PtyError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "environment name contains NUL",
+                        "environment entry contains NUL",
                     ))
-                })?;
-                let value = std::ffi::CString::new(value.as_str()).map_err(|_| {
-                    PtyError::Io(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "environment value contains NUL",
-                    ))
-                })?;
-                Ok((name, value))
+                })
             })
             .collect::<Result<Vec<_>, PtyError>>()?;
+        let mut argv = Vec::with_capacity(args.len() + 2);
+        argv.push(shell.as_ptr());
+        argv.extend(args.iter().map(|arg| arg.as_ptr()));
+        argv.push(std::ptr::null());
+        let mut envpointers = environment
+            .iter()
+            .map(|entry| entry.as_ptr())
+            .collect::<Vec<_>>();
+        envpointers.push(std::ptr::null());
 
         let mut master_fd = -1;
         let window = libc::winsize {
@@ -90,21 +96,6 @@ impl PtyHandle {
         if pid == 0 {
             unsafe {
                 libc::chdir(cwd.as_ptr());
-                let mut argv = Vec::with_capacity(args.len() + 2);
-                argv.push(shell.as_ptr());
-                argv.extend(args.iter().map(|arg| arg.as_ptr()));
-                argv.push(std::ptr::null());
-                let envp = environment
-                    .iter()
-                    .map(|(name, value)| {
-                        let mut entry = name.as_bytes().to_vec();
-                        entry.push(b'=');
-                        entry.extend_from_slice(value.as_bytes());
-                        std::ffi::CString::new(entry).expect("validated environment entry")
-                    })
-                    .collect::<Vec<_>>();
-                let mut envpointers = envp.iter().map(|entry| entry.as_ptr()).collect::<Vec<_>>();
-                envpointers.push(std::ptr::null());
                 libc::execve(executable.as_ptr(), argv.as_ptr(), envpointers.as_ptr());
                 libc::_exit(127);
             }
@@ -263,11 +254,14 @@ impl PtyHandle {
         if sequence >= state.next_sequence {
             return Err(PtyError::InvalidAcknowledgement);
         }
-        while let Some(chunk) = state.output.front() {
-            if chunk.sequence > sequence {
+        while state
+            .output
+            .front()
+            .is_some_and(|chunk| chunk.sequence <= sequence)
+        {
+            let Some(chunk) = state.output.pop_front() else {
                 break;
-            }
-            let chunk = state.output.pop_front().expect("front was present");
+            };
             state.retained_bytes -= chunk.bytes.len();
             state.first_retained_sequence = chunk.sequence + 1;
         }

@@ -14,6 +14,7 @@ import {
   TerminalCwdError,
   TerminalError,
   TerminalHistoryError,
+  TerminalRuntimeLeaseError,
   TerminalNotRunningError,
   TerminalOpenInput,
   TerminalResizeInput,
@@ -30,6 +31,7 @@ export {
   TerminalCwdError,
   TerminalError,
   TerminalHistoryError,
+  TerminalRuntimeLeaseError,
   TerminalNotRunningError,
   TerminalSessionLookupError,
 };

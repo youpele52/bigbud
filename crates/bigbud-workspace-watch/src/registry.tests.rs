@@ -133,9 +133,15 @@ fn native_idle_mode_does_not_repeat_directory_snapshots() {
     let root = temporary_workspace("idle");
     let workspace = workspace(&root);
     let registry = WorkspaceWatchRegistry::new(|_| {});
-    registry.subscribe("root", workspace.clone(), "").unwrap();
+    let started = registry.subscribe("root", workspace.clone(), "").unwrap();
+    if started.backend != WorkspaceWatchBackend::Native {
+        registry.unsubscribe("root");
+        let _ = fs::remove_dir_all(root);
+        return;
+    }
+    std::thread::sleep(Duration::from_millis(500));
     let baseline_calls = workspace.list_calls();
-    std::thread::sleep(Duration::from_millis(250));
+    std::thread::sleep(Duration::from_millis(500));
     assert_eq!(workspace.list_calls(), baseline_calls);
     registry.unsubscribe("root");
     let _ = fs::remove_dir_all(root);

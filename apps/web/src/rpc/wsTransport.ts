@@ -2,6 +2,7 @@ import { Cause, Duration, Effect, Exit, ManagedRuntime, Option, Scope, Stream } 
 import { RpcClient } from "effect/unstable/rpc";
 
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
+import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
@@ -26,6 +27,8 @@ const NOOP: () => void = () => undefined;
 interface TransportSession {
   readonly clientPromise: Promise<WsRpcProtocolClient>;
   readonly clientScope: Scope.Closeable;
+  readonly closeScope: () => Promise<void>;
+  readonly readinessController: AbortController;
   readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
 }
 
@@ -207,7 +210,8 @@ export class WsTransport {
   }
 
   private closeSession(session: TransportSession) {
-    return session.runtime.runPromise(Scope.close(session.clientScope, Exit.void)).finally(() => {
+    session.readinessController?.abort();
+    return session.closeScope().finally(() => {
       session.runtime.dispose();
     });
   }
@@ -222,11 +226,24 @@ export class WsTransport {
         isActive: () => !this.disposed && this.activeSessionId === sessionId,
       }),
     );
-    const clientScope = runtime.runSync(Scope.make());
+    const clientScope = Effect.runSync(Scope.make());
+    const readinessController = new AbortController();
+    const clientPromise = waitForDesktopBackendReady(
+      typeof window === "undefined" ? undefined : window.desktopBridge,
+      readinessController.signal,
+    ).then(() => {
+      if (readinessController.signal.aborted) {
+        throw new Error("WebSocket transport session closed before backend readiness.");
+      }
+      return runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient));
+    });
+    void clientPromise.catch(() => undefined);
     return {
       runtime,
       clientScope,
-      clientPromise: runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient)),
+      closeScope: () => Effect.runPromise(Scope.close(clientScope, Exit.void)),
+      readinessController,
+      clientPromise,
     };
   }
 

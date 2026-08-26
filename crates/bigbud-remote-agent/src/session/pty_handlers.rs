@@ -31,8 +31,8 @@ impl AgentSession {
             .resolve_directory(&request.cwd)
             .map_err(|error| SessionError::Pty(error.to_string()))?;
         let environment = process_environment_from_entries(&request.environment)?;
-        let cols = u16::try_from(request.cols.clamp(1, 500)).unwrap_or(120);
-        let rows = u16::try_from(request.rows.clamp(1, 500)).unwrap_or(30);
+        let cols = request.cols.clamp(1, 500) as u16;
+        let rows = request.rows.clamp(1, 500) as u16;
         let job = pty::PtyHandle::spawn(
             request.pty_id.clone(),
             &cwd,
@@ -169,8 +169,8 @@ impl AgentSession {
         let result = self.pty(&request.pty_id).and_then(|handle| {
             handle
                 .resize(
-                    u16::try_from(request.cols.clamp(1, 500)).unwrap_or(120),
-                    u16::try_from(request.rows.clamp(1, 500)).unwrap_or(30),
+                    request.cols.clamp(1, 500) as u16,
+                    request.rows.clamp(1, 500) as u16,
                 )
                 .map_err(|error| SessionError::Pty(error.to_string()))
         });

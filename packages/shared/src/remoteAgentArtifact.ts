@@ -12,6 +12,7 @@ export interface RemoteAgentArtifactSignature {
 
 export interface RemoteAgentArtifact {
   readonly version: string;
+  readonly buildDigest: string;
   readonly protocolMajor: number;
   readonly protocolMinor: number;
   readonly targetTriple: RemoteAgentTargetTriple;
@@ -84,6 +85,7 @@ function parseArtifact(value: unknown): RemoteAgentArtifact {
   const artifact = value as Record<string, unknown>;
   assertString(artifact.version, "Artifact version");
   assertSafeVersion(artifact.version);
+  assertString(artifact.buildDigest, "Artifact buildDigest");
   if (artifact.protocolMajor !== REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR) {
     throw new RemoteAgentArtifactError(
       `Artifact protocol major ${String(artifact.protocolMajor)} is unsupported.`,
@@ -119,6 +121,7 @@ function parseArtifact(value: unknown): RemoteAgentArtifact {
   }
   return {
     version: artifact.version,
+    buildDigest: artifact.buildDigest,
     protocolMajor: artifact.protocolMajor,
     protocolMinor: artifact.protocolMinor,
     targetTriple: artifact.targetTriple,
@@ -183,6 +186,7 @@ export function verifyRemoteAgentArtifactBytes(
 export function canonicalizeRemoteAgentArtifact(artifact: RemoteAgentArtifact): string {
   return [
     artifact.version,
+    artifact.buildDigest,
     artifact.protocolMajor,
     artifact.protocolMinor,
     artifact.targetTriple,

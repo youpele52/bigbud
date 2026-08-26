@@ -12,6 +12,7 @@ import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
 import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
+import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -193,11 +194,7 @@ export interface SidebarState {
     value: string | ProviderRuntimeLocation,
   ) => void;
   submitRemoteProjectDialog: () => Promise<void>;
-  remoteAgentInstallRequest: {
-    readonly candidate: RemoteProjectDraft;
-    readonly executionTargetId: string;
-    readonly targetLabel: string;
-  } | null;
+  remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
   declineRemoteAgentInstall: () => void;
   completeRemoteAgentInstall: (message: string) => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;

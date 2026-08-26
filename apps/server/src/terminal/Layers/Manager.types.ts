@@ -2,6 +2,7 @@ import type { Effect, Fiber } from "effect";
 
 import type {
   TerminalCwdError,
+  TerminalRuntimeLeaseError,
   TerminalDropPathMode,
   TerminalSessionStatus,
 } from "@bigbud/contracts";
@@ -109,7 +110,7 @@ export interface TerminalManagerOptions {
     executionTargetId: string;
     cwd: string;
     worktreePath: string | null;
-  }) => Effect.Effect<void, TerminalCwdError>;
+  }) => Effect.Effect<void, TerminalCwdError | TerminalRuntimeLeaseError>;
   markWorktreeLeaseStarted?: (input: {
     threadId: string;
     terminalId: string;

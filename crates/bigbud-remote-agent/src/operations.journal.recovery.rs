@@ -10,7 +10,10 @@ pub(super) fn decode_complete_records(
         if bytes.len() - cursor < 4 {
             return Ok((records, record_start));
         }
-        let length = u32::from_be_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+        let encoded_length = <[u8; 4]>::try_from(&bytes[cursor..cursor + 4])
+            .map_err(|_| OperationJournalError::Corrupt("invalid record length"))?;
+        let length = usize::try_from(u32::from_be_bytes(encoded_length))
+            .map_err(|_| OperationJournalError::Corrupt("record length overflow"))?;
         cursor += 4;
         if length == 0 || length > MAX_FIELD_BYTES {
             return Err(OperationJournalError::Corrupt("invalid record length"));

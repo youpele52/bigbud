@@ -9,6 +9,7 @@ rust-version = "1.95"
 version = "0.1.0"
 
 [workspace.dependencies]
+anyhow = "1"
 prost = "0.14"
 prost-build = "0.14"
 sha2 = "0.10"

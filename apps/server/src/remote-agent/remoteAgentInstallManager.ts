@@ -3,20 +3,21 @@ import { open } from "node:fs/promises";
 import {
   parseRemoteAgentArtifactManifest,
   selectRemoteAgentArtifact,
+  verifyRemoteAgentArtifactSignature,
   type RemoteAgentArtifact,
   type RemoteAgentArtifactManifest,
   type RemoteAgentArtifactTrustStore,
   type RemoteAgentTargetTriple,
 } from "./remoteAgentArtifact.ts";
 import {
-  buildRemoteAgentActivationScript,
   buildRemoteAgentCandidateCheckScript,
-  buildRemoteAgentRollbackScript,
   installRemoteAgentArtifact,
   type RemoteAgentInstallPaths,
 } from "./remoteAgentInstall.ts";
+import { runRemoteAgentActivationTransaction } from "./remoteAgentInstall.transaction.ts";
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 
 const MAX_REMOTE_AGENT_ARTIFACT_BYTES = 128 * 1024 * 1024;
 
@@ -44,6 +45,18 @@ export interface RemoteAgentInstallResult {
   readonly binaryPath: string;
 }
 
+export interface RemoteAgentResolvedArtifact {
+  readonly platform: RemoteAgentPlatformInfo;
+  readonly targetTriple: RemoteAgentTargetTriple;
+  readonly artifact: RemoteAgentArtifact;
+}
+
+function remoteCommandStdout(result: unknown): string {
+  return typeof result === "object" && result !== null && "stdout" in result
+    ? String((result as { stdout?: unknown }).stdout ?? "")
+    : "";
+}
+
 interface RemoteAgentInstallManagerDependencies {
   readonly probePlatform: (executionTargetId: string) => Promise<RemoteAgentPlatformInfo>;
   readonly readArtifactBytes: (artifact: RemoteAgentArtifact) => Promise<Uint8Array>;
@@ -59,6 +72,7 @@ interface RemoteAgentInstallManagerDependencies {
   readonly verifyInstalledAgent: (input: {
     readonly executionTargetId: string;
     readonly version: string;
+    readonly buildDigest: string;
     readonly protocolMajor: number;
     readonly protocolMinor: number;
   }) => Promise<void>;
@@ -160,23 +174,13 @@ function defaultDependencies(
       const result = await runRemoteCommand({
         executionTargetId: input.executionTargetId,
         command: "sh",
-        args: ["-lc", buildRemoteAgentCandidateCheckScript(input.version)],
+        args: ["-lc", buildRemoteAgentCandidateCheckScript()],
         timeoutMs: 30_000,
         maxBufferBytes: 64 * 1024,
         outputMode: "error",
       });
-      const stdout =
-        typeof result === "object" && result !== null && "stdout" in result
-          ? String((result as { stdout?: unknown }).stdout ?? "")
-          : "";
-      const [name, version, protocolMajor, protocolMinor, digest] = stdout.trim().split(/\s+/);
-      if (
-        name !== "bigbud-remote-agent" ||
-        version !== input.version ||
-        Number(protocolMajor) !== input.protocolMajor ||
-        Number(protocolMinor) !== input.protocolMinor ||
-        !digest
-      ) {
+      const stdout = remoteCommandStdout(result);
+      if (!remoteAgentIdentityMatches(parseRemoteAgentCheckOutput(stdout), input)) {
         throw new RemoteAgentInstallManagerError(
           "Installed remote agent candidate returned an invalid handshake.",
         );
@@ -192,77 +196,85 @@ export function makeRemoteAgentInstallManager(
     ...defaultDependencies(overrides.runRemoteCommand ?? runSshCommand),
     ...overrides,
   };
+  const installTails = new Map<string, Promise<void>>();
+
+  const withInstallLock = async <A>(executionTargetId: string, run: () => Promise<A>) => {
+    const previous = installTails.get(executionTargetId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    installTails.set(executionTargetId, tail);
+    await previous;
+    try {
+      return await run();
+    } finally {
+      release();
+      if (installTails.get(executionTargetId) === tail) {
+        installTails.delete(executionTargetId);
+      }
+    }
+  };
+
+  const resolveArtifact = async (input: {
+    readonly executionTargetId: string;
+    readonly source: RemoteAgentInstallSource;
+    readonly verifySignature?: boolean;
+  }): Promise<RemoteAgentResolvedArtifact> => {
+    const platform = await dependencies.probePlatform(input.executionTargetId);
+    if (!platform.targetTriple) {
+      throw new RemoteAgentInstallManagerError(
+        `Remote agent is unsupported on ${platform.operatingSystem}/${platform.architecture}.`,
+      );
+    }
+    const artifact = selectRemoteAgentArtifact(input.source.manifest, platform.targetTriple);
+    if (input.verifySignature && !input.source.allowUntrustedDevelopmentArtifact) {
+      verifyRemoteAgentArtifactSignature(artifact, input.source.trustStore);
+    }
+    return { platform, targetTriple: platform.targetTriple, artifact };
+  };
 
   return {
-    install: async (input: {
+    resolveArtifact,
+    install: (input: {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
-    }): Promise<RemoteAgentInstallResult> => {
-      const platform = await dependencies.probePlatform(input.executionTargetId);
-      if (!platform.targetTriple) {
-        throw new RemoteAgentInstallManagerError(
-          `Remote agent is unsupported on ${platform.operatingSystem}/${platform.architecture}.`,
-        );
-      }
-
-      const artifact = selectRemoteAgentArtifact(input.source.manifest, platform.targetTriple);
-      const bytes = await dependencies.readArtifactBytes(artifact);
-      const paths = await dependencies.installArtifact({
-        executionTargetId: input.executionTargetId,
-        artifact,
-        targetTriple: platform.targetTriple,
-        bytes,
-        trustStore: input.source.trustStore,
-        ...(input.source.allowUntrustedDevelopmentArtifact
-          ? { skipSignatureVerification: true }
-          : {}),
-      });
-      try {
-        await dependencies.runRemoteCommand({
+    }): Promise<RemoteAgentInstallResult> =>
+      withInstallLock(input.executionTargetId, async () => {
+        const { platform, targetTriple, artifact } = await resolveArtifact(input);
+        const bytes = await dependencies.readArtifactBytes(artifact);
+        const paths = await dependencies.installArtifact({
           executionTargetId: input.executionTargetId,
-          command: "sh",
-          args: ["-lc", buildRemoteAgentActivationScript(artifact.version)],
-          timeoutMs: 30_000,
-          maxBufferBytes: 64 * 1024,
-          outputMode: "error",
+          artifact,
+          targetTriple,
+          bytes,
+          trustStore: input.source.trustStore,
+          ...(input.source.allowUntrustedDevelopmentArtifact
+            ? { skipSignatureVerification: true }
+            : {}),
         });
-        await dependencies.verifyInstalledAgent({
-          executionTargetId: input.executionTargetId,
-          version: artifact.version,
-          protocolMajor: artifact.protocolMajor,
-          protocolMinor: artifact.protocolMinor,
-        });
-      } catch (error) {
         try {
-          await dependencies.runRemoteCommand({
+          await runRemoteAgentActivationTransaction({
             executionTargetId: input.executionTargetId,
-            command: "sh",
-            args: ["-lc", buildRemoteAgentRollbackScript()],
-            timeoutMs: 30_000,
-            maxBufferBytes: 64 * 1024,
-            outputMode: "error",
+            artifact,
+            paths,
+            runRemoteCommand: dependencies.runRemoteCommand,
+            verifyInstalledAgent: dependencies.verifyInstalledAgent,
           });
-        } catch (rollbackError) {
+        } catch (error) {
           throw new RemoteAgentInstallManagerError(
-            `Remote agent candidate failed verification and rollback failed: ${
-              rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
-            }`,
+            error instanceof Error ? error.message : String(error),
           );
         }
-        throw new RemoteAgentInstallManagerError(
-          `Remote agent candidate failed verification: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-      return {
-        platform,
-        targetTriple: platform.targetTriple,
-        artifact,
-        paths,
-        binaryPath: paths.activeLink,
-      };
-    },
+        return {
+          platform,
+          targetTriple,
+          artifact,
+          paths,
+          binaryPath: paths.activeLink,
+        };
+      }),
   };
 }
 

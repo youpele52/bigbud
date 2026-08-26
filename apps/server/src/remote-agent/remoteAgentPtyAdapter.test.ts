@@ -79,7 +79,9 @@ describe("remote-agent PTY adapter", () => {
         rows: 30,
         env: {
           TERM: "xterm-256color",
+          COLORTERM: "truecolor",
           LANG: "en_US.UTF-8",
+          LC_MESSAGES: "en_US.UTF-8",
           SECRET_KEY: "must-not-forward",
         },
         executionTargetId: "ssh:host=devbox",
@@ -90,7 +92,9 @@ describe("remote-agent PTY adapter", () => {
     expect(opened[0]?.root).toBe("/srv/project");
     expect(created[0]?.environment).toEqual([
       { name: "TERM", value: "xterm-256color" },
+      { name: "COLORTERM", value: "truecolor" },
       { name: "LANG", value: "en_US.UTF-8" },
+      { name: "LC_MESSAGES", value: "en_US.UTF-8" },
     ]);
     expect(created[0]?.cwd).toBe("");
     expect(created[0]?.shell).toBe("/bin/sh");

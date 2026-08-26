@@ -110,11 +110,14 @@ impl OperationRegistry {
         if acknowledged_sequence >= record.next_sequence {
             return Err(OperationError::InvalidAcknowledgement);
         }
-        while let Some(chunk) = record.output.front() {
-            if chunk.sequence > acknowledged_sequence {
+        while record
+            .output
+            .front()
+            .is_some_and(|chunk| chunk.sequence <= acknowledged_sequence)
+        {
+            let Some(chunk) = record.output.pop_front() else {
                 break;
-            }
-            let chunk = record.output.pop_front().expect("front was present");
+            };
             record.retained_bytes -= chunk.bytes.len();
             record.first_retained_sequence = chunk.sequence + 1;
         }

@@ -204,6 +204,26 @@ export class TerminalHistoryError extends Schema.TaggedErrorClass<TerminalHistor
   }
 }
 
+export const TerminalRuntimeLeaseReason = Schema.Literals([
+  "storageFull",
+  "databaseBusy",
+  "conflict",
+  "unknown",
+]);
+export type TerminalRuntimeLeaseReason = typeof TerminalRuntimeLeaseReason.Type;
+
+export class TerminalRuntimeLeaseError extends Schema.TaggedErrorClass<TerminalRuntimeLeaseError>()(
+  "TerminalRuntimeLeaseError",
+  {
+    cwd: Schema.String,
+    reason: TerminalRuntimeLeaseReason,
+  },
+) {
+  override get message() {
+    return `Failed to reserve terminal runtime lease for: ${this.cwd}`;
+  }
+}
+
 export class TerminalSessionLookupError extends Schema.TaggedErrorClass<TerminalSessionLookupError>()(
   "TerminalSessionLookupError",
   {
@@ -246,6 +266,7 @@ export class TerminalExecutionTargetError extends Schema.TaggedErrorClass<Termin
 export const TerminalError = Schema.Union([
   TerminalCwdError,
   TerminalHistoryError,
+  TerminalRuntimeLeaseError,
   TerminalSessionLookupError,
   TerminalNotRunningError,
   TerminalExecutionTargetError,

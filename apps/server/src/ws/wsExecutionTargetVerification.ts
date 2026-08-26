@@ -62,6 +62,17 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
       remoteAgent: { status: "install-required" },
     };
   }
+  if (agent.status === "upgrade-required") {
+    return {
+      ...sshResult,
+      message: `${sshResult.message} The bigbud remote agent must be upgraded from ${agent.currentVersion} to ${agent.targetVersion} before this remote project can be used.`,
+      remoteAgent: {
+        status: "upgrade-required",
+        currentVersion: agent.currentVersion,
+        targetVersion: agent.targetVersion,
+      },
+    };
+  }
   return {
     ...sshResult,
     message: `${sshResult.message} Remote agent ${agent.agentVersion} is ready.`,

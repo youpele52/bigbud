@@ -7,13 +7,16 @@ import {
 import { runSshCommand } from "../ssh/sshProcess.ts";
 
 const SAFE_REMOTE_PATH_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+const SAFE_ARTIFACT_SHA256 = /^[a-f0-9]{64}$/;
+
+export type RemoteAgentBuildIdentity = Pick<RemoteAgentArtifact, "version" | "sha256">;
 
 export interface RemoteAgentInstallPaths {
   readonly root: string;
   readonly binRoot: string;
   readonly stateRoot: string;
   readonly versionRoot: string;
-  readonly stagedBinary: string;
+  readonly buildRoot: string;
   readonly installedBinary: string;
   readonly activeLink: string;
   readonly previousLink: string;
@@ -25,23 +28,83 @@ export interface RemoteAgentInstallScriptInput {
   readonly stagedBase64: string;
 }
 
-export function buildRemoteAgentInstallPaths(version: string): RemoteAgentInstallPaths {
-  if (!SAFE_REMOTE_PATH_VERSION.test(version)) {
-    throw new Error(`Invalid remote agent version '${version}'.`);
-  }
+function buildRemoteAgentInstallRoots() {
   const root = "$HOME/.bigbud/agent";
   const binRoot = `${root}/bin`;
-  const stateRoot = `${root}/state`;
-  const versionRoot = `${binRoot}/${version}`;
+  return {
+    root,
+    binRoot,
+    stateRoot: `${root}/state`,
+    activeLink: `${binRoot}/current`,
+    previousLink: `${binRoot}/previous`,
+  };
+}
+
+export function buildRemoteAgentTrustedTargetValidator(): string {
+  return `
+validate_agent_target() {
+  target=$1
+  case "$target" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  canonical=$(readlink -f -- "$target")
+  case "$canonical" in
+    "$bin_root_canonical"/*) ;;
+    *) return 1 ;;
+  esac
+  relative=\${canonical#"$bin_root_canonical"/}
+  case "$relative" in
+    */bigbud-remote-agent) ;;
+    *) return 1 ;;
+  esac
+  directory=\${relative%/bigbud-remote-agent}
+  case "$directory" in
+    */*)
+      version=\${directory%%/*}
+      sha256=\${directory#*/}
+      test "\${#sha256}" -eq 64
+      case "$sha256" in *[!a-f0-9]*) return 1 ;; esac
+      ;;
+    *) version=$directory ;;
+  esac
+  test -n "$version"
+  test "\${#version}" -le 64
+  case "$version" in
+    [A-Za-z0-9]*) ;;
+    *) return 1 ;;
+  esac
+  case "$version" in *[!A-Za-z0-9._+-]*) return 1 ;; esac
+  test -f "$canonical"
+  test ! -L "$canonical"
+  test "$(stat -c '%u' "$canonical")" = "$(id -u)"
+  test "$(stat -c '%a' "$canonical")" = "700"
+  printf '%s\n' "$canonical"
+}
+`;
+}
+
+export function buildRemoteAgentInstallPaths(
+  identity: RemoteAgentBuildIdentity,
+): RemoteAgentInstallPaths {
+  if (!SAFE_REMOTE_PATH_VERSION.test(identity.version)) {
+    throw new Error(`Invalid remote agent version '${identity.version}'.`);
+  }
+  if (!SAFE_ARTIFACT_SHA256.test(identity.sha256)) {
+    throw new Error("Invalid remote agent artifact SHA-256 digest.");
+  }
+  const { root, binRoot, stateRoot, activeLink, previousLink } = buildRemoteAgentInstallRoots();
+  const versionRoot = `${binRoot}/${identity.version}`;
+  const buildRoot = `${versionRoot}/${identity.sha256}`;
   return {
     root,
     binRoot,
     stateRoot,
     versionRoot,
-    stagedBinary: `${versionRoot}/.bigbud-remote-agent.stage.$$.bin`,
-    installedBinary: `${versionRoot}/bigbud-remote-agent`,
-    activeLink: `${binRoot}/current`,
-    previousLink: `${binRoot}/previous`,
+    buildRoot,
+    installedBinary: `${buildRoot}/bigbud-remote-agent`,
+    activeLink,
+    previousLink,
   };
 }
 
@@ -56,7 +119,7 @@ export function buildRemoteAgentInstallScript(input: RemoteAgentInstallScriptInp
   if (input.stagedBase64.length === 0) {
     throw new Error("Remote agent installation payload cannot be empty.");
   }
-  const paths = buildRemoteAgentInstallPaths(input.artifact.version);
+  const paths = buildRemoteAgentInstallPaths(input.artifact);
   const command = `
 set -eu
 umask 077
@@ -64,9 +127,9 @@ root=${paths.root}
 bin_root=${paths.binRoot}
 state_root=${paths.stateRoot}
 version_root=${paths.versionRoot}
-staged=${paths.stagedBinary}
+build_root=${paths.buildRoot}
 installed=${paths.installedBinary}
-for path in "$root" "$bin_root" "$state_root" "$version_root"; do
+for path in "$root" "$bin_root" "$state_root" "$version_root" "$build_root"; do
   if [ -e "$path" ] || [ -L "$path" ]; then
     test ! -L "$path"
     test -d "$path"
@@ -74,99 +137,38 @@ for path in "$root" "$bin_root" "$state_root" "$version_root"; do
     test "$(stat -c '%a' "$path")" = "700"
   fi
 done
-install -d -m 700 "$root" "$bin_root" "$state_root" "$version_root"
+install -d -m 700 "$root" "$bin_root" "$state_root" "$version_root" "$build_root"
+staged=$(mktemp "$build_root/.bigbud-remote-agent.stage.XXXXXX")
+trap 'rm -f "$staged"' EXIT HUP INT TERM
 base64 --decode > "$staged"
 test "$(wc -c < "$staged")" -eq '${input.artifact.sizeBytes}'
 test "$(sha256sum "$staged" | awk '{print $1}')" = '${input.artifact.sha256}'
 chmod 700 "$staged"
-mv -f "$staged" "$installed"
-printf '%s\\n' '${input.targetTriple}' > "$version_root/target-triple"
+if ln "$staged" "$installed" 2>/dev/null; then
+  rm -f "$staged"
+else
+  test -e "$installed"
+  test ! -L "$installed"
+  test -f "$installed"
+  test "$(stat -c '%u' "$installed")" = "$(id -u)"
+  test "$(stat -c '%a' "$installed")" = "700"
+  test "$(wc -c < "$installed")" -eq '${input.artifact.sizeBytes}'
+  test "$(sha256sum "$installed" | awk '{print $1}')" = '${input.artifact.sha256}'
+  rm -f "$staged"
+fi
+trap - EXIT HUP INT TERM
 `;
   return { command, stdin: input.stagedBase64, paths };
 }
 
-function assertSafeInstallVersion(version: string): void {
-  if (!SAFE_REMOTE_PATH_VERSION.test(version)) {
-    throw new Error(`Invalid remote agent version '${version}'.`);
-  }
-}
-
-export function buildRemoteAgentActivationScript(version: string): string {
-  assertSafeInstallVersion(version);
-  const paths = buildRemoteAgentInstallPaths(version);
-  const temporaryLink = `${paths.activeLink}.$$.tmp`;
-  const previousTemporaryLink = `${paths.previousLink}.$$.tmp`;
-  return `
-set -eu
-umask 077
-bin_root=${paths.binRoot}
-installed=${paths.installedBinary}
-active=${paths.activeLink}
-previous=${paths.previousLink}
-temporary=${temporaryLink}
-previous_temporary=${previousTemporaryLink}
-test -f "$installed"
-test ! -L "$installed"
-test "$(stat -c '%u' "$installed")" = "$(id -u)"
-test "$(stat -c '%a' "$installed")" = "700"
-if { [ -e "$active" ] || [ -L "$active" ]; } && [ ! -L "$active" ]; then exit 1; fi
-if { [ -e "$previous" ] || [ -L "$previous" ]; } && [ ! -L "$previous" ]; then exit 1; fi
-if [ -L "$active" ]; then
-  current_target=$(readlink "$active")
-  case "$current_target" in
-    "$bin_root"/*) ;;
-    *) exit 1 ;;
-  esac
-  ln -s "$current_target" "$previous_temporary"
-  mv -Tf "$previous_temporary" "$previous"
-fi
-ln -s "$installed" "$temporary"
-mv -Tf "$temporary" "$active"
-`;
-}
-
-export function buildRemoteAgentCandidateCheckScript(version: string): string {
-  assertSafeInstallVersion(version);
-  const paths = buildRemoteAgentInstallPaths(version);
+export function buildRemoteAgentCandidateCheckScript(): string {
+  const paths = buildRemoteAgentInstallRoots();
   return [
     "set -eu",
     `active=${paths.activeLink}`,
     'test -x "$active"',
     'exec "$active" --check',
   ].join("\n");
-}
-
-export function buildRemoteAgentRollbackScript(): string {
-  const paths = buildRemoteAgentInstallPaths("rollback");
-  const temporaryLink = `${paths.activeLink}.$$.rollback.tmp`;
-  const previousTemporaryLink = `${paths.previousLink}.$$.rollback.tmp`;
-  return `
-set -eu
-umask 077
-bin_root=${paths.binRoot}
-active=${paths.activeLink}
-previous=${paths.previousLink}
-temporary=${temporaryLink}
-previous_temporary=${previousTemporaryLink}
-if [ ! -L "$previous" ]; then exit 0; fi
-if { [ -e "$active" ] || [ -L "$active" ]; } && [ ! -L "$active" ]; then exit 1; fi
-previous_target=$(readlink "$previous")
-case "$previous_target" in
-  "$bin_root"/*) ;;
-  *) exit 1 ;;
-esac
-if [ -L "$active" ]; then
-  active_target=$(readlink "$active")
-  case "$active_target" in
-    "$bin_root"/*) ;;
-    *) exit 1 ;;
-  esac
-  ln -s "$active_target" "$previous_temporary"
-  mv -Tf "$previous_temporary" "$previous"
-fi
-ln -s "$previous_target" "$temporary"
-mv -Tf "$temporary" "$active"
-`;
 }
 
 export async function installRemoteAgentArtifact(input: {

@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::sync::{Arc, Mutex};
 
+use anyhow::{Context, Result};
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
-    AgentSession, protocol_error_frame,
+    AgentSession, identity, protocol_error_frame,
     state::{AgentState, supervisor_socket_path},
-    supervisor::run_proxy,
+    supervisor::{SupervisorPreparation, prepare_supervisor, run_proxy},
     workspace_watch_event_frame,
 };
 use bigbud_workspace_watch::WorkspaceWatchRegistry;
@@ -23,19 +24,19 @@ fn state_root() -> Option<std::path::PathBuf> {
         })
 }
 
-fn create_session() -> io::Result<AgentSession> {
+fn create_session() -> Result<AgentSession> {
     let state_root = state_root();
     match state_root {
         Some(root) => {
-            let state = AgentState::open(root)
-                .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
+            let state = AgentState::open(&root)
+                .with_context(|| format!("failed to open agent state at {}", root.display()))?;
             AgentSession::with_epoch_and_journal(
                 state.epoch().to_owned(),
                 state.operation_journal_path(),
             )
-            .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))
+            .context("failed to restore the agent session journal")
         }
-        None => Ok(AgentSession::new()),
+        None => AgentSession::new().context("failed to create an ephemeral agent session"),
     }
 }
 
@@ -119,67 +120,73 @@ fn write_stdio_responses(
 }
 
 fn run_check() {
-    let version = option_env!("BIGBUD_AGENT_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     println!(
         "bigbud-remote-agent\t{}\t{}\t{}\t{}\t{}\t{}",
-        version,
+        identity::build_version(),
         bigbud_protocol::PROTOCOL_MAJOR,
         bigbud_protocol::PROTOCOL_MINOR,
-        option_env!("BIGBUD_AGENT_BUILD_DIGEST").unwrap_or(env!("CARGO_PKG_VERSION")),
+        identity::build_digest(),
         std::env::consts::OS,
         std::env::consts::ARCH,
     );
 }
 
 #[cfg(unix)]
-fn run_supervisor_mode(root: std::path::PathBuf) -> io::Result<()> {
+fn run_supervisor_mode(root: std::path::PathBuf) -> Result<()> {
     let state = AgentState::open_for_supervisor(&root)
-        .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
+        .with_context(|| format!("failed to open supervisor state at {}", root.display()))?;
     run_supervisor(
         AgentSession::with_epoch_and_journal(
             state.epoch().to_owned(),
             state.operation_journal_path(),
         )
-        .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?,
+        .context("failed to restore the supervisor session journal")?,
         &supervisor_socket_path(root),
     )
+    .context("remote agent supervisor failed")
 }
 
 #[cfg(not(unix))]
-fn run_supervisor_mode(_root: std::path::PathBuf) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "the remote agent supervisor requires Unix-domain sockets on this platform",
-    ))
+fn run_supervisor_mode(_root: std::path::PathBuf) -> Result<()> {
+    anyhow::bail!("the remote agent supervisor requires Unix-domain sockets on this platform")
 }
 
-fn main() -> io::Result<()> {
+fn main() -> Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("--check") => {
             run_check();
             Ok(())
         }
         Some("--supervisor") => {
-            let root = state_root().ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "HOME is required for supervisor mode",
-                )
-            })?;
+            let root = state_root().context("HOME is required for supervisor mode")?;
             run_supervisor_mode(root)
         }
+        Some("--prepare-supervisor") => {
+            let root = state_root().context("HOME is required to prepare the supervisor")?;
+            match prepare_supervisor(&supervisor_socket_path(root))
+                .context("failed to prepare the remote agent supervisor")?
+            {
+                SupervisorPreparation::Ready => Ok(()),
+                SupervisorPreparation::StartRequired => std::process::exit(10),
+                SupervisorPreparation::BlockedActiveWork => {
+                    eprintln!(
+                        "remote agent upgrade is blocked by active terminals or process operations; close them and retry"
+                    );
+                    std::process::exit(11)
+                }
+            }
+        }
         Some("--proxy") => {
-            let root = state_root().ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "HOME is required for proxy mode",
-                )
-            })?;
+            let root = state_root().context("HOME is required for proxy mode")?;
             let stdin = io::stdin();
             let stdout = io::stdout();
             run_proxy(stdin, stdout.lock(), &supervisor_socket_path(root))
+                .context("remote agent proxy failed")
         }
-        Some("--ephemeral") => run_stdio(AgentSession::new()),
-        _ => run_stdio(create_session()?),
+        Some("--ephemeral") => {
+            run_stdio(AgentSession::new().context("failed to create the ephemeral agent session")?)
+                .context("remote agent stdio mode failed")
+        }
+        _ => run_stdio(create_session()?).context("remote agent stdio mode failed"),
     }
 }

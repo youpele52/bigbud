@@ -12,11 +12,17 @@ import {
   type RemoteAgentFrame,
   type RemoteAgentHello,
 } from "./remoteAgentProtocol.ts";
+import { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
+
+export { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
 
 export class RemoteAgentConnectionError extends Error {
   readonly _tag = "RemoteAgentConnectionError";
 
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
     super(message);
     this.name = "RemoteAgentConnectionError";
   }
@@ -86,31 +92,9 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-export function buildRemoteAgentPresenceProbeCommand(binaryPath: string): string {
+export function buildRemoteAgentIdentityProbeCommand(binaryPath: string): string {
   const binary = shellQuote(binaryPath);
-  return `if test -x ${binary}; then printf 'ready'; else printf 'missing'; fi`;
-}
-
-export function buildRemoteAgentProxyCommand(binaryPath: string): string {
-  const binary = shellQuote(binaryPath);
-  return [
-    "set -eu",
-    'socket="$HOME/.bigbud/agent/state/supervisor.sock"',
-    'log="$HOME/.bigbud/agent/state/supervisor.log"',
-    ': > "$log"',
-    `${binary} --supervisor >/dev/null 2>"$log" &`,
-    "supervisor_pid=$!",
-    "for attempt in 1 2 3 4 5 6 7 8 9 10; do",
-    '  if [ -S "$socket" ]; then break; fi',
-    "  sleep 0.1",
-    "done",
-    'if [ ! -S "$socket" ]; then',
-    '  if [ -s "$log" ]; then cat "$log" >&2; fi',
-    '  wait "$supervisor_pid" || true',
-    "  exit 1",
-    "fi",
-    `exec ${binary} --proxy`,
-  ].join("\n");
+  return `if test -x ${binary}; then exec ${binary} --check; else printf 'missing'; fi`;
 }
 
 export class RemoteAgentConnection {
@@ -195,7 +179,10 @@ export class RemoteAgentConnection {
     });
     const frame = await this.nextFrame();
     if (frame.type === "protocolError") {
-      throw new RemoteAgentConnectionError(`${frame.value.code}: ${frame.value.message}`);
+      throw new RemoteAgentConnectionError(
+        `${frame.value.code}: ${frame.value.message}`,
+        frame.value.code,
+      );
     }
     if (frame.type !== "agentHello") {
       throw new RemoteAgentConnectionError(`Expected agent hello, received ${frame.type}.`);
@@ -203,6 +190,7 @@ export class RemoteAgentConnection {
     if (frame.value.protocolMajor !== REMOTE_AGENT_PROTOCOL_MAJOR) {
       throw new RemoteAgentConnectionError(
         `Remote agent protocol major ${frame.value.protocolMajor} is incompatible with ${REMOTE_AGENT_PROTOCOL_MAJOR}.`,
+        "UNSUPPORTED_PROTOCOL_MAJOR",
       );
     }
     return frame.value;
@@ -331,7 +319,10 @@ export class RemoteAgentConnection {
 
   private assertRequestResponse(frame: RemoteAgentFrame): RemoteAgentFrame {
     if (frame.type === "protocolError") {
-      throw new RemoteAgentConnectionError(`${frame.value.code}: ${frame.value.message}`);
+      throw new RemoteAgentConnectionError(
+        `${frame.value.code}: ${frame.value.message}`,
+        frame.value.code,
+      );
     }
     return frame;
   }

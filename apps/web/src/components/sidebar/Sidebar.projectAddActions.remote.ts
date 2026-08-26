@@ -24,6 +24,7 @@ import {
   type RemoteProjectFieldErrors,
 } from "./Sidebar.projectAddActions.helpers";
 import type {
+  SidebarRemoteAgentInstallRequest,
   SidebarRemoteProjectAddActionsOutput,
   UseSidebarRemoteProjectAddActionsInput,
 } from "./Sidebar.projectAddActions.remote.types";
@@ -55,11 +56,8 @@ export function useSidebarRemoteProjectAddActions({
   const [remoteProjectDialogMode, setRemoteProjectDialogMode] = useState<"add" | "edit">("add");
   const [editingProjectId, setEditingProjectId] = useState<ProjectId | null>(null);
   const [editingProjectUpdatedAt, setEditingProjectUpdatedAt] = useState<string | null>(null);
-  const [remoteAgentInstallRequest, setRemoteAgentInstallRequest] = useState<{
-    readonly candidate: RemoteProjectDraft;
-    readonly executionTargetId: string;
-    readonly targetLabel: string;
-  } | null>(null);
+  const [remoteAgentInstallRequest, setRemoteAgentInstallRequest] =
+    useState<SidebarRemoteAgentInstallRequest | null>(null);
   const verificationRequestIdRef = useRef(0);
 
   const resetRemoteProjectDialog = useCallback(() => {
@@ -179,14 +177,25 @@ export function useSidebarRemoteProjectAddActions({
       if (requestId !== verificationRequestIdRef.current) {
         return "invalid" as const;
       }
-      if (result.remoteAgent?.status === "install-required") {
+      if (
+        result.remoteAgent?.status === "install-required" ||
+        result.remoteAgent?.status === "upgrade-required"
+      ) {
         setRemoteProjectVerificationMessage(null);
-        setRemoteAgentInstallRequest({
+        const request = {
           candidate: remoteProjectDraft,
           executionTargetId: createRemoteProjectExecutionTargetId(remoteProjectDraft),
           targetLabel: getRemoteProjectConnectionLabel(remoteProjectDraft),
-        });
-        return "install-required" as const;
+          ...(result.remoteAgent.status === "upgrade-required"
+            ? {
+                kind: "upgrade" as const,
+                currentVersion: result.remoteAgent.currentVersion,
+                targetVersion: result.remoteAgent.targetVersion,
+              }
+            : { kind: "install" as const }),
+        };
+        setRemoteAgentInstallRequest(request);
+        return result.remoteAgent.status;
       }
       setRemoteProjectVerificationMessage(result.message);
       return "verified" as const;

@@ -5,6 +5,18 @@ use super::*;
 
 static NEXT_PATH_ID: AtomicU64 = AtomicU64::new(0);
 
+#[test]
+fn rejects_truncated_numeric_fields_without_panicking() {
+    assert!(matches!(
+        decode_record(&[3, 0, 0, 0, 0]),
+        Err(OperationJournalError::Corrupt(_))
+    ));
+    assert!(matches!(
+        decode_record(&[5, 0, 0, 0, 0, 4, 1]),
+        Err(OperationJournalError::Corrupt(_))
+    ));
+}
+
 fn temp_path() -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -348,7 +348,8 @@ jobs:
           set -euo pipefail
           version='${{ needs.preflight.outputs.version }}'
           node scripts/build-remote-agent-release-manifest.ts \
-            --version "$version" \
+             --version "$version" \
+            --build-digest "$GITHUB_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --output release-assets/remote-agent-manifest.json \
             --install-source-output release-assets/remote-agent-install-source.json \

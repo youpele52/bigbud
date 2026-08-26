@@ -7,6 +7,7 @@ export type RemoteAgentReleaseTarget = "x86_64-unknown-linux-gnu" | "aarch64-unk
 
 export interface RemoteAgentReleaseManifestInput {
   readonly version: string;
+  readonly buildDigest: string;
   readonly repository: string;
   readonly signingKeyId: string;
   readonly signingKeyPem: string;
@@ -20,6 +21,7 @@ export interface RemoteAgentReleaseManifest {
   readonly schemaVersion: 1;
   readonly artifacts: ReadonlyArray<{
     readonly version: string;
+    readonly buildDigest: string;
     readonly protocolMajor: 1;
     readonly protocolMinor: 1;
     readonly targetTriple: RemoteAgentReleaseTarget;
@@ -47,6 +49,7 @@ type UnsignedRemoteAgentArtifact = Omit<
 function canonicalizeArtifact(artifact: UnsignedRemoteAgentArtifact): string {
   return [
     artifact.version,
+    artifact.buildDigest,
     artifact.protocolMajor,
     artifact.protocolMinor,
     artifact.targetTriple,
@@ -83,6 +86,7 @@ export function buildRemoteAgentReleaseManifest(
   input: RemoteAgentReleaseManifestInput,
 ): RemoteAgentReleaseManifest {
   assertSafeReleaseValue(input.version, "Release version", /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/);
+  assertSafeReleaseValue(input.buildDigest, "Build digest", /^[A-Fa-f0-9]{7,64}$/);
   assertSafeReleaseValue(
     input.repository,
     "GitHub repository",
@@ -103,6 +107,7 @@ export function buildRemoteAgentReleaseManifest(
     const assetName = `bigbud-remote-agent-${input.version}-${targetTriple}`;
     const artifact = {
       version: input.version,
+      buildDigest: input.buildDigest,
       protocolMajor: 1 as const,
       protocolMinor: 1 as const,
       targetTriple,
@@ -159,6 +164,7 @@ function runCli(): void {
     .map((argument) => parseAssetSpec(argument.slice("--asset=".length)));
   const manifest = buildRemoteAgentReleaseManifest({
     version: argumentValue("--version"),
+    buildDigest: argumentValue("--build-digest"),
     repository: argumentValue("--repository"),
     signingKeyId: process.env.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID ?? "",
     signingKeyPem: process.env.BIGBUD_REMOTE_AGENT_SIGNING_KEY ?? "",

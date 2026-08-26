@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  buildRemoteAgentPresenceProbeCommand,
+  buildRemoteAgentIdentityProbeCommand,
   buildRemoteAgentProxyCommand,
   closeRemoteAgentProcess,
   remoteAgentLocalProcessArgs,
@@ -12,6 +12,7 @@ describe("remote agent proxy command", () => {
     const command = buildRemoteAgentProxyCommand("/tmp/agent's binary");
     expect(command).toContain("/tmp/agent'\\''s binary");
     expect(command).toContain("--supervisor");
+    expect(command).toContain("--prepare-supervisor");
     expect(command).toContain("--proxy");
     expect(command).toContain('socket="$HOME/.bigbud/agent/state/supervisor.sock"');
     expect(command).toContain('cat "$log" >&2');
@@ -21,8 +22,8 @@ describe("remote agent proxy command", () => {
     expect(
       buildRemoteAgentProxyCommand("$HOME/.bigbud/agent/bin/0.1.0/bigbud-remote-agent"),
     ).toContain('"$HOME/.bigbud/agent/bin/0.1.0/bigbud-remote-agent" --proxy');
-    expect(buildRemoteAgentPresenceProbeCommand("$HOME/.bigbud/agent/bin/current")).toBe(
-      "if test -x \"$HOME/.bigbud/agent/bin/current\"; then printf 'ready'; else printf 'missing'; fi",
+    expect(buildRemoteAgentIdentityProbeCommand("$HOME/.bigbud/agent/bin/current")).toBe(
+      'if test -x "$HOME/.bigbud/agent/bin/current"; then exec "$HOME/.bigbud/agent/bin/current" --check; else printf \'missing\'; fi',
     );
   });
 });

@@ -1,24 +1,20 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::test_helpers::hello;
 use super::*;
 
-fn hello() -> v1::Frame {
-    v1::Frame {
-        payload: Some(v1::frame::Payload::ClientHello(v1::ClientHello {
-            protocol_major: PROTOCOL_MAJOR,
-            protocol_minor: PROTOCOL_MINOR,
-            client_instance_id: "client-1".to_owned(),
-            connection_id: "connection-1".to_owned(),
-            server_nonce: "nonce".to_owned(),
-            max_frame_bytes: 1024,
-        })),
-    }
+#[test]
+fn rejects_a_clock_before_unix_epoch() {
+    assert!(matches!(
+        session_epoch(UNIX_EPOCH - Duration::from_secs(1)),
+        Err(SessionError::ClockBeforeUnixEpoch(_))
+    ));
 }
 
 #[test]
 fn negotiates_a_compatible_hello() {
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     let response = session.handle(hello()).unwrap();
     let Some(v1::frame::Payload::AgentHello(agent)) = response.payload else {
         panic!("expected agent hello");
@@ -30,7 +26,7 @@ fn negotiates_a_compatible_hello() {
 
 #[test]
 fn rejects_conflicting_operation_digests() {
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     session.handle(hello()).unwrap();
     let request = |digest: &[u8]| v1::Frame {
         payload: Some(v1::frame::Payload::DiagnosticRequest(
@@ -124,8 +120,25 @@ fn accepts_bounded_git_configuration_environment() {
 }
 
 #[test]
+fn accepts_terminal_locale_environment_without_identity_overrides() {
+    let result = process_environment_from_entries(&[
+        v1::ProcessEnvironment {
+            name: "COLORTERM".to_owned(),
+            value: "truecolor".to_owned(),
+        },
+        v1::ProcessEnvironment {
+            name: "LC_MESSAGES".to_owned(),
+            value: "en_US.UTF-8".to_owned(),
+        },
+    ])
+    .unwrap();
+    assert_eq!(result[0].0, "COLORTERM");
+    assert_eq!(result[1].0, "LC_MESSAGES");
+}
+
+#[test]
 fn exposes_explicit_terminal_cancellation_result() {
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     session.handle(hello()).unwrap();
     let response = session
         .handle(v1::Frame {
@@ -152,7 +165,7 @@ fn opens_a_root_and_reads_through_the_bounded_workspace_protocol() {
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("hello.txt"), "hello remote").unwrap();
 
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     session.handle(hello()).unwrap();
     let opened = session
         .handle(v1::Frame {
@@ -223,7 +236,7 @@ fn retryable_workspace_reads_do_not_exhaust_retained_mutation_slots() {
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("hello.txt"), "hello remote").unwrap();
 
-    let mut session = AgentSession::new();
+    let mut session = AgentSession::new().unwrap();
     session.handle(hello()).unwrap();
     session
         .handle(v1::Frame {
@@ -307,133 +320,5 @@ fn rejected_process_concurrency_is_not_persisted_to_the_journal() {
     drop(session);
 
     AgentSession::with_epoch_and_journal("epoch-2", &journal_path).unwrap();
-    let _ = fs::remove_dir_all(root);
-}
-
-#[test]
-fn restores_the_latest_process_retention_deadline() {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("bigbud-agent-retention-{suffix}"));
-    let journal_path = root.join("operations.journal");
-    let journal = OperationJournal::open(&journal_path, 1024 * 1024).unwrap();
-    let operation_id = "operation-1".to_owned();
-    for record in [
-        JournalRecord::Accepted {
-            operation_id: operation_id.clone(),
-            request_digest: vec![1],
-        },
-        JournalRecord::Retention {
-            operation_id: operation_id.clone(),
-            expires_at_unix_ms: 1,
-        },
-        JournalRecord::Started {
-            operation_id: operation_id.clone(),
-        },
-        JournalRecord::Completed {
-            operation_id: operation_id.clone(),
-            state: OperationState::Completed,
-            exit_code: Some(0),
-            error_code: None,
-        },
-        JournalRecord::Retention {
-            operation_id: operation_id.clone(),
-            expires_at_unix_ms: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64
-                + 60_000,
-        },
-    ] {
-        journal.append(&record).unwrap();
-    }
-    drop(journal);
-
-    let session = AgentSession::with_epoch_and_journal("epoch-2", &journal_path).unwrap();
-    assert_eq!(
-        session
-            .process_operations
-            .snapshot(&operation_id, Instant::now())
-            .unwrap()
-            .terminal
-            .unwrap()
-            .state,
-        OperationState::Completed
-    );
-    let _ = fs::remove_dir_all(root);
-}
-
-#[cfg(unix)]
-#[test]
-fn replays_completed_processes_from_the_user_only_journal() {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("bigbud-agent-journal-{suffix}"));
-    fs::create_dir_all(&root).unwrap();
-    let journal_path = root.join("operations.journal");
-    let workspace = root.join("workspace");
-    fs::create_dir_all(&workspace).unwrap();
-
-    let open = v1::Frame {
-        payload: Some(v1::frame::Payload::WorkspaceOpenRequest(
-            v1::WorkspaceOpenRequest {
-                request_id: "open-1".to_owned(),
-                workspace_handle: "workspace-1".to_owned(),
-                root: workspace.to_string_lossy().into_owned(),
-            },
-        )),
-    };
-    let process = v1::ProcessRequest {
-        request_id: "process-1".to_owned(),
-        operation_id: "operation-1".to_owned(),
-        request_digest: vec![1, 2, 3],
-        workspace_handle: "workspace-1".to_owned(),
-        command: "printf".to_owned(),
-        args: vec!["journal-ok".to_owned()],
-        timeout_ms: 2_000,
-        max_output_bytes: 1024,
-        environment: Vec::new(),
-        stdin: Vec::new(),
-    };
-
-    let mut first = AgentSession::with_epoch_and_journal("epoch-1", &journal_path).unwrap();
-    first.handle(hello()).unwrap();
-    first.handle(open.clone()).unwrap();
-    let first_responses = first.handle_process_request(process.clone()).unwrap();
-    assert!(
-        first_responses
-            .iter()
-            .any(|frame| matches!(frame.payload, Some(v1::frame::Payload::ProcessCompleted(_))))
-    );
-
-    let mut restarted = AgentSession::with_epoch_and_journal("epoch-2", &journal_path).unwrap();
-    restarted.handle(hello()).unwrap();
-    restarted.handle(open).unwrap();
-    let replayed = restarted
-        .handle_process_attach(v1::ProcessAttachRequest {
-            request_id: "attach-1".to_owned(),
-            operation_id: process.operation_id,
-            after_sequence: 0,
-        })
-        .unwrap();
-    assert!(
-        replayed
-            .iter()
-            .any(|frame| matches!(frame.payload, Some(v1::frame::Payload::ProcessOutput(_))))
-    );
-    assert!(replayed.iter().any(|frame| matches!(
-        frame.payload,
-        Some(v1::frame::Payload::ProcessAttachResponse(ref status))
-            if status.state == "completed" && status.next_sequence == 2
-    )));
-    assert!(
-        replayed
-            .iter()
-            .any(|frame| matches!(frame.payload, Some(v1::frame::Payload::ProcessCompleted(_))))
-    );
     let _ = fs::remove_dir_all(root);
 }

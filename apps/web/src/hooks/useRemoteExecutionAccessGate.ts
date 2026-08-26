@@ -9,6 +9,7 @@ import {
 } from "../stores/remoteAccess/remoteAccess.store";
 import {
   REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS,
+  getRemoteAgentAccessError,
   resolveRemoteExecutionCheckingStatus,
   resolveRemoteExecutionFailureStatus,
 } from "./useRemoteExecutionAccessGate.shared";
@@ -58,11 +59,8 @@ async function verifyRemoteExecutionTarget(input: {
     executionTargetId: input.executionTargetId,
     ...(input.cwd ? { cwd: input.cwd } : {}),
   });
-  if (result.remoteAgent?.status === "install-required") {
-    throw new Error(
-      "The bigbud remote agent is not installed. Edit the remote project to review and approve installation.",
-    );
-  }
+  const remoteAgentError = getRemoteAgentAccessError(result.remoteAgent);
+  if (remoteAgentError) throw new Error(remoteAgentError);
 }
 
 function sleep(ms: number): Promise<void> {

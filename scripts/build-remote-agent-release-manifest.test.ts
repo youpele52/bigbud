@@ -29,6 +29,7 @@ describe("buildRemoteAgentReleaseManifest", () => {
     const keyPair = generateKeyPairSync("ed25519");
     const manifest = buildRemoteAgentReleaseManifest({
       version: "1.2.3-beta.1",
+      buildDigest: "0123456789abcdef0123456789abcdef01234567",
       repository: "youpele52/bigbud",
       signingKeyId: "release-2026",
       signingKeyPem: keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
@@ -52,6 +53,7 @@ describe("buildRemoteAgentReleaseManifest", () => {
         Buffer.from(
           [
             manifest.artifacts[0]!.version,
+            manifest.artifacts[0]!.buildDigest,
             manifest.artifacts[0]!.protocolMajor,
             manifest.artifacts[0]!.protocolMinor,
             manifest.artifacts[0]!.targetTriple,
@@ -94,6 +96,7 @@ describe("buildRemoteAgentReleaseManifest", () => {
     const keyPair = generateKeyPairSync("ed25519");
     const manifest = buildRemoteAgentReleaseManifest({
       version: "1.2.3",
+      buildDigest: "0123456789abcdef0123456789abcdef01234567",
       repository: "youpele52/bigbud",
       signingKeyId: "release-2026",
       signingKeyPem: keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),

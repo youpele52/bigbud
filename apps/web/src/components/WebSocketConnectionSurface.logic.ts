@@ -49,15 +49,22 @@ export function shouldContinueDesktopStartupReconnect(
   return startup?.status === "starting" || startup?.status === "upgrading";
 }
 
-export function shouldReconnectAfterTimedOutDesktopStartup(
+export function shouldReconnectAfterDesktopStartupTransition(
   isDesktop: boolean,
   previous: DesktopBackendStartupState | null,
   current: DesktopBackendStartupState | null,
 ): boolean {
-  return (
-    isDesktop &&
-    previous?.status === "timedOut" &&
-    current?.status === "ready" &&
+  if (!isDesktop || !previous || !current) return false;
+  if (
+    previous.status === "timedOut" &&
+    current.status === "ready" &&
     previous.generation === current.generation
+  ) {
+    return true;
+  }
+  return (
+    previous.status === "failed" &&
+    (current.status === "starting" || current.status === "upgrading") &&
+    current.generation > previous.generation
   );
 }

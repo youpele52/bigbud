@@ -22,6 +22,7 @@ function installSource() {
       artifacts: [
         {
           version: "1.2.3",
+          buildDigest: "build-1.2.3",
           protocolMajor: 1,
           protocolMinor: 0,
           targetTriple: "x86_64-unknown-linux-gnu",

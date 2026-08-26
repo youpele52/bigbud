@@ -113,9 +113,7 @@ impl AgentSession {
         self.process_operations
             .start(&request.operation_id, now)
             .map_err(operation_error)?;
-        let max_output_bytes = usize::try_from(request.max_output_bytes)
-            .unwrap_or(8 * 1024 * 1024)
-            .min(8 * 1024 * 1024);
+        let max_output_bytes = request.max_output_bytes.min(8 * 1024 * 1024) as usize;
         let timeout = Duration::from_millis(request.timeout_ms.min(600_000));
         let cancellation = Arc::new(AtomicBool::new(false));
         self.process_cancellations

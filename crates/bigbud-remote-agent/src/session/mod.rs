@@ -7,6 +7,7 @@ use bigbud_protocol::{PROTOCOL_MAJOR, PROTOCOL_MINOR, v1};
 use thiserror::Error;
 
 use crate::operations;
+use crate::operations::journal::MAX_OPERATION_JOURNAL_BYTES;
 use crate::operations::{
     AcceptResult, JournalRecord, OperationError, OperationJournal, OperationRegistry,
     OperationState, OutputStream,
@@ -32,6 +33,9 @@ mod journal_restore_tests;
 #[cfg(test)]
 #[path = "pty_handlers.tests.rs"]
 mod pty_handler_tests;
+#[cfg(test)]
+#[path = "test_helpers.rs"]
+mod test_helpers;
 #[cfg(test)]
 mod tests;
 
@@ -81,6 +85,8 @@ pub enum SessionError {
     ProcessJournal(String),
     #[error("PTY operation failed: {0}")]
     Pty(String),
+    #[error("system clock is before Unix epoch")]
+    ClockBeforeUnixEpoch(#[source] std::time::SystemTimeError),
     #[error("unexpected message after handshake")]
     UnexpectedMessage,
 }
@@ -130,13 +136,9 @@ pub struct PreparedProcess {
 pub use workspace_watch_handlers::{PreparedWorkspaceWatch, workspace_watch_event_frame};
 
 impl AgentSession {
-    pub fn new() -> Self {
-        let epoch = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock is before Unix epoch")
-            .as_millis()
-            .to_string();
-        Self::with_epoch(epoch)
+    pub fn new() -> Result<Self, SessionError> {
+        let epoch = session_epoch(SystemTime::now())?;
+        Ok(Self::with_epoch(epoch))
     }
 
     pub fn with_epoch(epoch: impl Into<String>) -> Self {
@@ -147,7 +149,7 @@ impl AgentSession {
         epoch: impl Into<String>,
         journal_path: impl AsRef<std::path::Path>,
     ) -> Result<Self, SessionError> {
-        let journal = OperationJournal::open(journal_path, 64 * 1024 * 1024)
+        let journal = OperationJournal::open(journal_path, MAX_OPERATION_JOURNAL_BYTES)
             .map_err(|error| SessionError::ProcessJournal(error.to_string()))?;
         let mut session = Self::with_epoch_and_journal_inner(epoch.into(), Some(journal));
         let now = Instant::now();
@@ -254,10 +256,8 @@ impl AgentSession {
             payload: Some(v1::frame::Payload::AgentHello(v1::AgentHello {
                 protocol_major: PROTOCOL_MAJOR,
                 protocol_minor: PROTOCOL_MINOR,
-                agent_version: env!("CARGO_PKG_VERSION").to_owned(),
-                build_digest: option_env!("BIGBUD_AGENT_BUILD_DIGEST")
-                    .unwrap_or(env!("CARGO_PKG_VERSION"))
-                    .to_owned(),
+                agent_version: crate::identity::build_version().to_owned(),
+                build_digest: crate::identity::build_digest().to_owned(),
                 os: std::env::consts::OS.to_owned(),
                 architecture: std::env::consts::ARCH.to_owned(),
                 agent_instance_id: self.agent_instance_id.clone(),
@@ -375,4 +375,10 @@ impl AgentSession {
         }
         Ok(false)
     }
+}
+
+fn session_epoch(now: SystemTime) -> Result<String, SessionError> {
+    now.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().to_string())
+        .map_err(SessionError::ClockBeforeUnixEpoch)
 }
