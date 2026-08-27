@@ -282,7 +282,7 @@ export function RightPanelTabs({
               <button
                 type="button"
                 draggable={false}
-                className="flex min-w-0 items-center justify-center gap-1.5 px-1.5"
+                className="absolute inset-0 z-0 flex min-w-0 items-center justify-center gap-1.5 rounded-t-xl px-1.5 pr-7"
                 title={label}
                 onClick={() => {
                   setActiveTab(tabId);
@@ -302,7 +302,7 @@ export function RightPanelTabs({
                 )}
                 <span className="truncate text-xs font-medium">{label}</span>
               </button>
-              <span className="flex items-center justify-center">
+              <span className="relative z-10 col-start-3 row-start-1 flex items-center justify-center">
                 <button
                   type="button"
                   draggable={false}
