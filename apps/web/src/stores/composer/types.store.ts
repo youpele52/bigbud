@@ -253,6 +253,13 @@ export interface ComposerDraftStoreState {
   ) => void;
   clearProjectDraftThreadId: (projectId: ProjectId) => void;
   clearProjectDraftThreadById: (projectId: ProjectId, threadId: ThreadId) => void;
+  reconcileCanonicalThread: (threadId: ThreadId) => void;
+  replaceCollidingDraftThread: (input: {
+    threadId: ThreadId;
+    nextThreadId: ThreadId;
+    projectId: ProjectId;
+    createdAt: string;
+  }) => void;
   clearDraftThread: (threadId: ThreadId) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadId: ThreadId, prompt: string) => void;

@@ -11,6 +11,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
+import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
+import { routeOrchestrationDeliveryBatch } from "./-__root.delivery-routing";
 import {
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
@@ -29,6 +31,7 @@ import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
+import { createAsyncOperationQueue } from "./-__root.recovery.serial";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
@@ -197,6 +200,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     disposedRef.current = false;
     const eventRecovery = createEventRouterRecovery({
       api,
+      ownershipScope: ownsThread ? "compact" : "main",
       queryClient,
       clearAllThinkingDeltas,
       reconcileThinkingActivities,
@@ -209,6 +213,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       removeOrphanedTerminalStates,
       applyTerminalEvent: (event) => applyTerminalEvents([event]),
     });
+    const deliveryApplicationQueue = createAsyncOperationQueue();
 
     const pendingTerminalEvents: Array<import("@bigbud/contracts").TerminalEvent> = [];
     let flushPendingTerminalEventsScheduled = false;
@@ -243,39 +248,38 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       await eventRecovery.runBoundedRecovery("replay-failed", selectedThreadId, () => disposed);
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
-      (event) => {
-        const action = eventRecovery.classifyDomainEvent(event.sequence);
-        if (action === "apply") {
-          eventRecovery.pushPendingDomainEvent(event);
-          if (eventRecovery.shouldFlushImmediately(event)) {
-            eventRecovery.flushPendingDomainEvents(disposed);
-          } else {
-            eventRecovery.schedulePendingDomainEventFlush(() => disposed);
-          }
-          return;
-        }
-        if (action === "recover") {
-          eventRecovery.flushPendingDomainEvents(disposed);
-          void eventRecovery.runReplayRecovery(
-            "sequence-gap",
-            () => disposed,
-            () => {
-              void fallbackToBoundedRecovery();
-            },
-          );
-        }
-      },
+      (item) =>
+        deliveryApplicationQueue
+          .enqueue(async () => {
+            if (disposed) return;
+            if (item.type === "lifecycle") {
+              setOrchestrationDeliveryLifecycle(item);
+              if (item.state === "fallback" && item.reasonCode === "replay_gap") {
+                await fallbackToBoundedRecovery();
+              }
+              return;
+            }
+            await routeOrchestrationDeliveryBatch({
+              batch: item,
+              classify: eventRecovery.classifyDomainEvent,
+              recover: fallbackToBoundedRecovery,
+              apply: (events) =>
+                eventRecovery.applyEventBatch(events, { disposed: () => disposed }),
+              getAppliedSequence: eventRecovery.getAppliedSequence,
+              acknowledge: api.orchestration.acknowledgeDelivery,
+            });
+          })
+          .catch((error: unknown) => {
+            console.error("[orchestration-recovery] Event application failed.", { error });
+            void fallbackToBoundedRecovery().catch((recoveryError: unknown) => {
+              console.error("[orchestration-recovery] Bounded recovery failed.", {
+                error: recoveryError,
+              });
+            });
+            throw error;
+          }),
       {
-        onResubscribe: () => {
-          eventRecovery.flushPendingDomainEvents(disposed);
-          void eventRecovery.runReplayRecovery(
-            "resubscribe",
-            () => disposed,
-            () => {
-              void fallbackToBoundedRecovery();
-            },
-          );
-        },
+        onResubscribe: () => undefined,
       },
     );
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
@@ -290,6 +294,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       disposed = true;
       disposedRef.current = true;
       eventRecovery.cancel();
+      setOrchestrationDeliveryLifecycle(null);
       flushPendingTerminalEventsScheduled = false;
       pendingTerminalEvents.length = 0;
       unsubDomainEvent();

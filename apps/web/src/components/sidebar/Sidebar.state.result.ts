@@ -4,7 +4,7 @@ import type { Project } from "../../models/types";
 import type { ThreadId } from "@bigbud/contracts";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { SidebarProjectAddActionsOutput } from "./Sidebar.projectAddActions";
-import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions";
+import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions.types";
 import type { SidebarRenderedProjectsOutput } from "./Sidebar.renderedProjects";
 import type { SidebarThreadActionsOutput } from "./Sidebar.threadActions.types";
 import type {

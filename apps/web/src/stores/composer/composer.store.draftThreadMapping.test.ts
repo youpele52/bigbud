@@ -122,7 +122,19 @@ describe("composerDraftStore project draft thread mapping", () => {
 
     expect(useComposerDraftStore.getState().getDraftThreadByProjectId(projectId)).toBeNull();
     expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
-    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.prompt).toBe("promote me");
+  });
+
+  it("clears a mapping-only promoted draft poison", () => {
+    useComposerDraftStore.setState((state) => ({
+      ...state,
+      draftThreadsByThreadId: {},
+      projectDraftThreadIdByProjectId: { [projectId]: threadId },
+    }));
+
+    clearPromotedDraftThread(threadId);
+
+    expect(useComposerDraftStore.getState().projectDraftThreadIdByProjectId).toEqual({});
   });
 
   it("does not clear composer drafts for existing server threads during promotion cleanup", () => {
@@ -145,13 +157,37 @@ describe("composerDraftStore project draft thread mapping", () => {
     clearPromotedDraftThreads([threadId]);
 
     expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
-    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.prompt).toBe("promote me");
     expect(
       useComposerDraftStore.getState().getDraftThreadByProjectId(otherProjectId)?.threadId,
     ).toBe(otherThreadId);
     expect(useComposerDraftStore.getState().draftsByThreadId[otherThreadId]?.prompt).toBe(
       "keep me",
     );
+  });
+
+  it("atomically replaces a canonical collision and preserves composer content", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectId, threadId, { branch: "main" });
+    store.setProjectDraftThreadId(otherProjectId, threadId);
+    store.setPrompt(threadId, "recover me");
+
+    store.replaceCollidingDraftThread({
+      threadId,
+      nextThreadId: otherThreadId,
+      projectId,
+      createdAt: "2026-08-26T20:00:00.000Z",
+    });
+
+    const state = useComposerDraftStore.getState();
+    expect(state.getDraftThread(threadId)).toBeNull();
+    expect(state.draftsByThreadId[threadId]).toBeUndefined();
+    expect(state.getDraftThreadByProjectId(otherProjectId)).toBeNull();
+    expect(state.getDraftThreadByProjectId(projectId)).toMatchObject({
+      threadId: otherThreadId,
+      createdAt: "2026-08-26T20:00:00.000Z",
+    });
+    expect(state.draftsByThreadId[otherThreadId]?.prompt).toBe("recover me");
   });
 
   it("keeps existing server-thread composer drafts during iterable promotion cleanup", () => {

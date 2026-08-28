@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { WsConnectionStatus } from "../rpc/wsConnectionState";
 import {
+  syncDeliveryRecoveryToast,
   shouldAutoReconnect,
   shouldRestartStalledReconnect,
 } from "./WebSocketConnectionSurface.logic";
@@ -28,6 +29,62 @@ function makeStatus(overrides: Partial<WsConnectionStatus> = {}): WsConnectionSt
 }
 
 describe("WebSocketConnectionSurface.logic", () => {
+  it("keeps one recovery toast until a reconnect is proven live", () => {
+    const manager = {
+      add: vi.fn(() => "delivery-toast"),
+      close: vi.fn(),
+      update: vi.fn(),
+    };
+    const delivery = {
+      type: "lifecycle" as const,
+      route: "supervisor" as const,
+      consumerId: "consumer-1",
+      consumerGeneration: 1,
+      state: "reconnecting" as const,
+      acknowledgedSequence: 4,
+      restartAttempt: 1,
+    };
+
+    const toastId = syncDeliveryRecoveryToast(manager, null, delivery);
+    const repeatedToastId = syncDeliveryRecoveryToast(manager, toastId, {
+      ...delivery,
+      restartAttempt: 2,
+    });
+    const attachingToastId = syncDeliveryRecoveryToast(manager, repeatedToastId, {
+      ...delivery,
+      state: "connecting",
+    });
+    const degradedAgainToastId = syncDeliveryRecoveryToast(manager, attachingToastId, {
+      ...delivery,
+      state: "fallback",
+    });
+    syncDeliveryRecoveryToast(manager, degradedAgainToastId, { ...delivery, state: "live" });
+
+    expect(manager.add).toHaveBeenCalledOnce();
+    expect(manager.update).toHaveBeenCalledTimes(3);
+    expect(manager.close).toHaveBeenCalledWith("delivery-toast");
+  });
+
+  it("does not show recovery UI for an initial connection", () => {
+    const manager = {
+      add: vi.fn(() => "delivery-toast"),
+      close: vi.fn(),
+      update: vi.fn(),
+    };
+
+    expect(
+      syncDeliveryRecoveryToast(manager, null, {
+        type: "lifecycle",
+        route: "supervisor",
+        consumerId: "consumer-1",
+        consumerGeneration: 1,
+        state: "connecting",
+        acknowledgedSequence: 0,
+        restartAttempt: 0,
+      }),
+    ).toBeNull();
+    expect(manager.add).not.toHaveBeenCalled();
+  });
   it("retries on browser online after an initial connection failure", () => {
     expect(
       shouldAutoReconnect(

@@ -12,10 +12,13 @@ import {
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
+import { runWsHeartbeatProbe, WS_HEARTBEAT_INTERVAL_MS } from "../rpc/wsHeartbeat";
+import { useOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
 import {
   shouldAutoReconnect,
   shouldShowDesktopStartupBlockingState,
   shouldRestartStalledReconnect,
+  syncDeliveryRecoveryToast,
   type WsAutoReconnectTrigger,
 } from "./WebSocketConnectionSurface.logic";
 import {
@@ -68,12 +71,23 @@ function describeRecoveredToast(
 
 export function WebSocketConnectionCoordinator() {
   const status = useWsConnectionStatus();
+  const delivery = useOrchestrationDeliveryLifecycle();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastForcedReconnectAtRef = useRef(0);
   const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
+  const deliveryToastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const toastResetTimerRef = useRef<number | null>(null);
   const previousUiStateRef = useRef<WsConnectionUiState>(getWsConnectionUiState(status));
   const previousDisconnectedAtRef = useRef<string | null>(status.disconnectedAt);
+  const heartbeatInFlightRef = useRef(false);
+
+  useEffect(() => {
+    deliveryToastIdRef.current = syncDeliveryRecoveryToast(
+      toastManager,
+      deliveryToastIdRef.current,
+      delivery,
+    );
+  }, [delivery]);
 
   const runReconnect = useEffectEvent((showFailureToast: boolean) => {
     if (toastResetTimerRef.current !== null) {
@@ -140,6 +154,22 @@ export function WebSocketConnectionCoordinator() {
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
+
+  useEffect(() => {
+    if (status.phase !== "connected") return;
+    const intervalId = window.setInterval(() => {
+      if (heartbeatInFlightRef.current || getWsConnectionStatus().phase !== "connected") return;
+      heartbeatInFlightRef.current = true;
+      void runWsHeartbeatProbe(() => getWsRpcClient().server.ping())
+        .then((healthy) => {
+          if (!healthy && getWsConnectionStatus().phase === "connected") runReconnect(false);
+        })
+        .finally(() => {
+          heartbeatInFlightRef.current = false;
+        });
+    }, WS_HEARTBEAT_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [status.phase]);
 
   useEffect(() => {
     if (status.reconnectPhase !== "waiting" || status.nextRetryAt === null) {
@@ -284,6 +314,7 @@ export function WebSocketConnectionCoordinator() {
 
   useEffect(() => {
     return () => {
+      if (deliveryToastIdRef.current) toastManager.close(deliveryToastIdRef.current);
       if (toastResetTimerRef.current !== null) {
         window.clearTimeout(toastResetTimerRef.current);
       }

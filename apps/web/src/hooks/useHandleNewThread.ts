@@ -21,6 +21,15 @@ import { useUiStateStore } from "../stores/ui";
 import type { Project } from "../models/types";
 import { readNativeApi } from "../rpc/nativeApi";
 import { toastManager } from "../components/ui/toast";
+import {
+  createOwnershipReplacementThreadId,
+  resolveProjectDraftOwnership,
+} from "./useHandleNewThread.ownership";
+import { registerDraftOwnership } from "../stores/ownership/ownershipLedger";
+import {
+  initializeOwnershipFromComposer,
+  replaceCanonicalOwnershipCollision,
+} from "../stores/ownership/ownershipLedger.reconcile";
 
 const pendingProjectLoads = new Map<ProjectId, Promise<Project | undefined>>();
 
@@ -158,7 +167,7 @@ export function useHandleNewThread() {
       const getProject = () =>
         useStore.getState().projects.find((projectEntry) => projectEntry.id === projectId);
       const loadedProject = getProject();
-      const api = loadedProject ? null : readNativeApi();
+      const api = readNativeApi();
       if (!loadedProject && !api) {
         toastManager.add({
           type: "error",
@@ -182,6 +191,33 @@ export function useHandleNewThread() {
       const latestActiveDraftThread: DraftThreadState | null = routeThreadId
         ? getDraftThread(routeThreadId)
         : null;
+      const resolveDraftOwnership = (draft: DraftThreadState & { threadId: ThreadId }) =>
+        resolveProjectDraftOwnership({
+          api: api ?? null,
+          draft,
+          projectId,
+          createThreadId: createOwnershipReplacementThreadId,
+          now: () => new Date().toISOString(),
+          replaceCollidingDraftThread: async (replacement) => {
+            await replaceCanonicalOwnershipCollision({
+              ownership: replacement.ownership,
+              createThreadId: () => replacement.nextThreadId,
+              scope: "main",
+            });
+          },
+        });
+      const persistDraftOwnership = async (threadId: ThreadId) => {
+        const draft = useComposerDraftStore.getState().getDraftThread(threadId);
+        if (!draft) throw new Error("Draft ownership is unavailable.");
+        await registerDraftOwnership({ scope: "main", threadId, draft, bindProject: true });
+      };
+      const showOwnershipUnavailable = (reason: string) => {
+        toastManager.add({
+          type: "info",
+          title: "Checking your saved draft",
+          description: `${reason} Your draft is safe; reconnect and try New Thread again.`,
+        });
+      };
       const ensureProjectRemoteAccess = async () => {
         const project = await loadProject.catch((error: unknown) => {
           toastManager.add({
@@ -216,8 +252,15 @@ export function useHandleNewThread() {
           if (!(await ensureProjectRemoteAccess())) {
             return;
           }
+          await initializeOwnershipFromComposer({ scope: "main" });
+          const ownership = await resolveDraftOwnership(storedDraftThread);
+          if (ownership.status === "unavailable") {
+            showOwnershipUnavailable(ownership.reason);
+            return;
+          }
+          const targetThreadId = ownership.threadId;
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-            setDraftThreadContext(storedDraftThread.threadId, {
+            setDraftThreadContext(targetThreadId, {
               ...(hasBranchOption ? { branch: normalizedOptions?.branch ?? null } : {}),
               ...(hasWorktreePathOption
                 ? { worktreePath: normalizedOptions?.worktreePath ?? null }
@@ -225,13 +268,14 @@ export function useHandleNewThread() {
               ...(hasEnvModeOption ? { envMode: normalizedOptions?.envMode } : {}),
             });
           }
-          setProjectDraftThreadId(projectId, storedDraftThread.threadId);
-          if (routeThreadId === storedDraftThread.threadId) {
+          setProjectDraftThreadId(projectId, targetThreadId);
+          await persistDraftOwnership(targetThreadId);
+          if (routeThreadId === targetThreadId) {
             return;
           }
           await navigate({
             to: "/$threadId",
-            params: { threadId: storedDraftThread.threadId },
+            params: { threadId: targetThreadId },
           });
         })();
       }
@@ -246,9 +290,20 @@ export function useHandleNewThread() {
           if (!(await ensureProjectRemoteAccess())) {
             return;
           }
+          await initializeOwnershipFromComposer({ scope: "main" });
+
+          const ownership = await resolveDraftOwnership({
+            threadId: routeThreadId,
+            ...latestActiveDraftThread,
+          });
+          if (ownership.status === "unavailable") {
+            showOwnershipUnavailable(ownership.reason);
+            return;
+          }
+          const targetThreadId = ownership.threadId;
 
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-            setDraftThreadContext(routeThreadId, {
+            setDraftThreadContext(targetThreadId, {
               ...(hasBranchOption ? { branch: normalizedOptions?.branch ?? null } : {}),
               ...(hasWorktreePathOption
                 ? { worktreePath: normalizedOptions?.worktreePath ?? null }
@@ -256,7 +311,11 @@ export function useHandleNewThread() {
               ...(hasEnvModeOption ? { envMode: normalizedOptions?.envMode } : {}),
             });
           }
-          setProjectDraftThreadId(projectId, routeThreadId);
+          setProjectDraftThreadId(projectId, targetThreadId);
+          await persistDraftOwnership(targetThreadId);
+          if (routeThreadId !== targetThreadId) {
+            await navigate({ to: "/$threadId", params: { threadId: targetThreadId } });
+          }
         })();
       }
 
@@ -266,13 +325,20 @@ export function useHandleNewThread() {
         if (!(await ensureProjectRemoteAccess())) {
           return;
         }
+        await initializeOwnershipFromComposer({ scope: "main" });
         const concurrentlyCreatedDraft = getDraftThreadByProjectId(projectId);
         if (concurrentlyCreatedDraft) {
-          setProjectDraftThreadId(projectId, concurrentlyCreatedDraft.threadId);
-          if (routeThreadId !== concurrentlyCreatedDraft.threadId) {
+          const ownership = await resolveDraftOwnership(concurrentlyCreatedDraft);
+          if (ownership.status === "unavailable") {
+            showOwnershipUnavailable(ownership.reason);
+            return;
+          }
+          setProjectDraftThreadId(projectId, ownership.threadId);
+          await persistDraftOwnership(ownership.threadId);
+          if (routeThreadId !== ownership.threadId) {
             await navigate({
               to: "/$threadId",
-              params: { threadId: concurrentlyCreatedDraft.threadId },
+              params: { threadId: ownership.threadId },
             });
           }
           return;
@@ -285,6 +351,7 @@ export function useHandleNewThread() {
           envMode: normalizedOptions?.envMode ?? "local",
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
+        await persistDraftOwnership(threadId);
         applyStickyState(threadId);
 
         await navigate({

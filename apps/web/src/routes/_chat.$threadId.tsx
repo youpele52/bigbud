@@ -1,10 +1,14 @@
-import { ThreadId } from "@bigbud/contracts";
+import { ThreadId, type GetThreadOwnershipResult } from "@bigbud/contracts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import ChatView from "../components/chat/view/ChatView";
 import { BigbudLogo } from "../components/sidebar/SidebarProjectItem";
-import { useComposerDraftStore } from "../stores/composer";
+import {
+  clearPromotedDraftThread,
+  replaceCollidingDraftThreadLocally,
+  useComposerDraftStore,
+} from "../stores/composer";
 import { closeDiffRouteSearch, type DiffRouteSearch, parseDiffRouteSearch } from "../utils/diff";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
@@ -14,6 +18,8 @@ import { registerDiffPanelCloseAction } from "../stores/rightPanel/rightPanel.co
 import { useRightPanelTabsStore } from "../stores/rightPanel/rightPanelTabs.store";
 import { readNativeApi } from "../rpc/nativeApi";
 import { hydrateSelectedThread, runBoundedBootstrap } from "./-__root.bounded-bootstrap";
+import { toastManager } from "../components/ui/toast";
+import { createOwnershipReplacementThreadId } from "../hooks/useHandleNewThread.ownership";
 
 export function getMissingThreadRouteAction(input: {
   bootstrapComplete: boolean;
@@ -27,6 +33,19 @@ export function getMissingThreadRouteAction(input: {
     return "bootstrap";
   }
   return input.hydrationStatus === "failed" ? "redirect" : null;
+}
+
+export function isConfirmedLocalDraftThread(
+  draftThreadExists: boolean,
+  ownership: GetThreadOwnershipResult | null,
+): boolean {
+  return draftThreadExists && ownership?.status === "absent";
+}
+
+export function getCanonicalCollisionNavigation(ownership: GetThreadOwnershipResult) {
+  return ownership.status === "archived"
+    ? ({ to: "/settings/archived", search: { threadId: ownership.threadId } } as const)
+    : ({ to: "/" } as const);
 }
 
 export function ChatThreadRouteView() {
@@ -45,11 +64,15 @@ export function ChatThreadRouteView() {
   const draftThreadExists = useComposerDraftStore((store) =>
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
-  const routeThreadExists = routeThread ? isVisibleThread(routeThread) : draftThreadExists;
+  const [draftOwnership, setDraftOwnership] = useState<GetThreadOwnershipResult | null>(null);
+  const resolvingDraftOwnership = draftThreadExists && routeThread === undefined;
+  const routeThreadExists = routeThread
+    ? isVisibleThread(routeThread)
+    : isConfirmedLocalDraftThread(draftThreadExists, draftOwnership);
   const missingThreadRouteAction = getMissingThreadRouteAction({
     bootstrapComplete,
     routeThreadExists,
-    hydrationStatus,
+    hydrationStatus: resolvingDraftOwnership ? "loading" : hydrationStatus,
   });
   const diffOpen = search.diff === "1";
   usePageTitle(threadTitle);
@@ -74,6 +97,82 @@ export function ChatThreadRouteView() {
   }, [diffOpen]);
 
   useEffect(() => registerDiffPanelCloseAction(closeDiff), [closeDiff]);
+
+  useEffect(() => {
+    if (!bootstrapComplete || !resolvingDraftOwnership) {
+      return;
+    }
+    const api = readNativeApi();
+    if (!api) {
+      setDraftOwnership({
+        threadId,
+        status: "unavailable",
+        ownership: "unconfirmed",
+        reason: "bigbud is not connected to the server.",
+      });
+      return;
+    }
+
+    let disposed = false;
+    void (async () => {
+      try {
+        const ownership = await api.orchestration.resolveThreadOwnership({ threadId });
+        if (disposed) return;
+        setDraftOwnership(ownership);
+        if (ownership.status === "absent" || ownership.status === "unavailable") return;
+        if (ownership.status === "active") {
+          clearPromotedDraftThread(threadId);
+          await hydrateSelectedThread({ api, threadId });
+          return;
+        }
+
+        const draft = useComposerDraftStore.getState().getDraftThread(threadId);
+        if (draft) {
+          replaceCollidingDraftThreadLocally({
+            threadId,
+            nextThreadId: await createOwnershipReplacementThreadId(ownership),
+            projectId: draft.projectId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        if (disposed) return;
+        toastManager.add({
+          type: "info",
+          title: ownership.status === "archived" ? "Thread is archived" : "Thread is unavailable",
+          description:
+            ownership.status === "archived"
+              ? "This saved thread is owned by the server and cannot be created again."
+              : ownership.status === "deleted"
+                ? "This thread was deleted and its saved draft was moved to a fresh chat."
+                : "This thread is being removed and cannot be reused as a new draft.",
+        });
+        const collisionNavigation = getCanonicalCollisionNavigation(ownership);
+        if (collisionNavigation.to === "/settings/archived") {
+          await hydrateSelectedThread({ api, threadId });
+          if (disposed) return;
+          await navigate({
+            to: "/settings/archived",
+            search: collisionNavigation.search,
+            replace: true,
+          });
+          return;
+        }
+        await navigate({ to: "/", replace: true });
+      } catch (error) {
+        if (disposed) return;
+        setDraftOwnership({
+          threadId,
+          status: "unavailable",
+          ownership: "unconfirmed",
+          reason:
+            error instanceof Error ? error.message : "Canonical ownership could not be checked.",
+        });
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [bootstrapComplete, navigate, resolvingDraftOwnership, threadId]);
 
   useEffect(() => {
     const api = readNativeApi();
@@ -108,7 +207,13 @@ export function ChatThreadRouteView() {
     return (
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
         <div className="flex h-full items-center justify-center">
-          <BigbudLogo className="h-7 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />
+          {draftOwnership?.status === "unavailable" ? (
+            <p className="max-w-sm px-6 text-center text-sm text-muted-foreground">
+              Your draft is safe. Reconnect to verify this thread before sending.
+            </p>
+          ) : (
+            <BigbudLogo className="h-7 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />
+          )}
         </div>
       </SidebarInset>
     );

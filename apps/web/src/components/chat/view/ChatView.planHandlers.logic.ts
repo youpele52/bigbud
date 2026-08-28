@@ -9,6 +9,7 @@ import { truncate } from "@bigbud/shared/String";
 import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { buildExplicitExecutionTargets } from "../../../lib/providerExecutionTargets";
 import {
@@ -268,21 +269,20 @@ export function usePlanHandlers({
       resetLocalDispatch();
     };
 
-    await api.orchestration
-      .dispatchCommand({
-        type: "thread.create",
-        commandId: newCommandId(),
-        threadId: nextThreadId,
-        projectId: activeProject.id,
-        title: nextThreadTitle,
-        ...executionTargets,
-        modelSelection: nextThreadModelSelection,
-        runtimeMode,
-        interactionMode: "default",
-        branch: activeThread.branch,
-        worktreePath: activeThread.worktreePath,
-        createdAt,
-      })
+    await dispatchCommandWithOutcomeRecovery(api, {
+      type: "thread.create",
+      commandId: newCommandId(),
+      threadId: nextThreadId,
+      projectId: activeProject.id,
+      title: nextThreadTitle,
+      ...executionTargets,
+      modelSelection: nextThreadModelSelection,
+      runtimeMode,
+      interactionMode: "default",
+      branch: activeThread.branch,
+      worktreePath: activeThread.worktreePath,
+      createdAt,
+    })
       .then(() => {
         return api.orchestration.dispatchCommand({
           type: "thread.turn.start",
@@ -317,13 +317,11 @@ export function usePlanHandlers({
         });
       })
       .catch(async (err) => {
-        await api.orchestration
-          .dispatchCommand({
-            type: "thread.delete",
-            commandId: newCommandId(),
-            threadId: nextThreadId,
-          })
-          .catch(() => undefined);
+        await dispatchCommandWithOutcomeRecovery(api, {
+          type: "thread.delete",
+          commandId: newCommandId(),
+          threadId: nextThreadId,
+        }).catch(() => undefined);
         toastManager.add({
           type: "error",
           title: "Could not start implementation thread",

@@ -15,6 +15,75 @@ import {
 } from "./wsNativeApi.test.helpers";
 
 describe("wsNativeApi — orchestration", () => {
+  it("recovers the verified cursor across renderer reload before replaying the next ordered events", async () => {
+    const { createWsNativeApi, __resetWsNativeApiForTests } = await import("./wsNativeApi");
+    const consumerId = "consumer-reload";
+    const storage = new Map<string, string>([
+      ["bigbud:orchestration-delivery-consumer", consumerId],
+    ]);
+    const browserStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+      clear: () => storage.clear(),
+      key: (index: number) => Array.from(storage.keys())[index] ?? null,
+      get length() {
+        return storage.size;
+      },
+    } as Storage;
+    Object.defineProperty(window, "sessionStorage", { configurable: true, value: browserStorage });
+    Object.defineProperty(window, "localStorage", { configurable: true, value: browserStorage });
+
+    rpcClientMock.orchestration.acknowledgeDelivery.mockResolvedValue({
+      accepted: true,
+      fenced: false,
+      acknowledgedSequence: 10,
+    });
+    const firstApi = createWsNativeApi();
+    await firstApi.orchestration.acknowledgeDelivery({
+      batchId: "batch-10",
+      consumerId,
+      consumerGeneration: 1,
+      receivedThroughSequence: 10,
+      appliedThroughSequence: 10,
+      applicationDurationMs: 3,
+    });
+    expect(storage.get("bigbud:orchestration-delivery-cursor:consumer-reload")).toBe("10");
+
+    __resetWsNativeApiForTests();
+    orchestrationEventListeners.clear();
+    const reloadedApi = createWsNativeApi();
+    const deliveredSequences: number[] = [];
+    reloadedApi.orchestration.onDomainEvent((batch) => {
+      if (batch.type === "batch") {
+        deliveredSequences.push(...batch.events.map((event) => event.sequence));
+      }
+    });
+
+    const subscriptionInput = rpcClientMock.orchestration.onDomainEvent.mock.calls.at(-1)?.[0] as
+      | (() => { consumerId: string; appliedSequence: number })
+      | undefined;
+    expect(subscriptionInput?.()).toEqual({ consumerId, appliedSequence: 10 });
+
+    const replayEvents = [11, 12].map((sequence) => ({ sequence })) as never;
+    emitEvent(orchestrationEventListeners, {
+      type: "batch",
+      route: "direct-unmanaged",
+      consumerId,
+      consumerGeneration: 2,
+      serverEpoch: "epoch-1",
+      subscriptionGeneration: 2,
+      batchId: "batch-replay",
+      events: replayEvents,
+    });
+    expect(deliveredSequences).toEqual([11, 12]);
+    expect(new Set(deliveredSequences).size).toBe(deliveredSequences.length);
+  });
+
   it("forwards terminal and orchestration stream events", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
 
@@ -58,10 +127,20 @@ describe("wsNativeApi — orchestration", () => {
         updatedAt: "2026-02-24T00:00:00.000Z",
       },
     } satisfies Extract<OrchestrationEvent, { type: "project.created" }>;
-    emitEvent(orchestrationEventListeners, orchestrationEvent);
+    const deliveryBatch = {
+      type: "batch",
+      route: "direct-unmanaged",
+      consumerId: "consumer-1",
+      consumerGeneration: 1,
+      serverEpoch: "epoch-1",
+      subscriptionGeneration: 1,
+      batchId: "batch-1",
+      events: [orchestrationEvent],
+    } as const;
+    emitEvent(orchestrationEventListeners, deliveryBatch);
 
     expect(onTerminalEvent).toHaveBeenCalledWith(terminalEvent);
-    expect(onDomainEvent).toHaveBeenCalledWith(orchestrationEvent);
+    expect(onDomainEvent).toHaveBeenCalledWith(deliveryBatch);
   });
 
   it("sends orchestration dispatch commands as the direct RPC payload", async () => {
@@ -151,6 +230,59 @@ describe("wsNativeApi — orchestration", () => {
     await expect(createWsNativeApi().orchestration.replayEvents(4)).resolves.toEqual(replay);
     expect(rpcClientMock.orchestration.replayEvents).toHaveBeenCalledWith({
       fromSequenceExclusive: 4,
+    });
+  });
+
+  it("returns authoritative thread ownership from the orchestration RPC", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-owned");
+    rpcClientMock.orchestration.getThreadOwnership.mockResolvedValue({
+      threadId,
+      projectId: ProjectId.makeUnsafe("project-1"),
+      status: "archived",
+      serverEpoch: "server-1",
+      canonicalRevision: 12,
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    await expect(
+      createWsNativeApi().orchestration.resolveThreadOwnership({ threadId }),
+    ).resolves.toMatchObject({ status: "archived", canonicalRevision: 12 });
+  });
+
+  it("returns durable command outcomes from the orchestration RPC", async () => {
+    const commandId = CommandId.makeUnsafe("command-outcome");
+    rpcClientMock.orchestration.getCommandOutcome.mockResolvedValue({
+      commandId,
+      status: "unknown",
+      serverEpoch: "server-1",
+      canonicalRevision: 12,
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    await expect(
+      createWsNativeApi().orchestration.getCommandOutcome({ commandId }),
+    ).resolves.toEqual({
+      commandId,
+      status: "unknown",
+      serverEpoch: "server-1",
+      canonicalRevision: 12,
+    });
+  });
+
+  it("returns unavailable instead of guessing absence when ownership lookup fails", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-unavailable");
+    rpcClientMock.orchestration.getThreadOwnership.mockRejectedValue(
+      new Error("server disconnected"),
+    );
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    await expect(
+      createWsNativeApi().orchestration.resolveThreadOwnership({ threadId }),
+    ).resolves.toEqual({
+      threadId,
+      status: "unavailable",
+      ownership: "unconfirmed",
+      reason: "server disconnected",
     });
   });
 });

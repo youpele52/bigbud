@@ -108,6 +108,7 @@ import {
 import { partializeComposerDraftStoreState, toHydratedThreadDraft } from "./persistence.store";
 import { createComposerDraftActions } from "./actions.store";
 import { composerStorageKey } from "./storageKey.store";
+import type { ProjectId, ThreadId } from "@bigbud/contracts";
 
 // ── Debounced storage setup ───────────────────────────────────────────
 
@@ -181,10 +182,20 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
  * threads at once.
  */
 export function clearPromotedDraftThread(threadId: import("@bigbud/contracts").ThreadId): void {
-  if (!useComposerDraftStore.getState().getDraftThread(threadId)) {
-    return;
-  }
-  useComposerDraftStore.getState().clearDraftThread(threadId);
+  useComposerDraftStore.getState().reconcileCanonicalThread(threadId);
+  composerDebouncedStorage.flush();
+}
+
+export function replaceCollidingDraftThreadLocally(change: {
+  readonly threadId: ThreadId;
+  readonly nextThreadId: ThreadId;
+  readonly projectId: ProjectId;
+  readonly createdAt: string;
+}): void {
+  const before = useComposerDraftStore.getState().getDraftThread(change.threadId);
+  useComposerDraftStore.getState().replaceCollidingDraftThread(change);
+  if (!before) return;
+  composerDebouncedStorage.flush();
 }
 
 export function clearPromotedDraftThreads(
@@ -193,4 +204,9 @@ export function clearPromotedDraftThreads(
   for (const threadId of serverThreadIds) {
     clearPromotedDraftThread(threadId);
   }
+}
+
+/** Flush required ownership/composer persistence before acknowledging event application. */
+export function flushComposerDraftPersistence(): void {
+  composerDebouncedStorage.flush();
 }

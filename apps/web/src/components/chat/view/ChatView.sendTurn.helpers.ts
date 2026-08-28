@@ -72,6 +72,7 @@ export function buildThreadBootstrap(input: {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
   readonly baseBranchForWorktree: string | null;
+  readonly recoveryCommandId: string;
 }): ThreadTurnStartBootstrap | undefined {
   const seededTitle =
     input.isFirstMessage && (input.isDraft || input.thread.title.trim() === DEFAULT_THREAD_TITLE)
@@ -110,7 +111,7 @@ export function buildThreadBootstrap(input: {
           prepareWorktree: {
             projectCwd: input.project.cwd!,
             baseBranch: input.baseBranchForWorktree,
-            branch: buildTemporaryWorktreeBranchName(),
+            branch: buildTemporaryWorktreeBranchName(input.recoveryCommandId),
           },
           runSetupScript: true,
         }

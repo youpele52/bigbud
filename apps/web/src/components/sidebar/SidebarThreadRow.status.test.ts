@@ -5,6 +5,7 @@ import {
   providerIconPresentationClass,
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
+  shouldShowThreadStatusLabel,
   terminalStatusFromRunningIds,
 } from "./SidebarThreadRow.status";
 
@@ -39,70 +40,63 @@ describe("SidebarThreadRow.status", () => {
     ).toBe(false);
   });
 
-  it("maps stable provider icons to connecting, working, completed, and idle colors", () => {
+  it("uses only the muted provider icon for idle threads", () => {
     expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: false,
-        isConnecting: true,
-        isError: false,
-        isRunning: false,
+      shouldShowThreadStatusLabel({
+        label: "Idle",
+        colorClass: "text-muted-foreground",
+        dotClass: "bg-muted-foreground",
+        pulse: false,
       }),
-    ).toBe("text-warning");
+    ).toBe(false);
     expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: false,
-        isConnecting: false,
-        isError: false,
-        isRunning: true,
+      shouldShowThreadStatusLabel({
+        label: "Connection Warning",
+        colorClass: "text-warning",
+        dotClass: "bg-warning",
+        pulse: false,
       }),
-    ).toBe("text-info-foreground");
+    ).toBe(true);
+  });
+
+  it("uses only the red provider icon for failed threads", () => {
+    const failedStatus = {
+      label: "Failed" as const,
+      colorClass: "text-destructive",
+      dotClass: "bg-destructive",
+      pulse: false,
+    };
+
+    expect(providerIconPresentationClass(failedStatus)).toBe("text-destructive");
+    expect(shouldShowThreadStatusLabel(failedStatus)).toBe(false);
+  });
+
+  it("passes resolved state colors through to stable provider icons", () => {
+    const iconClass = (label: "Connection Warning" | "Working" | "Pending Approval") =>
+      providerIconPresentationClass({
+        label,
+        colorClass:
+          label === "Connection Warning"
+            ? "text-warning"
+            : label === "Working"
+              ? "text-info-foreground"
+              : "text-primary",
+        dotClass: "bg-primary",
+        pulse: false,
+      });
+
+    expect(iconClass("Connection Warning")).toBe("text-warning");
+    expect(iconClass("Working")).toBe("text-info-foreground");
+    expect(iconClass("Pending Approval")).toBe("text-primary");
     expect(
       providerIconPresentationClass({
-        isCompleted: true,
-        isCompacting: false,
-        isConnecting: false,
-        isError: false,
-        isRunning: false,
+        label: "Done",
+        colorClass: "text-primary",
+        dotClass: "bg-primary",
+        pulse: false,
       }),
     ).toBe("text-success");
-    expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: false,
-        isConnecting: false,
-        isError: false,
-        isRunning: false,
-      }),
-    ).toBe("text-muted-foreground");
-    expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: false,
-        isConnecting: false,
-        isError: true,
-        isRunning: false,
-      }),
-    ).toBe("text-destructive");
-    expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: false,
-        isConnecting: false,
-        isError: false,
-        isRunning: true,
-      }),
-    ).toBe("text-info-foreground");
-    expect(
-      providerIconPresentationClass({
-        isCompleted: false,
-        isCompacting: true,
-        isConnecting: false,
-        isError: false,
-        isRunning: true,
-      }),
-    ).toBe("text-warning");
+    expect(providerIconPresentationClass(null)).toBe("text-muted-foreground");
     expect(shouldAnimateProviderIcon({ isConnecting: true, isRunning: false })).toBe(true);
     expect(shouldAnimateProviderIcon({ isConnecting: false, isRunning: false })).toBe(false);
   });

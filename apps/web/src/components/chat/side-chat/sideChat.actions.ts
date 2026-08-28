@@ -6,6 +6,7 @@ import {
 
 import { type Thread } from "../../../models/types";
 import { newCommandId, newThreadId, randomUUID } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { type RemovedComposerThreadReferenceFiles, useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
@@ -128,7 +129,7 @@ export async function openSideChat(activeThread: Thread): Promise<void> {
   const threadId = newThreadId();
   useSideChatStore.getState().beginCreate(threadId);
   try {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.create",
       commandId: newCommandId(),
       threadId,
@@ -180,7 +181,7 @@ export async function closeSideChat(threadId: Thread["id"]): Promise<void> {
   }
 
   try {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.delete",
       commandId: newCommandId(),
       threadId,

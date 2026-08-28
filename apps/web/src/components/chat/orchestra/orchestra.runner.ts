@@ -9,6 +9,7 @@ import { truncate } from "@bigbud/shared/String";
 import { buildExplicitExecutionTargets } from "~/lib/providerExecutionTargets";
 import { generateHandoffDocument, HandoffError, buildHandoffSeedMessage } from "~/lib/handoff";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { isLatestTurnSettled } from "~/logic/session";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { selectThreadById, useStore } from "~/stores/main";
@@ -244,7 +245,7 @@ export function createOrchestraOperations(input: {
       const title = buildOrchestraParentThreadTitle(resolvedScoreName);
       const { command } = createBaseThreadCommand(threadId, title, assignments[0]!.modelSelection);
 
-      await api.orchestration.dispatchCommand(command);
+      await dispatchCommandWithOutcomeRecovery(api, command);
 
       return { threadId, title: resolvedScoreName };
     },
@@ -262,7 +263,7 @@ export function createOrchestraOperations(input: {
         assignment.modelSelection,
       );
 
-      await api.orchestration.dispatchCommand({
+      await dispatchCommandWithOutcomeRecovery(api, {
         ...command,
         parentThread,
         ...(seedMessages && seedMessages.length > 0 ? { seedMessages } : {}),

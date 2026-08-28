@@ -9,6 +9,7 @@ import {
 } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { newCommandId, newProjectId } from "../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../lib/orchestrationCommandRecovery";
 import { buildExplicitExecutionTargets } from "../lib/providerExecutionTargets";
 import { getDefaultModelSelection } from "../models/provider/provider.models";
 import { resolveShortcutCommand } from "../models/keybindings";
@@ -194,7 +195,7 @@ function ChatRouteGlobalShortcuts({
               workspaceExecutionTargetId: "local",
               providerRuntimeLocation: "local",
             });
-            await api.orchestration.dispatchCommand({
+            await dispatchCommandWithOutcomeRecovery(api, {
               type: "project.create",
               commandId: newCommandId(),
               projectId: newProjectId(),

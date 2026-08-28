@@ -5,6 +5,7 @@ import type { ProjectId } from "@bigbud/contracts";
 import { isElectron } from "../../config/env";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { buildExplicitExecutionTargets } from "../../lib/providerExecutionTargets";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { newCommandId, newProjectId } from "../../lib/utils";
 import type { Project } from "../../models/types";
 import { getDefaultModelSelection } from "../../models/provider/provider.models";
@@ -122,7 +123,7 @@ export function useSidebarProjectAddActions({
         const projectId = newProjectId();
         const createdAt = new Date().toISOString();
 
-        await api.orchestration.dispatchCommand({
+        await dispatchCommandWithOutcomeRecovery(api, {
           type: "project.create",
           commandId: newCommandId(),
           projectId,

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AUTOMATION_AUTHORING_RUNTIME_MODE } from "~/lib/automation";
 import { newCommandId, newThreadId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { type Thread } from "~/models/types";
 import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
@@ -56,7 +57,7 @@ export async function disposeAutomationBuilderThread(
   useComposerDraftStore.getState().clearDraftThread(builderThreadId);
 
   try {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.delete",
       commandId: newCommandId(),
       threadId: builderThreadId,

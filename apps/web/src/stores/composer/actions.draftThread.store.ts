@@ -252,6 +252,75 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
         };
       });
     },
+    reconcileCanonicalThread: (threadId: ThreadId) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      set((state) => {
+        const hasDraftThread = state.draftThreadsByThreadId[threadId] !== undefined;
+        const hasProjectMapping = Object.values(state.projectDraftThreadIdByProjectId).includes(
+          threadId,
+        );
+        if (!hasDraftThread && !hasProjectMapping) {
+          return state;
+        }
+        const projectDraftThreadIdByProjectId = Object.fromEntries(
+          Object.entries(state.projectDraftThreadIdByProjectId).filter(
+            ([, draftThreadId]) => draftThreadId !== threadId,
+          ),
+        ) as Record<ProjectId, ThreadId>;
+        const { [threadId]: _removed, ...draftThreadsByThreadId } = state.draftThreadsByThreadId;
+        return { draftThreadsByThreadId, projectDraftThreadIdByProjectId };
+      });
+    },
+    replaceCollidingDraftThread: ({
+      threadId,
+      nextThreadId,
+      projectId,
+      createdAt,
+    }: {
+      threadId: ThreadId;
+      nextThreadId: ThreadId;
+      projectId: ProjectId;
+      createdAt: string;
+    }) => {
+      if (
+        threadId.length === 0 ||
+        nextThreadId.length === 0 ||
+        projectId.length === 0 ||
+        threadId === nextThreadId
+      ) {
+        return;
+      }
+      set((state) => {
+        const existingThread = state.draftThreadsByThreadId[threadId];
+        if (!existingThread) {
+          return state;
+        }
+        const projectDraftThreadIdByProjectId = Object.fromEntries(
+          Object.entries(state.projectDraftThreadIdByProjectId).filter(
+            ([, draftThreadId]) => draftThreadId !== threadId,
+          ),
+        ) as Record<ProjectId, ThreadId>;
+        projectDraftThreadIdByProjectId[projectId] = nextThreadId;
+        const { [threadId]: _removedThread, ...draftThreadsByThreadId } =
+          state.draftThreadsByThreadId;
+        draftThreadsByThreadId[nextThreadId] = {
+          ...existingThread,
+          projectId,
+          createdAt,
+        };
+        const { [threadId]: composerDraft, ...draftsByThreadId } = state.draftsByThreadId;
+        if (composerDraft) {
+          draftsByThreadId[nextThreadId] = composerDraft;
+        }
+        return {
+          draftsByThreadId,
+          draftThreadsByThreadId,
+          projectDraftThreadIdByProjectId,
+        };
+      });
+    },
     clearDraftThread: (threadId: ThreadId) => {
       if (threadId.length === 0) {
         return;

@@ -1,4 +1,4 @@
-import type { OrchestrationSession, OrchestrationThread, ProviderKind } from "@bigbud/contracts";
+import type { OrchestrationThread } from "@bigbud/contracts";
 
 import { isSessionCompacting } from "~/components/chat/common/threadActivityIndicator";
 import { resolveThreadStatusPill } from "~/components/sidebar/Sidebar.logic";
@@ -6,33 +6,12 @@ import {
   findLatestProposedPlan,
   hasActionableProposedPlan,
 } from "~/logic/session/session.timeline.logic";
-import type { ThreadSession } from "~/models/types/app.types";
+import { mapSession } from "~/stores/main/mappers.store";
 
 import { derivePendingApprovals, derivePendingUserInputs } from "../lib/mobileModels";
 
-function adaptSessionForStatus(session: OrchestrationSession | null): ThreadSession | null {
-  if (!session) {
-    return null;
-  }
-
-  const status: ThreadSession["status"] =
-    session.status === "running"
-      ? "running"
-      : session.status === "starting"
-        ? "connecting"
-        : session.status === "error"
-          ? "error"
-          : "ready";
-
-  return {
-    provider: "codex" as ProviderKind,
-    status,
-    orchestrationStatus: session.status,
-    reason: session.reason ?? null,
-    createdAt: session.updatedAt,
-    updatedAt: session.updatedAt,
-  };
-}
+const adaptSessionForStatus = (session: OrchestrationThread["session"]) =>
+  session === null ? null : mapSession(session);
 
 export function buildMobileThreadStatusInput(
   thread: OrchestrationThread,
@@ -61,7 +40,7 @@ export function resolveMobileProviderIconClassName(
   const isThreadCompacting = thread.session
     ? isSessionCompacting(adaptSessionForStatus(thread.session))
     : false;
-  const isThreadCompleted = threadStatus?.label === "Completed";
+  const isThreadCompleted = threadStatus?.label === "Done";
 
   if (thread.session?.status === "error") {
     return "text-destructive";

@@ -12,7 +12,6 @@ import {
 } from "./FilePreview.markdown";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
-import { isCodeRelatedFilePath } from "../../models/editor";
 import {
   buildAbsolutePreviewPath,
   buildFilePreviewBreadcrumb,
@@ -21,6 +20,7 @@ import {
   inferPreviewLanguage,
   isMarkdownFilePath,
   shouldShowPreviewLoading,
+  shouldSyntaxHighlightPreviewPath,
 } from "./FilePreview.logic";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
@@ -157,7 +157,7 @@ export const FilePreview = memo(function FilePreview({
   const language = useMemo(() => inferPreviewLanguage(relativePath), [relativePath]);
   const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
   const isPlainTextFile = useMemo(
-    () => !isMarkdownFile && !isCodeRelatedFilePath(relativePath),
+    () => !isMarkdownFile && !shouldSyntaxHighlightPreviewPath(relativePath),
     [isMarkdownFile, relativePath],
   );
   const breadcrumb = useMemo(

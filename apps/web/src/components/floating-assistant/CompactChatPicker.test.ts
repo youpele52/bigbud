@@ -80,12 +80,12 @@ describe("compact chat picker thread lists", () => {
         thread: { ...thread, lastVisitedAt: undefined },
       }),
     ).toMatchObject({
-      label: "Completed",
+      label: "Done",
     });
     expect(
       resolveThreadStatusPill({
         thread: { ...thread, lastVisitedAt: "2026-08-19T00:06:00.000Z" },
       }),
-    ).toBeNull();
+    ).toMatchObject({ label: "Idle" });
   });
 });

@@ -5,9 +5,24 @@ import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
 import { resetWsConnectionStateForTests } from "./wsConnectionState";
+import { resetOrchestrationDeliveryLifecycleForTests } from "./orchestrationDeliveryState";
+import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 
 let instance: { api: NativeApi } | null = null;
+const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
+
+function resolveDeliveryConsumerId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(DELIVERY_CONSUMER_STORAGE_KEY)?.trim();
+    if (existing) return existing;
+    const consumerId = crypto.randomUUID();
+    window.sessionStorage.setItem(DELIVERY_CONSUMER_STORAGE_KEY, consumerId);
+    return consumerId;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
 
 function shouldOpenViaDesktopShell(url: string): boolean {
   try {
@@ -24,6 +39,7 @@ export function __resetWsNativeApiForTests() {
   resetRequestLatencyStateForTests();
   resetServerStateForTests();
   resetWsConnectionStateForTests();
+  resetOrchestrationDeliveryLifecycleForTests();
 }
 
 export function createWsNativeApi(): NativeApi {
@@ -32,6 +48,29 @@ export function createWsNativeApi(): NativeApi {
   }
 
   const rpcClient = getWsRpcClient();
+  const deliveryConsumerId = resolveDeliveryConsumerId();
+  let deliveryAppliedSequence = readPersistedDeliveryCursor(deliveryConsumerId);
+  type DomainEventCallback = Parameters<NativeApi["orchestration"]["onDomainEvent"]>[0];
+  const domainEventCallbacks = new Set<DomainEventCallback>();
+  const domainResubscribeCallbacks = new Set<() => void>();
+  let unsubscribeDomainEvents: (() => void) | null = null;
+
+  const ensureDomainEventSubscription = () => {
+    if (unsubscribeDomainEvents) return;
+    unsubscribeDomainEvents = rpcClient.orchestration.onDomainEvent(
+      () => ({ consumerId: deliveryConsumerId, appliedSequence: deliveryAppliedSequence }),
+      (item) => {
+        return Promise.all(Array.from(domainEventCallbacks, (callback) => callback(item))).then(
+          () => undefined,
+        );
+      },
+      {
+        onResubscribe: () => {
+          for (const callback of domainResubscribeCallbacks) callback();
+        },
+      },
+    );
+  };
 
   const api: NativeApi = {
     dialogs: {
@@ -181,14 +220,47 @@ export function createWsNativeApi(): NativeApi {
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
+      resolveThreadOwnership: async (input) => {
+        try {
+          return await rpcClient.orchestration.getThreadOwnership(input);
+        } catch (error) {
+          const message = error instanceof Error ? error.message.trim() : "";
+          return {
+            threadId: input.threadId,
+            status: "unavailable",
+            ownership: "unconfirmed",
+            reason: message || "Thread ownership could not be confirmed.",
+          };
+        }
+      },
+      getCommandOutcome: (input) => rpcClient.orchestration.getCommandOutcome(input),
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
         rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
-      onDomainEvent: (callback, options) =>
-        rpcClient.orchestration.onDomainEvent(callback, options),
+      acknowledgeDelivery: async (input) => {
+        const result = await rpcClient.orchestration.acknowledgeDelivery(input);
+        if (result.accepted && !result.fenced) {
+          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
+          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+        }
+        return result;
+      },
+      onDomainEvent: (callback, options) => {
+        domainEventCallbacks.add(callback);
+        if (options?.onResubscribe) domainResubscribeCallbacks.add(options.onResubscribe);
+        ensureDomainEventSubscription();
+        return () => {
+          domainEventCallbacks.delete(callback);
+          if (options?.onResubscribe) domainResubscribeCallbacks.delete(options.onResubscribe);
+          if (domainEventCallbacks.size === 0) {
+            unsubscribeDomainEvents?.();
+            unsubscribeDomainEvents = null;
+          }
+        };
+      },
       onThinkingDelta: (callback, options) =>
         rpcClient.orchestration.onThinkingDelta(callback, options),
     },

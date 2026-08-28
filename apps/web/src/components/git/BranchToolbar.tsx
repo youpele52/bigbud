@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import BranchToolbarProjectMenu from "./BranchToolbarProjectMenu";
 
 import { newCommandId } from "../../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
@@ -66,7 +67,7 @@ export default function BranchToolbar({
           .catch(() => undefined);
       }
       if (api && hasServerThread) {
-        void api.orchestration.dispatchCommand({
+        void dispatchCommandWithOutcomeRecovery(api, {
           type: "thread.meta.update",
           commandId: newCommandId(),
           threadId: activeThreadId,

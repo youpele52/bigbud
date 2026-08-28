@@ -7,6 +7,7 @@ import { useComposerDraftStore } from "../stores/composer";
 import { useHandleNewThread } from "./useHandleNewThread";
 import { buildExplicitExecutionTargets } from "../lib/providerExecutionTargets";
 import { newCommandId, newThreadId } from "../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
 import { toastManager } from "../components/ui/toast";
@@ -96,7 +97,7 @@ export function useThreadActions() {
         throw new Error("Cannot archive a running thread.");
       }
 
-      await api.orchestration.dispatchCommand({
+      await dispatchCommandWithOutcomeRecovery(api, {
         type: "thread.archive",
         commandId: newCommandId(),
         threadId,
@@ -112,7 +113,7 @@ export function useThreadActions() {
   const unarchiveThread = useCallback(async (threadId: ThreadId) => {
     const api = readNativeApi();
     if (!api) return;
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.unarchive",
       commandId: newCommandId(),
       threadId,
@@ -134,7 +135,7 @@ export function useThreadActions() {
         deletedThreadIds,
         sortOrder: appSettings.sidebarThreadSortOrder,
       });
-      await api.orchestration.dispatchCommand({
+      await dispatchCommandWithOutcomeRecovery(api, {
         type: "thread.delete",
         commandId: newCommandId(),
         threadId,
@@ -227,7 +228,7 @@ export function useThreadActions() {
           providerRuntimeExecutionTargetId: sourceThread.providerRuntimeExecutionTargetId,
           workspaceExecutionTargetId: sourceThread.workspaceExecutionTargetId,
         });
-        await api.orchestration.dispatchCommand({
+        await dispatchCommandWithOutcomeRecovery(api, {
           type: "thread.create",
           commandId: newCommandId(),
           threadId: branchedThreadId,

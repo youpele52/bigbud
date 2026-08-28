@@ -1,6 +1,6 @@
 import { ArchiveIcon, ArchiveX } from "lucide-react";
 import { isBuiltInChatsProject, type AutomationId, type ThreadId } from "@bigbud/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useSettings } from "../../hooks/useSettings";
 import { useStore } from "../../stores/main";
@@ -16,7 +16,11 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "..
 import { ProjectFavicon } from "../project/ProjectFavicon";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 
-export function ArchivedThreadsPanel() {
+export function ArchivedThreadsPanel({
+  targetThreadId,
+}: {
+  readonly targetThreadId?: ThreadId | undefined;
+}) {
   const appSettings = useSettings();
   const projects = useStore((store) => store.projects);
   const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
@@ -46,6 +50,13 @@ export function ArchivedThreadsPanel() {
       }))
       .filter((group) => group.threads.length > 0);
   }, [projects, threads]);
+
+  useEffect(() => {
+    if (!targetThreadId) return;
+    document
+      .getElementById(`archived-thread-${targetThreadId}`)
+      ?.scrollIntoView({ block: "center" });
+  }, [archivedGroups, targetThreadId]);
 
   const handleArchivedThreadContextMenu = useCallback(
     async (threadId: ThreadId, position: { x: number; y: number }) => {
@@ -132,7 +143,12 @@ export function ArchivedThreadsPanel() {
             {projectThreads.map((thread) => (
               <fieldset
                 key={thread.id}
-                className="min-w-0 border-0 border-t border-border px-4 py-3 first:border-t-0 sm:px-5"
+                id={`archived-thread-${thread.id}`}
+                className={`min-w-0 border-0 border-t border-border px-4 py-3 first:border-t-0 sm:px-5 ${
+                  targetThreadId === thread.id
+                    ? "bg-accent/60 ring-1 ring-inset ring-primary/40"
+                    : ""
+                }`}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   void handleArchivedThreadContextMenu(thread.id, {

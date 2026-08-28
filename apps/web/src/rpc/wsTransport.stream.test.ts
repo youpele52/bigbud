@@ -1,4 +1,4 @@
-import { WS_METHODS } from "@bigbud/contracts";
+import { WS_METHODS, type OrchestrationDeliveryStreamItem } from "@bigbud/contracts";
 import { Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,23 @@ const transports: WsTransport[] = [];
 registerTestHooks(sockets, transports);
 
 describe("WsTransport stream subscriptions", () => {
+  it("reports listener failures instead of swallowing them", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    const onError = vi.fn();
+    const listenerError = new Error("renderer apply failed");
+    transport.subscribe(
+      () => Stream.make("event"),
+      () => {
+        throw listenerError;
+      },
+      { onError, shouldRetry: () => false },
+    );
+
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    getSocket(sockets).open();
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(listenerError));
+  });
+
   it("does not reconnect a subscription after a non-retryable failure", async () => {
     const transport = createTransport(transports, "ws://localhost:3020");
     const shouldRetry = vi.fn(() => false);
@@ -171,6 +188,97 @@ describe("WsTransport stream subscriptions", () => {
     await waitFor(() => {
       expect(listener).toHaveBeenLastCalledWith(secondEvent);
     });
+
+    unsubscribe();
+    await transport.dispose();
+  });
+
+  it("replays from the last verified cursor after an asynchronous application failure", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    const listener = vi
+      .fn<(event: OrchestrationDeliveryStreamItem) => void | Promise<void>>()
+      .mockRejectedValueOnce(new Error("renderer apply failed"))
+      .mockResolvedValue(undefined);
+    let appliedSequence = 4;
+    const unsubscribe = transport.subscribe(
+      (client) =>
+        client[WS_METHODS.subscribeOrchestrationDomainEvents]({
+          consumerId: "consumer-1",
+          appliedSequence,
+        }),
+      async (event) => {
+        await listener(event);
+        if (event.type === "batch") {
+          const sequence = event.events.at(-1)?.sequence ?? appliedSequence;
+          if (sequence > appliedSequence) appliedSequence = sequence;
+        }
+      },
+      { retryDelay: 1 },
+    );
+
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const socket = getSocket(sockets);
+    socket.open();
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    const firstRequest = JSON.parse(socket.sent[0] ?? "{}") as { id: string };
+    socket.serverMessage(
+      JSON.stringify({
+        _tag: "Chunk",
+        requestId: firstRequest.id,
+        values: [
+          {
+            type: "lifecycle",
+            route: "direct-unmanaged",
+            consumerId: "consumer-1",
+            consumerGeneration: 1,
+            state: "connecting",
+            acknowledgedSequence: 4,
+            restartAttempt: 0,
+          },
+        ],
+      }),
+    );
+
+    await waitFor(() => {
+      const requests = socket.sent.filter((message) => {
+        const parsed = JSON.parse(message) as { _tag?: string; id?: string };
+        return parsed._tag === "Request" && parsed.id !== firstRequest.id;
+      });
+      expect(requests).toHaveLength(1);
+    });
+    const secondRequest = JSON.parse(
+      socket.sent.find((message) => {
+        const parsed = JSON.parse(message) as { _tag?: string; id?: string };
+        return parsed._tag === "Request" && parsed.id !== firstRequest.id;
+      }) ?? "{}",
+    ) as {
+      id: string;
+      tag: string;
+      payload: { consumerId: string; appliedSequence: number };
+    };
+    expect(secondRequest.tag).toBe(WS_METHODS.subscribeOrchestrationDomainEvents);
+    expect(secondRequest.payload).toEqual({ consumerId: "consumer-1", appliedSequence: 4 });
+    socket.serverMessage(
+      JSON.stringify({
+        _tag: "Chunk",
+        requestId: secondRequest.id,
+        values: [
+          {
+            type: "lifecycle",
+            route: "direct-unmanaged",
+            consumerId: "consumer-1",
+            consumerGeneration: 2,
+            state: "connecting",
+            acknowledgedSequence: 4,
+            restartAttempt: 0,
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    expect(listener).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "lifecycle", acknowledgedSequence: 4 }),
+    );
 
     unsubscribe();
     await transport.dispose();

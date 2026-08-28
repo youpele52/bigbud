@@ -64,6 +64,7 @@ import {
   type TeachListProjectsInput,
   type TeachListProjectsResult,
   type ThinkingActivityDeltaEvent,
+  type OrchestrationDeliverySubscriptionInput,
   type VisibleBrowserCommandResult,
   type VisibleBrowserLeaseRevokeInput,
   type VisibleBrowserLeaseSnapshot,
@@ -212,6 +213,7 @@ export interface WsRpcClient {
     >;
   };
   readonly server: {
+    readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
@@ -292,12 +294,23 @@ export interface WsRpcClient {
     readonly getSelectedThreadDetail: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
     >;
+    readonly getThreadOwnership: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getThreadOwnership>;
+    readonly getCommandOutcome: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getCommandOutcome>;
     readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
-    readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
+    readonly acknowledgeDelivery: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.acknowledgeDelivery
+    >;
+    readonly onDomainEvent: (
+      input: () => OrchestrationDeliverySubscriptionInput,
+      listener: Parameters<
+        RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>
+      >[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
     readonly onThinkingDelta: (
       listener: (event: ThinkingActivityDeltaEvent) => void,
       options?: StreamSubscriptionOptions,

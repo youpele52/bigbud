@@ -1,4 +1,8 @@
-import { type ProviderKind, type ServerProvider } from "@bigbud/contracts";
+import {
+  isLocalExecutionTargetId,
+  type ProviderKind,
+  type ServerProvider,
+} from "@bigbud/contracts";
 import type { Icon } from "../../Icons";
 import {
   PROVIDER_DESCRIPTORS,
@@ -23,10 +27,22 @@ export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailablePro
 export const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
 export type { ProviderPickerKind } from "./providerDescriptors";
 
+const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;
+const LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS = "min-w-[40ch]";
+
+export function providerModelListPopupClassName(
+  options: ReadonlyArray<ModelOption>,
+): string | undefined {
+  return options.length > LARGE_PROVIDER_MODEL_COUNT_THRESHOLD
+    ? LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS
+    : undefined;
+}
+
 export function getProviderModelAvailability(input: {
   providers: ReadonlyArray<ServerProvider> | undefined;
   provider: ServerProvider | undefined;
   modelCount: number;
+  workspaceExecutionTargetId?: string | null | undefined;
 }) {
   const loading =
     input.modelCount === 0 && (input.providers === undefined || input.provider === undefined);
@@ -41,15 +57,27 @@ export function getProviderModelAvailability(input: {
           : input.provider.status === "error" || input.provider.status === "warning"
             ? (input.provider.message ?? "Provider unavailable")
             : undefined);
+  // Missing capability metadata is treated optimistically for compatibility with
+  // older snapshots; only an explicit false disables a provider.
+  const unsupportedRemoteWorkspace =
+    input.provider?.supportsLocalRuntimeRemoteWorkspace === false &&
+    !isLocalExecutionTargetId(input.workspaceExecutionTargetId);
   const unavailable =
     input.provider !== undefined &&
-    (!input.provider.enabled ||
+    (unsupportedRemoteWorkspace ||
+      !input.provider.enabled ||
       !input.provider.installed ||
       input.provider.auth.status === "unauthenticated" ||
       input.provider.status === "error" ||
       (input.provider.status === "warning" && input.modelCount === 0));
 
-  return { loading, unavailable, unavailableMessage };
+  return {
+    loading,
+    unavailable,
+    unavailableMessage: unsupportedRemoteWorkspace
+      ? "Provider does not support a remote workspace with a local runtime"
+      : unavailableMessage,
+  };
 }
 
 // exactOptionalPropertyTypes: group/subProviderID must be `string | undefined` so callers can

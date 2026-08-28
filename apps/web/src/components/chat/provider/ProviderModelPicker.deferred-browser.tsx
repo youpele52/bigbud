@@ -17,6 +17,7 @@ async function mountPicker(props: {
   model: string;
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProvider>;
+  workspaceExecutionTargetId?: string;
   triggerVariant?: "ghost" | "outline";
 }) {
   const host = document.createElement("div");
@@ -35,6 +36,7 @@ async function mountPicker(props: {
       model={props.model}
       lockedProvider={props.lockedProvider}
       providers={providers}
+      workspaceExecutionTargetId={props.workspaceExecutionTargetId}
       modelOptionsByProvider={modelOptionsByProvider}
       triggerVariant={props.triggerVariant}
       onProviderModelChange={onProviderModelChange}
@@ -300,6 +302,37 @@ describe("ProviderModelPicker", () => {
       }
       expect(button.className).toContain("border-input");
       expect(button.className).toContain("bg-popover");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("surfaces remote-workspace capability limits in disabled provider entries", async () => {
+    const providers: ReadonlyArray<ServerProvider> = TEST_PROVIDERS.map((provider) =>
+      provider.provider === "codex"
+        ? Object.assign({}, provider, { supportsLocalRuntimeRemoteWorkspace: false })
+        : provider,
+    );
+    const mounted = await mountPicker({
+      provider: "claudeAgent",
+      model: "claude-opus-4-6",
+      lockedProvider: null,
+      providers,
+      workspaceExecutionTargetId: "ssh:devbox",
+    });
+
+    try {
+      await page.getByRole("button").click();
+      const codex = page.getByRole("menuitem", { name: /Codex/ });
+      await vi.waitFor(() => {
+        expect(codex).toHaveAttribute(
+          "title",
+          "Provider does not support a remote workspace with a local runtime",
+        );
+        expect(codex).toHaveTextContent(
+          "Provider does not support a remote workspace with a local runtime",
+        );
+      });
     } finally {
       await mounted.cleanup();
     }

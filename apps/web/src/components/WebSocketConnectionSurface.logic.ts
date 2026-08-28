@@ -1,5 +1,52 @@
 import { getWsConnectionUiState, type WsConnectionStatus } from "../rpc/wsConnectionState";
 import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
+import type { OrchestrationDeliveryLifecycle } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
+
+type DeliveryRecoveryToast = {
+  readonly type: "error" | "info" | "warning";
+  readonly title: string;
+  readonly description: string;
+  readonly timeout: 0;
+  readonly data: { readonly hideCopyButton: true };
+};
+
+export function syncDeliveryRecoveryToast<TToastId>(
+  manager: {
+    readonly add: (toast: DeliveryRecoveryToast) => TToastId;
+    readonly update: (toastId: TToastId, toast: DeliveryRecoveryToast) => void;
+    readonly close: (toastId: TToastId) => void;
+  },
+  toastId: TToastId | null,
+  delivery: OrchestrationDeliveryLifecycle | null,
+): TToastId | null {
+  if (!delivery || delivery.state === "live") {
+    if (toastId !== null) manager.close(toastId);
+    return null;
+  }
+  if (delivery.state === "connecting" && toastId === null) return null;
+  const fallback = delivery.state === "fallback";
+  const incompatible = delivery.state === "incompatible";
+  const toast: DeliveryRecoveryToast = {
+    type: incompatible ? "error" : fallback ? "warning" : "info",
+    title: incompatible
+      ? "Desktop delivery supervisor is incompatible"
+      : fallback
+        ? "Event delivery is degraded"
+        : "Restoring event delivery",
+    description: incompatible
+      ? "Update bigbud to restore desktop event delivery."
+      : fallback
+        ? "This session is using the fenced TypeScript fallback."
+        : "The desktop delivery supervisor is reconnecting from the last applied event.",
+    timeout: 0,
+    data: { hideCopyButton: true },
+  };
+  if (toastId !== null) {
+    manager.update(toastId, toast);
+    return toastId;
+  }
+  return manager.add(toast);
+}
 
 export type WsAutoReconnectTrigger = "focus" | "online";
 

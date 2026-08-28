@@ -86,7 +86,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
-  it("shows a stalled provider separately from active work", () => {
+  it("shows provider unavailability separately from transport degradation", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -97,7 +97,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Stalled", pulse: false });
+    ).toMatchObject({ label: "Provider Unavailable", pulse: false });
   });
 
   it("shows provider inspection without a work spinner", () => {
@@ -108,7 +108,7 @@ describe("resolveThreadStatusPill", () => {
           session: { ...baseThread.session, status: "error", reason: "provider.checking" },
         },
       }),
-    ).toMatchObject({ label: "Checking", pulse: false });
+    ).toMatchObject({ label: "Connection Warning", pulse: false });
   });
 
   it("shows working instead of stale checking when the matching provider turn is streaming", () => {
@@ -152,7 +152,11 @@ describe("resolveThreadStatusPill", () => {
             },
           },
         }),
-      ).toMatchObject({ label: "Stalled", pulse: false, dotClass: "bg-destructive" });
+      ).toMatchObject({
+        label: "Provider Unavailable",
+        pulse: false,
+        dotClass: "bg-destructive",
+      });
     },
   );
 
@@ -170,7 +174,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Compacting", pulse: true, dotClass: "bg-warning" });
   });
 
-  it("keeps connecting available to project aggregate indicators", () => {
+  it("uses canonical startup state for local and remote getting-ready indicators", () => {
     const connecting = resolveThreadStatusPill({
       thread: {
         ...baseThread,
@@ -183,7 +187,7 @@ describe("resolveThreadStatusPill", () => {
     });
 
     expect(connecting).toMatchObject({
-      label: "Connecting",
+      label: "Getting Ready",
       dotClass: "bg-info-foreground",
       pulse: true,
     });
@@ -220,10 +224,10 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Done", pulse: false });
   });
 
-  it("shows completed when there is an unseen completion and no active blocker", () => {
+  it("shows done for an unseen completion and then returns to true idle", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -238,20 +242,100 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Done", pulse: false });
+  });
+
+  it.each([
+    ["ready", "connecting", null, "Idle", false],
+    ["starting", "ready", null, "Getting Ready", true],
+    ["running", "ready", null, "Working", true],
+    ["error", "error", null, "Failed", false],
+    ["stopped", "ready", null, "Idle", false],
+    ["ready", "ready", "error", "Failed", false],
+  ] as const)(
+    "maps canonical session %s over legacy phase %s and turn %s to %s",
+    (orchestrationStatus, legacyStatus, latestTurnState, expectedLabel, expectedPulse) => {
+      expect(
+        resolveThreadStatusPill({
+          thread: {
+            ...baseThread,
+            interactionMode: "default",
+            latestTurn:
+              latestTurnState === null ? null : { ...makeLatestTurn(), state: latestTurnState },
+            session: {
+              ...baseThread.session,
+              status: legacyStatus,
+              orchestrationStatus,
+            },
+          },
+        }),
+      ).toMatchObject({ label: expectedLabel, pulse: expectedPulse });
+    },
+  );
+
+  it.each([
+    {
+      name: "local lifecycle",
+      provider: "codex" as const,
+      states: [
+        ["starting", "connecting", null, "Getting Ready"],
+        ["ready", "ready", null, "Idle"],
+        ["running", "running", "running", "Working"],
+        ["ready", "ready", "completed", "Done"],
+      ],
+    },
+    {
+      name: "remote reconnect with duplicate and out-of-order legacy phases",
+      provider: "claudeAgent" as const,
+      states: [
+        ["running", "running", "running", "Working"],
+        ["error", "error", "running", "Connection Warning", "provider.checking"],
+        ["running", "ready", "running", "Working"],
+        ["running", "ready", "running", "Working"],
+        ["ready", "connecting", null, "Idle"],
+      ],
+    },
+  ])("projects $name predictably", ({ provider, states }) => {
+    expect(
+      states.map(
+        ([orchestrationStatus, legacyStatus, turnState, _label, reason]) =>
+          resolveThreadStatusPill({
+            thread: {
+              ...baseThread,
+              latestTurn:
+                turnState === null
+                  ? null
+                  : turnState === "running"
+                    ? { ...makeLatestTurn(), completedAt: null, state: "running" as const }
+                    : makeLatestTurn(),
+              session: {
+                ...baseThread.session,
+                provider,
+                status: legacyStatus as "connecting" | "ready" | "running" | "error",
+                orchestrationStatus: orchestrationStatus as
+                  | "starting"
+                  | "ready"
+                  | "running"
+                  | "error",
+                ...(reason ? { reason } : {}),
+              },
+            },
+          })?.label,
+      ),
+    ).toEqual(states.map((state) => state[3]));
   });
 });
 
 describe("resolveProjectStatusIndicator", () => {
-  it("returns null when no threads have a notable status", () => {
-    expect(resolveProjectStatusIndicator([null, null])).toBeNull();
+  it("returns null when there are no thread statuses", () => {
+    expect(resolveProjectStatusIndicator([])).toBeNull();
   });
 
   it("surfaces the highest-priority actionable state across project threads", () => {
     expect(
       resolveProjectStatusIndicator([
         {
-          label: "Completed",
+          label: "Done",
           colorClass: "text-primary",
           dotClass: "bg-primary",
           pulse: false,
@@ -276,7 +360,7 @@ describe("resolveProjectStatusIndicator", () => {
     expect(
       resolveProjectStatusIndicator([
         {
-          label: "Completed",
+          label: "Done",
           colorClass: "text-primary",
           dotClass: "bg-primary",
           pulse: false,

@@ -26,6 +26,7 @@ import {
   serializeCompactChatPersistedState,
   shouldAbandonCompactChatThread,
 } from "~/hooks/useCompactChatThread.logic";
+import { useCompactChatOwnershipRestoration } from "~/hooks/useCompactChatThread.restore";
 
 function getInitialSelection() {
   return getCompactChatModelPreference() ?? getNewestRecentlyUsedModel();
@@ -73,6 +74,9 @@ export function useCompactChatThread() {
     (state) => state.threadHydrationById[threadId]?.status ?? "unloaded",
   );
   const prompt = useComposerDraftStore((state) => state.draftsByThreadId[threadId]?.prompt ?? "");
+  const replacementDraftThreadId = useComposerDraftStore(
+    (state) => state.projectDraftThreadIdByProjectId[selectedProjectId] ?? null,
+  );
   const setDraftThreadContext = useComposerDraftStore((state) => state.setDraftThreadContext);
   const setModelSelection = useComposerDraftStore((state) => state.setModelSelection);
   const clearDraftThread = useComposerDraftStore((state) => state.clearDraftThread);
@@ -119,50 +123,33 @@ export function useCompactChatThread() {
     startFreshThread(BUILT_IN_CHATS_PROJECT_ID);
   }, [startFreshThread]);
 
-  // The bounded startup catalog may not include the persisted compact thread.
-  // Resolve it exactly before deciding that its id belongs to a local draft.
-  useEffect(() => {
-    if (!restoring || !bootstrapComplete) return;
-    const api = readNativeApi();
-    if (!api) return;
+  useCompactChatOwnershipRestoration({
+    abandonCurrentThread,
+    bootstrapComplete,
+    persistedMaterialized,
+    restoring,
+    setThreadState,
+    setThreadSyncError,
+    threadId,
+  });
 
-    let disposed = false;
-    void runBoundedBootstrap({ api, selectedThreadId: threadId, disposed: () => disposed })
-      .then(() => {
-        if (disposed) return;
-        const restored = useStore.getState().threads.find((thread) => thread.id === threadId);
-        if (
-          shouldAbandonCompactChatThread({
-            deleting: restored?.deletingAt != null,
-            presentOnServer: restored !== undefined && restored.deletingAt === null,
-            seenOnServer: seenOnServerRef.current,
-            restoring: true,
-            persistedMaterialized,
-            hasLocalDraft: Boolean(useComposerDraftStore.getState().getDraftThread(threadId)),
-            hydrationFailed: false,
-          })
-        ) {
-          abandonCurrentThread();
-          return;
-        }
-        setThreadState((current) =>
-          current.threadId === threadId
-            ? {
-                ...current,
-                ...(restored ? { projectId: restored.projectId } : {}),
-                restoring: false,
-                persistedMaterialized: restored !== undefined && restored.deletingAt === null,
-              }
-            : current,
-        );
-      })
-      .catch((error: unknown) => {
-        if (!disposed) console.error("Failed to restore compact chat thread", error);
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [abandonCurrentThread, bootstrapComplete, persistedMaterialized, restoring, threadId]);
+  useEffect(() => {
+    if (
+      persistedMaterialized ||
+      serverThread ||
+      !replacementDraftThreadId ||
+      replacementDraftThreadId === threadId ||
+      useComposerDraftStore.getState().getDraftThread(threadId)
+    ) {
+      return;
+    }
+    setThreadState({
+      projectId: selectedProjectId,
+      restoring: false,
+      threadId: replacementDraftThreadId,
+      persistedMaterialized: false,
+    });
+  }, [persistedMaterialized, replacementDraftThreadId, selectedProjectId, serverThread, threadId]);
 
   useEffect(() => {
     if (restoring) return;

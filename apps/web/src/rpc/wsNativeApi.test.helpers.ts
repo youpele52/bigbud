@@ -1,5 +1,4 @@
 import {
-  DEFAULT_SERVER_SETTINGS,
   type KanbanCard,
   type KanbanDeleteResult,
   type KanbanListResult,
@@ -7,18 +6,15 @@ import {
   type Note,
   type NotesDeleteResult,
   type NotesListResult,
-  type OrchestrationEvent,
+  type OrchestrationDeliveryStreamItem,
   type ProjectDirectoryWatchEvent,
-  type ServerConfig,
-  type ServerProvider,
   type TerminalEvent,
 } from "@bigbud/contracts";
 import type { ContextMenuItem } from "@bigbud/contracts";
 import { afterEach, beforeEach, vi, type Mock } from "vitest";
 
 import type { WsRpcClient } from "./wsRpcClient";
-
-/** Recursively replaces all function properties with vitest's Mock type. */
+export { baseServerConfig, defaultProviders } from "./wsNativeApi.test.fixtures";
 type DeepMock<T> = {
   [P in keyof T]: T[P] extends (...args: any[]) => any
     ? Mock
@@ -43,7 +39,9 @@ function registerListener<T>(listeners: Set<(event: T) => void>, listener: (even
 }
 
 export const terminalEventListeners = new Set<(event: TerminalEvent) => void>();
-export const orchestrationEventListeners = new Set<(event: OrchestrationEvent) => void>();
+export const orchestrationEventListeners = new Set<
+  (event: OrchestrationDeliveryStreamItem) => void
+>();
 export const projectDirectoryEventListeners = new Set<
   (event: ProjectDirectoryWatchEvent) => void
 >();
@@ -124,6 +122,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     onStatus: vi.fn(),
   },
   server: {
+    ping: vi.fn(),
     getConfig: vi.fn(),
     refreshProviders: vi.fn(),
     activateCliProxy: vi.fn(),
@@ -166,13 +165,17 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     getStartupProjectCatalog: vi.fn(),
     getProjectThreadSummaries: vi.fn(),
     getSelectedThreadDetail: vi.fn(),
+    getThreadOwnership: vi.fn(),
+    getCommandOutcome: vi.fn(),
     getSnapshot: vi.fn(),
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
     getFullThreadDiff: vi.fn(),
     replayEvents: vi.fn(),
-    onDomainEvent: vi.fn((listener: (event: OrchestrationEvent) => void) =>
-      registerListener(orchestrationEventListeners, listener),
+    acknowledgeDelivery: vi.fn(),
+    onDomainEvent: vi.fn(
+      (_input: unknown, listener: (event: OrchestrationDeliveryStreamItem) => void) =>
+        registerListener(orchestrationEventListeners, listener),
     ),
     onThinkingDelta: vi.fn(),
   },
@@ -345,45 +348,6 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
     ...overrides,
   };
 }
-
-export const defaultProviders: ReadonlyArray<ServerProvider> = [
-  {
-    provider: "codex",
-    enabled: true,
-    installed: true,
-    version: "0.116.0",
-    status: "ready",
-    auth: { status: "authenticated" },
-    checkedAt: "2026-01-01T00:00:00.000Z",
-    models: [],
-    slashCommands: [],
-    skills: [],
-  },
-];
-
-export const baseServerConfig: ServerConfig = {
-  cwd: "/tmp/workspace",
-  storage: {
-    notesDir: "/tmp/workspace/.config/notes",
-    kanbanDir: "/tmp/workspace/.config/kanban",
-  },
-  keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
-  keybindings: [],
-  issues: [],
-  providers: defaultProviders,
-  discovery: {
-    agents: [],
-    skills: [],
-  },
-  availableEditors: ["cursor"],
-  observability: {
-    logsDirectoryPath: "/tmp/workspace/.config/logs",
-    localTracingEnabled: true,
-    otlpTracesEnabled: false,
-    otlpMetricsEnabled: false,
-  },
-  settings: DEFAULT_SERVER_SETTINGS,
-};
 
 beforeEach(() => {
   vi.resetModules();

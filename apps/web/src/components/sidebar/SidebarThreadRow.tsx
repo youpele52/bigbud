@@ -7,7 +7,7 @@ import {
   serializeThreadContextDragPayload,
 } from "./threadPanel.dnd";
 
-import { useIsThreadCompacting, useSidebarThreadSummaryById } from "../../stores/main";
+import { useSidebarThreadSummaryById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { selectThreadTerminalState } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -18,6 +18,7 @@ import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
+import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
@@ -28,6 +29,7 @@ import {
   providerIconPresentationClass,
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
+  shouldShowThreadStatusLabel,
   terminalStatusFromRunningIds,
   type ThreadPr,
 } from "./SidebarThreadRow.status";
@@ -57,8 +59,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       return mergeRunningTerminalIds(drawerRunningTerminalIds, panelRunningTerminalIds);
     }),
   );
-  const isThreadCompacting = useIsThreadCompacting(props.threadId);
-
   const swipeReveal = useSwipeRevealAction<HTMLAnchorElement>({
     itemId: effectiveThreadId,
     disabled: props.renamingThreadId === effectiveThreadId,
@@ -74,12 +74,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         },
       })
     : null;
-  const visibleThreadStatus =
-    threadStatus?.label === "Working" ||
-    threadStatus?.label === "Compacting" ||
-    threadStatus?.label === "Completed"
-      ? null
-      : threadStatus;
+  const visibleThreadStatus = shouldShowThreadStatusLabel(threadStatus) ? threadStatus : null;
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
@@ -120,10 +115,9 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     return null;
   }
 
-  const isThreadCompleted = threadStatus?.label === "Completed";
   const isWorkingPresentation = threadStatus?.label === "Working";
   const connectingStartedAt =
-    thread.session?.status === "connecting" ? thread.session.updatedAt : null;
+    thread.session?.orchestrationStatus === "starting" ? thread.session.updatedAt : null;
   const isConnectingPresentation = shouldShowThreadConnectingPresentation(
     visibleThreadStatus,
     connectingStartedAt,
@@ -132,13 +126,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     thread.session?.provider && thread.session.provider !== "unknown"
       ? PROVIDER_ICON_BY_PROVIDER[thread.session.provider]
       : null;
-  const providerIconColor = providerIconPresentationClass({
-    isCompleted: isThreadCompleted,
-    isCompacting: isThreadCompacting,
-    isConnecting: isConnectingPresentation,
-    isError: thread.session?.status === "error" && !isWorkingPresentation,
-    isRunning: isWorkingPresentation,
-  });
+  const providerIconColor = providerIconPresentationClass(threadStatus);
   const providerIconAnimationClass = shouldAnimateProviderIcon({
     isConnecting: isConnectingPresentation,
     isRunning: isWorkingPresentation,
@@ -248,10 +236,10 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           </Tooltip>
         )}
         {ProviderIcon ? (
-          <ProviderIcon
-            aria-hidden="true"
-            focusable="false"
-            className={`size-3 shrink-0 transition-[color,opacity] duration-200 ease-out ${providerIconColor} ${providerIconAnimationClass}`.trim()}
+          <SidebarThreadProviderIcon
+            icon={ProviderIcon}
+            colorClass={providerIconColor}
+            animationClass={providerIconAnimationClass}
           />
         ) : null}
         {isConnectingPresentation ? (
@@ -259,7 +247,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         ) : visibleThreadStatus ? (
           <ThreadStatusLabel
             status={visibleThreadStatus}
-            hideDot={visibleThreadStatus.label === "Completed"}
+            hideDot={visibleThreadStatus.label === "Done"}
           />
         ) : null}
         {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}

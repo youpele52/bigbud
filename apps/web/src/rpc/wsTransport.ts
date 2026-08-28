@@ -74,7 +74,7 @@ export class WsTransport {
 
   async requestStream<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
   ): Promise<void> {
     if (this.disposed) {
       throw new Error("Transport disposed");
@@ -84,20 +84,14 @@ export class WsTransport {
     const client = await session.clientPromise;
     await session.runtime.runPromise(
       Stream.runForEach(connect(client), (value) =>
-        Effect.sync(() => {
-          try {
-            listener(value);
-          } catch {
-            // Swallow listener errors so the stream can finish cleanly.
-          }
-        }),
+        Effect.promise(() => Promise.resolve(listener(value))),
       ),
     );
   }
 
   subscribe<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
     options?: SubscribeOptions,
   ): () => void {
     if (this.disposed) {
@@ -120,11 +114,7 @@ export class WsTransport {
         const session = this.session;
         try {
           if (hasReceivedValue) {
-            try {
-              options?.onResubscribe?.();
-            } catch {
-              // Swallow reconnect hook errors so the stream can recover.
-            }
+            options?.onResubscribe?.();
           }
 
           const runningStream = this.runStreamOnSession(
@@ -250,7 +240,7 @@ export class WsTransport {
   private runStreamOnSession<TValue>(
     session: TransportSession,
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
     isActive: () => boolean,
     markValueReceived: () => void,
   ): {
@@ -267,17 +257,13 @@ export class WsTransport {
       Effect.promise(() => session.clientPromise).pipe(
         Effect.flatMap((client) =>
           Stream.runForEach(connect(client), (value) =>
-            Effect.sync(() => {
+            Effect.promise(() => {
               if (!isActive()) {
-                return;
+                return Promise.resolve();
               }
 
               markValueReceived();
-              try {
-                listener(value);
-              } catch {
-                // Swallow listener errors so the stream stays live.
-              }
+              return Promise.resolve(listener(value));
             }),
           ),
         ),

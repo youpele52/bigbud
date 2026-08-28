@@ -98,10 +98,17 @@ export function startMascotOrchestrationSync(input: {
   };
 
   const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
-    for (const event of events) {
-      ensurePlaceholderThread(event);
+    const admitted = recovery.admitEventBatch(events);
+    if (admitted.length === 0) return;
+    try {
+      for (const event of admitted) ensurePlaceholderThread(event);
+      applyAcceptedEvents(admitted);
+      recovery.commitEventBatchApplied(admitted);
+      recovery.acknowledgeAppliedSequence(admitted.at(-1)!.sequence);
+    } catch (error) {
+      recovery.markApplicationFailed();
+      throw error;
     }
-    applyAcceptedEvents(recovery.markEventBatchApplied(events));
   };
 
   const flushPendingEvents = () => {
@@ -113,7 +120,16 @@ export function startMascotOrchestrationSync(input: {
   const scheduleFlush = () => {
     if (flushScheduled) return;
     flushScheduled = true;
-    queueMicrotask(flushPendingEvents);
+    queueMicrotask(() => {
+      try {
+        flushPendingEvents();
+      } catch (error) {
+        logRecovery("Mascot event application failed.", { error });
+        void runReplayRecovery("sequence-gap", () => {
+          void runBoundedRecovery("replay-failed");
+        });
+      }
+    });
   };
 
   const runReplayRecovery = async (
@@ -204,18 +220,21 @@ export function startMascotOrchestrationSync(input: {
   };
 
   const unsubscribe = input.api.orchestration.onDomainEvent(
-    (event) => {
-      const action = recovery.classifyDomainEvent(event.sequence);
-      if (action === "apply") {
-        pendingEvents.push(event);
-        scheduleFlush();
-        return;
-      }
-      if (action === "recover") {
-        flushPendingEvents();
-        void runReplayRecovery("sequence-gap", () => {
-          void runBoundedRecovery("replay-failed");
-        });
+    (item) => {
+      if (item.type !== "batch") return;
+      for (const event of item.events) {
+        const action = recovery.classifyDomainEvent(event.sequence);
+        if (action === "apply") {
+          pendingEvents.push(event);
+          scheduleFlush();
+          continue;
+        }
+        if (action === "recover") {
+          flushPendingEvents();
+          void runReplayRecovery("sequence-gap", () => {
+            void runBoundedRecovery("replay-failed");
+          });
+        }
       }
     },
     {

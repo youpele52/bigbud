@@ -12,13 +12,18 @@ function renderCodePreview(
   onSelectRange = vi.fn(),
   onSelectLine = vi.fn(),
   selectedRange: { startLine: number; endLine: number } | null = null,
+  code: { contents: string; language: string; isPlainTextFile: boolean } = {
+    contents: CONTENTS,
+    language: "text",
+    isPlainTextFile: true,
+  },
 ) {
   return render(
     <FilePreviewCode
-      contents={CONTENTS}
-      language="text"
+      contents={code.contents}
+      language={code.language}
       themeName="pierre-dark"
-      isPlainTextFile
+      isPlainTextFile={code.isPlainTextFile}
       truncated={false}
       selectedRange={selectedRange}
       selectedText={selectedRange ? "alpha\nbeta value" : ""}
@@ -100,5 +105,20 @@ describe("FilePreviewCode annotation affordances", () => {
     selection.addRange(range);
     code.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
     expect(onSelectRange).not.toHaveBeenCalled();
+  });
+
+  it("renders environment keys and values with syntax colors", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    await renderCodePreview(vi.fn(), vi.fn(), null, {
+      contents: "EXTEND_ESLINT=true\nAPI_URL=http://localhost/api\n# Local settings",
+      language: "dotenv",
+      isPlainTextFile: false,
+    });
+
+    await expect.poll(() => document.querySelector(".chat-markdown-shiki")).not.toBeNull();
+    expect(
+      document.querySelectorAll(".chat-markdown-shiki span[style*='color']").length,
+    ).toBeGreaterThan(1);
   });
 });

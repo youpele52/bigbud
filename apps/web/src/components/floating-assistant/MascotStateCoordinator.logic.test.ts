@@ -5,6 +5,7 @@ import {
   type GetSidebarThreadCatalogResult,
   type GetStartupProjectCatalogResult,
   type NativeApi,
+  type OrchestrationDeliveryStreamItem,
   type OrchestrationEvent,
   type OrchestrationReplayEventsResult,
 } from "@bigbud/contracts";
@@ -65,7 +66,7 @@ function makeApi(options: {
   readonly replayEvents?: OrchestrationEvent[];
 }) {
   const projectionSequence = options.projectionSequence ?? 10;
-  const listeners = new Set<(event: OrchestrationEvent) => void>();
+  const listeners = new Set<(event: OrchestrationDeliveryStreamItem) => void>();
   const orchestration = {
     getSnapshot: vi.fn(),
     getSidebarThreadCatalog: vi.fn(
@@ -92,7 +93,8 @@ function makeApi(options: {
         events: options.replayEvents ?? [],
       }),
     ),
-    onDomainEvent: vi.fn((listener: (event: OrchestrationEvent) => void) => {
+    acknowledgeDelivery: vi.fn(),
+    onDomainEvent: vi.fn((listener: (event: OrchestrationDeliveryStreamItem) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     }),
@@ -102,7 +104,18 @@ function makeApi(options: {
     api: { orchestration } as unknown as NativeApi,
     orchestration,
     emit: (event: OrchestrationEvent) => {
-      for (const listener of listeners) listener(event);
+      for (const listener of listeners) {
+        listener({
+          type: "batch",
+          route: "direct-unmanaged",
+          consumerId: "mascot-test",
+          consumerGeneration: 1,
+          serverEpoch: "server-test",
+          subscriptionGeneration: 1,
+          batchId: `batch-${event.sequence}`,
+          events: [event],
+        });
+      }
     },
   };
 }

@@ -1,5 +1,6 @@
 import { type ComponentProps, type ReactNode, forwardRef } from "react";
 import {
+  type ExecutionTargetId,
   type ProviderInteractionMode,
   type ProviderKind,
   type RuntimeMode,
@@ -15,6 +16,7 @@ interface ComposerFooterLeadingProps {
   selectedModelForPickerWithCustomFallback: string;
   lockedProvider: ProviderKind | null;
   providerStatuses: readonly ServerProvider[];
+  workspaceExecutionTargetId?: ExecutionTargetId | null | undefined;
   modelOptionsByProvider: ModelOptionsByProvider;
   composerProviderState: {
     modelPickerIconClassName?: string;
@@ -43,6 +45,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       selectedModelForPickerWithCustomFallback,
       lockedProvider,
       providerStatuses,
+      workspaceExecutionTargetId,
       modelOptionsByProvider,
       composerProviderState,
       hasThreadStarted,
@@ -76,6 +79,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           model={selectedModelForPickerWithCustomFallback}
           lockedProvider={lockedProvider}
           providers={providerStatuses}
+          workspaceExecutionTargetId={workspaceExecutionTargetId}
           modelOptionsByProvider={modelOptionsByProvider}
           enableRecentlyUsed
           {...(compact

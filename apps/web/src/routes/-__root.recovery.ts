@@ -1,18 +1,10 @@
 import { type OrchestrationEvent, type ThreadId } from "@bigbud/contracts";
 import { Throttler } from "@tanstack/react-pacer";
 import { type QueryClient } from "@tanstack/react-query";
-import {
-  clearPromotedDraftThread,
-  clearPromotedDraftThreads,
-  useComposerDraftStore,
-} from "../stores/composer";
+import { flushComposerDraftPersistence, useComposerDraftStore } from "../stores/composer";
 import { useStore } from "../stores/main";
-import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
 import { toastManager } from "../components/ui/toast";
-import {
-  applySideChatLifecycleEvents,
-  reconcileSideChatSnapshot,
-} from "../components/chat/side-chat/sideChat.actions";
+import { applySideChatLifecycleEvents } from "../components/chat/side-chat/sideChat.actions";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import type { readNativeApi } from "../rpc/nativeApi";
@@ -30,11 +22,17 @@ import {
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
 import { getFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
+import { clearPersistedCommandsForCanonicalEvents } from "../lib/orchestrationCommandRecovery";
 import {
   coalesceOrchestrationUiEvents,
   shouldFlushOrchestrationEventImmediately,
 } from "./-__root.orchestration-events";
 import { runBoundedBootstrap } from "./-__root.bounded-bootstrap";
+import { reconcileAppliedCanonicalOwnership } from "./-__root.ownership-reconciliation";
+import { createAsyncOperationQueue } from "./-__root.recovery.serial";
+import { createPendingDomainEventQueue } from "./-__root.recovery.pending";
+import { reconcileSnapshotDerivedState } from "./-__root.recovery.snapshot";
+import type { OwnershipScope } from "../stores/ownership/ownershipLedger.types";
 import {
   createSidebarCatalogRefresher,
   getHighestSequence,
@@ -46,6 +44,7 @@ export const MAX_NO_PROGRESS_REPLAY_RETRIES = 3;
 
 interface OrchestrationRecoveryInput {
   api: NonNullable<ReturnType<typeof readNativeApi>>;
+  ownershipScope?: OwnershipScope;
   queryClient: QueryClient;
   clearAllThinkingDeltas: () => void;
   reconcileThinkingActivities: (events: ReadonlyArray<OrchestrationEvent>) => void;
@@ -66,34 +65,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
   const sidebarCatalogRefresher = createSidebarCatalogRefresher(input.api);
   let replayRetryTracker: ReplayRetryTracker | null = null;
   let needsProviderInvalidation = false;
-  const pendingDomainEvents: OrchestrationEvent[] = [];
-  let flushPendingDomainEventsScheduled = false;
-
-  const reconcileSnapshotDerivedState = () => {
-    const threads = useStore.getState().threads;
-    reconcileSideChatSnapshot(threads);
-    const projects = useStore.getState().projects;
-    input.syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
-    input.syncThreads(
-      threads.map((thread) => ({
-        id: thread.id,
-        seedVisitedAt: thread.updatedAt ?? thread.createdAt,
-      })),
-    );
-    clearPromotedDraftThreads(threads.map((thread) => thread.id));
-    const draftThreadIds = Object.keys(
-      useComposerDraftStore.getState().draftThreadsByThreadId,
-    ) as ThreadId[];
-    const activeThreadIds = collectActiveTerminalThreadIds({
-      snapshotThreads: threads.map((thread) => ({
-        id: thread.id,
-        deletedAt: null,
-        archivedAt: thread.archivedAt,
-      })),
-      draftThreadIds,
-    });
-    input.removeOrphanedTerminalStates(activeThreadIds);
-  };
+  const recoveryOperationQueue = createAsyncOperationQueue();
 
   const queryInvalidationThrottler = new Throttler(
     () => {
@@ -157,9 +129,6 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
 
     const draftStore = useComposerDraftStore.getState();
-    for (const threadId of batchEffects.clearPromotedDraftThreadIds) {
-      clearPromotedDraftThread(threadId);
-    }
     for (const threadId of batchEffects.clearDeletedThreadIds) {
       draftStore.clearDraftThread(threadId);
       input.clearThreadUi(threadId);
@@ -179,38 +148,48 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     if (failedDeleteToast) toastManager.add(failedDeleteToast);
   };
 
-  const applyEventBatch = (
+  const applyEventBatchNow = async (
     events: ReadonlyArray<OrchestrationEvent>,
     options: { readonly disposed?: (() => boolean) | undefined; readonly refresh?: boolean } = {},
   ) => {
-    const nextEvents = recovery.markEventBatchApplied(events);
-    const acceptedEvents = nextEvents.filter(
-      (event) => !threadHydrationEventBuffer.bufferEvent(event),
-    );
-    applyAcceptedEventBatch(acceptedEvents, options.disposed, options.refresh !== false);
-  };
-  setThreadHydrationEventApplier((events) => applyAcceptedEventBatch(events));
-
-  const flushPendingDomainEvents = (disposed: boolean) => {
-    flushPendingDomainEventsScheduled = false;
-    if (disposed || pendingDomainEvents.length === 0) {
-      return;
+    const nextEvents = recovery.admitEventBatch(events);
+    if (nextEvents.length === 0) return;
+    try {
+      for (const event of nextEvents) threadHydrationEventBuffer.bufferEvent(event);
+      applyAcceptedEventBatch(nextEvents, options.disposed, options.refresh !== false);
+      await reconcileAppliedCanonicalOwnership({
+        api: input.api,
+        events: nextEvents,
+        scope: input.ownershipScope,
+      });
+      await clearPersistedCommandsForCanonicalEvents(nextEvents).catch((error: unknown) => {
+        console.warn("[orchestration-recovery] Command-attempt cleanup failed.", {
+          reason: error instanceof Error ? error.name : "unknown",
+        });
+      });
+      flushComposerDraftPersistence();
+      recovery.commitEventBatchApplied(nextEvents);
+      recovery.acknowledgeAppliedSequence(nextEvents.at(-1)!.sequence);
+    } catch (error) {
+      recovery.markApplicationFailed();
+      throw error;
     }
-    applyEventBatch(pendingDomainEvents.splice(0, pendingDomainEvents.length), {
-      disposed: () => disposed,
-    });
   };
-  const schedulePendingDomainEventFlush = (disposed: () => boolean) => {
-    if (flushPendingDomainEventsScheduled) {
-      return;
-    }
-    flushPendingDomainEventsScheduled = true;
-    queueMicrotask(() => {
-      flushPendingDomainEvents(disposed());
+  const applyEventBatch = (
+    events: ReadonlyArray<OrchestrationEvent>,
+    options: { readonly disposed?: (() => boolean) | undefined; readonly refresh?: boolean } = {},
+  ) => recoveryOperationQueue.enqueue(() => applyEventBatchNow(events, options));
+  setThreadHydrationEventApplier((events) => {
+    applyAcceptedEventBatch(events);
+    void clearPersistedCommandsForCanonicalEvents(events).catch((error: unknown) => {
+      console.warn("[orchestration-recovery] Command-attempt cleanup failed.", {
+        reason: error instanceof Error ? error.name : "unknown",
+      });
     });
-  };
+  });
+  const pendingDomainEventQueue = createPendingDomainEventQueue(applyEventBatch);
 
-  const runReplayRecovery = async (
+  const runReplayRecoveryNow = async (
     reason: "sequence-gap" | "resubscribe",
     disposed: () => boolean,
     fallbackToBoundedRecovery: () => void,
@@ -235,7 +214,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       recovery.observeReplayTarget(replay.latestSequence);
       if (!disposed()) {
         input.clearAllThinkingDeltas();
-        applyEventBatch(replay.events, { disposed, refresh: false });
+        await applyEventBatchNow(replay.events, { disposed, refresh: false });
         if (replay.events.some(shouldRefreshSidebarCatalog)) {
           const refreshed = await sidebarCatalogRefresher.refresh(
             disposed,
@@ -297,7 +276,16 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     void runReplayRecovery(reason, disposed, fallbackToBoundedRecovery);
   };
 
-  const runBoundedRecovery = async (
+  const runReplayRecovery = (
+    reason: "sequence-gap" | "resubscribe",
+    disposed: () => boolean,
+    fallbackToBoundedRecovery: () => void,
+  ) =>
+    recoveryOperationQueue.enqueue(() =>
+      runReplayRecoveryNow(reason, disposed, fallbackToBoundedRecovery),
+    );
+
+  const runBoundedRecoveryNow = async (
     reason: "bootstrap" | "replay-failed",
     selectedThreadId: ThreadId | null,
     disposed: () => boolean,
@@ -326,7 +314,11 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
         { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (!disposed()) {
-        reconcileSnapshotDerivedState();
+        reconcileSnapshotDerivedState({
+          syncProjects: input.syncProjects,
+          syncThreads: input.syncThreads,
+          removeOrphanedTerminalStates: input.removeOrphanedTerminalStates,
+        });
         if (recovery.completeSnapshotRecovery(projectionSequence)) {
           void runReplayRecovery("sequence-gap", disposed, () => {
             void runBoundedRecovery("replay-failed", selectedThreadId, disposed);
@@ -345,25 +337,30 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
   };
 
+  const runBoundedRecovery = (
+    reason: "bootstrap" | "replay-failed",
+    selectedThreadId: ThreadId | null,
+    disposed: () => boolean,
+  ) =>
+    recoveryOperationQueue.enqueue(() => runBoundedRecoveryNow(reason, selectedThreadId, disposed));
+
   return {
     applyEventBatch,
-    flushPendingDomainEvents,
-    schedulePendingDomainEventFlush,
+    flushPendingDomainEvents: pendingDomainEventQueue.flushPendingDomainEvents,
+    schedulePendingDomainEventFlush: pendingDomainEventQueue.schedulePendingDomainEventFlush,
     runReplayRecovery,
     runBoundedRecovery,
     classifyDomainEvent: recovery.classifyDomainEvent.bind(recovery),
+    getAppliedSequence: () => recovery.getState().appliedSequence,
     cancel: () => {
       needsProviderInvalidation = false;
-      flushPendingDomainEventsScheduled = false;
-      pendingDomainEvents.length = 0;
+      pendingDomainEventQueue.cancel();
       sidebarCatalogRefresher.cancel();
       queryInvalidationThrottler.cancel();
       threadHydrationEventBuffer.clear();
       setThreadHydrationEventApplier(null);
     },
-    pushPendingDomainEvent: (event: OrchestrationEvent) => {
-      pendingDomainEvents.push(event);
-    },
+    pushPendingDomainEvent: pendingDomainEventQueue.pushPendingDomainEvent,
     shouldFlushImmediately: shouldFlushOrchestrationEventImmediately,
   };
 }

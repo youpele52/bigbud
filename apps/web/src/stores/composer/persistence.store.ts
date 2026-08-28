@@ -149,8 +149,10 @@ export function partializeComposerDraftStoreState(
   }
   return {
     draftsByThreadId: persistedDraftsByThreadId,
-    draftThreadsByThreadId: state.draftThreadsByThreadId,
-    projectDraftThreadIdByProjectId: state.projectDraftThreadIdByProjectId,
+    // Draft ownership is persisted immediately in the revisioned ownership ledger.
+    // Composer persistence owns content only and cannot restore invalidated mappings.
+    draftThreadsByThreadId: {},
+    projectDraftThreadIdByProjectId: {},
     stickyModelSelectionByProvider: state.stickyModelSelectionByProvider,
     stickyActiveProvider: state.stickyActiveProvider,
   };

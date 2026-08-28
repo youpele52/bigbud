@@ -10,13 +10,14 @@ import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
 
 export interface ThreadStatusPill {
   label:
+    | "Connection Warning"
+    | "Provider Unavailable"
+    | "Failed"
+    | "Idle"
     | "Working"
-    | "Checking"
-    | "Stalled"
-    | "Recovering"
     | "Compacting"
-    | "Connecting"
-    | "Completed"
+    | "Getting Ready"
+    | "Done"
     | "Pending Approval"
     | "Awaiting Input"
     | "Plan Ready";
@@ -26,16 +27,17 @@ export interface ThreadStatusPill {
 }
 
 const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
-  "Pending Approval": 5,
-  "Awaiting Input": 4,
-  Working: 3,
-  Checking: 3,
-  Stalled: 3,
-  Recovering: 3,
-  Compacting: 3,
-  Connecting: 3,
+  Failed: 7,
+  "Provider Unavailable": 7,
+  "Pending Approval": 6,
+  "Awaiting Input": 5,
+  "Connection Warning": 4,
+  Working: 4,
+  Compacting: 4,
+  "Getting Ready": 3,
   "Plan Ready": 2,
-  Completed: 1,
+  Done: 1,
+  Idle: 0,
 };
 
 type ThreadStatusInput = Pick<
@@ -53,23 +55,26 @@ export function resolveThreadStatusPill(input: {
 }): ThreadStatusPill | null {
   const { thread } = input;
   if (isSessionHealthChecking(thread.session) && !hasActiveProviderProgress(thread)) {
-    return status("Checking", "text-warning", "bg-warning");
+    return status("Connection Warning", "text-warning", "bg-warning");
   }
   if (isSessionRecovering(thread.session)) {
-    return status("Recovering", "text-warning", "bg-warning");
+    return status("Connection Warning", "text-warning", "bg-warning");
   }
   if (isSessionStalled(thread.session)) {
-    return status("Stalled", "text-destructive", "bg-destructive");
+    return status("Provider Unavailable", "text-destructive", "bg-destructive");
+  }
+  if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
+    return status("Failed", "text-destructive", "bg-destructive");
   }
   if (thread.hasPendingApprovals) return status("Pending Approval");
   if (thread.hasPendingUserInput) return status("Awaiting Input");
-  if (thread.session?.status === "running" || hasActiveProviderProgress(thread)) {
+  if (thread.session?.orchestrationStatus === "running" || hasActiveProviderProgress(thread)) {
     return isSessionCompacting(thread.session)
       ? status("Compacting", "text-warning", "bg-warning", true)
       : status("Working", "text-info-foreground", "bg-info-foreground", true);
   }
-  if (thread.session?.status === "connecting") {
-    return status("Connecting", "text-info-foreground", "bg-info-foreground", true);
+  if (thread.session?.orchestrationStatus === "starting") {
+    return status("Getting Ready", "text-info-foreground", "bg-info-foreground", true);
   }
   if (
     !thread.hasPendingUserInput &&
@@ -79,7 +84,9 @@ export function resolveThreadStatusPill(input: {
   ) {
     return status("Plan Ready");
   }
-  return isThreadCompletedStatus(thread) ? status("Completed") : null;
+  return isThreadCompletedStatus(thread)
+    ? status("Done")
+    : status("Idle", "text-muted-foreground", "bg-muted-foreground");
 }
 
 /** A matching streaming turn is stronger evidence than a legacy health-only projection. */

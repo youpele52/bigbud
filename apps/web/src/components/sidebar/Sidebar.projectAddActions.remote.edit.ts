@@ -1,6 +1,7 @@
 import type { NativeApi, OrchestrationReadModel, ProjectId } from "@bigbud/contracts";
 
 import { buildExplicitExecutionTargets } from "../../lib/providerExecutionTargets";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
@@ -81,7 +82,7 @@ export async function reconfigureRemoteProjectWithApi(input: {
       projectId: input.projectId,
       executionTargetId: executionTargets.workspaceExecutionTargetId,
     });
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "project.reconfigure",
       commandId: newCommandId(),
       projectId: input.projectId,
