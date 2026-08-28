@@ -13,6 +13,7 @@ import { assertLinuxBackendModulesLink } from "./linuxArtifactVerify.backendModu
 import { BuildScriptError, commandOutputOptions, runCommand } from "./shared.ts";
 import { assertLinuxElectronRuntimeFiles } from "./linuxRuntimeFiles.ts";
 import { assertWorkspaceAgentBinary } from "./workspaceAgent.ts";
+import { assertLinuxDesktopSupervisor } from "./linuxArtifactVerify.supervisor.ts";
 
 const LINUX_X64_WORKSPACE_AGENT = findDesktopWorkspaceAgentTarget("linux", "x64")!;
 
@@ -115,6 +116,7 @@ export const verifyLinuxUnpackedArtifact = Effect.fn("verifyLinuxUnpackedArtifac
     "Linux unpacked artifact verification failed",
     LINUX_X64_WORKSPACE_AGENT,
   );
+  yield* assertLinuxDesktopSupervisor(unpackedDir, "Linux unpacked artifact verification failed");
   yield* Effect.log("[desktop-artifact] Unpacked Linux artifact verification passed.");
 });
 
@@ -143,14 +145,13 @@ export const verifyLinuxAppImageArtifact = Effect.fn("verifyLinuxAppImageArtifac
     "AppImage artifact verification failed",
     LINUX_X64_WORKSPACE_AGENT,
   );
+  yield* assertLinuxDesktopSupervisor(extractedRoot, "AppImage artifact verification failed");
 
   yield* Effect.log("[desktop-artifact] AppImage artifact verification passed.");
 });
 
 /**
  * Smoke test a Linux AppImage by running it headlessly with --version.
- * This ensures the AppImage can actually start on the host system.
- *
  * Skipped in headless/CI environments where no X11/Wayland display is available.
  */
 export const smokeTestLinuxAppImage = Effect.fn("smokeTestLinuxAppImage")(function* (

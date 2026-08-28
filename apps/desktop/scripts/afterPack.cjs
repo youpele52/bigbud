@@ -1,5 +1,6 @@
 const {
   assertPackagedBundledSkills,
+  assertPackagedDesktopSupervisor,
   ensureLinuxBackendModulesSymlink,
   resolvePackagedServerDir,
 } = require("./afterPack.shared.cjs");
@@ -18,6 +19,7 @@ module.exports = async function afterPack(context) {
   const serverDir = resolvePackagedServerDir(context);
 
   assertPackagedBundledSkills(serverDir);
+  assertPackagedDesktopSupervisor(serverDir, platformName);
   console.log(`[afterPack] Verified bundled native skills at ${serverDir}.`);
 
   if (platformName === "linux") {

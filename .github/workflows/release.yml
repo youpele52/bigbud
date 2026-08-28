@@ -153,6 +153,22 @@ jobs:
             fi
           done
 
+      - name: Validate Windows signing credentials
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          set -euo pipefail
+          for name in WIN_CSC_LINK WIN_CSC_KEY_PASSWORD BIGBUD_WINDOWS_SIGNING_SUBJECT; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required Windows signing configuration: $name" >&2
+              exit 1
+            fi
+          done
+
       - name: Import code signing certificates
         if: matrix.platform == 'mac'
         uses: apple-actions/import-codesign-certs@v2
@@ -166,6 +182,8 @@ jobs:
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+          WIN_CSC_LINK: ${{ matrix.platform == 'win' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: |
           args=(
             --platform "${{ matrix.platform }}"
@@ -179,7 +197,8 @@ jobs:
             echo "macOS signing and notarization are required."
             args+=(--signed)
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
-            echo "Windows artifacts are intentionally unsigned."
+            echo "Windows Authenticode signing is required."
+            args+=(--signed)
           else
             echo "Linux artifacts do not use OS code signing."
           fi
@@ -188,12 +207,25 @@ jobs:
 
       - name: Smoke test packaged workspace watcher
         shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
         run: |
           args=(release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish)
-          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ matrix.platform }}" == "win" ]]; then
             args+=(--require-code-signature)
           fi
           node scripts/verify-packaged-workspace-agent.ts "${args[@]}"
+
+      - name: Smoke test packaged delivery supervisor
+        shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          args=(release "${{ matrix.platform }}")
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ matrix.platform }}" == "win" ]]; then
+            args+=(--require-code-signature)
+          fi
+          bun run verify:packaged-desktop-supervisor -- "${args[@]}"
 
       - name: Build Linux .deb fallback
         if: matrix.platform == 'linux'

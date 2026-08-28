@@ -1,12 +1,13 @@
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { assert, describe, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const afterPackShared = require("../../scripts/afterPack.shared.cjs") as {
   assertPackagedBundledSkills: (serverDir: string) => void;
+  assertPackagedDesktopSupervisor: (serverDir: string, platformName: string) => void;
   ensureLinuxBackendModulesSymlink: (serverDir: string) => void;
   resolvePackagedServerDir: (context: {
     electronPlatformName: string;
@@ -66,6 +67,27 @@ describe("afterPack.shared", () => {
         () => afterPackShared.assertPackagedBundledSkills(serverDir),
         /teach\/SKILL\.md/,
       );
+    } finally {
+      rmSync(serverDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires the executable and release evidence for the packaged supervisor", () => {
+    const serverDir = makeTempDir("after-pack-supervisor-");
+    const supervisorDir = join(serverDir, "delivery-supervisor", "bin");
+    try {
+      mkdirSync(supervisorDir, { recursive: true });
+      const binaryPath = join(supervisorDir, "bigbud-desktop-supervisor");
+      writeFileSync(binaryPath, "fixture");
+      chmodSync(binaryPath, 0o755);
+      writeFileSync(join(supervisorDir, "artifact-manifest.json"), "{}");
+      expect(() => afterPackShared.assertPackagedDesktopSupervisor(serverDir, "linux")).toThrow(
+        /sbom\.cdx\.json/,
+      );
+      writeFileSync(join(supervisorDir, "sbom.cdx.json"), "{}");
+      expect(() =>
+        afterPackShared.assertPackagedDesktopSupervisor(serverDir, "linux"),
+      ).not.toThrow();
     } finally {
       rmSync(serverDir, { recursive: true, force: true });
     }

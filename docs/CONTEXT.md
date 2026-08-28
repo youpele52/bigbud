@@ -39,3 +39,62 @@ _Avoid_: Beta when referring to prereleases generally
 ## Flagged ambiguities
 
 - "Production" previously meant any packaged build and a stable release. Resolved: use **Stable Release** when specifically referring to an unbadged packaged release.
+
+# Desktop Orchestration Delivery
+
+This context distinguishes canonical product ownership from reliable delivery
+coordination in the packaged desktop runtime.
+
+## Language
+
+**Canonical Domain Authority**:
+The TypeScript server and SQLite state that define which orchestration events
+exist, their canonical order, replay data, authorization, and product meaning.
+_Avoid_: Supervisor, delivery authority
+
+**Desktop Delivery Supervisor**:
+The packaged `bigbud-desktop-supervisor` Rust sidecar that authoritatively
+coordinates bounded orchestration-event delivery for an attached desktop
+consumer. It owns batching, delivery ordering, consumer generations,
+application acknowledgements, timeouts, and reconnect recovery, but does not
+create or interpret orchestration events.
+_Avoid_: Application server, canonical event store
+
+**Delivery Authority**:
+The single active path allowed to deliver canonical orchestration events to a
+consumer. For a supervisor-managed packaged desktop session, the **Desktop
+Delivery Supervisor** is the delivery authority and events must not bypass it.
+
+**Application Acknowledgement**:
+The web consumer's confirmation that it has serially applied a complete batch
+and finished canonical ownership reconciliation. A WebSocket write or receipt
+alone is not an application acknowledgement.
+
+**Controlled Fallback**:
+An emergency, fenced transition from a failed supervisor-managed session to
+the TypeScript delivery path after bounded restart, reconnect, and replay
+recovery are exhausted. It resumes after the last verified application
+acknowledgement, stays on TypeScript for the rest of that session, and never
+causes the two paths to deliver concurrently.
+
+**Direct Unmanaged Delivery**:
+The retained TypeScript delivery route for standalone server and mobile-remote
+consumers that do not have a supported native supervisor distribution. It is
+not evidence that a packaged desktop supervisor failed.
+
+## Operations
+
+Packaged Electron passes the immutable supervisor path in
+`BIGBUD_DESKTOP_SUPERVISOR_BINARY` and marks packaged intent with
+`BIGBUD_DESKTOP_PACKAGED=1`. Development can opt in with
+`BIGBUD_DESKTOP_SUPERVISOR_ENABLED=1`; setting it to `0` is the startup-only
+rollback gate. A missing or incompatible packaged binary produces factual
+`degraded` and `fallback` lifecycle states. Fallback is terminal for that
+subscription; reconnect or reload creates a new subscription decision.
+
+## Relationships
+
+- The **Canonical Domain Authority** supplies events to the **Delivery Authority**.
+- The **Desktop Delivery Supervisor** is authoritative for delivery, not domain truth.
+- A supervisor restart preserves authority when the server can reattach and recover from the last **Application Acknowledgement**.
+- **Controlled Fallback** is a terminal recovery mode for the current session, not normal routing or a mid-session switchback mechanism.

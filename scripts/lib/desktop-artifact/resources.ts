@@ -275,6 +275,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
           macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
           macConfig.binaries = [
             "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
+            "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
           ];
           // afterSign is a root-level electron-builder property, not mac-specific.
           buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
@@ -306,6 +307,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
         buildConfig.win = {
           target: [target],
           icon: "icon.ico",
+          signExts: [".exe"],
         };
       }
 

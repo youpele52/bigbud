@@ -44,7 +44,7 @@ import {
 } from "./linuxArtifactVerify.ts";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
-import { stagePackagedWorkspaceAgent } from "./workspaceAgent.ts";
+import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -142,7 +142,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });
   yield* fs.makeDirectory(stageServerDir, { recursive: true });
-  yield* stagePackagedWorkspaceAgent({
+  yield* stageDesktopNativeSidecars({
     repoRoot,
     stageServerDir,
     platform: options.platform,
@@ -296,6 +296,8 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
     delete buildEnv.CSC_LINK;
     delete buildEnv.CSC_KEY_PASSWORD;
+    delete buildEnv.WIN_CSC_LINK;
+    delete buildEnv.WIN_CSC_KEY_PASSWORD;
     delete buildEnv.APPLE_API_KEY;
     delete buildEnv.APPLE_API_KEY_ID;
     delete buildEnv.APPLE_API_ISSUER;

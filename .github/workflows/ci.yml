@@ -178,6 +178,9 @@ jobs:
       - name: Smoke test packaged workspace watcher
         run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
 
+      - name: Smoke test packaged delivery supervisor
+        run: bun run verify:packaged-desktop-supervisor -- release "${{ matrix.platform }}"
+
       - name: Build Linux .deb fallback
         if: matrix.platform == 'linux'
         run: >-

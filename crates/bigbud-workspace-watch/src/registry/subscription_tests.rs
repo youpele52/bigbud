@@ -45,7 +45,7 @@ struct TrackingWatcher {
 
 impl Watcher for TrackingWatcher {
     fn new<F: EventHandler>(_event_handler: F, _config: Config) -> notify::Result<Self> {
-        unreachable!("the test injects this watcher")
+        Err(notify::Error::generic("the test injects this watcher"))
     }
 
     fn watch(&mut self, path: &Path, _mode: RecursiveMode) -> notify::Result<()> {

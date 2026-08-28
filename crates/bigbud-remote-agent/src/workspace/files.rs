@@ -250,6 +250,7 @@ fn hex_sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
+#[allow(clippy::indexing_slicing)]
 fn reader_sha256(reader: &mut impl Read) -> Result<String, WorkspaceError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];

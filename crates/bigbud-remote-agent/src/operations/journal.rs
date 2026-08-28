@@ -133,7 +133,7 @@ impl OperationJournal {
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)
             .map_err(OperationJournalError::Io)?;
-        if bytes.len() < MAGIC.len() || &bytes[..MAGIC.len()] != MAGIC {
+        if bytes.get(..MAGIC.len()) != Some(MAGIC) {
             return Err(OperationJournalError::Corrupt("invalid journal header"));
         }
         let (records, valid_length) = decode_complete_records(&bytes)?;

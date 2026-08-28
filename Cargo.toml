@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/bigbud-protocol", "crates/bigbud-remote-agent", "crates/bigbud-workspace-watch"]
+members = [
+  "crates/bigbud-desktop-supervisor",
+  "crates/bigbud-protocol",
+  "crates/bigbud-remote-agent",
+  "crates/bigbud-workspace-watch",
+]
 resolver = "2"
 
 [workspace.package]
@@ -12,6 +17,19 @@ version = "0.1.0"
 anyhow = "1"
 prost = "0.14"
 prost-build = "0.14"
+protoc-bin-vendored = "3.2.0"
 sha2 = "0.10"
 thiserror = "2"
 notify = "8.2"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"

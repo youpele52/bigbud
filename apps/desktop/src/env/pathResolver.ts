@@ -10,6 +10,7 @@ import {
   resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
   resolvePackagedWorkspaceAgentPlan,
+  resolvePackagedDesktopSupervisorPlan,
 } from "./pathResolver.platform";
 
 // ---------------------------------------------------------------------------
@@ -221,6 +222,13 @@ export function resolvePackagedWorkspaceAgentBinary(): string | null {
   if (!app.isPackaged) return null;
 
   const plan = resolvePackagedWorkspaceAgentPlan(process.platform, process.resourcesPath);
+  return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
+}
+
+export function resolvePackagedDesktopSupervisorBinary(): string | null {
+  if (!app.isPackaged) return null;
+
+  const plan = resolvePackagedDesktopSupervisorPlan(process.platform, process.resourcesPath);
   return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
 }
 

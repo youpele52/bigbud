@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted architecture with incremental implementation. The remote workspace agent and the shared local/managed-remote workspace watcher are implemented; the remaining systems-core scope retains the rollout gates in this document.
+Accepted architecture with incremental implementation. The remote workspace agent, the shared local/managed-remote workspace watcher, and the packaged-desktop orchestration delivery supervisor are implemented. Release-matrix evidence and the remaining systems-core scope retain the rollout gates in this document.
 
 ## Objective
 
@@ -53,6 +53,7 @@ Rust systems runtime
 9. Disconnect is not cancellation. Explicit cancellation, timeout, deletion, shutdown, and transport loss have separate lifecycle semantics.
 10. A local provider cannot continue while the local machine is suspended or powered off. The agent resumes remote workspace operations; it does not make local provider execution independent of the local machine.
 11. The agent-backed workspace path initially requires a local provider runtime. Existing remote-provider runtime sessions remain on their current compatibility path until separately migrated; they are not silently changed or removed.
+12. Project and thread commands enter through the TypeScript command gateway. TypeScript remains the only authority that may validate those commands, commit canonical SQLite state, and record their durable outcomes. Rust may supervise delivery of the resulting canonical events, but it does not accept product commands on TypeScript's behalf.
 
 ## Terminology
 
@@ -104,6 +105,7 @@ Rust systems runtime
 - Opening a remote TCP port or requiring a cloud relay.
 - Guaranteeing that local providers continue while the local machine sleeps.
 - Moving SQLite persistence to Rust before a separate design proves a concrete benefit and safe ownership model.
+- Adding a durable Rust queue for project or thread commands while TypeScript remains the canonical executor. That would require a separate ADR proving a restart/offline requirement and defining idempotency, versioning, retention, and recovery ownership.
 
 ## Ownership Boundary
 
@@ -112,16 +114,92 @@ Rust systems runtime
 | Provider SDKs and credentials                | Owns                                           | Never receives unless an explicit future design changes this |
 | Provider session and event normalization     | Owns                                           | Provider-agnostic                                            |
 | Threads, messages, approvals, and activities | Owns                                           | Does not model                                               |
-| Canonical SQLite state                       | Owns                                           | Does not own initially                                       |
+| Project/thread command semantics             | Validates, orders, fences, and decides         | Does not interpret                                           |
+| Command receipts and canonical outcomes      | Persists atomically with canonical changes     | Does not acknowledge acceptance                              |
+| Canonical SQLite state                       | Owns                                           | Does not own                                                 |
 | Workspace capability selection               | Owns                                           | Advertises available capabilities                            |
 | Filesystem and search execution              | Requests and maps results                      | Executes                                                     |
 | Git execution                                | Applies product policy and maps results        | Executes structured operations                               |
 | Process and PTY lifecycle                    | Requests, presents, and authorizes             | Supervises                                                   |
 | Reconnect policy                             | Owns user-facing state and retry decisions     | Retains bounded resumable operation state                    |
 | Remote installation and version selection    | Owns                                           | Reports identity and compatibility                           |
+| Desktop orchestration-event delivery         | Supplies replay and controlled fallback        | Orders, bounds, fences, and tracks application ACKs          |
 | Temporary output replay                      | Persists acknowledged canonical events locally | Retains only unacknowledged bounded output                   |
 
 Rust must not become a second application server. The language boundary should prevent product rules from drifting into two implementations.
+
+### Canonical command and delivery boundary
+
+The verified application path is intentionally asymmetric:
+
+```text
+UI
+ |
+ v
+TypeScript command gateway
+|- authenticated WebSocket admission and schema normalization
+|- stable command ID and durable outcome lookup
+|- lifecycle invariants and deletion/ownership fences
+|- serialized orchestration decision
+|- SQLite transaction: events + projections + command receipt
+`- canonical event publication after commit
+ |
+ v
+Rust desktop delivery supervisor
+|- bounded event queues and strict delivery order
+|- consumer generations and stale-generation fencing
+|- restart, replay, reconnect, and controlled fallback
+`- verified application acknowledgement
+ |
+ v
+UI applies events and reconciles canonical ownership before ACK
+```
+
+The TypeScript gateway already serializes orchestration commands through an Effect queue, deduplicates committed commands through durable command receipts, and writes the event set, projections, and accepted receipt in one SQLite transaction. In the current contract, an `accepted` command receipt means the canonical transaction committed; it must not mean merely received by the WebSocket or placed in an in-memory queue. Deterministic rejected outcomes may also be persisted. Transport loss before a receipt exists remains an unknown outcome, and a client must query by the original command ID before deciding whether to retry.
+
+The command and startup-readiness queues are bounded and memory-only, with explicit retryable overload/deadline outcomes and queue depth metrics; all aggregates still share one serialized processing lane. These remain TypeScript gateway concerns, not Rust command responsibilities. Stable command IDs remain the recovery key: a deadline can leave a queued command unknown, so clients query the original ID before retrying. Preserve the single global lane until measurements and conflict tests justify aggregate-partitioned concurrency; project deletion and thread ownership changes cross simple aggregate boundaries.
+
+Rust is authoritative only after canonical events exist. It improves event delivery reliability without deciding whether a project/thread action is valid or whether it committed. Create, rename, archive, and delete normally need a terminal command outcome rather than synthetic percentage progress. Multi-stage destructive or cleanup work may expose named durable stages when those stages correspond to canonical state transitions.
+
+A future Rust command-ingress journal is permitted only if measurements demonstrate a product requirement to accept actions while the TypeScript backend is unavailable or restarting. That design must use stable idempotency keys, durable bounded storage, per-aggregate conflict ordering, protocol-version checks, expiry, explicit `unknown_outcome`, and removal only after TypeScript confirms the canonical receipt. It must remain a transport journal, never a second domain authority.
+
+### Canonical command and delivery completion gates
+
+The command and desktop-delivery path is complete only when all of these
+invariants are implemented and covered by composed fault-injection tests:
+
+1. The UI acknowledges only the highest contiguous sequence it successfully
+   applied and reconciled. An application, recovery, or ownership-reconciliation
+   failure blocks acknowledgement advancement and initiates recovery; the final
+   sequence in a delivered batch is never acknowledged merely because it was
+   received.
+2. Replay is paged until the requested contiguous range is complete. A page or
+   implementation limit must never be interpreted as the end of replay, and live
+   delivery must not bridge an unresolved gap.
+3. Every external side-effect identity, including Git branches and worktrees,
+   is derived deterministically from persisted command recovery data. Retrying
+   the same command after response loss or restart must address the same physical
+   resource.
+4. Only deterministic domain validation or invariant failures may be persisted
+   as rejected command outcomes. Hydration, SQLite, filesystem, Git, timeout,
+   and other operational failures remain retryable or `unknown` unless their
+   canonical outcome is proven. A terminal rejection is returned only after its
+   receipt is durably confirmed.
+5. Every asynchronous event boundary has an explicit memory bound, including
+   TypeScript publication/subscription paths before Rust delivery. Overflow must
+   either conflate a wake-up signal backed by canonical SQLite replay or produce
+   an explicit recoverable gap; it must never silently retain an unbounded backlog
+   or drop canonical history.
+6. Idempotency is bound to both the command ID and a canonical payload digest.
+   The receipt store compares the digest atomically, returns the existing outcome
+   only for the same command, and rejects reuse of an ID with different content
+   as a typed conflict.
+
+Required regression coverage includes application failure before ACK, ownership
+reconciliation failure, replay spanning multiple storage pages, live events
+arriving during replay, response loss around external Git side effects, restart
+after a partial bootstrap, transient persistence failures, subscriber saturation,
+and same-ID/different-payload conflicts.
 
 ## Repository Layout
 
@@ -276,6 +354,35 @@ Protocol rules:
 9. Invalid frames, oversize frames, and unsupported capabilities fail closed.
 10. Sensitive values are omitted or redacted from diagnostics.
 
+### Protobuf generation dependency
+
+Rust protobuf bindings are generated locally by `prost-build` from the checked-in
+schemas. The workspace pins `protoc-bin-vendored` at `3.2.0` as a build
+dependency, and the protocol build script resolves that package's platform
+compiler and passes its path to `prost-build`. This keeps generation
+deterministic and avoids requiring a separately installed `protoc` or network
+access during a build once Cargo dependencies are available, across the
+supported macOS, Windows, and Linux developer/build environments. The same
+generation pattern is used by the desktop supervisor protocol.
+
+This dependency is build-time only; it supplies the compiler needed to turn the
+authoritative `.proto` files into Rust bindings and does not change the runtime
+wire protocol. The version and platform package checksums are recorded in
+`Cargo.lock`.
+
+`protoc-bin-vendored` version `3.2.0` is approved for this build-time use. The
+approval covers the root crate and its lockfile-pinned macOS, Windows, and Linux
+platform packages. The crate family declares the MIT license and is sourced
+from crates.io with its upstream repository recorded as
+`stepancheg/rust-protoc-bin-vendored`. It is not shipped as an application
+runtime dependency and must remain isolated to protobuf binding generation.
+
+Upgrading the crate, changing its source, adding a supported target, or using
+the bundled compiler at runtime requires a fresh dependency review. Routine
+maintenance must retain the exact workspace pin, committed `Cargo.lock`
+checksums, locked CI and release builds, and protocol fixture tests that detect
+unexpected generated wire changes.
+
 ## Resumability Semantics
 
 The first implementation targets faster, predictable recovery after temporary SSH loss.
@@ -389,6 +496,41 @@ The TypeScript supervisor owns:
 
 Avoid presenting historical verification as a live connection.
 
+### Desktop delivery supervisor boundary
+
+The packaged desktop runtime must integrate `bigbud-desktop-supervisor` as the
+authoritative delivery coordinator for orchestration events. The TypeScript
+server owns the sidecar process and remains the canonical domain authority for
+events, replay data, authorization, SQLite state, and user-visible connection
+state. Electron packages, verifies, resolves, and supplies the native binary;
+it does not proxy orchestration traffic through main-process IPC.
+
+For an attached supervisor-managed consumer, canonical events cannot bypass
+Rust. The consumer acknowledges a batch only after serialized application and
+canonical ownership reconciliation. Rust owns bounded queues, delivery order,
+consumer generations, acknowledgement tracking, timeout detection, and
+recovery requests. It never owns provider sessions, credentials, threads,
+messages, or canonical event history.
+
+Supervisor failure first triggers bounded restart, handshake, reattachment,
+and replay from the last verified application acknowledgement. A controlled
+TypeScript fallback is permitted only after self-healing is exhausted. It must
+fence the failed generation, reconcile an uncertain cursor before delivery,
+remain active for the rest of that session, and never deliver concurrently
+with Rust. The accepted ownership and rollout decision is recorded in
+`docs/decisions/2026-08-27-desktop-delivery-supervisor-authority.md`.
+
+This boundary is now implemented by `apps/server/src/desktop-supervisor/`, the
+delivery-envelope and application-ACK contracts under
+`packages/contracts/src/orchestration/`, and the serialized web application
+queue. Protocol major 1, minor 1 adds an explicit ACK-accepted response so the
+TypeScript owner never advances a verified cursor from an ambiguous write.
+The Rust binary enforces hello-first sessions, rejects stale generation or
+sequence rollback, checks ACK timeouts on an independent watchdog, and treats
+partial frame prefixes as truncation. Packaged desktop builds stage the binary
+under `server/delivery-supervisor/bin`; standalone server and mobile-remote
+delivery remain direct until they have supported native distribution.
+
 ## Security Model
 
 ### Trust Boundary
@@ -427,6 +569,10 @@ Any broader local sidecar should continue using the repository's existing daemon
 Do not use N-API for the initial systems core. A sidecar provides crash isolation, avoids Electron/Node ABI coupling, and lets the local daemon and remote agent share behavior. Reconsider in-process bindings only for a measured hot path where RPC overhead is material.
 
 ## Migration Plan
+
+These phases describe rollout and verification gates. Some deliverables are
+already implemented, as recorded in the Status section; their phase entries
+remain as regression and release-evidence requirements rather than future work.
 
 ### Phase 0: Architecture and Baselines
 
@@ -496,7 +642,8 @@ Deliverables:
 - Structured spawn, stdin, output, attach, status, signal, cancel, and terminate.
 - Process-tree ownership and cleanup.
 - Resumable PTY sessions with bounded history.
-- File watchers with overflow/invalidation semantics.
+- Retain the implemented shared file watcher and verify its
+  overflow/invalidation semantics across supported local and remote targets.
 - Incremental indexing only if direct search measurements justify it.
 
 Exit gate:
@@ -628,7 +775,10 @@ Remaining rollout gates:
 2. Retain an explicit repair/reinstall action and direct SSH recovery mode until signed artifact delivery, live-host integration, soak, and provider parity evidence pass the supported matrix.
 3. Remove the recovery mode only after at least one stable release has demonstrated parity on that matrix.
 
-## First Implementation Slice
+## Original First Implementation Slice
+
+This section records the initial slice used to prove the architecture. It is
+historical scope, not a list of remaining implementation work.
 
 The first vertical slice should prove the architecture rather than maximize operation count.
 
@@ -653,7 +803,7 @@ Do not include in the first slice:
 
 The first slice is successful when a remote file search or Git diff can continue or be deterministically recovered after the SSH transport is killed, while all canonical state and all provider execution remain local.
 
-## Open Decisions Before Implementation
+## Remaining Open Decisions
 
 1. Which remote OS/architecture targets are required for the first public release?
 2. What are the concrete idle memory, binary size, reconnect latency, and journal disk budgets?
@@ -664,7 +814,8 @@ The first slice is successful when a remote file search or Git diff can continue
 7. What release-key and signing model will protect separately downloaded remote-agent artifacts?
 8. Is Windows OpenSSH-host support required in the first milestone or explicitly deferred?
 
-Resolve these decisions in an ADR before Phase 1 code begins.
+Resolve each still-open decision in an ADR before expanding or releasing the
+affected capability.
 
 ## Success Criteria
 

@@ -42,15 +42,16 @@ describe("packaged workspace agent discovery", () => {
     expect(findPackagedWorkspaceAgent(root, platform)).toBe(binaryPath);
   });
 
-  it("allows required code signatures only for macOS packages", () => {
+  it("requires an expected publisher for Windows signature checks", () => {
     expect(() => validateCodeSignatureRequirement("mac", true)).not.toThrow();
     expect(() => validateCodeSignatureRequirement("linux", false)).not.toThrow();
     expect(() => validateCodeSignatureRequirement("win", false)).not.toThrow();
     expect(() => validateCodeSignatureRequirement("linux", true)).toThrow(
-      "--require-code-signature is only valid for macOS packages",
+      "--require-code-signature is not valid for Linux packages",
     );
     expect(() => validateCodeSignatureRequirement("win", true)).toThrow(
-      "--require-code-signature is only valid for macOS packages",
+      "BIGBUD_WINDOWS_SIGNING_SUBJECT is required for Windows signature checks",
     );
+    expect(() => validateCodeSignatureRequirement("win", true, "CN=bigbud")).not.toThrow();
   });
 });

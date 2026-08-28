@@ -227,6 +227,7 @@ struct BoundedOutput {
     truncated: bool,
 }
 
+#[allow(clippy::indexing_slicing)]
 fn read_bounded(
     mut reader: impl Read,
     max_output_bytes: usize,

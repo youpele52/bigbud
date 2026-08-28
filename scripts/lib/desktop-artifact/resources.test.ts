@@ -95,7 +95,10 @@ describe("createBuildConfig", () => {
 
     assert.equal(config.forceCodeSigning, true);
     assert.deepInclude(config.mac, {
-      binaries: ["Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent"],
+      binaries: [
+        "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
+        "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
+      ],
       entitlements: "/resources/entitlements.mac.plist",
       entitlementsInherit: "/resources/entitlements.mac.plist",
     });

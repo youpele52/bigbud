@@ -1,0 +1,18 @@
+[package]
+name = "bigbud-desktop-supervisor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+prost.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+protoc-bin-vendored.workspace = true
+
+[lints]
+workspace = true

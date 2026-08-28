@@ -8,6 +8,7 @@ import {
   resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
   resolvePackagedWorkspaceAgentPlan,
+  resolvePackagedDesktopSupervisorPlan,
 } from "./pathResolver.platform";
 
 describe("resolveBackendModulesLinkPlan", () => {
@@ -118,6 +119,22 @@ describe("resolvePackagedWorkspaceAgentPlan", () => {
     expect(plan.binaryName).toBe(binaryName);
     expect(plan.binaryPath).toBe(
       Path.join(resourcesPath, "server", "workspace-agent", "bin", binaryName),
+    );
+  });
+});
+
+describe("resolvePackagedDesktopSupervisorPlan", () => {
+  const resourcesPath = "/Applications/bigbud.app/Contents/Resources";
+
+  it.each([
+    ["darwin", "bigbud-desktop-supervisor"],
+    ["linux", "bigbud-desktop-supervisor"],
+    ["win32", "bigbud-desktop-supervisor.exe"],
+  ])("resolves the delivery supervisor for %s", (platform, binaryName) => {
+    const plan = resolvePackagedDesktopSupervisorPlan(platform, resourcesPath);
+    expect(plan.binaryName).toBe(binaryName);
+    expect(plan.binaryPath).toBe(
+      Path.join(resourcesPath, "server", "delivery-supervisor", "bin", binaryName),
     );
   });
 });

@@ -31,7 +31,19 @@ pub fn decode_frame(encoded: &[u8], maximum: usize) -> Result<v1::Frame, FrameEr
         });
     }
 
-    let length = u32::from_be_bytes([encoded[0], encoded[1], encoded[2], encoded[3]]) as usize;
+    let prefix = encoded.get(..4).ok_or(FrameError::Oversized {
+        actual: encoded.len(),
+        maximum: 4,
+    })?;
+    let length_bytes: [u8; 4] = prefix.try_into().map_err(|_| FrameError::Oversized {
+        actual: encoded.len(),
+        maximum: 4,
+    })?;
+    let length =
+        usize::try_from(u32::from_be_bytes(length_bytes)).map_err(|_| FrameError::Oversized {
+            actual: encoded.len(),
+            maximum,
+        })?;
     if length > maximum {
         return Err(FrameError::Oversized {
             actual: length,
@@ -45,7 +57,13 @@ pub fn decode_frame(encoded: &[u8], maximum: usize) -> Result<v1::Frame, FrameEr
         )));
     }
 
-    v1::Frame::decode(&encoded[4..]).map_err(FrameError::Decode)
+    let payload = encoded
+        .get(4..)
+        .ok_or(FrameError::ReadPayload(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "frame payload is missing",
+        )))?;
+    v1::Frame::decode(payload).map_err(FrameError::Decode)
 }
 
 pub fn read_frame<R: Read>(
@@ -53,11 +71,17 @@ pub fn read_frame<R: Read>(
     maximum: usize,
 ) -> Result<Option<v1::Frame>, FrameError> {
     let mut length_bytes = [0; 4];
-    match reader.read_exact(&mut length_bytes) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-        Err(error) => return Err(FrameError::ReadLength(error)),
+    loop {
+        match reader.read(&mut length_bytes[..1]) {
+            Ok(0) => return Ok(None),
+            Ok(_) => break,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(FrameError::ReadLength(error)),
+        }
     }
+    reader
+        .read_exact(&mut length_bytes[1..])
+        .map_err(FrameError::ReadLength)?;
 
     let length = u32::from_be_bytes(length_bytes) as usize;
     if length > maximum {
@@ -320,5 +344,14 @@ mod tests {
         let encoded = [0, 0, 0, 5, 1, 2];
         let error = decode_frame(&encoded, DEFAULT_MAX_FRAME_BYTES).unwrap_err();
         assert!(matches!(error, FrameError::ReadPayload(_)));
+    }
+
+    #[test]
+    fn rejects_a_partial_length_prefix_as_truncated_input() {
+        let error = read_frame(&mut Cursor::new([0, 0]), DEFAULT_MAX_FRAME_BYTES).unwrap_err();
+        assert!(matches!(
+            error,
+            FrameError::ReadLength(error) if error.kind() == io::ErrorKind::UnexpectedEof
+        ));
     }
 }

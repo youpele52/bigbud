@@ -39,7 +39,7 @@ pub fn inspect_active_operations(path: &Path) -> Result<bool, OperationJournalEr
             maximum: MAX_OPERATION_JOURNAL_BYTES,
         });
     }
-    if bytes.len() < MAGIC.len() || &bytes[..MAGIC.len()] != MAGIC {
+    if bytes.get(..MAGIC.len()) != Some(MAGIC) {
         return Err(OperationJournalError::Corrupt("invalid journal header"));
     }
     let (records, valid_length) = decode_complete_records(&bytes)?;

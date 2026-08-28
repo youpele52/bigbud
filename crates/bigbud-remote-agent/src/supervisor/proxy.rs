@@ -23,6 +23,7 @@ pub fn run_proxy<R: Read + Send, W: Write>(
 }
 
 #[cfg(unix)]
+#[allow(clippy::indexing_slicing)]
 fn forward_socket_to_output<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result<()> {
     let mut buffer = [0; 16 * 1024];
     loop {

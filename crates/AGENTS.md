@@ -12,7 +12,7 @@ cargo test --locked --workspace
 
 ## Architectural authority
 
-This Rust workspace is mainly for core, close-to-the-metal services, consistent with how it started. [docs/decisions/2026-08-22-rust-remote-workspace-agent-boundary.md](../docs/decisions/2026-08-22-rust-remote-workspace-agent-boundary.md)
+This Rust workspace is mainly for core, close-to-the-metal services, consistent with [how it started](../docs/decisions/2026-08-22-rust-remote-workspace-agent-boundary.md).
 
 - Rust native components are provider-neutral systems backends. They may perform
   explicitly authorized filesystem, search, Git, process, PTY, watch, IPC, and

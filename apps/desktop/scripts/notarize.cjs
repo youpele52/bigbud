@@ -58,14 +58,16 @@ module.exports = async function afterSign(context) {
   const appleId = requireCredential("APPLE_ID");
   const appleIdPassword = requireCredential("APPLE_APP_SPECIFIC_PASSWORD");
   const teamId = requireCredential("APPLE_TEAM_ID");
-  const sidecarPath = path.join(
-    appPath,
+  const sidecarPaths = [
     "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
-  );
+    "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
+  ].map((relativePath) => path.join(appPath, relativePath));
 
-  console.log(`[afterSign] Verifying Rust sidecar signature: ${sidecarPath}`);
-  verifyCodeSignature(sidecarPath);
-  verifyTeamIdentifier(sidecarPath, teamId);
+  for (const sidecarPath of sidecarPaths) {
+    console.log(`[afterSign] Verifying Rust sidecar signature: ${sidecarPath}`);
+    verifyCodeSignature(sidecarPath);
+    verifyTeamIdentifier(sidecarPath, teamId);
+  }
   console.log(`[afterSign] Verifying app signature: ${appPath}`);
   verifyCodeSignature(appPath, true);
   verifyTeamIdentifier(appPath, teamId);

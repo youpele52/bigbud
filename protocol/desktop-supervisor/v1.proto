@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package bigbud.desktop_supervisor.v1;
+
+message Frame {
+  oneof payload {
+    ClientHello client_hello = 1;
+    SupervisorHello supervisor_hello = 2;
+    AttachConsumer attach_consumer = 3;
+    ConsumerAttached consumer_attached = 4;
+    DetachConsumer detach_consumer = 5;
+    EventBatch event_batch = 6;
+    ApplicationAck application_ack = 7;
+    Heartbeat heartbeat = 8;
+    RecoveryRequired recovery_required = 9;
+    MetricsSnapshot metrics_snapshot = 10;
+    Shutdown shutdown = 11;
+    ProtocolError protocol_error = 12;
+    ApplicationAckAccepted application_ack_accepted = 13;
+  }
+}
+
+message Limits {
+  uint64 max_frame_bytes = 1;
+  uint64 max_consumers = 2;
+  uint64 max_queue_events = 3;
+  uint64 max_queue_bytes = 4;
+  uint64 max_in_flight_events = 5;
+  uint64 acknowledgement_timeout_ms = 6;
+}
+
+message ClientHello {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string client_instance_id = 3;
+  Limits requested_limits = 4;
+}
+
+message SupervisorHello {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string supervisor_instance_id = 3;
+  Limits accepted_limits = 4;
+}
+
+message AttachConsumer {
+  string consumer_id = 1;
+  uint64 consumer_generation = 2;
+  string server_epoch = 3;
+  uint64 applied_sequence = 4;
+}
+
+message ConsumerAttached {
+  string consumer_id = 1;
+  uint64 consumer_generation = 2;
+  uint64 acknowledged_sequence = 3;
+}
+
+message DetachConsumer {
+  string consumer_id = 1;
+  uint64 consumer_generation = 2;
+  string reason = 3;
+}
+
+message Event {
+  string event_id = 1;
+  uint64 sequence = 2;
+  bytes canonical_payload = 3;
+}
+
+message EventBatch {
+  string batch_id = 1;
+  string server_epoch = 2;
+  uint64 subscription_generation = 3;
+  string consumer_id = 4;
+  uint64 consumer_generation = 5;
+  repeated Event events = 6;
+}
+
+message ApplicationAck {
+  string batch_id = 1;
+  string consumer_id = 2;
+  uint64 consumer_generation = 3;
+  uint64 received_through_sequence = 4;
+  uint64 applied_through_sequence = 5;
+  uint64 application_duration_ms = 6;
+}
+
+message ApplicationAckAccepted {
+  string batch_id = 1;
+  string consumer_id = 2;
+  uint64 consumer_generation = 3;
+  uint64 acknowledged_sequence = 4;
+}
+
+message Heartbeat {
+  uint64 monotonic_millis = 1;
+}
+
+enum RecoveryKind {
+  RECOVERY_KIND_UNSPECIFIED = 0;
+  RECOVERY_KIND_REPLAY = 1;
+  RECOVERY_KIND_BOOTSTRAP = 2;
+  RECOVERY_KIND_OVERLOAD = 3;
+}
+
+message RecoveryRequired {
+  string consumer_id = 1;
+  uint64 consumer_generation = 2;
+  RecoveryKind kind = 3;
+  uint64 from_sequence_exclusive = 4;
+  string reason_code = 5;
+}
+
+message ConsumerMetrics {
+  string consumer_id = 1;
+  uint64 consumer_generation = 2;
+  uint64 persisted_sequence = 3;
+  uint64 sent_sequence = 4;
+  uint64 received_sequence = 5;
+  uint64 applied_sequence = 6;
+  uint64 acknowledged_sequence = 7;
+  uint64 queue_events = 8;
+  uint64 queue_bytes = 9;
+  uint64 acknowledgement_age_ms = 10;
+  string state = 11;
+}
+
+message MetricsSnapshot {
+  repeated ConsumerMetrics consumers = 1;
+}
+
+message Shutdown {
+  string reason = 1;
+}
+
+message ProtocolError {
+  string code = 1;
+  string message = 2;
+}

@@ -117,6 +117,21 @@ Packaged desktop builds use the managed agent transport by default. `bun dev:des
 
 Local and managed-remote file watching share the Rust `bigbud-workspace-watch` implementation. Server-bearing development commands build the native `bigbud-remote-agent` automatically, and packaged desktop builds include it. Standalone server deployments can set `BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to an executable built with `cargo build --locked --package bigbud-remote-agent`; a missing or incompatible binary is reported as a typed watcher diagnostic instead of falling back to a different local watcher.
 
+## Desktop Event Delivery
+
+Packaged desktop sessions ship `bigbud-desktop-supervisor` as the authoritative
+orchestration delivery coordinator. The TypeScript server remains the source
+of truth for events and SQLite state; Rust owns bounded delivery order,
+consumer generations, application ACKs, timeout recovery, and reconnect
+reattachment. Electron only packages and resolves the executable—the protocol
+travels directly between the server and the sidecar over framed stdio.
+
+Development can exercise this path with `bun run smoke:desktop-supervisor` and
+`BIGBUD_DESKTOP_SUPERVISOR_ENABLED=1`. `BIGBUD_DESKTOP_SUPERVISOR_ENABLED=0`
+selects the startup rollback route. After exhausted native recovery, the UI
+reports a fenced TypeScript fallback that remains active until the session
+reconnects; the two delivery routes never run concurrently.
+
 ## Computer Use
 
 bigbud's **Computer Use** feature lets AI agents control the in-app browser and, on desktop, your macOS machine. This enables agents to navigate web pages, fill forms, take screenshots, open applications, and more — all within your session.

@@ -18,6 +18,7 @@ import {
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
   resolvePackagedWorkspaceAgentBinary,
+  resolvePackagedDesktopSupervisorBinary,
 } from "../env/pathResolver";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
 import { killBackendProcess } from "./backendProcess";
@@ -149,6 +150,7 @@ export async function startBackend(): Promise<void> {
   const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
   const packagedBundledAgentsDir = resolvePackagedBundledAgentsDir();
   const packagedWorkspaceAgentBinary = resolvePackagedWorkspaceAgentBinary();
+  const packagedDesktopSupervisorBinary = resolvePackagedDesktopSupervisorBinary();
   const backendLauncherPath = resolveBackendLauncherPath();
   const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
   ensureBackendModulesPath();
@@ -174,6 +176,9 @@ export async function startBackend(): Promise<void> {
             : {}),
           ...(packagedWorkspaceAgentBinary
             ? { BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY: packagedWorkspaceAgentBinary }
+            : {}),
+          ...(packagedDesktopSupervisorBinary
+            ? { BIGBUD_DESKTOP_SUPERVISOR_BINARY: packagedDesktopSupervisorBinary }
             : {}),
           ...computerUseRuntimeEnv,
           BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,

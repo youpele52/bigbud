@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -6,6 +6,7 @@ import {
   findPackagedWorkspaceAgent,
   type DesktopBuildPlatform,
   validateCodeSignatureRequirement,
+  verifyPackagedCodeSignature,
 } from "./lib/packaged-workspace-agent.ts";
 import { verifyWorkspaceAgentHandshake } from "./lib/workspace-agent-handshake.ts";
 
@@ -24,7 +25,8 @@ if (!(["mac", "linux", "win"] as const).includes(buildPlatform as DesktopBuildPl
 }
 
 const desktopPlatform = buildPlatform as DesktopBuildPlatform;
-validateCodeSignatureRequirement(desktopPlatform, requireCodeSignature);
+const expectedWindowsPublisher = process.env.BIGBUD_WINDOWS_SIGNING_SUBJECT;
+validateCodeSignatureRequirement(desktopPlatform, requireCodeSignature, expectedWindowsPublisher);
 const platform =
   desktopPlatform === "mac" ? "darwin" : desktopPlatform === "win" ? "win32" : "linux";
 
@@ -35,9 +37,11 @@ if (!binaryPath)
   throw new Error(`Packaged workspace watcher agent was not found under ${releaseRoot}`);
 
 if (requireCodeSignature) {
-  execFileSync("codesign", ["--verify", "--strict", "--verbose=2", binaryPath], {
-    stdio: "inherit",
-  });
+  verifyPackagedCodeSignature(
+    binaryPath,
+    desktopPlatform as "mac" | "win",
+    expectedWindowsPublisher,
+  );
 }
 
 const result = spawnSync(binaryPath, ["--check"], { encoding: "utf8" });

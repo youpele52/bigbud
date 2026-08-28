@@ -113,6 +113,7 @@ mod environment;
 mod tests;
 
 #[cfg(unix)]
+#[allow(clippy::indexing_slicing)]
 pub fn run_events(mut reader: std::fs::File, pid: u32, mut callback: impl FnMut(PtyEvent)) {
     let mut buffer = [0; READ_CHUNK_BYTES];
     loop {
