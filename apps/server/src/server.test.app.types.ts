@@ -1,10 +1,12 @@
 import type { CheckpointDiffQueryShape } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import type { CommandGatewayShape } from "./command-gateway/Services/CommandGateway.ts";
 import type { GitCoreShape } from "./git/Services/GitCore.ts";
 import type { GitManagerShape } from "./git/Services/GitManager.ts";
 import type { KeybindingsShape } from "./keybindings/keybindings.ts";
 import type { MobileRemoteControlShape } from "./mobile/Services/MobileRemoteControl.ts";
 import type { PluginRegistryShape } from "./plugins/Services/PluginRegistry.ts";
 import type { OrchestrationEngineShape } from "./orchestration/Services/OrchestrationEngine.ts";
+import type { OrchestrationBootstrapRecipeRepositoryShape } from "./persistence/Services/OrchestrationBootstrapRecipes.ts";
 import type { ProjectionCatalogQueryShape } from "./orchestration/Services/ProjectionCatalogQuery.ts";
 import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import type { ProjectionThreadRepositoryShape } from "./persistence/Services/ProjectionThreads.ts";
@@ -38,10 +40,12 @@ export interface BuildAppUnderTestOptions {
     readonly pluginRegistry?: Partial<PluginRegistryShape>;
     readonly terminalManager?: Partial<TerminalManagerShape>;
     readonly orchestrationEngine?: Partial<OrchestrationEngineShape>;
+    readonly orchestrationBootstrapRecipes?: OrchestrationBootstrapRecipeRepositoryShape;
     readonly projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
     readonly projectionCatalogQuery?: Partial<ProjectionCatalogQueryShape>;
     readonly projectionThreadRepository?: Partial<ProjectionThreadRepositoryShape>;
     readonly checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
+    readonly commandGateway?: CommandGatewayShape;
     readonly serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
     readonly serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
     readonly remoteWorkspaceRuntime?: WorkspaceRuntimeBackendShape;

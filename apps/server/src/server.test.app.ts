@@ -3,6 +3,10 @@ import { Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import {
+  CommandGateway,
+  type CommandGatewayShape,
+} from "./command-gateway/Services/CommandGateway.ts";
 import { GitCore } from "./git/Services/GitCore.ts";
 import { GitManager } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
@@ -11,12 +15,14 @@ import { MobileRemoteControl } from "./mobile/Services/MobileRemoteControl.ts";
 import { PluginRegistry } from "./plugins/Services/PluginRegistry.ts";
 import { BrowserTraceCollector } from "./observability/Services/BrowserTraceCollector.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationBootstrapRecipeRepository } from "./persistence/Services/OrchestrationBootstrapRecipes.ts";
 import { ProjectionKanbanRepository } from "./persistence/Services/ProjectionKanban.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { DiscoveryRegistry } from "./provider/Services/DiscoveryRegistry.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "./provider/Services/ProviderService.ts";
+import { DesktopSupervisorDeliveryTestLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
 import { makeRoutesLayer } from "./server.ts";
 import { ThreadShellRunner } from "./shell/Services/ThreadShellRunner.ts";
 import { ServerConfig } from "./startup/config.ts";
@@ -31,6 +37,7 @@ import {
   defaultThreadId,
 } from "./server.test.fixtures.ts";
 import { ServerSettingsService } from "./ws/serverSettings.ts";
+import { BootstrapCommandLockLive } from "./ws/wsBootstrap.lock.ts";
 import { RemoteWorkspaceRuntime } from "./workspace-runtime/Services/WorkspaceRuntime.ts";
 import type { BuildAppUnderTestOptions } from "./server.test.app.types.ts";
 import { makeProjectionTestLayer } from "./server.test.app.projections.ts";
@@ -123,6 +130,19 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             getInstalledSkillRoots: Effect.succeed([]),
             ...options?.layers?.pluginRegistry,
           }),
+          Layer.succeed(CommandGateway, {
+            dispatchNormalized: () => Effect.succeed({ sequence: 0 }),
+            ...options?.layers?.commandGateway,
+          } satisfies CommandGatewayShape),
+          Layer.succeed(
+            OrchestrationBootstrapRecipeRepository,
+            options?.layers?.orchestrationBootstrapRecipes ?? {
+              claimOrInspect: (recipe) => Effect.succeed({ status: "claimed", recipe }),
+              getByParentCommandId: () => Effect.succeed(Option.none()),
+            },
+          ),
+          DesktopSupervisorDeliveryTestLive,
+          BootstrapCommandLockLive,
         ),
       ),
       Layer.provide(Layer.mock(Open)({ ...options?.layers?.open })),
