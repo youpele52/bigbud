@@ -2,6 +2,7 @@ import { Cause, Duration, Effect, Exit, ManagedRuntime, Option, Scope, Stream } 
 import { RpcClient } from "effect/unstable/rpc";
 
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
+import { markWsInboundActivity } from "./wsActivity";
 import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   createWsRpcProtocolLayer,
@@ -84,7 +85,10 @@ export class WsTransport {
     const client = await session.clientPromise;
     await session.runtime.runPromise(
       Stream.runForEach(connect(client), (value) =>
-        Effect.promise(() => Promise.resolve(listener(value))),
+        Effect.promise(() => {
+          markWsInboundActivity();
+          return Promise.resolve(listener(value));
+        }),
       ),
     );
   }
@@ -262,6 +266,7 @@ export class WsTransport {
                 return Promise.resolve();
               }
 
+              markWsInboundActivity();
               markValueReceived();
               return Promise.resolve(listener(value));
             }),

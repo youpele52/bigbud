@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runWsHeartbeatProbe } from "./wsHeartbeat";
+import {
+  runWsHeartbeatProbe,
+  shouldReconnectAfterHeartbeatFailure,
+  WS_HEARTBEAT_FAILURE_THRESHOLD,
+} from "./wsHeartbeat";
 
 describe("runWsHeartbeatProbe", () => {
   it("reports a responsive server as healthy", async () => {
@@ -13,5 +17,10 @@ describe("runWsHeartbeatProbe", () => {
     await vi.advanceTimersByTimeAsync(15);
     await expect(probe).resolves.toBe(false);
     vi.useRealTimers();
+  });
+
+  it("requires repeated probe failures before replacing a stale-open socket", () => {
+    expect(shouldReconnectAfterHeartbeatFailure(WS_HEARTBEAT_FAILURE_THRESHOLD - 1)).toBe(false);
+    expect(shouldReconnectAfterHeartbeatFailure(WS_HEARTBEAT_FAILURE_THRESHOLD)).toBe(true);
   });
 });

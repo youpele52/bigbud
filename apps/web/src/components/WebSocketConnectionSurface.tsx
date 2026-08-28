@@ -12,7 +12,6 @@ import {
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
-import { runWsHeartbeatProbe, WS_HEARTBEAT_INTERVAL_MS } from "../rpc/wsHeartbeat";
 import { useOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
 import {
   shouldAutoReconnect,
@@ -25,6 +24,7 @@ import {
   formatConnectionMoment,
   WebSocketBlockingState,
 } from "./WebSocketConnectionSurface.blocking";
+import { useWebSocketHeartbeat } from "./WebSocketConnectionSurface.heartbeat";
 import { toastManager } from "./ui/toast";
 import { useDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
 
@@ -79,7 +79,6 @@ export function WebSocketConnectionCoordinator() {
   const toastResetTimerRef = useRef<number | null>(null);
   const previousUiStateRef = useRef<WsConnectionUiState>(getWsConnectionUiState(status));
   const previousDisconnectedAtRef = useRef<string | null>(status.disconnectedAt);
-  const heartbeatInFlightRef = useRef(false);
 
   useEffect(() => {
     deliveryToastIdRef.current = syncDeliveryRecoveryToast(
@@ -90,6 +89,7 @@ export function WebSocketConnectionCoordinator() {
   }, [delivery]);
 
   const runReconnect = useEffectEvent((showFailureToast: boolean) => {
+    invalidateHeartbeat();
     if (toastResetTimerRef.current !== null) {
       window.clearTimeout(toastResetTimerRef.current);
       toastResetTimerRef.current = null;
@@ -112,6 +112,10 @@ export function WebSocketConnectionCoordinator() {
           },
         });
       });
+  });
+
+  const invalidateHeartbeat = useWebSocketHeartbeat(status.phase === "connected", () => {
+    runReconnect(false);
   });
 
   const syncBrowserOnlineStatus = useEffectEvent(() => {
@@ -154,22 +158,6 @@ export function WebSocketConnectionCoordinator() {
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
-
-  useEffect(() => {
-    if (status.phase !== "connected") return;
-    const intervalId = window.setInterval(() => {
-      if (heartbeatInFlightRef.current || getWsConnectionStatus().phase !== "connected") return;
-      heartbeatInFlightRef.current = true;
-      void runWsHeartbeatProbe(() => getWsRpcClient().server.ping())
-        .then((healthy) => {
-          if (!healthy && getWsConnectionStatus().phase === "connected") runReconnect(false);
-        })
-        .finally(() => {
-          heartbeatInFlightRef.current = false;
-        });
-    }, WS_HEARTBEAT_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
-  }, [status.phase]);
 
   useEffect(() => {
     if (status.reconnectPhase !== "waiting" || status.nextRetryAt === null) {
