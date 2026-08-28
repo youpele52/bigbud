@@ -10,7 +10,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.206 (28 August, 2026)
+## v0.2.206 (29 August, 2026)
 
 ### Broader Remote Workspace Providers
 
