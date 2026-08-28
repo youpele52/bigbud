@@ -22,7 +22,7 @@ import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptR
 import { DiscoveryRegistry } from "./provider/Services/DiscoveryRegistry.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "./provider/Services/ProviderService.ts";
-import { DesktopSupervisorDeliveryTestLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryTestLive } from "./desktop-supervisor/desktopSupervisorDelivery.testLayer.ts";
 import { makeRoutesLayer } from "./server.ts";
 import { ThreadShellRunner } from "./shell/Services/ThreadShellRunner.ts";
 import { ServerConfig } from "./startup/config.ts";

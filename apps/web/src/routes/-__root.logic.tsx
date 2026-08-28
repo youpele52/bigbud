@@ -12,7 +12,10 @@ import { toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
 import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
-import { routeOrchestrationDeliveryBatch } from "./-__root.delivery-routing";
+import {
+  recoverAndAcknowledgeDeliveryBaseline,
+  routeOrchestrationDeliveryBatch,
+} from "./-__root.delivery-routing";
 import {
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
@@ -235,6 +238,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     };
 
     let selectedThreadId: ThreadId | null = readOwnedThreadId();
+    const deliveryBaselineAbort = new AbortController();
     const bootstrapBounded = async (nextSelectedThreadId: ThreadId | null): Promise<void> => {
       selectedThreadId = nextSelectedThreadId;
       await eventRecovery.runBoundedRecovery("bootstrap", selectedThreadId, () => disposed);
@@ -257,6 +261,20 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
               if (item.state === "fallback" && item.reasonCode === "replay_gap") {
                 await fallbackToBoundedRecovery();
               }
+              return;
+            }
+            if (item.type === "recovery") {
+              selectedThreadId = ownsThread
+                ? readOwnedThreadId()
+                : resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
+              await recoverAndAcknowledgeDeliveryBaseline({
+                recovery: item,
+                recover: () =>
+                  eventRecovery.runDeliveryBaselineRecovery(selectedThreadId, () => disposed),
+                acknowledge: api.orchestration.acknowledgeDeliveryBaseline,
+                signal: deliveryBaselineAbort.signal,
+                shouldAbort: () => disposed,
+              });
               return;
             }
             await routeOrchestrationDeliveryBatch({
@@ -292,6 +310,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     });
     return () => {
       disposed = true;
+      deliveryBaselineAbort.abort();
       disposedRef.current = true;
       eventRecovery.cancel();
       setOrchestrationDeliveryLifecycle(null);

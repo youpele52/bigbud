@@ -66,6 +66,7 @@ impl Supervisor {
                 in_flight: None,
                 acknowledged_batches: VecDeque::new(),
                 last_acknowledged_batch: None,
+                baseline_identities: VecDeque::new(),
             },
         );
         let last_touched = self.next_generation_fence_clock();

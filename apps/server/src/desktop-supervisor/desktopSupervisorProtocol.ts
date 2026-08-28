@@ -1,5 +1,5 @@
 export const DESKTOP_SUPERVISOR_PROTOCOL_MAJOR = 1;
-export const DESKTOP_SUPERVISOR_PROTOCOL_MINOR = 1;
+export const DESKTOP_SUPERVISOR_PROTOCOL_MINOR = 3;
 export const DESKTOP_SUPERVISOR_MAX_FRAME_BYTES = 1024 * 1024;
 
 export interface DesktopSupervisorLimits {
@@ -42,6 +42,14 @@ export interface DesktopSupervisorApplicationAck {
   readonly receivedThroughSequence: number;
   readonly appliedThroughSequence: number;
   readonly applicationDurationMs: number;
+}
+
+export interface DesktopSupervisorBaselineInstall {
+  readonly recoveryId: string;
+  readonly consumerId: string;
+  readonly consumerGeneration: number;
+  readonly serverEpoch: string;
+  readonly appliedProjectionSequence: number;
 }
 
 export type DesktopSupervisorFrame =
@@ -97,6 +105,18 @@ export type DesktopSupervisorFrame =
         readonly consumerId: string;
         readonly consumerGeneration: number;
         readonly acknowledgedSequence: number;
+      };
+    }
+  | { readonly type: "installBaseline"; readonly value: DesktopSupervisorBaselineInstall }
+  | {
+      readonly type: "baselineInstalled";
+      readonly value: {
+        readonly recoveryId: string;
+        readonly consumerId: string;
+        readonly consumerGeneration: number;
+        readonly acknowledgedSequence: number;
+        readonly serverEpoch: string;
+        readonly appliedProjectionSequence: number;
       };
     }
   | { readonly type: "heartbeat"; readonly value: { readonly monotonicMillis: number } }

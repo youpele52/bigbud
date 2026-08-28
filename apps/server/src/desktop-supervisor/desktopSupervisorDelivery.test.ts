@@ -62,6 +62,7 @@ function owner(options: { readonly failDelivery?: boolean } = {}) {
       return { type: "eventBatch" as const, value: batch };
     }),
     acknowledge: vi.fn(async (ack) => ack.appliedThroughSequence),
+    installBaseline: vi.fn(async (baseline) => baseline.appliedProjectionSequence),
     heartbeat: vi.fn(async (monotonicMillis) => ({
       type: "heartbeat" as const,
       value: { monotonicMillis },

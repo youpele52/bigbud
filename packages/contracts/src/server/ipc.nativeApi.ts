@@ -18,6 +18,8 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationApplicationAckInput,
   OrchestrationApplicationAckResult,
+  OrchestrationBaselineAckInput,
+  OrchestrationBaselineAckResult,
   OrchestrationDeliveryStreamItem,
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
@@ -256,6 +258,9 @@ export interface NativeApi {
     acknowledgeDelivery: (
       input: OrchestrationApplicationAckInput,
     ) => Promise<OrchestrationApplicationAckResult>;
+    acknowledgeDeliveryBaseline: (
+      input: OrchestrationBaselineAckInput,
+    ) => Promise<OrchestrationBaselineAckResult>;
     onDomainEvent: (
       callback: (event: OrchestrationDeliveryStreamItem) => void | Promise<void>,
       options?: { onResubscribe?: () => void },

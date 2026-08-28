@@ -20,6 +20,12 @@ export const OrchestrationDeliveryLifecycleState = Schema.Literals([
 ]);
 export type OrchestrationDeliveryLifecycleState = typeof OrchestrationDeliveryLifecycleState.Type;
 
+export const OrchestrationDeliveryRecoveryReason = Schema.Literals([
+  "replay_budget_exceeded",
+  "replay_unavailable",
+]);
+export type OrchestrationDeliveryRecoveryReason = typeof OrchestrationDeliveryRecoveryReason.Type;
+
 export const OrchestrationDeliverySubscriptionInput = Schema.Struct({
   consumerId: Schema.optional(TrimmedNonEmptyString),
   appliedSequence: Schema.optional(NonNegativeInt),
@@ -51,9 +57,23 @@ export const OrchestrationDeliveryLifecycle = Schema.Struct({
 });
 export type OrchestrationDeliveryLifecycle = typeof OrchestrationDeliveryLifecycle.Type;
 
+export const OrchestrationDeliveryRecovery = Schema.Struct({
+  type: Schema.Literal("recovery"),
+  route: OrchestrationDeliveryRoute,
+  recoveryId: TrimmedNonEmptyString,
+  consumerId: TrimmedNonEmptyString,
+  consumerGeneration: NonNegativeInt,
+  serverEpoch: TrimmedNonEmptyString,
+  acknowledgedSequence: NonNegativeInt,
+  targetSequence: NonNegativeInt,
+  reasonCode: OrchestrationDeliveryRecoveryReason,
+});
+export type OrchestrationDeliveryRecovery = typeof OrchestrationDeliveryRecovery.Type;
+
 export const OrchestrationDeliveryStreamItem = Schema.Union([
   OrchestrationDeliveryBatch,
   OrchestrationDeliveryLifecycle,
+  OrchestrationDeliveryRecovery,
 ]);
 export type OrchestrationDeliveryStreamItem = typeof OrchestrationDeliveryStreamItem.Type;
 
@@ -73,3 +93,20 @@ export const OrchestrationApplicationAckResult = Schema.Struct({
   acknowledgedSequence: NonNegativeInt,
 });
 export type OrchestrationApplicationAckResult = typeof OrchestrationApplicationAckResult.Type;
+
+export const OrchestrationBaselineAckInput = Schema.Struct({
+  recoveryId: TrimmedNonEmptyString,
+  consumerId: TrimmedNonEmptyString,
+  consumerGeneration: NonNegativeInt,
+  serverEpoch: TrimmedNonEmptyString,
+  appliedProjectionSequence: NonNegativeInt,
+  applicationDurationMs: NonNegativeInt,
+});
+export type OrchestrationBaselineAckInput = typeof OrchestrationBaselineAckInput.Type;
+
+export const OrchestrationBaselineAckResult = Schema.Struct({
+  accepted: Schema.Boolean,
+  fenced: Schema.Boolean,
+  acknowledgedSequence: NonNegativeInt,
+});
+export type OrchestrationBaselineAckResult = typeof OrchestrationBaselineAckResult.Type;

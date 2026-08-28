@@ -184,7 +184,9 @@ describe("makeOrchestrationDeliveryStream", () => {
     await Effect.runPromise(Effect.forEach(persisted, deliveryHub.publish));
     releaseOpen(subscription);
 
-    await expect(running).resolves.toBeUndefined();
+    await expect(running).rejects.toThrow(
+      "orchestration delivery live handoff requires resubscription",
+    );
     expect(closed).toHaveBeenCalled();
 
     const replayedSubscription = outputSubscription({});
@@ -209,10 +211,10 @@ describe("makeOrchestrationDeliveryStream", () => {
         }),
       ),
     );
-    expect(
-      Array.from(replayed).flatMap((item) =>
-        item.type === "batch" ? item.events.map((entry) => entry.sequence) : [],
-      ),
-    ).toEqual([1, 2, 3, 4]);
+    const replayedSequences = Array.from(replayed).flatMap((item) =>
+      item.type === "batch" ? item.events.map((entry) => entry.sequence) : [],
+    );
+    expect(replayedSequences).toEqual([1, 2, 3, 4]);
+    expect(new Set(replayedSequences).size).toBe(replayedSequences.length);
   });
 });

@@ -6,6 +6,7 @@ import {
 import {
   DesktopSupervisorProtocolError,
   type DesktopSupervisorApplicationAck,
+  type DesktopSupervisorBaselineInstall,
   type DesktopSupervisorEvent,
   type DesktopSupervisorEventBatch,
   type DesktopSupervisorFrame,
@@ -107,6 +108,46 @@ function decodeApplicationAck(bytes: Uint8Array): DesktopSupervisorApplicationAc
   return value;
 }
 
+function decodeBaselineInstall(bytes: Uint8Array): DesktopSupervisorBaselineInstall {
+  const value = {
+    recoveryId: "",
+    consumerId: "",
+    consumerGeneration: 0,
+    serverEpoch: "",
+    appliedProjectionSequence: 0,
+  };
+  decodeMessage(bytes, (field, wireType, reader) => {
+    if (field === 1) value.recoveryId = readString(wireType, reader);
+    else if (field === 2) value.consumerId = readString(wireType, reader);
+    else if (field === 3) value.consumerGeneration = readUint(wireType, reader);
+    else if (field === 4) value.serverEpoch = readString(wireType, reader);
+    else if (field === 5) value.appliedProjectionSequence = readUint(wireType, reader);
+    else reader.skip(wireType);
+  });
+  return value;
+}
+
+function decodeBaselineInstalled(bytes: Uint8Array): DesktopSupervisorFrame {
+  const value = {
+    recoveryId: "",
+    consumerId: "",
+    consumerGeneration: 0,
+    acknowledgedSequence: 0,
+    serverEpoch: "",
+    appliedProjectionSequence: 0,
+  };
+  decodeMessage(bytes, (field, wireType, reader) => {
+    if (field === 1) value.recoveryId = readString(wireType, reader);
+    else if (field === 2) value.consumerId = readString(wireType, reader);
+    else if (field === 3) value.consumerGeneration = readUint(wireType, reader);
+    else if (field === 4) value.acknowledgedSequence = readUint(wireType, reader);
+    else if (field === 5) value.serverEpoch = readString(wireType, reader);
+    else if (field === 6) value.appliedProjectionSequence = readUint(wireType, reader);
+    else reader.skip(wireType);
+  });
+  return { type: "baselineInstalled", value };
+}
+
 function decodeHello(bytes: Uint8Array, supervisor: boolean): DesktopSupervisorFrame {
   const value = {
     protocolMajor: 0,
@@ -179,6 +220,8 @@ function decodeSimpleFrame(field: number, bytes: Uint8Array): DesktopSupervisorF
   if (field === 3 || field === 4) return decodeAttach(bytes, field === 4);
   if (field === 6) return { type: "eventBatch", value: decodeEventBatch(bytes) };
   if (field === 7) return { type: "applicationAck", value: decodeApplicationAck(bytes) };
+  if (field === 14) return { type: "installBaseline", value: decodeBaselineInstall(bytes) };
+  if (field === 15) return decodeBaselineInstalled(bytes);
   if (field === 10) return { type: "metricsSnapshot" };
   const value = { first: "", second: "", generation: 0, sequence: 0, kind: 0 };
   decodeMessage(bytes, (nested, wireType, reader) => {
@@ -188,8 +231,9 @@ function decodeSimpleFrame(field: number, bytes: Uint8Array): DesktopSupervisorF
     } else if (nested === 1) value.first = readString(wireType, reader);
     else if (nested === 2 && field === 9) value.generation = readUint(wireType, reader);
     else if (nested === 2) value.second = readString(wireType, reader);
-    else if (nested === 3 && field === 13) value.generation = readUint(wireType, reader);
-    else if (nested === 3) value.kind = readUint(wireType, reader);
+    else if (nested === 3 && field === 13) {
+      value.generation = readUint(wireType, reader);
+    } else if (nested === 3) value.kind = readUint(wireType, reader);
     else if (nested === 4) value.sequence = readUint(wireType, reader);
     else if (nested === 5) value.second = readString(wireType, reader);
     else reader.skip(wireType);

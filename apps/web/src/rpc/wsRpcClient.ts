@@ -291,6 +291,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input)),
       acknowledgeDelivery: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.acknowledgeDelivery](input)),
+      acknowledgeDeliveryBaseline: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline](input),
+        ),
       onDomainEvent: (input, listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents](input()),

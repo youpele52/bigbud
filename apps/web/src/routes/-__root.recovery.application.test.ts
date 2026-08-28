@@ -93,7 +93,7 @@ describe("event application acknowledgement", () => {
       removeOrphanedTerminalStates: vi.fn(),
       applyTerminalEvent: vi.fn(),
     });
-    await recovery.runBoundedRecovery("bootstrap", null, () => false);
+    await expect(recovery.runBoundedRecovery("bootstrap", null, () => false)).resolves.toBe(10);
     await recovery.applyEventBatch([
       makeEvent(
         "thread.archived",

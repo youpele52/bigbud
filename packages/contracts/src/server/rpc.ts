@@ -101,6 +101,7 @@ import {
 } from "./rpc.core";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
+  WsOrchestrationAcknowledgeDeliveryBaselineRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetCommandOutcomeRpc,
   WsOrchestrationGetFullThreadDiffRpc,
@@ -246,4 +247,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationAcknowledgeDeliveryRpc,
+  WsOrchestrationAcknowledgeDeliveryBaselineRpc,
 );

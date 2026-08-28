@@ -24,6 +24,8 @@ import {
 import {
   OrchestrationApplicationAckInput,
   OrchestrationApplicationAckResult,
+  OrchestrationBaselineAckInput,
+  OrchestrationBaselineAckResult,
   OrchestrationDeliveryStreamItem,
   OrchestrationDeliverySubscriptionInput,
 } from "../orchestration/orchestration.delivery";
@@ -150,6 +152,14 @@ export const WsOrchestrationAcknowledgeDeliveryRpc = Rpc.make(
   {
     payload: OrchestrationApplicationAckInput,
     success: OrchestrationApplicationAckResult,
+  },
+);
+
+export const WsOrchestrationAcknowledgeDeliveryBaselineRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline,
+  {
+    payload: OrchestrationBaselineAckInput,
+    success: OrchestrationBaselineAckResult,
   },
 );
 

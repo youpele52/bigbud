@@ -29,7 +29,7 @@ describe("desktop supervisor cross-language fixtures", () => {
           type: "clientHello",
           value: {
             protocolMajor: 1,
-            protocolMinor: 1,
+            protocolMinor: 3,
             clientInstanceId: "client-fixture",
             requestedLimits: DEFAULT_DESKTOP_SUPERVISOR_LIMITS,
           },
@@ -68,8 +68,28 @@ describe("desktop supervisor cross-language fixtures", () => {
     ["ack_accepted", "applicationAckAccepted"],
     ["recovery", "recoveryRequired"],
     ["error", "protocolError"],
+    ["install_baseline", "installBaseline"],
+    ["baseline_installed", "baselineInstalled"],
   ])("decodes the %s fixture", (name, type) => {
     expect(decodeDesktopSupervisorDelimitedFrame(hex(name)).type).toBe(type);
+  });
+
+  it("preserves the complete installed-baseline identity", () => {
+    const frame = {
+      type: "baselineInstalled",
+      value: {
+        recoveryId: "recovery-fixture",
+        consumerId: "consumer-fixture",
+        consumerGeneration: 7,
+        acknowledgedSequence: 42,
+        serverEpoch: "epoch-fixture",
+        appliedProjectionSequence: 42,
+      },
+    } as const;
+    expect(decodeDesktopSupervisorDelimitedFrame(hex("baseline_installed"))).toEqual(frame);
+    expect(Buffer.from(encodeDesktopSupervisorDelimitedFrame(frame))).toEqual(
+      hex("baseline_installed"),
+    );
   });
 
   it("rejects a truncated fixture", () => {

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { WireWriter } from "../remote-agent/remoteAgentProtocol.codec.wire.ts";
 import type {
   DesktopSupervisorApplicationAck,
+  DesktopSupervisorBaselineInstall,
   DesktopSupervisorEvent,
   DesktopSupervisorEventBatch,
   DesktopSupervisorFrame,
@@ -57,6 +58,16 @@ function encodeApplicationAck(value: DesktopSupervisorApplicationAck): Uint8Arra
   return writer.finish();
 }
 
+function encodeBaselineInstall(value: DesktopSupervisorBaselineInstall): Uint8Array {
+  const writer = new WireWriter();
+  writer.fieldString(1, value.recoveryId);
+  writer.fieldString(2, value.consumerId);
+  writer.fieldUint(3, value.consumerGeneration);
+  writer.fieldString(4, value.serverEpoch);
+  writer.fieldUint(5, value.appliedProjectionSequence);
+  return writer.finish();
+}
+
 function encodeFrameValue(frame: DesktopSupervisorFrame): { field: number; bytes: Uint8Array } {
   const writer = new WireWriter();
   switch (frame.type) {
@@ -98,6 +109,16 @@ function encodeFrameValue(frame: DesktopSupervisorFrame): { field: number; bytes
       writer.fieldUint(3, frame.value.consumerGeneration);
       writer.fieldUint(4, frame.value.acknowledgedSequence);
       return { field: 13, bytes: writer.finish() };
+    case "installBaseline":
+      return { field: 14, bytes: encodeBaselineInstall(frame.value) };
+    case "baselineInstalled":
+      writer.fieldString(1, frame.value.recoveryId);
+      writer.fieldString(2, frame.value.consumerId);
+      writer.fieldUint(3, frame.value.consumerGeneration);
+      writer.fieldUint(4, frame.value.acknowledgedSequence);
+      writer.fieldString(5, frame.value.serverEpoch);
+      writer.fieldUint(6, frame.value.appliedProjectionSequence);
+      return { field: 15, bytes: writer.finish() };
     case "heartbeat":
       writer.fieldUint(1, frame.value.monotonicMillis);
       return { field: 8, bytes: writer.finish() };

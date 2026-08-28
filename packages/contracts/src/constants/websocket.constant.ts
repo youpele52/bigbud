@@ -141,4 +141,5 @@ export const ORCHESTRATION_WS_METHODS = {
   getMobileThread: "orchestration.getMobileThread",
   replayEvents: "orchestration.replayEvents",
   acknowledgeDelivery: "orchestration.acknowledgeDelivery",
+  acknowledgeDeliveryBaseline: "orchestration.acknowledgeDeliveryBaseline",
 } as const;

@@ -254,6 +254,16 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         ),
         { "rpc.aggregate": "orchestration" },
       ),
+    [ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline]: (
+      input: Parameters<WsRpcContext["desktopSupervisorDelivery"]["acknowledgeBaseline"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline,
+        Effect.tryPromise(() => context.desktopSupervisorDelivery.acknowledgeBaseline(input)).pipe(
+          Effect.orDie,
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
     [WS_METHODS.subscribeOrchestrationDomainEvents]: (input: {
       readonly consumerId?: string | undefined;
       readonly appliedSequence?: number | undefined;

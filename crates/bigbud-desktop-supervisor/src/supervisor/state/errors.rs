@@ -32,13 +32,25 @@ pub enum SupervisorError {
     BatchIdentityConflict,
     #[error("event batch identity does not match its canonical protobuf content")]
     InvalidBatchIdentity,
+    #[error("baseline recovery identity is empty")]
+    InvalidBaselineIdentity,
+    #[error("baseline recovery identity conflicts with an earlier installation")]
+    BaselineIdentityConflict,
+    #[error("baseline recovery identity capacity is exhausted")]
+    BaselineIdentityCapacity,
+    #[error("baseline installation would move the acknowledged sequence backward")]
+    BaselineMovedBackward,
+    #[error("baseline installation conflicts with queued or in-flight delivery")]
+    BaselineStateConflict,
 }
 
 impl SupervisorError {
     pub fn is_fatal_session_error(&self) -> bool {
         matches!(
             self,
-            Self::BatchIdentityConflict | Self::InvalidBatchIdentity
+            Self::BatchIdentityConflict
+                | Self::InvalidBatchIdentity
+                | Self::BaselineIdentityConflict
         )
     }
 }

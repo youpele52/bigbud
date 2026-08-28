@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect";
+import { Deferred, Effect, Stream } from "effect";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -32,6 +32,7 @@ export function makeOrchestrationDeliveryStream(input: {
       ).pipe(Effect.orDie),
       (owned) => Effect.sync(() => owned.close()),
     );
+    const handoffEnded = yield* Deferred.make<void>();
     yield* Stream.runForEach(canonicalStream, (event: OrchestrationEvent) =>
       Effect.tryPromise(() => subscription.offer(event)).pipe(
         Effect.orDie,
@@ -41,12 +42,28 @@ export function makeOrchestrationDeliveryStream(input: {
             : Effect.die(new Error("orchestration delivery live handoff overflowed")),
         ),
       ),
-    ).pipe(Effect.ensuring(Effect.sync(() => subscription.close())), Effect.forkScoped);
-    return Stream.fromEffectRepeat(
+    ).pipe(
+      Effect.catchCause(() => Effect.void),
+      Effect.ensuring(
+        Effect.sync(() => subscription.close()).pipe(
+          Effect.andThen(Deferred.succeed(handoffEnded, undefined)),
+        ),
+      ),
+      Effect.forkScoped,
+    );
+    const output = Stream.fromEffectRepeat(
       Effect.tryPromise(() => subscription.take()).pipe(Effect.orDie),
     ).pipe(
       Stream.takeWhile((item) => item !== null),
       Stream.map((item) => item!),
     );
+    const handoffFailure = Stream.fromEffect(
+      Deferred.await(handoffEnded).pipe(
+        Effect.andThen(
+          Effect.die(new Error("orchestration delivery live handoff requires resubscription")),
+        ),
+      ),
+    );
+    return Stream.merge(output, handoffFailure);
   });
 }

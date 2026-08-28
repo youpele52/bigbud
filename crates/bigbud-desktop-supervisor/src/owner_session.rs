@@ -116,6 +116,21 @@ impl OwnerSession {
                     )?));
                     responses
                 }
+                Some(v1::frame::Payload::InstallBaseline(baseline)) => {
+                    let acknowledged_sequence = supervisor.install_baseline(&baseline)?;
+                    vec![v1::Frame {
+                        payload: Some(v1::frame::Payload::BaselineInstalled(
+                            v1::BaselineInstalled {
+                                recovery_id: baseline.recovery_id,
+                                consumer_id: baseline.consumer_id,
+                                consumer_generation: baseline.consumer_generation,
+                                acknowledged_sequence,
+                                server_epoch: baseline.server_epoch,
+                                applied_projection_sequence: baseline.applied_projection_sequence,
+                            },
+                        )),
+                    }]
+                }
                 Some(v1::frame::Payload::Heartbeat(heartbeat)) => vec![v1::Frame {
                     payload: Some(v1::frame::Payload::Heartbeat(heartbeat)),
                 }],
@@ -239,6 +254,11 @@ pub fn error_frame(error: &SupervisorError) -> v1::Frame {
         SupervisorError::AckMovedBackward => "ack_moved_backward",
         SupervisorError::BatchIdentityConflict => "batch_identity_conflict",
         SupervisorError::InvalidBatchIdentity => "invalid_batch_identity",
+        SupervisorError::InvalidBaselineIdentity => "invalid_baseline_identity",
+        SupervisorError::BaselineIdentityConflict => "baseline_identity_conflict",
+        SupervisorError::BaselineIdentityCapacity => "baseline_identity_capacity",
+        SupervisorError::BaselineMovedBackward => "baseline_moved_backward",
+        SupervisorError::BaselineStateConflict => "baseline_state_conflict",
     };
     protocol_error(code, &error.to_string())
 }

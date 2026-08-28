@@ -226,8 +226,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     });
   const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
     eventStore.readFromSequence(fromSequenceExclusive);
-  const readReplay: OrchestrationEngineShape["readReplay"] = (fromSequenceExclusive) =>
-    eventStore.readReplay(fromSequenceExclusive);
+  const readReplay: OrchestrationEngineShape["readReplay"] = (fromSequenceExclusive, limit) =>
+    eventStore.readReplay(fromSequenceExclusive, limit);
   const readEventsByCommandId: OrchestrationEngineShape["readEventsByCommandId"] = (commandId) =>
     eventStore.readByCommandId!(commandId);
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>

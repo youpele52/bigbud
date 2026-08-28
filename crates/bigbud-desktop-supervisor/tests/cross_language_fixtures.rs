@@ -35,6 +35,8 @@ fn decodes_shared_frames_and_batch_identity() -> Result<(), String> {
         "ack_accepted",
         "recovery",
         "error",
+        "install_baseline",
+        "baseline_installed",
     ] {
         let encoded = decode_hex(fixtures[name])?;
         let frame = read_frame(&mut Cursor::new(encoded), DEFAULT_MAX_FRAME_BYTES)

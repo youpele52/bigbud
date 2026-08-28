@@ -12,11 +12,17 @@ import {
 import { closeRemoteAgentProcess } from "../remote-agent/remoteAgentConnection.ts";
 
 const STDERR_TAIL_BYTES = 4_096;
+const UNMATCHED_FRAME_CAPACITY = 256;
 
 type FrameWaiter = {
   readonly resolve: (frame: DesktopSupervisorFrame) => void;
   readonly reject: (error: Error) => void;
   readonly matches: (frame: DesktopSupervisorFrame) => boolean;
+};
+
+type RequestOptions = {
+  readonly discardResponseOnAbort?: boolean;
+  readonly signal?: AbortSignal;
 };
 
 export class DesktopSupervisorConnectionError extends Error {
@@ -35,6 +41,7 @@ export class DesktopSupervisorConnection {
   private readBuffer = Buffer.alloc(0);
   private stderrTail = "";
   private readonly queuedFrames: DesktopSupervisorFrame[] = [];
+  private readonly lateResponseMatchers: Array<(frame: DesktopSupervisorFrame) => boolean> = [];
   private readonly waiters: FrameWaiter[] = [];
   private readonly frameListeners = new Set<(frame: DesktopSupervisorFrame) => boolean | void>();
   private readonly failureListeners = new Set<(error: Error) => void>();
@@ -100,17 +107,46 @@ export class DesktopSupervisorConnection {
   async request(
     frame: DesktopSupervisorFrame,
     matches: (response: DesktopSupervisorFrame) => boolean,
+    options?: RequestOptions,
   ): Promise<DesktopSupervisorFrame> {
+    if (options?.signal?.aborted) {
+      throw new DesktopSupervisorConnectionError("Request was cancelled.", "cancelled");
+    }
     const queued = this.takeQueued(matches);
     if (queued) return this.assertResponse(queued);
     if (this.failure) throw this.failure;
     const response = await new Promise<DesktopSupervisorFrame>((resolve, reject) => {
-      const waiter = { resolve, reject, matches };
+      let waiter: FrameWaiter;
+      const cleanup = () => options?.signal?.removeEventListener("abort", abort);
+      const abort = () => {
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        if (options?.discardResponseOnAbort) {
+          this.lateResponseMatchers.push(matches);
+          if (this.lateResponseMatchers.length > UNMATCHED_FRAME_CAPACITY) {
+            this.lateResponseMatchers.shift();
+          }
+        }
+        cleanup();
+        reject(new DesktopSupervisorConnectionError("Request was cancelled.", "cancelled"));
+      };
+      waiter = {
+        matches,
+        resolve: (value) => {
+          cleanup();
+          resolve(value);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      };
       this.waiters.push(waiter);
+      options?.signal?.addEventListener("abort", abort, { once: true });
       void this.send(frame).catch((cause: unknown) => {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
-        reject(this.asError(cause));
+        waiter.reject(this.asError(cause));
       });
     });
     return this.assertResponse(response);
@@ -165,7 +201,20 @@ export class DesktopSupervisorConnection {
     );
     const waiter = index >= 0 ? this.waiters.splice(index, 1)[0] : undefined;
     if (waiter) waiter.resolve(frame);
-    else if (!consumed) this.queuedFrames.push(frame);
+    else if (!consumed) {
+      const lateIndex = this.lateResponseMatchers.findIndex((matches) => matches(frame));
+      if (lateIndex >= 0) {
+        this.lateResponseMatchers.splice(lateIndex, 1);
+        return;
+      }
+      if (this.queuedFrames.length >= UNMATCHED_FRAME_CAPACITY) {
+        this.fail(
+          new DesktopSupervisorProtocolError("supervisor unmatched frame capacity exceeded"),
+        );
+        return;
+      }
+      this.queuedFrames.push(frame);
+    }
   }
 
   private takeQueued(

@@ -37,6 +37,7 @@ function owner(failDelivery = false) {
       return { type: "eventBatch" as const, value: batch };
     }),
     acknowledge: vi.fn(async (ack) => ack.appliedThroughSequence),
+    installBaseline: vi.fn(async (baseline) => baseline.appliedProjectionSequence),
     heartbeat: vi.fn(async (monotonicMillis) => ({
       type: "heartbeat" as const,
       value: { monotonicMillis },
@@ -62,6 +63,57 @@ async function takeBatch(
 }
 
 describe("DesktopSupervisorDeliveryCoordinator generation routing", () => {
+  it("fences a supervised ACK response that arrives after session supersession", async () => {
+    const rust = owner();
+    let releaseAck!: () => void;
+    const ackGate = new Promise<void>((resolve) => (releaseAck = resolve));
+    vi.mocked(rust.value.acknowledge).mockImplementation(async (ack) => {
+      await ackGate;
+      return ack.appliedThroughSequence;
+    });
+    const coordinator = new DesktopSupervisorDeliveryCoordinator(
+      { mode: "supervisor", binaryPath: "/fixture/supervisor" },
+      async () => rust.value,
+    );
+    const readReplay = async () => ({
+      requestedFromSequenceExclusive: 0,
+      retainedFromSequenceExclusive: 0,
+      earliestAvailableSequence: 1,
+      latestSequence: 1,
+      availability: "available" as const,
+      complete: true,
+      events: [event],
+    });
+    const first = await coordinator.open({
+      consumerId: "superseded-ack",
+      appliedSequence: 0,
+      readReplay,
+    });
+    const batch = await takeBatch(first);
+    const acknowledgement = coordinator.acknowledge({
+      batchId: batch.batchId,
+      consumerId: batch.consumerId,
+      consumerGeneration: batch.consumerGeneration,
+      receivedThroughSequence: 1,
+      appliedThroughSequence: 1,
+      applicationDurationMs: 1,
+    });
+    await vi.waitFor(() => expect(rust.value.acknowledge).toHaveBeenCalledOnce());
+    await coordinator.open({
+      consumerId: "superseded-ack",
+      appliedSequence: 0,
+      readReplay,
+    });
+    releaseAck();
+
+    await expect(acknowledgement).resolves.toEqual({
+      accepted: false,
+      fenced: true,
+      acknowledgedSequence: 0,
+    });
+    await coordinator.close();
+  });
+
   it("ignores a stale recovery frame after replacing a failed generation", async () => {
     const failed = owner(true);
     const replacement = owner();

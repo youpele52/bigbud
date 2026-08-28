@@ -44,6 +44,13 @@ export class DesktopSupervisorShadowComparator {
     this.inFlight = null;
   }
 
+  observeBaseline(sequence: number): void {
+    if (this.inFlight) {
+      throw new Error("shadow comparator detected a baseline with delivery in flight");
+    }
+    this.acknowledgedSequence = sequence;
+  }
+
   observeFallbackFence(): void {
     this.fallbackFenced = true;
     this.inFlight = null;

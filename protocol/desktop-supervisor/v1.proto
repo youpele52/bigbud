@@ -17,6 +17,8 @@ message Frame {
     Shutdown shutdown = 11;
     ProtocolError protocol_error = 12;
     ApplicationAckAccepted application_ack_accepted = 13;
+    InstallBaseline install_baseline = 14;
+    BaselineInstalled baseline_installed = 15;
   }
 }
 
@@ -91,6 +93,23 @@ message ApplicationAckAccepted {
   string consumer_id = 2;
   uint64 consumer_generation = 3;
   uint64 acknowledged_sequence = 4;
+}
+
+message InstallBaseline {
+  string recovery_id = 1;
+  string consumer_id = 2;
+  uint64 consumer_generation = 3;
+  string server_epoch = 4;
+  uint64 applied_projection_sequence = 5;
+}
+
+message BaselineInstalled {
+  string recovery_id = 1;
+  string consumer_id = 2;
+  uint64 consumer_generation = 3;
+  uint64 acknowledged_sequence = 4;
+  string server_epoch = 5;
+  uint64 applied_projection_sequence = 6;
 }
 
 message Heartbeat {

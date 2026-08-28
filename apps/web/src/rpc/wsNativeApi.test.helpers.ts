@@ -173,6 +173,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     getFullThreadDiff: vi.fn(),
     replayEvents: vi.fn(),
     acknowledgeDelivery: vi.fn(),
+    acknowledgeDeliveryBaseline: vi.fn(),
     onDomainEvent: vi.fn(
       (_input: unknown, listener: (event: OrchestrationDeliveryStreamItem) => void) =>
         registerListener(orchestrationEventListeners, listener),

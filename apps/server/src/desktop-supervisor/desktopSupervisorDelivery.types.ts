@@ -1,6 +1,8 @@
 import type {
   OrchestrationApplicationAckInput,
   OrchestrationApplicationAckResult,
+  OrchestrationBaselineAckInput,
+  OrchestrationBaselineAckResult,
   OrchestrationDeliveryStreamItem,
 } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
@@ -25,5 +27,8 @@ export interface DesktopSupervisorDeliveryShape {
   readonly acknowledge: (
     input: OrchestrationApplicationAckInput,
   ) => Promise<OrchestrationApplicationAckResult>;
+  readonly acknowledgeBaseline: (
+    input: OrchestrationBaselineAckInput,
+  ) => Promise<OrchestrationBaselineAckResult>;
   readonly close: () => Promise<void>;
 }

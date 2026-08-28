@@ -10,6 +10,7 @@ use crate::v1;
 use self::consumer::{Consumer, InFlight};
 
 const ACKNOWLEDGED_BATCH_HISTORY_LIMIT: usize = 256;
+const BASELINE_IDENTITY_HISTORY_LIMIT: usize = 256;
 // Detached generation fences use logical LRU eviction at this hard capacity.
 // They intentionally have no wall-clock TTL, so behavior is independent of clock changes.
 const DEFAULT_DETACHED_GENERATION_TOMBSTONE_CAPACITY: usize = 1_024;
@@ -345,6 +346,7 @@ impl Supervisor {
 }
 
 mod attach;
+mod baseline;
 mod batch_identity;
 mod consumer;
 mod errors;
@@ -358,3 +360,7 @@ mod tests;
 #[cfg(test)]
 #[path = "state/tombstone_tests.rs"]
 mod tombstone_tests;
+
+#[cfg(test)]
+#[path = "state/baseline_tests.rs"]
+mod baseline_tests;

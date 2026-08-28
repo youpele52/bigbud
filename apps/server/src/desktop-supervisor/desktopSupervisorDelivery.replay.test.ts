@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
 import { DesktopSupervisorDeliveryCoordinator } from "./desktopSupervisorDelivery.ts";
-import { DESKTOP_SUPERVISOR_REPLAY_BUFFER_CAPACITY } from "./desktopSupervisorConfig.ts";
 
 function event(sequence: number): OrchestrationEvent {
   return {
@@ -92,15 +91,16 @@ describe("DesktopSupervisorDelivery replay", () => {
     await coordinator.close();
   });
 
-  it("fences replay that exceeds the explicit in-memory buffer bound", async () => {
+  it("requests and persists a projection baseline when replay exceeds the buffer bound", async () => {
     const coordinator = new DesktopSupervisorDeliveryCoordinator({
       mode: "direct-unmanaged",
       reasonCode: "standalone",
     });
-    const latestSequence = DESKTOP_SUPERVISOR_REPLAY_BUFFER_CAPACITY + 1;
+    const appliedSequence = 496_663;
+    const latestSequence = 4_530_348;
     const subscription = await coordinator.open({
       consumerId: "consumer-bounded-replay",
-      appliedSequence: 0,
+      appliedSequence,
       readReplay: async (fromSequenceExclusive, limit = 1_000) => {
         const events = Array.from(
           { length: Math.min(limit, latestSequence - fromSequenceExclusive) },
@@ -112,26 +112,65 @@ describe("DesktopSupervisorDelivery replay", () => {
           earliestAvailableSequence: 1,
           latestSequence,
           availability: "available" as const,
-          complete: events.at(-1)?.sequence === latestSequence,
+          complete:
+            fromSequenceExclusive >= latestSequence || events.at(-1)?.sequence === latestSequence,
           events,
         };
       },
     });
 
-    let sawReplayGapFallback = false;
-    for (let index = 0; index < 4; index += 1) {
+    let recovery: Extract<
+      Awaited<ReturnType<typeof subscription.take>>,
+      { type: "recovery" }
+    > | null = null;
+    let sawFallback = false;
+    for (let index = 0; index < 8; index += 1) {
       const item = await subscription.take();
-      if (
-        item?.type === "lifecycle" &&
-        item.state === "fallback" &&
-        item.reasonCode === "replay_gap"
-      ) {
-        sawReplayGapFallback = true;
+      if (item?.type === "lifecycle" && item.state === "fallback") sawFallback = true;
+      if (item?.type === "recovery") {
+        recovery = item;
         break;
       }
     }
 
-    expect(sawReplayGapFallback).toBe(true);
+    expect(recovery?.reasonCode).toBe("replay_budget_exceeded");
+    expect(sawFallback).toBe(false);
+    const result = await coordinator.acknowledgeBaseline({
+      recoveryId: recovery!.recoveryId,
+      consumerId: recovery!.consumerId,
+      consumerGeneration: recovery!.consumerGeneration,
+      serverEpoch: recovery!.serverEpoch,
+      appliedProjectionSequence: latestSequence,
+      applicationDurationMs: 10,
+    });
+    expect(result).toEqual({
+      accepted: true,
+      fenced: false,
+      acknowledgedSequence: latestSequence,
+    });
+    for (;;) {
+      const item = await subscription.take();
+      if (item?.type === "lifecycle" && item.state === "live") break;
+    }
+
+    const replacement = await coordinator.open({
+      consumerId: "consumer-bounded-replay",
+      appliedSequence: result.acknowledgedSequence,
+      readReplay: async (fromSequenceExclusive) => ({
+        requestedFromSequenceExclusive: fromSequenceExclusive,
+        retainedFromSequenceExclusive: 0,
+        earliestAvailableSequence: 1,
+        latestSequence,
+        availability: "available" as const,
+        complete: true,
+        events: [],
+      }),
+    });
+    for (;;) {
+      const item = await replacement.take();
+      expect(item?.type).not.toBe("recovery");
+      if (item?.type === "lifecycle" && item.state === "live") break;
+    }
     await coordinator.close();
   });
 
@@ -143,27 +182,34 @@ describe("DesktopSupervisorDelivery replay", () => {
     const subscription = await coordinator.open({
       consumerId: "consumer-recovered-gap",
       appliedSequence: 0,
-      readReplay: async () => ({
-        requestedFromSequenceExclusive: 0,
+      readReplay: async (fromSequenceExclusive) => ({
+        requestedFromSequenceExclusive: fromSequenceExclusive,
         retainedFromSequenceExclusive: 5,
-        earliestAvailableSequence: 6,
+        earliestAvailableSequence: fromSequenceExclusive < 5 ? 6 : null,
         latestSequence: 5,
-        availability: "gap" as const,
-        complete: false,
+        availability: fromSequenceExclusive < 5 ? ("gap" as const) : ("available" as const),
+        complete: fromSequenceExclusive >= 5,
         events: [],
       }),
     });
 
+    let recovery: Extract<Awaited<ReturnType<typeof subscription.take>>, { type: "recovery" }>;
     for (;;) {
       const item = await subscription.take();
-      if (
-        item?.type === "lifecycle" &&
-        item.state === "fallback" &&
-        item.reasonCode === "replay_gap"
-      ) {
+      if (item?.type === "recovery") {
+        recovery = item;
         break;
       }
     }
+
+    await coordinator.acknowledgeBaseline({
+      recoveryId: recovery!.recoveryId,
+      consumerId: recovery!.consumerId,
+      consumerGeneration: recovery!.consumerGeneration,
+      serverEpoch: recovery!.serverEpoch,
+      appliedProjectionSequence: 5,
+      applicationDurationMs: 1,
+    });
 
     await subscription.offer(event(6));
     const batch = await takeBatch(subscription);

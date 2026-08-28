@@ -4,6 +4,8 @@ import { Effect, Layer, ServiceMap } from "effect";
 import type {
   OrchestrationApplicationAckInput,
   OrchestrationApplicationAckResult,
+  OrchestrationBaselineAckInput,
+  OrchestrationBaselineAckResult,
 } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 
 import {
@@ -17,6 +19,8 @@ import {
   type DesktopSupervisorRuntimeConfig,
 } from "./desktopSupervisorConfig.ts";
 import { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
+import { installSessionSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.session.ts";
+import { hasLiveDesktopSupervisorSession } from "./desktopSupervisorDelivery.identity.ts";
 import type {
   DesktopSupervisorDeliveryShape,
   DesktopSupervisorSubscription,
@@ -35,6 +39,7 @@ export interface DesktopSupervisorOwner {
   readonly detach: DesktopSupervisorOwnerClient["detach"];
   readonly enqueue: DesktopSupervisorOwnerClient["enqueue"];
   readonly acknowledge: DesktopSupervisorOwnerClient["acknowledge"];
+  readonly installBaseline: DesktopSupervisorOwnerClient["installBaseline"];
   readonly heartbeat: DesktopSupervisorOwnerClient["heartbeat"];
   readonly onFailure: DesktopSupervisorOwnerClient["onFailure"];
   readonly onFrame: DesktopSupervisorOwnerClient["onFrame"];
@@ -117,10 +122,17 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     });
   }
 
+  acknowledgeBaseline(
+    input: OrchestrationBaselineAckInput,
+  ): Promise<OrchestrationBaselineAckResult> {
+    const session = this.sessions.get(this.sessionKey(input.consumerId, input.consumerGeneration));
+    if (session) return session.acknowledgeBaseline(input);
+    return Promise.resolve({ accepted: false, fenced: true, acknowledgedSequence: 0 });
+  }
+
   get retainedConsumerGenerationCount(): number {
     return this.generations.size;
   }
-
   async recover(session: DesktopSupervisorDeliverySession): Promise<boolean> {
     if (
       this.config.mode !== "supervisor" ||
@@ -206,12 +218,25 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   }
 
   async acknowledgeSupervisor(input: OrchestrationApplicationAckInput): Promise<number> {
-    const ack: DesktopSupervisorApplicationAck = input;
-    return (await this.startClient()).acknowledge(ack);
+    return (await this.startClient()).acknowledge(input as DesktopSupervisorApplicationAck);
+  }
+
+  async installSupervisorBaseline(
+    session: DesktopSupervisorDeliverySession,
+    input: OrchestrationBaselineAckInput,
+  ): Promise<number> {
+    return installSessionSupervisorBaseline(
+      session,
+      input,
+      this.serverEpoch,
+      () => this.isAuthoritative(session),
+      () => this.startClient(),
+      () => this.recover(session),
+    );
   }
 
   async fenceSupervisor(session: DesktopSupervisorDeliverySession, reason: string): Promise<void> {
-    if (!this.isAuthoritative(session)) return;
+    if (this.authoritativeSessions.get(session.consumerId) !== session) return;
     session.clearAttachment();
     const client = this.client;
     this.client = null;
@@ -226,7 +251,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     }
     if (
       this.generations.get(session.consumerId) === session.generation &&
-      !this.hasLiveSession(session.consumerId)
+      !hasLiveDesktopSupervisorSession(this.authoritativeSessions, session.consumerId)
     ) {
       this.generations.delete(session.consumerId);
       this.generations.set(session.consumerId, session.generation);
@@ -321,7 +346,10 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     this.client = null;
     this.clientPromise = null;
     const error = cause instanceof Error ? cause : new Error(String(cause));
-    for (const session of new Set(this.sessions.values())) session.failInFlight(error);
+    for (const session of new Set(this.sessions.values())) {
+      if (client && session.isAttachedTo(client)) session.clearAttachment();
+      session.failInFlight(error);
+    }
     if (client) void client.close("connection_invalidated");
   }
 
@@ -332,7 +360,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     ) {
       let evictable: string | undefined;
       for (const candidate of this.generations.keys()) {
-        if (!this.hasLiveSession(candidate)) {
+        if (!hasLiveDesktopSupervisorSession(this.authoritativeSessions, candidate)) {
           evictable = candidate;
           break;
         }
@@ -346,11 +374,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     return generation;
   }
 
-  private hasLiveSession(consumerId: string): boolean {
-    return this.authoritativeSessions.get(consumerId)?.closed === false;
-  }
-
-  private isAuthoritative(session: DesktopSupervisorDeliverySession): boolean {
+  isAuthoritative(session: DesktopSupervisorDeliverySession): boolean {
     return this.authoritativeSessions.get(session.consumerId) === session && !session.closed;
   }
 
@@ -372,12 +396,4 @@ export const DesktopSupervisorDeliveryLive = Layer.effect(
     ),
     (coordinator) => Effect.promise(() => coordinator.close()),
   ),
-);
-
-export const DesktopSupervisorDeliveryTestLive = Layer.succeed(
-  DesktopSupervisorDelivery,
-  new DesktopSupervisorDeliveryCoordinator({
-    mode: "direct-unmanaged",
-    reasonCode: "standalone",
-  }),
 );

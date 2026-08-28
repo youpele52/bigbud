@@ -289,7 +289,8 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     reason: "bootstrap" | "replay-failed",
     selectedThreadId: ThreadId | null,
     disposed: () => boolean,
-  ): Promise<void> => {
+    resumeReplay = true,
+  ): Promise<number | null> => {
     const started = recovery.beginSnapshotRecovery(reason);
     if (import.meta.env.MODE !== "test") {
       const state = recovery.getState();
@@ -306,7 +307,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       });
     }
     if (!started) {
-      return;
+      return null;
     }
     try {
       const projectionSequence = await retryTransportRecoveryOperation(
@@ -319,11 +320,13 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           syncThreads: input.syncThreads,
           removeOrphanedTerminalStates: input.removeOrphanedTerminalStates,
         });
-        if (recovery.completeSnapshotRecovery(projectionSequence)) {
+        const shouldReplay = recovery.completeSnapshotRecovery(projectionSequence);
+        if (shouldReplay && resumeReplay) {
           void runReplayRecovery("sequence-gap", disposed, () => {
             void runBoundedRecovery("replay-failed", selectedThreadId, disposed);
           });
         }
+        return projectionSequence;
       }
     } catch (error) {
       recovery.failSnapshotRecovery();
@@ -335,6 +338,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
         });
       }
     }
+    return null;
   };
 
   const runBoundedRecovery = (
@@ -344,12 +348,21 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
   ) =>
     recoveryOperationQueue.enqueue(() => runBoundedRecoveryNow(reason, selectedThreadId, disposed));
 
+  const runDeliveryBaselineRecovery = (
+    selectedThreadId: ThreadId | null,
+    disposed: () => boolean,
+  ) =>
+    recoveryOperationQueue.enqueue(() =>
+      runBoundedRecoveryNow("replay-failed", selectedThreadId, disposed, false),
+    );
+
   return {
     applyEventBatch,
     flushPendingDomainEvents: pendingDomainEventQueue.flushPendingDomainEvents,
     schedulePendingDomainEventFlush: pendingDomainEventQueue.schedulePendingDomainEventFlush,
     runReplayRecovery,
     runBoundedRecovery,
+    runDeliveryBaselineRecovery,
     classifyDomainEvent: recovery.classifyDomainEvent.bind(recovery),
     getAppliedSequence: () => recovery.getState().appliedSequence,
     cancel: () => {

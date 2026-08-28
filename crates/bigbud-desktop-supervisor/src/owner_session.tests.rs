@@ -151,6 +151,42 @@ fn accepts_operations_only_after_a_compatible_handshake() {
 }
 
 #[test]
+fn installs_a_typescript_authorized_projection_baseline() {
+    let limits = Limits::default();
+    let mut session = OwnerSession::new(limits, "supervisor-1".to_owned());
+    let mut supervisor = Supervisor::new(limits);
+    session
+        .handle_frame(&mut supervisor, hello(PROTOCOL_MAJOR), 0)
+        .unwrap();
+    session.handle_frame(&mut supervisor, attach(), 1).unwrap();
+
+    let result = session
+        .handle_frame(
+            &mut supervisor,
+            v1::Frame {
+                payload: Some(v1::frame::Payload::InstallBaseline(v1::InstallBaseline {
+                    recovery_id: "recovery-1".to_owned(),
+                    consumer_id: "main".to_owned(),
+                    consumer_generation: 1,
+                    server_epoch: "epoch-1".to_owned(),
+                    applied_projection_sequence: 100,
+                })),
+            },
+            2,
+        )
+        .unwrap();
+
+    assert!(matches!(
+        result.responses.first().and_then(|frame| frame.payload.as_ref()),
+        Some(v1::frame::Payload::BaselineInstalled(installed))
+            if installed.recovery_id == "recovery-1"
+                && installed.acknowledged_sequence == 100
+                && installed.server_epoch == "epoch-1"
+                && installed.applied_projection_sequence == 100
+    ));
+}
+
+#[test]
 fn replays_an_exact_framed_duplicate_while_in_flight() {
     let limits = Limits::default();
     let mut session = OwnerSession::new(limits, "supervisor-1".to_owned());

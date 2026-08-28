@@ -26,6 +26,9 @@ export function syncDeliveryRecoveryToast<TToastId>(
   if (delivery.state === "connecting" && toastId === null) return null;
   const fallback = delivery.state === "fallback";
   const incompatible = delivery.state === "incompatible";
+  const restoringBaseline =
+    delivery.reasonCode === "replay_budget_exceeded" ||
+    delivery.reasonCode === "replay_unavailable";
   const toast: DeliveryRecoveryToast = {
     type: incompatible ? "error" : fallback ? "warning" : "info",
     title: incompatible
@@ -37,7 +40,9 @@ export function syncDeliveryRecoveryToast<TToastId>(
       ? "Update bigbud to restore desktop event delivery."
       : fallback
         ? "This session is using the fenced TypeScript fallback."
-        : "The desktop delivery supervisor is reconnecting from the last applied event.",
+        : restoringBaseline
+          ? "Restoring current state before event delivery resumes."
+          : "The desktop delivery supervisor is reconnecting from the last applied event.",
     timeout: 0,
     data: { hideCopyButton: true },
   };

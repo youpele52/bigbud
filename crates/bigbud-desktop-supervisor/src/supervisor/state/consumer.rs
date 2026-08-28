@@ -5,6 +5,12 @@ use super::batch_identity::BatchIdentity;
 use crate::v1;
 
 #[derive(Debug)]
+pub(super) struct BaselineIdentity {
+    pub(super) recovery_id: String,
+    pub(super) acknowledged_sequence: u64,
+}
+
+#[derive(Debug)]
 pub(super) struct InFlight {
     pub(super) queued: QueuedBatch,
     pub(super) sent_at_ms: u64,
@@ -25,6 +31,7 @@ pub(super) struct Consumer {
     pub(super) in_flight: Option<InFlight>,
     pub(super) acknowledged_batches: VecDeque<BatchIdentity>,
     pub(super) last_acknowledged_batch: Option<v1::EventBatch>,
+    pub(super) baseline_identities: VecDeque<BaselineIdentity>,
 }
 
 impl Consumer {

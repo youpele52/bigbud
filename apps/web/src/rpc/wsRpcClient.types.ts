@@ -304,6 +304,9 @@ export interface WsRpcClient {
     readonly acknowledgeDelivery: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.acknowledgeDelivery
     >;
+    readonly acknowledgeDeliveryBaseline: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline
+    >;
     readonly onDomainEvent: (
       input: () => OrchestrationDeliverySubscriptionInput,
       listener: Parameters<

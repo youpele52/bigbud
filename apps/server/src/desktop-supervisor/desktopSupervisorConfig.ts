@@ -7,6 +7,7 @@ export const DESKTOP_SUPERVISOR_INPUT_CAPACITY = 2_000;
 export const DESKTOP_SUPERVISOR_OUTPUT_CAPACITY = 32;
 export const DESKTOP_SUPERVISOR_REPLAY_BUFFER_CAPACITY = 4_000;
 export const DESKTOP_SUPERVISOR_APPLICATION_ACK_TIMEOUT_MS = 15_000;
+export const DESKTOP_SUPERVISOR_BASELINE_ACK_TIMEOUT_MS = 65_000;
 // Detached generation fences use logical LRU eviction at this hard capacity.
 // They intentionally have no wall-clock TTL, so behavior is independent of clock changes.
 export const DESKTOP_SUPERVISOR_DETACHED_GENERATION_TOMBSTONE_CAPACITY = 1_024;

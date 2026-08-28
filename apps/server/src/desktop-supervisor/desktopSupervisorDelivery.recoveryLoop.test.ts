@@ -29,6 +29,7 @@ function failingOwner(): DesktopSupervisorOwner {
       throw new Error("injected repeated delivery failure");
     }),
     acknowledge: vi.fn(async (ack) => ack.appliedThroughSequence),
+    installBaseline: vi.fn(async (baseline) => baseline.appliedProjectionSequence),
     heartbeat: vi.fn(async (monotonicMillis) => ({
       type: "heartbeat" as const,
       value: { monotonicMillis },

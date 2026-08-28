@@ -53,19 +53,47 @@ export function createWsNativeApi(): NativeApi {
   type DomainEventCallback = Parameters<NativeApi["orchestration"]["onDomainEvent"]>[0];
   const domainEventCallbacks = new Set<DomainEventCallback>();
   const domainResubscribeCallbacks = new Set<() => void>();
+  let activeBaselineRecovery: {
+    readonly recoveryId: string;
+    readonly consumerId: string;
+    readonly consumerGeneration: number;
+    readonly serverEpoch: string;
+  } | null = null;
   let unsubscribeDomainEvents: (() => void) | null = null;
+
+  const isActiveBaselineRecovery = (input: {
+    readonly recoveryId: string;
+    readonly consumerId: string;
+    readonly consumerGeneration: number;
+    readonly serverEpoch: string;
+  }) =>
+    activeBaselineRecovery?.recoveryId === input.recoveryId &&
+    activeBaselineRecovery.consumerId === input.consumerId &&
+    activeBaselineRecovery.consumerGeneration === input.consumerGeneration &&
+    activeBaselineRecovery.serverEpoch === input.serverEpoch;
 
   const ensureDomainEventSubscription = () => {
     if (unsubscribeDomainEvents) return;
     unsubscribeDomainEvents = rpcClient.orchestration.onDomainEvent(
       () => ({ consumerId: deliveryConsumerId, appliedSequence: deliveryAppliedSequence }),
       (item) => {
+        if (item.type === "recovery") {
+          activeBaselineRecovery = {
+            recoveryId: item.recoveryId,
+            consumerId: item.consumerId,
+            consumerGeneration: item.consumerGeneration,
+            serverEpoch: item.serverEpoch,
+          };
+        } else if (item.type === "batch") {
+          activeBaselineRecovery = null;
+        }
         return Promise.all(Array.from(domainEventCallbacks, (callback) => callback(item))).then(
           () => undefined,
         );
       },
       {
         onResubscribe: () => {
+          activeBaselineRecovery = null;
           for (const callback of domainResubscribeCallbacks) callback();
         },
       },
@@ -248,6 +276,19 @@ export function createWsNativeApi(): NativeApi {
         }
         return result;
       },
+      acknowledgeDeliveryBaseline: async (input) => {
+        if (!isActiveBaselineRecovery(input)) {
+          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
+        }
+        const result = await rpcClient.orchestration.acknowledgeDeliveryBaseline(input);
+        if (result.accepted && !result.fenced && isActiveBaselineRecovery(input)) {
+          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
+          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+        } else if (result.accepted && !result.fenced) {
+          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
+        }
+        return result;
+      },
       onDomainEvent: (callback, options) => {
         domainEventCallbacks.add(callback);
         if (options?.onResubscribe) domainResubscribeCallbacks.add(options.onResubscribe);
@@ -256,6 +297,7 @@ export function createWsNativeApi(): NativeApi {
           domainEventCallbacks.delete(callback);
           if (options?.onResubscribe) domainResubscribeCallbacks.delete(options.onResubscribe);
           if (domainEventCallbacks.size === 0) {
+            activeBaselineRecovery = null;
             unsubscribeDomainEvents?.();
             unsubscribeDomainEvents = null;
           }

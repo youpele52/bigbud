@@ -7,6 +7,7 @@ import {
   DESKTOP_SUPERVISOR_PROTOCOL_MINOR,
   DesktopSupervisorProtocolError,
   type DesktopSupervisorApplicationAck,
+  type DesktopSupervisorBaselineInstall,
   type DesktopSupervisorEventBatch,
   type DesktopSupervisorFrame,
   type DesktopSupervisorLimits,
@@ -14,10 +15,17 @@ import {
 
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const BASELINE_REQUEST_TIMEOUT_MS = 5_000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operation: string,
+  onTimeout?: () => void,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      onTimeout?.();
       reject(new DesktopSupervisorProtocolError(`${operation} timed out`, "timeout"));
     }, timeoutMs);
     promise.then(
@@ -161,6 +169,35 @@ export class DesktopSupervisorOwnerClient {
     if (response.type !== "applicationAckAccepted") {
       throw new DesktopSupervisorProtocolError(
         `Expected ApplicationAckAccepted, got ${response.type}`,
+      );
+    }
+    return response.value.acknowledgedSequence;
+  }
+
+  async installBaseline(baseline: DesktopSupervisorBaselineInstall): Promise<number> {
+    const controller = new AbortController();
+    const response = await withTimeout(
+      this.connection.request(
+        { type: "installBaseline", value: baseline },
+        (frame) =>
+          frame.type === "baselineInstalled" &&
+          frame.value.recoveryId === baseline.recoveryId &&
+          frame.value.consumerId === baseline.consumerId &&
+          frame.value.consumerGeneration === baseline.consumerGeneration &&
+          frame.value.serverEpoch === baseline.serverEpoch &&
+          frame.value.appliedProjectionSequence === baseline.appliedProjectionSequence,
+        { discardResponseOnAbort: true, signal: controller.signal },
+      ),
+      BASELINE_REQUEST_TIMEOUT_MS,
+      "desktop supervisor baseline installation",
+      () => controller.abort(),
+    );
+    if (response.type !== "baselineInstalled") {
+      throw new DesktopSupervisorProtocolError(`Expected BaselineInstalled, got ${response.type}`);
+    }
+    if (response.value.acknowledgedSequence !== baseline.appliedProjectionSequence) {
+      throw new DesktopSupervisorProtocolError(
+        "Desktop supervisor installed a conflicting projection baseline",
       );
     }
     return response.value.acknowledgedSequence;
