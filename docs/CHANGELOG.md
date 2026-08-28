@@ -10,7 +10,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.206 (26 August, 2026)
+## v0.2.206 (28 August, 2026)
 
 ### Remote Workspace Reliability and Agent Upgrades
 
@@ -18,6 +18,27 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Made remote-agent installation and activation transactional, with recovery that can restore the previous agent or safely remove an incomplete candidate instead of leaving the remote workspace uncertain.
 - Hardened remote-agent paths, activation links, supervisor sockets, process handoffs, and connection recovery against unsafe permissions, unexpected symlinks, stale supervisors, protocol mismatches, incomplete handshakes, and concurrent work.
 - Prevented desktop connections and remote projects from proceeding before their backends and execution targets are ready, while preserving terminal, shell, and workspace operation state across agent restarts and bounded journal recovery.
+
+### Broader Remote Workspace Providers
+
+- Added readiness checks and shared ACP, MCP, filesystem, terminal, and PTY bridges so local runtimes can target remote workspaces without a separate direct SSH path for those tools.
+- Enabled Cursor, Devin, CLI proxy, and existing providers on remote workspaces only when their verified capabilities are available, with safer startup cleanup and cross-platform filesystem handling.
+
+### More Reliable Delivery Across Reconnects
+
+- Introduced a supervised desktop delivery sidecar with a bounded acknowledgement protocol, packaging and signing verification, and ordered event replay so chat and workspace updates stay consistent after a reconnect.
+- Strengthened command dispatch with bounded admission, durable payload-digested outcomes, ownership resolution, and restart-safe bootstrap recipes, routing WebSocket delivery through ordered replay, acknowledgement, and controlled fallback.
+- Preserved your intent in chat, the sidebar, compact chat, provider availability, connection recovery, and mobile status across retries, reconnects, and thread collisions, reconciling ownership before acknowledging delivery.
+- When replay history is too large or unavailable, restore a verified current-state baseline and resume ordered delivery from that point instead of dropping the session into fallback.
+- Show a restoring-state notice while that baseline recovery is in progress, distinct from a reconnect-from-last-event notice.
+- Reconnect the WebSocket only after three consecutive heartbeat failures, and ignore delayed probes when inbound events are still arriving.
+
+### Faster Local Server Load
+
+- Kept routine provider-session reconciliation focused on recent and in-progress work so stale historical sessions remain durable without participating in every background pass.
+- Reduced write amplification during streaming by coalescing assistant deltas, skipping unchanged session state, and deduplicating repeated context-window updates while still flushing completions.
+- Added a dry-run-first canonical event compaction command with explicit apply and server-stopped safeguards, verified baselines, bounded passes, and reporting for replay gaps and deletion markers.
+- Added a production trace policy that retains failures, slow spans, and time-bounded diagnostics while suppressing fast successful spans from local trace files.
 
 ### Files Panel Reliability
 
@@ -33,15 +54,22 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Changed changed-file trees to start collapsed by default while preserving an explicit expanded choice for later visits.
 - Made native text selection in the Diff panel open the annotation composer automatically, matching the file viewer without removing the existing mouse-icon and context-menu actions.
 
+### Refined Interface
+
+- Made each right-panel tab easier to activate by covering the full visible tab surface, while keeping the close button as its own higher-layer control and preserving the existing tab grid, drag behavior, and close-button spacing.
+
 ### Terminal Runtime Reliability
 
 - Allowed multiple terminal leases for the same thread and workspace while keeping provider and shell runtime identities protected from conflicting duplicates.
 - Added structured terminal lease errors for storage-full, database-busy, and runtime-conflict failures, with clearer diagnostics when a terminal cannot reserve its workspace runtime.
 - Improved terminal environment handling and remote workspace metadata reporting, including safer locale values and bounded modification timestamps when filesystem clocks or metadata are unusual.
+- Capped terminal history from the newest lines without splitting the full buffer, so large sessions stay bounded without extra copying.
 
 ### Validation
 
 - Added regression coverage for remote-agent identity, installation transactions, activation recovery, supervisor takeover races, remote access prompts, desktop backend readiness, terminal runtime leases, workspace metadata, Files-panel reconciliation, sidebar persistence, and automatic Diff annotations.
+- Added regression coverage for remote-workspace provider readiness, ACP and MCP bridges, supervised desktop delivery, command admission and replay, ownership reconciliation, connection recovery, compact-chat and sidebar intent preservation, session-reconciliation bounds, streaming coalescing, and canonical event compaction.
+- Added regression coverage for delivery baseline installation, replay-budget and replay-unavailable recovery, heartbeat failure thresholds, inbound-activity heartbeat suppression, and terminal history capping.
 - Verified formatting, linting, and workspace type checks.
 
 ## v0.2.205 (25 August, 2026)
