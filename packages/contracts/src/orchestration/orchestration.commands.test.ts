@@ -126,6 +126,30 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
   }),
 );
 
+it.effect("keeps existing-branch bootstrap worktrees schema-compatible", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-existing-branch-worktree",
+      threadId: "thread-1",
+      message: {
+        messageId: "msg-existing-branch-worktree",
+        role: "user",
+        text: "hello",
+        attachments: [],
+      },
+      bootstrap: {
+        prepareWorktree: {
+          projectCwd: "/tmp/workspace",
+          baseBranch: "feature/existing",
+        },
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.bootstrap?.prepareWorktree?.branch, undefined);
+  }),
+);
+
 it.effect("preserves explicit provider and runtime mode in thread.turn.start", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadTurnStartCommand({

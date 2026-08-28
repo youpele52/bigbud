@@ -1,6 +1,7 @@
 import { SchemaIssue, Schema } from "effect";
 
 import type { ProjectionRepositoryError } from "../persistence/Errors.ts";
+import { CommandAdmissionError } from "../command-admission/CommandAdmission.ts";
 
 export class OrchestrationCommandJsonParseError extends Schema.TaggedErrorClass<OrchestrationCommandJsonParseError>()(
   "OrchestrationCommandJsonParseError",
@@ -31,6 +32,7 @@ export class OrchestrationCommandInvariantError extends Schema.TaggedErrorClass<
   {
     commandType: Schema.String,
     detail: Schema.String,
+    code: Schema.optional(Schema.Literal("thread_already_exists")),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -49,6 +51,34 @@ export class OrchestrationCommandPreviouslyRejectedError extends Schema.TaggedEr
 ) {
   override get message(): string {
     return `Command previously rejected (${this.commandId}): ${this.detail}`;
+  }
+}
+
+export class OrchestrationCommandOutcomePersistenceError extends Schema.TaggedErrorClass<OrchestrationCommandOutcomePersistenceError>()(
+  "OrchestrationCommandOutcomePersistenceError",
+  {
+    commandId: Schema.String,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message(): string {
+    return `Command outcome remains unknown (${this.commandId}): ${this.detail}`;
+  }
+}
+
+export class OrchestrationCommandIdConflictError extends Schema.TaggedErrorClass<OrchestrationCommandIdConflictError>()(
+  "OrchestrationCommandIdConflictError",
+  {
+    commandId: Schema.String,
+    payloadDigestVersion: Schema.String,
+    payloadDigest: Schema.String,
+    storedPayloadDigestVersion: Schema.String,
+    storedPayloadDigest: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Command id conflict (${this.commandId}): payload digest does not match the existing claim.`;
   }
 }
 
@@ -82,6 +112,9 @@ export type OrchestrationDispatchError =
   | ProjectionRepositoryError
   | OrchestrationCommandInvariantError
   | OrchestrationCommandPreviouslyRejectedError
+  | OrchestrationCommandOutcomePersistenceError
+  | OrchestrationCommandIdConflictError
+  | CommandAdmissionError
   | OrchestrationProjectorDecodeError
   | OrchestrationListenerCallbackError;
 

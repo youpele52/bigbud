@@ -1,6 +1,6 @@
 import { CommandId, EventId, ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { OrchestrationEventStore } from "../Services/OrchestrationEventStore.ts";
@@ -56,6 +56,108 @@ layer("OrchestrationEventStore identity", (it) => {
           SELECT COUNT(*) AS count FROM projection_threads WHERE thread_id = ${threadId}
         `,
         [{ count: 0 }],
+      );
+    }),
+  );
+
+  it.effect("resolves compacted thread ownership from its durable identity", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("thread-identity-marker");
+      const projectId = ProjectId.makeUnsafe("project-identity-marker");
+      yield* sql`
+        INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
+        VALUES (${threadId}, ${projectId}, 1)
+      `;
+      assert.deepEqual(yield* eventStore.findThreadProjectId(threadId), Option.some(projectId));
+      assert.deepEqual(
+        yield* eventStore.findThreadOwnershipEvidence(threadId),
+        Option.some({
+          projectId,
+          latestCreatedSequence: 1,
+          deletionSequence: null,
+          deletedAt: null,
+        }),
+      );
+    }),
+  );
+
+  it.effect("orders deletion evidence after the latest create", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("thread-deletion-marker");
+      const projectId = ProjectId.makeUnsafe("project-deletion-marker");
+      yield* sql`
+        INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
+        VALUES (${threadId}, ${projectId}, 10)
+      `;
+      yield* sql`
+        INSERT INTO orchestration_deletion_markers (
+          entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+        ) VALUES ('thread', ${threadId}, 12, '2026-08-26T10:02:35.000Z', NULL)
+      `;
+
+      assert.deepEqual(
+        yield* eventStore.findThreadOwnershipEvidence(threadId),
+        Option.some({
+          projectId,
+          latestCreatedSequence: 10,
+          deletionSequence: 12,
+          deletedAt: "2026-08-26T10:02:35.000Z",
+        }),
+      );
+    }),
+  );
+
+  it.effect("orders an older deletion marker behind the latest recreated identity", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("thread-recreated-after-deletion");
+      const projectId = ProjectId.makeUnsafe("project-recreated-after-deletion");
+      yield* sql`
+        INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
+        VALUES (${threadId}, ${projectId}, 13)
+      `;
+      yield* sql`
+        INSERT INTO orchestration_deletion_markers (
+          entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+        ) VALUES ('thread', ${threadId}, 12, '2026-08-26T10:02:35.000Z', NULL)
+      `;
+
+      assert.deepEqual(
+        yield* eventStore.findThreadOwnershipEvidence(threadId),
+        Option.some({
+          projectId,
+          latestCreatedSequence: 13,
+          deletionSequence: 12,
+          deletedAt: "2026-08-26T10:02:35.000Z",
+        }),
+      );
+    }),
+  );
+
+  it.effect("returns marker-only canonical evidence when a legacy identity is missing", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("legacy-marker-without-identity");
+      yield* sql`
+        INSERT INTO orchestration_deletion_markers (
+          entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+        ) VALUES ('thread', ${threadId}, 19, '2026-08-26T10:02:35.000Z', NULL)
+      `;
+
+      assert.deepEqual(
+        yield* eventStore.findThreadOwnershipEvidence(threadId),
+        Option.some({
+          projectId: null,
+          latestCreatedSequence: null,
+          deletionSequence: 19,
+          deletedAt: "2026-08-26T10:02:35.000Z",
+        }),
       );
     }),
   );

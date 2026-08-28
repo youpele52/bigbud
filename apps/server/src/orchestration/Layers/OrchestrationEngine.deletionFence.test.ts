@@ -50,6 +50,22 @@ describe("OrchestrationEngine deletion fence", () => {
           createdAt,
         }),
       );
+      const acceptedBeforeFence = {
+        type: "thread.session.set" as const,
+        commandId: CommandId.makeUnsafe("accepted-before-deletion-fence"),
+        threadId: rootThreadId,
+        session: {
+          threadId: rootThreadId,
+          status: "ready" as const,
+          providerName: "codex",
+          runtimeMode: "full-access" as const,
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: createdAt,
+        },
+        createdAt,
+      };
+      const acceptedResult = await system.run(system.engine.dispatch(acceptedBeforeFence));
       await system.run(
         system.engine.dispatch({
           type: "thread.create",
@@ -73,6 +89,15 @@ describe("OrchestrationEngine deletion fence", () => {
           threadId: rootThreadId,
         }),
       );
+      await expect(system.run(system.engine.dispatch(acceptedBeforeFence))).resolves.toEqual(
+        acceptedResult,
+      );
+      await expect(
+        system.run(system.engine.getCommandOutcome!(acceptedBeforeFence.commandId)),
+      ).resolves.toMatchObject({
+        status: "accepted",
+        resultSequence: acceptedResult.sequence,
+      });
       expect(await system.run(system.engine.threadDeletion!.isFenceRoot(rootThreadId))).toBe(true);
 
       await expect(
@@ -93,6 +118,9 @@ describe("OrchestrationEngine deletion fence", () => {
           }),
         ),
       ).rejects.toThrow("being deleted");
+      await expect(
+        system.run(system.engine.getCommandOutcome!(CommandId.makeUnsafe("prompt-fenced-root"))),
+      ).resolves.toMatchObject({ status: "rejected", reason: "other" });
       await expect(
         system.run(
           system.engine.dispatch({

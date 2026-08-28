@@ -105,14 +105,17 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
 
           if (input.title !== undefined) {
             yield* context
-              .dispatchNormalizedCommand({
-                type: "thread.meta.update",
-                commandId: CommandId.makeUnsafe(
-                  `server:automation-thread-title:${crypto.randomUUID()}`,
-                ),
-                threadId: current.value.targetThreadId,
-                title: input.title,
-              })
+              .dispatchNormalizedCommand(
+                {
+                  type: "thread.meta.update",
+                  commandId: CommandId.makeUnsafe(
+                    `server:automation-thread-title:${crypto.randomUUID()}`,
+                  ),
+                  threadId: current.value.targetThreadId,
+                  title: input.title,
+                },
+                "automation",
+              )
               .pipe(Effect.ignore);
           }
 
@@ -208,13 +211,16 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
               current.value.targetThreadId,
             )).pipe(Option.isNone)
           ) {
-            yield* context.dispatchNormalizedCommand({
-              type: "thread.delete",
-              commandId: CommandId.makeUnsafe(
-                `server:automation-owned-thread-delete:${crypto.randomUUID()}`,
-              ),
-              threadId: current.value.targetThreadId,
-            });
+            yield* context.dispatchNormalizedCommand(
+              {
+                type: "thread.delete",
+                commandId: CommandId.makeUnsafe(
+                  `server:automation-owned-thread-delete:${crypto.randomUUID()}`,
+                ),
+                threadId: current.value.targetThreadId,
+              },
+              "automation",
+            );
           }
         }).pipe(
           Effect.mapError((cause) => toAutomationError(cause, "Failed to delete automation")),

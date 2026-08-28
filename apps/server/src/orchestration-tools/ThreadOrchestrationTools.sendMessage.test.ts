@@ -95,10 +95,8 @@ describe("sendThreadMessageViaOrchestration", () => {
     await expect(send(value)).resolves.toEqual({ delivery: "queued", queuePosition: 3 });
     await expect(send(value)).resolves.toEqual({ delivery: "queued", queuePosition: 3 });
     const commands = value.dispatch.mock.calls.map(([command]) => command);
-    expect(commands).toHaveLength(2);
-    expect(commands[0]?.commandId).toBe(commands[1]?.commandId);
-    expect(commands[0]?.message.messageId).toBe(commands[1]?.message.messageId);
-    expect(value.readEventsByCommandId).toHaveBeenCalledTimes(2);
+    expect(commands).toHaveLength(1);
+    expect(value.readEventsByCommandId).toHaveBeenCalledTimes(3);
     expect(value.readEvents).not.toHaveBeenCalled();
   });
 

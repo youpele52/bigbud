@@ -78,6 +78,17 @@ export interface OrchestrationEventStoreShape {
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<ProjectId>, OrchestrationEventStoreError>;
 
+  /** Read resolver-only durable ownership and lifecycle ordering evidence. */
+  readonly findThreadOwnershipEvidence: (threadId: ThreadId) => Effect.Effect<
+    Option.Option<{
+      readonly projectId: ProjectId | null;
+      readonly latestCreatedSequence: number | null;
+      readonly deletionSequence: number | null;
+      readonly deletedAt: string | null;
+    }>,
+    OrchestrationEventStoreError
+  >;
+
   /**
    * Read all events from the beginning of the stream.
    *

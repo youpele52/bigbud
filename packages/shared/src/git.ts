@@ -16,8 +16,14 @@ export function isTemporaryWorktreeBranch(branch: string): boolean {
  * Build a new temporary worktree branch name of the form `bigbud/<8-hex-chars>`.
  * The 8-hex suffix shape must match `isTemporaryWorktreeBranch`.
  */
-export function buildTemporaryWorktreeBranchName(): string {
-  const token = crypto.randomUUID().slice(0, 8).toLowerCase();
+export function buildTemporaryWorktreeBranchName(recoverySeed?: string): string {
+  const seed = recoverySeed ?? crypto.randomUUID();
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const token = (hash >>> 0).toString(16).padStart(8, "0");
   return `${WORKTREE_BRANCH_PREFIX}/${token}`;
 }
 

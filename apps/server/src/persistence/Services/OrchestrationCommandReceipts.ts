@@ -15,6 +15,7 @@ import {
   ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
+import { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
@@ -27,7 +28,10 @@ export const OrchestrationCommandReceipt = Schema.Struct({
   acceptedAt: IsoDateTime,
   resultSequence: NonNegativeInt,
   status: OrchestrationCommandReceiptStatus,
+  rejectionReason: Schema.NullOr(OrchestrationCommandRejectionReason),
   error: Schema.NullOr(Schema.String),
+  payloadDigestVersion: Schema.NullOr(Schema.String),
+  payloadDigest: Schema.NullOr(Schema.String),
 });
 export type OrchestrationCommandReceipt = typeof OrchestrationCommandReceipt.Type;
 
@@ -35,6 +39,28 @@ export const GetByCommandIdInput = Schema.Struct({
   commandId: CommandId,
 });
 export type GetByCommandIdInput = typeof GetByCommandIdInput.Type;
+
+export const ClaimCommandReceiptInput = Schema.Struct({
+  commandId: CommandId,
+  payloadDigestVersion: Schema.String,
+  payloadDigest: Schema.String,
+  claimedAt: IsoDateTime,
+});
+export type ClaimCommandReceiptInput = typeof ClaimCommandReceiptInput.Type;
+
+export type CommandReceiptClaimResult =
+  | {
+      readonly status: "claimed";
+    }
+  | {
+      readonly status: "existing";
+      readonly receipt: OrchestrationCommandReceipt;
+    }
+  | {
+      readonly status: "conflict";
+      readonly storedPayloadDigestVersion: string;
+      readonly storedPayloadDigest: string;
+    };
 
 /**
  * OrchestrationCommandReceiptRepositoryShape - Service API for command receipts.
@@ -58,6 +84,14 @@ export interface OrchestrationCommandReceiptRepositoryShape {
     Option.Option<OrchestrationCommandReceipt>,
     OrchestrationCommandReceiptRepositoryError
   >;
+
+  /**
+   * Atomically claim a command id for a canonical payload digest or inspect the
+   * existing claim/terminal receipt.
+   */
+  readonly claimOrInspect: (
+    input: ClaimCommandReceiptInput,
+  ) => Effect.Effect<CommandReceiptClaimResult, OrchestrationCommandReceiptRepositoryError>;
 }
 
 /**

@@ -62,6 +62,15 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
     const identity = `${input.callerThreadId}\n${input.threadId}\n${input.invocationId}`;
     const messageId = MessageId.makeUnsafe(stableThreadToolId("message", identity));
     const commandId = CommandId.makeUnsafe(stableThreadToolId("command", identity));
+    const readEventsByCommandId = input.orchestrationEngine.readEventsByCommandId;
+    if (!readEventsByCommandId) {
+      return yield* Effect.fail(new Error("Command event lookup is not available."));
+    }
+    const committedOutcome = outcomeFromEvents({
+      commandId,
+      events: yield* readEventsByCommandId(commandId),
+    });
+    if (committedOutcome) return committedOutcome;
     yield* input.orchestrationEngine.dispatch({
       type: "thread.message.submit",
       commandId,
@@ -70,10 +79,6 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
       delivery: input.delivery,
       createdAt: new Date().toISOString(),
     });
-    const readEventsByCommandId = input.orchestrationEngine.readEventsByCommandId;
-    if (!readEventsByCommandId) {
-      return yield* Effect.fail(new Error("Command event lookup is not available."));
-    }
     const events = yield* readEventsByCommandId(commandId);
     const outcome = outcomeFromEvents({ commandId, events });
     if (outcome) return outcome;

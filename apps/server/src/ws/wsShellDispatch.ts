@@ -14,6 +14,7 @@ import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils";
 import type { OrchestrationDispatchError } from "../orchestration/Errors";
 import type { ThreadShellRunnerShape } from "../shell/Services/ThreadShellRunner";
 import type { ServerRuntimeStartupError } from "../startup/serverRuntimeStartup";
+import type { CommandAdmissionError } from "../command-admission/CommandAdmission.ts";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget";
 import { resolveDefaultChatCwd } from "./serverSettings";
@@ -36,7 +37,7 @@ class ShellCommandExecutionError extends Data.TaggedError("ShellCommandExecution
 interface DispatchShellCommandServices {
   readonly enqueueCommand: <A, E>(
     effect: Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
+  ) => Effect.Effect<A, E | ServerRuntimeStartupError | CommandAdmissionError>;
   readonly dispatchInitialShellCommand: (
     command: Extract<OrchestrationCommand, { type: "thread.shell.run" }>,
   ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError>;
@@ -78,7 +79,7 @@ export const makeDispatchShellCommand =
     normalizedCommand: Extract<OrchestrationCommand, { type: "thread.shell.run" }>,
   ): Effect.Effect<
     { readonly sequence: number },
-    OrchestrationDispatchCommandError | ServerRuntimeStartupError
+    OrchestrationDispatchCommandError | ServerRuntimeStartupError | CommandAdmissionError
   > =>
     enqueueCommand(
       Effect.gen(function* () {

@@ -2,14 +2,16 @@ import { Option, Schema, SchemaIssue, Struct } from "effect";
 import {
   CheckpointRef,
   AutomationId,
+  CommandId,
   IsoDateTime,
   MessageId,
   NonNegativeInt,
+  ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
-import { ProviderApprovalDecision } from "./orchestration.provider";
+import { OrchestrationAggregateKind, ProviderApprovalDecision } from "./orchestration.provider";
 import { ClientOrchestrationCommand } from "./orchestration.commands";
 import { OrchestrationEvent } from "./orchestration.events";
 import { OrchestrationReadModel } from "./orchestration.thread";
@@ -27,9 +29,50 @@ import {
   GetSelectedThreadDetailInput,
   GetSelectedThreadDetailResult,
 } from "./orchestration.detail";
+import { GetThreadOwnershipInput, GetThreadOwnershipResult } from "./orchestration.ownership";
 
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
+
+export const OrchestrationCommandRejectionReason = Schema.Literals([
+  "thread_already_exists",
+  "other",
+]);
+export type OrchestrationCommandRejectionReason = typeof OrchestrationCommandRejectionReason.Type;
+
+export const GetCommandOutcomeInput = Schema.Struct({ commandId: CommandId });
+export type GetCommandOutcomeInput = typeof GetCommandOutcomeInput.Type;
+
+export const GetCommandOutcomeResult = Schema.Union([
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("unknown"),
+    serverEpoch: Schema.String,
+    canonicalRevision: NonNegativeInt,
+  }),
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("accepted"),
+    aggregateKind: OrchestrationAggregateKind,
+    aggregateId: Schema.Union([ProjectId, ThreadId]),
+    acceptedAt: IsoDateTime,
+    resultSequence: NonNegativeInt,
+    serverEpoch: Schema.String,
+    canonicalRevision: NonNegativeInt,
+  }),
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("rejected"),
+    aggregateKind: OrchestrationAggregateKind,
+    aggregateId: Schema.Union([ProjectId, ThreadId]),
+    rejectedAt: IsoDateTime,
+    resultSequence: NonNegativeInt,
+    reason: OrchestrationCommandRejectionReason,
+    serverEpoch: Schema.String,
+    canonicalRevision: NonNegativeInt,
+  }),
+]);
+export type GetCommandOutcomeResult = typeof GetCommandOutcomeResult.Type;
 
 export const TurnCountRange = Schema.Struct({
   fromTurnCount: NonNegativeInt,
@@ -159,6 +202,14 @@ export const OrchestrationRpcSchemas = {
     input: GetSelectedThreadDetailInput,
     output: GetSelectedThreadDetailResult,
   },
+  getThreadOwnership: {
+    input: GetThreadOwnershipInput,
+    output: GetThreadOwnershipResult,
+  },
+  getCommandOutcome: {
+    input: GetCommandOutcomeInput,
+    output: GetCommandOutcomeResult,
+  },
   getSnapshot: {
     input: OrchestrationGetSnapshotInput,
     output: OrchestrationGetSnapshotResult,
@@ -217,6 +268,18 @@ export class OrchestrationGetSelectedThreadDetailError extends Schema.TaggedErro
   },
 ) {}
 
+export class OrchestrationGetThreadOwnershipError extends Schema.TaggedErrorClass<OrchestrationGetThreadOwnershipError>()(
+  "OrchestrationGetThreadOwnershipError",
+  {
+    message: TrimmedNonEmptyString,
+  },
+) {}
+
+export class OrchestrationGetCommandOutcomeError extends Schema.TaggedErrorClass<OrchestrationGetCommandOutcomeError>()(
+  "OrchestrationGetCommandOutcomeError",
+  { message: TrimmedNonEmptyString },
+) {}
+
 export class OrchestrationGetSnapshotError extends Schema.TaggedErrorClass<OrchestrationGetSnapshotError>()(
   "OrchestrationGetSnapshotError",
   {
@@ -229,7 +292,17 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedErrorClass<O
   "OrchestrationDispatchCommandError",
   {
     message: TrimmedNonEmptyString,
-    code: Schema.optional(Schema.Literal("automation_owned_thread")),
+    code: Schema.optional(
+      Schema.Literals([
+        "automation_owned_thread",
+        "thread_already_exists",
+        "overloaded",
+        "deadline_exceeded",
+        "command_id_conflict",
+        "unauthorized",
+      ]),
+    ),
+    retryAfterMs: Schema.optional(NonNegativeInt),
     automationId: Schema.optional(AutomationId),
     cause: Schema.optional(Schema.Defect),
   },

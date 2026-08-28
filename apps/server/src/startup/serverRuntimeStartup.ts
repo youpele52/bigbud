@@ -1,15 +1,4 @@
-import {
-  Data,
-  Deferred,
-  Effect,
-  Exit,
-  Layer,
-  Queue,
-  Ref,
-  Schedule,
-  Scope,
-  ServiceMap,
-} from "effect";
+import { Data, Deferred, Effect, Exit, Layer, Ref, Schedule, Scope, ServiceMap } from "effect";
 
 import { ServerConfig } from "./config";
 import { Keybindings } from "../keybindings/keybindings";
@@ -25,6 +14,13 @@ import { runLegacyPinnedThreadSettingsMigration } from "./LegacyPinnedThreadSett
 import { writeStartupStatus } from "./startupStatus.ts";
 import { runThreadRetentionSettingsMigration } from "./ThreadRetentionSettingsMigration.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
+import {
+  CommandAdmissionError,
+  STARTUP_COMMAND_DEADLINE_MS,
+  STARTUP_COMMAND_QUEUE_CAPACITY,
+  makeBoundedCommandAdmission,
+  withCommandAdmissionDeadline,
+} from "../command-admission/CommandAdmission.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -36,7 +32,7 @@ export interface ServerRuntimeStartupShape {
   readonly markHttpListening: Effect.Effect<void>;
   readonly enqueueCommand: <A, E>(
     effect: Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
+  ) => Effect.Effect<A, E | ServerRuntimeStartupError | CommandAdmissionError>;
 }
 
 export class ServerRuntimeStartup extends ServiceMap.Service<
@@ -56,7 +52,7 @@ interface CommandGate {
   readonly failCommandReady: (error: ServerRuntimeStartupError) => Effect.Effect<void>;
   readonly enqueueCommand: <A, E>(
     effect: Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
+  ) => Effect.Effect<A, E | ServerRuntimeStartupError | CommandAdmissionError>;
 }
 
 const settleQueuedCommand = <A, E>(deferred: Deferred.Deferred<A, E>, exit: Exit.Exit<A, E>) =>
@@ -64,49 +60,65 @@ const settleQueuedCommand = <A, E>(deferred: Deferred.Deferred<A, E>, exit: Exit
     ? Deferred.succeed(deferred, exit.value)
     : Deferred.failCause(deferred, exit.cause);
 
-export const makeCommandGate = Effect.gen(function* () {
-  const commandReady = yield* Deferred.make<void, ServerRuntimeStartupError>();
-  const commandQueue = yield* Queue.unbounded<QueuedCommand>();
-  const commandReadinessState = yield* Ref.make<CommandReadinessState>("pending");
+export const makeCommandGate = (options?: {
+  readonly capacity?: number;
+  readonly deadlineMs?: number;
+  readonly onCommandTaken?: () => Effect.Effect<void>;
+  readonly onCommandEnqueued?: () => Effect.Effect<void>;
+}) =>
+  Effect.gen(function* () {
+    const commandReady = yield* Deferred.make<void, ServerRuntimeStartupError>();
+    const commandAdmission = yield* makeBoundedCommandAdmission<QueuedCommand>({
+      capacity: options?.capacity ?? STARTUP_COMMAND_QUEUE_CAPACITY,
+      queue: "startup-readiness",
+    });
+    const commandReadinessState = yield* Ref.make<CommandReadinessState>("pending");
 
-  const commandWorker = Effect.forever(
-    Queue.take(commandQueue).pipe(Effect.flatMap((command) => command.run)),
-  );
-  yield* Effect.forkScoped(commandWorker);
+    const commandWorker = Effect.forever(
+      commandAdmission.take.pipe(
+        Effect.tap(() => options?.onCommandTaken?.() ?? Effect.void),
+        Effect.flatMap((command) => command.run),
+      ),
+    );
+    yield* Effect.forkScoped(commandWorker);
 
-  return {
-    awaitCommandReady: Deferred.await(commandReady),
-    signalCommandReady: Effect.gen(function* () {
-      yield* Ref.set(commandReadinessState, "ready");
-      yield* Deferred.succeed(commandReady, undefined).pipe(Effect.orDie);
-    }),
-    failCommandReady: (error) =>
-      Effect.gen(function* () {
-        yield* Ref.set(commandReadinessState, error);
-        yield* Deferred.fail(commandReady, error).pipe(Effect.orDie);
+    return {
+      awaitCommandReady: Deferred.await(commandReady),
+      signalCommandReady: Effect.gen(function* () {
+        yield* Ref.set(commandReadinessState, "ready");
+        yield* Deferred.succeed(commandReady, undefined).pipe(Effect.orDie);
       }),
-    enqueueCommand: <A, E>(effect: Effect.Effect<A, E>) =>
-      Effect.gen(function* () {
-        const readinessState = yield* Ref.get(commandReadinessState);
-        if (readinessState === "ready") {
-          return yield* effect;
-        }
-        if (readinessState !== "pending") {
-          return yield* readinessState;
-        }
+      failCommandReady: (error) =>
+        Effect.gen(function* () {
+          yield* Ref.set(commandReadinessState, error);
+          yield* Deferred.fail(commandReady, error).pipe(Effect.orDie);
+        }),
+      enqueueCommand: <A, E>(effect: Effect.Effect<A, E>) =>
+        Effect.gen(function* () {
+          const readinessState = yield* Ref.get(commandReadinessState);
+          if (readinessState === "ready") {
+            return yield* effect;
+          }
+          if (readinessState !== "pending") {
+            return yield* readinessState;
+          }
 
-        const result = yield* Deferred.make<A, E | ServerRuntimeStartupError>();
-        yield* Queue.offer(commandQueue, {
-          run: Deferred.await(commandReady).pipe(
-            Effect.flatMap(() => effect),
-            Effect.exit,
-            Effect.flatMap((exit) => settleQueuedCommand(result, exit)),
-          ),
-        });
-        return yield* Deferred.await(result);
-      }),
-  } satisfies CommandGate;
-});
+          const result = yield* Deferred.make<A, E | ServerRuntimeStartupError>();
+          yield* commandAdmission.offer({
+            run: Deferred.await(commandReady).pipe(
+              Effect.flatMap(() => effect),
+              Effect.exit,
+              Effect.flatMap((exit) => settleQueuedCommand(result, exit)),
+            ),
+          });
+          yield* options?.onCommandEnqueued?.() ?? Effect.void;
+          return yield* withCommandAdmissionDeadline(Deferred.await(result), {
+            queue: "startup-readiness",
+            deadlineMs: options?.deadlineMs ?? STARTUP_COMMAND_DEADLINE_MS,
+          });
+        }),
+    } satisfies CommandGate;
+  });
 
 export const recordStartupHeartbeat = Effect.gen(function* () {
   const analytics = yield* AnalyticsService;
@@ -146,7 +158,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
   const threadRetention = yield* Effect.serviceOption(ThreadRetention);
-  const commandGate = yield* makeCommandGate;
+  const commandGate = yield* makeCommandGate();
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
 

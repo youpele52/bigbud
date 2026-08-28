@@ -1,10 +1,14 @@
 import type { ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type {
   ClientOrchestrationCommand,
+  GetCommandOutcomeInput,
+  GetCommandOutcomeResult,
   GetProjectThreadSummariesInput,
   GetProjectThreadSummariesResult,
   GetSelectedThreadDetailInput,
   GetSelectedThreadDetailResult,
+  GetThreadOwnershipInput,
+  GetThreadOwnershipResult,
   GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
@@ -12,7 +16,9 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
-  OrchestrationEvent,
+  OrchestrationApplicationAckInput,
+  OrchestrationApplicationAckResult,
+  OrchestrationDeliveryStreamItem,
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
@@ -238,6 +244,8 @@ export interface NativeApi {
     getSelectedThreadDetail: (
       input: GetSelectedThreadDetailInput,
     ) => Promise<GetSelectedThreadDetailResult>;
+    resolveThreadOwnership: (input: GetThreadOwnershipInput) => Promise<GetThreadOwnershipResult>;
+    getCommandOutcome: (input: GetCommandOutcomeInput) => Promise<GetCommandOutcomeResult>;
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
@@ -245,8 +253,11 @@ export interface NativeApi {
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationReplayEventsResult>;
+    acknowledgeDelivery: (
+      input: OrchestrationApplicationAckInput,
+    ) => Promise<OrchestrationApplicationAckResult>;
     onDomainEvent: (
-      callback: (event: OrchestrationEvent) => void,
+      callback: (event: OrchestrationDeliveryStreamItem) => void | Promise<void>,
       options?: { onResubscribe?: () => void },
     ) => () => void;
     onThinkingDelta: (

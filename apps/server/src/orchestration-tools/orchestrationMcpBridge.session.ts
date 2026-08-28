@@ -1,4 +1,8 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
+import {
+  REMOTE_WORKSPACE_MCP_SERVER_NAME,
+  REMOTE_WORKSPACE_TOOL_NAMES,
+} from "../remote-workspace-bridge/remoteWorkspaceTools.ts";
 
 import {
   buildAcpOrchestrationBridgeConfig,
@@ -50,16 +54,40 @@ export function buildOpencodeThreadOrchestrationServerName(threadId: string): st
 export function buildOpencodeAllowedTools(input: {
   readonly toolIds: ReadonlyArray<string>;
   readonly serverName: string;
+  readonly remoteWorkspaceServerName?: string;
 }): Record<string, boolean> {
   const currentPrefix = `${sanitizeOpencodeToolSegment(input.serverName)}_`;
+  const defaultRemotePrefix = `${sanitizeOpencodeToolSegment(REMOTE_WORKSPACE_MCP_SERVER_NAME)}_`;
+  const activeRemotePrefix = input.remoteWorkspaceServerName
+    ? `${sanitizeOpencodeToolSegment(input.remoteWorkspaceServerName)}_`
+    : undefined;
   const tools: Record<string, boolean> = {};
 
   for (const toolId of input.toolIds) {
+    if (toolId.startsWith(defaultRemotePrefix)) {
+      tools[toolId] = activeRemotePrefix !== undefined && toolId.startsWith(activeRemotePrefix);
+      continue;
+    }
+    if (input.remoteWorkspaceServerName) {
+      if (REMOTE_WORKSPACE_TOOL_NAMES.some((name) => name === toolId)) {
+        tools[toolId] = false;
+        continue;
+      }
+      if (activeRemotePrefix && toolId.startsWith(activeRemotePrefix)) {
+        tools[toolId] = true;
+        continue;
+      }
+    }
     if (toolId.startsWith(`${ORCHESTRATION_SERVER_NAME_PREFIX}_`)) {
       tools[toolId] = toolId.startsWith(currentPrefix);
       continue;
     }
     tools[toolId] = true;
+  }
+  if (input.remoteWorkspaceServerName) {
+    for (const toolName of REMOTE_WORKSPACE_TOOL_NAMES) {
+      tools[`${sanitizeOpencodeToolSegment(input.remoteWorkspaceServerName)}_${toolName}`] = true;
+    }
   }
 
   return tools;
@@ -113,6 +141,22 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
     readonly bridgeDir?: string;
   };
 }): Promise<void> {
+  return registerOpencodeMcpBridge({
+    client: input.client,
+    ...(input.directory ? { directory: input.directory } : {}),
+    bridge: input.bridge,
+    label: "orchestration",
+  });
+}
+
+export async function registerOpencodeMcpBridge(input: {
+  readonly client: OpencodeClient;
+  readonly directory?: string;
+  readonly bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath"> & {
+    readonly bridgeDir?: string;
+  };
+  readonly label: string;
+}): Promise<void> {
   const orchestration = buildOpencodeOrchestrationBridgeConfig(input.bridge);
   const addResult = await runOpencodeMcpRpc("OpenCode MCP add", (signal) =>
     input.client.mcp.add(
@@ -125,7 +169,7 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
     ),
   );
   if (addResult.error) {
-    throw new Error(`Failed to register orchestration MCP server: ${String(addResult.error)}`);
+    throw new Error(`Failed to register ${input.label} MCP server: ${String(addResult.error)}`);
   }
   const ownStatus =
     addResult.data && typeof addResult.data === "object"
@@ -135,7 +179,7 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
       : undefined;
   if (ownStatus?.status === "failed" || ownStatus?.status === "disabled") {
     throw new Error(
-      `OpenCode orchestration MCP server '${orchestration.name}' is ${ownStatus.status}${
+      `OpenCode ${input.label} MCP server '${orchestration.name}' is ${ownStatus.status}${
         ownStatus.error ? `: ${ownStatus.error}` : "."
       }`,
     );
@@ -151,7 +195,7 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
     ),
   );
   if (connectResult.error) {
-    throw new Error(`Failed to connect orchestration MCP server: ${String(connectResult.error)}`);
+    throw new Error(`Failed to connect ${input.label} MCP server: ${String(connectResult.error)}`);
   }
 }
 

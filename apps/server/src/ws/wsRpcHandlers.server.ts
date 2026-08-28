@@ -21,6 +21,12 @@ import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 
 export function makeServerWsRpcHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.serverPing]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverPing,
+        Effect.sync(() => ({ serverTime: new Date().toISOString() })),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverGetConfig]: (_input: unknown) =>
       observeRpcEffect(WS_METHODS.serverGetConfig, context.loadServerConfig, {
         "rpc.aggregate": "server",

@@ -65,7 +65,7 @@ describe("ThreadWorkflowStatus.logic", () => {
     expect(status.isWorkflowComplete).toBe(false);
   });
 
-  it("reports a stalled provider turn as an error rather than active work", () => {
+  it("reports a stalled provider turn as unavailable rather than active work", () => {
     const status = resolveThreadWorkflowStatus(
       makeThread({
         session: {
@@ -89,7 +89,31 @@ describe("ThreadWorkflowStatus.logic", () => {
       }),
     );
 
-    expect(status.workflowStatus).toBe("error");
+    expect(status.workflowStatus).toBe("provider_unavailable");
+    expect(status.isAgentActive).toBe(false);
+  });
+
+  it.each([
+    ["provider.checking", "warning"],
+    ["provider.recovering", "warning"],
+    ["provider.lost-session", "provider_unavailable"],
+  ] as const)("maps provider health reason %s to %s", (reason, expectedStatus) => {
+    const status = resolveThreadWorkflowStatus(
+      makeThread({
+        session: {
+          threadId: THREAD_ID,
+          status: "error",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: "turn-1" as never,
+          reason,
+          lastError: "Provider health is unconfirmed.",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
+    expect(status.workflowStatus).toBe(expectedStatus);
     expect(status.isAgentActive).toBe(false);
   });
 

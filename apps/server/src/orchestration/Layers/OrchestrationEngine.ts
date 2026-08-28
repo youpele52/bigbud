@@ -1,5 +1,4 @@
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
-import { OrchestrationCommand } from "@bigbud/contracts";
+import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
 import {
   Cause,
   Deferred,
@@ -8,12 +7,11 @@ import {
   Layer,
   Option,
   Path,
-  PubSub,
-  Queue,
+  Schema,
   Semaphore,
-  Stream,
 } from "effect";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
+import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
 import { createEmptyReadModel } from "../projectorReadModel.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
@@ -23,32 +21,15 @@ import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
-import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
-import {
-  archiveThreadViaOrchestration as archiveThreadViaThreadTools,
-  getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
-  listPinnedThreadsViaOrchestration as listPinnedThreadsViaThreadTools,
-  renameThreadViaOrchestration as renameThreadViaThreadTools,
-  setThreadPinnedViaOrchestration as setThreadPinnedViaThreadTools,
-  createThreadViaOrchestration,
-} from "../../orchestration-tools/ThreadOrchestrationTools.ts";
-import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
-import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
-import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
-import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
 import { ProjectionNoteRepository } from "../../persistence/Services/ProjectionNotes.ts";
 import { ProjectionKanbanRepository } from "../../persistence/Services/ProjectionKanban.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
 import { BrowserManagerLive } from "../../browser/Layers/BrowserManager.ts";
-import {
-  setVisibleBrowserControl,
-  VisibleBrowserControl,
-} from "../../browser/Services/VisibleBrowserControl.ts";
+import { VisibleBrowserControl } from "../../browser/Services/VisibleBrowserControl.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { ThreadDelegationRepository } from "../../persistence/Services/ThreadDelegations.ts";
 import { ThreadDelegationRepositoryLive } from "../../persistence/Layers/ThreadDelegations.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
@@ -59,15 +40,27 @@ import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserCo
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
 import { makeQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
 import {
-  commandToAggregateRef,
   type CommandEnvelope,
   makeCommandProcessor,
 } from "./OrchestrationEngine.commandProcessing.ts";
+import { settlePreflightFailure } from "./OrchestrationEngine.preflight.ts";
 import { makeDeletionFence } from "./OrchestrationEngine.deletionFence.ts";
-import { executeBrowserAction } from "./OrchestrationEngine.browser.ts";
-
+import { makeThreadOwnershipResolver } from "./OrchestrationEngine.ownership.ts";
+import { makePrepareCommandState } from "./OrchestrationEngine.prepareCommandState.ts";
+import { makeCommandOutcomeQuery } from "./OrchestrationEngine.commandOutcome.ts";
+import { makeOrchestrationDomainEventDistribution } from "./OrchestrationEngine.domainEvents.ts";
+import { installOrchestrationEngineToolDispatchers } from "./OrchestrationEngine.toolDispatcher.ts";
+import { calculateCommandPayloadDigest } from "../commandDigest.ts";
+import {
+  ORCHESTRATION_COMMAND_DEADLINE_MS,
+  ORCHESTRATION_COMMAND_QUEUE_CAPACITY,
+  ORCHESTRATION_COMMAND_QUEUE_RESERVED_CAPACITY,
+  makeBoundedCommandAdmission,
+  withCommandAdmissionDeadline,
+} from "../../command-admission/CommandAdmission.ts";
 const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
+  const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const operationalQueryOption = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
   const projectionCatalogQuery = yield* Effect.serviceOption(ProjectionCatalogQuery);
@@ -86,7 +79,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
-
+  const serverEpoch = crypto.randomUUID();
   const threadStateHydrator = Option.isSome(operationalQueryOption)
     ? makeThreadStateHydrator({
         query: operationalQueryOption.value,
@@ -103,64 +96,34 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         },
       })
     : null;
-
-  const commandQueue = yield* Queue.unbounded<CommandEnvelope>();
-  const eventPubSub = yield* PubSub.unbounded<OrchestrationEvent>();
-
+  const commandAdmission = yield* makeBoundedCommandAdmission<CommandEnvelope>({
+    capacity: ORCHESTRATION_COMMAND_QUEUE_CAPACITY,
+    queue: "orchestration",
+    reservedCapacity: ORCHESTRATION_COMMAND_QUEUE_RESERVED_CAPACITY,
+  });
+  const domainEvents = yield* makeOrchestrationDomainEventDistribution({
+    initialSequence: () => readModel.snapshotSequence,
+    readReplay: eventStore.readReplay,
+  });
   const processEnvelope = yield* makeCommandProcessor({
-    commandQueue,
-    eventPubSub,
+    commandAdmission,
+    publishDomainEvent: domainEvents.publish,
     readModel: () => readModel,
     setReadModel: (nextReadModel) => {
       readModel = nextReadModel;
     },
   });
 
-  const prepareCommandState = (command: OrchestrationCommand) => {
-    if (threadStateHydrator === null) {
-      return Effect.void;
-    }
-    if (command.type === "thread.create") {
-      return Effect.gen(function* () {
-        yield* threadStateHydrator.load(command.threadId, "operational");
-        if (
-          command.parentThread !== undefined &&
-          command.parentThread.threadId !== command.threadId
-        ) {
-          yield* threadStateHydrator.load(command.parentThread.threadId, "operational");
-        }
-      });
-    }
-    const aggregate = commandToAggregateRef(command);
-    if (aggregate.aggregateKind !== "thread") {
-      return Effect.void;
-    }
-    const historyRequired =
-      command.type === "thread.turn.start" ||
-      command.type === "thread.checkpoint.revert" ||
-      command.type === "thread.revert.complete";
-    return Effect.gen(function* () {
-      yield* threadStateHydrator.load(
-        aggregate.aggregateId as ThreadId,
-        historyRequired ? "history" : "operational",
-      );
-      if (command.type === "thread.turn.start" && command.sourceProposedPlan) {
-        yield* threadStateHydrator.load(command.sourceProposedPlan.threadId, "history");
-      }
-    });
-  };
-
+  const prepareCommandState = makePrepareCommandState({ threadStateHydrator });
   const deletionFence = makeDeletionFence({
     threadDeletion,
     readModel: () => readModel,
   });
-
   yield* projectionPipeline.bootstrap;
   readModel = Option.isSome(operationalQueryOption)
     ? yield* operationalQueryOption.value.getStartupOperationalState()
     : readModel;
   rehydrateThreadTitleLocks([]);
-
   for (const thread of readModel.threads) {
     const recoveryCommand = makeQueuedPromptFlushCommand({
       threadId: thread.id,
@@ -169,40 +132,53 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     });
     if (recoveryCommand) {
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
-      yield* Queue.offer(commandQueue, {
-        command: recoveryCommand,
-        result,
-        startedAtMs: Date.now(),
-      });
+      yield* commandAdmission.offer(
+        {
+          command: recoveryCommand,
+          payloadDigest: calculateCommandPayloadDigest(recoveryCommand),
+          result,
+          startedAtMs: Date.now(),
+        },
+        "internal",
+      );
     }
   }
-
   const worker = Effect.forever(
-    Queue.take(commandQueue).pipe(
+    commandAdmission.take.pipe(
       Effect.flatMap((envelope) =>
         commandSemaphore.withPermits(1)(
           prepareCommandState(envelope.command).pipe(
             Effect.andThen(deletionFence.assertAllows(envelope.command)),
             Effect.matchEffect({
-              onFailure: (error) =>
-                Deferred.fail(
-                  envelope.result,
-                  new OrchestrationCommandInvariantError({
-                    commandType: envelope.command.type,
-                    detail: error instanceof Error ? error.message : String(error),
-                  }),
-                ).pipe(Effect.asVoid),
+              onFailure: (error) => {
+                if (!Schema.is(OrchestrationCommandInvariantError)(error)) {
+                  return Deferred.fail(envelope.result, error as OrchestrationDispatchError).pipe(
+                    Effect.asVoid,
+                  );
+                }
+                return settlePreflightFailure({
+                  receipts: commandReceiptRepository,
+                  readModelSequence: readModel.snapshotSequence,
+                  envelope,
+                  error,
+                });
+              },
               onSuccess: () =>
                 deletionFence.acquire(envelope.command).pipe(
                   Effect.flatMap((acquired) =>
                     !acquired
-                      ? Deferred.fail(
-                          envelope.result,
-                          new OrchestrationCommandInvariantError({
+                      ? Effect.gen(function* () {
+                          const invariant = new OrchestrationCommandInvariantError({
                             commandType: envelope.command.type,
                             detail: "A thread subtree is already being deleted.",
-                          }),
-                        ).pipe(Effect.asVoid)
+                          });
+                          yield* settlePreflightFailure({
+                            receipts: commandReceiptRepository,
+                            readModelSequence: readModel.snapshotSequence,
+                            envelope,
+                            error: invariant,
+                          });
+                        })
                       : processEnvelope(envelope).pipe(
                           Effect.tap((accepted) =>
                             deletionFence.releaseAfterProcess(envelope.command, accepted),
@@ -230,30 +206,53 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   yield* Effect.logDebug("orchestration engine started").pipe(
     Effect.annotateLogs({ sequence: readModel.snapshotSequence }),
   );
-
   const getReadModel: OrchestrationEngineShape["getReadModel"] = () =>
     Effect.sync((): OrchestrationReadModel => readModel);
-
+  const resolveThreadOwnership = makeThreadOwnershipResolver({
+    serverEpoch,
+    commandSemaphore,
+    eventStore,
+    readModel: () => readModel,
+    hydrate:
+      threadStateHydrator === null
+        ? null
+        : (threadId) => threadStateHydrator.load(threadId, "operational"),
+  });
+  const getCommandOutcome: NonNullable<OrchestrationEngineShape["getCommandOutcome"]> =
+    makeCommandOutcomeQuery({
+      serverEpoch,
+      canonicalRevision: () => readModel.snapshotSequence,
+      receipts: commandReceiptRepository,
+    });
   const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
     eventStore.readFromSequence(fromSequenceExclusive);
   const readReplay: OrchestrationEngineShape["readReplay"] = (fromSequenceExclusive) =>
     eventStore.readReplay(fromSequenceExclusive);
   const readEventsByCommandId: OrchestrationEngineShape["readEventsByCommandId"] = (commandId) =>
     eventStore.readByCommandId!(commandId);
-
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
-      yield* Queue.offer(commandQueue, { command, result, startedAtMs: Date.now() });
-      return yield* Deferred.await(result);
+      yield* commandAdmission.offer({
+        command,
+        payloadDigest: calculateCommandPayloadDigest(command),
+        result,
+        startedAtMs: Date.now(),
+      });
+      return yield* withCommandAdmissionDeadline(Deferred.await(result), {
+        queue: "orchestration",
+        deadlineMs: ORCHESTRATION_COMMAND_DEADLINE_MS,
+      });
     });
-
   const engine: OrchestrationEngineShape = {
     threadDeletion,
+    getCommandOutcome,
     getReadModel,
+    resolveThreadOwnership,
     readEvents,
     readEventsByCommandId,
     readReplay,
+    openDeliveryLiveCapture: domainEvents.openDeliveryCapture,
     ...(threadStateHydrator === null
       ? {}
       : {
@@ -263,119 +262,27 @@ const makeOrchestrationEngine = Effect.gen(function* () {
               .pipe(Effect.orDie),
         }),
     dispatch,
-    // Each access creates a fresh PubSub subscription so that multiple
-    // consumers (wsServer, ProviderRuntimeIngestion, CheckpointReactor, etc.)
-    // each independently receive all domain events.
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
-      return Stream.fromPubSub(eventPubSub);
+      return domainEvents.streamGeneral();
     },
   };
 
-  setThreadOrchestrationToolDispatcher({
-    ...(Option.isSome(notes) && Option.isSome(kanban)
-      ? {
-          workspace: makeAgentWorkspaceTool({
-            readModel: () => readModel,
-            notes: notes.value,
-            kanban: kanban.value,
-          }),
-        }
-      : {}),
-    rename: (input) =>
-      renameThreadViaThreadTools({
-        orchestrationEngine: engine,
-        threadId: input.threadId,
-        title: input.title,
-      }),
-    archive: (input) =>
-      archiveThreadViaThreadTools({
-        orchestrationEngine: engine,
-        threadId: input.threadId,
-      }),
-    getStatus: (input) =>
-      getThreadStatusViaThreadTools({
-        orchestrationEngine: engine,
-        threadDelegationRepository: input.threadDelegationRepository ?? threadDelegationRepository,
-        callerThreadId: input.callerThreadId,
-        threadId: input.threadId,
-      }),
-    listPinned: (input) =>
-      listPinnedThreadsViaThreadTools({
-        orchestrationEngine: engine,
-        callerThreadId: input.callerThreadId,
-      }),
-    ...(Option.isSome(projectionCatalogQuery)
-      ? {
-          listThreads: (input) =>
-            listThreadsViaOrchestration({
-              projectionCatalogQuery: projectionCatalogQuery.value,
-              ...input,
-            }),
-        }
-      : {}),
-    setPinned: (input) =>
-      setThreadPinnedViaThreadTools({
-        orchestrationEngine: engine,
-        callerThreadId: input.callerThreadId,
-        threadId: input.threadId,
-        pinned: input.pinned,
-      }),
-    sendMessage: (input) =>
-      sendThreadMessageViaOrchestration({
-        orchestrationEngine: engine,
-        threadDelegationRepository,
-        ...input,
-      }),
-    computerUse: (input) =>
-      Effect.gen(function* () {
-        const settings = yield* serverSettingsService.getSettings.pipe(
-          Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
-        );
-        return yield* computerUseViaOrchestration({
-          attachmentsDir: serverConfig.attachmentsDir,
-          computerUse,
-          computerUseEnabled: settings.computerUseEnabled,
-          fileSystem,
-          orchestrationEngine: engine,
-          path,
-          serverMode: serverConfig.mode,
-          threadId: input.threadId,
-          action: input.action,
-          checkInIntervalMs: settings.computerUseCheckInIntervalMs,
-          actionTimeoutMs: settings.computerUseActionTimeoutMs,
-        });
-      }),
-    browser: (input) =>
-      executeBrowserAction({
-        browser,
-        readModel: () => readModel,
-        threadId: input.threadId,
-        action: input.action,
-        visibleBrowser,
-      }),
-    createThread: (input) =>
-      createThreadViaOrchestration({
-        orchestrationEngine: engine,
-        threadDelegationRepository,
-        projectionThreadWatchRepository: threadWatchRepository,
-        callerThreadId: input.callerThreadId,
-        sourceMessageId: input.sourceMessageId,
-        invocationId: input.invocationId,
-        title: input.title,
-        task: input.task,
-        ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
-        watchForCompletion: input.watchForCompletion,
-      }),
+  yield* installOrchestrationEngineToolDispatchers({
+    browser,
+    computerUse,
+    engine,
+    fileSystem,
+    kanban,
+    notes,
+    path,
+    projectionCatalogQuery,
+    readModel: () => readModel,
+    serverConfig,
+    serverSettingsService,
+    threadDelegationRepository,
+    threadWatchRepository,
+    visibleBrowser,
   });
-  setVisibleBrowserControl(visibleBrowser);
-
-  yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      setThreadOrchestrationToolDispatcher(null);
-      setVisibleBrowserControl(null);
-      yield* computerUse.dispose;
-    }),
-  );
 
   return engine satisfies OrchestrationEngineShape;
 });

@@ -32,10 +32,35 @@ export const orchestrationCommandAckDuration = Metric.timer(
   },
 );
 
+export const orchestrationCommandQueueDepth = Metric.gauge("t3_orchestration_command_queue_depth", {
+  description: "Current orchestration command admission queue depth.",
+});
+
+export const orchestrationCommandQueueOverloadedTotal = Metric.counter(
+  "t3_orchestration_command_queue_overloaded_total",
+  { description: "Orchestration command admissions rejected because the queue is full." },
+);
+
+export const startupCommandQueueDepth = Metric.gauge("t3_startup_command_queue_depth", {
+  description: "Current startup-readiness command admission queue depth.",
+});
+
+export const startupCommandQueueOverloadedTotal = Metric.counter(
+  "t3_startup_command_queue_overloaded_total",
+  { description: "Startup-readiness command admissions rejected because the queue is full." },
+);
+
 export const orchestrationEventsProcessedTotal = Metric.counter(
   "t3_orchestration_events_processed_total",
   {
     description: "Total orchestration intent events processed by runtime reactors.",
+  },
+);
+
+export const orchestrationDomainEventOverflowTotal = Metric.counter(
+  "bigbud_orchestration_domain_event_overflow_total",
+  {
+    description: "Total bounded orchestration domain event publication overflows.",
   },
 );
 

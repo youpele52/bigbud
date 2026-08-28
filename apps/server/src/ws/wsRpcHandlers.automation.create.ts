@@ -76,14 +76,17 @@ export function makeWsRpcAutomationCreateHandlers(context: WsRpcContext) {
           });
 
           yield* context
-            .dispatchNormalizedCommand({
-              type: "thread.meta.update",
-              commandId: CommandId.makeUnsafe(
-                `server:automation-thread-title:${crypto.randomUUID()}`,
-              ),
-              threadId: input.targetThreadId,
-              title: input.title,
-            })
+            .dispatchNormalizedCommand(
+              {
+                type: "thread.meta.update",
+                commandId: CommandId.makeUnsafe(
+                  `server:automation-thread-title:${crypto.randomUUID()}`,
+                ),
+                threadId: input.targetThreadId,
+                title: input.title,
+              },
+              "automation",
+            )
             .pipe(Effect.ignore);
 
           return { automation };
@@ -100,28 +103,31 @@ export function makeWsRpcAutomationCreateHandlers(context: WsRpcContext) {
         Effect.gen(function* () {
           const threadId = ThreadId.makeUnsafe(crypto.randomUUID());
           const createdAt = new Date().toISOString();
-          yield* context.dispatchNormalizedCommand({
-            type: "thread.create",
-            commandId: CommandId.makeUnsafe(
-              `server:automation-thread-create:${crypto.randomUUID()}`,
-            ),
-            threadId,
-            projectId: input.projectId,
-            title: input.title,
-            modelSelection: input.modelSelection,
-            runtimeMode: input.runtimeMode,
-            interactionMode: input.interactionMode,
-            branch: input.branch,
-            worktreePath: input.worktreePath,
-            createdAt,
-            ...(input.providerRuntimeExecutionTargetId
-              ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
-              : {}),
-            ...(input.workspaceExecutionTargetId
-              ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
-              : {}),
-            ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-          });
+          yield* context.dispatchNormalizedCommand(
+            {
+              type: "thread.create",
+              commandId: CommandId.makeUnsafe(
+                `server:automation-thread-create:${crypto.randomUUID()}`,
+              ),
+              threadId,
+              projectId: input.projectId,
+              title: input.title,
+              modelSelection: input.modelSelection,
+              runtimeMode: input.runtimeMode,
+              interactionMode: input.interactionMode,
+              branch: input.branch,
+              worktreePath: input.worktreePath,
+              createdAt,
+              ...(input.providerRuntimeExecutionTargetId
+                ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
+                : {}),
+              ...(input.workspaceExecutionTargetId
+                ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
+                : {}),
+              ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+            },
+            "automation",
+          );
           const automation = yield* createSchedule(context, {
             ...input,
             targetThreadId: threadId,
@@ -129,13 +135,16 @@ export function makeWsRpcAutomationCreateHandlers(context: WsRpcContext) {
           }).pipe(
             Effect.tapError(() =>
               context
-                .dispatchNormalizedCommand({
-                  type: "thread.delete",
-                  commandId: CommandId.makeUnsafe(
-                    `server:automation-thread-create-compensation:${crypto.randomUUID()}`,
-                  ),
-                  threadId,
-                })
+                .dispatchNormalizedCommand(
+                  {
+                    type: "thread.delete",
+                    commandId: CommandId.makeUnsafe(
+                      `server:automation-thread-create-compensation:${crypto.randomUUID()}`,
+                    ),
+                    threadId,
+                  },
+                  "automation",
+                )
                 .pipe(Effect.ignore),
             ),
           );

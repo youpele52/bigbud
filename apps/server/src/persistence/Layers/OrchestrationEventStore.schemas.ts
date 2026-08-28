@@ -4,6 +4,7 @@ import {
   IsoDateTime,
   NonNegativeInt,
   OrchestrationAggregateKind,
+  OrchestrationActorKind,
   OrchestrationEventMetadata,
   OrchestrationEventType,
   ProjectId,
@@ -26,4 +27,29 @@ export const OrchestrationEventPersistedRowSchema = Schema.Struct({
   correlationId: Schema.NullOr(CommandId),
   payload: UnknownFromJsonString,
   metadata: EventMetadataFromJsonString,
+});
+
+export const AppendEventRequestSchema = Schema.Struct({
+  eventId: EventId,
+  aggregateKind: OrchestrationAggregateKind,
+  streamId: Schema.Union([ProjectId, ThreadId]),
+  type: OrchestrationEventType,
+  causationEventId: Schema.NullOr(EventId),
+  correlationId: Schema.NullOr(CommandId),
+  actorKind: OrchestrationActorKind,
+  occurredAt: IsoDateTime,
+  commandId: Schema.NullOr(CommandId),
+  payloadJson: UnknownFromJsonString,
+  metadataJson: EventMetadataFromJsonString,
+});
+
+export const ReadFromSequenceRequestSchema = Schema.Struct({
+  sequenceExclusive: NonNegativeInt,
+  limit: Schema.Number,
+});
+
+export const EventRangeRowSchema = Schema.Struct({
+  earliestAvailableSequence: Schema.NullOr(NonNegativeInt),
+  latestSequence: NonNegativeInt,
+  retainedThroughSequence: NonNegativeInt,
 });

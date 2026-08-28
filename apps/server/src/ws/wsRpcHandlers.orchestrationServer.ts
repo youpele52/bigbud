@@ -2,15 +2,18 @@ import { Effect, Option, Schema } from "effect";
 import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetCommandOutcomeError,
   OrchestrationGetSnapshotError,
   OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetProjectThreadSummariesError,
   OrchestrationGetStartupProjectCatalogError,
   OrchestrationGetSelectedThreadDetailError,
+  OrchestrationGetThreadOwnershipError,
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
   ProjectDirectoryWatchError,
+  type ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
 
@@ -22,11 +25,13 @@ import {
   makeServerWsRpcHandlers,
   makeWorkspaceWsRpcHandlers,
 } from "./wsRpcHandlers.orchestrationServer.helpers";
-import {
-  makeOrderedOrchestrationDomainEventStream,
-  makeThinkingActivityDeltaStream,
-} from "./wsStreams";
+import { makeThinkingActivityDeltaStream } from "./wsStreams";
+import { makeOrchestrationDeliveryStream } from "./wsOrchestrationDelivery.ts";
 import { makeThreadRetentionWsRpcHandlers } from "./wsRpcHandlers.retention.ts";
+import {
+  getOrchestrationCommandOutcome,
+  resolveOrchestrationThreadOwnership,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 
 export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   const toProjectDirectoryWatchError = (
@@ -100,6 +105,34 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               new OrchestrationGetSelectedThreadDetailError({
                 message: "Failed to load selected thread detail",
                 cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getThreadOwnership]: (input: { readonly threadId: ThreadId }) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getThreadOwnership,
+        resolveOrchestrationThreadOwnership(context.orchestrationEngine, input.threadId).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationGetThreadOwnershipError({
+                message: "Failed to resolve thread ownership",
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getCommandOutcome]: (input: {
+      readonly commandId: import("@bigbud/contracts").CommandId;
+    }) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getCommandOutcome,
+        getOrchestrationCommandOutcome(context.orchestrationEngine, input.commandId).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationGetCommandOutcomeError({
+                message: "Failed to resolve command outcome",
               }),
           ),
         ),
@@ -211,11 +244,27 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         ),
         { "rpc.aggregate": "orchestration" },
       ),
-    [WS_METHODS.subscribeOrchestrationDomainEvents]: (_input: unknown) =>
+    [ORCHESTRATION_WS_METHODS.acknowledgeDelivery]: (
+      input: Parameters<WsRpcContext["desktopSupervisorDelivery"]["acknowledge"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.acknowledgeDelivery,
+        Effect.tryPromise(() => context.desktopSupervisorDelivery.acknowledge(input)).pipe(
+          Effect.orDie,
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [WS_METHODS.subscribeOrchestrationDomainEvents]: (input: {
+      readonly consumerId?: string | undefined;
+      readonly appliedSequence?: number | undefined;
+    }) =>
       observeRpcStreamEffect(
         WS_METHODS.subscribeOrchestrationDomainEvents,
-        makeOrderedOrchestrationDomainEventStream({
+        makeOrchestrationDeliveryStream({
+          consumerId: input.consumerId ?? crypto.randomUUID(),
+          appliedSequence: input.appliedSequence ?? 0,
           orchestrationEngine: context.orchestrationEngine,
+          delivery: context.desktopSupervisorDelivery,
         }),
         { "rpc.aggregate": "orchestration" },
       ),

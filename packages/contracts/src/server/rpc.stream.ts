@@ -4,10 +4,11 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import { KeybindingsConfigError } from "./keybindings";
 import {
   ClientOrchestrationCommand,
-  OrchestrationEvent,
+  GetCommandOutcomeInput,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetCommandOutcomeError,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetMobileThreadError,
   OrchestrationGetMobileThreadInput,
@@ -20,6 +21,12 @@ import {
   OrchestrationRpcSchemas,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
+import {
+  OrchestrationApplicationAckInput,
+  OrchestrationApplicationAckResult,
+  OrchestrationDeliveryStreamItem,
+  OrchestrationDeliverySubscriptionInput,
+} from "../orchestration/orchestration.delivery";
 import { TerminalEvent } from "../workspace/terminal";
 import { ServerConfigStreamEvent, ServerLifecycleStreamEvent } from "./server";
 import { ServerSettingsError } from "../core/settings";
@@ -35,7 +42,9 @@ import {
   OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetStartupProjectCatalogError,
   OrchestrationGetSelectedThreadDetailError,
+  OrchestrationGetThreadOwnershipError,
 } from "../orchestration/orchestration.rpc";
+import { GetThreadOwnershipInput } from "../orchestration/orchestration.ownership";
 
 export const WsOrchestrationGetSidebarThreadCatalogRpc = Rpc.make(
   ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog,
@@ -70,6 +79,24 @@ export const WsOrchestrationGetSelectedThreadDetailRpc = Rpc.make(
     payload: GetSelectedThreadDetailInput,
     success: OrchestrationRpcSchemas.getSelectedThreadDetail.output,
     error: OrchestrationGetSelectedThreadDetailError,
+  },
+);
+
+export const WsOrchestrationGetThreadOwnershipRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getThreadOwnership,
+  {
+    payload: GetThreadOwnershipInput,
+    success: OrchestrationRpcSchemas.getThreadOwnership.output,
+    error: OrchestrationGetThreadOwnershipError,
+  },
+);
+
+export const WsOrchestrationGetCommandOutcomeRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getCommandOutcome,
+  {
+    payload: GetCommandOutcomeInput,
+    success: OrchestrationRpcSchemas.getCommandOutcome.output,
+    error: OrchestrationGetCommandOutcomeError,
   },
 );
 
@@ -118,11 +145,19 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationAcknowledgeDeliveryRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.acknowledgeDelivery,
+  {
+    payload: OrchestrationApplicationAckInput,
+    success: OrchestrationApplicationAckResult,
+  },
+);
+
 export const WsSubscribeOrchestrationDomainEventsRpc = Rpc.make(
   WS_METHODS.subscribeOrchestrationDomainEvents,
   {
-    payload: Schema.Struct({}),
-    success: OrchestrationEvent,
+    payload: OrchestrationDeliverySubscriptionInput,
+    success: OrchestrationDeliveryStreamItem,
     stream: true,
   },
 );

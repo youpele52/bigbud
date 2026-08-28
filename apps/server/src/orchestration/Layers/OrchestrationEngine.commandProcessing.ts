@@ -5,19 +5,7 @@ import type {
   ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
-import {
-  Cause,
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  Metric,
-  Option,
-  PubSub,
-  Queue,
-  Schema,
-  Stream,
-} from "effect";
+import { Cause, Deferred, Duration, Effect, Exit, Metric, Option, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
@@ -26,6 +14,10 @@ import {
   orchestrationCommandDuration,
   orchestrationCommandsTotal,
 } from "../../observability/Metrics.ts";
+import {
+  orchestrationCommandDigestConflictsTotal,
+  orchestrationCommandUnknownOutcomesTotal,
+} from "../../observability/Metrics.orchestrationRecovery.ts";
 import {
   orchestrationEventPayloadBytes,
   orchestrationEventsAppendedTotal,
@@ -37,18 +29,26 @@ import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRete
 import { VisibleBrowserControl } from "../../browser/Services/VisibleBrowserControl.ts";
 import { decideOrchestrationCommand } from "../decider.ts";
 import {
+  OrchestrationCommandIdConflictError,
   OrchestrationCommandInvariantError,
   OrchestrationCommandPreviouslyRejectedError,
   type OrchestrationDispatchError,
 } from "../Errors.ts";
 import { projectEvent } from "../projector.ts";
 import { makeLifecycleQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
+import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
+import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
+import {
+  calculateCommandPayloadDigest,
+  type OrchestrationCommandPayloadDigest,
+} from "../commandDigest.ts";
 
 const eventPayloadEncoder = new TextEncoder();
 
 export interface CommandEnvelope {
   readonly command: OrchestrationCommand;
+  readonly payloadDigest: OrchestrationCommandPayloadDigest;
   readonly result: Deferred.Deferred<{ sequence: number }, OrchestrationDispatchError>;
   readonly startedAtMs: number;
 }
@@ -71,8 +71,8 @@ export function commandToAggregateRef(command: OrchestrationCommand): {
 }
 
 export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* (input: {
-  readonly commandQueue: Queue.Queue<CommandEnvelope>;
-  readonly eventPubSub: PubSub.PubSub<OrchestrationEvent>;
+  readonly commandAdmission: BoundedCommandAdmission<CommandEnvelope>;
+  readonly publishDomainEvent: (event: OrchestrationEvent) => Effect.Effect<void>;
   readonly readModel: () => OrchestrationReadModel;
   readonly setReadModel: (readModel: OrchestrationReadModel) => void;
 }) {
@@ -102,7 +102,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
       }
       input.setReadModel(nextReadModel);
       for (const persistedEvent of persistedEvents) {
-        yield* PubSub.publish(input.eventPubSub, persistedEvent);
+        yield* input.publishDomainEvent(persistedEvent);
       }
     });
 
@@ -114,16 +114,32 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           "orchestration.aggregate_kind": aggregateRef.aggregateKind,
           "orchestration.aggregate_id": aggregateRef.aggregateId,
         });
-        const existingReceipt = yield* commandReceiptRepository.getByCommandId({
+        const receiptClaim = yield* commandReceiptRepository.claimOrInspect({
           commandId: envelope.command.commandId,
+          payloadDigestVersion: envelope.payloadDigest.version,
+          payloadDigest: envelope.payloadDigest.digest,
+          claimedAt: new Date().toISOString(),
         });
-        if (Option.isSome(existingReceipt)) {
-          if (existingReceipt.value.status === "accepted") {
-            return { sequence: existingReceipt.value.resultSequence };
+        if (receiptClaim.status === "conflict") {
+          yield* Metric.update(orchestrationCommandDigestConflictsTotal, 1);
+          return yield* new OrchestrationCommandIdConflictError({
+            commandId: envelope.command.commandId,
+            payloadDigestVersion: envelope.payloadDigest.version,
+            payloadDigest: envelope.payloadDigest.digest,
+            storedPayloadDigestVersion: receiptClaim.storedPayloadDigestVersion,
+            storedPayloadDigest: receiptClaim.storedPayloadDigest,
+          });
+        }
+        if (receiptClaim.status === "existing") {
+          if (receiptClaim.receipt.status === "accepted") {
+            return {
+              dispatchResult: { sequence: receiptClaim.receipt.resultSequence },
+              committedEventCount: 1,
+            };
           }
           return yield* new OrchestrationCommandPreviouslyRejectedError({
             commandId: envelope.command.commandId,
-            detail: existingReceipt.value.error ?? "Previously rejected.",
+            detail: receiptClaim.receipt.error ?? "Previously rejected.",
           });
         }
         const currentReadModel = input.readModel();
@@ -181,7 +197,10 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                   acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
                   resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
                   status: "accepted",
+                  rejectionReason: null,
                   error: null,
+                  payloadDigestVersion: envelope.payloadDigest.version,
+                  payloadDigest: envelope.payloadDigest.digest,
                 });
               }
               return {
@@ -212,7 +231,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           }
         }
         for (const [index, event] of committedCommand.committedEvents.entries()) {
-          yield* PubSub.publish(input.eventPubSub, event);
+          yield* input.publishDomainEvent(event);
           if (index === 0) {
             yield* Metric.update(
               Metric.withAttributes(
@@ -223,16 +242,25 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
             );
           }
         }
-        return { sequence: committedCommand.lastSequence };
+        return {
+          dispatchResult: { sequence: committedCommand.lastSequence },
+          committedEventCount: committedCommand.committedEvents.length,
+        };
       }).pipe(Effect.withSpan(`orchestration.command.${envelope.command.type}`)),
     ).pipe(
       Effect.flatMap((exit) =>
         Effect.gen(function* () {
-          const outcome = Exit.isSuccess(exit)
-            ? "success"
-            : Cause.hasInterruptsOnly(exit.cause)
-              ? "interrupt"
-              : "failure";
+          const staleFlush =
+            Exit.isSuccess(exit) &&
+            envelope.command.type === "thread.queued-prompt.flush" &&
+            exit.value.committedEventCount === 0;
+          const outcome = staleFlush
+            ? "failure"
+            : Exit.isSuccess(exit)
+              ? "success"
+              : Cause.hasInterruptsOnly(exit.cause)
+                ? "interrupt"
+                : "failure";
           yield* Metric.update(
             Metric.withAttributes(
               orchestrationCommandDuration,
@@ -248,7 +276,25 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
             1,
           );
           if (Exit.isSuccess(exit)) {
-            yield* Deferred.succeed(envelope.result, exit.value);
+            const dispatchResult = exit.value.dispatchResult;
+            if (staleFlush || dispatchResult === undefined) {
+              // A stale lifecycle flush is retryable. It must remain unknown
+              // instead of being reported as committed without a receipt.
+              yield* Deferred.fail(
+                envelope.result,
+                new OrchestrationCommandInvariantError({
+                  commandType: envelope.command.type,
+                  detail: staleFlush
+                    ? "Queued prompt flush produced no canonical event."
+                    : "Command completed without a dispatch result.",
+                }),
+              );
+              return false;
+            }
+            yield* Deferred.succeed<{ sequence: number }, OrchestrationDispatchError>(
+              envelope.result,
+              dispatchResult,
+            );
             const flushCommand = makeLifecycleQueuedPromptFlushCommand({
               trigger: envelope.command,
               readModel: input.readModel(),
@@ -259,15 +305,30 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 { sequence: number },
                 OrchestrationDispatchError
               >();
-              yield* Queue.offer(input.commandQueue, {
-                command: flushCommand,
-                result,
-                startedAtMs: Date.now(),
-              });
+              yield* input.commandAdmission
+                .offer(
+                  {
+                    command: flushCommand,
+                    result,
+                    startedAtMs: Date.now(),
+                    payloadDigest: calculateCommandPayloadDigest(flushCommand),
+                  },
+                  "internal",
+                )
+                .pipe(
+                  Effect.catchTag("CommandAdmissionError", (error) =>
+                    Effect.logError("failed to enqueue lifecycle command", {
+                      queue: error.queue,
+                      code: error.code,
+                    }),
+                  ),
+                );
             }
             return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;
+          let reportedError = error;
+          let acceptedRaceSequence: number | null = null;
           if (!Schema.is(OrchestrationCommandPreviouslyRejectedError)(error)) {
             yield* reconcileReadModelAfterDispatchFailure.pipe(
               Effect.catch(() =>
@@ -282,20 +343,39 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               ),
             );
             if (Schema.is(OrchestrationCommandInvariantError)(error)) {
-              yield* commandReceiptRepository
-                .upsert({
+              const persisted = yield* Effect.exit(
+                persistRejectedCommandReceipt({
+                  receipts: commandReceiptRepository,
                   commandId: envelope.command.commandId,
                   aggregateKind: aggregateRef.aggregateKind,
                   aggregateId: aggregateRef.aggregateId,
-                  acceptedAt: new Date().toISOString(),
                   resultSequence: input.readModel().snapshotSequence,
-                  status: "rejected",
+                  rejectionReason:
+                    error.code === "thread_already_exists" ? "thread_already_exists" : "other",
                   error: error.message,
-                })
-                .pipe(Effect.catch(() => Effect.void));
+                  payloadDigestVersion: envelope.payloadDigest.version,
+                  payloadDigest: envelope.payloadDigest.digest,
+                }),
+              );
+              if (Exit.isFailure(persisted)) {
+                reportedError = Cause.squash(persisted.cause) as OrchestrationDispatchError;
+              } else if (persisted.value.status === "accepted") {
+                acceptedRaceSequence = persisted.value.sequence;
+              }
             }
           }
-          yield* Deferred.fail(envelope.result, error);
+          if (acceptedRaceSequence !== null) {
+            yield* Deferred.succeed(envelope.result, { sequence: acceptedRaceSequence });
+            return true;
+          }
+          if (
+            !Schema.is(OrchestrationCommandInvariantError)(reportedError) &&
+            !Schema.is(OrchestrationCommandPreviouslyRejectedError)(reportedError) &&
+            !Schema.is(OrchestrationCommandIdConflictError)(reportedError)
+          ) {
+            yield* Metric.update(orchestrationCommandUnknownOutcomesTotal, 1);
+          }
+          yield* Deferred.fail(envelope.result, reportedError);
           return false;
         }),
       ),

@@ -104,6 +104,10 @@ import Migration0100 from "./Migrations/100_ProviderTurnLivenessSessionEpoch.ts"
 import Migration0101 from "./Migrations/101_ProviderRuntimeEpochAndTurnControl.ts";
 import Migration0102 from "./Migrations/102_ThreadRuntimeLeaseTerminalMultiplicity.ts";
 import Migration0103 from "./Migrations/103_ProviderSessionRuntimeReconciliationIndex.ts";
+import Migration0104 from "./Migrations/104_ThreadIdentityLatestMaterialization.ts";
+import Migration0105 from "./Migrations/105_CommandReceiptRejectionReason.ts";
+import Migration0106 from "./Migrations/106_CommandReceiptPayloadDigest.ts";
+import Migration0107 from "./Migrations/107_OrchestrationBootstrapRecipes.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -208,6 +212,10 @@ export const migrationEntries = [
   [101, "ProviderRuntimeEpochAndTurnControl", Migration0101],
   [102, "ThreadRuntimeLeaseTerminalMultiplicity", Migration0102],
   [103, "ProviderSessionRuntimeReconciliationIndex", Migration0103],
+  [104, "ThreadIdentityLatestMaterialization", Migration0104],
+  [105, "CommandReceiptRejectionReason", Migration0105],
+  [106, "CommandReceiptPayloadDigest", Migration0106],
+  [107, "OrchestrationBootstrapRecipes", Migration0107],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

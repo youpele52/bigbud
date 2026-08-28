@@ -98,6 +98,12 @@ import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../cor
 import { OrchestrationDispatchCommandError } from "../orchestration/orchestration.rpc";
 import { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import { WS_METHODS } from "../constants/websocket.constant";
+import { IsoDateTime } from "../core/baseSchemas";
+
+export const WsServerPingRpc = Rpc.make(WS_METHODS.serverPing, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({ serverTime: IsoDateTime }),
+});
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
   payload: ServerUpsertKeybindingInput,

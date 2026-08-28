@@ -13,10 +13,15 @@ import { Effect } from "effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { hasActiveThreadTurnOrSession } from "./ThreadDispatchSafety.logic.ts";
 
-function invariantError(commandType: string, detail: string): OrchestrationCommandInvariantError {
+function invariantError(
+  commandType: string,
+  detail: string,
+  code?: "thread_already_exists",
+): OrchestrationCommandInvariantError {
   return new OrchestrationCommandInvariantError({
     commandType,
     detail,
+    code,
   });
 }
 
@@ -342,6 +347,7 @@ export function requireThreadAbsent(input: {
     invariantError(
       input.command.type,
       `Thread '${input.threadId}' already exists and cannot be created twice.`,
+      "thread_already_exists",
     ),
   );
 }
