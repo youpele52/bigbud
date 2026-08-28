@@ -124,7 +124,7 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       yield* cleanupBridge;
     }
 
-    if (options?.emitExitEvent !== false) {
+    if (options?.emitExitEvent !== false && sessions.get(context.session.threadId) === context) {
       const stamp = yield* makeEventStamp();
       yield* offerRuntimeEvent({
         type: "session.exited",
@@ -140,7 +140,9 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       });
     }
 
-    sessions.delete(context.session.threadId);
+    if (sessions.get(context.session.threadId) === context) {
+      sessions.delete(context.session.threadId);
+    }
   });
 
   const handleStreamExit = Effect.fn("handleStreamExit")(function* (

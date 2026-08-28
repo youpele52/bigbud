@@ -74,7 +74,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
   const offerRuntimeEvent = (event: UnstampedProviderRuntimeEvent): Effect.Effect<void> => {
     const session = sessions.get(event.threadId);
-    if (!session) return Effect.die("No active Claude session.");
+    if (!session) return Effect.void;
     return Queue.offer(runtimeEventQueue, {
       ...event,
       sessionEpoch: session.sessionEpoch,
