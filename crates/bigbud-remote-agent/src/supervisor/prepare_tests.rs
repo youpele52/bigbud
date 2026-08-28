@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::panic)]
+
 use std::fs;
 use std::io::{self, Cursor};
 use std::os::unix::fs::PermissionsExt;
