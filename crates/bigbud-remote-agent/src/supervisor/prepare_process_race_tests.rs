@@ -28,7 +28,11 @@ fn blocks_takeover_after_process_acceptance_and_before_child_spawn() {
     fs::create_dir_all(&barrier).unwrap();
     let socket = root.join("supervisor.sock");
     let mut supervisor = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", REAL_SUPERVISOR_TEST, "--nocapture"])
+        .args([
+            "--exact",
+            &lib_test_filter("real_supervisor_helper"),
+            "--nocapture",
+        ])
         .env("BIGBUD_TEST_REAL_SUPERVISOR_ROOT", &root)
         .env("BIGBUD_TEST_PROCESS_SPAWN_BARRIER", &barrier)
         .stdin(Stdio::null())

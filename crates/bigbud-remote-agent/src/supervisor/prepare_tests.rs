@@ -16,8 +16,12 @@ use super::*;
 use crate::operations::OperationJournal;
 use crate::operations::journal::MAX_OPERATION_JOURNAL_BYTES;
 
-const HELPER_TEST: &str = "supervisor::prepare::tests::fake_supervisor_helper";
-const REAL_SUPERVISOR_TEST: &str = "supervisor::prepare::tests::real_supervisor_helper";
+fn lib_test_filter(name: &str) -> String {
+    let module = module_path!();
+    let crate_prefix = concat!(env!("CARGO_CRATE_NAME"), "::");
+    let relative = module.strip_prefix(crate_prefix).unwrap_or(module);
+    format!("{relative}::{name}")
+}
 
 fn temp_root(label: &str) -> PathBuf {
     let suffix = SystemTime::now()
@@ -29,7 +33,11 @@ fn temp_root(label: &str) -> PathBuf {
 
 fn spawn_helper(root: &Path, version: &str, digest: &str, active_child: bool) -> Child {
     Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", HELPER_TEST, "--nocapture"])
+        .args([
+            "--exact",
+            &lib_test_filter("fake_supervisor_helper"),
+            "--nocapture",
+        ])
         .env("BIGBUD_TEST_SUPERVISOR_ROOT", root)
         .env("BIGBUD_TEST_SUPERVISOR_VERSION", version)
         .env("BIGBUD_TEST_SUPERVISOR_DIGEST", digest)
@@ -46,7 +54,11 @@ fn spawn_helper(root: &Path, version: &str, digest: &str, active_child: bool) ->
 
 fn spawn_real_supervisor(root: &Path) -> Child {
     Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", REAL_SUPERVISOR_TEST, "--nocapture"])
+        .args([
+            "--exact",
+            &lib_test_filter("real_supervisor_helper"),
+            "--nocapture",
+        ])
         .env("BIGBUD_TEST_REAL_SUPERVISOR_ROOT", root)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
