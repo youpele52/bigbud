@@ -13,6 +13,7 @@ import type { Effect } from "effect";
 
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { PiRpcProcess, PiRpcStdoutMessage } from "./RpcProcess.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export const PROVIDER = "pi" as const;
 export const USER_INPUT_FALLBACK_QUESTION_ID = "answer";
@@ -101,6 +102,7 @@ export interface ActivePiSession {
 }
 
 export interface PiAdapterLiveOptions {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
 }

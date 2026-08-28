@@ -15,6 +15,7 @@ describe("ClaudeRemoteWorkspaceBridge", () => {
         cwd: "/srv/project",
       },
       { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+      async () => ({ os: "linux", architecture: "x86_64" }),
     );
 
     expect(bridge.cwd).toContain("bigbud-claude-remote-workspace-");
@@ -29,9 +30,13 @@ describe("ClaudeRemoteWorkspaceBridge", () => {
     ]);
     expect(bridge.queryOptions.allowedTools).toEqual([
       "mcp__bigbud_remote_workspace__read",
+      "mcp__bigbud_remote_workspace__write",
+      "mcp__bigbud_remote_workspace__edit",
+      "mcp__bigbud_remote_workspace__bash",
       "mcp__bigbud_remote_workspace__grep",
       "mcp__bigbud_remote_workspace__glob",
       "mcp__bigbud_remote_workspace__list",
+      "mcp__bigbud_remote_workspace__apply_patch",
     ]);
 
     const serverPath = path.join(bridge.cwd, ".bigbud/remote-workspace-mcp-server.mjs");

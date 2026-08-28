@@ -2,27 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
-import ts from "typescript";
 
+import { REMOTE_WORKSPACE_TOOL_NAMES } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
 
-function expectTranspiles(relativePath: string, source: string): void {
-  const result = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: relativePath,
-    reportDiagnostics: true,
-  });
-  const errors = (result.diagnostics ?? [])
-    .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)
-    .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
-  expect(errors).toEqual([]);
-}
-
 describe("OpencodeRemoteWorkspaceBridge", () => {
-  it("creates transpileable override tools in a synthetic cwd", async () => {
+  it("creates a provider-neutral MCP bridge in a synthetic cwd", async () => {
     const bridge = await createOpencodeRemoteWorkspaceBridge(
       {
         location: "remote",
@@ -32,55 +17,17 @@ describe("OpencodeRemoteWorkspaceBridge", () => {
       { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
     );
 
-    const generatedFiles = [
-      ".bigbud/opencode-remote-runtime.ts",
-      ".opencode/tools/read.ts",
-      ".opencode/tools/write.ts",
-      ".opencode/tools/edit.ts",
-      ".opencode/tools/bash.ts",
-      ".opencode/tools/grep.ts",
-      ".opencode/tools/glob.ts",
-      ".opencode/tools/list.ts",
-      ".opencode/tools/apply_patch.ts",
-    ] as const;
-
-    for (const relativePath of generatedFiles) {
-      const source = await fs.readFile(path.join(bridge.cwd, relativePath), "utf8");
-      expect(source.length).toBeGreaterThan(0);
-      expectTranspiles(relativePath, source);
-    }
-
-    const runtimeSource = await fs.readFile(
-      path.join(bridge.cwd, ".bigbud/opencode-remote-runtime.ts"),
-      "utf8",
-    );
+    expect(bridge.serverName).toBe("bigbud_remote_workspace");
+    const runtimeSource = await fs.readFile(bridge.serverPath, "utf8");
     expect(runtimeSource).toContain("remote_workspace_process");
     expect(runtimeSource).toContain("token-1");
     expect(runtimeSource).not.toContain("root@devbox");
-    expect(runtimeSource).toContain("readRemoteFileContents");
-    expect(runtimeSource).toContain("git apply --check");
-    expect(runtimeSource).toContain("patch --dry-run");
-    expect(runtimeSource).toContain("OpenCode patch syntax is not a unified diff");
+    for (const toolName of REMOTE_WORKSPACE_TOOL_NAMES) {
+      expect(runtimeSource).toContain(`name: "${toolName}"`);
+    }
     expect(bridge.systemPrompt).toContain("The actual workspace root is /srv/project");
     expect(bridge.systemPrompt).toContain("prefer edit or write");
-
-    const readToolSource = await fs.readFile(
-      path.join(bridge.cwd, ".opencode/tools/read.ts"),
-      "utf8",
-    );
-    expect(readToolSource).toContain("export default tool({");
-
-    const editToolSource = await fs.readFile(
-      path.join(bridge.cwd, ".opencode/tools/edit.ts"),
-      "utf8",
-    );
-    expect(editToolSource).toContain("readRemoteFileContents");
-
-    const patchToolSource = await fs.readFile(
-      path.join(bridge.cwd, ".opencode/tools/apply_patch.ts"),
-      "utf8",
-    );
-    expect(patchToolSource).toContain("OpenCode *** Begin Patch syntax is not accepted");
+    await expect(fs.access(path.join(bridge.cwd, ".opencode/tools"))).rejects.toThrow();
 
     await bridge.cleanup();
     await expect(fs.access(bridge.cwd)).rejects.toThrow();

@@ -16,6 +16,10 @@ export interface DevinAboutResult {
   readonly message?: string;
 }
 
+export function markDevinCredentialsVerified(parsed: DevinAboutResult): DevinAboutResult {
+  return { ...parsed, auth: { status: "authenticated" } };
+}
+
 function joinProviderMessages(...messages: ReadonlyArray<string | undefined>): string | undefined {
   const parts = messages
     .map((message) => message?.trim())

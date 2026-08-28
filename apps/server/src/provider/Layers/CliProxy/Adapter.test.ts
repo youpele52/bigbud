@@ -77,6 +77,7 @@ const adapterLayer = effectIt.layer(
   makeCliProxyAdapterLive({
     resolveRuntimeConfig: resolveRuntimeConfig as never,
     createQuery,
+    remoteWorkspaceReadinessProbe: async () => ({ os: "linux", architecture: "x86_64" }),
   }).pipe(
     Layer.provideMerge(ServerConfig.layerTest("/tmp/cliproxy-adapter-test", "/tmp")),
     Layer.provideMerge(ServerSettingsService.layerTest()),
@@ -90,7 +91,79 @@ const adapterLayer = effectIt.layer(
   ),
 );
 
+const unavailableRemoteLayer = effectIt.layer(
+  makeCliProxyAdapterLive({
+    resolveRuntimeConfig: resolveRuntimeConfig as never,
+    createQuery,
+    remoteWorkspaceReadinessProbe: async () => {
+      throw new Error("remote workspace readiness timed out");
+    },
+  }).pipe(
+    Layer.provideMerge(ServerConfig.layerTest("/tmp/cliproxy-remote-test", "/tmp")),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(
+      Layer.succeed(CliProxyLifecycle, {
+        isClaudeRunnable: async () => ({ _tag: "available" }) as const,
+        activate: async () => ({ _tag: "started", strategy: "direct" }) as const,
+      }),
+    ),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+unavailableRemoteLayer("CliProxyAdapterLive remote readiness", (it) => {
+  it.effect("propagates remote readiness failure before creating Claude", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CliProxyAdapter;
+      const beforeQueries = createQuery.mock.calls.length;
+      const result = yield* adapter
+        .startSession({
+          threadId: "thread-cli-proxy-remote-failure",
+          provider: "cliProxy",
+          modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+          runtimeMode: "full-access",
+          providerRuntimeExecutionTargetId: "local",
+          workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22",
+          cwd: "/srv/project",
+        } as never)
+        .pipe(Effect.result);
+
+      assert.equal(result._tag, "Failure");
+      assert.equal(createQuery.mock.calls.length, beforeQueries);
+    }),
+  );
+});
+
 adapterLayer("CliProxyAdapterLive", (it) => {
+  it.effect("exposes the complete remote workspace toolset through Claude", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CliProxyAdapter;
+      const threadId = ThreadId.makeUnsafe("thread-cli-proxy-remote-tools");
+      yield* adapter.startSession({
+        threadId,
+        provider: "cliProxy",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      } as never);
+
+      const options = createQuery.mock.calls.at(-1)?.[0].options;
+      expect(options?.cwd).toContain("bigbud-claude-remote-workspace-");
+      expect(options?.allowedTools).toEqual(
+        expect.arrayContaining([
+          "mcp__bigbud_remote_workspace__read",
+          "mcp__bigbud_remote_workspace__write",
+          "mcp__bigbud_remote_workspace__edit",
+          "mcp__bigbud_remote_workspace__bash",
+          "mcp__bigbud_remote_workspace__apply_patch",
+        ]),
+      );
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
   it.effect("resolves an isolated Claude-compatible harness for every session", () =>
     Effect.gen(function* () {
       const adapter = yield* CliProxyAdapter;

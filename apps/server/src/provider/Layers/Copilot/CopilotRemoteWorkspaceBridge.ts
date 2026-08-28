@@ -1,6 +1,7 @@
 import type { SessionConfig, SessionFsConfig, Tool, ToolResultObject } from "@github/copilot-sdk";
 
 import { createRemoteWorkspaceSessionFsBridge } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import {
   runToolCommand,
   resolveToolTransportTarget,
@@ -87,6 +88,7 @@ export interface CopilotRemoteWorkspaceBridge {
 
 export async function createCopilotRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
+  readinessProbe?: RemoteWorkspaceReadinessProbe,
 ): Promise<CopilotRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceSessionFsBridge(
     workspaceTarget,
@@ -96,6 +98,7 @@ export async function createCopilotRemoteWorkspaceBridge(
       "The actual project files live on the remote host configured for this thread.",
       "",
     ],
+    readinessProbe,
   );
 
   return {

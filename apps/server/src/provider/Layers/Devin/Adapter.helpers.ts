@@ -66,6 +66,8 @@ import { applyDevinAcpModelSelection, makeDevinAcpRuntime } from "../../acp/Devi
 import { DevinAdapter } from "../../Services/Devin/Adapter.ts";
 import { resolveDevinAcpBaseModelId } from "./Provider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
+import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export const PROVIDER = "devin" as const;
 export const DEVIN_RESUME_VERSION = 1 as const;
@@ -76,6 +78,8 @@ export const ACP_APPROVAL_MODE_ALIASES = ["ask"];
 export interface DevinAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly remoteAgentPtyResolver?: RemoteAgentPtyResolver;
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 
 export interface PendingApproval {

@@ -7,11 +7,14 @@ import { createCopilotRemoteWorkspaceBridge } from "./CopilotRemoteWorkspaceBrid
 
 describe("CopilotRemoteWorkspaceBridge", () => {
   it("creates a session-fs bridge and overrides remote bash", async () => {
-    const bridge = await createCopilotRemoteWorkspaceBridge({
-      location: "remote",
-      executionTargetId: "ssh:host=devbox&user=root&port=22",
-      cwd: "/srv/project",
-    });
+    const bridge = await createCopilotRemoteWorkspaceBridge(
+      {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      async () => ({ os: "linux", architecture: "x86_64" }),
+    );
 
     expect(bridge.runtimeCwd).toContain("bigbud-copilot-remote-workspace-");
     expect(bridge.clientSessionFsConfig.initialCwd).toBe("/srv/project");

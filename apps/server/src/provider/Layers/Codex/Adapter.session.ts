@@ -1,4 +1,3 @@
-/** Session lifecycle for the Codex provider adapter. */
 import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
 import { Effect, FileSystem, Queue, Stream } from "effect";
 
@@ -119,6 +118,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
               workspaceTarget: executionContext.workspaceTarget,
               orchestrationBridge,
               threadId: input.threadId,
+              readinessProbe: options?.remoteWorkspaceReadinessProbe,
             })
           : undefined;
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);

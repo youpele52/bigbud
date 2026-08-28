@@ -12,6 +12,8 @@ export function makeAcpStartSessionTestDeps(input: {
   return {
     childProcessSpawner: {} as ChildProcessSpawner.ChildProcessSpawner["Service"],
     nativeEventLogger: undefined,
+    remoteAgentPtyResolver: undefined,
+    remoteWorkspaceReadinessProbe: async () => ({ os: "linux" as const, architecture: "x86_64" }),
     serverConfig: {
       stateDir: input.stateDir,
       host: "127.0.0.1" as const,

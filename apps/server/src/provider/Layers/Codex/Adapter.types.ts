@@ -4,6 +4,7 @@
  * @module CodexAdapter.types
  */
 import type { CodexAppServerManager } from "../../../codex/codexAppServerManager.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ServiceMap } from "effect";
 
@@ -14,6 +15,7 @@ export interface CodexAdapterLiveOptions {
   readonly makeManager?: (services?: ServiceMap.ServiceMap<never>) => CodexAppServerManager;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 
 export function toMessage(cause: unknown, fallback: string): string {

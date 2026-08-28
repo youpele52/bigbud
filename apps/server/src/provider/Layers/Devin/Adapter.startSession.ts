@@ -3,7 +3,9 @@ import { Effect, Exit, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
+import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
 import { prepareAcpThreadOrchestrationBridge } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
+import { prepareAcpRemoteWorkspaceSession } from "../AcpRemoteWorkspace.session.ts";
 import {
   type DevinAdapterLiveOptions,
   type DevinEventStamp,
@@ -19,7 +21,6 @@ import {
   mapAcpToAdapterError,
   makeAcpRequestOpenedEvent,
   makeAcpRequestResolvedEvent,
-  nodePath,
   parsePermissionRequest,
   makeAcpNativeLoggers,
   makeDevinAcpRuntime,
@@ -34,6 +35,8 @@ import { forkNotificationFiber, logNative } from "./Adapter.startSession.events.
 interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly nativeEventLogger: DevinAdapterLiveOptions["nativeEventLogger"] | undefined;
+  readonly remoteAgentPtyResolver: RemoteAgentPtyResolver | undefined;
+  readonly remoteWorkspaceReadinessProbe: DevinAdapterLiveOptions["remoteWorkspaceReadinessProbe"];
   readonly serverConfig: {
     readonly stateDir: string;
     readonly host: string | undefined;
@@ -73,7 +76,6 @@ export function makeStartSessionEffect(
       });
     }
 
-    const cwd = nodePath.resolve(input.cwd.trim());
     const sessionEpoch = input.sessionEpoch ?? 0;
     const devinModelSelection =
       input.modelSelection?.provider === "devin" ? input.modelSelection : undefined;
@@ -114,10 +116,23 @@ export function makeStartSessionEffect(
           cause,
         }),
     });
+    const workspaceSession = yield* prepareAcpRemoteWorkspaceSession({
+      provider: PROVIDER,
+      sessionInput: input,
+      ptyResolver: deps.remoteAgentPtyResolver,
+      orchestrationCleanup: orchestration.bridge.cleanup,
+      ...(deps.remoteWorkspaceReadinessProbe
+        ? { readinessProbe: deps.remoteWorkspaceReadinessProbe }
+        : {}),
+    });
     const acp = yield* makeDevinAcpRuntime({
       devinSettings,
       childProcessSpawner: deps.childProcessSpawner,
-      cwd,
+      cwd: workspaceSession.sessionCwd,
+      spawnCwd: workspaceSession.processCwd,
+      ...(workspaceSession.remoteBridge
+        ? { clientCapabilities: workspaceSession.remoteBridge.clientCapabilities }
+        : {}),
       ...(resumeSessionId ? { resumeSessionId } : {}),
       mcpServers: orchestration.mcpServers,
       clientInfo: { name: "bigbud", version: "0.0.0" },
@@ -133,10 +148,13 @@ export function makeStartSessionEffect(
             cause,
           }),
       ),
-      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
+      Effect.onError(() => Effect.promise(workspaceSession.cleanup)),
     );
 
     const started = yield* Effect.gen(function* () {
+      if (workspaceSession.remoteBridge) {
+        yield* workspaceSession.remoteBridge.registerHandlers(acp);
+      }
       yield* acp.handleRequestPermission((params) =>
         Effect.gen(function* () {
           yield* logNative(deps, input.threadId, "session/request_permission", params);
@@ -203,7 +221,7 @@ export function makeStartSessionEffect(
       Effect.mapError((error) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, "session/start", error),
       ),
-      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
+      Effect.onError(() => Effect.promise(workspaceSession.cleanup)),
     );
 
     yield* applyRequestedSessionConfiguration({
@@ -213,14 +231,18 @@ export function makeStartSessionEffect(
       modelSelection: devinModelSelection,
       mapError: ({ cause, method }) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
-    }).pipe(Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)));
+    }).pipe(Effect.onError(() => Effect.promise(workspaceSession.cleanup)));
 
     const now = yield* deps.nowIso;
     const session = {
       provider: PROVIDER,
       status: "ready",
       runtimeMode: input.runtimeMode,
-      cwd,
+      cwd: workspaceSession.sessionCwd,
+      providerRuntimeExecutionTargetId:
+        workspaceSession.executionContext.executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId:
+        workspaceSession.executionContext.executionTargets.workspaceExecutionTargetId,
       model: devinModelSelection?.model,
       threadId: input.threadId,
       sessionEpoch,
@@ -238,7 +260,7 @@ export function makeStartSessionEffect(
       session,
       scope: sessionScope,
       acp,
-      orchestrationBridgeCleanup: orchestration.bridge.cleanup,
+      orchestrationBridgeCleanup: workspaceSession.cleanup,
       notificationFiber: undefined,
       pendingApprovals,
       pendingUserInputs,

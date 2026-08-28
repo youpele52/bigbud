@@ -11,8 +11,10 @@ import type {
   UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export interface SessionStartDeps {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly fileSystem: FileSystem.FileSystem;
   readonly serverConfig: {
     readonly attachmentsDir: string;

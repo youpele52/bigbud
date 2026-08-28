@@ -2,6 +2,7 @@ import { createRemoteWorkspaceMcpBridge } from "../remote-workspace-bridge/remot
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 const CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 
@@ -23,6 +24,7 @@ function quoteTomlStringArray(values: ReadonlyArray<string>): string {
 export async function createCodexRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
   httpConfig: ThreadOrchestrationHttpConfig,
+  readinessProbe?: RemoteWorkspaceReadinessProbe,
 ): Promise<CodexRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceMcpBridge(
     workspaceTarget,
@@ -33,6 +35,7 @@ export async function createCodexRemoteWorkspaceBridge(
       "",
     ],
     httpConfig,
+    readinessProbe,
   );
 
   return {

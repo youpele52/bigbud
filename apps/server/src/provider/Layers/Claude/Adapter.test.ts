@@ -44,6 +44,7 @@ describe("ClaudeAdapterLive", () => {
 
   it.effect("runs remote Claude workspaces through a local MCP bridge", () => {
     const harness = makeHarness();
+    harness.query.mcpConnectedAfterIteration = true;
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       const session = yield* adapter.startSession({
@@ -73,9 +74,13 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(createInput?.options.agentProgressSummaries, true);
       assert.deepEqual(createInput?.options.allowedTools, [
         "mcp__bigbud_remote_workspace__read",
+        "mcp__bigbud_remote_workspace__write",
+        "mcp__bigbud_remote_workspace__edit",
+        "mcp__bigbud_remote_workspace__bash",
         "mcp__bigbud_remote_workspace__grep",
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
+        "mcp__bigbud_remote_workspace__apply_patch",
         ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__bigbud_orchestration__${name}`),
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",
@@ -115,6 +120,36 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(existsSync(syntheticCwd), true);
       yield* adapter.stopSession(THREAD_ID);
       assert.equal(existsSync(syntheticCwd), false);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("fails before creating Claude when remote workspace readiness is unavailable", () => {
+    const harness = makeHarness({
+      remoteWorkspaceReadinessProbe: async () => {
+        throw new Error("Permission denied (publickey)");
+      },
+    });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const failure = yield* adapter
+        .startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          executionTargetId: "ssh:host=devbox&user=root&port=22",
+          cwd: "/srv/project",
+          runtimeMode: "approval-required",
+        })
+        .pipe(Effect.result);
+
+      assert.equal(failure._tag, "Failure");
+      if (failure._tag === "Failure") {
+        assert.equal(failure.failure._tag, "ProviderAdapterProcessError");
+        assert.match(String(failure.failure), /Permission denied \(publickey\)/u);
+      }
+      assert.equal(harness.getLastCreateQueryInput(), undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

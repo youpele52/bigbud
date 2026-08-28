@@ -73,6 +73,8 @@ import {
   extractTodosAsPlan,
 } from "../../acp/CursorAcpExtension.ts";
 import { CursorAdapter } from "../../Services/Cursor/Adapter.ts";
+import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import { resolveCursorAcpBaseModelId } from "./Provider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 
@@ -85,6 +87,8 @@ export const ACP_APPROVAL_MODE_ALIASES = ["ask"];
 export interface CursorAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly remoteAgentPtyResolver?: RemoteAgentPtyResolver;
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 
 export interface PendingApproval {

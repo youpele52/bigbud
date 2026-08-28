@@ -153,6 +153,8 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           {
             childProcessSpawner,
             nativeEventLogger,
+            remoteAgentPtyResolver: options?.remoteAgentPtyResolver,
+            remoteWorkspaceReadinessProbe: options?.remoteWorkspaceReadinessProbe,
             serverConfig: {
               stateDir: serverConfig.stateDir,
               host: serverConfig.host,

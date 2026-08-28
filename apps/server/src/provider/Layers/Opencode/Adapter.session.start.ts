@@ -23,7 +23,6 @@ import {
   buildOpencodeAllowedTools,
   buildOpencodeThreadOrchestrationServerName,
   composeBridgeCleanups,
-  disconnectOpencodeOrchestrationMcpBridge,
   prepareThreadOrchestrationMcpBridge,
   registerOpencodeOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
@@ -32,8 +31,11 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { startEventStream, toMessage } from "./Adapter.stream.ts";
-
-const OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT = Duration.millis(5_500);
+import { formatOpencodeSdkError } from "./Provider.sdk.ts";
+import {
+  makeOpencodeBridgeCleanup,
+  registerOpencodeRemoteWorkspaceMcp,
+} from "./Adapter.session.remoteWorkspaceMcp.ts";
 
 export interface StartSessionDeps {
   readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
@@ -209,7 +211,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             cause,
           }),
       }).pipe(
-        Effect.timeout(OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT),
+        Effect.timeout(Duration.millis(5_500)),
         Effect.catchCause((cause) =>
           Effect.logWarning("opencode orchestration MCP registration failed; continuing", {
             provider: deps.provider,
@@ -218,31 +220,38 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           }),
         ),
       );
+      if (remoteWorkspaceBridge) {
+        yield* registerOpencodeRemoteWorkspaceMcp({
+          provider: deps.provider,
+          threadId: input.threadId,
+          serverHandle,
+          serverDirectory,
+          bridge: remoteWorkspaceBridge,
+          cleanup: cleanupBridge,
+        });
+      }
       const client = serverHandle.client;
-      const cleanupConnectedBridge = composeBridgeCleanups(async () => {
-        try {
-          await disconnectOpencodeOrchestrationMcpBridge({
-            client,
-            ...(serverDirectory ? { directory: serverDirectory } : {}),
-            serverName: orchestrationBridge.serverName,
-          });
-        } catch {
-          // Best effort: bridge cleanup below removes bigbud auth and files.
-        }
-      }, cleanupBridge);
+      const cleanupConnectedBridge = makeOpencodeBridgeCleanup({
+        serverHandle,
+        serverDirectory,
+        orchestrationServerName: orchestrationBridge.serverName,
+        remoteWorkspaceServerName: remoteWorkspaceBridge?.serverName,
+        cleanup: cleanupBridge,
+      });
       const allowedTools = yield* Effect.tryPromise({
         try: async () => {
-          const toolIdsResponse = await client.tool.ids(
-            serverDirectory ? { directory: serverDirectory } : undefined,
-          );
+          const toolIdsResponse = await client.tool.ids();
           if (toolIdsResponse.error || !Array.isArray(toolIdsResponse.data)) {
             throw new Error(
-              `Failed to list ${deps.provider} tool IDs: ${String(toolIdsResponse.error)}`,
+              `Failed to list ${deps.provider} tool IDs: ${formatOpencodeSdkError(toolIdsResponse.error)}`,
             );
           }
           return buildOpencodeAllowedTools({
             toolIds: toolIdsResponse.data,
             serverName: orchestrationBridge.serverName,
+            ...(remoteWorkspaceBridge
+              ? { remoteWorkspaceServerName: remoteWorkspaceBridge.serverName }
+              : {}),
           });
         },
         catch: (cause) =>
@@ -301,7 +310,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         return yield* new ProviderAdapterProcessError({
           provider: deps.provider,
           threadId: input.threadId,
-          detail: `Failed to create ${deps.provider} session: ${String(sessionResp.error)}`,
+          detail: `Failed to create ${deps.provider} session: ${formatOpencodeSdkError(sessionResp.error)}`,
         });
       }
 

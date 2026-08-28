@@ -169,4 +169,13 @@ describe("local workspace watcher agent", () => {
     expect(unsupported.close).toHaveBeenCalledOnce();
     agent.close();
   });
+
+  it("reports an explicit close as permanently unavailable", async () => {
+    const agent = new LocalWorkspaceWatchAgent({
+      resolveBinary: () => "/tmp/agent",
+    });
+    agent.close();
+
+    await expect(agent.getConnection()).rejects.toMatchObject({ retryable: false });
+  });
 });

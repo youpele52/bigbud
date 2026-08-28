@@ -7,6 +7,10 @@ import type { SessionFsConfig, SessionFsFileInfo, SessionFsProvider } from "@git
 import { runToolCommand, resolveToolTransportTarget } from "../tool-transport/toolTransport.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { createRemoteWorkspaceBridge } from "./remoteWorkspaceBridge.ts";
+import {
+  probeRemoteWorkspaceReadiness,
+  type RemoteWorkspaceReadinessProbe,
+} from "./remoteWorkspaceReadiness.ts";
 
 export const REMOTE_WORKSPACE_SESSION_STATE_PATH = ".bigbud/session-state";
 const DEFAULT_REMOTE_TIMEOUT_MS = 30_000;
@@ -37,10 +41,20 @@ function isSessionStatePath(pathname: string): boolean {
   );
 }
 
-export function resolveSessionFsPath(inputPath: string, initialCwd: string): ResolvedSessionFsPath {
+export function resolveSessionFsPath(
+  inputPath: string,
+  initialCwd: string,
+  bridgeCwd?: string,
+): ResolvedSessionFsPath {
   const normalizedPath = posixPath.normalize(inputPath);
   if (isSessionStatePath(normalizedPath)) {
     return { kind: "session-state", path: normalizedPath };
+  }
+  if (bridgeCwd && (normalizedPath === bridgeCwd || normalizedPath.startsWith(`${bridgeCwd}/`))) {
+    return {
+      kind: "workspace",
+      path: posixPath.resolve(initialCwd, posixPath.relative(bridgeCwd, normalizedPath)),
+    };
   }
 
   return {
@@ -91,7 +105,9 @@ export async function createRemoteWorkspaceSessionFsBridge(
   workspaceTarget: WorkspaceTarget,
   prefix: string,
   readmeLines: ReadonlyArray<string>,
+  readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
 ): Promise<RemoteWorkspaceSessionFsBridge> {
+  const readiness = await readinessProbe(workspaceTarget);
   const bridge = await createRemoteWorkspaceBridge({
     workspaceTarget,
     prefix,
@@ -146,7 +162,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
 
     return {
       async readFile(inputPath: string): Promise<string> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           return fs.readFile(resolveSessionStateFsPath(resolvedPath.path, stateRoot), "utf8");
         }
@@ -156,7 +172,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         return readRemoteFile(resolvedPath.path);
       },
       async writeFile(inputPath: string, content: string): Promise<void> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           const filePath = resolveSessionStateFsPath(resolvedPath.path, stateRoot);
           await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -172,7 +188,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         );
       },
       async appendFile(inputPath: string, content: string): Promise<void> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           const filePath = resolveSessionStateFsPath(resolvedPath.path, stateRoot);
           await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -191,7 +207,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         );
       },
       async exists(inputPath: string): Promise<boolean> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           return fs
             .access(resolveSessionStateFsPath(resolvedPath.path, stateRoot))
@@ -201,7 +217,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         return existsRemotePath(resolvedPath.path);
       },
       async stat(inputPath: string): Promise<SessionFsFileInfo> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           return toSessionFsFileInfo(
             await fs.stat(resolveSessionStateFsPath(resolvedPath.path, stateRoot)),
@@ -216,9 +232,9 @@ export async function createRemoteWorkspaceSessionFsBridge(
             "target=$1",
             'kind="file"',
             'if [ -d "$target" ]; then kind="directory"; fi',
-            'size=$(stat -c %s -- "$target")',
-            'mtime=$(stat -c %Y -- "$target")',
-            'birthtime=$(stat -c %W -- "$target" 2>/dev/null || printf -- "-1")',
+            readiness.os === "darwin"
+              ? 'size=$(stat -f %z -- "$target"); mtime=$(stat -f %m -- "$target"); birthtime=$(stat -f %B -- "$target" 2>/dev/null || printf -- "-1")'
+              : 'size=$(stat -c %s -- "$target"); mtime=$(stat -c %Y -- "$target"); birthtime=$(stat -c %W -- "$target" 2>/dev/null || printf -- "-1")',
             'printf "%s\\t%s\\t%s\\t%s\\n" "$kind" "$size" "$mtime" "$birthtime"',
           ].join("\n"),
           [resolvedPath.path],
@@ -236,7 +252,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         };
       },
       async mkdir(inputPath: string, recursive: boolean, mode?: number): Promise<void> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           await fs.mkdir(resolveSessionStateFsPath(resolvedPath.path, stateRoot), {
             recursive,
@@ -252,7 +268,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         );
       },
       async readdir(inputPath: string): Promise<string[]> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           return fs.readdir(resolveSessionStateFsPath(resolvedPath.path, stateRoot));
         }
@@ -264,7 +280,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
             "set -eu",
             "target=$1",
             'if [ ! -d "$target" ]; then printf "Not a directory: %s\\n" "$target" >&2; exit 1; fi',
-            'find "$target" -mindepth 1 -maxdepth 1 -printf "%f\\n" | LC_ALL=C sort',
+            'find "$target" -mindepth 1 -maxdepth 1 -exec basename {} \\; | LC_ALL=C sort',
           ].join("\n"),
           [resolvedPath.path],
         );
@@ -274,7 +290,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
           .filter((entry) => entry.length > 0);
       },
       async readdirWithTypes(inputPath: string) {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           const entries = await fs.readdir(
             resolveSessionStateFsPath(resolvedPath.path, stateRoot),
@@ -312,7 +328,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
           });
       },
       async rm(inputPath: string, recursive: boolean, force: boolean): Promise<void> {
-        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd);
+        const resolvedPath = resolveSessionFsPath(inputPath, initialCwd, bridge.cwd);
         if (resolvedPath.kind === "session-state") {
           await fs.rm(resolveSessionStateFsPath(resolvedPath.path, stateRoot), {
             recursive,

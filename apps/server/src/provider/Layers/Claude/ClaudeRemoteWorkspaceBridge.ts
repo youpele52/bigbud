@@ -4,8 +4,13 @@ import { createRemoteWorkspaceMcpBridge } from "../../../remote-workspace-bridge
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 import type { ThreadOrchestrationHttpConfig } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
+import {
+  REMOTE_WORKSPACE_MCP_SERVER_NAME,
+  REMOTE_WORKSPACE_TOOL_NAMES,
+  remoteWorkspaceMcpToolId,
+} from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 
-const CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 const CLAUDE_REMOTE_WORKSPACE_BUILTIN_TOOLS = [
   "AskUserQuestion",
   "TaskCreate",
@@ -15,12 +20,8 @@ const CLAUDE_REMOTE_WORKSPACE_BUILTIN_TOOLS = [
   "TodoWrite",
   "ExitPlanMode",
 ] as const;
-const CLAUDE_REMOTE_WORKSPACE_ALLOWED_TOOLS = [
-  `mcp__${CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME}__read`,
-  `mcp__${CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME}__grep`,
-  `mcp__${CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME}__glob`,
-  `mcp__${CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME}__list`,
-] as const;
+const CLAUDE_REMOTE_WORKSPACE_ALLOWED_TOOLS =
+  REMOTE_WORKSPACE_TOOL_NAMES.map(remoteWorkspaceMcpToolId);
 
 export interface ClaudeRemoteWorkspaceBridge {
   readonly cwd: string;
@@ -31,6 +32,7 @@ export interface ClaudeRemoteWorkspaceBridge {
 export async function createClaudeRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
   httpConfig: ThreadOrchestrationHttpConfig,
+  readinessProbe?: RemoteWorkspaceReadinessProbe,
 ): Promise<ClaudeRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceMcpBridge(
     workspaceTarget,
@@ -41,6 +43,7 @@ export async function createClaudeRemoteWorkspaceBridge(
       "",
     ],
     httpConfig,
+    readinessProbe,
   );
 
   return {
@@ -50,7 +53,7 @@ export async function createClaudeRemoteWorkspaceBridge(
       tools: [...CLAUDE_REMOTE_WORKSPACE_BUILTIN_TOOLS],
       allowedTools: [...CLAUDE_REMOTE_WORKSPACE_ALLOWED_TOOLS],
       mcpServers: {
-        [CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME]: {
+        [REMOTE_WORKSPACE_MCP_SERVER_NAME]: {
           command: resolveNodeExecutable(),
           args: [bridge.serverPath],
         },

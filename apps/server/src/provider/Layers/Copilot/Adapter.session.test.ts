@@ -12,6 +12,7 @@ import type {
 } from "@github/copilot-sdk";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { vi } from "vitest";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -73,11 +74,43 @@ class FakeCopilotClient {
 const THREAD_ID = ThreadId.makeUnsafe("thread-copilot-remote");
 
 describe("CopilotAdapter remote workspace sessions", () => {
+  it.effect("fails before creating Copilot when remote workspace readiness times out", () => {
+    const clientFactory = vi.fn(() => new FakeCopilotClient() as never);
+    const layer = makeCopilotAdapterLive({
+      clientFactory,
+      remoteWorkspaceReadinessProbe: async () => {
+        throw new Error("remote workspace readiness timed out");
+      },
+    }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/copilot-readiness-test", "/tmp")),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* CopilotAdapter;
+      const result = yield* adapter
+        .startSession({
+          threadId: THREAD_ID,
+          provider: "copilot",
+          providerRuntimeExecutionTargetId: "local",
+          workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22",
+          cwd: "/srv/project",
+          runtimeMode: "approval-required",
+        })
+        .pipe(Effect.result);
+
+      assert.equal(result._tag, "Failure");
+      assert.equal(clientFactory.mock.calls.length, 0);
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect("starts remote workspace sessions locally with a remote session-fs bridge", () => {
     const client = new FakeCopilotClient();
     const customBinaryPath = "/tmp/custom/copilot";
     let createdClientOptions: CopilotClientOptions | undefined;
     const layer = makeCopilotAdapterLive({
+      remoteWorkspaceReadinessProbe: async () => ({ os: "linux", architecture: "x86_64" }),
       clientFactory: (options: CopilotClientOptions) => {
         createdClientOptions = options;
         return client as unknown as import("@github/copilot-sdk").CopilotClient;
@@ -163,7 +196,8 @@ describe("CopilotAdapter remote workspace sessions", () => {
         return;
       }
 
-      assert.equal(createdConfig.workingDirectory, "/srv/project");
+      assert.equal(createdConfig.workingDirectory, createdClientOptions?.workingDirectory);
+      assert.notEqual(createdConfig.workingDirectory, "/srv/project");
       assert.equal(
         Array.isArray(createdConfig.excludedTools) &&
           createdConfig.excludedTools.includes("read_bash"),

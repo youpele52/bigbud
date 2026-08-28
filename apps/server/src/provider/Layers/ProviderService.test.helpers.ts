@@ -264,9 +264,12 @@ export function makeProviderServiceLayer(options?: {
   const cliProxy = makeFakeCodexAdapter("cliProxy", {
     sessionRecovery: options?.cliProxySessionRecovery ?? "unsupported",
   });
+  const kilocode = makeFakeCodexAdapter("kilocode");
   const copilot = makeFakeCodexAdapter("copilot");
   const opencode = makeFakeCodexAdapter("opencode");
   const pi = makeFakeCodexAdapter("pi");
+  const cursor = makeFakeCodexAdapter("cursor");
+  const devin = makeFakeCodexAdapter("devin");
   const includeCliProxyAdapter = options?.includeCliProxyAdapter !== false;
   const registry: typeof ProviderAdapterRegistry.Service = {
     getByProvider: (provider) =>
@@ -278,18 +281,27 @@ export function makeProviderServiceLayer(options?: {
             ? Effect.succeed(cliProxy.adapter)
             : provider === "copilot"
               ? Effect.succeed(copilot.adapter)
-              : provider === "opencode"
-                ? Effect.succeed(opencode.adapter)
-                : provider === "pi"
-                  ? Effect.succeed(pi.adapter)
-                  : Effect.fail(new ProviderUnsupportedError({ provider })),
+              : provider === "cursor"
+                ? Effect.succeed(cursor.adapter)
+                : provider === "devin"
+                  ? Effect.succeed(devin.adapter)
+                  : provider === "opencode"
+                    ? Effect.succeed(opencode.adapter)
+                    : provider === "kilocode"
+                      ? Effect.succeed(kilocode.adapter)
+                      : provider === "pi"
+                        ? Effect.succeed(pi.adapter)
+                        : Effect.fail(new ProviderUnsupportedError({ provider })),
     listProviders: () =>
       Effect.succeed([
         "codex",
         "claudeAgent",
         ...(includeCliProxyAdapter ? (["cliProxy"] as const) : []),
         "copilot",
+        "cursor",
+        "devin",
         "opencode",
+        "kilocode",
         "pi",
       ]),
   };
@@ -338,7 +350,10 @@ export function makeProviderServiceLayer(options?: {
     codex,
     claude,
     cliProxy,
+    kilocode,
     copilot,
+    cursor,
+    devin,
     opencode,
     pi,
     layer,

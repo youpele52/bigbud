@@ -18,7 +18,10 @@ import {
 
 const validationManager = new FakeCodexManager();
 const validationLayer = it.layer(
-  makeCodexAdapterLive({ manager: validationManager }).pipe(
+  makeCodexAdapterLive({
+    manager: validationManager,
+    remoteWorkspaceReadinessProbe: async () => ({ os: "linux", architecture: "x86_64" }),
+  }).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),

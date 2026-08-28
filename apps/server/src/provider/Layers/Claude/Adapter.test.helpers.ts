@@ -89,6 +89,8 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   > = [];
   public closeCalls = 0;
   public reopenOnReinitialize = false;
+  public mcpConnectedAfterIteration = false;
+  public iterationStarted = false;
 
   setInitializationResponse(response: ClaudeInitializationResult): void {
     this.initializationResponse = response;
@@ -187,7 +189,9 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   readonly mcpServerStatus: ClaudeQueryRuntime["mcpServerStatus"] = async () => {
     this.mcpServerStatusCalls.push(undefined);
     this.throwControlFailure("mcpServerStatus");
-    return this.mcpServerStatusesResult;
+    return this.mcpConnectedAfterIteration && !this.iterationStarted
+      ? this.mcpServerStatusesResult.map((status) => ({ ...status, status: "pending" as const }))
+      : this.mcpServerStatusesResult;
   };
 
   readonly setMcpPermissionModeOverride: ClaudeQueryRuntime["setMcpPermissionModeOverride"] =
@@ -247,6 +251,7 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   };
 
   [Symbol.asyncIterator](): AsyncIterator<SDKMessage> {
+    this.iterationStarted = true;
     return {
       next: () => {
         if (this.queue.length > 0) {
@@ -285,6 +290,7 @@ export function makeHarness(config?: {
   readonly nativeEventLogger?: ClaudeAdapterLiveOptions["nativeEventLogger"];
   readonly cwd?: string;
   readonly baseDir?: string;
+  readonly remoteWorkspaceReadinessProbe?: ClaudeAdapterLiveOptions["remoteWorkspaceReadinessProbe"];
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -295,6 +301,9 @@ export function makeHarness(config?: {
     | undefined;
 
   const adapterOptions: ClaudeAdapterLiveOptions = {
+    remoteWorkspaceReadinessProbe:
+      config?.remoteWorkspaceReadinessProbe ??
+      (async () => ({ os: "linux", architecture: "x86_64" })),
     createQuery: (input) => {
       createInput = input;
       return query;

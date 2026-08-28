@@ -140,6 +140,7 @@ export const ServerProvider = Schema.Struct({
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
+  supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
   supportsSteer: Schema.optional(Schema.Boolean),
   turnControl: Schema.optional(
     Schema.Struct({

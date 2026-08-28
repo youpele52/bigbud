@@ -7,6 +7,10 @@ import {
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import { renderRemoteWorkspaceMcpServerSource } from "./remoteWorkspaceMcpBridge.template.ts";
+import {
+  probeRemoteWorkspaceReadiness,
+  type RemoteWorkspaceReadinessProbe,
+} from "./remoteWorkspaceReadiness.ts";
 
 export interface RemoteWorkspaceMcpBridge {
   readonly cwd: string;
@@ -31,7 +35,9 @@ export async function createRemoteWorkspaceMcpBridge(
   prefix: string,
   readmeLines: ReadonlyArray<string>,
   httpConfig: ThreadOrchestrationHttpConfig,
+  readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
 ): Promise<RemoteWorkspaceMcpBridge> {
+  await readinessProbe(workspaceTarget);
   const bridge = await createRemoteWorkspaceBridge({
     workspaceTarget,
     prefix,

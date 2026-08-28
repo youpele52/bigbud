@@ -137,7 +137,11 @@ export const makeStartSession =
         isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
         isRemoteWorkspaceTarget(executionContext.workspaceTarget)
           ? yield* Effect.tryPromise({
-              try: () => createCopilotRemoteWorkspaceBridge(executionContext.workspaceTarget),
+              try: () =>
+                createCopilotRemoteWorkspaceBridge(
+                  executionContext.workspaceTarget,
+                  deps.options?.remoteWorkspaceReadinessProbe,
+                ),
               catch: (cause) =>
                 new ProviderAdapterProcessError({
                   provider: PROVIDER,
@@ -151,8 +155,7 @@ export const makeStartSession =
             })
           : undefined;
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
-      const sessionWorkingDirectory =
-        remoteWorkspaceBridge?.clientSessionFsConfig.initialCwd ?? input.cwd;
+      const sessionWorkingDirectory = runtimeCwd;
       const clientOptions = makeCopilotClientOptions({
         binaryPath: copilotSettings.binaryPath,
         ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),

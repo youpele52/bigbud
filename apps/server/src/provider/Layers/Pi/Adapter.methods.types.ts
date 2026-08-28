@@ -1,6 +1,7 @@
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type {
   ActivePiSession,
   PiEmitEvents,
@@ -11,6 +12,7 @@ import type {
 } from "./Adapter.types.ts";
 
 export interface PiAdapterMethodDependencies {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly attachmentsDir: string;
   readonly stateDir: string;
   readonly host: string | undefined;

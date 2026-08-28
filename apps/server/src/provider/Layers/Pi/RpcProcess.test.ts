@@ -123,6 +123,7 @@ describe("createPiRpcProcess", () => {
         cwd: "/srv/project",
       },
       undefined,
+      undefined,
     );
     expect(spawnMock).toHaveBeenCalledWith(
       "/custom/pi",

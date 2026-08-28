@@ -113,6 +113,7 @@ describe("local workspace watcher child integration", () => {
       expect(events.at(-1)).toMatchObject({ backend: expect.stringMatching(/native|poll/) });
     } finally {
       agent.close();
+      await consume.catch(() => undefined);
     }
   });
 });

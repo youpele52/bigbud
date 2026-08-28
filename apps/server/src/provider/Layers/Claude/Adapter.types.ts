@@ -27,6 +27,7 @@ import type {
 import type { Deferred, Effect, Fiber, Queue } from "effect";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ProviderAdapterError, ProviderAdapterProcessError } from "../../Errors.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type { McpServerStatusEntry } from "@bigbud/contracts";
 import type { ClaudeInterruptReceipt, ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 import type { ClaudeTaskState } from "./Adapter.tasks.ts";
@@ -160,6 +161,7 @@ export interface ClaudeSessionContext {
 }
 
 export interface ClaudeAdapterLiveOptions {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly harness?: ClaudeHarnessConfig;
   readonly resolveHarness?: (
     input: ProviderSessionStartInput,

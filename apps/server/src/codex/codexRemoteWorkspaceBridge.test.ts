@@ -15,6 +15,7 @@ describe("codexRemoteWorkspaceBridge", () => {
         cwd: "/srv/project",
       },
       { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+      async () => ({ os: "linux", architecture: "x86_64" }),
     );
 
     expect(bridge.cwd).toContain("bigbud-codex-remote-workspace-");

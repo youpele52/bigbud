@@ -74,6 +74,9 @@ export function makePiStartSession(
           providerRuntimeTarget,
           workspaceTarget,
           orchestrationBridge,
+          ...(deps.remoteWorkspaceReadinessProbe
+            ? { remoteWorkspaceReadinessProbe: deps.remoteWorkspaceReadinessProbe }
+            : {}),
           ...(resumeCursor?.sessionFile ? { sessionFile: resumeCursor.sessionFile } : {}),
           env: process.env,
         }),
@@ -149,7 +152,7 @@ export function makePiStartSession(
     session.process.child.once("exit", onExit);
 
     yield* Effect.gen(function* () {
-      yield* refreshSessionState(session).pipe(Effect.orElseSucceed(() => undefined));
+      yield* refreshSessionState(session);
       if (input.modelSelection) {
         yield* applyModelSelection({ session, modelSelection: input.modelSelection }).pipe(
           Effect.tapError((error) =>
@@ -159,7 +162,7 @@ export function makePiStartSession(
             }),
           ),
         );
-        yield* refreshSessionState(session).pipe(Effect.orElseSucceed(() => undefined));
+        yield* refreshSessionState(session);
       }
     }).pipe(
       Effect.onError(() =>

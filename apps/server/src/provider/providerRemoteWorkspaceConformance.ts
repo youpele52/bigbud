@@ -1,4 +1,5 @@
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
+import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
 
 export type ProviderRemoteWorkspaceBackend = "agent-runtime" | "unsupported";
 
@@ -36,15 +37,15 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
   },
   cursor: {
     provider: "cursor",
-    backend: "unsupported",
-    supportsLocalRuntimeRemoteWorkspace: false,
-    reason: "Cursor custom tools are not yet backed by the provider-neutral runtime.",
+    backend: "agent-runtime",
+    supportsLocalRuntimeRemoteWorkspace: true,
+    reason: "Cursor ACP filesystem and terminal callbacks dispatch through the remote agent.",
   },
   devin: {
     provider: "devin",
-    backend: "unsupported",
-    supportsLocalRuntimeRemoteWorkspace: false,
-    reason: "Devin ACP still starts from a local cwd and has no remote workspace bridge.",
+    backend: "agent-runtime",
+    supportsLocalRuntimeRemoteWorkspace: true,
+    reason: "Devin ACP filesystem and terminal callbacks dispatch through the remote agent.",
   },
   kilocode: {
     provider: "kilocode",
@@ -74,4 +75,20 @@ export function getProviderRemoteWorkspaceConformance(
     throw new Error(`Provider remote workspace conformance is not registered for '${provider}'.`);
   }
   return conformance;
+}
+
+export function providerAdvertisesRemoteWorkspaceSupport(
+  snapshot: Pick<
+    ServerProvider,
+    "auth" | "enabled" | "initialProbeComplete" | "installed" | "provider" | "status"
+  >,
+): boolean {
+  return (
+    getProviderRemoteWorkspaceConformance(snapshot.provider).supportsLocalRuntimeRemoteWorkspace &&
+    snapshot.enabled &&
+    snapshot.installed &&
+    snapshot.initialProbeComplete === true &&
+    snapshot.status === "ready" &&
+    snapshot.auth.status === "authenticated"
+  );
 }

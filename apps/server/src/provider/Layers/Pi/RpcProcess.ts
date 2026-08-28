@@ -85,6 +85,7 @@ async function preparePiRpcProcessBridge(
   return createPiRemoteWorkspaceBridge(
     options.workspaceTarget,
     options.orchestrationBridge?.httpConfig,
+    options.remoteWorkspaceReadinessProbe,
   );
 }
 

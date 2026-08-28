@@ -4,6 +4,7 @@ import type { PiThinkingLevel } from "@bigbud/contracts";
 import type { PiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
 import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export interface PiRpcImage {
   readonly type: "image";
@@ -322,6 +323,7 @@ export type PiRpcStdoutEvent =
 export type PiRpcStdoutMessage = PiRpcResponse | PiRpcStdoutEvent;
 
 export interface PiRpcProcessOptions {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly binaryPath: string;
   readonly providerRuntimeTarget: ProviderRuntimeTarget;
   readonly workspaceTarget: WorkspaceTarget;

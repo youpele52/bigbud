@@ -29,4 +29,17 @@ describe("remoteWorkspaceSessionFsBridge", () => {
       path: "/etc/hosts",
     });
   });
+
+  it("maps synthetic bridge paths back into the remote workspace", () => {
+    expect(
+      resolveSessionFsPath(
+        "/tmp/bigbud-cursor-bridge/src/index.ts",
+        "/srv/project",
+        "/tmp/bigbud-cursor-bridge",
+      ),
+    ).toEqual({
+      kind: "workspace",
+      path: "/srv/project/src/index.ts",
+    });
+  });
 });

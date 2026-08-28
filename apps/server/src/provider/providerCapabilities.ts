@@ -79,9 +79,6 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
   },
   devin: {
     supportsRemoteProviderRuntime: false,
-    // Devin ACP currently starts with the local cwd and has no remote
-    // workspace bridge. Keep the declaration honest until its adapter uses
-    // WorkspaceRuntime for remote targets.
     supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("devin"),
     toolInjectionMode: "custom-tools",
     needsBuiltinsDisabled: false,

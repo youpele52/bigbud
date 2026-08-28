@@ -2,7 +2,10 @@ import type { RemoteAgentHello } from "./remoteAgentProtocol.ts";
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import { RemoteAgentCapabilityError } from "./remoteAgentConnectionPool.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
-import { resolveLocalWorkspaceWatchAgentBinary } from "./localWorkspaceWatchAgent.binary.ts";
+import {
+  LocalWorkspaceWatchAgentUnavailableError,
+  resolveLocalWorkspaceWatchAgentBinary,
+} from "./localWorkspaceWatchAgent.binary.ts";
 
 const DEFAULT_RESTART_DELAY_MS = 250;
 const MAX_RESTART_DELAY_MS = 30_000;
@@ -85,7 +88,9 @@ export class LocalWorkspaceWatchAgent {
 
   async getConnection(): Promise<RemoteAgentConnection> {
     if (this.closed) {
-      throw new RemoteAgentConnectionError("Local workspace watcher agent is closed.");
+      throw new LocalWorkspaceWatchAgentUnavailableError(
+        "Local workspace watcher agent is closed.",
+      );
     }
     if (this.live) return this.live.connection;
     if (!this.starting) {

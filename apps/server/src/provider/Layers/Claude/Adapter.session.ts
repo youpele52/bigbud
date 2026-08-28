@@ -178,6 +178,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
               createClaudeRemoteWorkspaceBridge(
                 executionContext.workspaceTarget,
                 orchestrationBridge.httpConfig,
+                deps.remoteWorkspaceReadinessProbe,
               ),
             catch: (cause) =>
               new ProviderAdapterProcessError({
@@ -344,6 +345,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       void cleanupBridge().catch(() => undefined);
     }).pipe(Effect.tap(() => Ref.set(contextRef, undefined)));
 
+    yield* startRuntimeStream({ context, logNativeSdkMessage, runFork }).pipe(
+      Effect.tapError(() => cleanupRegisteredSession),
+    );
+
     yield* initializeClaudeMcpLifecycle({ context, query: queryRuntime, threadId }).pipe(
       Effect.tapError(() => cleanupRegisteredSession),
     );
@@ -358,10 +363,6 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       dangerousPermissionBypass: permissionMode === "bypassPermissions",
       fastMode,
     }).pipe(Effect.tapError(() => cleanupRegisteredSession));
-
-    yield* startRuntimeStream({ context, logNativeSdkMessage, runFork }).pipe(
-      Effect.tapError(() => cleanupRegisteredSession),
-    );
 
     return {
       ...session,

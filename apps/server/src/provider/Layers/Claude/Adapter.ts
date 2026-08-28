@@ -1,11 +1,3 @@
-/**
- * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
- *
- * Wraps `@anthropic-ai/claude-agent-sdk` query sessions behind the generic
- * provider adapter contract and emits canonical runtime events.
- *
- * @module ClaudeAdapterLive
- */
 import {
   query,
   type Options as ClaudeQueryOptions,
@@ -97,6 +89,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   });
 
   const startSession: ClaudeAdapterShape["startSession"] = makeStartSession({
+    ...(options?.remoteWorkspaceReadinessProbe
+      ? { remoteWorkspaceReadinessProbe: options.remoteWorkspaceReadinessProbe }
+      : {}),
     fileSystem,
     serverConfig,
     serverSettingsService,

@@ -15,6 +15,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import {
   ABOUT_TIMEOUT_MS,
   buildDevinProviderSnapshot,
+  markDevinCredentialsVerified,
   parseDevinVersionOutput,
 } from "./Provider.about.ts";
 import { hasDevinModelCapabilities } from "./Provider.config.ts";
@@ -195,6 +196,7 @@ export const checkDevinProviderStatus = Effect.fn("checkDevinProviderStatus")(
     let discoveredModels =
       Option.none<ReadonlyArray<import("@bigbud/contracts").ServerProviderModel>>();
     let discoveryWarning: string | undefined;
+    let credentialsVerified = false;
     if (parsed.auth.status !== "unauthenticated") {
       const discoveryExit = yield* Effect.exit(
         discoverDevinModelsViaAcp(devinSettings).pipe(
@@ -209,18 +211,21 @@ export const checkDevinProviderStatus = Effect.fn("checkDevinProviderStatus")(
         discoveryWarning = "Devin ACP model discovery failed. Model switching may be limited.";
       } else if (Option.isNone(discoveryExit.value)) {
         discoveryWarning = `Devin ACP model discovery timed out after ${DEVIN_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms. Model switching may be limited.`;
-      } else if (discoveryExit.value.value.length === 0) {
-        discoveryWarning =
-          "Devin ACP model discovery returned no built-in models. Model switching may be limited.";
       } else {
-        discoveredModels = discoveryExit.value;
+        credentialsVerified = true;
+        if (discoveryExit.value.value.length === 0) {
+          discoveryWarning =
+            "Devin ACP model discovery returned no built-in models. Model switching may be limited.";
+        } else {
+          discoveredModels = discoveryExit.value;
+        }
       }
     }
 
     return buildDevinProviderSnapshot({
       checkedAt,
       devinSettings,
-      parsed,
+      parsed: credentialsVerified ? markDevinCredentialsVerified(parsed) : parsed,
       discoveredModels: Option.getOrElse(
         Option.filter(discoveredModels, (models) => models.length > 0),
         () => [] as const,

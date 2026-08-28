@@ -9,6 +9,9 @@ import type { DevinSessionContext } from "./Adapter.helpers.ts";
 import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 
 const capturedAcpInputs: Array<{
+  readonly cwd?: string;
+  readonly spawnCwd?: string;
+  readonly clientCapabilities?: unknown;
   readonly mcpServers?: ReadonlyArray<{
     readonly name: string;
     readonly args?: ReadonlyArray<string>;
@@ -65,6 +68,48 @@ describe("DevinAdapter startSession orchestration wiring", () => {
       yield* Effect.promise(
         () => sessions.get(THREAD_ID)?.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
       );
+      yield* Effect.ignore(Scope.close(notificationScope, Exit.void));
+    }),
+  );
+
+  it.effect("fails before starting ACP when the remote agent lacks PTY support", () =>
+    Effect.gen(function* () {
+      capturedAcpInputs.length = 0;
+      const sessions = new Map<ThreadId, DevinSessionContext>();
+      const notificationScope = yield* Scope.make();
+      const deps = makeAcpStartSessionTestDeps({
+        stateDir: "/tmp/bigbud-devin-remote-session",
+        sessions,
+      });
+      const exit = yield* Effect.exit(
+        makeStartSessionEffect(
+          {
+            ...deps,
+            notificationScope,
+            remoteAgentPtyResolver: {
+              resolveWorkspace: async () => ({ openWorkspace: async () => ({}) }) as never,
+              resolvePty: async () => {
+                throw new Error("terminal.pty unavailable on linux/arm64");
+              },
+            },
+            getDevinSettings: () => Effect.succeed({ binaryPath: "devin" }),
+          },
+          {
+            threadId: THREAD_ID,
+            provider: "devin",
+            cwd: "/srv/devin-project",
+            runtimeMode: "approval-required",
+            providerRuntimeExecutionTargetId: "local",
+            workspaceExecutionTargetId: "ssh:devbox",
+          },
+        ).pipe(Effect.scoped),
+      );
+
+      assert.strictEqual(Exit.isFailure(exit), true);
+      if (Exit.isFailure(exit)) {
+        assert.match(String(exit.cause), /terminal\.pty unavailable on linux\/arm64/);
+      }
+      assert.strictEqual(capturedAcpInputs.length, 0);
       yield* Effect.ignore(Scope.close(notificationScope, Exit.void));
     }),
   );

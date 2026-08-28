@@ -113,6 +113,9 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
   });
 
   const methods = makePiAdapterMethods({
+    ...(options?.remoteWorkspaceReadinessProbe
+      ? { remoteWorkspaceReadinessProbe: options.remoteWorkspaceReadinessProbe }
+      : {}),
     attachmentsDir: serverConfig.attachmentsDir,
     stateDir: serverConfig.stateDir,
     host: serverConfig.host,

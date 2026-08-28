@@ -5,7 +5,7 @@ import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 
 import { ProviderService } from "../Services/ProviderService.ts";
-import { ProviderValidationError } from "../Errors.ts";
+import { ProviderAdapterProcessError, ProviderValidationError } from "../Errors.ts";
 
 import {
   asRequestId,
@@ -188,7 +188,17 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
       const threadId = asThreadId("thread-session-timeout");
       const priorStarts = routing.codex.startSession.mock.calls.length;
+      const priorStops = routing.codex.stopSession.mock.calls.length;
       routing.codex.startSession.mockImplementationOnce(() => Effect.never);
+      routing.codex.stopSession.mockImplementationOnce(() =>
+        Effect.fail(
+          new ProviderAdapterProcessError({
+            provider: "codex",
+            threadId,
+            detail: "cleanup failed",
+          }),
+        ),
+      );
       const fiber = yield* provider
         .startSession(threadId, {
           provider: "codex",
@@ -210,6 +220,8 @@ routing.layer("ProviderServiceLive routing", (it) => {
             "Provider 'codex' session startup timed out after 45s before the first turn could be sent.",
         }),
       );
+      assert.equal(routing.codex.stopSession.mock.calls.length, priorStops + 1);
+      assert.isFalse(yield* routing.codex.hasSession(threadId));
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
