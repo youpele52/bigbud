@@ -61,6 +61,13 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
     if (context.stopped) return;
 
     context.stopped = true;
+    const updatedAt = yield* nowIso;
+    context.session = {
+      ...context.session,
+      status: "closed",
+      activeTurnId: undefined,
+      updatedAt,
+    };
 
     for (const pending of context.pendingApprovals.values()) {
       yield* Deferred.succeed(pending.decision, "cancel");
@@ -116,14 +123,6 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       );
       yield* cleanupBridge;
     }
-
-    const updatedAt = yield* nowIso;
-    context.session = {
-      ...context.session,
-      status: "closed",
-      activeTurnId: undefined,
-      updatedAt,
-    };
 
     if (options?.emitExitEvent !== false) {
       const stamp = yield* makeEventStamp();
