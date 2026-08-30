@@ -23,9 +23,10 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     chatsExpanded: true,
     favouritesExpanded: true,
+    lastActiveThreadId: null,
     projectExpandedById: {},
     projectOrder: [],
-    projectsExpanded: false,
+    projectsExpanded: true,
     remoteProjectsExpanded: false,
     selectedProjectId: null,
     threadLastVisitedAtById: {},
@@ -35,6 +36,38 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
 }
 
 describe("uiStateStore pure functions", () => {
+  it("opens local projects when accordion state is fresh or missing", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+      },
+    });
+
+    try {
+      expect(readPersistedState().projectsExpanded).toBe(true);
+      values.set(PERSISTED_STATE_KEY, JSON.stringify({}));
+      expect(readPersistedState().projectsExpanded).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps a persisted local projects collapse choice", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === PERSISTED_STATE_KEY ? JSON.stringify({ projectsExpanded: false }) : null,
+      },
+    });
+
+    try {
+      expect(readPersistedState().projectsExpanded).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("markThreadUnread moves lastVisitedAt before completion for a completed thread", () => {
     const threadId = ThreadId.makeUnsafe("thread-1");
     const latestTurnCompletedAt = "2026-02-25T12:30:00.000Z";

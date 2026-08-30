@@ -1,4 +1,12 @@
+import { ThreadId } from "@bigbud/contracts";
+
 import type { PersistedUiState } from "./ui.store.types";
+
+export function sanitizePersistedLastActiveThreadId(value: unknown): ThreadId | null {
+  return typeof value === "string" && value.length > 0 && value.trim() === value
+    ? ThreadId.makeUnsafe(value)
+    : null;
+}
 
 export function sanitizePersistedThreadLastVisitedAt(
   value: PersistedUiState["threadLastVisitedAtById"],

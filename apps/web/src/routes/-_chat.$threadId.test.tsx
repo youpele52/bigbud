@@ -46,12 +46,16 @@ vi.mock("../stores/main", () => ({
   useStore: (
     selector: (state: {
       bootstrapComplete: boolean;
+      projects: Array<{ id: string }>;
+      sidebarPinnedThreadIds: ThreadId[];
       threads: Array<{ id: ThreadId; title: string; purpose: "standard" | "side-chat" }>;
       threadHydrationById: Record<string, { status: typeof routeState.hydrationStatus }>;
     }) => unknown,
   ) =>
     selector({
       bootstrapComplete: true,
+      projects: [],
+      sidebarPinnedThreadIds: [],
       threads: [{ id: threadId, purpose: routeState.purpose, title: "Thread" }],
       threadHydrationById: { [threadId]: { status: routeState.hydrationStatus } },
     }),

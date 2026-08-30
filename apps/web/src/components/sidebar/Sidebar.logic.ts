@@ -141,6 +141,39 @@ export function getVisibleRecentThreadIds<TThreadId>(input: {
     : input.renderedChatThreadIds.slice(0, input.initialVisibleCount);
 }
 
+export function getPreviewItemsIncludingActive<TItem, TId>(input: {
+  items: readonly TItem[];
+  activeId: TId | null | undefined;
+  showAll: boolean;
+  previewLimit: number;
+  getId: (item: TItem) => TId;
+}): { visibleItems: TItem[]; hiddenCount: number; totalCount: number } {
+  const uniqueItems: TItem[] = [];
+  const seenIds = new Set<TId>();
+  for (const item of input.items) {
+    const id = input.getId(item);
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+    uniqueItems.push(item);
+  }
+  if (input.showAll || uniqueItems.length <= input.previewLimit) {
+    return { visibleItems: uniqueItems, hiddenCount: 0, totalCount: uniqueItems.length };
+  }
+
+  const visibleIds = new Set(
+    uniqueItems.slice(0, input.previewLimit).map((item) => input.getId(item)),
+  );
+  if (input.activeId != null && seenIds.has(input.activeId)) {
+    visibleIds.add(input.activeId);
+  }
+  const visibleItems = uniqueItems.filter((item) => visibleIds.has(input.getId(item)));
+  return {
+    visibleItems,
+    hiddenCount: uniqueItems.length - visibleItems.length,
+    totalCount: uniqueItems.length,
+  };
+}
+
 export function resolveAdjacentThreadId<T>(input: {
   threadIds: readonly T[];
   currentThreadId: T | null;

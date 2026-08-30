@@ -17,6 +17,7 @@ import {
 } from "../logic/orchestration/thread-hydration-events.logic";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
+const STARTUP_LOCAL_PROJECT_CATALOG_LIMIT = 2;
 export {
   loadAllProjectCatalog,
   loadMoreProjectCatalog,
@@ -29,6 +30,7 @@ export function resolveSelectedThreadIdFromPath(
   if (
     !/^\/[^/]+$/.test(pathname) ||
     pathname === "/automations" ||
+    pathname === "/plugins" ||
     pathname === "/usage" ||
     pathname === "/settings"
   ) {
@@ -74,7 +76,10 @@ export async function runBoundedBootstrap(input: {
         scopes.map((scope) =>
           input.api.orchestration.getStartupProjectCatalog({
             scope,
-            limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+            limit:
+              scope === "local"
+                ? STARTUP_LOCAL_PROJECT_CATALOG_LIMIT
+                : STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
             ...(priorityProjectId ? { priorityProjectId } : {}),
           }),
         ),

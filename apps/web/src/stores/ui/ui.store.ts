@@ -13,7 +13,10 @@ import {
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
-import { sanitizePersistedThreadLastVisitedAt } from "./ui.store.persistence";
+import {
+  sanitizePersistedLastActiveThreadId,
+  sanitizePersistedThreadLastVisitedAt,
+} from "./ui.store.persistence";
 import { type SyncProjectInput, type SyncThreadInput, type UiState } from "./ui.store.types";
 
 export {
@@ -28,7 +31,10 @@ export {
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
-export { sanitizePersistedThreadLastVisitedAt } from "./ui.store.persistence";
+export {
+  sanitizePersistedLastActiveThreadId,
+  sanitizePersistedThreadLastVisitedAt,
+} from "./ui.store.persistence";
 export type {
   PersistedUiState,
   SyncProjectInput,
@@ -128,6 +134,10 @@ export function markThreadVisited(state: UiState, threadId: ThreadId, visitedAt?
       [threadId]: at,
     },
   };
+}
+
+export function setLastActiveThreadId(state: UiState, threadId: ThreadId | null): UiState {
+  return state.lastActiveThreadId === threadId ? state : { ...state, lastActiveThreadId: threadId };
 }
 
 export function markThreadUnread(
@@ -235,6 +245,7 @@ interface UiStateStore extends UiState {
   markThreadVisited: (threadId: ThreadId, visitedAt?: string) => void;
   markThreadUnread: (threadId: ThreadId, latestTurnCompletedAt: string | null | undefined) => void;
   clearThreadUi: (threadId: ThreadId) => void;
+  setLastActiveThreadId: (threadId: ThreadId | null) => void;
   setThreadChangedFilesExpanded: (threadId: ThreadId, turnId: string, expanded: boolean) => void;
   setChatsExpanded: (expanded: boolean) => void;
   setFavouritesExpanded: (expanded: boolean) => void;
@@ -255,6 +266,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   markThreadUnread: (threadId, latestTurnCompletedAt) =>
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
+  setLastActiveThreadId: (threadId) => set((state) => setLastActiveThreadId(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setChatsExpanded: (expanded) =>
@@ -284,8 +296,12 @@ if (typeof window !== "undefined") {
     }
     try {
       const parsed = JSON.parse(event.newValue) as {
+        lastActiveThreadId?: unknown;
         threadLastVisitedAtById?: Record<string, string>;
       };
+      useUiStateStore
+        .getState()
+        .setLastActiveThreadId(sanitizePersistedLastActiveThreadId(parsed.lastActiveThreadId));
       const incoming = sanitizePersistedThreadLastVisitedAt(parsed.threadLastVisitedAtById);
       const markVisited = useUiStateStore.getState().markThreadVisited;
       for (const [threadId, visitedAt] of Object.entries(incoming)) {

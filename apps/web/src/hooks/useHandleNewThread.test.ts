@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Project } from "../models/types";
 import { useStore } from "../stores/main";
 import { loadProjectForNewThread } from "./useHandleNewThread";
+import { activateNewThreadRoute } from "./useHandleNewThread.activation";
 
 const projectId = ProjectId.makeUnsafe("project-1");
 const project: Project = {
@@ -148,5 +149,29 @@ describe("loadProjectForNewThread", () => {
       workspaceExecutionTargetId: "remote-workspace",
     });
     expect(useStore.getState().projectCatalogCursorByScope.local).toEqual(cursor);
+  });
+});
+
+describe("automatic new-thread activation", () => {
+  it("does not navigate when currentness changes while creation is in flight", async () => {
+    let current = true;
+    let finishCreation!: () => void;
+    const creation = new Promise<void>((resolve) => {
+      finishCreation = resolve;
+    });
+    const navigate = vi.fn(async () => undefined);
+    const operation = (async () => {
+      await creation;
+      return activateNewThreadRoute({
+        activation: { shouldActivate: () => current },
+        navigate,
+      });
+    })();
+
+    current = false;
+    finishCreation();
+
+    await expect(operation).resolves.toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

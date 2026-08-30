@@ -7,6 +7,7 @@ import {
   initialState,
 } from "./ui.store.types";
 import {
+  sanitizePersistedLastActiveThreadId,
   sanitizePersistedThreadChangedFilesExpanded,
   sanitizePersistedThreadLastVisitedAt,
 } from "./ui.store.persistence";
@@ -74,13 +75,24 @@ export function readPersistedState(): UiState {
     }
     const parsed = JSON.parse(raw) as PersistedUiState;
     hydratePersistedProjectState(parsed);
+    const lastActiveThreadId = sanitizePersistedLastActiveThreadId(parsed.lastActiveThreadId);
+    if (parsed.lastActiveThreadId !== undefined && lastActiveThreadId === null) {
+      const sanitized = { ...parsed };
+      delete sanitized.lastActiveThreadId;
+      try {
+        window.localStorage.setItem(PERSISTED_STATE_KEY, JSON.stringify(sanitized));
+      } catch {
+        // Hydration remains valid even when best-effort repair cannot be written.
+      }
+    }
     return {
       ...initialState,
       chatsExpanded: typeof parsed.chatsExpanded === "boolean" ? parsed.chatsExpanded : true,
       favouritesExpanded:
         typeof parsed.favouritesExpanded === "boolean" ? parsed.favouritesExpanded : true,
+      lastActiveThreadId,
       projectsExpanded:
-        typeof parsed.projectsExpanded === "boolean" ? parsed.projectsExpanded : false,
+        typeof parsed.projectsExpanded === "boolean" ? parsed.projectsExpanded : true,
       remoteProjectsExpanded:
         typeof parsed.remoteProjectsExpanded === "boolean" ? parsed.remoteProjectsExpanded : false,
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
@@ -129,6 +141,7 @@ export function persistState(state: UiState): void {
         chatsExpanded: state.chatsExpanded,
         expandedProjectCwds,
         favouritesExpanded: state.favouritesExpanded,
+        ...(state.lastActiveThreadId ? { lastActiveThreadId: state.lastActiveThreadId } : {}),
         projectOrderCwds,
         projectsExpanded: state.projectsExpanded,
         remoteProjectsExpanded: state.remoteProjectsExpanded,

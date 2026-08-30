@@ -5,6 +5,7 @@ export interface PersistedUiState {
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   favouritesExpanded?: boolean;
+  lastActiveThreadId?: string;
   projectOrderCwds?: string[];
   projectsExpanded?: boolean;
   remoteProjectsExpanded?: boolean;
@@ -26,6 +27,7 @@ export interface UiProjectState {
 }
 
 export interface UiThreadState {
+  lastActiveThreadId: ThreadId | null;
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
 }
@@ -45,9 +47,10 @@ export interface SyncThreadInput {
 export const initialState: UiState = {
   chatsExpanded: true,
   favouritesExpanded: true,
+  lastActiveThreadId: null,
   projectExpandedById: {},
   projectOrder: [],
-  projectsExpanded: false,
+  projectsExpanded: true,
   remoteProjectsExpanded: false,
   selectedProjectId: null,
   threadLastVisitedAtById: {},

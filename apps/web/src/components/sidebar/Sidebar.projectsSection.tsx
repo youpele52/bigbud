@@ -1,8 +1,7 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CloudIcon } from "@hugeicons/core-free-icons";
-import { autoAnimate } from "@formkit/auto-animate";
 import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
-import { useCallback, type RefObject } from "react";
+import { type RefObject } from "react";
 import {
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
@@ -102,12 +101,6 @@ export function SidebarProjectsSection({
   onDragCancel,
   sharedProjectItemProps,
 }: SidebarProjectsSectionProps) {
-  const attachProjectsContentRef = useCallback((node: HTMLElement | null) => {
-    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
-  }, []);
-  const attachRemoteProjectsContentRef = useCallback((node: HTMLElement | null) => {
-    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
-  }, []);
   const localProjects = renderedProjects.filter(
     (entry) => !isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
   );
@@ -186,7 +179,7 @@ export function SidebarProjectsSection({
           </span>
         </SidebarSectionLabel>
 
-        <div ref={attachProjectsContentRef}>
+        <div>
           {isExpanded && shouldShowProjectPathEntry && (
             <SidebarNewProjectFlow
               isElectron={isElectron}
@@ -270,7 +263,7 @@ export function SidebarProjectsSection({
             </span>
           </SidebarSectionLabel>
 
-          <div ref={attachRemoteProjectsContentRef}>
+          <div>
             {isRemoteProjectsExpanded ? (
               <SidebarProjectList
                 renderedProjects={remoteProjects as unknown as RenderedProject[]}

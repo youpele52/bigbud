@@ -38,10 +38,15 @@ function renderChatsSection(input: {
   hasMoreChats: boolean;
   collapsedHiddenChatCount: number | null;
   unloadedChatCount: number | null;
+  activeThreadId?: ThreadId;
 }) {
   return renderToStaticMarkup(
     <SidebarChatsSection
-      {...input}
+      renderedChats={input.renderedChats}
+      showAll={input.showAll}
+      hasMoreChats={input.hasMoreChats}
+      collapsedHiddenChatCount={input.collapsedHiddenChatCount}
+      unloadedChatCount={input.unloadedChatCount}
       isExpanded={input.isExpanded ?? true}
       onExpandedChange={vi.fn()}
       onShowAllChange={vi.fn()}
@@ -53,6 +58,7 @@ function renderChatsSection(input: {
         {
           threadJumpLabelById: new Map(),
           prByThreadId: new Map(),
+          routeThreadId: input.activeThreadId ?? null,
         } as SharedProjectItemProps
       }
     />,
@@ -109,5 +115,20 @@ describe("SidebarChatsSection", () => {
 
     expect(html).not.toContain("Recents");
     expect(html).not.toContain("thread:chat-1");
+  });
+
+  it("includes an active fifth chat in the folded preview with an accurate hidden count", () => {
+    const html = renderChatsSection({
+      renderedChats,
+      activeThreadId: orderedThreadIds[4]!,
+      showAll: false,
+      hasMoreChats: true,
+      collapsedHiddenChatCount: 2,
+      unloadedChatCount: 0,
+    });
+
+    expect(html).toContain("thread:chat-5");
+    expect(html.match(/thread:chat-5/g)).toHaveLength(1);
+    expect(html).toContain("See more (1)");
   });
 });

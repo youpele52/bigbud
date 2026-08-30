@@ -2,8 +2,6 @@ import {
   BUILT_IN_CHATS_PROJECT_ID,
   DEFAULT_RUNTIME_MODE,
   isBuiltInChatsProject,
-  type GetStartupProjectCatalogResult,
-  type NativeApi,
   type ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
@@ -18,7 +16,6 @@ import { useRemoteExecutionAccessGate } from "./useRemoteExecutionAccessGate";
 import { useStore } from "../stores/main";
 import { useThreadById } from "../stores/main";
 import { useUiStateStore } from "../stores/ui";
-import type { Project } from "../models/types";
 import { readNativeApi } from "../rpc/nativeApi";
 import { toastManager } from "../components/ui/toast";
 import {
@@ -30,56 +27,13 @@ import {
   initializeOwnershipFromComposer,
   replaceCanonicalOwnershipCollision,
 } from "../stores/ownership/ownershipLedger.reconcile";
+import {
+  activateNewThreadRoute,
+  type NewThreadActivationOptions,
+} from "./useHandleNewThread.activation";
+import { loadProjectForNewThread } from "./useHandleNewThread.project";
 
-const pendingProjectLoads = new Map<ProjectId, Promise<Project | undefined>>();
-
-export async function loadProjectForNewThread(input: {
-  api: Pick<NativeApi, "orchestration">;
-  projectId: ProjectId;
-  getProject: () => Project | undefined;
-  mergeProjectCatalogPage: (page: GetStartupProjectCatalogResult) => void;
-}): Promise<Project | undefined> {
-  const existingProject = input.getProject();
-  if (existingProject) {
-    return existingProject;
-  }
-
-  const pendingLoad = pendingProjectLoads.get(input.projectId);
-  if (pendingLoad) {
-    return pendingLoad;
-  }
-
-  const load = Promise.allSettled(
-    (["local", "remote"] as const).map((scope) =>
-      input.api.orchestration.getStartupProjectCatalog({
-        scope,
-        limit: 1,
-        priorityProjectId: input.projectId,
-      }),
-    ),
-  )
-    .then((results) => {
-      for (const result of results) {
-        if (result.status !== "fulfilled") continue;
-        const page = result.value;
-        if (page.projects.some((candidate) => candidate.id === input.projectId)) {
-          input.mergeProjectCatalogPage(page);
-        }
-      }
-      const loadedProject = input.getProject();
-      if (loadedProject) return loadedProject;
-      const failures = results.filter((result) => result.status === "rejected");
-      if (failures.length === results.length) {
-        throw failures[0]!.reason;
-      }
-      return undefined;
-    })
-    .finally(() => {
-      pendingProjectLoads.delete(input.projectId);
-    });
-  pendingProjectLoads.set(input.projectId, load);
-  return load;
-}
+export { loadProjectForNewThread } from "./useHandleNewThread.project";
 
 export function resolveContextualNewThreadOptions(input: {
   activeDraftThread:
@@ -152,7 +106,9 @@ export function useHandleNewThread() {
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
       },
+      activation?: NewThreadActivationOptions,
     ): Promise<void> => {
+      const shouldActivate = () => activation?.shouldActivate?.() !== false;
       const normalizedOptions = isBuiltInChatsProject(projectId)
         ? resolveNewChatOptions()
         : options;
@@ -169,11 +125,13 @@ export function useHandleNewThread() {
       const loadedProject = getProject();
       const api = readNativeApi();
       if (!loadedProject && !api) {
-        toastManager.add({
-          type: "error",
-          title: "Could not start a new thread",
-          description: "bigbud is not connected to the server.",
-        });
+        if (shouldActivate()) {
+          toastManager.add({
+            type: "error",
+            title: "Could not start a new thread",
+            description: "bigbud is not connected to the server.",
+          });
+        }
         return Promise.resolve();
       }
       const loadProject = loadedProject
@@ -212,6 +170,7 @@ export function useHandleNewThread() {
         await registerDraftOwnership({ scope: "main", threadId, draft, bindProject: true });
       };
       const showOwnershipUnavailable = (reason: string) => {
+        if (!shouldActivate()) return;
         toastManager.add({
           type: "info",
           title: "Checking your saved draft",
@@ -220,40 +179,47 @@ export function useHandleNewThread() {
       };
       const ensureProjectRemoteAccess = async () => {
         const project = await loadProject.catch((error: unknown) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not start a new thread",
-            description:
-              error instanceof Error ? error.message : "The project could not be loaded.",
-          });
+          if (shouldActivate()) {
+            toastManager.add({
+              type: "error",
+              title: "Could not start a new thread",
+              description:
+                error instanceof Error ? error.message : "The project could not be loaded.",
+            });
+          }
           return null;
         });
         if (project === null) {
           return false;
         }
         if (!project) {
-          toastManager.add({
-            type: "error",
-            title: "Could not start a new thread",
-            description: "The project is unavailable.",
-          });
+          if (shouldActivate()) {
+            toastManager.add({
+              type: "error",
+              title: "Could not start a new thread",
+              description: "The project is unavailable.",
+            });
+          }
           return false;
         }
 
+        if (!shouldActivate()) return false;
         return beginRemoteExecutionTargetAccessCheck({
           executionTargetId: resolveWorkspaceExecutionTargetId(project),
           ...(project.cwd ? { cwd: project.cwd } : {}),
-          onVerified: () => handleNewThread(projectId, normalizedOptions),
+          onVerified: () => handleNewThread(projectId, normalizedOptions, activation),
           resumeOnUnlockOnly: true,
         });
       };
       if (storedDraftThread) {
         return (async () => {
-          if (!(await ensureProjectRemoteAccess())) {
+          if (!(await ensureProjectRemoteAccess()) || !shouldActivate()) {
             return;
           }
           await initializeOwnershipFromComposer({ scope: "main" });
+          if (!shouldActivate()) return;
           const ownership = await resolveDraftOwnership(storedDraftThread);
+          if (!shouldActivate()) return;
           if (ownership.status === "unavailable") {
             showOwnershipUnavailable(ownership.reason);
             return;
@@ -273,9 +239,9 @@ export function useHandleNewThread() {
           if (routeThreadId === targetThreadId) {
             return;
           }
-          await navigate({
-            to: "/$threadId",
-            params: { threadId: targetThreadId },
+          await activateNewThreadRoute({
+            activation,
+            navigate: () => navigate({ to: "/$threadId", params: { threadId: targetThreadId } }),
           });
         })();
       }
@@ -287,15 +253,17 @@ export function useHandleNewThread() {
         !useStore.getState().threads.find((t) => t.id === routeThreadId)
       ) {
         return (async () => {
-          if (!(await ensureProjectRemoteAccess())) {
+          if (!(await ensureProjectRemoteAccess()) || !shouldActivate()) {
             return;
           }
           await initializeOwnershipFromComposer({ scope: "main" });
+          if (!shouldActivate()) return;
 
           const ownership = await resolveDraftOwnership({
             threadId: routeThreadId,
             ...latestActiveDraftThread,
           });
+          if (!shouldActivate()) return;
           if (ownership.status === "unavailable") {
             showOwnershipUnavailable(ownership.reason);
             return;
@@ -314,7 +282,10 @@ export function useHandleNewThread() {
           setProjectDraftThreadId(projectId, targetThreadId);
           await persistDraftOwnership(targetThreadId);
           if (routeThreadId !== targetThreadId) {
-            await navigate({ to: "/$threadId", params: { threadId: targetThreadId } });
+            await activateNewThreadRoute({
+              activation,
+              navigate: () => navigate({ to: "/$threadId", params: { threadId: targetThreadId } }),
+            });
           }
         })();
       }
@@ -322,13 +293,15 @@ export function useHandleNewThread() {
       const threadId = newThreadId();
       const createdAt = new Date().toISOString();
       return (async () => {
-        if (!(await ensureProjectRemoteAccess())) {
+        if (!(await ensureProjectRemoteAccess()) || !shouldActivate()) {
           return;
         }
         await initializeOwnershipFromComposer({ scope: "main" });
+        if (!shouldActivate()) return;
         const concurrentlyCreatedDraft = getDraftThreadByProjectId(projectId);
         if (concurrentlyCreatedDraft) {
           const ownership = await resolveDraftOwnership(concurrentlyCreatedDraft);
+          if (!shouldActivate()) return;
           if (ownership.status === "unavailable") {
             showOwnershipUnavailable(ownership.reason);
             return;
@@ -336,9 +309,10 @@ export function useHandleNewThread() {
           setProjectDraftThreadId(projectId, ownership.threadId);
           await persistDraftOwnership(ownership.threadId);
           if (routeThreadId !== ownership.threadId) {
-            await navigate({
-              to: "/$threadId",
-              params: { threadId: ownership.threadId },
+            await activateNewThreadRoute({
+              activation,
+              navigate: () =>
+                navigate({ to: "/$threadId", params: { threadId: ownership.threadId } }),
             });
           }
           return;
@@ -352,11 +326,12 @@ export function useHandleNewThread() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         await persistDraftOwnership(threadId);
+        if (!shouldActivate()) return;
         applyStickyState(threadId);
 
-        await navigate({
-          to: "/$threadId",
-          params: { threadId },
+        await activateNewThreadRoute({
+          activation,
+          navigate: () => navigate({ to: "/$threadId", params: { threadId } }),
         });
       })();
     },

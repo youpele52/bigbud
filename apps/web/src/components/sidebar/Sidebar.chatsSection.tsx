@@ -1,8 +1,6 @@
 import { Chatting01Icon, Comment03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { autoAnimate } from "@formkit/auto-animate";
 import { SquarePenIcon } from "lucide-react";
-import { useCallback } from "react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
@@ -16,6 +14,8 @@ import {
   SidebarMenuSubItem,
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useSidebarAutoAnimateRef } from "./Sidebar.autoAnimate";
+import { getPreviewItemsIncludingActive } from "./Sidebar.logic";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
 
 export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 4;
@@ -55,17 +55,29 @@ export function SidebarChatsSection({
   chatsSortOrder = "updated_at",
   onChatsSortOrderChange,
 }: SidebarChatsSectionProps) {
-  const attachChatsContentRef = useCallback((node: HTMLElement | null) => {
-    if (node) autoAnimate(node, { duration: 180, easing: "ease-out" });
-  }, []);
-  const hasHiddenChats =
+  const attachChatsContentRef = useSidebarAutoAnimateRef();
+  const preview = getPreviewItemsIncludingActive({
+    items: renderedChats,
+    activeId: sharedProjectItemProps.routeThreadId,
+    showAll,
+    previewLimit: RECENT_CHAT_INITIAL_VISIBLE_COUNT,
+    getId: (entry) => entry.threadId,
+  });
+  const activePreviewAddition = showAll
+    ? 0
+    : Math.max(0, preview.visibleItems.length - RECENT_CHAT_INITIAL_VISIBLE_COUNT);
+  const adjustedCollapsedHiddenChatCount =
     collapsedHiddenChatCount === null
-      ? renderedChats.length > RECENT_CHAT_INITIAL_VISIBLE_COUNT || hasMoreChats
-      : collapsedHiddenChatCount > 0;
-  const visibleChats = showAll
-    ? renderedChats
-    : renderedChats.slice(0, RECENT_CHAT_INITIAL_VISIBLE_COUNT);
-  const hiddenCount = renderedChats.length - RECENT_CHAT_INITIAL_VISIBLE_COUNT;
+      ? null
+      : Math.max(0, collapsedHiddenChatCount - activePreviewAddition);
+  const hasHiddenChats = showAll
+    ? collapsedHiddenChatCount === null
+      ? preview.totalCount > RECENT_CHAT_INITIAL_VISIBLE_COUNT || hasMoreChats
+      : collapsedHiddenChatCount > 0
+    : adjustedCollapsedHiddenChatCount === null
+      ? preview.hiddenCount > 0 || hasMoreChats
+      : adjustedCollapsedHiddenChatCount > 0;
+  const visibleChats = preview.visibleItems;
 
   return (
     <SidebarGroup className="px-2 py-2">
@@ -183,9 +195,9 @@ export function SidebarChatsSection({
                             <span>
                               {showAll
                                 ? "Show less"
-                                : collapsedHiddenChatCount === null
-                                  ? `See more (${hiddenCount})`
-                                  : `See more (${collapsedHiddenChatCount})`}
+                                : adjustedCollapsedHiddenChatCount === null
+                                  ? `See more (${preview.hiddenCount})`
+                                  : `See more (${adjustedCollapsedHiddenChatCount})`}
                             </span>
                           </span>
                         </SidebarMenuSubButton>

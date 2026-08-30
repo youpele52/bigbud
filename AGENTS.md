@@ -113,6 +113,7 @@ Key server files:
 - Inputs, selects, menus: `text-sm`
 - Secondary/muted text: `text-xs` (12px) for labels, captions, and helper text
 - Never use `text-base` (16px) in UI components — it will appear too large
+- Toast and provider-status semantics: blue for working/in-progress, green for done, amber for warnings or non-fatal issues, and red for failures. Toast type must express severity even when no icon is rendered.
 
 ## Keybindings
 

@@ -20,6 +20,7 @@ import { readNativeApi } from "../rpc/nativeApi";
 import { hydrateSelectedThread, runBoundedBootstrap } from "./-__root.bounded-bootstrap";
 import { toastManager } from "../components/ui/toast";
 import { createOwnershipReplacementThreadId } from "../hooks/useHandleNewThread.ownership";
+import { useCanonicalThreadRouteActivation } from "./-_chat.$threadId.activation";
 
 export function getMissingThreadRouteAction(input: {
   bootstrapComplete: boolean;
@@ -55,6 +56,10 @@ export function ChatThreadRouteView() {
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
   const routeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
+  const routeProject = useStore((store) =>
+    store.projects.find((project) => project.id === routeThread?.projectId),
+  );
+  const isRouteThreadPinned = useStore((store) => store.sidebarPinnedThreadIds.includes(threadId));
   const hydrationStatus = useStore(
     (store) => store.threadHydrationById[threadId]?.status ?? "unloaded",
   );
@@ -76,6 +81,11 @@ export function ChatThreadRouteView() {
   });
   const diffOpen = search.diff === "1";
   usePageTitle(threadTitle);
+  useCanonicalThreadRouteActivation({
+    thread: bootstrapComplete ? routeThread : undefined,
+    project: routeProject,
+    isPinned: isRouteThreadPinned,
+  });
 
   const closeDiff = useCallback(() => {
     useRightPanelTabsStore.getState().closeTab("diff");

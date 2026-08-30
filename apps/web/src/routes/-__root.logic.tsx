@@ -35,6 +35,11 @@ import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
+import {
+  restoreStartupContext,
+  runCoalescedStartupFreshChat,
+  validateStartupRestorationCandidate,
+} from "./-__root.startup-restoration";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
@@ -58,8 +63,8 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
   const { handleNewThread } = useHandleNewThread();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const readPathname = useEffectEvent(() => pathname);
-  const handledBootstrapThreadIdRef = useRef<string | null>(null);
-  const startedFreshChatRef = useRef(false);
+  const restorationRunIdRef = useRef(0);
+  const freshChatInFlightRef = useRef<{ promise: Promise<void>; runId: number } | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const disposedRef = useRef(false);
   const bootstrapBoundedRef = useRef<(threadId: ThreadId | null) => Promise<void>>(
@@ -80,36 +85,42 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         return;
       }
 
+      const runId = ++restorationRunIdRef.current;
+      const launchPathname = readPathname();
+      const isCurrent = () =>
+        !disposedRef.current &&
+        restorationRunIdRef.current === runId &&
+        readPathname() === launchPathname;
       migrateLocalSettingsToServer();
-      const selectedThreadId = resolveSelectedThreadIdFromPath(
-        readPathname(),
-        payload.bootstrapThreadId ?? null,
-      );
-      await bootstrapBoundedRef.current(selectedThreadId);
-      if (disposedRef.current) {
+      const api = readNativeApi();
+      if (!api) {
         return;
       }
-
-      if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
-        if (readPathname() !== "/" || startedFreshChatRef.current) {
-          return;
-        }
-        startedFreshChatRef.current = true;
-        await handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions());
-        return;
-      }
-      if (readPathname() !== "/") {
-        return;
-      }
-      if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
-        return;
-      }
-      await navigate({
-        to: "/$threadId",
-        params: { threadId: payload.bootstrapThreadId },
-        replace: true,
+      await restoreStartupContext({
+        pathname: launchPathname,
+        bootstrapProjectId: payload.bootstrapProjectId ?? null,
+        bootstrapThreadId: payload.bootstrapThreadId ?? null,
+        persistedThreadId: useUiStateStore.getState().lastActiveThreadId,
+        bootstrap: (threadId) => bootstrapBoundedRef.current(threadId),
+        validate: (candidate) => validateStartupRestorationCandidate({ api, candidate }),
+        clearPersistedThread: () => useUiStateStore.getState().setLastActiveThreadId(null),
+        isCurrent,
+        navigateToThread: async (threadId) => {
+          if (!isCurrent()) return;
+          await navigate({ to: "/$threadId", params: { threadId }, replace: true });
+        },
+        startFreshChat: async () => {
+          await runCoalescedStartupFreshChat({
+            inFlight: freshChatInFlightRef,
+            isCurrent,
+            runId,
+            start: () =>
+              handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions(), {
+                shouldActivate: isCurrent,
+              }),
+          });
+        },
       });
-      handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
     })().catch(() => undefined);
   });
 
