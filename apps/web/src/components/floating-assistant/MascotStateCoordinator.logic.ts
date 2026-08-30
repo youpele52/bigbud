@@ -2,6 +2,7 @@ import {
   BUILT_IN_CHATS_PROJECT_ID,
   LOCAL_EXECUTION_TARGET_ID,
   type NativeApi,
+  type OrchestrationDeliveryStreamItem,
   type OrchestrationEvent,
   type ThreadId,
 } from "@bigbud/contracts";
@@ -15,6 +16,11 @@ import {
 } from "~/logic/orchestration";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "~/models/types";
 import { runBoundedBootstrap } from "~/routes/-__root.bounded-bootstrap";
+import {
+  recoverAndAcknowledgeDeliveryBaseline,
+  routeOrchestrationDeliveryBatch,
+} from "~/routes/-__root.delivery-routing";
+import { createAsyncOperationQueue } from "~/routes/-__root.recovery.serial";
 import { mapSession } from "~/stores/main/mappers.store";
 import { useStore } from "~/stores/main";
 
@@ -89,15 +95,15 @@ export function startMascotOrchestrationSync(input: {
   let disposed = false;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let replayRetryTracker: ReplayRetryTracker | null = null;
-  const pendingEvents: OrchestrationEvent[] = [];
-  let flushScheduled = false;
+  const deliveryOperationQueue = createAsyncOperationQueue();
+  const deliveryBaselineAbort = new AbortController();
 
   const applyAcceptedEvents = (events: ReadonlyArray<OrchestrationEvent>) => {
     if (events.length === 0) return;
     input.applyOrchestrationEvents(events);
   };
 
-  const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
+  const applyEventBatch = async (events: ReadonlyArray<OrchestrationEvent>) => {
     const admitted = recovery.admitEventBatch(events);
     if (admitted.length === 0) return;
     try {
@@ -111,30 +117,9 @@ export function startMascotOrchestrationSync(input: {
     }
   };
 
-  const flushPendingEvents = () => {
-    flushScheduled = false;
-    if (disposed || pendingEvents.length === 0) return;
-    applyEventBatch(pendingEvents.splice(0, pendingEvents.length));
-  };
-
-  const scheduleFlush = () => {
-    if (flushScheduled) return;
-    flushScheduled = true;
-    queueMicrotask(() => {
-      try {
-        flushPendingEvents();
-      } catch (error) {
-        logRecovery("Mascot event application failed.", { error });
-        void runReplayRecovery("sequence-gap", () => {
-          void runBoundedRecovery("replay-failed");
-        });
-      }
-    });
-  };
-
   const runReplayRecovery = async (
     reason: "sequence-gap" | "resubscribe",
-    fallbackToBoundedRecovery: () => void,
+    fallbackToBoundedRecovery: () => Promise<void>,
   ): Promise<void> => {
     if (!recovery.beginReplayRecovery(reason)) return;
     const fromSequenceExclusive = recovery.getState().latestSequence;
@@ -146,16 +131,16 @@ export function startMascotOrchestrationSync(input: {
       if (replay.availability === "gap") {
         replayRetryTracker = null;
         recovery.failReplayRecovery();
-        if (!disposed) fallbackToBoundedRecovery();
+        if (!disposed) await fallbackToBoundedRecovery();
         return;
       }
       recovery.observeReplayTarget(replay.latestSequence);
-      if (!disposed) applyEventBatch(replay.events);
+      if (!disposed) await applyEventBatch(replay.events);
     } catch (error) {
       replayRetryTracker = null;
       recovery.failReplayRecovery();
       logRecovery("Mascot replay recovery failed.", { error });
-      if (!disposed) fallbackToBoundedRecovery();
+      if (!disposed) await fallbackToBoundedRecovery();
       return;
     }
     if (disposed) return;
@@ -182,15 +167,18 @@ export function startMascotOrchestrationSync(input: {
       });
       if (disposed) return;
     }
-    void runReplayRecovery(reason, fallbackToBoundedRecovery);
+    await runReplayRecovery(reason, fallbackToBoundedRecovery);
   };
 
-  const runBoundedRecovery = async (reason: "bootstrap" | "replay-failed"): Promise<void> => {
+  const runBoundedRecovery = async (
+    reason: "bootstrap" | "replay-failed",
+    resumeReplay = true,
+  ): Promise<number | null> => {
     if (retryTimer !== null) {
       clearTimeout(retryTimer);
       retryTimer = null;
     }
-    if (!recovery.beginSnapshotRecovery(reason)) return;
+    if (!recovery.beginSnapshotRecovery(reason)) return null;
     try {
       const projectionSequence = await retryTransportRecoveryOperation(
         () =>
@@ -201,57 +189,94 @@ export function startMascotOrchestrationSync(input: {
           }),
         { shouldAbort: () => disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
-      if (disposed) return;
-      if (recovery.completeSnapshotRecovery(projectionSequence)) {
-        void runReplayRecovery("sequence-gap", () => {
-          void runBoundedRecovery("replay-failed");
+      if (disposed) return null;
+      const shouldReplay = recovery.completeSnapshotRecovery(projectionSequence);
+      if (shouldReplay && resumeReplay) {
+        await runReplayRecovery("sequence-gap", async () => {
+          await runBoundedRecovery("replay-failed");
         });
       }
+      return projectionSequence;
     } catch (error) {
       recovery.failSnapshotRecovery();
       logRecovery("Mascot catalog recovery failed.", { error });
       if (!disposed && import.meta.env.MODE !== "test") {
         retryTimer = setTimeout(() => {
           retryTimer = null;
-          void runBoundedRecovery("bootstrap");
+          void deliveryOperationQueue
+            .enqueue(() => runBoundedRecovery("bootstrap"))
+            .catch((error) => {
+              logRecovery("Mascot catalog recovery retry failed.", { error });
+            });
         }, BOOTSTRAP_RETRY_MS);
       }
     }
+    return null;
   };
 
-  const unsubscribe = input.api.orchestration.onDomainEvent(
-    (item) => {
-      if (item.type !== "batch") return;
-      for (const event of item.events) {
-        const action = recovery.classifyDomainEvent(event.sequence);
-        if (action === "apply") {
-          pendingEvents.push(event);
-          scheduleFlush();
-          continue;
+  const fallbackToBoundedRecovery = async (): Promise<void> => {
+    await runBoundedRecovery("replay-failed");
+  };
+  const processDeliveryItem = async (item: OrchestrationDeliveryStreamItem) => {
+    if (disposed || item.type === "lifecycle") return;
+    if (item.type === "recovery") {
+      await recoverAndAcknowledgeDeliveryBaseline({
+        recovery: item,
+        recover: () => runBoundedRecovery("replay-failed", false),
+        acknowledge: input.api.orchestration.acknowledgeDeliveryBaseline,
+        signal: deliveryBaselineAbort.signal,
+        shouldAbort: () => disposed,
+      });
+      return;
+    }
+    await routeOrchestrationDeliveryBatch({
+      batch: item,
+      classify: recovery.classifyDomainEvent.bind(recovery),
+      recover: async () => {
+        await runReplayRecovery("sequence-gap", fallbackToBoundedRecovery);
+      },
+      apply: applyEventBatch,
+      getAppliedSequence: () => recovery.getState().appliedSequence,
+      acknowledge: input.api.orchestration.acknowledgeDelivery,
+    });
+  };
+
+  const enqueueDeliveryWork = (operation: () => Promise<unknown>): Promise<void> =>
+    deliveryOperationQueue.enqueue(async () => {
+      try {
+        await operation();
+      } catch (error) {
+        logRecovery("Mascot delivery application failed.", { error });
+        if (disposed) throw error;
+        try {
+          await fallbackToBoundedRecovery();
+        } catch (recoveryError) {
+          logRecovery("Mascot delivery recovery failed.", { error: recoveryError });
         }
-        if (action === "recover") {
-          flushPendingEvents();
-          void runReplayRecovery("sequence-gap", () => {
-            void runBoundedRecovery("replay-failed");
-          });
-        }
+        throw error;
       }
-    },
+    });
+
+  const unsubscribe = input.api.orchestration.onDomainEvent(
+    (item) => enqueueDeliveryWork(() => processDeliveryItem(item)),
     {
       onResubscribe: () => {
-        flushPendingEvents();
-        void runReplayRecovery("resubscribe", () => {
-          void runBoundedRecovery("replay-failed");
+        void enqueueDeliveryWork(() =>
+          runReplayRecovery("resubscribe", fallbackToBoundedRecovery),
+        ).catch((error) => {
+          logRecovery("Mascot resubscribe recovery failed.", { error });
         });
       },
     },
   );
 
-  void runBoundedRecovery("bootstrap");
+  void enqueueDeliveryWork(() => runBoundedRecovery("bootstrap")).catch((error) => {
+    logRecovery("Mascot bootstrap recovery failed.", { error });
+  });
 
   return () => {
     disposed = true;
-    pendingEvents.length = 0;
+    deliveryBaselineAbort.abort();
     if (retryTimer !== null) clearTimeout(retryTimer);
     unsubscribe();
   };

@@ -5,6 +5,7 @@ import {
   type GetSidebarThreadCatalogResult,
   type GetStartupProjectCatalogResult,
   type NativeApi,
+  type OrchestrationDeliveryRecovery,
   type OrchestrationDeliveryStreamItem,
   type OrchestrationEvent,
   type OrchestrationReplayEventsResult,
@@ -93,7 +94,16 @@ function makeApi(options: {
         events: options.replayEvents ?? [],
       }),
     ),
-    acknowledgeDelivery: vi.fn(),
+    acknowledgeDelivery: vi.fn(async () => ({
+      accepted: true,
+      fenced: false,
+      acknowledgedSequence: projectionSequence,
+    })),
+    acknowledgeDeliveryBaseline: vi.fn(async () => ({
+      accepted: true,
+      fenced: false,
+      acknowledgedSequence: projectionSequence,
+    })),
     onDomainEvent: vi.fn((listener: (event: OrchestrationDeliveryStreamItem) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -103,6 +113,11 @@ function makeApi(options: {
   return {
     api: { orchestration } as unknown as NativeApi,
     orchestration,
+    emitItem: (item: OrchestrationDeliveryStreamItem) => {
+      for (const listener of listeners) {
+        listener(item);
+      }
+    },
     emit: (event: OrchestrationEvent) => {
       for (const listener of listeners) {
         listener({
@@ -190,6 +205,101 @@ describe("mascot orchestration sync", () => {
         expect(deriveMascotWorkAnimation(useStore.getState().threads)).toBe("thinking");
       });
       expect(orchestration.getSnapshot).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+  });
+
+  it("updates mascot state before acknowledging a delivered batch", async () => {
+    const { api, orchestration, emit } = makeApi({
+      sidebarThreads: [
+        {
+          ...runningSummary(THREAD_ID),
+          sessionStatus: "ready",
+          activeTurnId: null,
+          latestTurnState: null,
+        },
+      ],
+    });
+    orchestration.acknowledgeDelivery.mockImplementation(async () => {
+      expect(deriveMascotWorkAnimation(useStore.getState().threads)).toBe("thinking");
+      return { accepted: true, fenced: false, acknowledgedSequence: 11 };
+    });
+    const stop = startMascotOrchestrationSync({
+      api,
+      applyOrchestrationEvents: (events) => useStore.getState().applyOrchestrationEvents(events),
+    });
+
+    try {
+      await vi.waitFor(() => expect(useStore.getState().threads).toHaveLength(1));
+      emit(
+        makeEvent(
+          "thread.session-set",
+          {
+            threadId: THREAD_ID,
+            session: {
+              threadId: THREAD_ID,
+              status: "running",
+              providerName: "codex",
+              runtimeMode: "full-access",
+              activeTurnId: TURN_ID,
+              sessionEpoch: 0,
+              reason: null,
+              lastError: null,
+              updatedAt: NOW,
+            },
+          },
+          { sequence: 11 },
+        ),
+      );
+
+      await vi.waitFor(() => expect(orchestration.acknowledgeDelivery).toHaveBeenCalledOnce());
+      expect(orchestration.acknowledgeDelivery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: "batch-11",
+          receivedThroughSequence: 11,
+          appliedThroughSequence: 11,
+        }),
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it("acknowledges a recovery baseline after a bounded mascot bootstrap", async () => {
+    const { api, orchestration, emitItem } = makeApi({});
+    orchestration.acknowledgeDeliveryBaseline.mockImplementation(async () => {
+      expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(2);
+      return { accepted: true, fenced: false, acknowledgedSequence: 10 };
+    });
+    const stop = startMascotOrchestrationSync({
+      api,
+      applyOrchestrationEvents: (events) => useStore.getState().applyOrchestrationEvents(events),
+    });
+
+    try {
+      await vi.waitFor(() => expect(useStore.getState().bootstrapComplete).toBe(true));
+      emitItem({
+        type: "recovery",
+        route: "direct-unmanaged",
+        recoveryId: "mascot-recovery",
+        consumerId: "mascot-test",
+        consumerGeneration: 1,
+        serverEpoch: "server-test",
+        acknowledgedSequence: 10,
+        targetSequence: 10,
+        reasonCode: "replay_unavailable",
+      } satisfies OrchestrationDeliveryRecovery);
+
+      await vi.waitFor(() =>
+        expect(orchestration.acknowledgeDeliveryBaseline).toHaveBeenCalledOnce(),
+      );
+      expect(orchestration.acknowledgeDeliveryBaseline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recoveryId: "mascot-recovery",
+          appliedProjectionSequence: 10,
+        }),
+      );
     } finally {
       stop();
     }
