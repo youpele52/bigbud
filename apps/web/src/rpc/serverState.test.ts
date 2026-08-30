@@ -7,6 +7,8 @@ import {
   type ServerLifecycleStreamEvent,
   type ServerProvider,
 } from "@bigbud/contracts";
+import { Schema } from "effect";
+import { ServerConfigStreamEvent as ServerConfigStreamEventSchema } from "@bigbud/contracts/server/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -190,6 +192,22 @@ describe("serverState", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(getServerConfig()).toEqual(streamedConfig);
+    stop();
+  });
+
+  it("accepts a raw legacy snapshot newline without reconnecting the config subscription", async () => {
+    const deferred = createDeferredPromise<ServerConfig>();
+    serverApi.getConfig.mockReturnValueOnce(deferred.promise);
+    const stop = startServerStateSync(serverApi);
+    const raw = { version: 1, type: "snapshot\n", config: baseServerConfig };
+    const event = Schema.decodeUnknownSync(ServerConfigStreamEventSchema)(raw);
+
+    emitServerConfigEvent(event);
+
+    await waitFor(() => expect(getServerConfig()).toEqual(baseServerConfig));
+    expect(event.type).toBe("snapshot");
+    expect(serverApi.subscribeConfig).toHaveBeenCalledOnce();
+    deferred.resolve(baseServerConfig);
     stop();
   });
 

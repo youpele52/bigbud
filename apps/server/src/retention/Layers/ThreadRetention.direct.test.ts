@@ -1,12 +1,132 @@
 import { ThreadId } from "@bigbud/contracts";
-import { Effect, Stream } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { runDirectThreadRetention } from "./ThreadRetention.direct.ts";
+import { ThreadRetentionLive } from "./ThreadRetention.ts";
+import { ThreadRetention } from "../Services/ThreadRetention.ts";
+import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
+import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import type { WsRpcContext } from "../../ws/wsRpcContext.ts";
+import { makeThreadRetentionWsRpcHandlers } from "../../ws/wsRpcHandlers.retention.ts";
+import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 
 const retentionRun = { runId: "retention-direct-run" };
 
 describe("runDirectThreadRetention", () => {
+  it("carries a valid manual 7-day preview challenge into an eligible Delete Now command", async () => {
+    const threadId = ThreadId.makeUnsafe("retention-seven-day-thread");
+    const challengeToken = "valid-seven-day-preview";
+    let issuedChallenge:
+      | { readonly token: string; readonly policy: "7-days"; readonly cutoffAt: string }
+      | undefined;
+    const consumeManualChallenge = vi.fn(({ token }: { readonly token: string }) =>
+      Effect.succeed(
+        token === issuedChallenge?.token
+          ? {
+              consumed: true as const,
+              result: "consumed" as const,
+              policy: issuedChallenge.policy,
+              cutoffAt: issuedChallenge.cutoffAt,
+            }
+          : { consumed: false as const, result: "invalid" as const },
+      ),
+    );
+    const createOrGetActiveRun = vi.fn(() => Effect.succeed(retentionRun));
+    const repository = {
+      preview: () =>
+        Effect.succeed({
+          eligibleCount: 1,
+          oldestEligibleActivityAt: "2026-08-10T00:00:00.000Z",
+          newestEligibleActivityAt: "2026-08-10T00:00:00.000Z",
+          exclusionCounts: [],
+          estimatedAttachmentCount: 0,
+          estimatedResourceCount: 0,
+          estimatedKnownBytes: 0,
+          attachmentEstimateComplete: true,
+          resourceEstimateComplete: true,
+          bytesEstimateComplete: true,
+        }),
+      issueChallenge: (input: {
+        readonly challengeId: string;
+        readonly trigger: "manual" | "policy-change";
+        readonly policy: "7-days" | "14-days" | "30-days" | "90-days";
+        readonly cutoffAt: string;
+        readonly issuedAt: string;
+        readonly expiresAt: string;
+      }) =>
+        Effect.sync(() => {
+          issuedChallenge = { token: challengeToken, policy: "7-days", cutoffAt: input.cutoffAt };
+          return { ...input, token: challengeToken };
+        }),
+      consumeManualChallenge,
+      createOrGetActiveRun,
+      insertSelectedItems: () => Effect.succeed(1),
+      transitionRun: () => Effect.succeed(true),
+      selectNextPage: () =>
+        Effect.succeed(
+          page++ === 0 ? [{ threadId, lastActivityAt: "2026-08-10T00:00:00.000Z" }] : [],
+        ),
+      getPolicyAuthority: () => Effect.succeed(Option.some({ policy: "7-days" })),
+    } as never;
+    let page = 0;
+    let deleted = false;
+    const dispatch = vi.fn(() =>
+      Effect.sync(() => {
+        deleted = true;
+        return { sequence: 1 };
+      }),
+    );
+    const orchestration = {
+      dispatch,
+      streamDomainEvents: Stream.empty,
+      getReadModel: () =>
+        Effect.succeed({
+          threads: deleted ? [] : [{ id: threadId, deletedAt: null, parentThread: undefined }],
+        } as never),
+    } as never;
+    const runtime = ManagedRuntime.make(
+      ThreadRetentionLive.pipe(
+        Layer.provideMerge(Layer.succeed(ThreadRetentionRepository, repository)),
+        Layer.provideMerge(Layer.succeed(OrchestrationEngineService, orchestration)),
+        Layer.provideMerge(ServerSettingsService.layerTest()),
+      ),
+    );
+    const retention = await runtime.runPromise(Effect.service(ThreadRetention));
+    const handlers = makeThreadRetentionWsRpcHandlers({
+      threadRetention: retention,
+    } as unknown as WsRpcContext);
+    const issued = await runtime.runPromise(
+      handlers[WS_METHODS.serverPreviewThreadRetention]({ trigger: "manual", policy: "7-days" }),
+    );
+    expect(issued.challenge).toEqual(
+      expect.objectContaining({ token: challengeToken, policy: "7-days", singleUse: true }),
+    );
+    const result = await runtime.runPromise(
+      handlers[WS_METHODS.serverStartThreadRetention]({ challengeToken }),
+    );
+    await runtime.dispose();
+
+    expect(result.policy).toBe("7-days");
+    expect(result.cutoffAt).toBe(issued.challenge.cutoffAt);
+    expect(result.deletedCount).toBe(1);
+    expect(consumeManualChallenge).toHaveBeenCalledWith({
+      token: challengeToken,
+      consumedAt: expect.any(String),
+    });
+    expect(createOrGetActiveRun).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: "manual", policy: "7-days", cutoffAt: result.cutoffAt }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.retention-delete",
+        threadId,
+        cutoffAt: issued.challenge.cutoffAt,
+      }),
+    );
+  });
+
   it("claims a retention run item then dispatches thread.retention-delete", async () => {
     const threadId = ThreadId.makeUnsafe("retention-thread");
     let deleted = false;

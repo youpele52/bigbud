@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import { ExecutionTargetId, ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings";
 import { EditorId } from "../workspace/editor";
@@ -243,7 +243,15 @@ export type ServerConfigSettingsUpdatedPayload = typeof ServerConfigSettingsUpda
 
 export const ServerConfigStreamSnapshotEvent = Schema.Struct({
   version: Schema.Literal(1),
-  type: Schema.Literal("snapshot"),
+  type: Schema.Union([Schema.Literal("snapshot"), Schema.Literal("snapshot\n")]).pipe(
+    Schema.decodeTo(
+      Schema.Literal("snapshot"),
+      SchemaTransformation.transform<"snapshot", "snapshot" | "snapshot\n">({
+        decode: () => "snapshot" as const,
+        encode: () => "snapshot" as const,
+      }),
+    ),
+  ),
   config: ServerConfig,
 });
 export type ServerConfigStreamSnapshotEvent = typeof ServerConfigStreamSnapshotEvent.Type;

@@ -132,10 +132,15 @@ export class WsTransport {
             },
           );
           cancelCurrentStream = runningStream.cancel;
-          await runningStream.completed;
-          cancelCurrentStream = NOOP;
+          try {
+            await runningStream.completed;
+          } finally {
+            // Every attempt owns a scoped RPC client. Interrupting it is idempotent after
+            // completion and guarantees its server request is disposed before a retry starts.
+            runningStream.cancel();
+            cancelCurrentStream = NOOP;
+          }
         } catch (error) {
-          cancelCurrentStream = NOOP;
           if (!active || this.disposed) {
             return;
           }
@@ -258,18 +263,20 @@ export class WsTransport {
       rejectCompleted = reject;
     });
     const cancel = session.runtime.runCallback(
-      Effect.promise(() => session.clientPromise).pipe(
-        Effect.flatMap((client) =>
-          Stream.runForEach(connect(client), (value) =>
-            Effect.promise(() => {
-              if (!isActive()) {
-                return Promise.resolve();
-              }
+      Effect.scoped(
+        Effect.promise(() => session.clientPromise).pipe(
+          Effect.flatMap((client) =>
+            Stream.runForEach(connect(client), (value) =>
+              Effect.promise(() => {
+                if (!isActive()) {
+                  return Promise.resolve();
+                }
 
-              markWsInboundActivity();
-              markValueReceived();
-              return Promise.resolve(listener(value));
-            }),
+                markWsInboundActivity();
+                markValueReceived();
+                return Promise.resolve(listener(value));
+              }),
+            ),
           ),
         ),
       ),
