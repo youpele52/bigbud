@@ -59,6 +59,49 @@ describe("wsNativeApi baseline acknowledgement", () => {
     expect(storage.get(`bigbud:orchestration-delivery-cursor:${consumerId}`)).toBe("4530348");
   });
 
+  it("advances the persisted cursor only when a retried baseline is accepted", async () => {
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const consumerId = "consumer-retry-baseline";
+    const storage = installStorage(consumerId);
+    rpcClientMock.orchestration.acknowledgeDeliveryBaseline
+      .mockResolvedValueOnce({ accepted: false, fenced: false, acknowledgedSequence: 0 })
+      .mockResolvedValueOnce({ accepted: true, fenced: false, acknowledgedSequence: 10 });
+    const api = createWsNativeApi();
+    api.orchestration.onDomainEvent(vi.fn());
+    emitEvent(orchestrationEventListeners, {
+      type: "recovery",
+      route: "direct-unmanaged",
+      recoveryId: "recovery-retry-cursor",
+      consumerId,
+      consumerGeneration: 1,
+      serverEpoch: "epoch-1",
+      acknowledgedSequence: 0,
+      targetSequence: 10,
+      reasonCode: "replay_budget_exceeded",
+    });
+    const acknowledgement = {
+      recoveryId: "recovery-retry-cursor",
+      consumerId,
+      consumerGeneration: 1,
+      serverEpoch: "epoch-1",
+      appliedProjectionSequence: 10,
+      applicationDurationMs: 1,
+    };
+
+    await expect(
+      api.orchestration.acknowledgeDeliveryBaseline(acknowledgement),
+    ).resolves.toMatchObject({
+      accepted: false,
+    });
+    expect(storage.has(`bigbud:orchestration-delivery-cursor:${consumerId}`)).toBe(false);
+    await expect(
+      api.orchestration.acknowledgeDeliveryBaseline(acknowledgement),
+    ).resolves.toMatchObject({
+      accepted: true,
+    });
+    expect(storage.get(`bigbud:orchestration-delivery-cursor:${consumerId}`)).toBe("10");
+  });
+
   it("does not persist a baseline response from a superseded stream epoch", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
     const consumerId = "consumer-stale-baseline";

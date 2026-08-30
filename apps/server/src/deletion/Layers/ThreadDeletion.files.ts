@@ -16,9 +16,18 @@ import {
 } from "./EntityPurge.resources.ts";
 import type { PurgeResource } from "../../persistence/Services/PurgeJobRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import type { DirectCleanupResource } from "../Services/DirectResourceCleanupExecutor.ts";
+import { captureDirectCleanupIdentity } from "./DirectResourceCleanup.identity.ts";
 
 export interface DiscoveredThreadDeletionFiles {
   readonly resources: ReadonlyArray<PurgeResource>;
+  readonly directResources: ReadonlyArray<DirectCleanupResource>;
+  readonly worktreeResources: ReadonlyArray<PurgeResource>;
+  readonly retainedResources: ReadonlyArray<{
+    readonly resourceId: string;
+    readonly kind: "attachment";
+    readonly relativePath: string;
+  }>;
   readonly rootThreadId: ThreadId;
 }
 
@@ -48,6 +57,33 @@ const captureResource = Effect.fn("ThreadDeletion.captureResource")(function* (
     quarantineName: `.bigbud-purge-${crypto.randomUUID()}`,
     action: "delete",
   } satisfies PurgeResource;
+});
+
+const captureDirectResource = Effect.fn("ThreadDeletion.captureDirectResource")(function* (
+  kind: DirectCleanupResource["kind"],
+  relativePath: string,
+) {
+  const config = yield* ServerConfig;
+  const resolved = resolvePurgeResource(config, {
+    kind,
+    relativePath,
+    identity: null,
+    quarantineName: null,
+    action: "delete",
+  });
+  const root = resolved.root;
+  yield* Effect.tryPromise(() => nodeFs.mkdir(root, { recursive: true }));
+  const captured = yield* Effect.tryPromise(() =>
+    captureDirectCleanupIdentity({ root, relativePath }),
+  );
+  return {
+    resourceId: `${kind}:${relativePath}`,
+    kind,
+    root,
+    relativePath,
+    quarantineName: `.bigbud-cleanup-${crypto.randomUUID()}`,
+    ...captured,
+  } satisfies DirectCleanupResource;
 });
 
 /** Captures every external resource before the cascade removes the thread subtree. */
@@ -82,7 +118,10 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
       ) AS shared
     `;
       resources.set(`attachment:${relativePath}`, {
-        ...(yield* captureResource("attachment", relativePath)),
+        kind: "attachment",
+        relativePath,
+        identity: null,
+        quarantineName: null,
         action: shared === 1 ? "retain-shared" : "delete",
       });
     }
@@ -129,23 +168,51 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
           threadId,
           type,
         })) {
-          resources.set(`${kind}:${relativePath}`, yield* captureResource(kind, relativePath));
+          resources.set(`${kind}:${relativePath}`, {
+            kind,
+            relativePath,
+            identity: null,
+            quarantineName: null,
+            action: "delete",
+          });
         }
       }
     }
+    const allResources = [...resources.values()];
+    const directResources = yield* Effect.forEach(
+      allResources.filter(
+        (resource): resource is PurgeResource & { kind: DirectCleanupResource["kind"] } =>
+          resource.kind !== "managed-worktree" && resource.action === "delete",
+      ),
+      (resource) => captureDirectResource(resource.kind, resource.relativePath),
+      { concurrency: 1 },
+    );
     return {
       rootThreadId: input.rootThreadId,
-      resources: [...resources.values()],
+      resources: allResources,
+      directResources,
+      worktreeResources: allResources.filter((resource) => resource.kind === "managed-worktree"),
+      retainedResources: allResources.flatMap((resource) =>
+        resource.kind === "attachment" && resource.action === "retain-shared"
+          ? [
+              {
+                resourceId: `attachment:${resource.relativePath}`,
+                kind: "attachment" as const,
+                relativePath: resource.relativePath,
+              },
+            ]
+          : [],
+      ),
     } satisfies DiscoveredThreadDeletionFiles;
   },
 );
 
-/** File failures are deliberately bounded after the database cascade has committed. */
-export const cleanupDiscoveredThreadDeletionFiles = Effect.fn("ThreadDeletion.cleanupFiles")(
+/** Managed-worktree failures are deliberately bounded after the database cascade has committed. */
+export const cleanupDiscoveredThreadWorktrees = Effect.fn("ThreadDeletion.cleanupWorktrees")(
   function* (files: DiscoveredThreadDeletionFiles) {
     const config = yield* ServerConfig;
     const results = yield* Effect.forEach(
-      files.resources,
+      files.worktreeResources,
       (resource) =>
         resource.action === "retain-shared"
           ? Effect.void

@@ -1,7 +1,7 @@
 import { CommandId, ProjectId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { calculateCommandPayloadDigest } from "./commandDigest.ts";
+import { calculateCommandPayloadDigest, commandPayloadDigestMatches } from "./commandDigest.ts";
 
 describe("orchestration command payload digest", () => {
   it("is stable across command ids and changes when semantic payload changes", () => {
@@ -24,5 +24,12 @@ describe("orchestration command payload digest", () => {
     expect(calculateCommandPayloadDigest(base).digest).not.toBe(
       calculateCommandPayloadDigest({ ...base, title: "Changed" }).digest,
     );
+    expect(commandPayloadDigestMatches(base, calculateCommandPayloadDigest(base))).toBe(true);
+    expect(
+      commandPayloadDigestMatches(
+        { ...base, title: "Tampered" },
+        calculateCommandPayloadDigest(base),
+      ),
+    ).toBe(false);
   });
 });

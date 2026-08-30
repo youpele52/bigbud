@@ -30,6 +30,7 @@ export const OrchestrationEventPersistedRowSchema = Schema.Struct({
 });
 
 export const AppendEventRequestSchema = Schema.Struct({
+  sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
   streamId: Schema.Union([ProjectId, ThreadId]),

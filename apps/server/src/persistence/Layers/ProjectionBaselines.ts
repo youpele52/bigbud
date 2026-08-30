@@ -4,6 +4,7 @@ import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceDecodeCauseError, toPersistenceSqlError } from "../Errors.ts";
+import { orchestrationSequenceFrontierSql } from "../OrchestrationSequenceFrontier.ts";
 import { PROJECTION_BASELINE_TABLES } from "../ProjectionBaselineSchema.ts";
 import {
   ProjectionBaselineRepository,
@@ -136,12 +137,9 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
           if (states.some((state) => state.sequence !== sequence)) {
             return Option.none<ProjectionBaseline>();
           }
-          const eventRanges = yield* sql.unsafe<{ latestSequence: number }>(
-            `SELECT MAX(
-              (SELECT retained_through_sequence FROM orchestration_retention_state WHERE singleton_id = 1),
-              COALESCE((SELECT MAX(sequence) FROM orchestration_events), 0)
-            ) AS latestSequence`,
-          );
+          const eventRanges = yield* sql<{ readonly latestSequence: number }>`
+            SELECT ${orchestrationSequenceFrontierSql(sql)} AS "latestSequence"
+          `;
           if (eventRanges[0]?.latestSequence !== sequence) {
             return Option.none<ProjectionBaseline>();
           }

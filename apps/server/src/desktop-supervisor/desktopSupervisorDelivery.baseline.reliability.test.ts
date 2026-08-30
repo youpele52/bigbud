@@ -112,7 +112,7 @@ describe("DesktopSupervisorDelivery baseline reliability", () => {
     await coordinator.close();
   });
 
-  it("authorizes a lower baseline only when its complete suffix fits the replay bound", async () => {
+  it("reports a zero cursor rejection before accepting a valid bounded suffix", async () => {
     const latestSequence = 10_000;
     const coordinator = new DesktopSupervisorDeliveryCoordinator({
       mode: "direct-unmanaged",

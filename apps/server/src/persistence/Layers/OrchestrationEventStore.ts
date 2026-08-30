@@ -4,6 +4,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Schema, Stream } from "effect";
 
 import { toPersistenceDecodeError, type OrchestrationEventStoreError } from "../Errors.ts";
+import { orchestrationSequenceFrontierSql } from "../OrchestrationSequenceFrontier.ts";
 import {
   OrchestrationEventStore,
   type OrchestrationEventStoreShape,
@@ -35,6 +36,7 @@ const makeEventStore = Effect.gen(function* () {
     execute: (request) =>
       sql`
         INSERT INTO orchestration_events (
+          sequence,
           event_id,
           aggregate_kind,
           stream_id,
@@ -49,6 +51,7 @@ const makeEventStore = Effect.gen(function* () {
           metadata_json
         )
         VALUES (
+          ${request.sequence},
           ${request.eventId},
           ${request.aggregateKind},
           ${request.streamId},
@@ -109,12 +112,9 @@ const makeEventStore = Effect.gen(function* () {
     Result: EventRangeRowSchema,
     execute: () => sql`
        SELECT
-         (SELECT MIN(sequence) FROM orchestration_events) AS "earliestAvailableSequence",
-         MAX(
-           retention.retained_through_sequence,
-           COALESCE((SELECT MAX(sequence) FROM orchestration_events), 0)
-         ) AS "latestSequence",
-         retention.retained_through_sequence AS "retainedThroughSequence"
+          (SELECT MIN(sequence) FROM orchestration_events) AS "earliestAvailableSequence",
+          ${orchestrationSequenceFrontierSql(sql)} AS "latestSequence",
+          retention.retained_through_sequence AS "retainedThroughSequence"
        FROM orchestration_retention_state AS retention
        WHERE retention.singleton_id = 1
     `,
@@ -123,16 +123,20 @@ const makeEventStore = Effect.gen(function* () {
     sql
       .withTransaction(
         Effect.gen(function* () {
-          yield* sql`
+          const reservations = yield* sql<{ readonly sequence: number }>`
             INSERT INTO orchestration_event_ids (event_id, sequence)
             VALUES (
               ${event.eventId},
-              COALESCE((SELECT MAX(sequence) + 1 FROM orchestration_events),
-                (SELECT retained_through_sequence + 1 FROM orchestration_retention_state WHERE singleton_id = 1),
-                1)
+              ${orchestrationSequenceFrontierSql(sql)} + 1
             )
+            RETURNING sequence
           `;
+          const sequence = reservations[0]?.sequence;
+          if (sequence === undefined) {
+            return yield* Effect.fail(new Error("event sequence reservation returned no row"));
+          }
           const persisted = yield* appendEventRow({
+            sequence,
             eventId: event.eventId,
             aggregateKind: event.aggregateKind,
             streamId: event.aggregateId,

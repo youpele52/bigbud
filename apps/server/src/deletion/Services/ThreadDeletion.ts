@@ -9,7 +9,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { DiscoveredThreadDeletionFiles } from "../Layers/ThreadDeletion.files.ts";
 import {
-  cleanupDiscoveredThreadDeletionFiles,
+  cleanupDiscoveredThreadWorktrees,
   discoverThreadDeletionFiles,
 } from "../Layers/ThreadDeletion.files.ts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -153,7 +153,7 @@ export interface ThreadDeletionShape {
     readonly rootThreadId: ThreadId;
     readonly threadIds: ReadonlyArray<ThreadId>;
   }) => Effect.Effect<DiscoveredThreadDeletionFiles, ThreadDeletionOperationError>;
-  readonly cleanupFiles: (
+  readonly cleanupWorktrees: (
     files: DiscoveredThreadDeletionFiles,
   ) => Effect.Effect<
     ReadonlyArray<{ readonly resource: string; readonly detail: string }>,
@@ -302,9 +302,9 @@ const makeThreadDeletion = Effect.gen(function* () {
           Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
         )
       : Effect.fail(unavailableFiles);
-  const cleanupFiles: ThreadDeletionShape["cleanupFiles"] = (files) =>
+  const cleanupWorktrees: ThreadDeletionShape["cleanupWorktrees"] = (files) =>
     Option.isSome(config)
-      ? cleanupDiscoveredThreadDeletionFiles(files).pipe(
+      ? cleanupDiscoveredThreadWorktrees(files).pipe(
           Effect.provideService(ServerConfig, config.value),
           Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
         )
@@ -318,7 +318,7 @@ const makeThreadDeletion = Effect.gen(function* () {
     isFenced,
     deleteNow,
     discoverFiles,
-    cleanupFiles,
+    cleanupWorktrees,
   } satisfies ThreadDeletionShape;
 });
 

@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "./wsTransport.test.helpers";
 import { WsTransport } from "./wsTransport";
+import { recoverAndAcknowledgeDeliveryBaseline } from "../routes/-__root.delivery-routing";
 
 const sockets: MockWebSocket[] = [];
 const transports: WsTransport[] = [];
@@ -279,6 +280,76 @@ describe("WsTransport stream subscriptions", () => {
     expect(listener).toHaveBeenLastCalledWith(
       expect.objectContaining({ type: "lifecycle", acknowledgedSequence: 4 }),
     );
+
+    unsubscribe();
+    await transport.dispose();
+  });
+
+  it("keeps an orchestration stream open while its baseline acknowledgement retries", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    let releaseRetry!: () => void;
+    const waitForRetry = new Promise<void>((resolve) => (releaseRetry = resolve));
+    const acknowledge = vi
+      .fn()
+      .mockResolvedValueOnce({ accepted: false, fenced: false, acknowledgedSequence: 0 })
+      .mockResolvedValueOnce({ accepted: true, fenced: false, acknowledgedSequence: 10 });
+    const unsubscribe = transport.subscribe(
+      (client) =>
+        client[WS_METHODS.subscribeOrchestrationDomainEvents]({
+          consumerId: "consumer-baseline",
+          appliedSequence: 0,
+        }),
+      async (item) => {
+        if (item.type !== "recovery") return;
+        await recoverAndAcknowledgeDeliveryBaseline({
+          recovery: item,
+          recover: async () => 10,
+          acknowledge,
+          sleep: async () => waitForRetry,
+        });
+      },
+      { retryDelay: 1 },
+    );
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const socket = getSocket(sockets);
+    socket.open();
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    const firstRequest = JSON.parse(socket.sent[0] ?? "{}") as { id: string };
+    socket.serverMessage(
+      JSON.stringify({
+        _tag: "Chunk",
+        requestId: firstRequest.id,
+        values: [
+          {
+            type: "recovery",
+            route: "direct-unmanaged",
+            recoveryId: "recovery-1",
+            consumerId: "consumer-baseline",
+            consumerGeneration: 1,
+            serverEpoch: "epoch-1",
+            acknowledgedSequence: 0,
+            targetSequence: 10,
+            reasonCode: "replay_budget_exceeded",
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
+    expect(
+      socket.sent.filter((message) => {
+        const request = JSON.parse(message) as { tag?: string };
+        return request.tag === WS_METHODS.subscribeOrchestrationDomainEvents;
+      }),
+    ).toHaveLength(1);
+
+    releaseRetry();
+    await waitFor(() => expect(acknowledge).toHaveBeenCalledTimes(2));
+    expect(
+      socket.sent.filter((message) => {
+        const request = JSON.parse(message) as { tag?: string };
+        return request.tag === WS_METHODS.subscribeOrchestrationDomainEvents;
+      }),
+    ).toHaveLength(1);
 
     unsubscribe();
     await transport.dispose();

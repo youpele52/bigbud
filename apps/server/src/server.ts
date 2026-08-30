@@ -88,6 +88,9 @@ import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
+import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
+import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -286,6 +289,12 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
 const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
 
 const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
+const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
+  Layer.provideMerge(DirectResourceCleanupExecutorLive),
+  Layer.provideMerge(DirectResourceCleanupRepositoryLive),
+  Layer.provideMerge(OrchestrationProjectionPipelineLayerLive),
+  Layer.provide(PersistenceLayerLive),
+);
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
@@ -297,7 +306,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
-  Layer.provideMerge(KeybindingsLive),
+  Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),

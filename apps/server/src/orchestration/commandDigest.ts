@@ -42,3 +42,11 @@ export function calculateCommandPayloadDigest(
     digest: createHash("sha256").update(canonicalizeCommandPayload(command)).digest("hex"),
   };
 }
+
+export function commandPayloadDigestMatches(
+  command: OrchestrationCommand,
+  expected: { readonly version: string; readonly digest: string },
+): boolean {
+  const actual = calculateCommandPayloadDigest(command);
+  return actual.version === expected.version && actual.digest === expected.digest;
+}

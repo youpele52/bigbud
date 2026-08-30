@@ -55,7 +55,7 @@ describe("routeOrchestrationDeliveryBatch", () => {
     });
   });
 
-  it("retries a lost baseline ACK response with the same identity", async () => {
+  it("lets transport failures reconnect rather than retrying an RPC acknowledgement", async () => {
     const recovery = {
       type: "recovery",
       route: "supervisor",
@@ -67,23 +67,20 @@ describe("routeOrchestrationDeliveryBatch", () => {
       targetSequence: 10,
       reasonCode: "replay_budget_exceeded",
     } satisfies OrchestrationDeliveryRecovery;
-    const acknowledge = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("response lost"))
-      .mockResolvedValue({ accepted: true, fenced: false, acknowledgedSequence: 10 });
+    const acknowledge = vi.fn().mockRejectedValueOnce(new Error("response lost"));
 
-    await recoverAndAcknowledgeDeliveryBaseline({
-      recovery,
-      recover: vi.fn(async () => 10),
-      acknowledge,
-      sleep: vi.fn(async () => undefined),
-    });
+    await expect(
+      recoverAndAcknowledgeDeliveryBaseline({
+        recovery,
+        recover: vi.fn(async () => 10),
+        acknowledge,
+      }),
+    ).rejects.toThrow("response lost");
 
-    expect(acknowledge).toHaveBeenCalledTimes(2);
-    expect(acknowledge.mock.calls[0]?.[0]).toEqual(acknowledge.mock.calls[1]?.[0]);
+    expect(acknowledge).toHaveBeenCalledOnce();
   });
 
-  it("runs one more bounded bootstrap when the canonical suffix is not authorized", async () => {
+  it("keeps one recovery identity while retrying a temporarily inadmissible baseline", async () => {
     const recovery = {
       type: "recovery",
       route: "direct-unmanaged",
@@ -101,23 +98,37 @@ describe("routeOrchestrationDeliveryBatch", () => {
       .mockResolvedValueOnce({ accepted: false, fenced: false, acknowledgedSequence: 4 })
       .mockResolvedValueOnce({ accepted: true, fenced: false, acknowledgedSequence: 10 });
 
-    await recoverAndAcknowledgeDeliveryBaseline({ recovery, recover, acknowledge });
+    const sleep = vi.fn(async () => undefined);
+    await expect(
+      recoverAndAcknowledgeDeliveryBaseline({ recovery, recover, acknowledge, sleep }),
+    ).resolves.toMatchObject({ accepted: true, acknowledgedSequence: 10 });
 
     expect(recover).toHaveBeenCalledTimes(2);
     expect(acknowledge).toHaveBeenCalledTimes(2);
+    expect(acknowledge.mock.calls[0]?.[0]).toMatchObject({
+      recoveryId: recovery.recoveryId,
+      consumerId: recovery.consumerId,
+      consumerGeneration: recovery.consumerGeneration,
+      serverEpoch: recovery.serverEpoch,
+      appliedProjectionSequence: 5,
+    });
+    expect(acknowledge.mock.calls[1]?.[0]).toMatchObject({
+      recoveryId: recovery.recoveryId,
+      consumerId: recovery.consumerId,
+      consumerGeneration: recovery.consumerGeneration,
+      serverEpoch: recovery.serverEpoch,
+      appliedProjectionSequence: 10,
+    });
+    expect(sleep).toHaveBeenCalledWith(250);
   });
 
-  it("stops after bounded non-replayable baseline attempts without reconnect looping", async () => {
-    const rejected = { accepted: false, fenced: false, acknowledgedSequence: 4 } as const;
-    const recover = vi.fn(async () => 5);
-    const acknowledge = vi.fn(async () => rejected);
-
+  it("treats a fenced acknowledgement as terminal", async () => {
     await expect(
       recoverAndAcknowledgeDeliveryBaseline({
         recovery: {
           type: "recovery",
           route: "direct-unmanaged",
-          recoveryId: "recovery-bounded",
+          recoveryId: "recovery-fenced",
           consumerId: "consumer-1",
           consumerGeneration: 3,
           serverEpoch: "epoch-1",
@@ -125,12 +136,14 @@ describe("routeOrchestrationDeliveryBatch", () => {
           targetSequence: 10,
           reasonCode: "replay_unavailable",
         },
-        recover,
-        acknowledge,
+        recover: vi.fn(async () => 10),
+        acknowledge: vi.fn(async () => ({
+          accepted: false,
+          fenced: true,
+          acknowledgedSequence: 4,
+        })),
       }),
-    ).rejects.toThrow("Delivery baseline acknowledgement was rejected at sequence 4.");
-    expect(recover).toHaveBeenCalledTimes(2);
-    expect(acknowledge).toHaveBeenCalledTimes(2);
+    ).rejects.toThrow("was fenced");
   });
 
   it("cancels baseline retries after renderer disposal", async () => {
@@ -162,6 +175,38 @@ describe("routeOrchestrationDeliveryBatch", () => {
     expect(acknowledge).toHaveBeenCalledOnce();
   });
 
+  it("cancels a delayed non-fenced retry without starting another bootstrap", async () => {
+    const controller = new AbortController();
+    const recover = vi.fn(async () => 10);
+    const acknowledge = vi.fn(async () => ({
+      accepted: false,
+      fenced: false,
+      acknowledgedSequence: 0,
+    }));
+    const operation = recoverAndAcknowledgeDeliveryBaseline({
+      recovery: {
+        type: "recovery",
+        route: "direct-unmanaged",
+        recoveryId: "recovery-delayed-cancel",
+        consumerId: "consumer-1",
+        consumerGeneration: 3,
+        serverEpoch: "epoch-1",
+        acknowledgedSequence: 0,
+        targetSequence: 10,
+        reasonCode: "replay_unavailable",
+      },
+      recover,
+      acknowledge,
+      signal: controller.signal,
+      sleep: () => new Promise<void>(() => undefined),
+    });
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
+    controller.abort();
+
+    await expect(operation).rejects.toThrow("recovery was cancelled");
+    expect(recover).toHaveBeenCalledOnce();
+  });
+
   it("cancels an in-flight baseline acknowledgement after renderer disposal", async () => {
     const controller = new AbortController();
     const acknowledge = vi.fn(() => new Promise<never>(() => undefined));
@@ -187,7 +232,7 @@ describe("routeOrchestrationDeliveryBatch", () => {
     expect(acknowledge).toHaveBeenCalledOnce();
   });
 
-  it("bounds a baseline acknowledgement that never settles", async () => {
+  it("fails a baseline acknowledgement that never settles so transport can reconnect", async () => {
     const acknowledge = vi.fn(() => new Promise<never>(() => undefined));
 
     await expect(
@@ -206,10 +251,9 @@ describe("routeOrchestrationDeliveryBatch", () => {
         recover: vi.fn(async () => 10),
         acknowledge,
         acknowledgementTimeoutMs: 1,
-        sleep: vi.fn(async () => undefined),
       }),
     ).rejects.toThrow("acknowledgement timed out");
-    expect(acknowledge).toHaveBeenCalledTimes(3);
+    expect(acknowledge).toHaveBeenCalledOnce();
   });
 
   it("retains a background reply until recovery completes, then applies and ACKs it", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveDeletionRequestMode } from "./ProviderCommandReactorHandlers.delete.ts";
+import { resolveDeletionRequestMode } from "./ProviderCommandReactorHandlers.delete.cleanup.ts";
 
 describe("resolveDeletionRequestMode", () => {
   it("preserves subtree behavior for legacy mode-less events", () => {
