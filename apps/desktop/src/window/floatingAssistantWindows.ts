@@ -4,6 +4,10 @@ import { BrowserWindow, Menu, screen, shell } from "electron";
 
 import type { DesktopWindowRegistry } from "./DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./desktopPreferences";
+import {
+  bindFloatingAssistantAlwaysOnTop,
+  reassertFloatingAssistantAlwaysOnTop,
+} from "./floatingAssistantWindows.alwaysOnTop";
 import { clampBounds, COMPACT_CHAT_MIN_SIZE, compactChatBounds, MASCOT_SIZE } from "./mascotBounds";
 import { getIconOption } from "./windowManager";
 
@@ -43,6 +47,8 @@ export class FloatingAssistantWindows {
   async openCompactChat(): Promise<BrowserWindow> {
     const existing = this.deps.registry.get("compact-chat");
     if (existing) {
+      if (existing.isMinimized()) existing.restore();
+      reassertFloatingAssistantAlwaysOnTop(existing);
       existing.show();
       existing.focus();
       return existing;
@@ -129,10 +135,11 @@ export class FloatingAssistantWindows {
       maximizable: false,
       fullscreenable: false,
       skipTaskbar: process.platform !== "darwin",
-      alwaysOnTop: process.env.XDG_SESSION_TYPE !== "wayland",
+      alwaysOnTop: true,
       ...getIconOption(this.deps.resolveIconPath),
       webPreferences: this.webPreferences(false),
     });
+    bindFloatingAssistantAlwaysOnTop(window);
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.deps.registry.register("mascot", window);
     window.on("moved", () => {
@@ -182,10 +189,11 @@ export class FloatingAssistantWindows {
       show: false,
       title: "bigbud",
       autoHideMenuBar: true,
-      alwaysOnTop: process.env.XDG_SESSION_TYPE !== "wayland",
+      alwaysOnTop: true,
       ...getIconOption(this.deps.resolveIconPath),
       webPreferences: this.webPreferences(true),
     });
+    bindFloatingAssistantAlwaysOnTop(window);
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.deps.registry.register("compact-chat", window);
     window.on("close", (event) => {
