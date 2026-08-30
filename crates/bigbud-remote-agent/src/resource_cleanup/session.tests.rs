@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Cursor;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::run;
+use super::{PlatformExecutor, admit_cleanup_request, handle_cleanup_request, run};
 use bigbud_protocol::{
     DEFAULT_MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1, write_frame,
 };
@@ -32,6 +32,9 @@ fn identity(path: &std::path::Path) -> v1::ResourceCleanupIdentity {
 
 #[test]
 fn executes_cleanup_only_after_hello_and_root_bootstrap() {
+    let _guard = super::super::CANCELLATION_TEST_LOCK
+        .lock()
+        .expect("cancellation lock");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -175,4 +178,69 @@ fn executes_cleanup_only_after_hello_and_root_bootstrap() {
     assert_eq!(digest_conflict.code, "OPERATION_DIGEST_CONFLICT");
     assert!(!target.exists());
     fs::remove_dir(root).expect("cleanup");
+}
+
+#[test]
+fn acknowledged_cancellation_before_the_handler_is_not_reset() {
+    let _guard = super::super::CANCELLATION_TEST_LOCK
+        .lock()
+        .expect("cancellation lock");
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "bigbud-session-cancel-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir(&root).expect("root");
+    let target = root.join("target");
+    fs::write(&target, b"retain").expect("target");
+    let root_identity = identity(&root);
+    let mut executor = PlatformExecutor::new();
+    let handles = executor
+        .bootstrap(vec![v1::ResourceCleanupRoot {
+            root_id: "root".to_owned(),
+            path: root.to_string_lossy().into_owned(),
+            identity: Some(root_identity.clone()),
+        }])
+        .expect("bootstrap");
+    let mut request = v1::ResourceCleanupRequest {
+        request_id: "cancel-request".to_owned(),
+        operation_id: "cancel-operation".to_owned(),
+        page_digest: Vec::new(),
+        plan_digest: vec![2; 32],
+        finalize_proof_digest: vec![3; 32],
+        authorization_digest: Vec::new(),
+        deadline_unix_ms: u64::MAX,
+        platform: std::env::consts::OS.to_owned(),
+        resources: vec![v1::ResourceCleanupResource {
+            resource_id: "resource".to_owned(),
+            root_handle: handles[0].root_handle.clone(),
+            relative_path: "target".to_owned(),
+            quarantine_name: ".bigbud-cleanup-target".to_owned(),
+            identity: Some(identity(&target)),
+            root_identity: Some(root_identity.clone()),
+            parent_identity: Some(root_identity),
+            action: v1::ResourceCleanupAction::Delete as i32,
+        }],
+    };
+    request.page_digest = super::super::contract::page_digest(&request.resources).to_vec();
+    request.authorization_digest = super::super::contract::authorization_digest(&request).to_vec();
+    let mut accepted = std::collections::VecDeque::new();
+    admit_cleanup_request(&request, &executor, &accepted).expect("admitted");
+    super::super::reset_cancellation();
+    super::super::request_cancellation();
+    let response = handle_cleanup_request(request, &mut executor, &mut accepted);
+    let Some(v1::frame::Payload::ResourceCleanupResponse(response)) = response.payload else {
+        panic!("expected cleanup response");
+    };
+    assert_eq!(
+        response.results[0].outcome,
+        v1::ResourceCleanupOutcome::ProcessFailure as i32
+    );
+    assert!(target.exists());
+    super::super::reset_cancellation();
+    fs::remove_file(target).expect("target cleanup");
+    fs::remove_dir(root).expect("root cleanup");
 }

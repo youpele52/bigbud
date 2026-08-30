@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, v1, write_frame};
 
 use super::{
-    AcceptedRequest, PlatformExecutor, handle_cleanup_request, hello_frame, protocol_error,
+    AcceptedRequest, PlatformExecutor, admit_cleanup_request, handle_cleanup_request, hello_frame,
+    protocol_error,
 };
 
 enum Input {
@@ -126,28 +127,42 @@ pub(super) fn run(reader: impl Read + Send + 'static, mut writer: impl Write) ->
                                 "cleanup request already active",
                             ))
                         } else {
-                            active_operation = Some(request.operation_id.clone());
-                            super::super::reset_cancellation();
-                            let mut owned_executor = executor.take().ok_or_else(|| {
-                                io::Error::other("cleanup executor ownership was lost")
-                            })?;
-                            let mut owned_accepted = accepted.take().ok_or_else(|| {
-                                io::Error::other("cleanup replay state ownership was lost")
-                            })?;
-                            let completed_tx = completed_tx.clone();
-                            std::thread::spawn(move || {
-                                let response = handle_cleanup_request(
-                                    request,
-                                    &mut owned_executor,
-                                    &mut owned_accepted,
-                                );
-                                let _ignored = completed_tx.send(Completed {
-                                    executor: owned_executor,
-                                    accepted: owned_accepted,
-                                    response,
-                                });
-                            });
-                            None
+                            let admission = admit_cleanup_request(
+                                &request,
+                                executor.as_ref().ok_or_else(|| {
+                                    io::Error::other("cleanup executor ownership was lost")
+                                })?,
+                                accepted.as_ref().ok_or_else(|| {
+                                    io::Error::other("cleanup replay state ownership was lost")
+                                })?,
+                            );
+                            match admission {
+                                Err(response) => Some(*response),
+                                Ok(()) => {
+                                    active_operation = Some(request.operation_id.clone());
+                                    super::super::reset_cancellation();
+                                    let mut owned_executor = executor.take().ok_or_else(|| {
+                                        io::Error::other("cleanup executor ownership was lost")
+                                    })?;
+                                    let mut owned_accepted = accepted.take().ok_or_else(|| {
+                                        io::Error::other("cleanup replay state ownership was lost")
+                                    })?;
+                                    let completed_tx = completed_tx.clone();
+                                    std::thread::spawn(move || {
+                                        let response = handle_cleanup_request(
+                                            request,
+                                            &mut owned_executor,
+                                            &mut owned_accepted,
+                                        );
+                                        let _ignored = completed_tx.send(Completed {
+                                            executor: owned_executor,
+                                            accepted: owned_accepted,
+                                            response,
+                                        });
+                                    });
+                                    None
+                                }
+                            }
                         }
                     }
                     Some(v1::frame::Payload::ResourceCleanupCancelRequest(request)) if ready => {

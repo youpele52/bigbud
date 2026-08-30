@@ -17,6 +17,13 @@ product outcomes. Rust receives only a bounded, already-authorized page and
 returns a typed result for each resource. Managed worktrees, checkpoints,
 canonical history, and legacy purge recovery remain TypeScript-owned.
 
+TypeScript-owned managed worktrees are captured into immutable, digest-bound
+rows in the same transaction as the direct cleanup plan. Their captured path,
+identity, and quarantine data survive process restarts; recovery never
+reconstructs an identity after canonical finalization. No historical backfill
+is attempted because old projections do not retain enough authority to infer a
+safe worktree manifest.
+
 There is no TypeScript filesystem fallback for these six kinds. On the packaged
 matrix (macOS arm64/x64, Linux x64, and Windows x64), a missing or incompatible
 agent prevents canonical finalization. Other architectures fail closed.
@@ -26,9 +33,17 @@ agent prevents canonical finalization. Other architectures fail closed.
 - A deletion-request event atomically creates a durable intent.
 - Operation and finalize-command identities derive from that intent's event ID.
 - The immutable resource plan is stored before finalization.
+- Prepared finalize commands without receipts are decoded, digest-verified, and
+  redispatched on every five-second recovery pass. Receipt deduplication and
+  immutable command IDs make repeated dispatch idempotent.
 - Execution requires the expected accepted command payload digest and committed
   deletion event to be copied into an immutable proof snapshot.
-- Canonical thread-history pruning happens only after the proof snapshot.
+- Canonical thread-history pruning happens only after the proof snapshot. The
+  canonical-pruned proof checkpoint is written in the same SQLite transaction
+  as canonical row deletion, so either both commit or both roll back.
+- Managed-worktree execution is independently proof-gated and, for threads,
+  canonical-pruning-gated. Each row has an isolated bounded retry budget and
+  can recover from an already-quarantined or already-absent resource.
 - Pages contain at most 256 resources, never exceed the encoded 1 MiB frame
   limit, persist exact request bytes/deadlines, and execute serially.
 - A TypeScript lease and executor-side operating-system lock exclude concurrent

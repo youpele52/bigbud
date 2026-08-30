@@ -3,7 +3,6 @@ use std::io::{Read, Seek};
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bigbud_protocol::v1;
@@ -12,8 +11,6 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 
 use super::{WindowsExecutor, identity, open_verified};
-
-static EXECUTION_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn excludes_a_second_executor_with_the_operation_lock() {
@@ -62,6 +59,53 @@ fn removes_a_nested_target_through_a_verified_parent() {
 
     assert_removed(&root, &target);
     fs::remove_dir(parent).expect("parent cleanup");
+    remove_root(&root);
+}
+
+#[test]
+fn rejects_an_ads_shaped_request_before_executor_mutation() {
+    let root = temporary_root("ads");
+    let target = root.join("target");
+    fs::write(&target, b"retain").expect("target");
+    let root_identity = identity(&open_verified(&root).expect("root")).expect("root identity");
+    let target_identity =
+        identity(&open_verified(&target).expect("target")).expect("target identity");
+    let mut executor = WindowsExecutor::new();
+    let handles = executor
+        .bootstrap(vec![v1::ResourceCleanupRoot {
+            root_id: "root".to_owned(),
+            path: root.to_string_lossy().into_owned(),
+            identity: Some(root_identity.clone()),
+        }])
+        .expect("bootstrap");
+    let mut request = v1::ResourceCleanupRequest {
+        request_id: "request".to_owned(),
+        operation_id: "operation".to_owned(),
+        page_digest: Vec::new(),
+        plan_digest: vec![2; 32],
+        finalize_proof_digest: vec![3; 32],
+        authorization_digest: Vec::new(),
+        deadline_unix_ms: u64::MAX,
+        platform: "windows".to_owned(),
+        resources: vec![v1::ResourceCleanupResource {
+            resource_id: "resource".to_owned(),
+            root_handle: handles[0].root_handle.clone(),
+            relative_path: "target:stream".to_owned(),
+            quarantine_name: ".bigbud-cleanup-target".to_owned(),
+            identity: Some(target_identity),
+            root_identity: Some(root_identity.clone()),
+            parent_identity: Some(root_identity),
+            action: v1::ResourceCleanupAction::Delete as i32,
+        }],
+    };
+    request.page_digest = super::super::contract::page_digest(&request.resources).to_vec();
+    request.authorization_digest = super::super::contract::authorization_digest(&request).to_vec();
+    assert_eq!(
+        super::super::contract::validate_request(&request),
+        Err("INVALID_RESOURCE".to_owned())
+    );
+    assert!(target.exists());
+    fs::remove_file(target).expect("target cleanup");
     remove_root(&root);
 }
 
@@ -162,7 +206,9 @@ fn execute_with_options(
     target_identity: v1::ResourceCleanupIdentity,
     cancel: bool,
 ) -> v1::ResourceCleanupOutcome {
-    let _guard = EXECUTION_LOCK.lock().expect("execution lock");
+    let _guard = super::super::CANCELLATION_TEST_LOCK
+        .lock()
+        .expect("execution lock");
     let root_identity = identity(&open_verified(root).expect("open root")).expect("root identity");
     let parent = root
         .join(relative_path)

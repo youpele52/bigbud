@@ -76,6 +76,7 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
     readonly sql: SqlClient.SqlClient;
     readonly threadId: ThreadId;
     readonly deletionSequence: number;
+    readonly recordCheckpoint?: Effect.Effect<void, Error>;
   }) {
     const verifyReplacement =
       input.projectionPipeline.ensureVerifiedBaselineThroughWithoutCompaction;
@@ -95,6 +96,7 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
         });
         yield* queries.deleteProvenReceipts({ entityKind: "thread", entityId: input.threadId });
         yield* queries.deleteProvenThreadCanonical({ threadId: input.threadId });
+        yield* input.recordCheckpoint ?? Effect.void;
       }),
     );
   },

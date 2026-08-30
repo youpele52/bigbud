@@ -12,11 +12,8 @@ import { Effect, Random } from "effect";
 
 import { nativeProviderRefs } from "./Adapter.utils.ts";
 import { claudeSdkDiagnostic } from "./Adapter.sdk.projections.ts";
-import type {
-  AssistantTextBlockState,
-  ClaudeSessionContext,
-  UnstampedProviderRuntimeEvent,
-} from "./Adapter.types.ts";
+import type { AssistantTextBlockState, ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import {
   asRuntimeItemId,
@@ -29,7 +26,7 @@ export interface BlockHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
 }
 
 export const makeBlockHandlers = (deps: BlockHandlerDeps) => {
@@ -108,7 +105,7 @@ export const makeBlockHandlers = (deps: BlockHandlerDeps) => {
 
     if (!block.emittedTextDelta && block.fallbackText.length > 0) {
       const deltaStamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "content.delta",
         eventId: deltaStamp.eventId,
         provider: PROVIDER,
@@ -139,7 +136,7 @@ export const makeBlockHandlers = (deps: BlockHandlerDeps) => {
     }
 
     const stamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "item.completed",
       eventId: stamp.eventId,
       provider: PROVIDER,

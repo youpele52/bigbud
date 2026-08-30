@@ -62,6 +62,7 @@ export function makeThreadRetentionRetry(sql: SqlClient.SqlClient) {
               last_failure_at = ${input.failedAt}, last_error_code = ${input.lastErrorCode},
               updated_at = ${input.failedAt}
             WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
+              AND active_slot = 1
             RETURNING retry_ordinal AS "retryOrdinal",
               failure_window_started_at AS "failureWindowStartedAt",
               failure_count_in_window AS "failureCountInWindow"
@@ -120,7 +121,8 @@ export function makeThreadRetentionRetry(sql: SqlClient.SqlClient) {
         failure_window_started_at = NULL, failure_count_in_window = 0,
         last_failure_at = NULL, next_attempt_at = NULL, circuit_open_until = NULL,
         last_error_code = NULL, updated_at = ${input.updatedAt}
-      WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
+       WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
+        AND active_slot = 1
       RETURNING run_id
     `.pipe(Effect.map((rows) => rows.length === 1));
   };

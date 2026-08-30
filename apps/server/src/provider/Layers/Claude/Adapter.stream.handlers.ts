@@ -18,8 +18,8 @@ import type {
   AssistantTextBlockState,
   ClaudeSessionContext,
   ToolInFlight,
-  UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeMessageSpecificHandlers } from "./Adapter.stream.handlers.messages.ts";
@@ -35,7 +35,7 @@ export interface MessageHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
@@ -93,7 +93,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
           assistantBlockEntry.block.emittedTextDelta = true;
         }
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "content.delta",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -150,7 +150,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         context.inFlightTools.set(event.index, nextTool);
 
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "item.updated",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -227,7 +227,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
       context.inFlightTools.set(index, tool);
 
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "item.started",
         eventId: stamp.eventId,
         provider: PROVIDER,

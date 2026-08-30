@@ -72,8 +72,8 @@ pub fn validate_request(request: &v1::ResourceCleanupRequest) -> Result<(), Stri
             || resource.root_handle.len() > 64
             || resource.relative_path.len() > 4096
             || resource.quarantine_name.len() > 255
-            || !safe_relative(&resource.relative_path)
-            || !safe_quarantine(&resource.quarantine_name)
+            || !safe_relative_for(&resource.relative_path, cfg!(windows))
+            || !safe_quarantine_for(&resource.quarantine_name, cfg!(windows))
             || resource.root_identity.is_none()
             || resource.parent_identity.is_none()
             || resource.action != v1::ResourceCleanupAction::Delete as i32
@@ -229,9 +229,13 @@ fn canonical_decimal(value: &str) -> bool {
         && value.parse::<u64>().is_ok()
 }
 
-fn safe_relative(value: &str) -> bool {
+fn safe_relative_for(value: &str, windows_rules: bool) -> bool {
     !value.is_empty()
         && !value.contains('\0')
+        && (!windows_rules
+            || value
+                .split(['/', '\\'])
+                .all(|component| !component.contains(':')))
         && Path::new(value).components().all(|component| {
             matches!(component, Component::Normal(_))
                 && !component
@@ -241,158 +245,10 @@ fn safe_relative(value: &str) -> bool {
         })
 }
 
-fn safe_quarantine(value: &str) -> bool {
-    value.starts_with(".bigbud-cleanup-") && safe_relative(value)
+fn safe_quarantine_for(value: &str, windows_rules: bool) -> bool {
+    value.starts_with(".bigbud-cleanup-") && safe_relative_for(value, windows_rules)
 }
 
 #[cfg(test)]
-mod tests {
-    use bigbud_protocol::v1;
-
-    use super::{validate_identity, validate_request};
-
-    fn identity(kind: v1::ResourceCleanupEntryType) -> v1::ResourceCleanupIdentity {
-        v1::ResourceCleanupIdentity {
-            device_or_volume: "1".to_owned(),
-            inode_or_file_id: "2".to_owned(),
-            entry_type: kind as i32,
-        }
-    }
-
-    #[test]
-    fn rejects_non_canonical_decimal_identity() {
-        let mut value = identity(v1::ResourceCleanupEntryType::File);
-        value.inode_or_file_id = "02".to_owned();
-        assert_eq!(
-            validate_identity(&value),
-            Err("INVALID_IDENTITY".to_owned())
-        );
-    }
-
-    #[test]
-    fn rejects_duplicate_resource_ids_and_unsafe_paths() {
-        let resource = v1::ResourceCleanupResource {
-            resource_id: "resource".to_owned(),
-            root_handle: "root".to_owned(),
-            relative_path: "../escape".to_owned(),
-            quarantine_name: ".bigbud-cleanup-resource".to_owned(),
-            identity: None,
-            root_identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            parent_identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            action: v1::ResourceCleanupAction::Delete as i32,
-        };
-        let request = v1::ResourceCleanupRequest {
-            request_id: "request".to_owned(),
-            operation_id: "operation".to_owned(),
-            page_digest: vec![0; 32],
-            deadline_unix_ms: u64::MAX,
-            platform: std::env::consts::OS.to_owned(),
-            resources: vec![resource.clone(), resource],
-            plan_digest: vec![0; 32],
-            finalize_proof_digest: vec![0; 32],
-            authorization_digest: vec![0; 32],
-        };
-        assert_eq!(
-            validate_request(&request),
-            Err("INVALID_RESOURCE".to_owned())
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn rejects_the_filesystem_root() {
-        let request = v1::ResourceCleanupRootBootstrapRequest {
-            request_id: "request".to_owned(),
-            platform: std::env::consts::OS.to_owned(),
-            roots: vec![v1::ResourceCleanupRoot {
-                root_id: "root".to_owned(),
-                path: "/".to_owned(),
-                identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            }],
-        };
-        assert_eq!(
-            super::validate_bootstrap(&request),
-            Err("INVALID_ROOT".to_owned())
-        );
-    }
-
-    #[test]
-    fn rejects_the_user_home_as_an_explicit_forbidden_root() {
-        let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        else {
-            return;
-        };
-        let request = v1::ResourceCleanupRootBootstrapRequest {
-            request_id: "request".to_owned(),
-            platform: std::env::consts::OS.to_owned(),
-            roots: vec![v1::ResourceCleanupRoot {
-                root_id: "root".to_owned(),
-                path: std::path::PathBuf::from(home)
-                    .to_string_lossy()
-                    .into_owned(),
-                identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            }],
-        };
-        assert_eq!(
-            super::validate_bootstrap(&request),
-            Err("FORBIDDEN_ROOT".to_owned())
-        );
-    }
-
-    #[test]
-    fn rejects_temporary_and_system_directories_as_forbidden_roots() {
-        let request = v1::ResourceCleanupRootBootstrapRequest {
-            request_id: "request".to_owned(),
-            platform: std::env::consts::OS.to_owned(),
-            roots: vec![v1::ResourceCleanupRoot {
-                root_id: "root".to_owned(),
-                path: std::env::temp_dir().to_string_lossy().into_owned(),
-                identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            }],
-        };
-        assert_eq!(
-            super::validate_bootstrap(&request),
-            Err("FORBIDDEN_ROOT".to_owned())
-        );
-        #[cfg(unix)]
-        {
-            let mut system_request = request;
-            system_request.roots[0].path = "/etc".to_owned();
-            assert_eq!(
-                super::validate_bootstrap(&system_request),
-                Err("FORBIDDEN_ROOT".to_owned())
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_a_page_digest_that_does_not_match_the_canonical_resources() {
-        let resource = v1::ResourceCleanupResource {
-            resource_id: "resource".to_owned(),
-            root_handle: "root-0".to_owned(),
-            relative_path: "target".to_owned(),
-            quarantine_name: ".bigbud-cleanup-target".to_owned(),
-            identity: Some(identity(v1::ResourceCleanupEntryType::File)),
-            root_identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            parent_identity: Some(identity(v1::ResourceCleanupEntryType::Directory)),
-            action: v1::ResourceCleanupAction::Delete as i32,
-        };
-        let mut request = v1::ResourceCleanupRequest {
-            request_id: "request".to_owned(),
-            operation_id: "operation".to_owned(),
-            page_digest: super::page_digest(std::slice::from_ref(&resource)).to_vec(),
-            deadline_unix_ms: u64::MAX,
-            platform: std::env::consts::OS.to_owned(),
-            resources: vec![resource],
-            plan_digest: vec![1; 32],
-            finalize_proof_digest: vec![2; 32],
-            authorization_digest: Vec::new(),
-        };
-        request.authorization_digest = super::authorization_digest(&request).to_vec();
-        request.resources[0].relative_path = "changed".to_owned();
-        assert_eq!(
-            validate_request(&request),
-            Err("INVALID_PAGE_DIGEST".to_owned())
-        );
-    }
-}
+#[path = "contract.tests.rs"]
+mod tests;

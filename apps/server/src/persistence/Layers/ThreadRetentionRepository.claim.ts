@@ -21,6 +21,10 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
           WHERE run_id = ? AND thread_id = ? AND status = 'selected'
             AND expected_last_activity_at = ?
             AND EXISTS (
+              SELECT 1 FROM thread_retention_runs AS run
+              WHERE run.run_id = ? AND run.active_slot = 1
+            )
+            AND EXISTS (
               SELECT 1 FROM projection_threads AS t
               JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
               LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = t.thread_id
@@ -35,6 +39,7 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
             input.runId,
             input.threadId,
             input.expectedLastActivityAt,
+            input.runId,
             input.threadId,
             input.expectedLastActivityAt,
             input.cutoffAt,
@@ -42,7 +47,8 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
         );
         if (claimed.length === 1) {
           yield* sql`UPDATE thread_retention_runs SET requested_count = requested_count + 1,
-            updated_at = ${input.claimedAt} WHERE run_id = ${input.runId}`;
+            updated_at = ${input.claimedAt}
+            WHERE run_id = ${input.runId} AND active_slot = 1`;
           return { claimed: true } as const;
         }
         const rows = yield* sql.unsafe<{
@@ -70,12 +76,16 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
             next_attempt_at = NULL,
             attempt_count = attempt_count + 1, updated_at = ${input.claimedAt}, completed_at = ${input.claimedAt}
           WHERE run_id = ${input.runId} AND thread_id = ${input.threadId} AND status = 'selected'
+            AND EXISTS (
+              SELECT 1 FROM thread_retention_runs AS run
+              WHERE run.run_id = ${input.runId} AND run.active_slot = 1
+            )
           RETURNING thread_id
         `;
         if (skipped.length === 1)
           yield* sql`
           UPDATE thread_retention_runs SET skipped_count = skipped_count + 1,
-            updated_at = ${input.claimedAt} WHERE run_id = ${input.runId}
+            updated_at = ${input.claimedAt} WHERE run_id = ${input.runId} AND active_slot = 1
         `;
         return { claimed: false, reason: row.reason } as const;
       }),

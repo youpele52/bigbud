@@ -29,12 +29,8 @@ import {
   nativeProviderRefs,
   summarizeToolRequest,
 } from "./Adapter.utils.ts";
-import type {
-  ClaudeSessionContext,
-  PendingApproval,
-  PendingUserInput,
-  UnstampedProviderRuntimeEvent,
-} from "./Adapter.types.ts";
+import type { ClaudeSessionContext, PendingApproval, PendingUserInput } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { decodeClaudePermissionCallback } from "./Adapter.sdk.messages.ts";
 import { claudeSdkPermissionRuntimeRaw } from "./Adapter.sdk.projections.ts";
@@ -52,7 +48,7 @@ export interface ApprovalHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly runFork: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>;
   readonly runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
   readonly emitProposedPlanCompleted: StreamHandlers["emitProposedPlanCompleted"];
@@ -191,7 +187,7 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     };
 
     const requestedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "request.opened",
       eventId: requestedStamp.eventId,
       provider: PROVIDER,
@@ -272,7 +268,7 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     resolvedApprovalSuggestions.set(requestId, pendingApproval.suggestions ?? []);
 
     const resolvedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "request.resolved",
       eventId: resolvedStamp.eventId,
       provider: PROVIDER,

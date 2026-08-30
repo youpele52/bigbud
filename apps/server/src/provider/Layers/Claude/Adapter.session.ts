@@ -36,6 +36,7 @@ import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
 import { makeLogNativeSdkMessage } from "./Adapter.session.log.ts";
 import { initializeClaudeMcpLifecycle } from "./Adapter.session.mcp.ts";
 import type { SessionStartDeps } from "./Adapter.session.types.ts";
+import { deleteClaudeSessionIfCurrent } from "./Adapter.events.ts";
 
 /** Initialize a new provider session and start the SDK stream fiber. */
 export const makeStartSession = (deps: SessionStartDeps) => {
@@ -336,7 +337,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     sessions.set(threadId, context);
 
     const cleanupRegisteredSession = Effect.sync(() => {
-      sessions.delete(threadId);
+      deleteClaudeSessionIfCurrent(sessions, context);
       try {
         queryRuntime.close();
       } catch {
@@ -354,6 +355,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     );
 
     yield* emitRuntimeEvents({
+      context,
       threadId,
       resumeCursor: input.resumeCursor,
       apiModelId,

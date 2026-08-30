@@ -19,6 +19,8 @@ const MAX_ENTRIES: usize = 1_000_000;
 const MAX_KNOWN_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 
 static CLEANUP_CANCELLED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static CANCELLATION_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn reset_cancellation() {
     CLEANUP_CANCELLED.store(false, Ordering::Release);

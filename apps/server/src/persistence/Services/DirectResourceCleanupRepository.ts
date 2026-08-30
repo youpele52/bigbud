@@ -3,6 +3,7 @@ import type { Effect } from "effect";
 
 import type { DirectCleanupResource } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
 import type { DirectCleanupResult } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
+import type { PurgeResource } from "./PurgeJobRepository.ts";
 
 export interface DirectCleanupPlanInput {
   readonly operationId: string;
@@ -19,6 +20,7 @@ export interface DirectCleanupPlanInput {
     readonly kind: "attachment";
     readonly relativePath: string;
   }>;
+  readonly worktreeResources?: ReadonlyArray<PurgeResource>;
   readonly createdAt: string;
 }
 
@@ -62,6 +64,60 @@ export interface DirectResourceCleanupRepositoryShape {
     Error
   >;
   readonly markCanonicalPruned: (operationId: string, at: string) => Effect.Effect<void, Error>;
+  readonly listPreparedFinalizeCandidates: (input: {
+    readonly createdAfter: string;
+    readonly operationAfter: string;
+    readonly limit: number;
+  }) => Effect.Effect<
+    ReadonlyArray<{
+      readonly operationId: string;
+      readonly createdAt: string;
+      readonly finalizeCommandId: string;
+      readonly finalizePayloadJson: string;
+      readonly finalizePayloadDigestVersion: string;
+      readonly finalizePayloadDigest: string;
+    }>,
+    Error
+  >;
+  readonly blockPrepared: (
+    operationId: string,
+    errorCode: string,
+    at: string,
+  ) => Effect.Effect<boolean, Error>;
+  readonly listEligibleWorktrees: (input: {
+    readonly dueAt: string;
+    readonly limit: number;
+    readonly operationId?: string;
+  }) => Effect.Effect<
+    ReadonlyArray<{
+      readonly operationId: string;
+      readonly resourceId: string;
+      readonly resource: PurgeResource;
+      readonly attemptCount: number;
+    }>,
+    Error
+  >;
+  readonly completeWorktree: (input: {
+    readonly operationId: string;
+    readonly resourceId: string;
+    readonly expectedAttemptCount: number;
+    readonly completedAt: string;
+  }) => Effect.Effect<boolean, Error>;
+  readonly retryWorktree: (input: {
+    readonly operationId: string;
+    readonly resourceId: string;
+    readonly expectedAttemptCount: number;
+    readonly errorCode: string;
+    readonly nextAttemptAt: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<boolean, Error>;
+  readonly blockWorktree: (input: {
+    readonly operationId: string;
+    readonly resourceId: string;
+    readonly expectedAttemptCount: number;
+    readonly errorCode: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<boolean, Error>;
   readonly cancelPrepared: (operationId: string, at: string) => Effect.Effect<void, Error>;
   readonly cancelIntentIfUnplanned: (intentId: string, at: string) => Effect.Effect<void, Error>;
   readonly recordResults: (

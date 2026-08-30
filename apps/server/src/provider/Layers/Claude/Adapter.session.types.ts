@@ -8,8 +8,8 @@ import type {
   ClaudeHarnessConfig,
   ClaudeQueryRuntime,
   ClaudeSessionContext,
-  UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
@@ -51,7 +51,7 @@ export interface SessionStartDeps {
   }) => ClaudeQueryRuntime;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly streamHandlers: StreamHandlers;
 }

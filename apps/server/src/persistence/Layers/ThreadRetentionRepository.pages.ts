@@ -100,6 +100,7 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
             SET cursor_last_activity_at = ${input.nextCursor.lastActivityAt},
               cursor_thread_id = ${input.nextCursor.threadId}, updated_at = ${input.createdAt}
             WHERE run_id = ${input.runId} AND status = ${input.expectedStatus}
+              AND active_slot = 1
               AND ((${
                 input.expectedCursor === null ? 1 : 0
               } = 1 AND cursor_last_activity_at IS NULL AND cursor_thread_id IS NULL)
@@ -133,7 +134,7 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
         yield* sql`
             UPDATE thread_retention_runs
             SET selected_count = selected_count + ${insertedCount}, updated_at = ${input.createdAt}
-            WHERE run_id = ${input.runId}
+            WHERE run_id = ${input.runId} AND active_slot = 1
           `;
         const outstanding = yield* sql<{ count: number }>`
             SELECT COUNT(*) AS count FROM thread_retention_run_items
@@ -156,6 +157,11 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
   ) {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
+        const ownership = yield* sql`
+          SELECT 1 FROM thread_retention_runs
+          WHERE run_id = ${input.runId} AND active_slot = 1
+        `;
+        if (ownership.length !== 1) return 0;
         let insertedCount = 0;
         for (const candidate of input.candidates) {
           const rows = yield* sql`

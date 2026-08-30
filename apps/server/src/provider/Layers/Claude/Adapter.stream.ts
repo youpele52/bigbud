@@ -17,7 +17,8 @@ import {
   messageFromClaudeStreamCause,
   toError,
 } from "./Adapter.utils.ts";
-import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { makeBlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnHandlers } from "./Adapter.stream.turn.ts";
@@ -29,7 +30,7 @@ export interface StreamHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
 }
@@ -126,7 +127,7 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
 
     if (options?.emitExitEvent !== false && sessions.get(context.session.threadId) === context) {
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "session.exited",
         eventId: stamp.eventId,
         provider: PROVIDER,

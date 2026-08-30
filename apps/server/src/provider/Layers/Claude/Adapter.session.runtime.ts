@@ -8,7 +8,8 @@ import {
   claudeModernizationMetricAttributes,
   increment,
 } from "../../../observability/Metrics.ts";
-import { PROVIDER, type UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import { PROVIDER } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { toError } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
@@ -19,7 +20,7 @@ const RECOVERY_RETRY_DELAYS_MS = [0, 100] as const;
 
 export interface SessionRuntimeDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly streamHandlers: StreamHandlers;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
 }
@@ -46,6 +47,7 @@ export const emitSessionRuntimeEvents = (
   deps: Pick<SessionRuntimeDeps, "makeEventStamp" | "offerRuntimeEvent">,
 ) =>
   Effect.fn("emitSessionRuntimeEvents")(function* (input: {
+    readonly context: ClaudeSessionContext;
     readonly threadId: ThreadId;
     readonly resumeCursor: unknown;
     readonly apiModelId: string | undefined;
@@ -56,7 +58,7 @@ export const emitSessionRuntimeEvents = (
     readonly fastMode: boolean;
   }) {
     const sessionStartedStamp = yield* deps.makeEventStamp();
-    yield* deps.offerRuntimeEvent({
+    yield* deps.offerRuntimeEvent(input.context, {
       type: "session.started",
       eventId: sessionStartedStamp.eventId,
       provider: PROVIDER,
@@ -67,7 +69,7 @@ export const emitSessionRuntimeEvents = (
     });
 
     const configuredStamp = yield* deps.makeEventStamp();
-    yield* deps.offerRuntimeEvent({
+    yield* deps.offerRuntimeEvent(input.context, {
       type: "session.configured",
       eventId: configuredStamp.eventId,
       provider: PROVIDER,
@@ -87,7 +89,7 @@ export const emitSessionRuntimeEvents = (
     });
 
     const readyStamp = yield* deps.makeEventStamp();
-    yield* deps.offerRuntimeEvent({
+    yield* deps.offerRuntimeEvent(input.context, {
       type: "session.state.changed",
       eventId: readyStamp.eventId,
       provider: PROVIDER,

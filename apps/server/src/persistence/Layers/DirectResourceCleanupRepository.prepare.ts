@@ -1,10 +1,15 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { DirectResourceCleanupRepositoryShape } from "../Services/DirectResourceCleanupRepository.ts";
 import { paginateDirectCleanupResources } from "../../deletion/Layers/DirectResourceCleanup.request.ts";
+import { serializeManagedWorktreeResource } from "./DirectResourceCleanupRepository.worktrees.ts";
 
 const UINT64_MAX = 18_446_744_073_709_551_615n;
+
+class CleanupPlanValidationError extends Data.TaggedError("CleanupPlanValidationError")<{
+  readonly cause: unknown;
+}> {}
 
 function isCanonicalIdentityPart(value: string): boolean {
   try {
@@ -143,6 +148,24 @@ export function makeDirectResourceCleanupPreparation(
             ) {
               return yield* Effect.fail(new Error("cleanup plan contains a malformed identity"));
             }
+            const worktrees = yield* Effect.try({
+              try: () =>
+                (input.worktreeResources ?? []).map((resource) => {
+                  const serialized = serializeManagedWorktreeResource(resource);
+                  return {
+                    resource: serialized.resource,
+                    json: serialized.json,
+                    digest: serialized.digest,
+                    resourceId: `managed-worktree:${serialized.resource.relativePath}`,
+                  };
+                }),
+              catch: (cause) => new CleanupPlanValidationError({ cause }),
+            });
+            if (
+              new Set(worktrees.map((worktree) => worktree.resourceId)).size !== worktrees.length
+            ) {
+              return yield* Effect.fail(new Error("cleanup plan contains duplicate worktrees"));
+            }
             const pages = paginateDirectCleanupResources({
               operationId: input.operationId,
               planDigest: input.planDigest,
@@ -205,6 +228,21 @@ export function makeDirectResourceCleanupPreparation(
                     ${input.resources.length + retainedIndex}, 0, ${resource.kind}, ${resource.kind},
                     ${resource.relativePath}, '.bigbud-cleanup-retained', NULL, NULL, NULL,
                     '0', '0', '0', '0', 'retained_shared', ${input.createdAt}
+                  )
+                `,
+              { concurrency: 1, discard: true },
+            );
+            yield* Effect.forEach(
+              worktrees,
+              (worktree, originalIndex) =>
+                sql`
+                  INSERT INTO direct_resource_cleanup_worktrees (
+                    operation_id, resource_id, original_index, resource_json, resource_digest,
+                    state, created_at, updated_at
+                  ) VALUES (
+                    ${input.operationId}, ${worktree.resourceId}, ${originalIndex},
+                    ${worktree.json}, ${worktree.digest}, 'pending', ${input.createdAt},
+                    ${input.createdAt}
                   )
                 `,
               { concurrency: 1, discard: true },

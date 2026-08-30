@@ -110,6 +110,7 @@ import Migration0106 from "./Migrations/106_CommandReceiptPayloadDigest.ts";
 import Migration0107 from "./Migrations/107_OrchestrationBootstrapRecipes.ts";
 import Migration0108 from "./Migrations/108_DirectResourceCleanupPlans.ts";
 import Migration0109 from "./Migrations/109_RepairOrchestrationEventIdSequences.ts";
+import Migration0110 from "./Migrations/110_DirectResourceCleanupWorktrees.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -220,6 +221,7 @@ export const migrationEntries = [
   [107, "OrchestrationBootstrapRecipes", Migration0107],
   [108, "DirectResourceCleanupPlans", Migration0108],
   [109, "RepairOrchestrationEventIdSequences", Migration0109],
+  [110, "DirectResourceCleanupWorktrees", Migration0110],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

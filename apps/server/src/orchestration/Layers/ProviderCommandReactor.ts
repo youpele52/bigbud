@@ -1,7 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
-import { Cause, Effect, Layer, Option, Schema, Scope, Stream } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { Cause, Effect, Layer, Option, Scope, Stream } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
 import {
@@ -11,9 +9,6 @@ import {
 import { makeProviderCommandHandlers } from "./ProviderCommandReactorHandlers.ts";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
-import { DirectResourceCleanupExecutor } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
-import { makeDirectResourceCleanupExecutor } from "../../deletion/Layers/DirectResourceCleanupExecutor.ts";
-import { commandPayloadDigestMatches } from "../commandDigest.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -33,28 +28,15 @@ type ProviderIntentEvent = Extract<
   }
 >;
 
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
-}
-
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const handlers = yield* makeProviderCommandHandlers;
-  const sql = yield* SqlClient.SqlClient;
   const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
     : yield* makeDirectResourceCleanupRepository;
-  const cleanupExecutorService = yield* Effect.serviceOption(DirectResourceCleanupExecutor);
-  const cleanupExecutor = Option.isSome(cleanupExecutorService)
-    ? cleanupExecutorService.value
-    : makeDirectResourceCleanupExecutor();
 
   const processDomainEventSafely = (event: ProviderIntentEvent) =>
     handlers.processDomainEvent(event).pipe(
@@ -119,95 +101,6 @@ const make = Effect.gen(function* () {
       Stream.runForEach(orchestrationEngine.streamDomainEvents, processEvent),
     );
     yield* Effect.yieldNow;
-
-    let preparedCursor = "";
-    while (true) {
-      const plans = yield* sql<{
-        readonly operationId: string;
-        readonly finalizeCommandId: string;
-        readonly finalizePayloadJson: string;
-        readonly finalizePayloadDigestVersion: string;
-        readonly finalizePayloadDigest: string;
-      }>`
-          SELECT plan.operation_id AS "operationId",
-            plan.finalize_command_id AS "finalizeCommandId",
-            plan.finalize_payload_json AS "finalizePayloadJson",
-            plan.finalize_payload_digest_version AS "finalizePayloadDigestVersion",
-            plan.finalize_payload_digest AS "finalizePayloadDigest"
-          FROM direct_resource_cleanup_plans AS plan
-          LEFT JOIN orchestration_command_receipts AS receipt
-            ON receipt.command_id = plan.finalize_command_id
-          LEFT JOIN orchestration_command_receipt_claims AS claim
-            ON claim.command_id = plan.finalize_command_id
-          WHERE plan.state = 'prepared' AND receipt.command_id IS NULL
-            AND plan.operation_id > ${preparedCursor}
-            AND (claim.command_id IS NULL OR (
-              claim.payload_digest_version = plan.finalize_payload_digest_version
-              AND claim.payload_digest = plan.finalize_payload_digest
-            ))
-          ORDER BY plan.operation_id LIMIT 100
-        `.pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("provider command reactor could not inspect prepared cleanup plans", {
-            detail: String(error),
-          }).pipe(Effect.as([])),
-        ),
-      );
-      yield* Effect.forEach(
-        plans,
-        (plan) =>
-          Effect.gen(function* () {
-            const decoded = yield* Effect.exit(
-              Schema.decodeUnknownEffect(OrchestrationCommand)(parseJson(plan.finalizePayloadJson)),
-            );
-            if (
-              decoded._tag === "Failure" ||
-              decoded.value.commandId !== plan.finalizeCommandId ||
-              !commandPayloadDigestMatches(decoded.value, {
-                version: plan.finalizePayloadDigestVersion,
-                digest: plan.finalizePayloadDigest,
-              })
-            ) {
-              yield* sql`
-                UPDATE direct_resource_cleanup_plans SET state = 'blocked',
-                  last_error_code = 'invalid_finalize_payload', updated_at = ${new Date().toISOString()}
-                WHERE operation_id = ${plan.operationId} AND state = 'prepared'
-              `;
-              return;
-            }
-            const executor = yield* cleanupExecutor.prepare();
-            yield* Effect.tryPromise(() => executor.assertAlive()).pipe(
-              Effect.andThen(orchestrationEngine.dispatch(decoded.value)),
-              Effect.ensuring(
-                Effect.tryPromise(() => executor.shutdown()).pipe(
-                  Effect.ignore,
-                  Effect.ensuring(Effect.sync(() => executor.close())),
-                ),
-              ),
-              Effect.catch((error) =>
-                Effect.logWarning("provider command reactor deferred cleanup finalize recovery", {
-                  operationId: plan.operationId,
-                  detail: String(error),
-                }),
-              ),
-            );
-          }).pipe(
-            Effect.catch((error) =>
-              Effect.logWarning(
-                "provider command reactor could not recover prepared cleanup plan",
-                {
-                  operationId: plan.operationId,
-                  detail: String(error),
-                },
-              ),
-            ),
-          ),
-        { concurrency: 1, discard: true },
-      );
-      const last = plans.at(-1);
-      if (!last || plans.length < 100) break;
-      preparedCursor = last.operationId;
-    }
 
     let cursorAt = "";
     let cursorId = "";

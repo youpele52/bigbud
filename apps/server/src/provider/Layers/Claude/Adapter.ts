@@ -3,15 +3,9 @@ import {
   type Options as ClaudeQueryOptions,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import {
-  EventId,
-  type ProviderRuntimeEvent,
-  type ProviderSendTurnInput,
-  ThreadId,
-  TurnId,
-} from "@bigbud/contracts";
+import { type ProviderSendTurnInput, ThreadId, TurnId } from "@bigbud/contracts";
 import { resolveApiModelId } from "@bigbud/shared/model";
-import { DateTime, Deferred, Effect, FileSystem, Layer, Queue, Random, Stream } from "effect";
+import { Deferred, Effect, FileSystem, Layer, Queue, Random } from "effect";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -32,7 +26,6 @@ import {
   type ClaudeQueryRuntime,
   type ClaudeSessionContext,
   type ClaudeTurnState,
-  type UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
@@ -41,6 +34,7 @@ import { applyClaudeRuntimeTraits } from "./Adapter.session.traits.ts";
 import { toRequestError } from "./Adapter.utils.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 import { makeClaudeControlOperations } from "./Adapter.controls.ts";
+import { makeClaudeEventRuntime } from "./Adapter.events.ts";
 
 export type { ClaudeAdapterLiveOptions };
 
@@ -65,21 +59,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }): ClaudeQueryRuntime => query({ prompt: input.prompt, options: input.options }));
 
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
-  const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const serverSettingsService = yield* ServerSettingsService;
-
-  const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-  const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
-  const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
-
-  const offerRuntimeEvent = (event: UnstampedProviderRuntimeEvent): Effect.Effect<void> => {
-    const session = sessions.get(event.threadId);
-    if (!session) return Effect.void;
-    return Queue.offer(runtimeEventQueue, {
-      ...event,
-      sessionEpoch: session.sessionEpoch,
-    }).pipe(Effect.asVoid);
-  };
+  const eventRuntime = yield* makeClaudeEventRuntime(sessions);
+  const { makeEventStamp, nowIso, offerRuntimeEvent } = eventRuntime;
 
   const streamHandlers = makeStreamHandlers({
     makeEventStamp,
@@ -215,7 +197,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     };
 
     const turnStartedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "turn.started",
       eventId: turnStartedStamp.eventId,
       provider: PROVIDER,
@@ -363,7 +345,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           emitExitEvent: false,
         }),
       { discard: true },
-    ).pipe(Effect.tap(() => Queue.shutdown(runtimeEventQueue))),
+    ).pipe(Effect.tap(() => eventRuntime.shutdown)),
   );
 
   return {
@@ -388,7 +370,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     hasSession,
     stopAll,
     get streamEvents() {
-      return Stream.fromQueue(runtimeEventQueue);
+      return eventRuntime.stream;
     },
   } satisfies ClaudeAdapterShape;
 });

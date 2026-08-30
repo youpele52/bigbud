@@ -13,32 +13,61 @@ import {
 } from "./DirectResourceCleanupCoordinator.ts";
 import { finalizeThreadCanonicalHistory } from "./CanonicalThreadCleanup.ts";
 import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
+import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
+import { recoverPreparedCleanupFinalizes } from "./DirectResourceCleanupRecovery.finalize.ts";
+import { recoverDirectCleanupWorktrees } from "./DirectResourceCleanupRecovery.worktrees.ts";
 
-const recoverOnce = Effect.fn("DirectResourceCleanupRecovery.recoverOnce")(function* () {
+export function recoverCanonicalPruningCandidates<Candidate, Error, Requirements>(input: {
+  readonly candidates: ReadonlyArray<Candidate>;
+  readonly finalizeCandidate: (candidate: Candidate) => Effect.Effect<void, Error, Requirements>;
+}): Effect.Effect<void, never, Requirements> {
+  return Effect.forEach(
+    input.candidates,
+    (candidate) =>
+      input.finalizeCandidate(candidate).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("canonical cleanup recovery deferred", {
+            detail: String(error),
+          }),
+        ),
+      ),
+    { concurrency: 1, discard: true },
+  );
+}
+
+export const recoverDirectResourceCleanupOnce = Effect.fn(
+  "DirectResourceCleanupRecovery.recoverOnce",
+)(function* () {
   const repository = yield* DirectResourceCleanupRepository;
   const executorService = yield* DirectResourceCleanupExecutor;
   const config = yield* ServerConfig;
   const sql = yield* SqlClient.SqlClient;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  const orchestration = yield* OrchestrationEngineService;
   const claimedAt = new Date().toISOString();
   const expectedPlatform = `${process.platform}/${process.arch}`;
   yield* repository.reconcilePrepared(claimedAt, expectedPlatform);
+  yield* recoverPreparedCleanupFinalizes({
+    repository,
+    executorService,
+    orchestration,
+  });
   const pruning = yield* repository.listCanonicalPruning(10);
-  yield* Effect.forEach(
-    pruning,
-    (candidate) =>
+  yield* recoverCanonicalPruningCandidates({
+    candidates: pruning,
+    finalizeCandidate: (candidate) =>
       finalizeThreadCanonicalHistory({
         projectionPipeline,
         sql,
         threadId: ThreadId.makeUnsafe(candidate.threadId),
         deletionSequence: candidate.deletionSequence,
-      }).pipe(
-        Effect.andThen(
-          repository.markCanonicalPruned(candidate.operationId, new Date().toISOString()),
+        recordCheckpoint: repository.markCanonicalPruned(
+          candidate.operationId,
+          new Date().toISOString(),
         ),
-      ),
-    { concurrency: 1, discard: true },
-  );
+      }),
+  });
+  yield* recoverDirectCleanupWorktrees({ repository, config });
   yield* withDirectCleanupCapacity(
     Effect.gen(function* () {
       const leaseId = crypto.randomUUID();
@@ -128,7 +157,7 @@ const recoverOnce = Effect.fn("DirectResourceCleanupRecovery.recoverOnce")(funct
 
 export const DirectResourceCleanupRecoveryLive = Layer.effectDiscard(
   Effect.repeat(
-    recoverOnce().pipe(
+    recoverDirectResourceCleanupOnce().pipe(
       Effect.catch(() =>
         Effect.logWarning("direct resource cleanup recovery deferred", {
           code: "recovery_failure",

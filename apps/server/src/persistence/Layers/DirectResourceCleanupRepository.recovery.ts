@@ -8,9 +8,54 @@ export function makeDirectResourceCleanupReconciliation(
   sql: SqlClient.SqlClient,
 ): Pick<
   DirectResourceCleanupRepositoryShape,
-  "reconcilePrepared" | "listCanonicalPruning" | "markCanonicalPruned" | "listRecoverableIntents"
+  | "reconcilePrepared"
+  | "listCanonicalPruning"
+  | "markCanonicalPruned"
+  | "listRecoverableIntents"
+  | "listPreparedFinalizeCandidates"
+  | "blockPrepared"
 > {
   return {
+    listPreparedFinalizeCandidates: (input) =>
+      sql<{
+        readonly operationId: string;
+        readonly createdAt: string;
+        readonly finalizeCommandId: string;
+        readonly finalizePayloadJson: string;
+        readonly finalizePayloadDigestVersion: string;
+        readonly finalizePayloadDigest: string;
+      }>`
+        SELECT plan.operation_id AS "operationId", plan.created_at AS "createdAt",
+          plan.finalize_command_id AS "finalizeCommandId",
+          plan.finalize_payload_json AS "finalizePayloadJson",
+          plan.finalize_payload_digest_version AS "finalizePayloadDigestVersion",
+          plan.finalize_payload_digest AS "finalizePayloadDigest"
+        FROM direct_resource_cleanup_plans AS plan
+        LEFT JOIN orchestration_command_receipts AS receipt
+          ON receipt.command_id = plan.finalize_command_id
+        LEFT JOIN orchestration_command_receipt_claims AS claim
+          ON claim.command_id = plan.finalize_command_id
+        WHERE plan.state = 'prepared' AND receipt.command_id IS NULL
+          AND (plan.created_at > ${input.createdAfter}
+            OR (plan.created_at = ${input.createdAfter}
+              AND plan.operation_id > ${input.operationAfter}))
+          AND (claim.command_id IS NULL OR (
+            claim.payload_digest_version = plan.finalize_payload_digest_version
+            AND claim.payload_digest = plan.finalize_payload_digest
+          ))
+        ORDER BY plan.created_at, plan.operation_id
+        LIMIT ${Math.max(1, Math.min(100, Math.floor(input.limit)))}
+      `.pipe(Effect.mapError((error) => new Error(String(error)))),
+    blockPrepared: (operationId, errorCode, at) =>
+      sql`
+        UPDATE direct_resource_cleanup_plans SET state = 'blocked',
+          last_error_code = ${errorCode}, updated_at = ${at}
+        WHERE operation_id = ${operationId} AND state = 'prepared'
+        RETURNING operation_id
+      `.pipe(
+        Effect.map((rows) => rows.length === 1),
+        Effect.mapError((error) => new Error(String(error))),
+      ),
     listRecoverableIntents: (input) =>
       sql<{
         readonly intentId: string;
@@ -52,12 +97,17 @@ export function makeDirectResourceCleanupReconciliation(
         ORDER BY proof.event_sequence LIMIT ${Math.max(1, Math.min(100, Math.floor(limit)))}
       `.pipe(Effect.mapError((error) => new Error(String(error)))),
     markCanonicalPruned: (operationId, at) =>
-      sql`
+      sql<{ readonly operationId: string }>`
         UPDATE direct_resource_cleanup_proofs SET canonical_pruned_at = ${at}
         WHERE operation_id = ${operationId} AND aggregate_kind = 'thread'
           AND canonical_pruned_at IS NULL
+        RETURNING operation_id AS "operationId"
       `.pipe(
-        Effect.asVoid,
+        Effect.flatMap((rows) =>
+          rows.length === 1
+            ? Effect.void
+            : Effect.fail(new Error("canonical pruning checkpoint was not recorded")),
+        ),
         Effect.mapError((error) => new Error(String(error))),
       ),
     reconcilePrepared: (at, expectedPlatform) =>

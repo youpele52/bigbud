@@ -32,6 +32,8 @@ import {
   runCleanupStep,
 } from "./ProviderCommandReactorHandlers.delete.cleanup.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { recoverDirectCleanupWorktrees } from "../../deletion/Layers/DirectResourceCleanupRecovery.worktrees.ts";
+import { serializeManagedWorktreeResource } from "../../persistence/Layers/DirectResourceCleanupRepository.worktrees.ts";
 type DeleteRequestedEvent = Extract<OrchestrationEvent, { type: "thread.deletion-requested" }>;
 interface DeletionDeps {
   readonly resolveThread: (threadId: ThreadId) => Effect.Effect<OrchestrationThread | undefined>;
@@ -180,6 +182,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             let storedPlan = yield* cleanupRepository.loadPlan(operationId);
             if (!storedPlan) {
               const payloadDigest = calculateCommandPayloadDigest(proposedFinalizeCommand);
+              const worktrees = files.worktreeResources.map(serializeManagedWorktreeResource);
               const discoveredPlanDigest = createHash("sha256")
                 .update(
                   JSON.stringify({
@@ -187,6 +190,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                     finalizeCommand: proposedFinalizeCommand,
                     resources: files.directResources,
                     retainedResources: files.retainedResources,
+                    worktreeResourceDigests: worktrees.map((worktree) => worktree.digest),
                   }),
                 )
                 .digest("hex");
@@ -201,6 +205,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 expectedPlatform: `${process.platform}/${process.arch}`,
                 resources: files.directResources,
                 retainedResources: files.retainedResources,
+                worktreeResources: worktrees.map((worktree) => worktree.resource),
                 createdAt: event.occurredAt,
               });
               storedPlan = yield* cleanupRepository.loadPlan(operationId);
@@ -267,10 +272,11 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
               sql,
               threadId: thread.id,
               deletionSequence: finalized.sequence,
-            }).pipe(
-              Effect.andThen(
-                cleanupRepository.markCanonicalPruned(operationId, new Date().toISOString()),
+              recordCheckpoint: cleanupRepository.markCanonicalPruned(
+                operationId,
+                new Date().toISOString(),
               ),
+            }).pipe(
               Effect.as(true),
               Effect.catch((error) =>
                 Effect.logWarning("thread canonical history cleanup deferred", {
@@ -293,22 +299,11 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 ),
               { concurrency: 1, discard: true },
             );
-            const orphanedResources = yield* orchestrationEngine
-              .threadDeletion!.cleanupWorktrees(files)
-              .pipe(
-                Effect.catch((error) =>
-                  Effect.logWarning("thread deletion file cleanup deferred", {
-                    rootThreadId: thread.id,
-                    detail: String(error),
-                  }).pipe(Effect.as([{ resource: "files", detail: String(error) }])),
-                ),
-              );
-            if (orphanedResources.length > 0) {
-              yield* Effect.logWarning("thread deletion orphan resource cleanup required", {
-                rootThreadId: thread.id,
-                orphanedResources,
-              });
-            }
+            yield* recoverDirectCleanupWorktrees({
+              repository: cleanupRepository,
+              config,
+              operationId,
+            });
             if (!pruningRecorded) return;
             if (directResources.length > 0 && preparedExecutor) {
               yield* executeReadyDirectCleanupPlan({

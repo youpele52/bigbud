@@ -112,7 +112,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         completed_at = CASE WHEN ${terminal ? 1 : 0} = 1 THEN ${input.updatedAt} ELSE NULL END,
         updated_at = ${input.updatedAt}
       WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
-        AND (status <> 'queued' OR active_slot = 1)
+        AND active_slot = 1
       RETURNING run_id
     `.pipe(Effect.map((rows) => rows.length === 1));
   };
@@ -132,7 +132,11 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
             attempt_count = attempt_count + 1, updated_at = ${input.updatedAt},
             completed_at = CASE WHEN ${terminal ? 1 : 0} = 1 THEN ${input.updatedAt} ELSE NULL END
           WHERE run_id = ${input.runId} AND thread_id = ${input.threadId}
-            AND status IN ${sql.in(input.expectedStatuses)} RETURNING run_id
+            AND status IN ${sql.in(input.expectedStatuses)}
+            AND EXISTS (
+              SELECT 1 FROM thread_retention_runs AS run
+              WHERE run.run_id = ${input.runId} AND run.active_slot = 1
+            ) RETURNING run_id
         `;
         if (rows.length !== 1) return false;
         const counter =
@@ -145,7 +149,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
                 : null;
         if (counter !== null)
           yield* sql.unsafe(
-            `UPDATE thread_retention_runs SET ${counter} = ${counter} + 1, updated_at = ? WHERE run_id = ?`,
+            `UPDATE thread_retention_runs SET ${counter} = ${counter} + 1, updated_at = ? WHERE run_id = ? AND active_slot = 1`,
             [input.updatedAt, input.runId],
           );
         return true;
@@ -163,6 +167,10 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         updated_at = ${input.updatedAt}
       WHERE run_id = ${input.runId} AND thread_id = ${input.threadId}
         AND status IN ${sql.in(input.expectedStatuses)}
+        AND EXISTS (
+          SELECT 1 FROM thread_retention_runs AS run
+          WHERE run.run_id = ${input.runId} AND run.active_slot = 1
+        )
       RETURNING thread_id
     `.pipe(Effect.map((rows) => rows.length === 1));
   };
@@ -259,7 +267,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
           WHEN required_baseline_sequence IS NULL OR required_baseline_sequence < ${input.sequence}
           THEN ${input.sequence} ELSE required_baseline_sequence END,
           updated_at = ${input.updatedAt}
-        WHERE run_id = ${input.runId} RETURNING run_id
+        WHERE run_id = ${input.runId} AND active_slot = 1 RETURNING run_id
       `.pipe(
         Effect.map((rows) => rows.length === 1),
         mapPersistenceError("recordRequiredBaselineSequence"),

@@ -76,7 +76,13 @@ fn run(reader: impl Read, writer: impl Write, activity: Option<&AtomicU64>) -> i
                 }
             }
             Some(v1::frame::Payload::ResourceCleanupRequest(request)) if ready => {
-                handle_cleanup_request(request, &mut executor, &mut accepted)
+                match admit_cleanup_request(&request, &executor, &accepted) {
+                    Ok(()) => {
+                        super::reset_cancellation();
+                        handle_cleanup_request(request, &mut executor, &mut accepted)
+                    }
+                    Err(response) => *response,
+                }
             }
             Some(v1::frame::Payload::ResourceCleanupKeepAliveRequest(request)) if ready => {
                 v1::Frame {
@@ -104,56 +110,9 @@ fn handle_cleanup_request(
     executor: &mut PlatformExecutor,
     accepted: &mut VecDeque<AcceptedRequest>,
 ) -> v1::Frame {
-    if let Some(previous) = accepted
-        .iter()
-        .find(|previous| previous.request.request_id == request.request_id)
-    {
-        return if previous.request == request {
-            v1::Frame {
-                payload: Some(v1::frame::Payload::ResourceCleanupResponse(
-                    previous.response.clone(),
-                )),
-            }
-        } else {
-            protocol_error("REQUEST_ID_CONFLICT", "cleanup request identity changed")
-        };
-    }
-    if let Some(previous) = accepted
-        .iter()
-        .find(|previous| previous.request.operation_id == request.operation_id)
-    {
-        if previous.request.plan_digest != request.plan_digest
-            || previous.request.finalize_proof_digest != request.finalize_proof_digest
-        {
-            return protocol_error(
-                "OPERATION_DIGEST_CONFLICT",
-                "cleanup operation proof changed",
-            );
-        }
-        if previous.request.page_digest == request.page_digest {
-            let mut prior = previous.request.clone();
-            let mut replay = request.clone();
-            prior.request_id.clear();
-            replay.request_id.clear();
-            return if prior == replay {
-                let mut response = previous.response.clone();
-                response.request_id = request.request_id;
-                v1::Frame {
-                    payload: Some(v1::frame::Payload::ResourceCleanupResponse(response)),
-                }
-            } else {
-                protocol_error("OPERATION_PAGE_CONFLICT", "cleanup page identity changed")
-            };
-        }
-    }
-    if let Err(code) = validate_request(&request).and_then(|()| executor.validate_handles(&request))
-    {
-        return protocol_error(&code, "cleanup request rejected");
-    }
     let request_id = request.request_id.clone();
     let operation_id = request.operation_id.clone();
     let accepted_request = request.clone();
-    super::reset_cancellation();
     let results = executor.execute(request);
     let record = AcceptedRequest {
         request: accepted_request,
@@ -171,6 +130,59 @@ fn handle_cleanup_request(
     v1::Frame {
         payload: Some(v1::frame::Payload::ResourceCleanupResponse(response)),
     }
+}
+
+fn admit_cleanup_request(
+    request: &v1::ResourceCleanupRequest,
+    executor: &PlatformExecutor,
+    accepted: &VecDeque<AcceptedRequest>,
+) -> Result<(), Box<v1::Frame>> {
+    if let Some(previous) = accepted
+        .iter()
+        .find(|previous| previous.request.request_id == request.request_id)
+    {
+        return Err(Box::new(if previous.request == *request {
+            v1::Frame {
+                payload: Some(v1::frame::Payload::ResourceCleanupResponse(
+                    previous.response.clone(),
+                )),
+            }
+        } else {
+            protocol_error("REQUEST_ID_CONFLICT", "cleanup request identity changed")
+        }));
+    }
+    if let Some(previous) = accepted
+        .iter()
+        .find(|previous| previous.request.operation_id == request.operation_id)
+    {
+        if previous.request.plan_digest != request.plan_digest
+            || previous.request.finalize_proof_digest != request.finalize_proof_digest
+        {
+            return Err(Box::new(protocol_error(
+                "OPERATION_DIGEST_CONFLICT",
+                "cleanup operation proof changed",
+            )));
+        }
+        if previous.request.page_digest == request.page_digest {
+            let mut prior = previous.request.clone();
+            let mut replay = request.clone();
+            prior.request_id.clear();
+            replay.request_id.clear();
+            return Err(Box::new(if prior == replay {
+                let mut response = previous.response.clone();
+                response.request_id = request.request_id.clone();
+                v1::Frame {
+                    payload: Some(v1::frame::Payload::ResourceCleanupResponse(response)),
+                }
+            } else {
+                protocol_error("OPERATION_PAGE_CONFLICT", "cleanup page identity changed")
+            }));
+        }
+    }
+    if let Err(code) = validate_request(request).and_then(|()| executor.validate_handles(request)) {
+        return Err(Box::new(protocol_error(&code, "cleanup request rejected")));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

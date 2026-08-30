@@ -8,7 +8,8 @@ import {
   isClaudeTaskTool,
   reduceClaudeTaskState,
 } from "./Adapter.tasks.ts";
-import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { nativeProviderRefs } from "./Adapter.utils.ts";
 
@@ -20,7 +21,7 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
   readonly authoritativeSnapshot?: boolean;
   readonly now: string;
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
 }) {
   if (!isClaudeTaskTool(deps.toolName)) return;
   if (!deps.context.modernTaskExposure && deps.toolName !== "TodoWrite") return;
@@ -56,7 +57,7 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
           : removalSource === "lifecycle"
             ? 4
             : 1;
-    yield* deps.offerRuntimeEvent({
+    yield* deps.offerRuntimeEvent(deps.context, {
       type: "task.removed",
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -84,7 +85,7 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
   }
   for (const task of claudeTaskRuntimeUpdates(deps.context.taskState, reduction.changedTaskIds)) {
     const stamp = yield* deps.makeEventStamp();
-    yield* deps.offerRuntimeEvent({
+    yield* deps.offerRuntimeEvent(deps.context, {
       type: "task.updated",
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -109,7 +110,7 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
   deps.context.lastPlanFingerprint = fingerprint;
 
   const stamp = yield* deps.makeEventStamp();
-  yield* deps.offerRuntimeEvent({
+  yield* deps.offerRuntimeEvent(deps.context, {
     type: "turn.plan.updated",
     eventId: stamp.eventId,
     provider: PROVIDER,

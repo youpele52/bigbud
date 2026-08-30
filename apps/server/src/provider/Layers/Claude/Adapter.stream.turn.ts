@@ -12,7 +12,8 @@ import { Effect } from "effect";
 
 import { asCanonicalTurnId, exitPlanCaptureKey, nativeProviderRefs } from "./Adapter.utils.ts";
 import { claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
-import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnCompletionHandlers } from "./Adapter.stream.turn.complete.ts";
@@ -22,7 +23,7 @@ export interface TurnHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
   readonly blocks: BlockHandlers;
@@ -65,7 +66,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
     if (context.lastThreadStartedId !== nextThreadId) {
       context.lastThreadStartedId = nextThreadId;
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "thread.started",
         eventId: stamp.eventId,
         provider: PROVIDER,
@@ -86,7 +87,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
     if (cause !== undefined) void cause;
     const turnState = context.turnState;
     const stamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "runtime.error",
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -109,7 +110,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
   ) {
     const turnState = context.turnState;
     const stamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "runtime.warning",
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -140,7 +141,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
     turnState.capturedProposedPlanKeys.add(captureKey);
 
     const stamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "turn.proposed.completed",
       eventId: stamp.eventId,
       provider: PROVIDER,

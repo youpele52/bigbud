@@ -24,21 +24,28 @@ import {
 } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.ts";
-import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
 import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../providerMcp.ts";
+import { makeSdkTelemetryHandler } from "./Adapter.stream.system.telemetry.ts";
 
 export interface SystemHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly turn: TurnHandlers;
 }
 
 export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
   const { makeEventStamp, offerRuntimeEvent, nowIso, turn } = deps;
+  const handleSdkTelemetryMessage = makeSdkTelemetryHandler({
+    makeEventStamp,
+    offerRuntimeEvent,
+    turn,
+  });
   const invalid = Effect.fn("invalidClaudeSystemMessage")(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
@@ -72,7 +79,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         if (!init) return yield* invalid(context, message);
         const status = normalizeMcpServerStatuses(init.servers);
         context.mcpStatuses = status;
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "session.configured",
           payload: {
@@ -80,7 +87,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           },
         });
         const mcpStamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           eventId: mcpStamp.eventId,
           createdAt: mcpStamp.createdAt,
@@ -90,7 +97,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         return;
       }
       case "status":
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "session.state.changed",
           payload: {
@@ -100,7 +107,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         });
         return;
       case "compact_boundary":
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "thread.state.changed",
           payload: { state: "compacted", detail: { trigger: message.compact_metadata.trigger } },
@@ -112,13 +119,13 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         const hook = decodeClaudeHookMessage(message);
         if (!hook) return yield* invalid(context, message);
         if (hook.subtype === "hook_started") {
-          yield* offerRuntimeEvent({
+          yield* offerRuntimeEvent(context, {
             ...base,
             type: "hook.started",
             payload: { hookId: hook.hookId, hookName: hook.hookName, hookEvent: hook.hookEvent },
           });
         } else if (hook.subtype === "hook_progress") {
-          yield* offerRuntimeEvent({
+          yield* offerRuntimeEvent(context, {
             ...base,
             type: "hook.progress",
             payload: {
@@ -131,7 +138,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         } else {
           const outcome = hook.outcome;
           if (!outcome) return yield* invalid(context, message);
-          yield* offerRuntimeEvent({
+          yield* offerRuntimeEvent(context, {
             ...base,
             type: "hook.completed",
             payload: {
@@ -149,7 +156,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       case "task_started": {
         const task = decodeClaudeTaskStartedMessage(message);
         if (!task) return yield* invalid(context, message);
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "task.started",
           payload: { taskId: RuntimeTaskId.makeUnsafe(task.taskId), description: task.description },
@@ -172,7 +179,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         if (normalizedUsage) {
           context.lastKnownTokenUsage = normalizedUsage;
           const usageStamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent({
+          yield* offerRuntimeEvent(context, {
             ...base,
             eventId: usageStamp.eventId,
             createdAt: usageStamp.createdAt,
@@ -180,7 +187,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             payload: { usage: normalizedUsage },
           });
         }
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "task.progress",
           payload: {
@@ -209,7 +216,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         if (normalizedUsage) {
           context.lastKnownTokenUsage = normalizedUsage;
           const usageStamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent({
+          yield* offerRuntimeEvent(context, {
             ...base,
             eventId: usageStamp.eventId,
             createdAt: usageStamp.createdAt,
@@ -217,7 +224,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             payload: { usage: normalizedUsage },
           });
         }
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "task.completed",
           payload: {
@@ -294,7 +301,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       case "model_refusal_fallback": {
         const refusal = decodeClaudeRefusalMessage(message);
         if (!refusal?.fallbackModel) return yield* invalid(context, message);
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "model.rerouted",
           payload: {
@@ -328,7 +335,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       case "elicitation_complete": {
         const completion = decodeClaudeElicitationCompleteMessage(message);
         if (!completion) return yield* invalid(context, message);
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           ...base,
           type: "mcp.oauth.completed",
           payload: { success: true, name: completion.serverName },
@@ -345,7 +352,11 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
                 : [];
             })
           : [];
-        yield* offerRuntimeEvent({ ...base, type: "files.persisted", payload: { files } });
+        yield* offerRuntimeEvent(context, {
+          ...base,
+          type: "files.persisted",
+          payload: { files },
+        });
         return;
       }
       default:
@@ -354,60 +365,6 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           `Unhandled Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} system message '${claudeSdkMessageLabel(message)}'.`,
           claudeSdkDiagnostic(message),
         );
-    }
-  });
-  const handleSdkTelemetryMessage = Effect.fn("handleSdkTelemetryMessage")(function* (
-    context: ClaudeSessionContext,
-    message: SDKMessage,
-  ) {
-    const stamp = yield* makeEventStamp();
-    const base = {
-      eventId: stamp.eventId,
-      provider: PROVIDER,
-      createdAt: stamp.createdAt,
-      threadId: context.session.threadId,
-      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-      providerRefs: nativeProviderRefs(context),
-      raw: claudeSdkRuntimeRaw(message, sdkNativeMethod(message)),
-    };
-    if (message.type === "tool_progress") {
-      yield* offerRuntimeEvent({
-        ...base,
-        type: "tool.progress",
-        payload: {
-          toolUseId: message.tool_use_id,
-          toolName: message.tool_name,
-          elapsedSeconds: message.elapsed_time_seconds,
-          ...(message.task_id ? { summary: `task:${message.task_id}` } : {}),
-        },
-      });
-    } else if (message.type === "tool_use_summary") {
-      yield* offerRuntimeEvent({
-        ...base,
-        type: "tool.summary",
-        payload: {
-          summary: message.summary,
-          ...(message.preceding_tool_use_ids.length > 0
-            ? { precedingToolUseIds: message.preceding_tool_use_ids }
-            : {}),
-        },
-      });
-    } else if (message.type === "auth_status") {
-      yield* offerRuntimeEvent({
-        ...base,
-        type: "auth.status",
-        payload: {
-          isAuthenticating: message.isAuthenticating,
-          output: message.output,
-          ...(message.error ? { error: message.error } : {}),
-        },
-      });
-    } else if (message.type === "rate_limit_event") {
-      yield* turn.emitRuntimeWarning(
-        context,
-        "Claude rate-limit status changed.",
-        claudeSdkDiagnostic(message),
-      );
     }
   });
   return { handleSystemMessage, handleSdkTelemetryMessage };

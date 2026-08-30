@@ -11,7 +11,8 @@ import {
   toolResultBlocksFromUserMessage,
   toolResultStreamKind,
 } from "./Adapter.utils.ts";
-import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
@@ -25,7 +26,7 @@ interface MessageSpecificHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: UnstampedProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
@@ -71,7 +72,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       };
 
       const updatedStamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "item.updated",
         eventId: updatedStamp.eventId,
         provider: PROVIDER,
@@ -93,7 +94,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       const streamKind = toolResultStreamKind(tool.itemType);
       if (streamKind && toolResult.text.length > 0 && context.turnState) {
         const deltaStamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "content.delta",
           eventId: deltaStamp.eventId,
           provider: PROVIDER,
@@ -111,7 +112,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       }
 
       const completedStamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "item.completed",
         eventId: completedStamp.eventId,
         provider: PROVIDER,
@@ -180,7 +181,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         : "";
       if (summary.length > 0) {
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "tool.progress",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -221,7 +222,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         updatedAt: startedAt,
       };
       const turnStartedStamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "turn.started",
         eventId: turnStartedStamp.eventId,
         provider: PROVIDER,

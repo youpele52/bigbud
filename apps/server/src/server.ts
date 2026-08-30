@@ -293,6 +293,7 @@ const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
   Layer.provideMerge(DirectResourceCleanupExecutorLive),
   Layer.provideMerge(DirectResourceCleanupRepositoryLive),
   Layer.provideMerge(OrchestrationProjectionPipelineLayerLive),
+  Layer.provideMerge(OrchestrationEngineLayerLive),
   Layer.provide(PersistenceLayerLive),
 );
 

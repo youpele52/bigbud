@@ -7,6 +7,7 @@ import {
 import { makeDirectResourceCleanupReconciliation } from "./DirectResourceCleanupRepository.recovery.ts";
 import { makeDirectResourceCleanupPreparation } from "./DirectResourceCleanupRepository.prepare.ts";
 import { makeDirectResourceCleanupProof } from "./DirectResourceCleanupRepository.proof.ts";
+import { makeDirectResourceCleanupWorktrees } from "./DirectResourceCleanupRepository.worktrees.ts";
 const terminalOutcomes = new Set([
   "removed",
   "already_absent",
@@ -19,6 +20,7 @@ export const makeDirectResourceCleanupRepository = Effect.gen(function* () {
   return {
     ...makeDirectResourceCleanupPreparation(sql),
     ...makeDirectResourceCleanupProof(sql),
+    ...makeDirectResourceCleanupWorktrees(sql),
     cancelPrepared: (operationId, at) =>
       sql
         .withTransaction(

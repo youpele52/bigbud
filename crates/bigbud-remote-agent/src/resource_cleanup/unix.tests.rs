@@ -3,14 +3,11 @@ use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bigbud_protocol::v1;
 
 use super::UnixExecutor;
-
-static EXECUTION_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_root(tag: &str) -> PathBuf {
     let nonce = SystemTime::now()
@@ -65,7 +62,9 @@ fn execute_with_options(
     deadline: u64,
     cancel: bool,
 ) -> v1::ResourceCleanupOutcome {
-    let _guard = EXECUTION_LOCK.lock().expect("execution lock");
+    let _guard = super::super::CANCELLATION_TEST_LOCK
+        .lock()
+        .expect("execution lock");
     let root_identity = identity(root);
     let mut executor = UnixExecutor::new();
     let handles = executor
