@@ -48,6 +48,7 @@ dependencies = [
  "libc",
  "sha2",
  "thiserror",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

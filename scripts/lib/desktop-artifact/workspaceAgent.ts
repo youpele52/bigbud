@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
-import { verifyWorkspaceAgentHandshake } from "../workspace-agent-handshake.ts";
+import {
+  verifyWorkspaceAgentCleanupSmoke,
+  verifyWorkspaceAgentHandshake,
+} from "../workspace-agent-handshake.ts";
 import {
   assertWorkspaceAgentArtifactTarget,
   findDesktopWorkspaceAgentTarget,
@@ -60,8 +63,11 @@ export const assertWorkspaceAgentBinary = Effect.fn("assertWorkspaceAgentBinary"
     });
   }
   yield* Effect.tryPromise({
-    try: () => verifyWorkspaceAgentHandshake(binaryPath),
-    catch: (cause) => new BuildScriptError({ message: `${label}: handshake failed`, cause }),
+    try: async () => {
+      await verifyWorkspaceAgentHandshake(binaryPath);
+      await verifyWorkspaceAgentCleanupSmoke(binaryPath);
+    },
+    catch: (cause) => new BuildScriptError({ message: `${label}: protocol smoke failed`, cause }),
   });
 });
 

@@ -13,6 +13,7 @@ import { WireWriter } from "./remoteAgentProtocol.codec.wire.ts";
 import { encodeWorkspaceFrame } from "./remoteAgentProtocol.codec.workspace.encode.ts";
 import { encodeProcessFrame } from "./remoteAgentProtocol.codec.process.encode.ts";
 import { encodePtyFrame } from "./remoteAgentProtocol.codec.pty.encode.ts";
+import { encodeResourceCleanupFrame } from "./remoteAgentProtocol.codec.resourceCleanup.ts";
 
 function encodeClientHello(value: RemoteAgentClientHello): Uint8Array {
   const writer = new WireWriter();
@@ -100,6 +101,13 @@ function encodeProtocolError(value: RemoteAgentProtocolError): Uint8Array {
 
 export function encodeFramePayload(frame: RemoteAgentFrame): Uint8Array {
   const writer = new WireWriter();
+  if (frame.type.startsWith("resourceCleanup")) {
+    const cleanupFrame = encodeResourceCleanupFrame(
+      frame as import("./remoteAgentProtocol.resourceCleanup.ts").RemoteAgentResourceCleanupFrame,
+    );
+    writer.fieldBytes(cleanupFrame.field, cleanupFrame.value);
+    return writer.finish();
+  }
   const workspaceFrame = encodeWorkspaceFrame(frame);
   if (workspaceFrame) {
     writer.fieldBytes(workspaceFrame.field, workspaceFrame.value);

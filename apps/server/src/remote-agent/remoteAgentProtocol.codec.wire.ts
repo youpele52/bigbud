@@ -10,7 +10,10 @@ export class WireWriter {
     if (value.length === 0) return;
     this.tag(field, 2);
     this.varint(value.length);
-    this.bytes.push(...value);
+    // Avoid exceeding JavaScript's argument limit for valid near-1 MiB frames.
+    for (let offset = 0; offset < value.length; offset += 8_192) {
+      this.bytes.push(...value.subarray(offset, offset + 8_192));
+    }
   }
 
   fieldString(field: number, value: string): void {

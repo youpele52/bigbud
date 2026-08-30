@@ -114,6 +114,9 @@ export class RemoteAgentConnection {
     this.maxFrameBytes = maxFrameBytes;
     child.stdout.on("data", (chunk: Buffer) => this.consume(chunk));
     child.stdout.on("error", (error) => this.fail(error));
+    // A child can exit while a cleanup request is still writing. Streams emit an
+    // `error` event in that case; without this listener Node treats it as fatal.
+    child.stdin.on("error", (error) => this.fail(error));
     child.stderr.on("data", (chunk: Buffer | string) => {
       this.stderrTail = `${this.stderrTail}${chunk.toString()}`.slice(-4_096);
     });
@@ -200,6 +203,19 @@ export class RemoteAgentConnection {
     if (this.failure) throw this.failure;
     if (this.closed) throw new RemoteAgentConnectionError("Remote agent connection is closed.");
     const encoded = encodeDelimitedFrame(frame, this.maxFrameBytes);
+    await this.sendEncoded(encoded);
+  }
+
+  async sendEncoded(encoded: Uint8Array): Promise<void> {
+    if (this.failure) throw this.failure;
+    if (this.closed) throw new RemoteAgentConnectionError("Remote agent connection is closed.");
+    if (encoded.byteLength < 4) {
+      throw new RemoteAgentConnectionError("Encoded remote agent frame is truncated.");
+    }
+    const length = Buffer.from(encoded.buffer, encoded.byteOffset, 4).readUInt32BE(0);
+    if (length > this.maxFrameBytes || length + 4 !== encoded.byteLength) {
+      throw new RemoteAgentConnectionError("Encoded remote agent frame has an invalid length.");
+    }
     await new Promise<void>((resolve, reject) => {
       const writable = this.child.stdin.write(Buffer.from(encoded), (error) => {
         if (error) reject(error);
@@ -249,10 +265,46 @@ export class RemoteAgentConnection {
     return this.assertRequestResponse(response);
   }
 
+  async requestEncoded(
+    encoded: Uint8Array,
+    matches: (response: RemoteAgentFrame) => boolean,
+  ): Promise<RemoteAgentFrame> {
+    const queued = this.takeQueuedFrame(matches);
+    if (queued) return this.assertRequestResponse(queued);
+    const response = await new Promise<RemoteAgentFrame>((resolve, reject) => {
+      const waiter: FrameWaiter = { resolve, reject, matches };
+      this.waiters.push(waiter);
+      void this.sendEncoded(encoded).catch((error: unknown) => {
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        reject(error instanceof Error ? error : new RemoteAgentConnectionError(String(error)));
+      });
+    });
+    return this.assertRequestResponse(response);
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
     closeRemoteAgentProcess(this.child);
+    const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
+    for (const waiter of this.waiters.splice(0)) waiter.reject(error);
+  }
+
+  async gracefulClose(timeoutMs = 2_000): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    const closed = new Promise<void>((resolve) => this.child.once("close", () => resolve()));
+    this.child.stdin.end();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const settled = await Promise.race([
+      closed.then(() => true),
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+    if (timeout) clearTimeout(timeout);
+    if (!settled) closeRemoteAgentProcess(this.child);
     const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
     for (const waiter of this.waiters.splice(0)) waiter.reject(error);
   }
@@ -329,7 +381,15 @@ export class RemoteAgentConnection {
 
   private fail(error: unknown): void {
     if (this.failure || this.closed) return;
-    this.failure = error instanceof Error ? error : new RemoteAgentConnectionError(String(error));
+    this.failure =
+      error instanceof RemoteAgentConnectionError
+        ? error
+        : new RemoteAgentConnectionError(
+            `Remote agent connection failed: ${error instanceof Error ? error.message : String(error)}`,
+            typeof error === "object" && error !== null && "code" in error
+              ? (error as NodeJS.ErrnoException).code
+              : undefined,
+          );
     for (const waiter of this.waiters.splice(0)) waiter.reject(this.failure);
     for (const listener of this.failureListeners) listener(this.failure);
   }

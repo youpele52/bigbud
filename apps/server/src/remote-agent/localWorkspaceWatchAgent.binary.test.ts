@@ -218,7 +218,7 @@ describe("local workspace watcher agent binary", () => {
   it("maps Node's Darwin identity to Rust's macOS identity", () => {
     const probe = vi.fn(() => ({
       status: 0,
-      stdout: "bigbud-remote-agent\t0.1.0\t1\t1\tdigest\tmacos\taarch64\n",
+      stdout: "bigbud-remote-agent\t0.1.0\t1\t2\tdigest\tmacos\taarch64\n",
       stderr: "",
     }));
 

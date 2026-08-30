@@ -187,6 +187,8 @@ fn main() -> Result<()> {
             run_stdio(AgentSession::new().context("failed to create the ephemeral agent session")?)
                 .context("remote agent stdio mode failed")
         }
+        Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
+            .context("resource cleanup stdio mode failed"),
         _ => run_stdio(create_session()?).context("remote agent stdio mode failed"),
     }
 }

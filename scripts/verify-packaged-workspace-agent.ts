@@ -8,7 +8,10 @@ import {
   validateCodeSignatureRequirement,
   verifyPackagedCodeSignature,
 } from "./lib/packaged-workspace-agent.ts";
-import { verifyWorkspaceAgentHandshake } from "./lib/workspace-agent-handshake.ts";
+import {
+  verifyWorkspaceAgentCleanupSmoke,
+  verifyWorkspaceAgentHandshake,
+} from "./lib/workspace-agent-handshake.ts";
 
 const rawArguments = process.argv.slice(2);
 const requireCodeSignature = rawArguments.includes("--require-code-signature");
@@ -60,6 +63,7 @@ if (
 }
 
 await verifyWorkspaceAgentHandshake(binaryPath);
+await verifyWorkspaceAgentCleanupSmoke(binaryPath);
 
 if (copyDirectory) {
   mkdirSync(copyDirectory, { recursive: true });

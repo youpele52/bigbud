@@ -14,6 +14,7 @@ import { decodeMessage, requireWireType } from "./remoteAgentProtocol.codec.wire
 import { decodeWorkspaceFrame } from "./remoteAgentProtocol.codec.workspace.decode.ts";
 import { decodeProcessFrame } from "./remoteAgentProtocol.codec.process.decode.ts";
 import { decodePtyFrame } from "./remoteAgentProtocol.codec.pty.decode.ts";
+import { decodeResourceCleanupFrame } from "./remoteAgentProtocol.codec.resourceCleanup.ts";
 
 function decodeClientHello(bytes: Uint8Array): RemoteAgentClientHello {
   const value = {
@@ -314,7 +315,13 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
   let frame: RemoteAgentFrame | undefined;
   decodeMessage(bytes, (field, wireType, reader) => {
     if (field > 7) {
-      if (!((field >= 8 && field <= 32) || (field >= 42 && field <= 57))) {
+      if (
+        !(
+          (field >= 8 && field <= 32) ||
+          (field >= 42 && field <= 57) ||
+          (field >= 100 && field <= 107)
+        )
+      ) {
         reader.skip(wireType);
         return;
       }
@@ -323,7 +330,8 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
       const workspaceFrame = decodeWorkspaceFrame(field, payload);
       const processFrame = decodeProcessFrame(field, payload);
       const ptyFrame = decodePtyFrame(field, payload);
-      const decodedFrame = workspaceFrame ?? processFrame ?? ptyFrame;
+      const cleanupFrame = decodeResourceCleanupFrame(field, payload);
+      const decodedFrame = workspaceFrame ?? processFrame ?? ptyFrame ?? cleanupFrame;
       if (!decodedFrame) return;
       if (frame) {
         throw new RemoteAgentProtocolDecodeError("protobuf frame contains multiple payloads");

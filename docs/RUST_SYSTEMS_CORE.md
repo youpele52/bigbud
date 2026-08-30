@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted architecture with incremental implementation. The remote workspace agent, the shared local/managed-remote workspace watcher, and the packaged-desktop orchestration delivery supervisor are implemented. Release-matrix evidence and the remaining systems-core scope retain the rollout gates in this document.
+Accepted architecture with incremental implementation. The remote workspace agent, the shared local/managed-remote workspace watcher, the direct managed-resource cleanup executor, and the packaged-desktop orchestration delivery supervisor are implemented. Release-matrix evidence and the remaining systems-core scope retain the rollout gates in this document.
 
 ## Objective
 
@@ -124,6 +124,7 @@ Rust systems runtime
 | Reconnect policy                             | Owns user-facing state and retry decisions     | Retains bounded resumable operation state                    |
 | Remote installation and version selection    | Owns                                           | Reports identity and compatibility                           |
 | Desktop orchestration-event delivery         | Supplies replay and controlled fallback        | Orders, bounds, fences, and tracks application ACKs          |
+| Plain managed-resource deletion              | Plans, proves, retries, and records outcomes   | Executes bounded descriptor/handle-relative cleanup          |
 | Temporary output replay                      | Persists acknowledged canonical events locally | Retains only unacknowledged bounded output                   |
 
 Rust must not become a second application server. The language boundary should prevent product rules from drifting into two implementations.

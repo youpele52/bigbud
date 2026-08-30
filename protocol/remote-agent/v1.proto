@@ -5,6 +5,7 @@ package bigbud.remote_agent.v1;
 import "remote-agent/common.proto";
 import "remote-agent/process.proto";
 import "remote-agent/pty.proto";
+import "remote-agent/resource_cleanup.proto";
 import "remote-agent/workspace.proto";
 
 message Frame {
@@ -57,5 +58,13 @@ message Frame {
     PtyExited pty_exited = 55;
     PtyInputResponse pty_input_response = 56;
     PtyOutputAckResponse pty_output_ack_response = 57;
+    ResourceCleanupRootBootstrapRequest resource_cleanup_root_bootstrap_request = 100;
+    ResourceCleanupRootBootstrapResponse resource_cleanup_root_bootstrap_response = 101;
+    ResourceCleanupRequest resource_cleanup_request = 102;
+    ResourceCleanupResponse resource_cleanup_response = 103;
+    ResourceCleanupKeepAliveRequest resource_cleanup_keep_alive_request = 104;
+    ResourceCleanupKeepAliveResponse resource_cleanup_keep_alive_response = 105;
+    ResourceCleanupCancelRequest resource_cleanup_cancel_request = 106;
+    ResourceCleanupCancelResponse resource_cleanup_cancel_response = 107;
   }
 }

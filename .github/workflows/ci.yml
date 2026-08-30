@@ -115,10 +115,48 @@ jobs:
         shell: pwsh
         run: pwsh -File scripts/bootstrap-installer-smoke.ps1
 
+  native_resource_cleanup:
+    name: Native Resource Cleanup ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runner: macos-14
+          - label: macOS x64
+            runner: macos-15-intel
+          - label: Linux x64
+            runner: ubuntu-24.04
+          - label: Windows x64
+            runner: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Run native cleanup tests
+        run: cargo test --locked --package bigbud-remote-agent resource_cleanup
+
+  native_resource_cleanup_mount:
+    name: Native Resource Cleanup Linux Mount Boundary
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Run privileged mount-boundary cleanup test
+        run: cargo test --locked --package bigbud-remote-agent refuses_a_same_device_bind_mount_boundary -- --ignored
+
   desktop_release_build:
     name: Desktop Release Build ${{ matrix.label }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: quality
+    needs: [quality, native_resource_cleanup, native_resource_cleanup_mount]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

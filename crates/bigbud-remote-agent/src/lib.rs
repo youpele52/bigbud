@@ -1,6 +1,7 @@
 pub mod operations;
 pub mod process;
 pub mod pty;
+pub mod resource_cleanup;
 pub mod state;
 pub mod supervisor;
 pub mod workspace;

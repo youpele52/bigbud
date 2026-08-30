@@ -1,9 +1,12 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   buildRemoteAgentIdentityProbeCommand,
   buildRemoteAgentProxyCommand,
   closeRemoteAgentProcess,
+  RemoteAgentConnection,
+  RemoteAgentConnectionError,
   remoteAgentLocalProcessArgs,
 } from "./remoteAgentConnection.ts";
 
@@ -25,6 +28,41 @@ describe("remote agent proxy command", () => {
     expect(buildRemoteAgentIdentityProbeCommand("$HOME/.bigbud/agent/bin/current")).toBe(
       'if test -x "$HOME/.bigbud/agent/bin/current"; then exec "$HOME/.bigbud/agent/bin/current" --check; else printf \'missing\'; fi',
     );
+  });
+});
+
+describe("RemoteAgentConnection", () => {
+  it("contains a child stdin pipe error and rejects pending requests once", async () => {
+    const stdin = new EventEmitter() as EventEmitter & {
+      write: () => boolean;
+      end: () => void;
+      once: EventEmitter["once"];
+    };
+    stdin.write = () => true;
+    stdin.end = vi.fn();
+    const child = Object.assign(new EventEmitter(), {
+      stdin,
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      kill: vi.fn(() => true),
+    });
+    const Connection = RemoteAgentConnection as unknown as new (
+      child: unknown,
+      maxFrameBytes: number,
+    ) => RemoteAgentConnection;
+    const connection = new Connection(child, 1_024);
+    const failure = vi.fn();
+    connection.onFailure(failure);
+    const pending = connection.nextFrame();
+
+    stdin.emit("error", Object.assign(new Error("broken pipe"), { code: "EPIPE" }));
+    stdin.emit("error", Object.assign(new Error("broken pipe"), { code: "EPIPE" }));
+
+    await expect(pending).rejects.toMatchObject({
+      _tag: "RemoteAgentConnectionError",
+      code: "EPIPE",
+    } satisfies Partial<RemoteAgentConnectionError>);
+    expect(failure).toHaveBeenCalledOnce();
   });
 });
 
