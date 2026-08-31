@@ -308,12 +308,15 @@ fn retains_a_replacement_target() {
     let root = temp_root("replacement");
     let target = root.join("target");
     fs::write(&target, b"first").expect("first");
+    let original = File::open(&target).expect("hold original identity");
     let captured = identity(&target);
     fs::remove_file(&target).expect("remove first");
     fs::write(&target, b"replacement").expect("replacement");
+    assert_ne!(identity(&target), captured);
     let outcome = execute(&root, "target", captured, ".bigbud-cleanup-replacement");
     assert_eq!(outcome, v1::ResourceCleanupOutcome::IdentityMismatch);
     assert_eq!(fs::read(&target).expect("retained"), b"replacement");
+    drop(original);
     fs::remove_dir_all(root).expect("cleanup");
 }
 
