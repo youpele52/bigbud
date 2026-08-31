@@ -16,7 +16,8 @@ import {
 export { WINDOWS_CUA_SWEEP_SCRIPT } from "./cuaDriver.windowsSweep.script";
 
 const DEFAULT_ATTEMPTS = 3;
-const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
+// Windows PowerShell 5.1 can spend more than 15 seconds compiling the native helper on a cold host.
+const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 3_000;
 
 interface SweepSuccess {

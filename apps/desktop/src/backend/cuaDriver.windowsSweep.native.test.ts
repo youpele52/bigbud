@@ -64,7 +64,7 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    30_000,
+    75_000,
   );
 
   nativeIt(
@@ -100,7 +100,7 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    30_000,
+    75_000,
   );
 
   nativeIt(
@@ -126,6 +126,6 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    30_000,
+    75_000,
   );
 });

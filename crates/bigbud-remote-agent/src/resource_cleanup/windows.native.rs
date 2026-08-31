@@ -165,13 +165,16 @@ fn open_relative(
 }
 
 pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()> {
-    let name = name.encode_wide().collect::<Vec<_>>();
+    let mut name = name.encode_wide().collect::<Vec<_>>();
     let name_bytes = name
         .len()
         .checked_mul(size_of::<u16>())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rename name too long"))?;
+    name.push(0);
     let byte_len = offset_of!(FILE_RENAME_INFO, FileName)
-        .checked_add(name_bytes)
+        .checked_add(name.len().checked_mul(size_of::<u16>()).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "rename buffer too large")
+        })?)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rename buffer too large"))?;
     let mut storage = vec![0usize; byte_len.div_ceil(size_of::<usize>())];
     let information = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
