@@ -57,7 +57,7 @@ describe("assertWindowsFilesReplaceable", () => {
     expect(JSON.parse(options.env.BIGBUD_WINDOWS_REPLACEABILITY_PATHS!)).toEqual([
       harness.targets[0]!.path,
     ]);
-    expect(options.timeout).toBeGreaterThan(0);
+    expect(options.timeout).toBe(60_000);
     expect(options.windowsHide).toBe(true);
   });
 

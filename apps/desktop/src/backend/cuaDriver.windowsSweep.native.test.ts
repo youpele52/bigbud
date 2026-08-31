@@ -11,6 +11,9 @@ import { assertWindowsFilesReplaceable } from "./windowsFileReplaceability";
 
 const nativeIt = process.platform === "win32" ? it : it.skip;
 const cleanupDirectories: string[] = [];
+const ONE_HELPER_TIMEOUT_MS = 75_000;
+const TWO_HELPERS_TIMEOUT_MS = 135_000;
+const THREE_HELPERS_TIMEOUT_MS = 195_000;
 
 async function stopChild(
   child: ChildProcess.ChildProcess,
@@ -27,14 +30,18 @@ afterEach(() => {
 });
 
 describe("Windows CUA sweep native helper", () => {
-  nativeIt("compiles and returns stock-PowerShell JSON for a safe no-match dry run", () => {
-    expect(() =>
-      sweepWindowsCuaDriverProcesses({
-        executablePath: process.execPath,
-        dryRun: true,
-      }),
-    ).not.toThrow();
-  });
+  nativeIt(
+    "compiles and returns stock-PowerShell JSON for a safe no-match dry run",
+    () => {
+      expect(() =>
+        sweepWindowsCuaDriverProcesses({
+          executablePath: process.execPath,
+          dryRun: true,
+        }),
+      ).not.toThrow();
+    },
+    ONE_HELPER_TIMEOUT_MS,
+  );
 
   nativeIt(
     "terminates only a controlled copied executable with an exact handle path",
@@ -64,7 +71,7 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    75_000,
+    TWO_HELPERS_TIMEOUT_MS,
   );
 
   nativeIt(
@@ -100,7 +107,7 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    75_000,
+    THREE_HELPERS_TIMEOUT_MS,
   );
 
   nativeIt(
@@ -126,6 +133,6 @@ describe("Windows CUA sweep native helper", () => {
         await stopChild(child, exited);
       }
     },
-    75_000,
+    ONE_HELPER_TIMEOUT_MS,
   );
 });

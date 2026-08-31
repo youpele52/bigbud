@@ -26,6 +26,9 @@ const defaultDeps: WindowsFileReplaceabilityDeps = {
   spawnSync: ChildProcess.spawnSync,
 };
 
+// Windows PowerShell 5.1 can spend more than 15 seconds compiling the native helper on a cold host.
+const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
+
 export function assertWindowsFilesReplaceable(input: {
   readonly targets: ReadonlyArray<WindowsReplaceabilityTarget>;
   readonly commandTimeoutMs?: number;
@@ -33,7 +36,7 @@ export function assertWindowsFilesReplaceable(input: {
 }): void {
   const deps = input.deps ?? defaultDeps;
   if (deps.platform !== "win32" || input.targets.length === 0) return;
-  const timeout = input.commandTimeoutMs ?? 15_000;
+  const timeout = input.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   if (timeout < 1)
     throw new Error("Windows file replaceability probe received an invalid timeout.");
   const powerShell = deps.resolvePowerShell();
