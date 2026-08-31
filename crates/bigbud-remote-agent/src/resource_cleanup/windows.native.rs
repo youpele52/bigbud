@@ -198,7 +198,10 @@ pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()>
             })?,
         ) == 0
         {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            #[cfg(test)]
+            eprintln!("Windows resource cleanup rename failed: {error:?}");
+            return Err(error);
         }
     }
     Ok(())
@@ -239,7 +242,10 @@ pub(super) fn delete(file: File) -> io::Result<()> {
         )
     } == 0
     {
-        return Err(io::Error::last_os_error());
+        let error = io::Error::last_os_error();
+        #[cfg(test)]
+        eprintln!("Windows resource cleanup delete failed: {error:?}");
+        return Err(error);
     }
     drop(file);
     Ok(())
