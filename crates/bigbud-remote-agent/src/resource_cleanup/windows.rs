@@ -71,6 +71,10 @@ impl WindowsExecutor {
             .into_iter()
             .map(|resource| {
                 let result = self.execute_one(&resource, request.deadline_unix_ms);
+                #[cfg(test)]
+                if let Err(error) = &result {
+                    eprintln!("Windows resource cleanup failed: {error:?}");
+                }
                 let error_code = result
                     .as_ref()
                     .err()
