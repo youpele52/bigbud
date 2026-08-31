@@ -95,17 +95,49 @@ function loadProjectCatalog(
 async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad): Promise<void> {
   let cursor = request.cursor;
   let restartProjectId = request.restartProjectId;
+  let attempt = 0;
 
   do {
-    const page = await api.orchestration.getStartupProjectCatalog(
+    attempt += 1;
+    const rpcInput =
       restartProjectId === null
         ? { scope: request.scope, limit: request.limit, ...(cursor ? { cursor } : {}) }
         : {
             scope: request.scope,
             limit: Math.min(request.limit + 1, STARTUP_PROJECT_CATALOG_MAX_LIMIT),
             priorityProjectId: restartProjectId,
-          },
-    );
+          };
+    const diagnostic = {
+      scope: request.scope,
+      limit: rpcInput.limit,
+      cursorPresent: "cursor" in rpcInput,
+      attempt,
+    };
+    const startedAt = performance.now();
+    if (import.meta.env.MODE !== "test") {
+      console.info("[project-catalog] Page request started.", diagnostic);
+    }
+    let page: GetStartupProjectCatalogResult;
+    try {
+      page = await api.orchestration.getStartupProjectCatalog(rpcInput);
+    } catch (error) {
+      if (import.meta.env.MODE !== "test") {
+        console.warn("[project-catalog] Page request failed.", {
+          ...diagnostic,
+          outcome: "failure",
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          reason: error instanceof Error ? error.name : "unknown",
+        });
+      }
+      throw error;
+    }
+    if (import.meta.env.MODE !== "test") {
+      console.info("[project-catalog] Page request completed.", {
+        ...diagnostic,
+        outcome: "success",
+        durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+      });
+    }
     if (useStore.getState().projectCatalogGenerationByScope[request.scope] !== request.generation) {
       return;
     }

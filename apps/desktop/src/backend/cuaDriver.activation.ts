@@ -11,6 +11,11 @@ import {
 
 import { callCuaDriverTool } from "./cuaDriver.mcpClient";
 import { runCommand } from "./cuaDriver.process";
+import {
+  assertCuaDriverProcessStartAllowed,
+  stopTrackedCuaDriverProcess,
+  trackCuaDriverProcess,
+} from "./cuaDriver.processRegistry";
 
 const ACTIVATION_TIMEOUT_MS = 10_000;
 const VALIDATION_SOCKET_DIRECTORY_PREFIX = "/tmp/bigbud-cua-validation-";
@@ -30,39 +35,31 @@ export function createCuaDriverValidationEndpoint(): {
   return { endpoint: Path.join(directory, "cua.sock"), cleanupDirectory: directory };
 }
 
-function stopChild(child: ChildProcess.ChildProcess): void {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  if (process.platform === "win32" && child.pid !== undefined) {
-    ChildProcess.spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-    });
-    return;
-  }
-  child.kill("SIGTERM");
-}
-
 export async function validateCuaDriverActivation(input: {
   readonly binaryPath: string;
   readonly policyPath: string;
   readonly hostBundleId: string;
 }): Promise<void> {
+  assertCuaDriverProcessStartAllowed("cua-driver activation validation");
   const { endpoint, cleanupDirectory } = createCuaDriverValidationEndpoint();
   const environment = {
     CUA_DRIVER_POLICY_FILE: input.policyPath,
     ...cuaDriverEmbeddedEnvironment(endpoint, input.hostBundleId),
   };
-  const child = ChildProcess.spawn(
-    input.binaryPath,
-    [
-      ...cuaDriverServeArguments(endpoint, input.hostBundleId),
-      "--no-permissions-gate",
-      "--no-overlay",
-    ],
-    {
-      env: makeCuaDriverChildEnvironment(process.env, environment),
-      stdio: ["ignore", "ignore", "pipe"],
-      shell: false,
-    },
+  const child = trackCuaDriverProcess(
+    ChildProcess.spawn(
+      input.binaryPath,
+      [
+        ...cuaDriverServeArguments(endpoint, input.hostBundleId),
+        "--no-permissions-gate",
+        "--no-overlay",
+      ],
+      {
+        env: makeCuaDriverChildEnvironment(process.env, environment),
+        stdio: ["ignore", "ignore", "pipe"],
+        shell: false,
+      },
+    ),
   );
   let stderrTail = "";
   child.stderr?.on("data", (chunk: Buffer | string) => {
@@ -115,7 +112,7 @@ export async function validateCuaDriverActivation(input: {
     }
     throw new Error("Computer Use runtime policy did not deny the activation probe.");
   } finally {
-    stopChild(child);
+    stopTrackedCuaDriverProcess(child);
     if (cleanupDirectory) FS.rmSync(cleanupDirectory, { recursive: true, force: true });
   }
 }

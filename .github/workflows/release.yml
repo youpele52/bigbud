@@ -176,6 +176,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Validate Windows CUA sweep native helper
+        if: matrix.platform == 'win'
+        run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
+
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 

@@ -2,6 +2,7 @@ import type { OrchestrationDeliveryBatch, OrchestrationDeliveryRecovery } from "
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  containDeliveryApplicationFailure,
   recoverAndAcknowledgeDeliveryBaseline,
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
@@ -20,6 +21,21 @@ function batch(): OrchestrationDeliveryBatch {
 }
 
 describe("routeOrchestrationDeliveryBatch", () => {
+  it("does not run redundant bounded recovery after a recovery item fails", async () => {
+    const fallbackToBoundedRecovery = vi.fn(async () => undefined);
+    const error = new Error("baseline recovery failed");
+
+    await expect(
+      containDeliveryApplicationFailure({
+        itemType: "recovery",
+        error,
+        fallbackToBoundedRecovery,
+      }),
+    ).rejects.toBe(error);
+
+    expect(fallbackToBoundedRecovery).not.toHaveBeenCalled();
+  });
+
   it("ACKs the projection baseline only after bounded recovery succeeds", async () => {
     const recovery = {
       type: "recovery",

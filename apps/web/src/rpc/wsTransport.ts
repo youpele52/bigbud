@@ -24,6 +24,29 @@ interface RequestOptions {
 
 const DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS = Duration.millis(250);
 const NOOP: () => void = () => undefined;
+const SUBSCRIPTION_LISTENER_FAILURE_NAME = "WsSubscriptionListenerError";
+
+class WsSubscriptionListenerError extends Error {
+  readonly listenerCause: unknown;
+
+  constructor(cause: unknown) {
+    super(formatErrorMessage(cause));
+    this.name = SUBSCRIPTION_LISTENER_FAILURE_NAME;
+    this.listenerCause = cause;
+  }
+}
+
+export function markWsSubscriptionListenerFailure(error: unknown): unknown {
+  return isWsSubscriptionListenerFailure(error) ? error : new WsSubscriptionListenerError(error);
+}
+
+export function isWsSubscriptionListenerFailure(error: unknown): boolean {
+  return error instanceof Error && error.name === SUBSCRIPTION_LISTENER_FAILURE_NAME;
+}
+
+function subscriptionErrorCause(error: unknown): unknown {
+  return error instanceof WsSubscriptionListenerError ? error.listenerCause : error;
+}
 
 interface TransportSession {
   readonly clientPromise: Promise<WsRpcProtocolClient>;
@@ -144,15 +167,17 @@ export class WsTransport {
           if (!active || this.disposed) {
             return;
           }
-          if (isUnknownRequestTagError(error)) {
-            options?.onError?.(error);
+          const listenerFailure = isWsSubscriptionListenerFailure(error);
+          const reportedError = subscriptionErrorCause(error);
+          if (!listenerFailure && isUnknownRequestTagError(error)) {
+            options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
               error: formatErrorMessage(error),
             });
             return;
           }
           if (options?.shouldRetry?.(error) === false) {
-            options?.onError?.(error);
+            options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
               error: formatErrorMessage(error),
             });
@@ -258,6 +283,7 @@ export class WsTransport {
   } {
     let resolveCompleted!: () => void;
     let rejectCompleted!: (error: unknown) => void;
+    let listenerFailure: unknown;
     const completed = new Promise<void>((resolve, reject) => {
       resolveCompleted = resolve;
       rejectCompleted = reject;
@@ -274,7 +300,12 @@ export class WsTransport {
 
                 markWsInboundActivity();
                 markValueReceived();
-                return Promise.resolve(listener(value));
+                return Promise.resolve()
+                  .then(() => listener(value))
+                  .catch((error: unknown) => {
+                    listenerFailure = markWsSubscriptionListenerFailure(error);
+                    return Promise.reject(listenerFailure);
+                  });
               }),
             ),
           ),
@@ -287,7 +318,7 @@ export class WsTransport {
             return;
           }
 
-          rejectCompleted(Cause.squash(exit.cause));
+          rejectCompleted(listenerFailure ?? Cause.squash(exit.cause));
         },
       },
     );

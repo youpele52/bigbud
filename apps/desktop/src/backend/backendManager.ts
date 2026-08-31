@@ -35,6 +35,8 @@ import {
   createDevelopmentBackendDiagnostics,
 } from "./backendStartupDiagnostics";
 import { resolveComputerUseRuntimeEnv } from "./backendRuntimeEnv";
+import * as ProcessQuiescence from "./installedProcessQuiescence";
+import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
@@ -43,11 +45,7 @@ export let backendHost = "";
 export let restartAttempt = 0;
 export let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let backendStartPending = false;
-
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
-
-/** No-op handler for pipe errors from a dying backend child.
- *  Keeps these errors from becoming uncaught exceptions in the main process. */
 const swallowPipeError = () => {};
 interface BackendManagerDeps {
   readonly rootDir: string;
@@ -60,7 +58,6 @@ interface BackendManagerDeps {
   readonly isDevelopmentDiagnostics: boolean;
   readonly runId: string;
 }
-
 let _deps: BackendManagerDeps | null = null;
 export function initBackendManager(deps: BackendManagerDeps): void {
   _deps = deps;
@@ -75,14 +72,10 @@ function logBackendBoundary(phase: "START" | "END", details: string): void {
   if (!_deps) return;
   writeBackendSessionBoundary(phase, details, _deps.getBackendLogSink(), _deps.runId);
 }
-
 function logBackendLifecycle(event: string, details: string): void {
   if (!_deps) return;
   writeBackendLifecycleEvent(event, details, _deps.getBackendLogSink(), _deps.runId);
 }
-/**
- * Set the resolved port/auth/url (called from bootstrap after port reservation).
- */
 export function setBackendConnectionInfo(opts: {
   port: number;
   authToken: string;
@@ -94,11 +87,10 @@ export function setBackendConnectionInfo(opts: {
   backendWsUrl = opts.wsUrl;
   backendHost = opts.host;
 }
-
 export function scheduleBackendRestart(reason: string): void {
   if (!_deps) return;
-  if (_deps.getIsQuitting() || restartTimer) return;
-
+  if (_deps.getIsQuitting() || ProcessQuiescence.isInstalledProcessQuiescing() || restartTimer)
+    return;
   const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
   restartAttempt += 1;
   logBackendLifecycle(
@@ -106,23 +98,36 @@ export function scheduleBackendRestart(reason: string): void {
     `attempt=${restartAttempt} delayMs=${delayMs} reason=${reason}`,
   );
   console.error(`[desktop] backend exited unexpectedly (${reason}); restarting in ${delayMs}ms`);
-
   restartTimer = setTimeout(() => {
     restartTimer = null;
     void startBackend();
   }, delayMs);
 }
-
 export async function startBackend(): Promise<void> {
   if (!_deps) return;
-  if (_deps.getIsQuitting() || backendProcess || backendStartPending) return;
+  if (
+    _deps.getIsQuitting() ||
+    ProcessQuiescence.isInstalledProcessQuiescing() ||
+    backendProcess ||
+    backendStartPending
+  )
+    return;
   backendStartPending = true;
-  const computerUseRuntimeEnv = await resolveComputerUseRuntimeEnv(
-    _deps.baseDir,
-    _deps.cuaDriverHostBundleId,
-  );
-  backendStartPending = false;
-  if (_deps.getIsQuitting() || backendProcess) return;
+  let computerUseRuntimeEnv: NodeJS.ProcessEnv | undefined;
+  try {
+    computerUseRuntimeEnv = await resolveBackendStartWhenAllowed(() =>
+      resolveComputerUseRuntimeEnv(_deps!.baseDir, _deps!.cuaDriverHostBundleId),
+    );
+  } finally {
+    backendStartPending = false;
+  }
+  if (
+    !computerUseRuntimeEnv ||
+    _deps.getIsQuitting() ||
+    ProcessQuiescence.isInstalledProcessQuiescing() ||
+    backendProcess
+  )
+    return;
   const startupGeneration = beginBackendStartup();
   logBackendLifecycle("startup_requested", `generation=${startupGeneration}`);
 
@@ -371,17 +376,14 @@ export async function startBackend(): Promise<void> {
     scheduleBackendRestart(reason);
   });
 }
-
 export function stopBackend(): void {
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-
   const child = backendProcess;
   backendProcess = null;
   if (!child) return;
-
   stopBackendChild(child, expectedBackendExitChildren);
 }
 
@@ -390,9 +392,9 @@ export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-
+  await ProcessQuiescence.waitForInstalledProcessStarts();
   const child = backendProcess;
-  backendProcess = null;
   if (!child) return;
   await stopBackendChildAndWait(child, expectedBackendExitChildren, timeoutMs);
+  if (backendProcess === child) backendProcess = null;
 }

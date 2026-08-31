@@ -5,12 +5,17 @@ import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
 import { resetWsConnectionStateForTests } from "./wsConnectionState";
-import { resetOrchestrationDeliveryLifecycleForTests } from "./orchestrationDeliveryState";
+import {
+  resetOrchestrationDeliveryLifecycleForTests,
+  setOrchestrationDeliveryLifecycle,
+} from "./orchestrationDeliveryState";
 import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
+import { isWsSubscriptionListenerFailure } from "./wsTransport";
 
 let instance: { api: NativeApi } | null = null;
 const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
+const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
 
 function resolveDeliveryConsumerId(): string {
   try {
@@ -60,6 +65,16 @@ export function createWsNativeApi(): NativeApi {
     readonly serverEpoch: string;
   } | null = null;
   let unsubscribeDomainEvents: (() => void) | null = null;
+  let orchestrationApplicationFailures = 0;
+  let latestDeliveryIdentity: {
+    readonly route: "direct-unmanaged" | "supervisor" | "fallback-fenced";
+    readonly consumerGeneration: number;
+    readonly acknowledgedSequence: number;
+  } | null = null;
+
+  const markDeliveryProgress = () => {
+    orchestrationApplicationFailures = 0;
+  };
 
   const isActiveBaselineRecovery = (input: {
     readonly recoveryId: string;
@@ -77,6 +92,12 @@ export function createWsNativeApi(): NativeApi {
     unsubscribeDomainEvents = rpcClient.orchestration.onDomainEvent(
       () => ({ consumerId: deliveryConsumerId, appliedSequence: deliveryAppliedSequence }),
       (item) => {
+        latestDeliveryIdentity = {
+          route: item.route,
+          consumerGeneration: item.consumerGeneration,
+          acknowledgedSequence:
+            item.type === "batch" ? deliveryAppliedSequence : item.acknowledgedSequence,
+        };
         if (item.type === "recovery") {
           activeBaselineRecovery = {
             recoveryId: item.recoveryId,
@@ -95,6 +116,27 @@ export function createWsNativeApi(): NativeApi {
         onResubscribe: () => {
           activeBaselineRecovery = null;
           for (const callback of domainResubscribeCallbacks) callback();
+        },
+        shouldRetry: (error) => {
+          if (!isWsSubscriptionListenerFailure(error)) return true;
+          orchestrationApplicationFailures += 1;
+          if (orchestrationApplicationFailures < MAX_ORCHESTRATION_NO_PROGRESS_FAILURES) {
+            return true;
+          }
+          const identity = latestDeliveryIdentity;
+          if (identity) {
+            setOrchestrationDeliveryLifecycle({
+              type: "lifecycle",
+              route: identity.route,
+              consumerId: deliveryConsumerId,
+              consumerGeneration: identity.consumerGeneration,
+              state: "degraded",
+              acknowledgedSequence: identity.acknowledgedSequence,
+              restartAttempt: 0,
+              reasonCode: "application_no_progress",
+            });
+          }
+          return false;
         },
       },
     );
@@ -273,6 +315,7 @@ export function createWsNativeApi(): NativeApi {
         if (result.accepted && !result.fenced) {
           deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
           persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+          markDeliveryProgress();
         }
         return result;
       },
@@ -284,6 +327,7 @@ export function createWsNativeApi(): NativeApi {
         if (result.accepted && !result.fenced && isActiveBaselineRecovery(input)) {
           deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
           persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+          markDeliveryProgress();
         } else if (result.accepted && !result.fenced) {
           return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
         }

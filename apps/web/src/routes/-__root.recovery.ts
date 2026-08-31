@@ -290,6 +290,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     selectedThreadId: ThreadId | null,
     disposed: () => boolean,
     resumeReplay = true,
+    propagateFailure = false,
   ): Promise<number | null> => {
     const started = recovery.beginSnapshotRecovery(reason);
     if (import.meta.env.MODE !== "test") {
@@ -337,6 +338,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           state: recovery.getState(),
         });
       }
+      if (propagateFailure) throw error;
     }
     return null;
   };
@@ -353,7 +355,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     disposed: () => boolean,
   ) =>
     recoveryOperationQueue.enqueue(() =>
-      runBoundedRecoveryNow("replay-failed", selectedThreadId, disposed, false),
+      runBoundedRecoveryNow("replay-failed", selectedThreadId, disposed, false, true),
     );
 
   return {

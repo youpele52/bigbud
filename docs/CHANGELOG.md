@@ -10,7 +10,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.206 (29 August, 2026)
+## v0.2.206 (31 August, 2026)
 
 ### Broader Remote Workspace Providers
 
@@ -65,12 +65,26 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added a dry-run-first event compaction command with apply and server-stopped safeguards.
 - Kept traces for failures and slow spans, dropping fast successful ones from local files.
 
+### Safer Resource Cleanup
+
+- Moved ordinary thread and project resource removal into a restricted Rust cleanup executor with verified roots, path-identity checks, mount and symlink protection, bounded deadlines, and resumable quarantine cleanup.
+- Made cleanup durable after deletion commits with immutable plans, proof-bound requests, leases, retries, and startup recovery, while preserving shared attachments and keeping managed worktrees under their existing deletion path.
+- Packaged and verified the native cleanup capability with protocol compatibility checks, artifact smoke tests, and platform-specific CI coverage.
+
+### Cleanup and Startup Reliability
+
+- Fixed cleanup after canonical event purges so retained gaps remain part of the event sequence, preventing repeated restore loops and repairing existing mismatched event identifiers during migration.
+- Kept temporary baseline rejections inside the same bounded recovery session instead of repeatedly reconnecting, while continuing to reject stale or unsafe delivery generations.
+- Prevented cleanup-worker pipe failures from terminating the server, preserving committed deletions while deferred resource cleanup retries safely.
+- Normalized Pi model display names before publishing configuration, and cancelled superseded configuration subscriptions so malformed provider data no longer leaves the app stuck connecting or accumulates retry streams.
+
 ### Validation
 
 - Added coverage for remote providers, delivery, command recovery, and load bounding.
 - Added coverage for baseline recovery, heartbeat reconnect, and terminal history capping.
 - Added regression coverage for remote-agent, Files, sidebar, Diff, and terminal work.
-- Verified formatting, linting, and workspace type checks.
+- Added regression coverage for native cleanup safety, durable deletion recovery, event-gap replay, retention **Delete now**, configuration delivery, and subscription cleanup.
+- Verified formatting, linting, workspace type checks, the full test suite, and the Rust workspace checks.
 
 ## v0.2.205 (25 August, 2026)
 

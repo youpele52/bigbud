@@ -11,7 +11,7 @@ describe("resolveDesktopRuntimeDependencies", () => {
       resolveDesktopRuntimeDependencies(
         {
           effect: "catalog:",
-          "electron-updater": "^6.6.2",
+          "electron-updater": "6.8.3",
         },
         {
           effect: "4.0.0-beta.43",
@@ -19,7 +19,7 @@ describe("resolveDesktopRuntimeDependencies", () => {
       ),
       {
         effect: "4.0.0-beta.43",
-        "electron-updater": "^6.6.2",
+        "electron-updater": "6.8.3",
       },
     );
   });
@@ -30,12 +30,12 @@ describe("resolveDesktopRuntimeDependencies", () => {
         {
           "@bigbud/shared": "workspace:*",
           electron: "40.6.0",
-          "electron-updater": "^6.6.2",
+          "electron-updater": "6.8.3",
         },
         {},
       ),
       {
-        "electron-updater": "^6.6.2",
+        "electron-updater": "6.8.3",
       },
     );
   });

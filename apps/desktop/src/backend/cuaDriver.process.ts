@@ -1,7 +1,17 @@
 import * as ChildProcess from "node:child_process";
 
+import {
+  assertCuaDriverProcessStartAllowed,
+  stopTrackedCuaDriverProcessesAndWait,
+  trackCuaDriverProcess,
+} from "./cuaDriver.processRegistry";
+
 const COMMAND_OUTPUT_MAX_CHARS = 256_000;
 const SHORT_COMMAND_TIMEOUT_MS = 30_000;
+
+export function stopCuaDriverCommandsAndWait(timeoutMs = 5_000): Promise<void> {
+  return stopTrackedCuaDriverProcessesAndWait(timeoutMs);
+}
 
 export function runCommand(
   command: string,
@@ -9,12 +19,14 @@ export function runCommand(
   env?: NodeJS.ProcessEnv,
   timeoutMs = SHORT_COMMAND_TIMEOUT_MS,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  assertCuaDriverProcessStartAllowed("cua-driver command");
   return new Promise((resolve, reject) => {
     const child = ChildProcess.spawn(command, args, {
       env,
       stdio: "pipe",
       shell: false,
     });
+    trackCuaDriverProcess(child);
 
     let stdout = "";
     let stderr = "";

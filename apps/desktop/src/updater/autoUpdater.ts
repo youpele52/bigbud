@@ -6,6 +6,11 @@ import { formatErrorMessage } from "../logging/logging";
 import { isArm64HostRunningIntelBuild } from "../env/runtimeArch";
 import { configureUpdaterFeed } from "./autoUpdater.feed";
 import {
+  createUpdateInstallCoordinator,
+  handleUpdateHandoffAccepted,
+  type UpdateInstallCoordinator,
+} from "./autoUpdater.install";
+import {
   isUpdateVersionAllowed,
   resolveDesktopUpdaterChannelPolicy,
   type DesktopUpdaterChannelPolicy,
@@ -19,7 +24,7 @@ import {
   reduceDesktopUpdateStateOnDownloadFailure,
   reduceDesktopUpdateStateOnDownloadProgress,
   reduceDesktopUpdateStateOnDownloadStart,
-  reduceDesktopUpdateStateOnInstallFailure,
+  reduceDesktopUpdateStateOnInstallRestartRequired,
   reduceDesktopUpdateStateOnInstallStart,
   reduceDesktopUpdateStateOnNoUpdate,
   reduceDesktopUpdateStateOnUpdateAvailable,
@@ -41,7 +46,6 @@ export let updatePollTimer: ReturnType<typeof setInterval> | null = null;
 export let updateStartupTimer: ReturnType<typeof setTimeout> | null = null;
 export let updateCheckInFlight = false;
 export let updateDownloadInFlight = false;
-export let updateInstallInFlight = false;
 export let updaterConfigured = false;
 
 type DesktopUpdateErrorContext = DesktopUpdateState["errorContext"];
@@ -58,7 +62,7 @@ let _prepareUpdaterFeedForCheck: (() => Promise<void>) | null = null;
 let _isDevelopment = false;
 let _getIsQuitting: (() => boolean) | null = null;
 let _setIsQuitting: ((v: boolean) => void) | null = null;
-let _stopBackendAndWaitForExit: (() => Promise<void>) | null = null;
+let _installCoordinator: UpdateInstallCoordinator | null = null;
 
 /** The current auto-updater state (initialised after init()). */
 export function getUpdateState(): DesktopUpdateState {
@@ -72,7 +76,7 @@ export function getUpdateState(): DesktopUpdateState {
 
 function resolveUpdaterErrorContext(): DesktopUpdateErrorContext {
   if (!_updateState) return null;
-  if (updateInstallInFlight) return "install";
+  if (_installCoordinator?.isInFlight()) return "install";
   if (updateDownloadInFlight) return "download";
   if (updateCheckInFlight) return "check";
   return _updateState.errorContext;
@@ -187,56 +191,7 @@ export async function installDownloadedUpdate(): Promise<{
   accepted: boolean;
   completed: boolean;
 }> {
-  if (!_updateState || !_getIsQuitting || !_setIsQuitting || !_stopBackendAndWaitForExit) {
-    return { accepted: false, completed: false };
-  }
-  if (_getIsQuitting() || !updaterConfigured || _updateState.status !== "downloaded") {
-    return { accepted: false, completed: false };
-  }
-
-  _setIsQuitting(true);
-  updateInstallInFlight = true;
-  clearUpdatePollTimer();
-  // Transition to "installing" so the UI can show a "Restarting…" state immediately.
-  setUpdateState(reduceDesktopUpdateStateOnInstallStart(_updateState));
-  try {
-    await _stopBackendAndWaitForExit();
-    // Hand off to the platform updater.
-    // - Windows (NSIS): quitAndInstall(isSilent, isForceRunAfter) — suppress UI and re-launch.
-    // - macOS (Squirrel.Mac) / Linux (AppImage): quitAndInstall() — no arguments needed.
-    // Do NOT manually destroy windows here: Electron's before-quit-for-update event fires
-    // after quitAndInstall() is called and handles window teardown in the normal lifecycle.
-    if (process.platform === "win32") {
-      autoUpdater.quitAndInstall(true, true);
-    } else {
-      autoUpdater.quitAndInstall();
-    }
-    // The process should quit from here. Reset the in-flight flag immediately
-    // so a silent failure (e.g. unsigned macOS build) doesn't block retries.
-    updateInstallInFlight = false;
-    // Safety: if the app hasn't quit after 5s, the platform updater likely
-    // failed silently. Reset state so the user can retry.
-    const installTimeout = setTimeout(() => {
-      if (_updateState?.status === "installing" && _setIsQuitting) {
-        _setIsQuitting(false);
-        setUpdateState(
-          reduceDesktopUpdateStateOnInstallFailure(
-            _updateState,
-            "The update could not be installed automatically. Please download the latest version manually.",
-          ),
-        );
-      }
-    }, 5_000);
-    installTimeout.unref();
-    return { accepted: true, completed: false };
-  } catch (error: unknown) {
-    const message = formatErrorMessage(error);
-    updateInstallInFlight = false;
-    _setIsQuitting(false);
-    setUpdateState(reduceDesktopUpdateStateOnInstallFailure(_updateState, message));
-    console.error(`[desktop-updater] Failed to install update: ${message}`);
-    return { accepted: true, completed: false };
-  }
+  return _installCoordinator?.install() ?? Promise.resolve({ accepted: false, completed: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +205,8 @@ export interface AutoUpdaterDeps {
   readonly isDevelopment: boolean;
   readonly getIsQuitting: () => boolean;
   readonly setIsQuitting: (v: boolean) => void;
-  readonly stopBackendAndWaitForExit: () => Promise<void>;
+  readonly beginUpdatePreparation: () => void;
+  readonly prepareForUpdateInstall: () => Promise<void>;
   /**
    * Called when `before-quit-for-update` fires on the Electron built-in
    * autoUpdater. Used by main.ts to run the same backend-stop / timer-clear
@@ -265,13 +221,18 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
   _isDevelopment = deps.isDevelopment;
   _getIsQuitting = deps.getIsQuitting;
   _setIsQuitting = deps.setIsQuitting;
-  _stopBackendAndWaitForExit = deps.stopBackendAndWaitForExit;
   _updaterChannelPolicy = resolveDesktopUpdaterChannelPolicy(app.getVersion());
 
   // Register cleanup on the Electron built-in autoUpdater. electron-updater's
   // quitAndInstall emits this event via require("electron").autoUpdater; it is
   // NOT emitted on app, so it must be wired here.
-  electronAutoUpdater.on("before-quit-for-update", deps.onBeforeQuitForUpdate);
+  electronAutoUpdater.on("before-quit-for-update", () => {
+    if (_installCoordinator) {
+      handleUpdateHandoffAccepted(_installCoordinator, deps.onBeforeQuitForUpdate);
+    } else {
+      deps.onBeforeQuitForUpdate();
+    }
+  });
 
   // Initialise the state now that app.getVersion() is available.
   _updateState = createInitialDesktopUpdateState(app.getVersion(), deps.runtimeInfo);
@@ -282,6 +243,28 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
     enabled,
     status: enabled ? "idle" : "disabled",
   };
+  _installCoordinator = createUpdateInstallCoordinator({
+    beginUpdatePreparation: deps.beginUpdatePreparation,
+    canInstall: () => updaterConfigured && _updateState?.status === "downloaded",
+    clearUpdateTimers: clearUpdatePollTimer,
+    formatError: formatErrorMessage,
+    getIsQuitting: deps.getIsQuitting,
+    onHandoffFailure: (message) => {
+      if (_updateState)
+        setUpdateState(reduceDesktopUpdateStateOnInstallRestartRequired(_updateState, message));
+    },
+    onRestartRequiredPreparationFailure: (message) => {
+      if (_updateState)
+        setUpdateState(reduceDesktopUpdateStateOnInstallRestartRequired(_updateState, message));
+    },
+    onInstallStart: () => {
+      if (_updateState) setUpdateState(reduceDesktopUpdateStateOnInstallStart(_updateState));
+    },
+    platform: process.platform,
+    prepareForUpdateInstall: deps.prepareForUpdateInstall,
+    quitAndInstall: (...args) => autoUpdater.quitAndInstall(...args),
+    setIsQuitting: deps.setIsQuitting,
+  });
 
   if (!enabled) {
     return;
@@ -335,10 +318,7 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
   autoUpdater.on("error", (error) => {
     if (!_updateState || !_getIsQuitting || !_setIsQuitting) return;
     const message = formatErrorMessage(error);
-    if (updateInstallInFlight) {
-      updateInstallInFlight = false;
-      _setIsQuitting(false);
-      setUpdateState(reduceDesktopUpdateStateOnInstallFailure(_updateState, message));
+    if (_installCoordinator?.handleUpdaterError(error)) {
       console.error(`[desktop-updater] Updater error: ${message}`);
       return;
     }

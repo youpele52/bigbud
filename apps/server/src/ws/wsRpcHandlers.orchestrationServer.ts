@@ -15,6 +15,8 @@ import {
   ProjectDirectoryWatchError,
   type ThreadId,
   WS_METHODS,
+  STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+  STARTUP_PROJECT_CATALOG_MAX_LIMIT,
 } from "@bigbud/contracts";
 
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
@@ -76,7 +78,15 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               }),
           ),
         ),
-        { "rpc.aggregate": "orchestration" },
+        {
+          "rpc.aggregate": "orchestration",
+          "rpc.project_catalog.scope": input.scope,
+          "rpc.project_catalog.limit": Math.min(
+            Math.max(input.limit ?? STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT, 1),
+            STARTUP_PROJECT_CATALOG_MAX_LIMIT,
+          ),
+          "rpc.project_catalog.cursor_present": input.cursor !== undefined,
+        },
       ),
     [ORCHESTRATION_WS_METHODS.getProjectThreadSummaries]: (
       input: Parameters<WsRpcContext["projectionCatalogQuery"]["getProjectThreadSummaries"]>[0],

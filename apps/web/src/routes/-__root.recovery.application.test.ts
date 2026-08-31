@@ -63,6 +63,28 @@ describe("event application acknowledgement", () => {
     vi.unstubAllGlobals();
   });
 
+  it("preserves the original bounded-bootstrap failure for delivery baseline recovery", async () => {
+    const { api } = makeApi();
+    const failure = new Error("sidebar catalog unavailable");
+    api.orchestration.getSidebarThreadCatalog = vi.fn().mockRejectedValue(failure);
+    const recovery = createEventRouterRecovery({
+      api,
+      queryClient: new QueryClient(),
+      clearAllThinkingDeltas: vi.fn(),
+      reconcileThinkingActivities: vi.fn(),
+      applyOrchestrationEvents: vi.fn(),
+      syncProjects: vi.fn(),
+      syncThreads: vi.fn(),
+      clearThreadUi: vi.fn(),
+      removeFromSelection: vi.fn(),
+      removeTerminalState: vi.fn(),
+      removeOrphanedTerminalStates: vi.fn(),
+      applyTerminalEvent: vi.fn(),
+    });
+
+    await expect(recovery.runDeliveryBaselineRecovery(null, () => false)).rejects.toBe(failure);
+  });
+
   it("clears an accepted CRUD attempt when its canonical event is applied", async () => {
     const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", {

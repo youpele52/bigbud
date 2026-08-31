@@ -6,6 +6,14 @@ import {
 } from "@bigbud/shared/cua-driver/invocation";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
 
+import {
+  assertCuaDriverMcpStartAllowed,
+  stopCuaDriverMcpProcess,
+  stopCuaDriverMcpProcesses,
+  stopCuaDriverMcpProcessesAndWait,
+  trackCuaDriverMcpChild,
+} from "./cuaDriver.mcpProcess";
+
 const JSONRPC_VERSION = "2.0";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const CUA_DRIVER_REQUEST_TIMEOUT_MS = 15 * 60_000;
@@ -141,15 +149,17 @@ interface PersistentMcpSession {
 let persistentSession: PersistentMcpSession | null = null;
 
 function stopSession(session: PersistentMcpSession): void {
-  if (session.child.exitCode === null && session.child.signalCode === null) {
-    session.child.kill("SIGTERM");
-  }
+  stopCuaDriverMcpProcess(session.child);
 }
 
 export function stopCuaDriverMcpClient(): void {
-  const session = persistentSession;
   persistentSession = null;
-  if (session) stopSession(session);
+  stopCuaDriverMcpProcesses();
+}
+
+export function stopCuaDriverMcpClientAndWait(timeoutMs = 5_000): Promise<void> {
+  persistentSession = null;
+  return stopCuaDriverMcpProcessesAndWait(timeoutMs);
 }
 
 function readEmbeddedHostBundleId(environment: NodeJS.ProcessEnv): string {
@@ -167,17 +177,19 @@ function createMcpChild(
   environment: NodeJS.ProcessEnv,
 ): ChildProcess.ChildProcessWithoutNullStreams {
   const hostBundleId = socketPath ? readEmbeddedHostBundleId(environment) : undefined;
-  const child = ChildProcess.spawn(
-    binaryPath,
-    socketPath ? [...cuaDriverMcpArguments(socketPath, hostBundleId!)] : ["mcp"],
-    {
-      env: makeCuaDriverChildEnvironment(
-        environment,
-        socketPath ? cuaDriverEmbeddedEnvironment(socketPath, hostBundleId!) : {},
-      ),
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
-    },
+  const child = trackCuaDriverMcpChild(
+    ChildProcess.spawn(
+      binaryPath,
+      socketPath ? [...cuaDriverMcpArguments(socketPath, hostBundleId!)] : ["mcp"],
+      {
+        env: makeCuaDriverChildEnvironment(
+          environment,
+          socketPath ? cuaDriverEmbeddedEnvironment(socketPath, hostBundleId!) : {},
+        ),
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+      },
+    ),
   );
   child.stderr.on("data", () => {});
   return child;
@@ -301,6 +313,7 @@ export async function callCuaDriverTool(
   args: Record<string, unknown>,
   options: CuaDriverMcpOptions = {},
 ): Promise<unknown> {
+  assertCuaDriverMcpStartAllowed();
   const socketPath =
     options.socketPath ??
     options.environment?.BIGBUD_CUA_ENDPOINT?.trim() ??
@@ -336,6 +349,6 @@ export async function callCuaDriverTool(
     });
     return unwrapToolResult(result);
   } finally {
-    child.kill("SIGTERM");
+    stopCuaDriverMcpProcess(child);
   }
 }

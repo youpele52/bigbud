@@ -13,6 +13,7 @@ import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
 import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
 import {
+  containDeliveryApplicationFailure,
   recoverAndAcknowledgeDeliveryBaseline,
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
@@ -300,12 +301,11 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
           })
           .catch((error: unknown) => {
             console.error("[orchestration-recovery] Event application failed.", { error });
-            void fallbackToBoundedRecovery().catch((recoveryError: unknown) => {
-              console.error("[orchestration-recovery] Bounded recovery failed.", {
-                error: recoveryError,
-              });
+            return containDeliveryApplicationFailure({
+              itemType: item.type,
+              error,
+              fallbackToBoundedRecovery,
             });
-            throw error;
           }),
       {
         onResubscribe: () => undefined,

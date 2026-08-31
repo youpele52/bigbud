@@ -1,5 +1,6 @@
 import { WS_METHODS } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { Effect, Stream } from "effect";
 
 import {
   MockWebSocket,
@@ -13,6 +14,10 @@ import { WsTransport } from "./wsTransport";
 const sockets: MockWebSocket[] = [];
 const transports: WsTransport[] = [];
 registerTestHooks(sockets, transports);
+
+class PageRejectedError extends Error {
+  readonly _tag = "PageRejectedError";
+}
 
 describe("WsTransport unary requests", () => {
   it("sends unary RPC requests and resolves successful exits", async () => {
@@ -70,6 +75,28 @@ describe("WsTransport unary requests", () => {
       issues: [],
     });
 
+    await transport.dispose();
+  });
+
+  it("keeps an existing stream active when an independent unary request fails", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    const listener = vi.fn();
+    const unsubscribe = transport.subscribe(
+      () => Stream.concat(Stream.make("still-live"), Stream.never),
+      listener,
+    );
+
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    getSocket(sockets).open();
+    await waitFor(() => expect(listener).toHaveBeenCalledWith("still-live"));
+
+    await expect(
+      transport.request(() => Effect.fail(new PageRejectedError("page rejected"))),
+    ).rejects.toThrow("page rejected");
+    expect(sockets).toHaveLength(1);
+    expect(listener).toHaveBeenCalledOnce();
+
+    unsubscribe();
     await transport.dispose();
   });
 });

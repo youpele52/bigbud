@@ -8,11 +8,29 @@ import type {
 import { applyAndAcknowledgeDeliveryBatch } from "./-__root.delivery-ack";
 
 type DeliveryAction = "ignore" | "defer" | "recover" | "apply";
+type DeliveryItemType = "lifecycle" | "recovery" | "batch";
 // Keep this below the server's 65-second recovery-gate expiry.
 const BASELINE_RECOVERY_DEADLINE_MS = 60_000;
 const BASELINE_ACK_RETRY_INITIAL_DELAY_MS = 250;
 const BASELINE_ACK_RETRY_MAX_DELAY_MS = 2_000;
 const BASELINE_ACK_TIMEOUT_MS = 20_000;
+
+export async function containDeliveryApplicationFailure(input: {
+  readonly itemType: DeliveryItemType;
+  readonly error: unknown;
+  readonly fallbackToBoundedRecovery: () => Promise<void>;
+}): Promise<never> {
+  if (input.itemType !== "recovery") {
+    try {
+      await input.fallbackToBoundedRecovery();
+    } catch (recoveryError) {
+      console.error("[orchestration-recovery] Bounded recovery failed.", {
+        error: recoveryError,
+      });
+    }
+  }
+  throw input.error;
+}
 
 function waitForBaselineAcknowledgement<T>(input: {
   readonly operation: Promise<T>;

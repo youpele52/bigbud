@@ -3,6 +3,7 @@ import {
   EventId,
   ProjectId,
   ThreadId,
+  type OrchestrationDeliveryStreamItem,
   type OrchestrationEvent,
 } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -13,8 +14,53 @@ import {
   rpcClientMock,
   terminalEventListeners,
 } from "./wsNativeApi.test.helpers";
+import { markWsSubscriptionListenerFailure } from "./wsTransport";
 
 describe("wsNativeApi — orchestration", () => {
+  it("bounds orchestration application retries while leaving transport failures retryable", async () => {
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const { getOrchestrationDeliveryLifecycle } = await import("./orchestrationDeliveryState");
+    const applicationError = new Error("deterministic recovery failure");
+    const api = createWsNativeApi();
+    api.orchestration.onDomainEvent(vi.fn(async () => Promise.reject(applicationError)));
+    const call = rpcClientMock.orchestration.onDomainEvent.mock.calls.at(-1);
+    const listener = call?.[1] as
+      | ((item: OrchestrationDeliveryStreamItem) => Promise<void>)
+      | undefined;
+    const options = call?.[2] as
+      | { shouldRetry?: (error: unknown) => boolean; onResubscribe?: () => void }
+      | undefined;
+    const recovery = {
+      type: "recovery" as const,
+      route: "direct-unmanaged" as const,
+      recoveryId: "persistent-recovery",
+      consumerId: "consumer-persistent",
+      consumerGeneration: 7,
+      serverEpoch: "epoch-persistent",
+      acknowledgedSequence: 4,
+      targetSequence: 10,
+      reasonCode: "replay_unavailable" as const,
+    };
+    if (!listener) throw new Error("expected orchestration listener");
+
+    expect(options?.shouldRetry?.(new Error("socket closed"))).toBe(true);
+    const decisions: boolean[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(listener(recovery)).rejects.toBe(applicationError);
+      decisions.push(
+        options?.shouldRetry?.(markWsSubscriptionListenerFailure(applicationError)) ?? false,
+      );
+    }
+
+    expect(decisions).toEqual([true, true, false]);
+    expect(getOrchestrationDeliveryLifecycle()).toMatchObject({
+      state: "degraded",
+      reasonCode: "application_no_progress",
+      consumerGeneration: 7,
+      acknowledgedSequence: 4,
+    });
+  });
+
   it("recovers the verified cursor across renderer reload before replaying the next ordered events", async () => {
     const { createWsNativeApi, __resetWsNativeApiForTests } = await import("./wsNativeApi");
     const consumerId = "consumer-reload";

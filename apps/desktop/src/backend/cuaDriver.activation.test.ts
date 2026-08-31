@@ -110,4 +110,18 @@ describe("Computer Use activation endpoint", () => {
     );
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
   });
+
+  it("refuses activation validation after update quiescence begins", async () => {
+    const { beginInstalledProcessQuiescence } = await import("./installedProcessQuiescence");
+    beginInstalledProcessQuiescence();
+
+    await expect(
+      validateCuaDriverActivation({
+        binaryPath: "/tmp/cua-driver",
+        policyPath: "/tmp/bigbud.yaml",
+        hostBundleId: "ai.bigbud.desktop.dev",
+      }),
+    ).rejects.toThrow("cannot start while update installation is preparing");
+    expect(mockedSpawn).not.toHaveBeenCalled();
+  });
 });

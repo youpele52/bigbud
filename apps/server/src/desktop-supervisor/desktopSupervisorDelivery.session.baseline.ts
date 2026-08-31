@@ -32,10 +32,12 @@ export async function acknowledgeProjectionBaseline(
       : rejected();
   }
   const gate = session.baselineGate;
+  const equalsAcknowledged = input.appliedProjectionSequence === session.acknowledgedSequence;
   if (
     !gate ||
     gate.recoveryId !== input.recoveryId ||
-    input.appliedProjectionSequence <= session.acknowledgedSequence
+    input.appliedProjectionSequence < session.acknowledgedSequence ||
+    (equalsAcknowledged && input.appliedProjectionSequence !== gate.targetSequence)
   ) {
     return rejected();
   }
