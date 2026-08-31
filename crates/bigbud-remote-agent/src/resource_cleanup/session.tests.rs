@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::Cursor;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{PlatformExecutor, admit_cleanup_request, handle_cleanup_request, run};
@@ -177,7 +178,7 @@ fn executes_cleanup_only_after_hello_and_root_bootstrap() {
     };
     assert_eq!(digest_conflict.code, "OPERATION_DIGEST_CONFLICT");
     assert!(!target.exists());
-    fs::remove_dir(root).expect("cleanup");
+    remove_root(&root);
 }
 
 #[test]
@@ -242,5 +243,16 @@ fn acknowledged_cancellation_before_the_handler_is_not_reset() {
     assert!(target.exists());
     super::super::reset_cancellation();
     fs::remove_file(target).expect("target cleanup");
+    remove_root(&root);
+}
+
+fn remove_root(root: &Path) {
+    #[cfg(windows)]
+    {
+        let lock = root.join(".bigbud-resource-cleanup.lock");
+        if lock.exists() {
+            fs::remove_file(lock).expect("lock cleanup");
+        }
+    }
     fs::remove_dir(root).expect("root cleanup");
 }

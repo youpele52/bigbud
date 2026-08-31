@@ -75,7 +75,9 @@ fn blocks_takeover_after_process_acceptance_and_before_child_spawn() {
         |payload| matches!(payload, v1::frame::Payload::ProcessAccepted(response) if response.accepted),
     );
     for _ in 0..100 {
-        if barrier.join("accepted").exists() {
+        if fs::read_to_string(barrier.join("accepted"))
+            .is_ok_and(|operation_id| operation_id == "accepted-before-spawn")
+        {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
