@@ -9,7 +9,8 @@ function Write-ProbeResult([object]$Value, [int]$ExitCode) {
 
 try {
   $rawPaths = [Environment]::GetEnvironmentVariable('${WINDOWS_REPLACEABILITY_PATHS_ENV}', 'Process')
-  $paths = @($rawPaths | ConvertFrom-Json)
+  $payload = ConvertFrom-Json -InputObject $rawPaths
+  $paths = @($payload.paths)
   if ($paths.Count -lt 1) { throw 'missing paths' }
   foreach ($path in $paths) {
     if (-not ($path -is [string]) -or [string]::IsNullOrWhiteSpace($path)) { throw 'invalid path' }

@@ -11,7 +11,8 @@ use bigbud_protocol::v1;
 use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows_sys::Wdk::Storage::FileSystem::{
     FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_FOR_BACKUP_INTENT, FILE_OPEN_IF,
-    FILE_OPEN_REPARSE_POINT, FILE_SYNCHRONOUS_IO_NONALERT, NtCreateFile,
+    FILE_OPEN_REPARSE_POINT, FILE_RENAME_INFORMATION, FILE_SYNCHRONOUS_IO_NONALERT,
+    FileRenameInformation, NtCreateFile, NtSetInformationFile,
 };
 use windows_sys::Win32::Foundation::{
     ERROR_LOCK_VIOLATION, HANDLE, INVALID_HANDLE_VALUE, OBJ_CASE_INSENSITIVE,
@@ -21,9 +22,9 @@ use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT,
     FILE_DISPOSITION_FLAG_DELETE, FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE,
     FILE_DISPOSITION_FLAG_POSIX_SEMANTICS, FILE_DISPOSITION_INFO_EX, FILE_LIST_DIRECTORY,
-    FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_WRITE_DATA, FileDispositionInfoEx, FileRenameInfo, LOCKFILE_EXCLUSIVE_LOCK,
-    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, SYNCHRONIZE, SetFileInformationByHandle,
+    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_DATA,
+    FileDispositionInfoEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
+    SYNCHRONIZE, SetFileInformationByHandle,
 };
 use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, OVERLAPPED};
 
@@ -170,11 +171,12 @@ pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()>
         .len()
         .checked_mul(size_of::<u16>())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rename name too long"))?;
-    let byte_len = size_of::<FILE_RENAME_INFO>()
+    let byte_len = offset_of!(FILE_RENAME_INFORMATION, FileName)
         .checked_add(name_bytes)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "rename buffer too large"))?;
     let mut storage = vec![0usize; byte_len.div_ceil(size_of::<usize>())];
-    let information = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    let information = storage.as_mut_ptr().cast::<FILE_RENAME_INFORMATION>();
+    let mut status = IO_STATUS_BLOCK::default();
     // SAFETY: storage is aligned and sized for the fixed header and complete UTF-16 name.
     unsafe {
         (*information).Anonymous.ReplaceIfExists = false;
@@ -185,20 +187,21 @@ pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()>
             name.as_ptr(),
             information
                 .cast::<u8>()
-                .add(offset_of!(FILE_RENAME_INFO, FileName))
+                .add(offset_of!(FILE_RENAME_INFORMATION, FileName))
                 .cast::<u16>(),
             name.len(),
         );
-        if SetFileInformationByHandle(
+        let result = NtSetInformationFile(
             file.as_raw_handle() as HANDLE,
-            FileRenameInfo,
+            &mut status,
             information.cast(),
             u32::try_from(byte_len).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidInput, "rename buffer too large")
             })?,
-        ) == 0
-        {
-            let error = io::Error::last_os_error();
+            FileRenameInformation,
+        );
+        if result < 0 {
+            let error = io::Error::from_raw_os_error(RtlNtStatusToDosError(result) as i32);
             #[cfg(test)]
             eprintln!("Windows resource cleanup rename failed: {error:?}");
             return Err(error);

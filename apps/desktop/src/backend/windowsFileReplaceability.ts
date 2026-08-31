@@ -56,7 +56,9 @@ export function assertWindowsFilesReplaceable(input: {
       encoding: "utf8",
       env: {
         ...powerShell.env,
-        [WINDOWS_REPLACEABILITY_PATHS_ENV]: JSON.stringify(input.targets.map(({ path }) => path)),
+        [WINDOWS_REPLACEABILITY_PATHS_ENV]: JSON.stringify({
+          paths: input.targets.map(({ path }) => path),
+        }),
       },
       maxBuffer: 64 * 1024,
       timeout,

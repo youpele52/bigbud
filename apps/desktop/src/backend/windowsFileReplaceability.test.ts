@@ -54,9 +54,9 @@ describe("assertWindowsFilesReplaceable", () => {
     expect(args).toContain("-NoProfile");
     expect(options.cwd).toBe(harness.powerShell.cwd);
     expect(options.env.PATH).toBeUndefined();
-    expect(JSON.parse(options.env.BIGBUD_WINDOWS_REPLACEABILITY_PATHS!)).toEqual([
-      harness.targets[0]!.path,
-    ]);
+    expect(JSON.parse(options.env.BIGBUD_WINDOWS_REPLACEABILITY_PATHS!)).toEqual({
+      paths: [harness.targets[0]!.path],
+    });
     expect(options.timeout).toBe(60_000);
     expect(options.windowsHide).toBe(true);
   });
