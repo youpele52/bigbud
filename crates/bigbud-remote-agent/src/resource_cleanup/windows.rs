@@ -166,11 +166,11 @@ impl WindowsExecutor {
             if !same_identity(&native::verified_identity(&held)?, expected) {
                 return Ok(v1::ResourceCleanupOutcome::IdentityMismatch);
             }
-            native::rename(&held, &parent_file, quarantine_name)?;
+            native::rename(&held, quarantine_name)?;
         }
         if !same_identity(&native::verified_identity(&held)?, expected) {
             if !resumed {
-                let _restore_result = native::rename(&held, &parent_file, &target_name);
+                let _restore_result = native::rename(&held, &target_name);
             }
             return Ok(v1::ResourceCleanupOutcome::IdentityMismatch);
         }

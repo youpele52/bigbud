@@ -165,7 +165,7 @@ fn open_relative(
     Ok(unsafe { File::from_raw_handle(handle as _) })
 }
 
-pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()> {
+pub(super) fn rename(file: &File, name: &OsStr) -> io::Result<()> {
     let name = name.encode_wide().collect::<Vec<_>>();
     let name_bytes = name
         .len()
@@ -180,7 +180,8 @@ pub(super) fn rename(file: &File, parent: &File, name: &OsStr) -> io::Result<()>
     // SAFETY: storage is aligned and sized for the fixed header and complete UTF-16 name.
     unsafe {
         (*information).Anonymous.ReplaceIfExists = false;
-        (*information).RootDirectory = parent.as_raw_handle() as HANDLE;
+        // A simple name with no root handle renames within the file's current directory.
+        (*information).RootDirectory = ptr::null_mut();
         (*information).FileNameLength = u32::try_from(name_bytes)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "rename name too long"))?;
         ptr::copy_nonoverlapping(
