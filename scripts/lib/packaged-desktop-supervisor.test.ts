@@ -36,7 +36,7 @@ describe("packaged desktop supervisor", () => {
         join(root, "artifact-manifest.json"),
         JSON.stringify({
           binary: "bigbud-desktop-supervisor",
-          protocol: { major: 1, minor: 1 },
+          protocol: { major: 1, minor: 3 },
           sha256: createHash("sha256").update("fixture").digest("hex"),
         }),
       );
@@ -45,6 +45,13 @@ describe("packaged desktop supervisor", () => {
         JSON.stringify({ bomFormat: "CycloneDX", components: [] }),
       );
       expect(() => verifyPackagedDesktopSupervisorEvidence(binary)).not.toThrow();
+      writeFileSync(binary, "signed fixture");
+      expect(() => verifyPackagedDesktopSupervisorEvidence(binary)).toThrow(
+        "Packaged desktop supervisor manifest is incompatible or stale",
+      );
+      expect(() =>
+        verifyPackagedDesktopSupervisorEvidence(binary, { verifyDigest: false }),
+      ).not.toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

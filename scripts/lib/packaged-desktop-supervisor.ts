@@ -28,7 +28,10 @@ export function findPackagedDesktopSupervisor(
   return undefined;
 }
 
-export function verifyPackagedDesktopSupervisorEvidence(binaryPath: string): void {
+export function verifyPackagedDesktopSupervisorEvidence(
+  binaryPath: string,
+  options: { readonly verifyDigest?: boolean } = {},
+): void {
   const evidenceDirectory = dirname(binaryPath);
   const manifest = JSON.parse(
     readFileSync(join(evidenceDirectory, "artifact-manifest.json"), "utf8"),
@@ -37,12 +40,16 @@ export function verifyPackagedDesktopSupervisorEvidence(binaryPath: string): voi
     readonly protocol?: { readonly major?: unknown; readonly minor?: unknown };
     readonly sha256?: unknown;
   };
-  const actual = createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
+  const validDigest = typeof manifest.sha256 === "string" && /^[0-9a-f]{64}$/.test(manifest.sha256);
+  const digestMatches =
+    options.verifyDigest === false ||
+    manifest.sha256 === createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
   if (
     manifest.binary !== binaryPath.split(/[\\/]/).at(-1) ||
-    manifest.sha256 !== actual ||
+    !validDigest ||
+    !digestMatches ||
     manifest.protocol?.major !== 1 ||
-    manifest.protocol.minor !== 1
+    manifest.protocol.minor !== 3
   ) {
     throw new Error("Packaged desktop supervisor manifest is incompatible or stale");
   }

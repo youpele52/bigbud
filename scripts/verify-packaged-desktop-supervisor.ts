@@ -36,10 +36,10 @@ if (!statSync(releaseRoot).isDirectory()) {
 }
 const binaryPath = findPackagedDesktopSupervisor(releaseRoot, platform);
 if (!binaryPath) throw new Error(`Packaged desktop supervisor was not found under ${releaseRoot}`);
-verifyPackagedDesktopSupervisorEvidence(binaryPath);
 if (requireCodeSignature) {
   verifyPackagedCodeSignature(binaryPath, platform as "mac" | "win", expectedWindowsPublisher);
 }
+verifyPackagedDesktopSupervisorEvidence(binaryPath, { verifyDigest: !requireCodeSignature });
 await smokeTestDesktopSupervisorBinary(binaryPath);
 await smokeTestDesktopSupervisorRecovery(binaryPath);
 console.log(`Verified packaged desktop supervisor: ${basename(binaryPath)} (${platform})`);

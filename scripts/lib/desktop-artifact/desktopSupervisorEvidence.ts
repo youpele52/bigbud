@@ -59,7 +59,7 @@ export function writeDesktopSupervisorArtifactEvidence(input: {
         schemaVersion: 1,
         binary: input.binaryPath.split(/[\\/]/).at(-1),
         targetTriple: input.targetTriple,
-        protocol: { major: 1, minor: 1 },
+        protocol: { major: 1, minor: 3 },
         sizeBytes: bytes.length,
         sha256,
       },
@@ -98,9 +98,16 @@ export function verifyDesktopSupervisorArtifactEvidence(binaryPath: string): voi
   const evidenceDir = dirname(binaryPath);
   const manifest = JSON.parse(
     readFileSync(join(evidenceDir, "artifact-manifest.json"), "utf8"),
-  ) as { readonly sha256?: unknown; readonly protocol?: { readonly major?: unknown } };
+  ) as {
+    readonly sha256?: unknown;
+    readonly protocol?: { readonly major?: unknown; readonly minor?: unknown };
+  };
   const expected = createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
-  if (manifest.sha256 !== expected || manifest.protocol?.major !== 1) {
+  if (
+    manifest.sha256 !== expected ||
+    manifest.protocol?.major !== 1 ||
+    manifest.protocol.minor !== 3
+  ) {
     throw new Error("desktop supervisor artifact manifest does not match the packaged binary");
   }
   const sbom = JSON.parse(readFileSync(join(evidenceDir, "sbom.cdx.json"), "utf8")) as {
