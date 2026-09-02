@@ -58,6 +58,52 @@ describe("remote agent install source", () => {
     ).rejects.toThrow("owner/repository");
   });
 
+  it("preserves repository and version overrides", async () => {
+    const request = vi.fn((_input: string | URL | Request, _init?: RequestInit) =>
+      Promise.resolve(new Response(JSON.stringify(installSource()))),
+    );
+
+    await loadRemoteAgentInstallSource(
+      {
+        BIGBUD_REMOTE_AGENT_RELEASE_REPOSITORY: "owner/repository",
+        BIGBUD_REMOTE_AGENT_RELEASE_VERSION: "2.3.4-rc.1",
+      },
+      { fetch: request, logger: () => undefined },
+    );
+
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      "https://github.com/owner/repository/releases/download/v2.3.4-rc.1/remote-agent-install-source.json",
+    );
+  });
+
+  it("allows an explicit source override and only follows same-origin redirects", async () => {
+    const responses = [
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://fixtures.example/releases/install-source.json" },
+      }),
+      new Response(JSON.stringify(installSource())),
+    ];
+    const request = vi.fn((_input: string | URL | Request, _init?: RequestInit) => {
+      return Promise.resolve(
+        responses.shift() ??
+          new Response(null, {
+            status: 500,
+          }),
+      );
+    });
+
+    await loadRemoteAgentInstallSource(
+      { BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL: "https://fixtures.example/latest.json" },
+      { fetch: request, logger: () => undefined },
+    );
+
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://fixtures.example/latest.json",
+      "https://fixtures.example/releases/install-source.json",
+    ]);
+  });
+
   it("uses the checksummed release manifest only for unpackaged desktop development", async () => {
     const request = vi
       .fn()
@@ -83,5 +129,37 @@ describe("remote agent install source", () => {
     await expect(loadRemoteAgentInstallSource({ BIGBUD_DESKTOP_PACKAGED: "0" })).rejects.toThrow(
       "Publish the matching release",
     );
+  });
+
+  it("fails closed on a packaged 404 without a development fallback", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", request);
+
+    await expect(loadRemoteAgentInstallSource({ BIGBUD_DESKTOP_PACKAGED: "1" })).rejects.toThrow(
+      "HTTP 404",
+    );
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("rejects malformed metadata without retrying", async () => {
+    const request = vi.fn().mockResolvedValue(new Response("{not-json"));
+    vi.stubGlobal("fetch", request);
+
+    await expect(loadRemoteAgentInstallSource()).rejects.toThrow("install source");
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an unsupported metadata schema without retrying", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(new Response('{"manifest":{"schemaVersion":2},"trustStore":{}}'));
+
+    await expect(
+      loadRemoteAgentInstallSource(undefined, {
+        fetch: request,
+        logger: () => undefined,
+      }),
+    ).rejects.toThrow("manifest schema");
+    expect(request).toHaveBeenCalledOnce();
   });
 });

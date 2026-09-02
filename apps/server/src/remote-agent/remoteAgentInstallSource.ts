@@ -7,9 +7,26 @@ import {
   RemoteAgentInstallManagerError,
   type RemoteAgentInstallSource,
 } from "./remoteAgentInstallManager.ts";
+import {
+  downloadRemoteAgentHttp,
+  RemoteAgentDownloadError,
+  type RemoteAgentFetch,
+} from "./remoteAgentHttpDownload.ts";
+import { REMOTE_AGENT_METADATA_DOWNLOAD_POLICY } from "./remoteAgentHttpDownload.policy.ts";
+import type { RemoteAgentDownloadLogger } from "./remoteAgentHttpDownload.diagnostics.ts";
 
 const DEFAULT_RELEASE_REPOSITORY = "youpele52/bigbud";
-const MAX_INSTALL_SOURCE_BYTES = 1024 * 1024;
+const MAX_INSTALL_SOURCE_BYTES = REMOTE_AGENT_METADATA_DOWNLOAD_POLICY.maxBytes;
+
+interface InstallSourceLoadOptions {
+  readonly signal?: AbortSignal;
+  readonly allowLoopbackHttp?: boolean;
+  readonly fetch?: RemoteAgentFetch;
+  readonly now?: () => number;
+  readonly sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly random?: () => number;
+  readonly logger?: RemoteAgentDownloadLogger;
+}
 
 function resolveInstallSourceUrl(environment: NodeJS.ProcessEnv): string {
   const configured = environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim();
@@ -38,98 +55,192 @@ function parseInstallSourceJson(bytes: Uint8Array, label: string): RemoteAgentIn
   }
 }
 
-async function readInstallSourceFile(path: string): Promise<RemoteAgentInstallSource> {
-  const metadata = await stat(path);
-  if (metadata.size <= 0 || metadata.size > MAX_INSTALL_SOURCE_BYTES) {
-    throw new RemoteAgentInstallManagerError(
-      `Remote agent install source file must be between 1 and ${MAX_INSTALL_SOURCE_BYTES} bytes.`,
-    );
-  }
-  return parseInstallSourceJson(await readFile(path), path);
-}
-
-async function readInstallSourceResponse(response: Response, url: string): Promise<Uint8Array> {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_INSTALL_SOURCE_BYTES) {
-    throw new RemoteAgentInstallManagerError("Remote agent install source response is too large.");
-  }
-  if (!response.body) {
-    throw new RemoteAgentInstallManagerError("Remote agent install source response has no body.");
-  }
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for await (const chunk of response.body) {
-    total += chunk.byteLength;
-    if (total > MAX_INSTALL_SOURCE_BYTES) {
+async function readInstallSourceFile(
+  path: string,
+  signal?: AbortSignal,
+): Promise<RemoteAgentInstallSource> {
+  if (signal?.aborted) throw signal.reason ?? new DOMException("caller", "AbortError");
+  try {
+    const metadata = await stat(path);
+    if (metadata.size <= 0 || metadata.size > MAX_INSTALL_SOURCE_BYTES) {
       throw new RemoteAgentInstallManagerError(
-        "Remote agent install source response is too large.",
+        `Remote agent install source file must be between 1 and ${MAX_INSTALL_SOURCE_BYTES} bytes.`,
       );
     }
-    chunks.push(chunk);
+    const bytes = await readFile(path, signal ? { signal } : undefined);
+    return parseInstallSourceJson(bytes, "the configured local file");
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException("caller", "AbortError");
+    if (error instanceof RemoteAgentInstallManagerError) throw error;
+    throw new RemoteAgentInstallManagerError(
+      "Could not read the remote agent install source file.",
+    );
   }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  if (bytes.byteLength === 0) {
-    throw new RemoteAgentInstallManagerError(`Remote agent install source from ${url} is empty.`);
-  }
-  return bytes;
 }
 
-async function loadDevelopmentReleaseManifest(url: string): Promise<RemoteAgentInstallSource> {
+function urlPolicy(url: string, explicit: boolean, allowLoopbackHttp?: boolean) {
+  let origin: string | undefined;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    // The downloader returns a privacy-safe invalid URL error.
+  }
+  return {
+    ...(explicit && origin ? { allowedOrigins: new Set([origin]) } : {}),
+    ...(allowLoopbackHttp ? { allowLoopbackHttp: true } : {}),
+  };
+}
+
+async function downloadMetadata(
+  url: string,
+  explicit: boolean,
+  options: InstallSourceLoadOptions,
+): Promise<Uint8Array> {
+  return downloadRemoteAgentHttp(
+    {
+      url,
+      policy: REMOTE_AGENT_METADATA_DOWNLOAD_POLICY,
+      ...(options.signal ? { signal: options.signal } : {}),
+      urlPolicy: urlPolicy(url, explicit, options.allowLoopbackHttp),
+    },
+    options,
+  );
+}
+
+async function loadDevelopmentReleaseManifest(
+  url: string,
+  options: InstallSourceLoadOptions,
+): Promise<RemoteAgentInstallSource> {
   const manifestUrl = url.replace(
     /remote-agent-install-source\.json$/,
     "remote-agent-manifest.json",
   );
-  const response = await fetch(manifestUrl, { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) {
-    throw new RemoteAgentInstallManagerError(
-      `No development remote-agent release is published at ${manifestUrl} (HTTP ${response.status}). Publish the matching release, set BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH to a local install source, or use BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh for local recovery.`,
-    );
-  }
   try {
-    const bytes = await readInstallSourceResponse(response, manifestUrl);
+    const bytes = await downloadMetadata(manifestUrl, false, options);
     return {
       manifest: parseRemoteAgentArtifactManifest(JSON.parse(new TextDecoder().decode(bytes))),
       trustStore: {},
       allowUntrustedDevelopmentArtifact: true,
     };
   } catch (error) {
+    if (
+      error instanceof RemoteAgentDownloadError &&
+      (error.details.abortOwner === "caller" || error.details.abortOwner === "shutdown")
+    ) {
+      throw error;
+    }
     throw new RemoteAgentInstallManagerError(
-      `Development remote agent manifest from ${manifestUrl} is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      `No valid development remote-agent release is published (${error instanceof Error ? error.message : String(error)}). Publish the matching release, set BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH to a local install source, or use BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh for local recovery.`,
     );
   }
 }
 
 export async function loadRemoteAgentInstallSource(
   environment: NodeJS.ProcessEnv = process.env,
+  options: InstallSourceLoadOptions = {},
 ): Promise<RemoteAgentInstallSource> {
   const path = environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH?.trim();
-  if (path) return readInstallSourceFile(path);
+  if (path) return readInstallSourceFile(path, options.signal);
 
   const url = resolveInstallSourceUrl(environment);
-  let response: Response;
+  const explicitUrl = Boolean(environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim());
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const bytes = await downloadMetadata(url, explicitUrl, options);
+    return parseInstallSourceJson(bytes, "the configured release host");
   } catch (error) {
-    throw new RemoteAgentInstallManagerError(
-      `Could not download the remote agent install source from ${url}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  if (!response.ok) {
     if (
-      response.status === 404 &&
+      error instanceof RemoteAgentDownloadError &&
+      error.details.status === 404 &&
       environment.BIGBUD_DESKTOP_PACKAGED === "0" &&
-      !environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL
+      !explicitUrl
     ) {
-      return loadDevelopmentReleaseManifest(url);
+      return loadDevelopmentReleaseManifest(url, options);
     }
+    if (error instanceof RemoteAgentInstallManagerError) throw error;
     throw new RemoteAgentInstallManagerError(
-      `Remote agent install source download failed with HTTP ${response.status} from ${url}.`,
+      error instanceof Error ? error.message : "Remote agent metadata download failed.",
     );
   }
-  return parseInstallSourceJson(await readInstallSourceResponse(response, url), url);
 }
+
+function waitForSharedLoad(
+  pending: Promise<RemoteAgentInstallSource>,
+  signal: AbortSignal | undefined,
+  onSettled: () => void,
+): Promise<RemoteAgentInstallSource> {
+  if (!signal) return pending.finally(onSettled);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return false;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      onSettled();
+      return true;
+    };
+    const abort = () => {
+      if (finish()) reject(signal.reason ?? new DOMException("caller", "AbortError"));
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then(
+      (source) => {
+        if (finish()) resolve(source);
+      },
+      (error: unknown) => {
+        if (finish()) reject(error);
+      },
+    );
+  });
+}
+
+export function makeRemoteAgentInstallSourceLoader(
+  environment: NodeJS.ProcessEnv = process.env,
+  options: Omit<InstallSourceLoadOptions, "signal"> = {},
+) {
+  let cached: RemoteAgentInstallSource | undefined;
+  let inFlight:
+    | { promise: Promise<RemoteAgentInstallSource>; controller: AbortController; waiters: number }
+    | undefined;
+  return (signal?: AbortSignal): Promise<RemoteAgentInstallSource> => {
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason ?? new DOMException("caller", "AbortError"));
+    }
+    if (cached) return Promise.resolve(cached);
+    if (!inFlight) {
+      const controller = new AbortController();
+      const record = {
+        controller,
+        waiters: 0,
+        promise: loadRemoteAgentInstallSource(environment, {
+          ...options,
+          signal: controller.signal,
+        }),
+      };
+      record.promise = record.promise.then((source) => {
+        if (inFlight === record) cached = source;
+        return source;
+      });
+      record.promise
+        .catch(() => undefined)
+        .finally(() => {
+          if (inFlight === record) inFlight = undefined;
+        });
+      inFlight = record;
+    }
+    const record = inFlight;
+    record.waiters += 1;
+    return waitForSharedLoad(record.promise, signal, () => {
+      record.waiters -= 1;
+      if (record.waiters === 0 && inFlight === record && !cached) {
+        inFlight = undefined;
+        record.controller.abort(new DOMException("caller", "AbortError"));
+      }
+    });
+  };
+}
+
+export const loadProcessScopedRemoteAgentInstallSource = makeRemoteAgentInstallSourceLoader();

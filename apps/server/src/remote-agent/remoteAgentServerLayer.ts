@@ -12,7 +12,7 @@ import {
   makeRemoteAgentInstallManager,
   type RemoteAgentInstallSource,
 } from "./remoteAgentInstallManager.ts";
-import { loadRemoteAgentInstallSource } from "./remoteAgentInstallSource.ts";
+import { loadProcessScopedRemoteAgentInstallSource } from "./remoteAgentInstallSource.ts";
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 import {
   getConfiguredRemoteAgentComposition,
@@ -40,7 +40,10 @@ export type RemoteAgentHealthResult =
     };
 
 export interface RemoteAgentHealth {
-  readonly verify: (executionTargetId: string) => Promise<RemoteAgentHealthResult>;
+  readonly verify: (
+    executionTargetId: string,
+    signal?: AbortSignal,
+  ) => Promise<RemoteAgentHealthResult>;
 }
 
 export class RemoteAgentHealthService extends ServiceMap.Service<
@@ -49,7 +52,10 @@ export class RemoteAgentHealthService extends ServiceMap.Service<
 >()("bigbud/remote-agent/RemoteAgentHealth") {}
 
 export interface RemoteAgentInstaller {
-  readonly install: (executionTargetId: string) => Promise<{
+  readonly install: (
+    executionTargetId: string,
+    signal?: AbortSignal,
+  ) => Promise<{
     readonly version: string;
   }>;
 }
@@ -61,7 +67,7 @@ export class RemoteAgentInstallerService extends ServiceMap.Service<
 
 interface RemoteAgentHealthDependencies {
   readonly binaryPath: string;
-  readonly loadInstallSource: () => Promise<RemoteAgentInstallSource>;
+  readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
   readonly resolveArtifact: ReturnType<typeof makeRemoteAgentInstallManager>["resolveArtifact"];
   readonly runIdentityProbe: (executionTargetId: string, command: string) => Promise<string>;
   readonly pool: {
@@ -74,27 +80,11 @@ interface RemoteAgentHealthDependencies {
   };
 }
 
-function cacheSuccessfulInstallSource(
-  load: () => Promise<RemoteAgentInstallSource>,
-): () => Promise<RemoteAgentInstallSource> {
-  let cached: Promise<RemoteAgentInstallSource> | undefined;
-  return async () => {
-    const pending = cached ?? load();
-    cached = pending;
-    try {
-      return await pending;
-    } catch (error) {
-      if (cached === pending) cached = undefined;
-      throw error;
-    }
-  };
-}
-
 export function makeRemoteAgentHealth(
   dependencies: RemoteAgentHealthDependencies,
 ): RemoteAgentHealth {
   return {
-    verify: async (executionTargetId) => {
+    verify: async (executionTargetId, signal) => {
       const checkOutput = await dependencies.runIdentityProbe(
         executionTargetId,
         buildRemoteAgentIdentityProbeCommand(dependencies.binaryPath),
@@ -103,7 +93,7 @@ export function makeRemoteAgentHealth(
         return { status: "install-required" };
       }
       const installedIdentity = parseRemoteAgentCheckOutput(checkOutput);
-      const source = await dependencies.loadInstallSource();
+      const source = await dependencies.loadInstallSource(signal);
       const { artifact } = await dependencies.resolveArtifact({
         executionTargetId,
         source,
@@ -177,9 +167,10 @@ export function makeConfiguredRemoteAgentLayers() {
   }
 
   const installManager = makeRemoteAgentInstallManager();
+  const loadInstallSource = loadProcessScopedRemoteAgentInstallSource;
   const health = makeRemoteAgentHealth({
     binaryPath: configuration.binaryPath!,
-    loadInstallSource: cacheSuccessfulInstallSource(() => loadRemoteAgentInstallSource()),
+    loadInstallSource,
     resolveArtifact: installManager.resolveArtifact,
     pool: composition.pool,
     runIdentityProbe: async (executionTargetId, command) => {
@@ -196,7 +187,7 @@ export function makeConfiguredRemoteAgentLayers() {
   });
   const installer = makeRemoteAgentInstaller({
     installManager,
-    loadInstallSource: loadRemoteAgentInstallSource,
+    loadInstallSource,
     pool: composition.pool,
   });
   const services = Layer.mergeAll(
@@ -222,16 +213,18 @@ export function makeRemoteAgentInstaller(input: {
     readonly install: (input: {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
+      readonly signal?: AbortSignal;
     }) => Promise<{ readonly artifact: { readonly version: string } }>;
   };
-  readonly loadInstallSource: () => Promise<RemoteAgentInstallSource>;
+  readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
   readonly pool: { readonly close: (executionTargetId: string) => void };
 }): RemoteAgentInstaller {
   return {
-    install: async (executionTargetId) => {
+    install: async (executionTargetId, signal) => {
       const result = await input.installManager.install({
         executionTargetId,
-        source: await input.loadInstallSource(),
+        source: await input.loadInstallSource(signal),
+        ...(signal ? { signal } : {}),
       });
       input.pool.close(executionTargetId);
       return { version: result.artifact.version };

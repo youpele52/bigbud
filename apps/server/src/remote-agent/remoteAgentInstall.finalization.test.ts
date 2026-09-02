@@ -90,7 +90,11 @@ function makeFinalizeLossFixture(initialCurrent: string | null, failVerification
   });
   const input = {
     executionTargetId: "ssh:example",
-    source: { manifest: { schemaVersion: 1 as const, artifacts: [artifact] }, trustStore: {} },
+    source: {
+      manifest: { schemaVersion: 1 as const, artifacts: [artifact] },
+      trustStore: {},
+      allowUntrustedDevelopmentArtifact: true as const,
+    },
   };
   return {
     input,

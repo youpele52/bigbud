@@ -1,8 +1,7 @@
-import { open } from "node:fs/promises";
-
 import {
   parseRemoteAgentArtifactManifest,
   selectRemoteAgentArtifact,
+  verifyRemoteAgentArtifactBytes,
   verifyRemoteAgentArtifactSignature,
   type RemoteAgentArtifact,
   type RemoteAgentArtifactManifest,
@@ -18,8 +17,7 @@ import { runRemoteAgentActivationTransaction } from "./remoteAgentInstall.transa
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
-
-const MAX_REMOTE_AGENT_ARTIFACT_BYTES = 128 * 1024 * 1024;
+import { downloadRemoteAgentArtifact } from "./remoteAgentArtifactDownload.ts";
 
 export class RemoteAgentInstallManagerError extends Error {
   readonly _tag = "RemoteAgentInstallManagerError";
@@ -59,7 +57,10 @@ function remoteCommandStdout(result: unknown): string {
 
 interface RemoteAgentInstallManagerDependencies {
   readonly probePlatform: (executionTargetId: string) => Promise<RemoteAgentPlatformInfo>;
-  readonly readArtifactBytes: (artifact: RemoteAgentArtifact) => Promise<Uint8Array>;
+  readonly readArtifactBytes: (
+    artifact: RemoteAgentArtifact,
+    signal?: AbortSignal,
+  ) => Promise<Uint8Array>;
   readonly installArtifact: (input: {
     readonly executionTargetId: string;
     readonly artifact: RemoteAgentArtifact;
@@ -78,96 +79,13 @@ interface RemoteAgentInstallManagerDependencies {
   }) => Promise<void>;
 }
 
-async function readArtifactBytes(artifact: RemoteAgentArtifact): Promise<Uint8Array> {
-  if (artifact.sizeBytes > MAX_REMOTE_AGENT_ARTIFACT_BYTES) {
-    throw new RemoteAgentInstallManagerError(
-      `Remote agent artifact exceeds the ${MAX_REMOTE_AGENT_ARTIFACT_BYTES} byte limit.`,
-    );
-  }
-  if (artifact.bundledPath) return readBundledArtifact(artifact.bundledPath, artifact.sizeBytes);
-  if (!artifact.url) {
-    throw new RemoteAgentInstallManagerError("Remote agent artifact has no local or URL source.");
-  }
-  const response = await fetch(artifact.url);
-  if (!response.ok) {
-    throw new RemoteAgentInstallManagerError(
-      `Remote agent artifact download failed with HTTP ${response.status}.`,
-    );
-  }
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null && Number(contentLength) !== artifact.sizeBytes) {
-    throw new RemoteAgentInstallManagerError(
-      "Remote agent artifact download length does not match its signed manifest.",
-    );
-  }
-  if (!response.body) {
-    throw new RemoteAgentInstallManagerError("Remote agent artifact download has no body.");
-  }
-  const bytes = new Uint8Array(artifact.sizeBytes);
-  const reader = response.body.getReader();
-  let offset = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (offset + value.byteLength > bytes.byteLength) {
-        throw new RemoteAgentInstallManagerError(
-          "Remote agent artifact download exceeds its signed manifest length.",
-        );
-      }
-      bytes.set(value, offset);
-      offset += value.byteLength;
-    }
-  } catch (cause) {
-    await reader.cancel().catch(() => undefined);
-    throw cause;
-  }
-  if (offset !== bytes.byteLength) {
-    throw new RemoteAgentInstallManagerError(
-      "Remote agent artifact download is shorter than its signed manifest length.",
-    );
-  }
-  return bytes;
-}
-
-async function readBundledArtifact(path: string, sizeBytes: number): Promise<Uint8Array> {
-  const file = await open(path, "r");
-  try {
-    const metadata = await file.stat();
-    if (metadata.size !== sizeBytes) {
-      throw new RemoteAgentInstallManagerError(
-        "Bundled remote agent length does not match its signed manifest.",
-      );
-    }
-    const bytes = new Uint8Array(sizeBytes);
-    let offset = 0;
-    while (offset < bytes.byteLength) {
-      const { bytesRead } = await file.read(bytes, offset, bytes.byteLength - offset, offset);
-      if (bytesRead === 0) {
-        throw new RemoteAgentInstallManagerError(
-          "Bundled remote agent is shorter than its signed manifest length.",
-        );
-      }
-      offset += bytesRead;
-    }
-    const trailing = new Uint8Array(1);
-    if ((await file.read(trailing, 0, 1, offset)).bytesRead !== 0) {
-      throw new RemoteAgentInstallManagerError(
-        "Bundled remote agent exceeds its signed manifest length.",
-      );
-    }
-    return bytes;
-  } finally {
-    await file.close();
-  }
-}
-
 function defaultDependencies(
   runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>,
 ): RemoteAgentInstallManagerDependencies {
   return {
     probePlatform: probeRemoteAgentPlatform,
-    readArtifactBytes,
+    readArtifactBytes: (artifact, signal) =>
+      downloadRemoteAgentArtifact(artifact, signal ? { signal } : {}),
     installArtifact: installRemoteAgentArtifact,
     runRemoteCommand,
     verifyInstalledAgent: async (input) => {
@@ -240,10 +158,21 @@ export function makeRemoteAgentInstallManager(
     install: (input: {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
+      readonly signal?: AbortSignal;
     }): Promise<RemoteAgentInstallResult> =>
       withInstallLock(input.executionTargetId, async () => {
-        const { platform, targetTriple, artifact } = await resolveArtifact(input);
-        const bytes = await dependencies.readArtifactBytes(artifact);
+        if (input.signal?.aborted) {
+          throw input.signal.reason ?? new DOMException("caller", "AbortError");
+        }
+        const { platform, targetTriple, artifact } = await resolveArtifact({
+          ...input,
+          verifySignature: true,
+        });
+        const bytes = await dependencies.readArtifactBytes(artifact, input.signal);
+        verifyRemoteAgentArtifactBytes(artifact, bytes);
+        if (input.signal?.aborted) {
+          throw input.signal.reason ?? new DOMException("caller", "AbortError");
+        }
         const paths = await dependencies.installArtifact({
           executionTargetId: input.executionTargetId,
           artifact,

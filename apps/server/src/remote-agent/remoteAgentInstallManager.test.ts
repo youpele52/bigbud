@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   makeRemoteAgentInstallManager,
@@ -20,6 +20,11 @@ const artifact = {
   signature: { algorithm: "ed25519" as const, keyId: "release", value: "signature" },
   bundledPath: "agent",
 };
+const developmentSource = {
+  manifest: { schemaVersion: 1 as const, artifacts: [artifact] },
+  trustStore: {},
+  allowUntrustedDevelopmentArtifact: true as const,
+};
 const paths = {
   root: "$HOME/.bigbud/agent",
   binRoot: "$HOME/.bigbud/agent/bin",
@@ -30,6 +35,8 @@ const paths = {
   activeLink: "$HOME/.bigbud/agent/bin/current",
   previousLink: "$HOME/.bigbud/agent/bin/previous",
 } satisfies RemoteAgentInstallPaths;
+
+afterEach(() => vi.unstubAllGlobals());
 
 function successfulRemoteCommand(input: unknown) {
   const script =
@@ -63,7 +70,7 @@ describe("remote agent installation manager", () => {
 
     const result = await manager.install({
       executionTargetId: "ssh:example",
-      source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+      source: developmentSource,
     });
 
     expect(result.binaryPath).toBe(paths.activeLink);
@@ -96,7 +103,7 @@ describe("remote agent installation manager", () => {
 
     await manager.install({
       executionTargetId: "ssh:example",
-      source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+      source: developmentSource,
     });
 
     expect(runRemoteCommand).toHaveBeenCalledTimes(4);
@@ -158,7 +165,7 @@ describe("remote agent installation manager", () => {
     await expect(
       manager.install({
         executionTargetId: "ssh:example",
-        source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+        source: developmentSource,
       }),
     ).rejects.toThrow("candidate failed verification");
     expect(runRemoteCommand).toHaveBeenCalledTimes(3);
@@ -191,7 +198,7 @@ describe("remote agent installation manager", () => {
     await expect(
       manager.install({
         executionTargetId: "ssh:example",
-        source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+        source: developmentSource,
       }),
     ).rejects.toThrow("candidate failed verification");
     expect(runRemoteCommand).toHaveBeenCalledTimes(2);
@@ -220,7 +227,7 @@ describe("remote agent installation manager", () => {
     await expect(
       manager.install({
         executionTargetId: "ssh:example",
-        source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+        source: developmentSource,
       }),
     ).rejects.toThrow("candidate failed verification: activation failed");
     expect(runRemoteCommand).toHaveBeenCalledTimes(2);
@@ -254,7 +261,7 @@ describe("remote agent installation manager", () => {
     await expect(
       manager.install({
         executionTargetId: "ssh:example",
-        source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+        source: developmentSource,
       }),
     ).rejects.toThrow("candidate failed verification: supervisor failed");
     expect(runRemoteCommand).toHaveBeenCalledTimes(4);
@@ -290,7 +297,7 @@ describe("remote agent installation manager", () => {
     });
     const input = {
       executionTargetId: "ssh:example",
-      source: { manifest: { schemaVersion: 1 as const, artifacts: [artifact] }, trustStore: {} },
+      source: developmentSource,
     };
 
     const first = manager.install(input);
@@ -319,13 +326,17 @@ describe("remote agent installation manager", () => {
     await expect(
       manager.install({
         executionTargetId: "ssh:example",
-        source: { manifest: { schemaVersion: 1, artifacts: [artifact] }, trustStore: {} },
+        source: developmentSource,
       }),
     ).rejects.toThrow("unsupported");
     expect(installArtifact).not.toHaveBeenCalled();
   });
 
   it("stops downloading when an artifact exceeds its signed length", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(bytes)),
+    );
     const installArtifact = vi.fn(async () => paths);
     const manager = makeRemoteAgentInstallManager({
       probePlatform: async () => ({
@@ -354,14 +365,15 @@ describe("remote agent installation manager", () => {
                 sizeBytes: 2,
                 sha256: artifact.sha256,
                 signature: artifact.signature,
-                url: "data:application/octet-stream;base64,AQID",
+                url: "https://github.com/owner/repository/releases/download/v1/agent",
               },
             ],
           },
           trustStore: {},
+          allowUntrustedDevelopmentArtifact: true,
         },
       }),
-    ).rejects.toThrow("signed manifest length");
+    ).rejects.toThrow("artifact download failed at body");
     expect(installArtifact).not.toHaveBeenCalled();
   });
 

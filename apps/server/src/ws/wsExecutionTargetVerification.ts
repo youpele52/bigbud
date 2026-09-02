@@ -45,7 +45,7 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
   }
 
   const agent = yield* Effect.tryPromise({
-    try: () => remoteAgentHealth.verify(input.executionTargetId),
+    try: (signal) => remoteAgentHealth.verify(input.executionTargetId, signal),
     catch: (cause) =>
       new ServerVerifyExecutionTargetError({
         message:
@@ -90,7 +90,7 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
     });
   }
   const result = yield* Effect.tryPromise({
-    try: () => remoteAgentInstaller.install(input.executionTargetId),
+    try: (signal) => remoteAgentInstaller.install(input.executionTargetId, signal),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
         message: cause instanceof Error ? cause.message : "Failed to install the remote agent.",
