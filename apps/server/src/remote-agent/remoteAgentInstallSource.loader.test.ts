@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { makeRemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
-import { makeRemoteAgentHealth, makeRemoteAgentInstaller } from "./remoteAgentServerLayer.ts";
-import { parseRemoteAgentInstallSource } from "./remoteAgentInstallManager.ts";
 
 function sourceJson(version = "1.2.3") {
   return JSON.stringify({
@@ -49,39 +47,6 @@ describe("process-scoped remote agent install source loader", () => {
     const installSource = await load();
 
     expect(installSource).toBe(healthSource);
-    expect(request).toHaveBeenCalledOnce();
-  });
-
-  it("shares the successful source across health verification and installation", async () => {
-    const request = vi.fn(async () => new Response(sourceJson()));
-    const load = loader(request as unknown as typeof fetch);
-    const artifact = parseRemoteAgentInstallSource(JSON.parse(sourceJson())).manifest.artifacts[0]!;
-    const health = makeRemoteAgentHealth({
-      binaryPath: "agent",
-      loadInstallSource: load,
-      runIdentityProbe: async () => `bigbud-remote-agent 1.2.2 1 0 old-build linux x86_64\n`,
-      resolveArtifact: async () => ({
-        platform: {
-          operatingSystem: "linux",
-          architecture: "x86_64",
-          targetTriple: artifact.targetTriple,
-        },
-        targetTriple: artifact.targetTriple,
-        artifact,
-      }),
-      pool: { get: async () => undefined, snapshot: () => ({}) },
-    });
-    const installer = makeRemoteAgentInstaller({
-      loadInstallSource: load,
-      installManager: { install: async () => ({ artifact }) },
-      pool: { close: () => undefined },
-    });
-
-    await expect(health.verify("ssh:example")).resolves.toMatchObject({
-      status: "upgrade-required",
-      targetVersion: "1.2.3",
-    });
-    await expect(installer.install("ssh:example")).resolves.toEqual({ version: "1.2.3" });
     expect(request).toHaveBeenCalledOnce();
   });
 

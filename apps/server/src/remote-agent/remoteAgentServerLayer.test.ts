@@ -4,11 +4,13 @@ import {
   makeConfiguredRemoteAgentLayers,
   makeRemoteAgentHealth,
   makeRemoteAgentInstaller,
+  makeRemoteAgentServerServices,
 } from "./remoteAgentServerLayer.ts";
 import { closeConfiguredRemoteAgentCompositions } from "./remoteAgentDefault.ts";
 import type { RemoteAgentInstallSource } from "./remoteAgentInstallManager.ts";
 import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
 import { RemoteAgentConnectionError, type RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { makeRemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
 
 const originalBinary = process.env.BIGBUD_REMOTE_AGENT_BINARY;
 const originalTransport = process.env.BIGBUD_REMOTE_AGENT_TRANSPORT;
@@ -97,6 +99,59 @@ describe("configured remote agent server layer", () => {
   it("retains direct ssh as an explicit diagnostic fallback", () => {
     process.env.BIGBUD_REMOTE_AGENT_TRANSPORT = "direct-ssh";
     expect(makeConfiguredRemoteAgentLayers().enabled).toBe(false);
+  });
+
+  it("shares one resolved install source loader between health and installation", async () => {
+    const metadataFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ manifest: source.manifest, trustStore: source.trustStore })),
+    );
+    const loadInstallSource = makeRemoteAgentInstallSourceLoader(
+      { BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL: "http://127.0.0.1/source" },
+      {
+        allowLoopbackHttp: true,
+        fetch: metadataFetch as unknown as typeof fetch,
+        logger: () => undefined,
+      },
+    );
+    const resolveInstallSourceLoader = vi.fn(() => loadInstallSource);
+    const resolveArtifact = vi.fn(async ({ source: resolvedSource }) => ({
+      platform: {
+        operatingSystem: "linux" as const,
+        architecture: "x86_64" as const,
+        targetTriple: artifact.targetTriple,
+      },
+      targetTriple: artifact.targetTriple,
+      artifact,
+      source: resolvedSource,
+    }));
+    const install = vi.fn(async ({ source: installedSource }) => ({
+      artifact,
+      source: installedSource,
+    }));
+    const services = makeRemoteAgentServerServices({
+      binaryPath: "agent",
+      resolveInstallSourceLoader,
+      runIdentityProbe: async () => "bigbud-remote-agent 0.1.0 1 0 old-digest linux x86_64\n",
+      installManager: { resolveArtifact, install },
+      pool: {
+        get: async () => undefined,
+        snapshot: () => ({}),
+        close: () => undefined,
+      },
+    });
+
+    await expect(services.health.verify("ssh:example")).resolves.toEqual({
+      status: "upgrade-required",
+      currentVersion: "0.1.0",
+      targetVersion: artifact.version,
+    });
+    await expect(services.installer.install("ssh:example")).resolves.toEqual({
+      version: artifact.version,
+    });
+    expect(resolveInstallSourceLoader).toHaveBeenCalledOnce();
+    expect(metadataFetch).toHaveBeenCalledOnce();
+    expect(resolveArtifact.mock.calls[0]?.[0].source).toBe(install.mock.calls[0]?.[0].source);
   });
 });
 

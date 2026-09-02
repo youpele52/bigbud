@@ -149,6 +149,48 @@ export function isRemoteAgentConfigured(): boolean {
   return resolveRemoteAgentConfiguration().transport === "agent";
 }
 
+interface RemoteAgentServerServicesDependencies {
+  readonly binaryPath: string;
+  readonly installManager?: {
+    readonly resolveArtifact: RemoteAgentHealthDependencies["resolveArtifact"];
+    readonly install: (input: {
+      readonly executionTargetId: string;
+      readonly source: RemoteAgentInstallSource;
+      readonly signal?: AbortSignal;
+    }) => Promise<{ readonly artifact: { readonly version: string } }>;
+  };
+  readonly resolveInstallSourceLoader?: () => (
+    signal?: AbortSignal,
+  ) => Promise<RemoteAgentInstallSource>;
+  readonly runIdentityProbe: (executionTargetId: string, command: string) => Promise<string>;
+  readonly pool: RemoteAgentHealthDependencies["pool"] & {
+    readonly close: (executionTargetId: string) => void;
+  };
+}
+
+export function makeRemoteAgentServerServices(
+  dependencies: RemoteAgentServerServicesDependencies,
+): { readonly health: RemoteAgentHealth; readonly installer: RemoteAgentInstaller } {
+  const installManager = dependencies.installManager ?? makeRemoteAgentInstallManager();
+  const loadInstallSource = (
+    dependencies.resolveInstallSourceLoader ?? (() => loadProcessScopedRemoteAgentInstallSource)
+  )();
+  return {
+    health: makeRemoteAgentHealth({
+      binaryPath: dependencies.binaryPath,
+      loadInstallSource,
+      resolveArtifact: installManager.resolveArtifact,
+      pool: dependencies.pool,
+      runIdentityProbe: dependencies.runIdentityProbe,
+    }),
+    installer: makeRemoteAgentInstaller({
+      installManager,
+      loadInstallSource,
+      pool: dependencies.pool,
+    }),
+  };
+}
+
 /**
  * Default live composition for the installed remote agent. Set
  * BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh for the diagnostic fallback.
@@ -166,12 +208,8 @@ export function makeConfiguredRemoteAgentLayers() {
     };
   }
 
-  const installManager = makeRemoteAgentInstallManager();
-  const loadInstallSource = loadProcessScopedRemoteAgentInstallSource;
-  const health = makeRemoteAgentHealth({
+  const { health, installer } = makeRemoteAgentServerServices({
     binaryPath: configuration.binaryPath!,
-    loadInstallSource,
-    resolveArtifact: installManager.resolveArtifact,
     pool: composition.pool,
     runIdentityProbe: async (executionTargetId, command) => {
       const presence = await runSshCommand({
@@ -184,11 +222,6 @@ export function makeConfiguredRemoteAgentLayers() {
       });
       return presence.stdout;
     },
-  });
-  const installer = makeRemoteAgentInstaller({
-    installManager,
-    loadInstallSource,
-    pool: composition.pool,
   });
   const services = Layer.mergeAll(
     Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),

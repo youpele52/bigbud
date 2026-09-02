@@ -1,11 +1,10 @@
-import { isTransientNetworkError } from "./remoteAgentHttpDownload.policy.ts";
+import {
+  isTransientNetworkError,
+  type RemoteAgentDownloadAbortOwner,
+} from "./remoteAgentHttpDownload.policy.ts";
 
 export type RemoteAgentDownloadStage = "request" | "headers" | "redirect" | "body";
-export type RemoteAgentDownloadAbortOwner =
-  | "caller"
-  | "shutdown"
-  | "attempt-timeout"
-  | "overall-timeout";
+export type { RemoteAgentDownloadAbortOwner } from "./remoteAgentHttpDownload.policy.ts";
 
 export class RemoteAgentDownloadAttemptFailure extends Error {
   redirectCount = 0;
@@ -79,6 +78,14 @@ export function makeRemoteAgentDownloadAttemptController(input: {
   };
 }
 
+export async function cancelRemoteAgentResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup must not replace the response validation failure.
+  }
+}
+
 export async function readRemoteAgentDownloadBody(
   response: Response,
   maximum: number,
@@ -88,9 +95,11 @@ export async function readRemoteAgentDownloadBody(
   if (contentLength !== null) {
     const declared = Number(contentLength);
     if (!Number.isSafeInteger(declared) || declared < 0 || declared > maximum) {
+      await cancelRemoteAgentResponseBody(response);
       throw new RemoteAgentDownloadAttemptFailure("headers", false);
     }
     if (expectedBytes !== undefined && declared !== expectedBytes) {
+      await cancelRemoteAgentResponseBody(response);
       throw new RemoteAgentDownloadAttemptFailure("headers", false);
     }
   }

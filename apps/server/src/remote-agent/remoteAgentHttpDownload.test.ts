@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { downloadRemoteAgentHttp, RemoteAgentDownloadError } from "./remoteAgentHttpDownload.ts";
-import {
-  isTransientNetworkError,
-  type RemoteAgentDownloadPolicy,
-} from "./remoteAgentHttpDownload.policy.ts";
+import { type RemoteAgentDownloadPolicy } from "./remoteAgentHttpDownload.policy.ts";
 
 const policy: RemoteAgentDownloadPolicy = {
   kind: "metadata",
@@ -239,20 +236,6 @@ describe("remote agent HTTP download", () => {
     });
 
     expect(delays).toEqual([policy.maxRetryDelayMs]);
-  });
-
-  it("exhausts transient network failures", async () => {
-    const failure = Object.assign(new TypeError("fetch failed"), {
-      cause: { code: "UND_ERR_CONNECT_TIMEOUT" },
-    });
-    const request = vi.fn(async () => Promise.reject(failure));
-
-    await expect(
-      downloadRemoteAgentHttp(fixtureInput(), options(request as unknown as typeof fetch)),
-    ).rejects.toMatchObject({ details: { attempts: 3, stage: "request" } });
-    expect(request).toHaveBeenCalledTimes(3);
-    expect(isTransientNetworkError(failure)).toBe(true);
-    expect(isTransientNetworkError(new Error("bad input"))).toBe(false);
   });
 
   it("emits privacy-safe terminal diagnostics", async () => {

@@ -21,6 +21,7 @@ import {
 } from "./remoteAgentHttpDownload.url.ts";
 import {
   makeRemoteAgentDownloadAttemptController,
+  cancelRemoteAgentResponseBody,
   readRemoteAgentDownloadBody,
   remoteAgentDownloadSleep,
   RemoteAgentDownloadAttemptFailure as AttemptFailure,
@@ -110,7 +111,7 @@ async function runAttempt(input: {
         const owner = input.abortOwner();
         throw new AttemptFailure(
           "request",
-          owner === "attempt-timeout" || (!owner && isTransientNetworkError(error)),
+          isTransientNetworkError(error, owner),
           undefined,
           undefined,
           owner,
@@ -119,7 +120,7 @@ async function runAttempt(input: {
       }
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        await response.body?.cancel().catch(() => undefined);
+        await cancelRemoteAgentResponseBody(response);
         if (!location) throw new AttemptFailure("redirect", false, response.status);
         try {
           current = parseAndValidateDownloadUrl(new URL(location, current).href, input.urlPolicy);
@@ -132,7 +133,7 @@ async function runAttempt(input: {
       }
       if (!response.ok) {
         const retryable = isRetryableHttpStatus(response.status);
-        await response.body?.cancel().catch(() => undefined);
+        await cancelRemoteAgentResponseBody(response);
         throw new AttemptFailure(
           "headers",
           retryable,
