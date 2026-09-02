@@ -201,7 +201,8 @@ jobs:
             fi
           done
 
-      - name: Validate Windows signing credentials
+      - id: windows_signing
+        name: Resolve Windows signing mode
         if: matrix.platform == 'win'
         shell: bash
         env:
@@ -210,12 +211,7 @@ jobs:
           BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
         run: |
           set -euo pipefail
-          for name in WIN_CSC_LINK WIN_CSC_KEY_PASSWORD BIGBUD_WINDOWS_SIGNING_SUBJECT; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing required Windows signing configuration: $name" >&2
-              exit 1
-            fi
-          done
+          bun scripts/resolve-windows-signing-mode.ts
 
       - name: Import code signing certificates
         if: matrix.platform == 'mac'
@@ -232,6 +228,7 @@ jobs:
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
           WIN_CSC_LINK: ${{ matrix.platform == 'win' && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ matrix.platform == 'win' && vars.BIGBUD_WINDOWS_SIGNING_SUBJECT || '' }}
         run: |
           args=(
             --platform "${{ matrix.platform }}"
@@ -245,8 +242,12 @@ jobs:
             echo "macOS signing and notarization are required."
             args+=(--signed)
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
-            echo "Windows Authenticode signing is required."
-            args+=(--signed)
+            if [[ "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+              echo "Windows Authenticode signing is enabled."
+              args+=(--signed)
+            else
+              echo "Building unsigned Windows artifacts."
+            fi
           else
             echo "Linux artifacts do not use OS code signing."
           fi
@@ -259,7 +260,7 @@ jobs:
           BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
         run: |
           args=(release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish)
-          if [[ "${{ matrix.platform }}" == "mac" || "${{ matrix.platform }}" == "win" ]]; then
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
             args+=(--require-code-signature)
           fi
           node scripts/verify-packaged-workspace-agent.ts "${args[@]}"
@@ -270,7 +271,7 @@ jobs:
           BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
         run: |
           args=(release "${{ matrix.platform }}")
-          if [[ "${{ matrix.platform }}" == "mac" || "${{ matrix.platform }}" == "win" ]]; then
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
             args+=(--require-code-signature)
           fi
           bun run verify:packaged-desktop-supervisor -- "${args[@]}"

@@ -82,6 +82,18 @@ function assertContains(haystack: string, needle: string, message: string): void
   }
 }
 
+function assertOccurrenceCount(
+  haystack: string,
+  needle: string,
+  expectedCount: number,
+  message: string,
+): void {
+  const actualCount = haystack.split(needle).length - 1;
+  if (actualCount !== expectedCount) {
+    throw new Error(`${message} Expected ${expectedCount}, found ${actualCount}.`);
+  }
+}
+
 const tempRoot = mkdtempSync(join(tmpdir(), "bigbud-release-smoke-"));
 
 try {
@@ -104,6 +116,17 @@ try {
     releaseWorkflow,
     "--require-code-signature",
     "Release workflow must verify the macOS sidecar signature.",
+  );
+  assertContains(
+    releaseWorkflow,
+    "bun scripts/resolve-windows-signing-mode.ts",
+    "Release workflow must resolve Windows signing mode once.",
+  );
+  assertOccurrenceCount(
+    releaseWorkflow,
+    'steps.windows_signing.outputs.signed }}" == "true"',
+    3,
+    "Release workflow must condition Windows signing and verification on the resolved mode.",
   );
   for (const credential of ["APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]) {
     assertContains(

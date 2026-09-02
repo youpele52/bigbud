@@ -43,6 +43,7 @@ import {
   verifyLinuxUnpackedArtifact,
 } from "./linuxArtifactVerify.ts";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
+import { sanitizeUnsignedSigningEnvironment } from "../windows-signing-mode.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
 
@@ -293,14 +294,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   }
 
   if (!options.signed) {
-    buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
-    delete buildEnv.CSC_LINK;
-    delete buildEnv.CSC_KEY_PASSWORD;
-    delete buildEnv.WIN_CSC_LINK;
-    delete buildEnv.WIN_CSC_KEY_PASSWORD;
-    delete buildEnv.APPLE_API_KEY;
-    delete buildEnv.APPLE_API_KEY_ID;
-    delete buildEnv.APPLE_API_ISSUER;
+    sanitizeUnsignedSigningEnvironment(buildEnv);
   }
 
   if (isWindowsBuildPlatform(options.platform)) {
