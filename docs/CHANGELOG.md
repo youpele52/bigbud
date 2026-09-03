@@ -10,6 +10,22 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
+## v0.2.207 (3 September, 2026)
+
+### More Reliable Remote-Agent Setup
+
+- Made remote-agent installation and upgrades recover from temporary network failures with bounded retries and timeouts, while cancellation stops pending work without leaving a partially activated installation.
+- Protected downloads with strict redirect rules, trusted release signatures, exact size checks, and SHA-256 verification before making changes on the remote computer.
+- Reused successfully loaded release information between agent health checks and installation, avoiding duplicate requests during setup.
+
+### Project Ordering
+
+- Fixed projects loaded through **Load more** so they can be reordered alongside projects that were already visible.
+
+### Terminal Layouts
+
+- Added **Open Terminal** to Quick actions and a header control for switching between split, terminal-only, and chat-only views, while keeping `Cmd/Ctrl+J` available for the bottom terminal.
+
 ## v0.2.206 (31 August, 2026)
 
 ### Broader Remote Workspace Providers

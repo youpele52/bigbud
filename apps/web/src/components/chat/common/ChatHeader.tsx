@@ -5,7 +5,7 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@bigbud/contracts";
-import { SidebarLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
+import { Cards02Icon, SidebarLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
@@ -14,6 +14,7 @@ import ProjectScriptsControl, {
   type NewProjectScriptInput,
 } from "../../project/ProjectScriptsControl";
 import { Toggle } from "../../ui/toggle";
+import { Button } from "../../ui/button";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
@@ -39,6 +40,8 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   planCardLabel: string;
   planCardOpen: boolean;
+  terminalOpen: boolean;
+  terminalLayoutNextActionLabel: string;
   onOpenOrchestra: () => void;
   onOpenSideChat?: (() => void) | undefined;
   sideChatDisabled?: boolean | undefined;
@@ -47,6 +50,8 @@ interface ChatHeaderProps {
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onTogglePlanCard: () => void;
+  onOpenTerminal: () => void;
+  onCycleTerminalLayout: () => void;
   onToggleRightPanel: () => void;
 }
 
@@ -67,6 +72,8 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   planCardLabel,
   planCardOpen,
+  terminalOpen,
+  terminalLayoutNextActionLabel,
   onOpenOrchestra,
   onOpenSideChat,
   sideChatDisabled,
@@ -75,6 +82,8 @@ export const ChatHeader = memo(function ChatHeader({
   onUpdateProjectScript,
   onDeleteProjectScript,
   onTogglePlanCard,
+  onOpenTerminal,
+  onCycleTerminalLayout,
   onToggleRightPanel,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
@@ -142,7 +151,32 @@ export const ChatHeader = memo(function ChatHeader({
             planCardLabel={planCardLabel}
             planCardOpen={planCardOpen}
             onTogglePlanCard={onTogglePlanCard}
+            onOpenTerminal={onOpenTerminal}
           />
+          {terminalOpen ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    aria-label={terminalLayoutNextActionLabel}
+                    className="shrink-0"
+                    size="xs"
+                    variant="toolbar"
+                    onClick={onCycleTerminalLayout}
+                  >
+                    <HugeiconsIcon
+                      aria-hidden="true"
+                      className="size-3.5"
+                      icon={Cards02Icon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">{terminalLayoutNextActionLabel}</TooltipPopup>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={

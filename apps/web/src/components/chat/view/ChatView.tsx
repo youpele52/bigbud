@@ -8,6 +8,7 @@ import { useChatViewRuntime } from "./chat-view/chat-view-runtime.hooks";
 import { useChatViewThreadDerivedState } from "./chat-view/chat-view-thread-derived.hooks";
 import { useChatViewTimelineState } from "./chat-view/chat-view-timeline.hooks";
 import { usePlanCardToggleShortcut } from "./chat-view/ChatViewPlanCardShortcut";
+import { useTerminalLayout } from "./chat-view/terminalLayout.hooks";
 import type { ChatViewProps } from "./chat-view/shared";
 
 export default function ChatView({ threadId }: ChatViewProps) {
@@ -16,12 +17,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const composer = useChatViewComposerDerivedState(base);
   const timeline = useChatViewTimelineState({ base, thread });
   const runtime = useChatViewRuntime({ base, thread, composer, timeline });
+  const terminalLayout = useTerminalLayout({
+    activeThreadId: base.threadId,
+    terminalOpen: base.terminalState.terminalOpen,
+    setTerminalOpen: runtime.terminalActions.setTerminalOpen,
+    toggleTerminalVisibility: runtime.terminalActions.toggleTerminalVisibility,
+  });
   const interactions = useChatViewInteractions({
     base,
     composer,
     thread,
     timeline,
     runtime,
+    toggleTerminalVisibility: terminalLayout.toggleTerminal,
   });
 
   useChatViewEffects({ base, composer, thread, runtime });
@@ -44,6 +52,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       timeline={timeline}
       runtime={runtime}
       interactions={interactions}
+      terminalLayout={terminalLayout}
     />
   );
 }

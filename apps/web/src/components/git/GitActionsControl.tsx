@@ -1,13 +1,15 @@
-import type { ThreadId } from "@bigbud/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildMenuItems,
-  type DefaultBranchConfirmableAction,
   type GitActionMenuItem,
-  resolveDefaultBranchActionDialogCopy,
   resolveLiveThreadBranchUpdate,
 } from "./GitActionsControl.logic";
+import {
+  type PendingDefaultBranchAction,
+  type GitActionsControlProps,
+  resolvePendingDefaultBranchActionCopy,
+} from "./GitActionsControl.pending";
 import { GitActionsControlActions } from "./GitActionsControl.actions";
 import { GitActionsControlDialogs } from "./GitActionsControl.dialogs";
 import { useChangedFileEditor } from "./GitActionsControl.editor";
@@ -24,29 +26,6 @@ import {
 import { openGitPanelToView } from "~/stores/git/gitPanel.coordinator";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
-import { useEffect } from "react";
-
-interface GitActionsControlProps {
-  gitCwd: string | null;
-  isProjectThread?: boolean;
-  executionTargetId?: string | undefined;
-  activeThreadId: ThreadId | null;
-  onOpenOrchestra?: (() => void) | undefined;
-  onOpenSideChat?: (() => void) | undefined;
-  sideChatDisabled?: boolean | undefined;
-  planCardLabel?: string | undefined;
-  planCardOpen?: boolean | undefined;
-  onTogglePlanCard?: (() => void) | undefined;
-}
-
-interface PendingDefaultBranchAction {
-  action: DefaultBranchConfirmableAction;
-  branchName: string;
-  includesCommit: boolean;
-  commitMessage?: string;
-  onConfirmed?: () => void;
-  filePaths?: string[];
-}
 
 export default function GitActionsControl({
   gitCwd,
@@ -59,6 +38,7 @@ export default function GitActionsControl({
   planCardLabel,
   planCardOpen,
   onTogglePlanCard,
+  onOpenTerminal,
 }: GitActionsControlProps) {
   const threadToastData = useMemo(
     () => (activeThreadId ? { threadId: activeThreadId } : undefined),
@@ -173,13 +153,9 @@ export default function GitActionsControl({
     () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasOriginRemote),
     [gitStatusForActions, hasOriginRemote, isGitActionRunning],
   );
-  const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
-    ? resolveDefaultBranchActionDialogCopy({
-        action: pendingDefaultBranchAction.action,
-        branchName: pendingDefaultBranchAction.branchName,
-        includesCommit: pendingDefaultBranchAction.includesCommit,
-      })
-    : null;
+  const pendingDefaultBranchActionCopy = resolvePendingDefaultBranchActionCopy(
+    pendingDefaultBranchAction,
+  );
 
   const runPull = useCallback(() => {
     const promise = pullMutation.mutateAsync();
@@ -370,6 +346,7 @@ export default function GitActionsControl({
         planCardOpen={planCardOpen}
         onMenuItemSelect={handleMenuItemSelect}
         onTogglePlanCard={onTogglePlanCard}
+        onOpenTerminal={onOpenTerminal}
       />
 
       <GitActionsControlDialogs

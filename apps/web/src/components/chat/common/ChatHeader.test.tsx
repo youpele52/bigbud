@@ -66,6 +66,8 @@ describe("ChatHeader", () => {
     onAddProjectScript: async () => undefined,
     onDeleteProjectScript: async () => undefined,
     onOpenOrchestra: () => undefined,
+    onOpenTerminal: () => undefined,
+    onCycleTerminalLayout: () => undefined,
     onTogglePlanCard: () => undefined,
     onRunProjectScript: () => undefined,
     onToggleRightPanel: () => undefined,
@@ -77,6 +79,8 @@ describe("ChatHeader", () => {
     rightPanelOpen: false,
     rightPanelToggleShortcutLabel: null,
     sidebarToggleShortcutLabel: null,
+    terminalLayoutNextActionLabel: "Show terminal only",
+    terminalOpen: false,
   } as const;
 
   it("renders the sidebar toggle and the right panel toggle", () => {
@@ -84,6 +88,28 @@ describe("ChatHeader", () => {
 
     expect(markup).toContain('aria-label="Toggle sidebar"');
     expect(markup).toContain('aria-label="Open right panel"');
+  });
+
+  it("renders the terminal layout control before sidebar controls only while open", () => {
+    const closedMarkup = renderHeader();
+    const openMarkup = renderHeader({ terminalOpen: true });
+
+    expect(closedMarkup).not.toContain('aria-label="Show terminal only"');
+    expect(openMarkup).toContain('aria-label="Show terminal only"');
+    expect(openMarkup.indexOf('aria-label="Show terminal only"')).toBeLessThan(
+      openMarkup.indexOf('aria-label="Toggle sidebar"'),
+    );
+    const layoutButton = openMarkup.match(/<button[^>]*aria-label="Show terminal only"[^>]*>/)?.[0];
+    expect(layoutButton).not.toContain("aria-pressed");
+  });
+
+  it("uses the supplied next-action accessibility label", () => {
+    const markup = renderHeader({
+      terminalOpen: true,
+      terminalLayoutNextActionLabel: "Show chat only",
+    });
+
+    expect(markup).toContain('aria-label="Show chat only"');
   });
 
   it("shows blue dots while running and orange dots while compacting", () => {
