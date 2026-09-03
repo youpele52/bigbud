@@ -8,6 +8,7 @@ const MAX_DIRTY_RECONCILIATION_THREADS = 10_000;
 export interface PeriodicReconciliationState {
   cursorThreadId: string | null;
   readonly dirtyThreadIds: Set<string>;
+  readonly terminalThreadIds: Set<string>;
   readonly missingSessionObservedAt: Map<string, number>;
   auditCursor: ProviderSessionRuntimeListCursor | null;
   lastSafetyAuditAt: number;
@@ -17,6 +18,7 @@ export function makePeriodicReconciliationState(): PeriodicReconciliationState {
   return {
     cursorThreadId: null,
     dirtyThreadIds: new Set(),
+    terminalThreadIds: new Set(),
     missingSessionObservedAt: new Map(),
     auditCursor: null,
     lastSafetyAuditAt: 0,
@@ -27,11 +29,25 @@ export function markPeriodicReconciliationDirty(
   state: PeriodicReconciliationState,
   threadId: string,
 ): void {
+  if (state.terminalThreadIds.has(threadId)) return;
   state.dirtyThreadIds.add(threadId);
   while (state.dirtyThreadIds.size > MAX_DIRTY_RECONCILIATION_THREADS) {
     const oldest = state.dirtyThreadIds.values().next().value;
     if (oldest === undefined) break;
     state.dirtyThreadIds.delete(oldest);
+  }
+}
+
+export function markPeriodicReconciliationTerminal(
+  state: PeriodicReconciliationState,
+  threadId: string,
+): void {
+  state.dirtyThreadIds.delete(threadId);
+  state.terminalThreadIds.add(threadId);
+  while (state.terminalThreadIds.size > MAX_DIRTY_RECONCILIATION_THREADS) {
+    const oldest = state.terminalThreadIds.values().next().value;
+    if (oldest === undefined) break;
+    state.terminalThreadIds.delete(oldest);
   }
 }
 
@@ -43,6 +59,7 @@ export function selectPeriodicReconciliationThreads(
   const eligible = threads
     .filter((thread) => {
       if (thread.deletedAt !== null || thread.archivedAt !== null) return false;
+      if (state.terminalThreadIds.has(thread.id)) return false;
       if (
         thread.pendingInterruptFlushIntent != null ||
         thread.pendingTurnControlOperation != null ||

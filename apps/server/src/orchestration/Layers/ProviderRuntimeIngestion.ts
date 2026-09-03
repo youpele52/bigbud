@@ -10,6 +10,7 @@
 import { Clock, Effect, Layer, Schedule, Scope, Stream } from "effect";
 import { Cause } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
+import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 import { increment } from "../../observability/Metrics.ts";
 import {
   providerReconciliationDiscoveryTotal,
@@ -46,6 +47,7 @@ import {
 import {
   makePeriodicReconciliationState,
   markPeriodicReconciliationDirty,
+  markPeriodicReconciliationTerminal,
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
 import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
@@ -116,6 +118,18 @@ const make = Effect.fn("make")(function* () {
     readonly result: ProviderSessionDiscoveryResult;
   } | null = null;
   const periodicReconciliationState = makePeriodicReconciliationState();
+  const recordReconciliationOutcome = (
+    command: OrchestrationCommand,
+    outcome: "applied" | "retryable" | "terminal",
+  ) =>
+    Effect.sync(() => {
+      if (!("threadId" in command)) return;
+      if (outcome === "terminal") {
+        markPeriodicReconciliationTerminal(periodicReconciliationState, command.threadId);
+      } else if (outcome === "retryable") {
+        markPeriodicReconciliationDirty(periodicReconciliationState, command.threadId);
+      }
+    });
 
   const discoverProviderSessions = Effect.fn("discoverProviderSessions")(function* (
     options: ProviderSessionReconciliationOptions = {},
@@ -184,7 +198,10 @@ const make = Effect.fn("make")(function* () {
 
       yield* Effect.forEach(
         commands,
-        (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
+        (command) =>
+          dispatchReconciliationCommandSafely(orchestrationEngine, command).pipe(
+            Effect.tap((outcome) => recordReconciliationOutcome(command, outcome)),
+          ),
         { concurrency: 1 },
       ).pipe(Effect.asVoid);
       yield* recoverTurnControlOperations({
@@ -262,7 +279,10 @@ const make = Effect.fn("make")(function* () {
         });
         yield* Effect.forEach(
           commands,
-          (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
+          (command) =>
+            dispatchReconciliationCommandSafely(orchestrationEngine, command).pipe(
+              Effect.tap((outcome) => recordReconciliationOutcome(command, outcome)),
+            ),
           { concurrency: 4 },
         );
         yield* recoverTurnControlOperations({

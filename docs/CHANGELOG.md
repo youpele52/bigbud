@@ -26,6 +26,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Added **Open Terminal** to Quick actions and a header control for switching between split, terminal-only, and chat-only views, while keeping `Cmd/Ctrl+J` available for the bottom terminal.
 
+### Recovery Reliability
+
+- Prevented cleanup recovery from overwhelming the backend and triggering health timeouts or repeated app reconnects.
+- Restored older recovery data safely when records reference threads that no longer exist.
+
 ## v0.2.206 (31 August, 2026)
 
 ### Broader Remote Workspace Providers

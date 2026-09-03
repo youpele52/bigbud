@@ -47,15 +47,6 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
               const current = yield* Ref.get(flight);
               const requestedSequence =
                 current?.deferred === deferred ? current.requestedSequence : 0;
-              const verified = yield* input.baselines.latestVerified();
-              if (
-                Option.isSome(verified) &&
-                (yield* markCovered(deferred, verified.value.sequence))
-              ) {
-                yield* Ref.set(failure, null);
-                return;
-              }
-
               const now = yield* Clock.currentTimeMillis;
               const previousFailure = yield* Ref.get(failure);
               if (
@@ -67,6 +58,15 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
                   cooldownMs: PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
                 });
                 return yield* previousFailure.error;
+              }
+
+              const verified = yield* input.baselines.latestVerified();
+              if (
+                Option.isSome(verified) &&
+                (yield* markCovered(deferred, verified.value.sequence))
+              ) {
+                yield* Ref.set(failure, null);
+                return;
               }
 
               yield* input.compact;

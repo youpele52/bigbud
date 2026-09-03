@@ -11,27 +11,47 @@ import {
   MAX_DIRECT_CLEANUP_EXECUTION_ATTEMPTS,
   withDirectCleanupCapacity,
 } from "./DirectResourceCleanupCoordinator.ts";
-import { finalizeThreadCanonicalHistory } from "./CanonicalThreadCleanup.ts";
+import { finalizeThreadCanonicalHistoryWithCoverage } from "./CanonicalThreadCleanup.ts";
 import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { recoverPreparedCleanupFinalizes } from "./DirectResourceCleanupRecovery.finalize.ts";
 import { recoverDirectCleanupWorktrees } from "./DirectResourceCleanupRecovery.worktrees.ts";
 
-export function recoverCanonicalPruningCandidates<Candidate, Error, Requirements>(input: {
+export function recoverCanonicalPruningCandidates<
+  Candidate,
+  CoverageError,
+  FinalizeError,
+  Requirements,
+>(input: {
   readonly candidates: ReadonlyArray<Candidate>;
-  readonly finalizeCandidate: (candidate: Candidate) => Effect.Effect<void, Error, Requirements>;
+  readonly requiredSequence: (candidate: Candidate) => number;
+  readonly ensureCoverage: (sequence: number) => Effect.Effect<void, CoverageError, Requirements>;
+  readonly finalizeCandidate: (
+    candidate: Candidate,
+  ) => Effect.Effect<void, FinalizeError, Requirements>;
 }): Effect.Effect<void, never, Requirements> {
-  return Effect.forEach(
-    input.candidates,
-    (candidate) =>
-      input.finalizeCandidate(candidate).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("canonical cleanup recovery deferred", {
-            detail: String(error),
-          }),
-        ),
+  if (input.candidates.length === 0) return Effect.void;
+  const highestSequence = Math.max(...input.candidates.map(input.requiredSequence));
+  return input.ensureCoverage(highestSequence).pipe(
+    Effect.andThen(
+      Effect.forEach(
+        input.candidates,
+        (candidate) =>
+          input.finalizeCandidate(candidate).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("canonical cleanup recovery deferred", {
+                detail: String(error),
+              }),
+            ),
+          ),
+        { concurrency: 1, discard: true },
       ),
-    { concurrency: 1, discard: true },
+    ),
+    Effect.catch((error) =>
+      Effect.logWarning("canonical cleanup baseline coverage deferred", {
+        detail: String(error),
+      }),
+    ),
   );
 }
 
@@ -55,12 +75,17 @@ export const recoverDirectResourceCleanupOnce = Effect.fn(
   const pruning = yield* repository.listCanonicalPruning(10);
   yield* recoverCanonicalPruningCandidates({
     candidates: pruning,
+    requiredSequence: (candidate) => candidate.deletionSequence,
+    ensureCoverage: (highestSequence) => {
+      const verifyReplacement = projectionPipeline.ensureVerifiedBaselineThroughWithoutCompaction;
+      return verifyReplacement === undefined
+        ? Effect.fail(new Error("verify-only projection baseline support is unavailable"))
+        : verifyReplacement(highestSequence);
+    },
     finalizeCandidate: (candidate) =>
-      finalizeThreadCanonicalHistory({
-        projectionPipeline,
+      finalizeThreadCanonicalHistoryWithCoverage({
         sql,
         threadId: ThreadId.makeUnsafe(candidate.threadId),
-        deletionSequence: candidate.deletionSequence,
         recordCheckpoint: repository.markCanonicalPruned(
           candidate.operationId,
           new Date().toISOString(),
@@ -155,8 +180,11 @@ export const recoverDirectResourceCleanupOnce = Effect.fn(
   );
 });
 
+export const repeatDirectResourceCleanupRecovery = <A, E, R>(recoverOnce: Effect.Effect<A, E, R>) =>
+  Effect.repeat(recoverOnce, Schedule.spaced("5 seconds"));
+
 export const DirectResourceCleanupRecoveryLive = Layer.effectDiscard(
-  Effect.repeat(
+  repeatDirectResourceCleanupRecovery(
     recoverDirectResourceCleanupOnce().pipe(
       Effect.catch(() =>
         Effect.logWarning("direct resource cleanup recovery deferred", {
@@ -164,6 +192,5 @@ export const DirectResourceCleanupRecoveryLive = Layer.effectDiscard(
         }),
       ),
     ),
-    Schedule.fixed("5 seconds"),
   ).pipe(Effect.forkScoped),
 );

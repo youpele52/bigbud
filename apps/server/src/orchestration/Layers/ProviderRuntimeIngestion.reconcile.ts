@@ -4,10 +4,11 @@ import {
   type OrchestrationThread,
   type ProviderSession,
 } from "@bigbud/contracts";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Schema } from "effect";
 
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import { PersistenceSqlError } from "../../persistence/Errors.ts";
 
 import {
   DEFAULT_RUNTIME_MODE,
@@ -35,21 +36,33 @@ const PROVIDER_HEALTH_REASONS = new Set<string>([
 export function dispatchReconciliationCommandSafely(
   orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch">,
   command: OrchestrationCommand,
-): Effect.Effect<void, OrchestrationDispatchError> {
+): Effect.Effect<"applied" | "retryable" | "terminal", OrchestrationDispatchError> {
   return orchestrationEngine.dispatch(command).pipe(
+    Effect.as("applied" as const),
     Effect.catchCause((cause) => {
       if (Cause.hasInterruptsOnly(cause)) {
         return Effect.failCause(cause);
+      }
+      const failure = Cause.findErrorOption(cause);
+      if (failure._tag === "Some" && isDeletingParentReconciliationError(failure.value)) {
+        return Effect.logDebug("provider runtime reconciliation reached terminal deletion fence", {
+          commandId: command.commandId,
+          commandType: command.type,
+          ...(command.type === "thread.session.set" ? { threadId: command.threadId } : {}),
+        }).pipe(Effect.as("terminal" as const));
       }
       return Effect.logWarning("provider runtime reconciliation command failed", {
         commandId: command.commandId,
         commandType: command.type,
         ...("threadId" in command ? { threadId: command.threadId } : {}),
         cause: Cause.pretty(cause),
-      });
+      }).pipe(Effect.as("retryable" as const));
     }),
-    Effect.asVoid,
   );
+}
+
+export function isDeletingParentReconciliationError(error: unknown): boolean {
+  return Schema.is(PersistenceSqlError)(error) && error.detail === "parent thread is deleting";
 }
 
 function areSessionsEqual(

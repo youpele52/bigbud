@@ -159,6 +159,8 @@ layer("atomic canonical pruning checkpoint", (it) => {
       const completed: string[] = [];
       yield* recoverCanonicalPruningCandidates({
         candidates: ["failed", "completed"],
+        requiredSequence: () => 1,
+        ensureCoverage: () => Effect.void,
         finalizeCandidate: (candidate) =>
           candidate === "failed"
             ? Effect.fail(new Error("failed candidate"))
@@ -166,5 +168,25 @@ layer("atomic canonical pruning checkpoint", (it) => {
       });
       assert.deepEqual(completed, ["completed"]);
     }),
+  );
+
+  it.effect(
+    "establishes coverage once through the highest sequence before isolated finalization",
+    () =>
+      Effect.gen(function* () {
+        const coverage: number[] = [];
+        const completed: number[] = [];
+        yield* recoverCanonicalPruningCandidates({
+          candidates: [2, 7, 4],
+          requiredSequence: (candidate) => candidate,
+          ensureCoverage: (sequence) => Effect.sync(() => void coverage.push(sequence)),
+          finalizeCandidate: (candidate) =>
+            candidate === 2
+              ? Effect.fail(new Error("failed candidate"))
+              : Effect.sync(() => void completed.push(candidate)),
+        });
+        assert.deepEqual(coverage, [7]);
+        assert.deepEqual(completed, [7, 4]);
+      }),
   );
 });
