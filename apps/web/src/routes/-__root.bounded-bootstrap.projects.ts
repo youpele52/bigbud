@@ -7,6 +7,7 @@ import {
 
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
+import { useUiStateStore } from "../stores/ui/ui.store";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 type ProjectCatalogCursor = NonNullable<GetStartupProjectCatalogResult["nextCursor"]>;
@@ -151,6 +152,10 @@ async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad
         request.generation,
         request.loadAll && hasMorePages,
       );
+    const projects = useStore.getState().projects;
+    useUiStateStore
+      .getState()
+      .syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
     if (!request.loadAll) {
       return;
     }

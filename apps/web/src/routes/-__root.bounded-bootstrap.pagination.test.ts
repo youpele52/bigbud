@@ -2,6 +2,7 @@ import { ProjectId, type GetStartupProjectCatalogResult, type NativeApi } from "
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useStore } from "../stores/main";
+import { useUiStateStore } from "../stores/ui/ui.store";
 import { loadAllProjectCatalog, loadMoreProjectCatalog } from "./-__root.bounded-bootstrap";
 
 const project1 = ProjectId.makeUnsafe("project-1");
@@ -64,6 +65,7 @@ beforeEach(() => {
     latestProjectEventSequenceById: {},
     projectThreadCountsById: {},
   });
+  useUiStateStore.setState({ projectExpandedById: {}, projectOrder: [], selectedProjectId: null });
 });
 
 describe("lazy project catalog pagination", () => {
@@ -112,6 +114,18 @@ describe("lazy project catalog pagination", () => {
     localPage.resolve(makePage(project1));
     await localLoad;
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2, project1]);
+  });
+
+  it("adds paginated projects to the reorderable project state", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.getState().appendProjectCatalogPage("local", makePage(project1, cursor1));
+    useUiStateStore.getState().syncProjects([{ id: project1, cwd: `/tmp/${project1}` }]);
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api, scope: "local" });
+    useUiStateStore.getState().reorderProjects(project2, project1);
+
+    expect(useUiStateStore.getState().projectOrder).toEqual([project2, project1]);
   });
 
   it("stores remaining counts independently for each catalog scope", async () => {
