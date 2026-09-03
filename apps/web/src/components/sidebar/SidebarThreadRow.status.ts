@@ -17,7 +17,11 @@ export interface PrStatusIndicator {
   url: string;
 }
 
-export function providerIconPresentationClass(status: ThreadStatusPill | null): string {
+export function providerIconPresentationClass(
+  status: ThreadStatusPill | null,
+  isConnecting: boolean,
+): string {
+  if (isConnecting) return "text-warning";
   if (status?.label === "Done") return "text-success";
   return status?.colorClass ?? "text-muted-foreground";
 }

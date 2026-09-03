@@ -67,37 +67,57 @@ describe("SidebarThreadRow.status", () => {
       pulse: false,
     };
 
-    expect(providerIconPresentationClass(failedStatus)).toBe("text-destructive");
+    expect(providerIconPresentationClass(failedStatus, false)).toBe("text-destructive");
     expect(shouldShowThreadStatusLabel(failedStatus)).toBe(false);
   });
 
   it("passes resolved state colors through to stable provider icons", () => {
     const iconClass = (label: "Connection Warning" | "Working" | "Pending Approval") =>
-      providerIconPresentationClass({
-        label,
-        colorClass:
-          label === "Connection Warning"
-            ? "text-warning"
-            : label === "Working"
-              ? "text-info-foreground"
-              : "text-primary",
-        dotClass: "bg-primary",
-        pulse: false,
-      });
+      providerIconPresentationClass(
+        {
+          label,
+          colorClass:
+            label === "Connection Warning"
+              ? "text-warning"
+              : label === "Working"
+                ? "text-info-foreground"
+                : "text-primary",
+          dotClass: "bg-primary",
+          pulse: false,
+        },
+        false,
+      );
 
     expect(iconClass("Connection Warning")).toBe("text-warning");
     expect(iconClass("Working")).toBe("text-info-foreground");
     expect(iconClass("Pending Approval")).toBe("text-primary");
     expect(
-      providerIconPresentationClass({
-        label: "Done",
-        colorClass: "text-primary",
-        dotClass: "bg-primary",
-        pulse: false,
-      }),
+      providerIconPresentationClass(
+        {
+          label: "Done",
+          colorClass: "text-primary",
+          dotClass: "bg-primary",
+          pulse: false,
+        },
+        false,
+      ),
     ).toBe("text-success");
-    expect(providerIconPresentationClass(null)).toBe("text-muted-foreground");
+    expect(providerIconPresentationClass(null, false)).toBe("text-muted-foreground");
     expect(shouldAnimateProviderIcon({ isConnecting: true, isRunning: false })).toBe(true);
     expect(shouldAnimateProviderIcon({ isConnecting: false, isRunning: false })).toBe(false);
+  });
+
+  it("uses the warning color for the provider icon during connecting", () => {
+    expect(
+      providerIconPresentationClass(
+        {
+          label: "Getting Ready",
+          colorClass: "text-info-foreground",
+          dotClass: "bg-info-foreground",
+          pulse: true,
+        },
+        true,
+      ),
+    ).toBe("text-warning");
   });
 });

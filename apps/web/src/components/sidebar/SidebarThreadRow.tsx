@@ -126,7 +126,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     thread.session?.provider && thread.session.provider !== "unknown"
       ? PROVIDER_ICON_BY_PROVIDER[thread.session.provider]
       : null;
-  const providerIconColor = providerIconPresentationClass(threadStatus);
+  const providerIconColor = providerIconPresentationClass(threadStatus, isConnectingPresentation);
   const providerIconAnimationClass = shouldAnimateProviderIcon({
     isConnecting: isConnectingPresentation,
     isRunning: isWorkingPresentation,

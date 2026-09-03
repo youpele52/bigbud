@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const SIDEBAR_CONNECTING_LABEL_DELAY_MS = 10_000;
+export const SIDEBAR_CONNECTING_LABEL_DELAY_MS = 30_000;
 
 function connectingLabelDelayMs(connectingStartedAt: string, now = Date.now()): number {
   const startedAt = Date.parse(connectingStartedAt);

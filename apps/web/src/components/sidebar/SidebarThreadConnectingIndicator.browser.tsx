@@ -107,7 +107,8 @@ describe("SidebarThreadConnectingIndicator", () => {
     expect(logo.classList).toContain("text-success");
   });
 
-  it("reveals the lowercase label at exactly ten seconds", async () => {
+  it("reveals the lowercase label at exactly 30 seconds", async () => {
+    expect(SIDEBAR_CONNECTING_LABEL_DELAY_MS).toBe(30_000);
     await render(<ConnectingHarness connecting connectingStartedAt={EPISODE_STARTED_AT} />);
 
     await vi.advanceTimersByTimeAsync(SIDEBAR_CONNECTING_LABEL_DELAY_MS - 1);
