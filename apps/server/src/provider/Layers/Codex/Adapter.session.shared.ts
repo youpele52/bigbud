@@ -2,10 +2,13 @@ import { type ProviderSendTurnInput, ThreadId } from "@bigbud/contracts";
 import { Effect, FileSystem } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
+import { isCodexModelSelectionError } from "../../../codex/codexAppServerManager.modelSelection.ts";
 import {
+  ProviderAdapterProcessError,
   ProviderAdapterRequestError,
   ProviderAdapterSessionClosedError,
   ProviderAdapterSessionNotFoundError,
+  ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../../Errors.ts";
 import { PROVIDER, toMessage } from "./Adapter.types.ts";
@@ -32,11 +35,44 @@ export function toSessionError(
   return undefined;
 }
 
+function toModelSelectionError(
+  operation: string,
+  cause: unknown,
+): ProviderAdapterValidationError | undefined {
+  return isCodexModelSelectionError(cause)
+    ? new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation,
+        issue: cause.issue,
+        cause,
+      })
+    : undefined;
+}
+
+export function toStartSessionError(
+  threadId: ThreadId,
+  cause: unknown,
+): ProviderAdapterValidationError | ProviderAdapterProcessError {
+  return (
+    toModelSelectionError("startSession", cause) ??
+    new ProviderAdapterProcessError({
+      provider: PROVIDER,
+      threadId,
+      detail: toMessage(cause, "Failed to start Codex adapter session."),
+      cause,
+    })
+  );
+}
+
 export function toRequestError(
   threadId: ThreadId,
   method: string,
   cause: unknown,
 ): ProviderAdapterError {
+  const modelSelectionError = toModelSelectionError(method, cause);
+  if (modelSelectionError) {
+    return modelSelectionError;
+  }
   const sessionError = toSessionError(threadId, cause);
   if (sessionError) {
     return sessionError;

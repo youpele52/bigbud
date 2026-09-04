@@ -84,7 +84,7 @@ const adapterLayer = effectIt.layer(
     Layer.provideMerge(
       Layer.succeed(CliProxyLifecycle, {
         isClaudeRunnable: async () => ({ _tag: "available" }) as const,
-        activate: async () => ({ _tag: "started", strategy: "direct" }) as const,
+        activate: async () => ({ _tag: "started", reused: false }) as const,
       }),
     ),
     Layer.provideMerge(NodeServices.layer),
@@ -104,7 +104,7 @@ const unavailableRemoteLayer = effectIt.layer(
     Layer.provideMerge(
       Layer.succeed(CliProxyLifecycle, {
         isClaudeRunnable: async () => ({ _tag: "available" }) as const,
-        activate: async () => ({ _tag: "started", strategy: "direct" }) as const,
+        activate: async () => ({ _tag: "started", reused: false }) as const,
       }),
     ),
     Layer.provideMerge(NodeServices.layer),

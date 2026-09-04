@@ -4,13 +4,17 @@ export type CliProxyLaunchStrategy = "homebrew" | "systemd-user" | "direct" | "n
 
 export type CliProxyCommandResult =
   | { readonly _tag: "available" }
-  | { readonly _tag: "missing"; readonly command: string }
-  | { readonly _tag: "timeout"; readonly command: string }
-  | { readonly _tag: "failed"; readonly command: string; readonly detail: string };
+  | { readonly _tag: "missing" }
+  | { readonly _tag: "timeout" }
+  | { readonly _tag: "execution-failed" };
 
 export type CliProxyActivationResult =
-  | { readonly _tag: "started"; readonly strategy: Exclude<CliProxyLaunchStrategy, "none"> }
-  | { readonly _tag: "unavailable"; readonly strategy: "none"; readonly detail: string };
+  | { readonly _tag: "started"; readonly reused: boolean }
+  | { readonly _tag: "service-configuration-unverified" }
+  | { readonly _tag: "direct-process-configuration-conflict" }
+  | { readonly _tag: "startup-failed" }
+  | { readonly _tag: "closed" }
+  | { readonly _tag: "unavailable" };
 
 export interface CliProxyLifecycleShape {
   isClaudeRunnable(input: { readonly binaryPath: string }): Promise<CliProxyCommandResult>;

@@ -11,6 +11,7 @@ import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 import { OrchestrationDispatchCommandError } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 
+import { cliProxyDiagnostic } from "../provider/Layers/CliProxy/Diagnostic.ts";
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
 import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
@@ -41,13 +42,19 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverActivateCliProxy,
         context.activateCliProxy().pipe(
-          Effect.map((providers) => ({ providers })),
-          Effect.mapError(
-            (cause) =>
-              new ServerCliProxyActivationError({
-                message: cause instanceof Error ? cause.message : "Failed to activate CLIProxyAPI.",
-                cause,
-              }),
+          Effect.catch(() =>
+            context.providerRegistry.getProviders.pipe(
+              Effect.orElseSucceed(() => []),
+              Effect.map((providers) => ({
+                providers,
+                diagnostic: cliProxyDiagnostic("activation-unavailable"),
+              })),
+            ),
+          ),
+          Effect.flatMap(({ providers, diagnostic }) =>
+            diagnostic === undefined
+              ? Effect.succeed({ providers })
+              : Effect.fail(new ServerCliProxyActivationError({ diagnostic, providers })),
           ),
         ),
         { "rpc.aggregate": "server" },

@@ -19,7 +19,6 @@ import {
   detailFromResult,
   isCommandMissingCause,
   parseGenericCliVersion,
-  providerModelsFromSettings,
   spawnAndCollect,
 } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
@@ -35,10 +34,11 @@ import {
   type CodexAccountSnapshot,
 } from "../../codexAccount";
 import { probeCodexDiscovery, type CodexDiscoverySnapshot } from "../../codexAppServer";
+import { includeConfiguredCodexModels } from "../../codexAppServer.models";
 import { CodexProvider } from "../../Services/Codex/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerSettingsError } from "@bigbud/contracts";
-import { BUILT_IN_MODELS, DEFAULT_CODEX_MODEL_CAPABILITIES } from "./Provider.models";
+import { getCodexFallbackModels } from "./Provider.models";
 import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./Provider.auth";
 import { makeCodexInitialSnapshot } from "./Provider.initialSnapshot";
 
@@ -112,12 +112,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     Effect.map((settings) => settings.providers.codex),
   );
   const checkedAt = new Date().toISOString();
-  const fallbackModels = providerModelsFromSettings(
-    BUILT_IN_MODELS,
-    PROVIDER,
-    codexSettings.customModels,
-    DEFAULT_CODEX_MODEL_CAPABILITIES,
-  );
+  const fallbackModels = getCodexFallbackModels(codexSettings.customModels);
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
@@ -237,16 +232,8 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         }).pipe(Effect.orElseSucceed(() => undefined))
       : undefined) ??
     [];
-  const resolvedModels = discovery?.models.length
-    ? [
-        ...discovery.models,
-        ...providerModelsFromSettings(
-          [],
-          PROVIDER,
-          codexSettings.customModels,
-          DEFAULT_CODEX_MODEL_CAPABILITIES,
-        ),
-      ]
+  const resolvedModels = discovery
+    ? includeConfiguredCodexModels(discovery.models, codexSettings.customModels)
     : adjustCodexModelsForAccount(fallbackModels, account);
 
   if (yield* hasCustomModelProvider) {

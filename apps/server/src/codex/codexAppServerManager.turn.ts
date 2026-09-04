@@ -17,7 +17,8 @@ import {
 
 import { resolveCodexModelForAccount } from "../provider/codexAccount";
 import { buildCodexCollaborationMode, normalizeCodexModelSlug } from "./codexModeInstructions";
-import { parseThreadSnapshot } from "./codexAppServerManager.protocol";
+import { resolveCodexModelSelection } from "./codexAppServerManager.modelSelection";
+import { parseThreadSnapshot, readObject, readString } from "./codexAppServerManager.protocol";
 import {
   type CodexAppServerSendTurnInput,
   type CodexAppServerSteerTurnInput,
@@ -92,7 +93,7 @@ export async function sendTurn(
       mode: "default" | "plan";
       settings: {
         model: string;
-        reasoning_effort: string;
+        reasoning_effort?: string;
         developer_instructions: string;
       };
     };
@@ -109,22 +110,31 @@ export async function sendTurn(
   turnStartParams.approvalPolicy = runtimeConfig.approvalPolicy;
   turnStartParams.sandboxPolicy = mapCodexTurnSandboxPolicy(context.session.runtimeMode);
   const normalizedModel = resolveCodexModelForAccount(
-    normalizeCodexModelSlug(input.model ?? context.session.model),
+    normalizeCodexModelSlug(
+      input.model ?? context.session.model ?? context.effectiveModelSelection?.model,
+    ),
     context.account,
   );
-  if (normalizedModel) {
-    turnStartParams.model = normalizedModel;
+  const modelSelection = resolveCodexModelSelection({
+    catalog: context.activeModelCatalog,
+    current: context.effectiveModelSelection,
+    model: normalizedModel,
+    effort: input.effort,
+    modelExplicitlyRequested: input.model !== undefined,
+  });
+  if (modelSelection.model) {
+    turnStartParams.model = modelSelection.model;
   }
   if (input.serviceTier !== undefined) {
     turnStartParams.serviceTier = input.serviceTier;
   }
-  if (input.effort) {
-    turnStartParams.effort = input.effort;
+  if (modelSelection.effort !== undefined) {
+    turnStartParams.effort = modelSelection.effort;
   }
   const collaborationMode = buildCodexCollaborationMode({
     ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
-    ...(normalizedModel !== undefined ? { model: normalizedModel } : {}),
-    ...(input.effort !== undefined ? { effort: input.effort } : {}),
+    ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
+    ...(modelSelection.effort !== undefined ? { effort: modelSelection.effort } : {}),
   });
   if (collaborationMode) {
     if (!turnStartParams.model) {
@@ -135,16 +145,18 @@ export async function sendTurn(
 
   const response = await ops.sendRequest(context, "turn/start", turnStartParams);
 
-  const turn = readObj(readObj(response), "turn");
-  const turnIdRaw = readStr(turn, "id");
+  const turn = readObject(readObject(response), "turn");
+  const turnIdRaw = readString(turn, "id");
   if (!turnIdRaw) {
     throw new Error("turn/start response did not include a turn id.");
   }
   const turnId = TurnId.makeUnsafe(turnIdRaw);
 
+  context.effectiveModelSelection = modelSelection;
   ops.updateSession(context, {
     status: "running",
     activeTurnId: turnId,
+    model: modelSelection.model,
     ...(context.session.resumeCursor !== undefined
       ? { resumeCursor: context.session.resumeCursor }
       : {}),
@@ -202,7 +214,7 @@ export async function steerTurn(
     input: [{ type: "text", text: input.input, text_elements: [] }],
     expectedTurnId: input.expectedTurnId,
   });
-  const acknowledgedTurnId = readStr(readObj(response), "turnId");
+  const acknowledgedTurnId = readString(readObject(response), "turnId");
   if (acknowledgedTurnId !== input.expectedTurnId) {
     throw new Error("turn/steer acknowledgement did not match the expected turn.");
   }
@@ -331,32 +343,4 @@ export function respondToUserInput(
       answers: codexAnswers,
     },
   });
-}
-
-// ---------------------------------------------------------------------------
-// Local helpers
-// ---------------------------------------------------------------------------
-
-function readObj(value: unknown, key?: string): Record<string, unknown> | undefined {
-  const target =
-    key === undefined
-      ? value
-      : value && typeof value === "object"
-        ? (value as Record<string, unknown>)[key]
-        : undefined;
-
-  if (!target || typeof target !== "object") {
-    return undefined;
-  }
-
-  return target as Record<string, unknown>;
-}
-
-function readStr(value: unknown, key: string): string | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const candidate = (value as Record<string, unknown>)[key];
-  return typeof candidate === "string" ? candidate : undefined;
 }

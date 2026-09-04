@@ -123,6 +123,40 @@ describe("inspectCliProxy", () => {
     ]);
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it("isolates concurrent flights with different credentials", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = vi.fn(async (_config: CliProxyConfig, pathname: string) => {
+      if (pathname === "/") await gate;
+      return pathname === "/"
+        ? new Response("CLI Proxy API Server")
+        : new Response(JSON.stringify({ data: [{ id: "gpt-5" }] }));
+    });
+    const first = inspectCliProxy(config, { request });
+    const second = inspectCliProxy({ ...config, apiKey: "other-secret" }, { request });
+    release?.();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [{ id: "gpt-5", name: "gpt-5" }],
+      [{ id: "gpt-5", name: "gpt-5" }],
+    ]);
+    expect(request).toHaveBeenCalledTimes(4);
+  });
+
+  it("clears a rejected inspection flight before the next inspection", async () => {
+    const request = vi.fn(async () => new Response("wrong product"));
+
+    await expect(inspectCliProxy(config, { request })).rejects.toMatchObject({
+      _tag: "HealthProbeFailed",
+    });
+    await expect(inspectCliProxy(config, { request })).rejects.toMatchObject({
+      _tag: "HealthProbeFailed",
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("validateCliProxyModel", () => {

@@ -14,6 +14,10 @@ import {
 } from "@bigbud/contracts";
 
 import { type CodexAccountSnapshot } from "../provider/codexAccount";
+import type {
+  CodexEffectiveModelSelection,
+  CodexModelCatalog,
+} from "./codexAppServerManager.modelSelection";
 
 export type PendingRequestKey = string;
 
@@ -86,6 +90,8 @@ export interface CodexSessionContext {
   pendingApprovals: Map<ApprovalRequestId, PendingApprovalRequest>;
   pendingUserInputs: Map<ApprovalRequestId, PendingUserInputRequest>;
   collabReceiverTurns: Map<string, TurnId>;
+  activeModelCatalog: CodexModelCatalog;
+  effectiveModelSelection: CodexEffectiveModelSelection | undefined;
   nextRequestId: number;
   dynamicToolCallHandler?: CodexDynamicToolCallHandler | undefined;
   cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
@@ -141,7 +147,9 @@ export interface CodexAppServerStartSessionInput {
   readonly executionTargetId?: string;
   readonly cwd?: string;
   readonly model?: string;
+  readonly effort?: string;
   readonly serviceTier?: string;
+  readonly customModels?: ReadonlyArray<string>;
   readonly resumeCursor?: unknown;
   readonly binaryPath: string;
   readonly homePath?: string;

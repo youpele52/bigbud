@@ -124,6 +124,47 @@ export const ServerProviderFailure = Schema.Struct({
 });
 export type ServerProviderFailure = typeof ServerProviderFailure.Type;
 
+export const CliProxyDiagnosticCode = Schema.Literals([
+  "configuration-invalid",
+  "credential-missing",
+  "claude-cli-unavailable",
+  "cli-proxy-unavailable",
+  "service-configuration-unverified",
+  "direct-process-configuration-conflict",
+  "startup-failed",
+  "activation-unavailable",
+  "proxy-not-ready",
+  "authentication-failed",
+  "catalog-unavailable",
+  "catalog-invalid",
+  "catalog-empty",
+  "selected-model-unavailable",
+]);
+export type CliProxyDiagnosticCode = typeof CliProxyDiagnosticCode.Type;
+
+export const CliProxyDiagnosticAction = Schema.Literals([
+  "review-configuration",
+  "update-credentials",
+  "install-or-configure-claude",
+  "install-cli-proxy",
+  "verify-service-configuration",
+  "resolve-process-configuration",
+  "retry-activation",
+  "none",
+  "wait-and-refresh",
+  "review-proxy-configuration",
+  "configure-proxy-models",
+  "choose-available-model",
+]);
+export type CliProxyDiagnosticAction = typeof CliProxyDiagnosticAction.Type;
+
+export const CliProxyDiagnostic = Schema.Struct({
+  code: CliProxyDiagnosticCode,
+  classification: ServerProviderFailureClassification,
+  action: CliProxyDiagnosticAction,
+});
+export type CliProxyDiagnostic = typeof CliProxyDiagnostic.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   enabled: Schema.Boolean,
@@ -136,6 +177,7 @@ export const ServerProvider = Schema.Struct({
   message: Schema.optional(TrimmedNonEmptyString),
   recovery: Schema.optional(ServerProviderRecovery),
   failure: Schema.optional(ServerProviderFailure),
+  cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
   models: Schema.Array(ServerProviderModel),
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   slashCommands: ServerProviderSlashCommands,

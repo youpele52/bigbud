@@ -23,6 +23,18 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Extended the shared availability-probe deadline to 30 seconds for every supported provider, preventing slower healthy CLIs and model discovery from being reported as unavailable.
 - OpenCode and KiloCode startup checks and model-catalog refreshes now reuse the same coordinated timeout policy instead of maintaining a separate provider-specific deadline.
 
+### Codex Model Discovery and Selection
+
+- Added live Codex model catalogs with advertised reasoning efforts and fast-mode capabilities, while keeping configured custom models available without claiming unverified capabilities.
+- Validated explicit Codex models and dynamic reasoning efforts before session and turn requests, preserved selections across turns, and applied model defaults when switching models or starting sessions.
+- Preserved custom-model fast mode for Codex CLI handoffs and Git text generation, and separated model parsing and selection logic for focused regression coverage.
+
+### CLIProxyAPI Diagnostics and Lifecycle
+
+- Replaced free-form CLIProxyAPI availability and activation failures with structured diagnostic codes, classifications, and recovery actions exposed through provider snapshots and WebSocket errors.
+- Distinguished service configuration, direct-process conflicts, startup failures, closed lifecycles, and reused processes during CLIProxyAPI activation while retaining provider state when refreshes fail.
+- Scoped concurrent CLIProxyAPI catalog inspections to normalized configuration and credential identities so unrelated credentials do not share in-flight requests.
+
 ### Terminal and Workspace Navigation
 
 - `Shift+Enter` now inserts exactly one new line in the terminal without interfering with IME composition, plain Enter, modified shortcuts, navigation, deletion, or terminal clearing.
@@ -52,6 +64,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Prevented cleanup recovery from overwhelming the backend and triggering health timeouts or repeated app reconnects.
 - Restored older recovery data safely when records reference threads that no longer exist.
+
+### Validation
+
+- Added regression and integration coverage for dynamic Codex model selection, catalog parsing, custom-model capabilities, CLI flags, and CLIProxyAPI diagnostics and lifecycle behavior.
+- Verified formatting, linting, workspace type checks, and focused server, web, contracts, and shared-package test suites.
 
 ## v0.2.206 (31 August, 2026)
 

@@ -1,5 +1,4 @@
 import {
-  CODEX_REASONING_EFFORT_OPTIONS,
   COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
   COMPOSER_DRAFT_STORAGE_KEY,
   COMPOSER_DRAFT_STORAGE_VERSION,
@@ -12,6 +11,7 @@ import {
   RuntimeMode,
   ThreadId,
 } from "@bigbud/contracts";
+import { CodexReasoningEffort } from "@bigbud/contracts/core/model";
 import * as Schema from "effect/Schema";
 import { type TerminalContextDraft } from "../../lib/terminalContext";
 import {
@@ -121,7 +121,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
 export type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
 export const LegacyCodexFields = Schema.Struct({
-  effort: Schema.optionalKey(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  effort: Schema.optionalKey(CodexReasoningEffort),
   codexFastMode: Schema.optionalKey(Schema.Boolean),
   serviceTier: Schema.optionalKey(Schema.String),
 });

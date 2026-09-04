@@ -1,4 +1,5 @@
 import {
+  CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   PI_THINKING_LEVEL_OPTIONS,
   PROVIDER_KINDS,
@@ -8,10 +9,16 @@ import {
   type ProviderKind,
   type ProviderModelOptions,
 } from "@bigbud/contracts";
-import { normalizeModelSlug } from "@bigbud/shared/model";
+import { normalizeModelSlug, trimOrNull } from "@bigbud/shared/model";
 
 import { cloneModelSelection, createModelSelection } from "../../models/provider";
 import { type LegacyCodexFields } from "./types.store";
+
+type FixedCodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[number];
+
+function normalizeCodexReasoningEffort(value: unknown): CodexReasoningEffort | undefined {
+  return typeof value === "string" ? (trimOrNull(value) ?? undefined) : undefined;
+}
 
 function normalizeProviderOptionsCandidate(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) {
@@ -38,19 +45,9 @@ export function normalizeProviderModelOptions(
   const codexCandidate = normalizeProviderOptionsCandidate(candidate?.codex);
   const claudeCandidate = normalizeProviderOptionsCandidate(candidate?.claudeAgent);
 
-  const codexReasoningEffort: CodexReasoningEffort | undefined =
-    codexCandidate?.reasoningEffort === "low" ||
-    codexCandidate?.reasoningEffort === "medium" ||
-    codexCandidate?.reasoningEffort === "high" ||
-    codexCandidate?.reasoningEffort === "xhigh"
-      ? codexCandidate.reasoningEffort
-      : provider === "codex" &&
-          (legacy?.effort === "low" ||
-            legacy?.effort === "medium" ||
-            legacy?.effort === "high" ||
-            legacy?.effort === "xhigh")
-        ? legacy.effort
-        : undefined;
+  const codexReasoningEffort =
+    normalizeCodexReasoningEffort(codexCandidate?.reasoningEffort) ??
+    (provider === "codex" ? normalizeCodexReasoningEffort(legacy?.effort) : undefined);
   const codexFastMode =
     codexCandidate?.fastMode === true
       ? true
@@ -110,7 +107,7 @@ export function normalizeProviderModelOptions(
       : undefined;
 
   const copilotCandidate = normalizeProviderOptionsCandidate(candidate?.copilot);
-  const copilotReasoningEffort: CodexReasoningEffort | undefined =
+  const copilotReasoningEffort: FixedCodexReasoningEffort | undefined =
     copilotCandidate?.reasoningEffort === "low" ||
     copilotCandidate?.reasoningEffort === "medium" ||
     copilotCandidate?.reasoningEffort === "high" ||
@@ -121,7 +118,7 @@ export function normalizeProviderModelOptions(
     copilotReasoningEffort !== undefined ? { reasoningEffort: copilotReasoningEffort } : undefined;
 
   const opencodeCandidate = normalizeProviderOptionsCandidate(candidate?.opencode);
-  const opencodeReasoningEffort: CodexReasoningEffort | undefined =
+  const opencodeReasoningEffort: FixedCodexReasoningEffort | undefined =
     opencodeCandidate?.reasoningEffort === "low" ||
     opencodeCandidate?.reasoningEffort === "medium" ||
     opencodeCandidate?.reasoningEffort === "high" ||
@@ -134,7 +131,7 @@ export function normalizeProviderModelOptions(
       : undefined;
 
   const kilocodeCandidate = normalizeProviderOptionsCandidate(candidate?.kilocode);
-  const kilocodeReasoningEffort: CodexReasoningEffort | undefined =
+  const kilocodeReasoningEffort: FixedCodexReasoningEffort | undefined =
     kilocodeCandidate?.reasoningEffort === "low" ||
     kilocodeCandidate?.reasoningEffort === "medium" ||
     kilocodeCandidate?.reasoningEffort === "high" ||
@@ -155,7 +152,7 @@ export function normalizeProviderModelOptions(
   const pi = piThinkingLevel !== undefined ? { thinkingLevel: piThinkingLevel } : undefined;
 
   const cursorCandidate = normalizeProviderOptionsCandidate(candidate?.cursor);
-  const cursorReasoning: CodexReasoningEffort | undefined =
+  const cursorReasoning: FixedCodexReasoningEffort | undefined =
     cursorCandidate?.reasoning === "low" ||
     cursorCandidate?.reasoning === "medium" ||
     cursorCandidate?.reasoning === "high" ||

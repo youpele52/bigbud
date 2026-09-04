@@ -11,10 +11,19 @@ import { Effect } from "effect";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { readCodexAccountSnapshot, resolveCodexModelForAccount } from "../provider/codexAccount";
 import { buildCodexInitializeParams } from "../provider/codexAppServer";
+import {
+  includeConfiguredCodexModels,
+  parseCodexModelsResult,
+} from "../provider/codexAppServer.models";
+import {
+  isCodexModelSelectionError,
+  resolveCodexModelSelection,
+} from "./codexAppServerManager.modelSelection";
 import { normalizeCodexModelSlug } from "./codexModeInstructions";
 import { isRecoverableThreadResumeError } from "./codexStderrClassifier";
 import { startCodexAppServerProcess } from "./codexAppServerManager.process";
 import { hasReadyMcpServers, sleep } from "./codexAppServerManager.mcp";
+import { readObject, readString } from "./codexAppServerManager.protocol";
 import {
   type CodexAppServerStartSessionInput,
   type CodexSessionContext,
@@ -42,6 +51,7 @@ export interface StartSessionOps {
 
 const MCP_SERVER_STATUS_RETRY_DELAY_MS = 150;
 const MCP_SERVER_STATUS_TIMEOUT_MS = 4_000;
+const MODEL_CATALOG_TIMEOUT_MS = 5_000;
 
 export async function waitForMcpServersReady(
   context: CodexSessionContext,
@@ -130,7 +140,7 @@ export async function startSession(
       account: {
         type: "unknown",
         planType: null,
-        sparkEnabled: true,
+        sparkEnabled: false,
       },
       child,
       output,
@@ -138,6 +148,8 @@ export async function startSession(
       pendingApprovals: new Map(),
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
+      activeModelCatalog: undefined,
+      effectiveModelSelection: undefined,
       nextRequestId: 1,
       ...(input.dynamicToolCallHandler
         ? { dynamicToolCallHandler: input.dynamicToolCallHandler }
@@ -157,9 +169,20 @@ export async function startSession(
     ops.writeMessage(context, { method: "initialized" });
     await waitForMcpServersReady(context, ops, input.expectedMcpServerNames ?? []);
     try {
-      const modelListResponse = await ops.sendRequest(context, "model/list", {});
+      const modelListResponse = await ops.sendRequest(
+        context,
+        "model/list",
+        {},
+        MODEL_CATALOG_TIMEOUT_MS,
+      );
+      const parsedModels = parseCodexModelsResult(modelListResponse);
+      context.activeModelCatalog =
+        parsedModels === undefined
+          ? undefined
+          : includeConfiguredCodexModels(parsedModels, input.customModels ?? []);
       console.log("codex model/list response", modelListResponse);
     } catch (error) {
+      context.activeModelCatalog = undefined;
       console.log("codex model/list failed", error);
     }
     try {
@@ -179,9 +202,19 @@ export async function startSession(
       normalizeCodexModelSlug(input.model),
       context.account,
     );
+    const modelSelection = resolveCodexModelSelection({
+      catalog: context.activeModelCatalog,
+      current: context.effectiveModelSelection,
+      model: normalizedModel,
+      effort: input.effort,
+      modelExplicitlyRequested: input.model !== undefined,
+    });
     const sessionOverrides = {
-      model: normalizedModel ?? null,
+      model: modelSelection.model ?? null,
       ...(input.serviceTier !== undefined ? { serviceTier: input.serviceTier } : {}),
+      ...(modelSelection.effort !== undefined
+        ? { config: { model_reasoning_effort: modelSelection.effort } }
+        : {}),
       cwd: input.cwd ?? null,
       ...(input.developerInstructions
         ? { developerInstructions: input.developerInstructions }
@@ -258,17 +291,19 @@ export async function startSession(
       threadOpenResponse = await ops.sendRequest(context, "thread/start", threadStartParams);
     }
 
-    const threadOpenRecord = readObjectHelper(threadOpenResponse);
+    const threadOpenRecord = readObject(threadOpenResponse);
     const threadIdRaw =
-      readStringHelper(readObjectHelper(threadOpenRecord, "thread"), "id") ??
-      readStringHelper(threadOpenRecord, "threadId");
+      readString(readObject(threadOpenRecord, "thread"), "id") ??
+      readString(threadOpenRecord, "threadId");
     if (!threadIdRaw) {
       throw new Error(`${threadOpenMethod} response did not include a thread id.`);
     }
     const providerThreadId = threadIdRaw;
 
+    context.effectiveModelSelection = modelSelection;
     ops.updateSession(context, {
       status: "ready",
+      model: modelSelection.model,
       resumeCursor: { threadId: providerThreadId },
     });
     ops.emitLifecycleEvent(
@@ -305,34 +340,9 @@ export async function startSession(
         message,
       });
     }
+    if (isCodexModelSelectionError(error)) {
+      throw error;
+    }
     throw new Error(message, { cause: error });
   }
-}
-
-// ---------------------------------------------------------------------------
-// Local helpers (mirror the class's private readObject/readString)
-// ---------------------------------------------------------------------------
-
-function readObjectHelper(value: unknown, key?: string): Record<string, unknown> | undefined {
-  const target =
-    key === undefined
-      ? value
-      : value && typeof value === "object"
-        ? (value as Record<string, unknown>)[key]
-        : undefined;
-
-  if (!target || typeof target !== "object") {
-    return undefined;
-  }
-
-  return target as Record<string, unknown>;
-}
-
-function readStringHelper(value: unknown, key: string): string | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const candidate = (value as Record<string, unknown>)[key];
-  return typeof candidate === "string" ? candidate : undefined;
 }

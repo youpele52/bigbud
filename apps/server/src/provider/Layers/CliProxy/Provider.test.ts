@@ -30,13 +30,8 @@ describe("checkCliProxyProvider", () => {
           Layer.mergeAll(
             ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),
             Layer.succeed(CliProxyLifecycle, {
-              isClaudeRunnable: async () =>
-                ({
-                  _tag: "missing",
-                  command: "claude",
-                }) as const,
-              activate: async () =>
-                ({ _tag: "unavailable", strategy: "none", detail: "unused" }) as const,
+              isClaudeRunnable: async () => ({ _tag: "missing" }) as const,
+              activate: async () => ({ _tag: "unavailable" }) as const,
             }),
           ),
         ),
@@ -44,6 +39,11 @@ describe("checkCliProxyProvider", () => {
     );
 
     expect(status.status).toBe("warning");
-    expect(status.message).toContain("requires a runnable configured Claude CLI");
+    expect(status.message).toBeUndefined();
+    expect(status.cliProxyDiagnostic).toEqual({
+      code: "claude-cli-unavailable",
+      classification: "user-action-required",
+      action: "install-or-configure-claude",
+    });
   });
 });

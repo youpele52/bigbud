@@ -1,4 +1,5 @@
 import type { ProviderSessionStartInput, ServerSettings } from "@bigbud/contracts";
+import type { CliProxyDiagnostic } from "@bigbud/contracts/server/server.providers.ts";
 import { Effect } from "effect";
 
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -18,10 +19,17 @@ import {
   validateCliProxyModel,
   type CliProxyModel,
 } from "./Client.ts";
+import { diagnosticForActivationResult, diagnosticForCommandResult } from "./Diagnostic.ts";
 import { resolveCliProxyConfig, type CliProxyConfig } from "./config.ts";
 
 const ACTIVATION_RETRY_ATTEMPTS = 5;
 const ACTIVATION_RETRY_DELAY_MS = 1_000;
+
+export class CliProxyActivationFailure extends Error {
+  constructor(readonly diagnostic: CliProxyDiagnostic) {
+    super(diagnostic.code);
+  }
+}
 
 export interface CliProxyRuntimeConfig {
   readonly config: CliProxyConfig;
@@ -39,12 +47,11 @@ type InspectionResult =
   | { readonly _tag: "success"; readonly models: ReadonlyArray<CliProxyModel> }
   | { readonly _tag: "failure"; readonly cause: unknown };
 
-function processError(input: ProviderSessionStartInput, detail: string, cause?: unknown) {
+function processError(input: ProviderSessionStartInput, detail: string) {
   return new ProviderAdapterProcessError({
     provider: "cliProxy",
     threadId: input.threadId,
     detail,
-    ...(cause === undefined ? {} : { cause }),
   });
 }
 
@@ -69,7 +76,7 @@ async function inspectAfterActivation(
     const result = await attemptInspection(config, inspect);
     if (result._tag === "success") return result.models;
     lastError = result.cause;
-    if (lastError instanceof CliProxyClientError && lastError._tag !== "HealthProbeFailed") {
+    if (!(lastError instanceof CliProxyClientError) || lastError._tag !== "HealthProbeFailed") {
       throw lastError;
     }
   }
@@ -94,27 +101,21 @@ export async function activateCliProxyRuntime(
     binaryPath: settings.providers.claudeAgent.binaryPath,
   });
   if (claudeRunnable._tag !== "available") {
-    throw new Error(
-      claudeRunnable._tag === "timeout"
-        ? "The configured Claude CLI version check timed out."
-        : claudeRunnable._tag === "missing"
-          ? "The configured Claude CLI is not installed or not on PATH."
-          : claudeRunnable.detail,
-    );
+    throw new CliProxyActivationFailure(diagnosticForCommandResult(claudeRunnable));
   }
 
   try {
     await inspect(config);
     return;
   } catch (cause) {
-    if (cause instanceof CliProxyClientError && cause._tag !== "HealthProbeFailed") {
+    if (!(cause instanceof CliProxyClientError) || cause._tag !== "HealthProbeFailed") {
       throw cause;
     }
   }
 
   const activation = await input.lifecycle.activate({ configPath: config.configPath });
-  if (activation._tag === "unavailable") {
-    throw new Error(activation.detail);
+  if (activation._tag !== "started") {
+    throw new CliProxyActivationFailure(diagnosticForActivationResult(activation));
   }
   const sleep =
     options.sleep ??
@@ -137,9 +138,7 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
     const settingsService = yield* ServerSettingsService;
     const lifecycle = yield* CliProxyLifecycle;
     const settings = yield* settingsService.getSettings.pipe(
-      Effect.mapError((cause) =>
-        processError(input, `Failed to load CLIProxyAPI settings: ${cause.message}`, cause),
-      ),
+      Effect.mapError(() => processError(input, "CLIProxyAPI settings are unavailable.")),
     );
     if (!settings.providers.cliProxy.enabled) {
       return yield* new ProviderAdapterValidationError({
@@ -161,26 +160,16 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
 
     const config = yield* Effect.try({
       try: () => resolveCliProxyConfig(settings.providers.cliProxy.configPath || undefined),
-      catch: (cause) =>
-        processError(
-          input,
-          cause instanceof Error ? cause.message : "Failed to resolve CLIProxyAPI configuration.",
-          cause,
-        ),
+      catch: () => processError(input, "CLIProxyAPI configuration is unavailable."),
     });
 
     const claudeRunnable = yield* Effect.tryPromise({
       try: () =>
         lifecycle.isClaudeRunnable({ binaryPath: settings.providers.claudeAgent.binaryPath }),
-      catch: (cause) => processError(input, "Failed to inspect the configured Claude CLI.", cause),
+      catch: () => processError(input, "Failed to inspect the configured Claude CLI."),
     });
     if (claudeRunnable._tag !== "available") {
-      return yield* processError(
-        input,
-        claudeRunnable._tag === "timeout"
-          ? "The configured Claude CLI version check timed out."
-          : "CLIProxyAPI requires a runnable configured Claude CLI.",
-      );
+      return yield* processError(input, "CLIProxyAPI requires a runnable configured Claude CLI.");
     }
 
     const initialInspection = yield* Effect.promise(() => attemptInspection(config, inspect));
@@ -189,17 +178,17 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
       models = initialInspection.models;
     } else {
       if (
-        initialInspection.cause instanceof CliProxyClientError &&
+        !(initialInspection.cause instanceof CliProxyClientError) ||
         initialInspection.cause._tag !== "HealthProbeFailed"
       ) {
-        return yield* processError(input, initialInspection.cause.message, initialInspection.cause);
+        return yield* processError(input, "CLIProxyAPI inspection failed.");
       }
       const activation = yield* Effect.tryPromise({
         try: () => lifecycle.activate({ configPath: config.configPath }),
-        catch: (cause) => processError(input, "CLIProxyAPI activation failed.", cause),
+        catch: () => processError(input, "CLIProxyAPI activation failed."),
       });
-      if (activation._tag === "unavailable") {
-        return yield* processError(input, activation.detail);
+      if (activation._tag !== "started") {
+        return yield* processError(input, "CLIProxyAPI could not be activated.");
       }
       const sleep =
         options.sleep ??
@@ -209,26 +198,17 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
           }));
       models = yield* Effect.tryPromise({
         try: () => inspectAfterActivation(config, inspect, sleep),
-        catch: (cause) =>
-          processError(
-            input,
-            cause instanceof Error
-              ? cause.message
-              : "CLIProxyAPI did not become ready after activation.",
-            cause,
-          ),
+        catch: () => processError(input, "CLIProxyAPI did not become ready after activation."),
       });
     }
 
     yield* Effect.try({
       try: () => validateCliProxyModel(models, requestedModel),
-      catch: (cause) =>
+      catch: () =>
         new ProviderAdapterValidationError({
           provider: "cliProxy",
           operation: "startSession",
-          issue:
-            cause instanceof Error ? cause.message : `Model '${requestedModel}' is unavailable.`,
-          ...(cause === undefined ? {} : { cause }),
+          issue: "The selected CLIProxyAPI model is unavailable.",
         }),
     });
 

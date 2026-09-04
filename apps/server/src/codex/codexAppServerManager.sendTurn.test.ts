@@ -12,8 +12,22 @@ vi.mock("./codexVersionCheck", () => ({
 
 describe("sendTurn", () => {
   it("sends text and image user input items to turn/start", async () => {
-    const { manager, context, requireSession, sendRequest, updateSession } =
-      createSendTurnHarness();
+    const { manager, context, requireSession, sendRequest, updateSession } = createSendTurnHarness({
+      activeModelCatalog: [
+        {
+          slug: "gpt-5.3-codex",
+          name: "GPT-5.3 Codex",
+          isCustom: false,
+          capabilities: {
+            reasoningEffortLevels: [{ value: "high", label: "High" }],
+            supportsFastMode: true,
+            supportsThinkingToggle: false,
+            contextWindowOptions: [],
+            promptInjectedEffortLevels: [],
+          },
+        },
+      ],
+    });
 
     const result = await manager.sendTurn({
       threadId: asThreadId("thread_1"),
@@ -62,6 +76,7 @@ describe("sendTurn", () => {
     expect(updateSession).toHaveBeenCalledWith(context, {
       status: "running",
       activeTurnId: "turn_1",
+      model: "gpt-5.3-codex",
       resumeCursor: { threadId: "thread_1" },
     });
   });
@@ -126,7 +141,6 @@ describe("sendTurn", () => {
           mode: "plan",
           settings: {
             model: "gpt-5.3-codex",
-            reasoning_effort: "medium",
             developer_instructions: CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
           },
         },
@@ -163,7 +177,6 @@ describe("sendTurn", () => {
           mode: "default",
           settings: {
             model: "gpt-5.3-codex",
-            reasoning_effort: "medium",
             developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
           },
         },
@@ -201,7 +214,6 @@ describe("sendTurn", () => {
           mode: "plan",
           settings: {
             model: "gpt-5.2-codex",
-            reasoning_effort: "medium",
             developer_instructions: CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
           },
         },

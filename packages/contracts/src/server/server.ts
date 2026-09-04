@@ -12,7 +12,12 @@ import {
   ServerLifecycleStreamWelcomeEvent,
   ServerLifecycleWelcomePayload,
 } from "./server.lifecycle";
-import { ServerConfigIssues, ServerDiscoveryCatalog, ServerProviders } from "./server.providers";
+import {
+  CliProxyDiagnostic,
+  ServerConfigIssues,
+  ServerDiscoveryCatalog,
+  ServerProviders,
+} from "./server.providers";
 
 export * from "./server.providers";
 
@@ -305,8 +310,8 @@ export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.T
 export class ServerCliProxyActivationError extends Schema.TaggedErrorClass<ServerCliProxyActivationError>()(
   "ServerCliProxyActivationError",
   {
-    message: TrimmedNonEmptyString,
-    cause: Schema.optional(Schema.Defect),
+    diagnostic: CliProxyDiagnostic,
+    providers: ServerProviders,
   },
 ) {}
 

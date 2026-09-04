@@ -19,7 +19,11 @@ import { ProjectionOperationalStateQuery } from "../orchestration/Services/Proje
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { CliProxyLifecycle } from "../provider/Services/CliProxy/Lifecycle.ts";
-import { activateCliProxyRuntime } from "../provider/Layers/CliProxy/RuntimeConfig.ts";
+import {
+  activateCliProxyRuntime,
+  CliProxyActivationFailure,
+} from "../provider/Layers/CliProxy/RuntimeConfig.ts";
+import { cliProxyDiagnostic } from "../provider/Layers/CliProxy/Diagnostic.ts";
 import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
@@ -52,7 +56,7 @@ import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/PluginRegistry";
-import { makeCoalescedPromiseEffect, toError } from "./wsRpcContext.helpers";
+import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
@@ -199,19 +203,37 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
 
     const activateCliProxy = makeCoalescedPromiseEffect(() =>
       Effect.gen(function* () {
-        const settings = yield* serverSettings.getSettings;
-        if (Option.isNone(cliProxyLifecycleOption)) {
-          return yield* Effect.fail(
-            new Error("CLIProxyAPI is not available in this server build."),
-          );
+        let diagnostic;
+        const settings = yield* serverSettings.getSettings.pipe(Effect.result);
+        if (settings._tag === "Failure") {
+          diagnostic = cliProxyDiagnostic("activation-unavailable");
+        } else if (Option.isNone(cliProxyLifecycleOption)) {
+          diagnostic = cliProxyDiagnostic("activation-unavailable");
+        } else {
+          const activation = yield* Effect.tryPromise({
+            try: () =>
+              activateCliProxyRuntime({
+                settings: settings.success,
+                lifecycle: cliProxyLifecycleOption.value,
+              }),
+            catch: (cause): CliProxyActivationFailure | undefined =>
+              cause instanceof CliProxyActivationFailure ? cause : undefined,
+          }).pipe(Effect.result);
+          if (activation._tag === "Failure") {
+            diagnostic =
+              activation.failure instanceof CliProxyActivationFailure
+                ? activation.failure.diagnostic
+                : cliProxyDiagnostic("activation-unavailable");
+          }
         }
-        yield* Effect.tryPromise({
-          try: () =>
-            activateCliProxyRuntime({ settings, lifecycle: cliProxyLifecycleOption.value }),
-          catch: toError,
-        });
-        return yield* providerRegistry.refresh("cliProxy");
-      }).pipe(Effect.mapError(toError)),
+
+        const refreshed = yield* providerRegistry.refresh("cliProxy").pipe(Effect.result);
+        const providers =
+          refreshed._tag === "Success"
+            ? refreshed.success
+            : yield* providerRegistry.getProviders.pipe(Effect.orElseSucceed(() => []));
+        return diagnostic === undefined ? { providers } : { providers, diagnostic };
+      }),
     );
 
     const loadServerConfig = Effect.gen(function* () {

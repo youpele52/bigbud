@@ -9,7 +9,11 @@ import { generateCodexHandoff } from "./wsHandoffJobs.cli.ts";
 
 const HandoffCliTestLayer = Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest());
 
-function makeFakeCodexBinary(fs: FileSystem.FileSystem, dir: string): Effect.Effect<string, never> {
+function makeFakeCodexBinary(
+  fs: FileSystem.FileSystem,
+  dir: string,
+  options: { readonly requireFastServiceTier?: boolean } = {},
+): Effect.Effect<string, never> {
   const codexPath = `${dir}/codex`;
   return Effect.gen(function* () {
     yield* fs.writeFileString(
@@ -17,10 +21,19 @@ function makeFakeCodexBinary(fs: FileSystem.FileSystem, dir: string): Effect.Eff
       [
         "#!/bin/sh",
         'output_path=""',
+        'seen_fast_service_tier="0"',
         'seen_skip_git_repo_check="0"',
         "while [ $# -gt 0 ]; do",
         '  if [ "$1" = "--skip-git-repo-check" ]; then',
         '    seen_skip_git_repo_check="1"',
+        "    shift",
+        "    continue",
+        "  fi",
+        '  if [ "$1" = "--config" ]; then',
+        "    shift",
+        '    if [ "$1" = "service_tier=\\"fast\\"" ]; then',
+        '      seen_fast_service_tier="1"',
+        "    fi",
         "    shift",
         "    continue",
         "  fi",
@@ -36,6 +49,14 @@ function makeFakeCodexBinary(fs: FileSystem.FileSystem, dir: string): Effect.Eff
         '  printf "%s\\n" "missing --skip-git-repo-check" >&2',
         "  exit 8",
         "fi",
+        ...(options.requireFastServiceTier
+          ? [
+              'if [ "$seen_fast_service_tier" != "1" ]; then',
+              '  printf "%s\\n" "missing fast service tier config" >&2',
+              "  exit 5",
+              "fi",
+            ]
+          : []),
         "cat > \"$output_path\" <<'__BIGBUD_HANDOFF_OUTPUT__'",
         JSON.stringify({ markdown: "# Handoff\n\nBody" }),
         "__BIGBUD_HANDOFF_OUTPUT__",
@@ -49,7 +70,7 @@ function makeFakeCodexBinary(fs: FileSystem.FileSystem, dir: string): Effect.Eff
 }
 
 it.layer(HandoffCliTestLayer)("generateCodexHandoff", (it) => {
-  it.effect("passes skip git repo check for chat-only handoff cwd", () =>
+  it.effect("passes CLI flags for a configured custom Codex model", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -58,9 +79,16 @@ it.layer(HandoffCliTestLayer)("generateCodexHandoff", (it) => {
         const tempDir = yield* fileSystem.makeTempDirectoryScoped({
           prefix: "bigbud-handoff-cli-test-",
         });
-        const codexPath = yield* makeFakeCodexBinary(fileSystem, tempDir);
+        const codexPath = yield* makeFakeCodexBinary(fileSystem, tempDir, {
+          requireFastServiceTier: true,
+        });
         yield* serverSettings.updateSettings({
-          providers: { codex: { binaryPath: codexPath } },
+          providers: {
+            codex: {
+              binaryPath: codexPath,
+              customModels: ["custom-codex"],
+            },
+          },
         });
 
         const markdown = yield* generateCodexHandoff(
@@ -73,7 +101,11 @@ it.layer(HandoffCliTestLayer)("generateCodexHandoff", (it) => {
           {
             cwd: tempDir,
             prompt: "handoff",
-            modelSelection: { provider: "codex", model: "gpt-5.4-mini" },
+            modelSelection: {
+              provider: "codex",
+              model: "custom-codex",
+              options: { fastMode: true },
+            },
           },
         );
 

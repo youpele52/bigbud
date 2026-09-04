@@ -7,7 +7,6 @@ import {
 } from "@bigbud/contracts";
 import {
   normalizeClaudeModelOptionsWithCapabilities,
-  normalizeCodexModelOptionsWithCapabilities,
   resolveApiModelId,
 } from "@bigbud/shared/model";
 
@@ -18,7 +17,7 @@ import {
 } from "../git/Layers/CodexTextGeneration.helpers.ts";
 import { normalizeCliError, toJsonSchemaObject } from "../git/Utils.ts";
 import { getClaudeModelCapabilities } from "../provider/Layers/Claude/Provider.ts";
-import { getCodexModelCapabilities } from "../provider/Layers/Codex/Provider.ts";
+import { shouldEnableCodexCliFastMode } from "../provider/Layers/Codex/Provider.cliOptions.ts";
 import type { ProjectionSnapshotQueryShape } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import type { ServerSettingsShape } from "./serverSettings.ts";
 import {
@@ -192,10 +191,11 @@ export function generateCodexHandoff(
         Effect.map((settings) => settings.providers.codex),
         Effect.catch(() => Effect.undefined),
       );
-      const normalizedOptions = normalizeCodexModelOptionsWithCapabilities(
-        getCodexModelCapabilities(input.modelSelection.model),
-        input.modelSelection.options,
-      );
+      const fastMode = shouldEnableCodexCliFastMode({
+        model: input.modelSelection.model,
+        options: input.modelSelection.options,
+        customModels: codexSettings?.customModels ?? [],
+      });
 
       const cleanup = Effect.all(
         [schemaPath, outputPath].map((filePath) => safeUnlink(deps.fileSystem, filePath)),
@@ -217,7 +217,7 @@ export function generateCodexHandoff(
                 input.modelSelection.model,
                 "--config",
                 `model_reasoning_effort="${input.modelSelection.options?.reasoningEffort ?? "low"}"`,
-                ...(normalizedOptions?.fastMode ? ["--config", `service_tier="fast"`] : []),
+                ...(fastMode ? ["--config", `service_tier="fast"`] : []),
                 "--output-schema",
                 schemaPath,
                 "--output-last-message",

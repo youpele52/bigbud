@@ -1,3 +1,6 @@
+import { createHmac, randomBytes } from "node:crypto";
+import path from "node:path";
+
 import type { CliProxyConfig } from "./config.ts";
 
 export interface CliProxyModel {
@@ -38,6 +41,14 @@ export type CliProxyHttpRequest = (config: CliProxyConfig, pathname: string) => 
 
 const REQUEST_TIMEOUT_MS = 2_000;
 const CLIENT_PROFILE_VERSION = "0.1.0";
+const inspectionFlightSecret = randomBytes(32);
+
+function inspectionFlightKey(config: CliProxyConfig): string {
+  const credentialIdentity = createHmac("sha256", inspectionFlightSecret)
+    .update(config.apiKey)
+    .digest("hex");
+  return `${path.resolve(config.configPath)}\u0000${config.baseUrl.href}\u0000${credentialIdentity}`;
+}
 
 const defaultRequest: CliProxyHttpRequest = (config, pathname) =>
   fetch(new URL(pathname, config.baseUrl), {
@@ -147,7 +158,7 @@ export async function inspectCliProxy(
   options: { readonly request?: CliProxyHttpRequest } = {},
 ): Promise<ReadonlyArray<CliProxyModel>> {
   const request = options.request ?? defaultRequest;
-  const key = `${config.configPath}\u0000${config.baseUrl.href}\u0000${config.apiKey}`;
+  const key = inspectionFlightKey(config);
   const existing = inspectionFlights.get(key);
   if (existing) return existing;
   const flight = inspectCliProxyUncached(config, request).finally(() => {

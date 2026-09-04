@@ -170,7 +170,7 @@ export function buildCodexCollaborationMode(input: {
       mode: "default" | "plan";
       settings: {
         model: string;
-        reasoning_effort: string;
+        reasoning_effort?: string;
         developer_instructions: string;
       };
     }
@@ -183,7 +183,7 @@ export function buildCodexCollaborationMode(input: {
     mode: input.interactionMode,
     settings: {
       model,
-      reasoning_effort: input.effort ?? "medium",
+      ...(input.effort !== undefined ? { reasoning_effort: input.effort } : {}),
       developer_instructions:
         input.interactionMode === "plan"
           ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS

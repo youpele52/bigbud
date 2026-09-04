@@ -25,6 +25,7 @@
     "./constants/providerRuntime.constant": "./src/constants/providerRuntime.constant.ts",
     "./constants/settings.constant": "./src/constants/settings.constant.ts",
     "./core/baseSchemas": "./src/core/baseSchemas.ts",
+    "./core/model": "./src/core/model.ts",
     "./core/settings.threadRetention": "./src/core/settings.threadRetention.ts",
     "./core/*": "./src/core/*",
     "./orchestration/*": "./src/orchestration/*",

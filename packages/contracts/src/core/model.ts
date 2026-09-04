@@ -16,12 +16,13 @@ export {
   PROVIDER_DISPLAY_NAMES,
 };
 
-export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[number];
+export const CodexReasoningEffort = TrimmedNonEmptyString;
+export type CodexReasoningEffort = typeof CodexReasoningEffort.Type;
 export type ClaudeCodeEffort = string;
 export type ProviderReasoningEffort = CodexReasoningEffort | ClaudeCodeEffort;
 
 export const CodexModelOptions = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  reasoningEffort: Schema.optional(CodexReasoningEffort),
   fastMode: Schema.optional(Schema.Boolean),
 });
 export type CodexModelOptions = typeof CodexModelOptions.Type;
