@@ -15,6 +15,7 @@ import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
 interface LoaderHarnessProps {
   readonly workspaceKey: string;
   readonly workspaceRoot: string;
+  readonly workspaceExecutionTargetId?: string | undefined;
   readonly initialExpandedPaths?: ReadonlyArray<string>;
 }
 
@@ -28,7 +29,7 @@ interface LoaderHarnessHandle {
 }
 
 const LoaderHarness = forwardRef<LoaderHarnessHandle, LoaderHarnessProps>(function LoaderHarness(
-  { workspaceKey, workspaceRoot, initialExpandedPaths = [] },
+  { workspaceKey, workspaceRoot, workspaceExecutionTargetId, initialExpandedPaths = [] },
   ref,
 ) {
   const previewPath = useFilesPanelStore((state) => state.previewPath);
@@ -51,6 +52,7 @@ const LoaderHarness = forwardRef<LoaderHarnessHandle, LoaderHarnessProps>(functi
   );
   const { directoryStateByPath, loadDirectory } = useFilesPanelDirectoryLoader({
     workspaceRoot,
+    workspaceExecutionTargetId,
     previewPathRef,
     previewPositionRef,
     setPreviewPath,
@@ -131,6 +133,27 @@ describe("useFilesPanelDirectoryLoader lifecycle", () => {
 
     await loaderRef.current?.loadDirectory("");
     await vi.waitFor(() => expect(loaderRef.current?.getDirectoryPaths()).toEqual([""]));
+  });
+
+  it("forwards the remote execution target when loading a directory", async () => {
+    mocks.listDirectory.mockResolvedValue({ entries: [] });
+    const loaderRef = createRef<LoaderHarnessHandle>();
+    await render(
+      <LoaderHarness
+        ref={loaderRef}
+        workspaceKey="remote-project"
+        workspaceRoot="/srv/project"
+        workspaceExecutionTargetId="ssh:dev"
+      />,
+    );
+
+    await loaderRef.current?.loadDirectory("src");
+
+    expect(mocks.listDirectory).toHaveBeenCalledWith({
+      cwd: "/srv/project",
+      executionTargetId: "ssh:dev",
+      relativePath: "src",
+    });
   });
 
   it("prunes removed descendants, expansion state, preview, and history", async () => {

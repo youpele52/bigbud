@@ -319,9 +319,9 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   )}
                   {question.options.length > 0 && (
                     <ul className="space-y-1 pl-3">
-                      {question.options.map((option) => (
+                      {question.options.map((option, index) => (
                         <li
-                          key={`${question.id}:${option.label}:${option.description ?? ""}`}
+                          key={`${question.id}:${option.id ?? `index:${index}`}`}
                           className="text-sm text-muted-foreground/70"
                         >
                           <span className="font-medium text-foreground/70">{option.label}</span>

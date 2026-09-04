@@ -7,6 +7,13 @@ import {
   resolvePathLinkTarget,
 } from "./links.utils";
 
+const primarySingleClick = {
+  shiftKey: false,
+  altKey: false,
+  button: 0,
+  detail: 1,
+};
+
 describe("extractTerminalLinks", () => {
   it("finds http urls and path tokens", () => {
     const line =
@@ -154,6 +161,7 @@ describe("isTerminalLinkActivation", () => {
         {
           metaKey: true,
           ctrlKey: false,
+          ...primarySingleClick,
         },
         "MacIntel",
       ),
@@ -163,6 +171,7 @@ describe("isTerminalLinkActivation", () => {
         {
           metaKey: false,
           ctrlKey: true,
+          ...primarySingleClick,
         },
         "MacIntel",
       ),
@@ -175,6 +184,7 @@ describe("isTerminalLinkActivation", () => {
         {
           metaKey: false,
           ctrlKey: true,
+          ...primarySingleClick,
         },
         "Win32",
       ),
@@ -184,9 +194,37 @@ describe("isTerminalLinkActivation", () => {
         {
           metaKey: true,
           ctrlKey: false,
+          ...primarySingleClick,
         },
         "Linux",
       ),
     ).toBe(false);
+  });
+
+  it("requires the exact platform modifier on a primary single click", () => {
+    const cases = [
+      { metaKey: false, ctrlKey: false, ...primarySingleClick },
+      { metaKey: false, ctrlKey: true, ...primarySingleClick },
+      { metaKey: true, ctrlKey: true, ...primarySingleClick },
+      { metaKey: true, ctrlKey: false, ...primarySingleClick, button: 1 },
+      { metaKey: true, ctrlKey: false, ...primarySingleClick, button: 2 },
+      { metaKey: true, ctrlKey: false, ...primarySingleClick, detail: 2 },
+      { metaKey: true, ctrlKey: false, ...primarySingleClick, shiftKey: true },
+      { metaKey: true, ctrlKey: false, ...primarySingleClick, altKey: true },
+    ];
+
+    for (const event of cases) {
+      expect(isTerminalLinkActivation(event, "MacIntel")).toBe(false);
+    }
+
+    expect(
+      isTerminalLinkActivation(
+        { metaKey: true, ctrlKey: false, ...primarySingleClick },
+        "MacIntel",
+      ),
+    ).toBe(true);
+    expect(
+      isTerminalLinkActivation({ metaKey: false, ctrlKey: true, ...primarySingleClick }, "Linux"),
+    ).toBe(true);
   });
 });

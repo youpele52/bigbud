@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import {
   type ExecutionTargetId,
+  type ResolvedKeybindingsConfig,
   type TerminalDropPathMode,
   type ThreadId,
 } from "@bigbud/contracts";
@@ -18,6 +19,7 @@ import {
 } from "./ThreadTerminalDrawer.logic";
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 import { applyPendingTerminalEvents, makeApplyTerminalEvent } from "./TerminalViewport.events";
+import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
 import { createTerminalWebLinkHandler } from "./TerminalViewport.links.web";
 import {
@@ -41,6 +43,7 @@ interface UseTerminalViewportSessionInput {
   selectionActionTimerRef: MutableRefObject<number | null>;
   lastAppliedTerminalEventIdRef: MutableRefObject<number>;
   terminalHydratedRef: MutableRefObject<boolean>;
+  keybindingsRef: MutableRefObject<ResolvedKeybindingsConfig>;
   autoFocusRef: MutableRefObject<boolean>;
   worktreePathRef: MutableRefObject<string | null | undefined>;
   dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
@@ -129,7 +132,13 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     }
 
     const terminalLinksDisposable = terminal.registerLinkProvider(
-      makeTerminalLinkProvider({ terminalRef: input.terminalRef, cwd: input.cwd, api }),
+      makeTerminalLinkProvider({
+        terminalRef: input.terminalRef,
+        cwd: input.cwd,
+        workspaceRoot: input.worktreePathRef.current ?? input.cwd,
+        executionTargetId: input.executionTargetId,
+        api,
+      }),
     );
     const inputDisposable = terminal.onData((data) => {
       void api.terminal
@@ -140,6 +149,14 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
             err instanceof Error ? err.message : "Terminal write failed",
           ),
         );
+    });
+    attachTerminalKeybindings({
+      terminal,
+      terminalRef: input.terminalRef,
+      threadId: input.threadId,
+      terminalId: input.terminalId,
+      keybindingsRef: input.keybindingsRef,
+      api,
     });
     const selectionDisposable = terminal.onSelectionChange(() => {
       if (input.terminalRef.current?.hasSelection()) {
@@ -322,6 +339,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     input.fitAddonRef,
     input.hasHandledExitRef,
     input.lastAppliedTerminalEventIdRef,
+    input.keybindingsRef,
     input.runtimeEnv,
     input.selectionActionOpenRef,
     input.selectionActionRequestIdRef,

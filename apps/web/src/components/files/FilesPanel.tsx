@@ -1,7 +1,6 @@
 import type { ProjectEntry, ThreadId } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import { useTheme } from "../../hooks/useTheme";
 import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
 import { useComposerDraftStore } from "../../stores/composer";
@@ -43,6 +42,9 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const fileOpenRequest = useFilesPanelStore((state) => state.fileOpenRequest);
   const workspaceRootOverride = useFilesPanelStore((state) => state.workspaceRootOverride);
+  const workspaceExecutionTargetIdOverride = useFilesPanelStore(
+    (state) => state.workspaceExecutionTargetIdOverride,
+  );
   const directoryNavigationRequest = useFilesPanelStore(
     (state) => state.directoryNavigationRequest,
   );
@@ -67,7 +69,9 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
   const regularProject = project && !isBuiltInChatsProject(project.id) ? project : undefined;
   const activeWorkspaceExecutionTargetId =
-    workspaceRootOverride === null ? workspaceExecutionTargetId : undefined;
+    workspaceRootOverride === null
+      ? (workspaceExecutionTargetIdOverride ?? workspaceExecutionTargetId)
+      : undefined;
   const activeProjectName = workspaceRootOverride === null ? regularProject?.name : undefined;
   const workspaceKey = createFilesPanelWorkspaceKey({
     ...(regularProject && workspaceRootOverride === null ? { projectId: regularProject.id } : {}),

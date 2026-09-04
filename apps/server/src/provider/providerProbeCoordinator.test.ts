@@ -3,9 +3,13 @@ import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Option, Ref } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
-import { withProviderProbePermit } from "./providerProbeCoordinator.ts";
+import { PROVIDER_PROBE_TIMEOUT, withProviderProbePermit } from "./providerProbeCoordinator.ts";
 
 describe("provider probe coordination", () => {
+  it("uses a 30-second default timeout", () => {
+    assert.strictEqual(PROVIDER_PROBE_TIMEOUT, "30 seconds");
+  });
+
   it.layer(NodeServices.layer, { excludeTestServices: true })("queued probes", (it) => {
     it.effect("starts the timeout only after a probe acquires capacity", () =>
       Effect.scoped(

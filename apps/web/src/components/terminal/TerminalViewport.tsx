@@ -159,12 +159,7 @@ export function TerminalViewport({
   autoFocusRef.current = autoFocus;
   worktreePathRef.current = worktreePath;
 
-  useTerminalKeybindings({
-    terminalRef,
-    threadId,
-    terminalId,
-    keybindings,
-  });
+  const keybindingsRef = useTerminalKeybindings({ keybindings });
 
   useTerminalViewportSession({
     containerRef: mountRef,
@@ -178,6 +173,7 @@ export function TerminalViewport({
     selectionActionTimerRef,
     lastAppliedTerminalEventIdRef,
     terminalHydratedRef,
+    keybindingsRef,
     autoFocusRef,
     worktreePathRef,
     dropPathModeRef,

@@ -209,10 +209,11 @@ export function extractWrappedTerminalLinkSegments(
 }
 
 export function isTerminalLinkActivation(
-  event: Pick<MouseEvent, "metaKey" | "ctrlKey">,
+  event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "button" | "detail">,
   platform = typeof navigator === "undefined" ? "" : navigator.platform,
 ): boolean {
   if (platform.length === 0) return false;
+  if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.altKey) return false;
   return isMacPlatform(platform)
     ? event.metaKey && !event.ctrlKey
     : event.ctrlKey && !event.metaKey;

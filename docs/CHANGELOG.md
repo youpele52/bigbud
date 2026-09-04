@@ -10,7 +10,29 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.207 (3 September, 2026)
+## v0.2.207 (4 September, 2026)
+
+### Cursor ACP Compatibility
+
+- Cursor questions and plans now use the documented response format, with answers, skips, and cancellations handled cleanly—even when a session stops midway.
+- Cursor option IDs now travel safely from the provider to the UI and back, while older options still work and duplicate labels can be selected independently on web and mobile.
+- Cursor model discovery is more dependable: successful status checks are no longer blocked by version or channel checks, configured endpoints are normalized, and extension handling is easier to maintain.
+
+### Provider Availability
+
+- Extended the shared availability-probe deadline to 30 seconds for every supported provider, preventing slower healthy CLIs and model discovery from being reported as unavailable.
+- OpenCode and KiloCode startup checks and model-catalog refreshes now reuse the same coordinated timeout policy instead of maintaining a separate provider-specific deadline.
+
+### Terminal and Workspace Navigation
+
+- `Shift+Enter` now inserts exactly one new line in the terminal without interfering with IME composition, plain Enter, modified shortcuts, navigation, deletion, or terminal clearing.
+- Terminal file links now normalize POSIX, Windows, UNC, relative, and dot-segment paths; preserve line and column positions; verify whether targets are files or directories; and open supported HTML, image, and PDF files in browser previews.
+- Terminal links activate only with an exact `Cmd` primary single-click on macOS or `Ctrl` primary single-click on Windows/Linux. Extra modifiers, double clicks, and middle or secondary clicks no longer trigger navigation.
+- Remote terminal links remain bound to their originating execution target and active workspace. Paths outside the remote workspace, and missing or inaccessible targets, are rejected before filesystem access or panel changes, while local external paths continue opening safely in Files.
+
+### Conversation Timeline Reliability
+
+- Fixed question choices with duplicate labels or descriptions so each option keeps its stable provider identity during rendering, while preserving compatibility with older options that do not include IDs.
 
 ### More Reliable Remote-Agent Setup
 

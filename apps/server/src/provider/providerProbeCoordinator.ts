@@ -2,7 +2,7 @@ import { Duration, Effect } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
 export const PROVIDER_PROBE_CONCURRENCY = 3;
-export const PROVIDER_PROBE_TIMEOUT = "12 seconds";
+export const PROVIDER_PROBE_TIMEOUT = "30 seconds";
 
 const aggregateProbeSemaphore = Effect.runSync(Semaphore.make(PROVIDER_PROBE_CONCURRENCY));
 

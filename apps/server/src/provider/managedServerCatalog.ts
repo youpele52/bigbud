@@ -8,7 +8,6 @@ import { Effect, Option } from "effect";
 
 import { providerModelsFromSettings } from "./providerSnapshot";
 import { getSubProviderDisplayName } from "./subProviderDisplayNames";
-import { MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT } from "./managedServerProbe.ts";
 import { runCoordinatedProviderProbe } from "./providerProbeCoordinator.ts";
 
 interface ManagedCatalogModel {
@@ -93,10 +92,7 @@ export const enrichManagedServerCatalog = Effect.fn("enrichManagedServerCatalog"
         durationMs: 0,
       },
     });
-  const result = yield* runCoordinatedProviderProbe(
-    input.catalogSnapshot,
-    MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT,
-  );
+  const result = yield* runCoordinatedProviderProbe(input.catalogSnapshot);
   if (Option.isNone(result)) {
     yield* Effect.logWarning("provider model catalog refresh timed out", {
       provider: input.provider,
