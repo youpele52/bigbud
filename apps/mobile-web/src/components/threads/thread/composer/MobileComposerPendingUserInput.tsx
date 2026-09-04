@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 
 import {
   derivePendingUserInputProgress,
+  getPendingUserInputOptionIdentity,
+  isPendingUserInputOptionSelected,
   type PendingUserInputDraftAnswer,
   togglePendingUserInputOptionSelection,
 } from "~/logic/user-input";
@@ -16,7 +18,11 @@ interface MobileComposerPendingUserInputProps {
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
   isResponding: boolean;
-  onToggleOption: (questionId: string, optionLabel: string) => void;
+  onToggleOption: (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => void;
   onAdvance: () => void;
 }
 
@@ -45,8 +51,8 @@ export function MobileComposerPendingUserInput({
   }, []);
 
   const handleOptionSelection = useCallback(
-    (questionId: string, optionLabel: string) => {
-      onToggleOption(questionId, optionLabel);
+    (questionId: string, option: UserInputQuestion["options"][number], optionIndex: number) => {
+      onToggleOption(questionId, option, optionIndex);
       if (activeQuestion?.multiSelect) {
         return;
       }
@@ -112,16 +118,25 @@ function OptionList({
   activeQuestion: UserInputQuestion;
   isResponding: boolean;
   progress: ReturnType<typeof derivePendingUserInputProgress>;
-  onSelect: (questionId: string, optionLabel: string) => void;
+  onSelect: (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => void;
 }) {
   return (
     <div className="mt-3 space-y-1">
       {activeQuestion.options.map((option, index) => {
-        const isSelected = progress.selectedOptionLabels.includes(option.label);
+        const isSelected = isPendingUserInputOptionSelected(
+          activeQuestion,
+          progress.activeDraft,
+          option,
+          index,
+        );
         const shortcutKey = index < 9 ? index + 1 : null;
         return (
           <button
-            key={`${activeQuestion.id}:${option.label}`}
+            key={`${activeQuestion.id}:${getPendingUserInputOptionIdentity(option, index)}`}
             className={cn(
               "group flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all duration-150",
               isSelected
@@ -130,7 +145,7 @@ function OptionList({
               isResponding && "cursor-not-allowed opacity-50",
             )}
             disabled={isResponding}
-            onClick={() => onSelect(activeQuestion.id, option.label)}
+            onClick={() => onSelect(activeQuestion.id, option, index)}
             type="button"
           >
             {shortcutKey !== null ? (
@@ -162,7 +177,8 @@ function OptionList({
 export function toggleMobileUserInputOption(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
-  optionLabel: string,
+  option: UserInputQuestion["options"][number],
+  optionIndex?: number,
 ): PendingUserInputDraftAnswer {
-  return togglePendingUserInputOptionSelection(question, draft, optionLabel);
+  return togglePendingUserInputOptionSelection(question, draft, option, optionIndex);
 }

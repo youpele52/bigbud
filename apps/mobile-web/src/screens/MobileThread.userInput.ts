@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import type { UserInputQuestion } from "@bigbud/contracts";
 
 import {
   derivePendingUserInputProgress,
@@ -21,7 +22,11 @@ export function createMobileUserInputHandlers(input: {
   readonly setPrompt: Dispatch<SetStateAction<string>>;
   readonly setQuestionIndexByRequestId: Dispatch<SetStateAction<QuestionIndexByRequestId>>;
 }) {
-  const toggleOption = (questionId: string, optionLabel: string) => {
+  const toggleOption = (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => {
     const request = input.activePendingUserInput;
     if (!request) return;
     const question = request.questions.find((entry) => entry.id === questionId);
@@ -33,7 +38,8 @@ export function createMobileUserInputHandlers(input: {
         [questionId]: togglePendingUserInputOptionSelection(
           question,
           existing[request.requestId]?.[questionId],
-          optionLabel,
+          option,
+          optionIndex,
         ),
       },
     }));

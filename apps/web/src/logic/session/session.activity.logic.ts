@@ -63,7 +63,12 @@ function parseUserInputQuestions(
           ) {
             return null;
           }
+          const optionId =
+            typeof optionRecord.id === "string" && optionRecord.id.trim().length > 0
+              ? optionRecord.id.trim()
+              : undefined;
           return {
+            ...(optionId ? { id: optionId } : {}),
             label: optionRecord.label,
             description: optionRecord.description,
           };

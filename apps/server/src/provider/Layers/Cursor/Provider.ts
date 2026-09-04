@@ -6,7 +6,6 @@ import {
   buildServerProvider,
   collectStreamAsString,
   isCommandMissingCause,
-  providerModelsFromSettings,
   type CommandResult,
 } from "../../providerSnapshot.ts";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
@@ -15,45 +14,26 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import {
   ABOUT_TIMEOUT_MS,
   buildCursorProviderSnapshot,
-  getCursorParameterizedModelPickerUnsupportedMessage,
   isCursorAboutJsonFormatUnsupported,
   parseCursorAboutOutput,
-  readCursorCliConfigChannel,
 } from "./Provider.about.ts";
-import { hasCursorModelCapabilities } from "./Provider.config.ts";
-import {
-  discoverCursorModelCapabilitiesViaAcp,
-  discoverCursorModelsViaAcp,
-} from "./Provider.discovery.ts";
+import { discoverCursorModelsViaAcp } from "./Provider.discovery.ts";
 import {
   CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS,
   CURSOR_REFRESH_INTERVAL,
-  EMPTY_CAPABILITIES,
   getCursorFallbackModels,
   PROVIDER,
 } from "./Provider.shared.ts";
 
-export {
-  CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
-  CURSOR_PARAMETERIZED_MODEL_PICKER_MIN_VERSION_DATE,
-} from "./Provider.shared.ts";
+export { CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES } from "./Provider.shared.ts";
 export {
   buildCursorCapabilitiesFromConfigOptions,
   buildCursorDiscoveredModelsFromConfigOptions,
   resolveCursorAcpBaseModelId,
   resolveCursorAcpConfigUpdates,
 } from "./Provider.config.ts";
-export {
-  buildCursorProviderSnapshot,
-  getCursorParameterizedModelPickerUnsupportedMessage,
-  parseCursorAboutOutput,
-  parseCursorCliConfigChannel,
-  parseCursorVersionDate,
-} from "./Provider.about.ts";
-export {
-  discoverCursorModelCapabilitiesViaAcp,
-  discoverCursorModelsViaAcp,
-} from "./Provider.discovery.ts";
+export { buildCursorProviderSnapshot, parseCursorAboutOutput } from "./Provider.about.ts";
+export { discoverCursorModelsViaAcp } from "./Provider.discovery.ts";
 export { getCursorFallbackModels } from "./Provider.shared.ts";
 
 function buildInitialCursorProviderSnapshot(cursorSettings: CursorSettings): ServerProvider {
@@ -193,30 +173,6 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
     }
 
     const parsed = parseCursorAboutOutput(aboutProbe.success.value);
-    const parameterizedModelPickerUnsupportedMessage =
-      getCursorParameterizedModelPickerUnsupportedMessage({
-        version: parsed.version,
-        channel: readCursorCliConfigChannel(),
-      });
-    if (parameterizedModelPickerUnsupportedMessage) {
-      return buildServerProvider({
-        provider: PROVIDER,
-        enabled: cursorSettings.enabled,
-        checkedAt,
-        models: fallbackModels,
-        probe: {
-          installed: true,
-          version: parsed.version,
-          status: "error",
-          auth: parsed.auth,
-          message:
-            parsed.auth.status === "unauthenticated" && parsed.message
-              ? `${parameterizedModelPickerUnsupportedMessage} ${parsed.message}`
-              : parameterizedModelPickerUnsupportedMessage,
-        },
-      });
-    }
-
     let discoveredModels =
       Option.none<ReadonlyArray<import("@bigbud/contracts").ServerProviderModel>>();
     let discoveryWarning: string | undefined;
@@ -276,40 +232,6 @@ export const CursorProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialCursorProviderSnapshot,
       checkProvider,
-      enrichSnapshot: ({ settings, snapshot, publishSnapshot }) => {
-        if (
-          !settings.enabled ||
-          snapshot.auth.status === "unauthenticated" ||
-          !snapshot.models.some((model) => !model.isCustom && !hasCursorModelCapabilities(model))
-        ) {
-          return Effect.void;
-        }
-
-        return discoverCursorModelCapabilitiesViaAcp(settings, snapshot.models).pipe(
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.flatMap((discoveredModels) => {
-            if (discoveredModels.length === 0) {
-              return Effect.void;
-            }
-
-            return publishSnapshot({
-              ...snapshot,
-              models: providerModelsFromSettings(
-                discoveredModels,
-                PROVIDER,
-                settings.customModels,
-                EMPTY_CAPABILITIES,
-              ),
-            });
-          }),
-          Effect.catchCause((cause) =>
-            Effect.logWarning("Cursor ACP background capability enrichment failed", {
-              models: snapshot.models.map((model) => model.slug),
-              cause: Cause.pretty(cause),
-            }).pipe(Effect.asVoid),
-          ),
-        );
-      },
       refreshInterval: CURSOR_REFRESH_INTERVAL,
     });
   }),

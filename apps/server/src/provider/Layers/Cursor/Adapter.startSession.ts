@@ -25,12 +25,6 @@ import {
   parsePermissionRequest,
   makeAcpNativeLoggers,
   makeCursorAcpRuntime,
-  CursorAskQuestionRequest,
-  CursorCreatePlanRequest,
-  CursorUpdateTodosRequest,
-  extractAskQuestions,
-  extractPlanMarkdown,
-  extractTodosAsPlan,
   CURSOR_RESUME_VERSION,
   PROVIDER,
   applyRequestedSessionConfiguration,
@@ -38,7 +32,8 @@ import {
   scheduleFullAccessPermissionAutoApproval,
   selectAutoApprovedPermissionOption,
 } from "./Adapter.helpers.ts";
-import { emitPlanUpdate, forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { registerCursorExtensionHandlers } from "./Adapter.startSession.extensions.ts";
 
 interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
@@ -163,79 +158,16 @@ export function makeStartSessionEffect(
       if (workspaceSession.remoteBridge) {
         yield* workspaceSession.remoteBridge.registerHandlers(acp);
       }
-      yield* acp.handleExtRequest("cursor/ask_question", CursorAskQuestionRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/ask_question", params);
-          const requestId = ApprovalRequestId.makeUnsafe(crypto.randomUUID());
-          const runtimeRequestId = RuntimeRequestId.makeUnsafe(requestId);
-          const answers =
-            yield* Deferred.make<import("@bigbud/contracts").ProviderUserInputAnswers>();
-          pendingUserInputs.set(requestId, { answers });
-          yield* deps.offerRuntimeEvent({
-            type: "user-input.requested",
-            ...(yield* deps.makeEventStamp()),
-            sessionEpoch,
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            requestId: runtimeRequestId,
-            payload: { questions: extractAskQuestions(params) },
-            raw: {
-              source: "acp.cursor.extension",
-              method: "cursor/ask_question",
-              payload: params,
-            },
-          });
-          const resolved = yield* Deferred.await(answers);
-          pendingUserInputs.delete(requestId);
-          yield* deps.offerRuntimeEvent({
-            type: "user-input.resolved",
-            ...(yield* deps.makeEventStamp()),
-            sessionEpoch,
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            requestId: runtimeRequestId,
-            payload: { answers: resolved },
-          });
-          return { answers: resolved };
-        }),
-      );
-      yield* acp.handleExtRequest("cursor/create_plan", CursorCreatePlanRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/create_plan", params);
-          yield* deps.offerRuntimeEvent({
-            type: "turn.proposed.completed",
-            ...(yield* deps.makeEventStamp()),
-            sessionEpoch,
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            payload: { planMarkdown: extractPlanMarkdown(params) },
-            raw: {
-              source: "acp.cursor.extension",
-              method: "cursor/create_plan",
-              payload: params,
-            },
-          });
-          return { accepted: true } as const;
-        }),
-      );
-      yield* acp.handleExtNotification("cursor/update_todos", CursorUpdateTodosRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/update_todos", params);
-          if (ctx) {
-            yield* emitPlanUpdate(
-              deps,
-              ctx,
-              extractTodosAsPlan(params),
-              params,
-              "acp.cursor.extension",
-              "cursor/update_todos",
-            );
-          }
-        }),
-      );
+      yield* registerCursorExtensionHandlers({
+        acp,
+        nativeEventLogger: deps.nativeEventLogger,
+        pendingUserInputs,
+        sessionEpoch,
+        threadId: input.threadId,
+        getSessionContext: () => ctx,
+        makeEventStamp: deps.makeEventStamp,
+        offerRuntimeEvent: deps.offerRuntimeEvent,
+      });
       yield* acp.handleRequestPermission((params) =>
         Effect.gen(function* () {
           yield* logNative(deps, input.threadId, "session/request_permission", params);

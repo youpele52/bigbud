@@ -97,8 +97,12 @@ export interface PendingApproval {
 }
 
 export interface PendingUserInput {
-  readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  readonly resolution: Deferred.Deferred<CursorUserInputResolution>;
 }
+
+export type CursorUserInputResolution =
+  | { readonly outcome: "answered"; readonly answers: ProviderUserInputAnswers }
+  | { readonly outcome: "cancelled" };
 
 export interface CursorSessionContext {
   readonly threadId: ThreadId;
@@ -132,13 +136,13 @@ export function settlePendingApprovalsAsCancelled(
   );
 }
 
-export function settlePendingUserInputsAsEmptyAnswers(
+export function settlePendingUserInputsAsCancelled(
   pendingUserInputs: ReadonlyMap<ApprovalRequestId, PendingUserInput>,
 ): Effect.Effect<void> {
   const pendingEntries = Array.from(pendingUserInputs.values());
   return Effect.forEach(
     pendingEntries,
-    (pending) => Deferred.succeed(pending.answers, {}).pipe(Effect.ignore),
+    (pending) => Deferred.succeed(pending.resolution, { outcome: "cancelled" }).pipe(Effect.ignore),
     { discard: true },
   );
 }

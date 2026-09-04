@@ -13,10 +13,7 @@ export const EMPTY_CAPABILITIES: ModelCapabilities = {
 };
 
 export const CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
-export const CURSOR_ACP_MODEL_CAPABILITY_TIMEOUT = "4 seconds";
-export const CURSOR_ACP_MODEL_DISCOVERY_CONCURRENCY = 4;
 export const CURSOR_REFRESH_INTERVAL = "1 hour";
-export const CURSOR_PARAMETERIZED_MODEL_PICKER_MIN_VERSION_DATE = 2026_04_08;
 export const CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES = {
   _meta: {
     parameterizedModelPicker: true,

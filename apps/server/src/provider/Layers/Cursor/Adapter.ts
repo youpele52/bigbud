@@ -39,7 +39,7 @@ import {
   Deferred,
   mapAcpToAdapterError,
   settlePendingApprovalsAsCancelled,
-  settlePendingUserInputsAsEmptyAnswers,
+  settlePendingUserInputsAsCancelled,
 } from "./Adapter.helpers.ts";
 import { makeSendTurnEffect } from "./Adapter.sendTurn.ts";
 import { makeStartSessionEffect } from "./Adapter.startSession.ts";
@@ -112,7 +112,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
         if (ctx.stopped) return;
         ctx.stopped = true;
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
+        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
@@ -189,7 +189,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       Effect.gen(function* () {
         const ctx = yield* requireSession(threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
+        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
         yield* Effect.ignore(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
@@ -232,7 +232,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
             detail: `Unknown pending user-input request: ${requestId}`,
           });
         }
-        yield* Deferred.succeed(pending.answers, answers);
+        yield* Deferred.succeed(pending.resolution, { outcome: "answered", answers });
       });
 
     const readThread: CursorAdapterShape["readThread"] = (threadId) =>

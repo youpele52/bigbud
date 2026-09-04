@@ -7,6 +7,8 @@ import { vi } from "vitest";
 import {
   scheduleFullAccessPermissionAutoApproval,
   selectAutoApprovedPermissionOption,
+  settlePendingUserInputsAsCancelled,
+  type CursorUserInputResolution,
 } from "./Adapter.helpers.ts";
 
 describe("selectAutoApprovedPermissionOption", () => {
@@ -65,4 +67,22 @@ describe("scheduleFullAccessPermissionAutoApproval", () => {
 
     vi.useRealTimers();
   });
+});
+
+describe("settlePendingUserInputsAsCancelled", () => {
+  it.effect("resolves every pending Cursor prompt with explicit cancellation", () =>
+    Effect.gen(function* () {
+      const first = yield* Deferred.make<CursorUserInputResolution>();
+      const second = yield* Deferred.make<CursorUserInputResolution>();
+      const pending = new Map([
+        [ApprovalRequestId.makeUnsafe("input-1"), { resolution: first }],
+        [ApprovalRequestId.makeUnsafe("input-2"), { resolution: second }],
+      ]);
+
+      yield* settlePendingUserInputsAsCancelled(pending);
+
+      assert.deepStrictEqual(yield* Deferred.await(first), { outcome: "cancelled" });
+      assert.deepStrictEqual(yield* Deferred.await(second), { outcome: "cancelled" });
+    }),
+  );
 });

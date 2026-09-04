@@ -1,4 +1,5 @@
-import { type CursorModelOptions, type CursorSettings } from "@bigbud/contracts";
+import type { CursorSettings } from "@bigbud/contracts/core/settings.ts";
+import type { CursorModelOptions } from "@bigbud/contracts/core/model.ts";
 import { Effect, Layer, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import type * as EffectAcpErrors from "effect-acp/errors";
@@ -37,13 +38,10 @@ export function buildCursorAcpSpawnInput(
   cursorSettings: CursorAcpRuntimeCursorSettings | null | undefined,
   cwd: string,
 ): AcpSpawnInput {
+  const endpoint = cursorSettings?.apiEndpoint?.trim();
   return {
     command: cursorSettings?.binaryPath || "agent",
-    args: [
-      ...(cursorSettings?.apiEndpoint ? (["-e", cursorSettings.apiEndpoint] as const) : []),
-      "--trust",
-      "acp",
-    ],
+    args: [...(endpoint ? (["-e", endpoint] as const) : []), "--trust", "acp"],
     cwd,
   };
 }

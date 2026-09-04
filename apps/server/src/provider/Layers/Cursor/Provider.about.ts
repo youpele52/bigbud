@@ -1,7 +1,3 @@
-import * as nodeFs from "node:fs";
-import * as nodeOs from "node:os";
-import * as nodePath from "node:path";
-
 import type {
   CursorSettings,
   ServerProvider,
@@ -15,11 +11,7 @@ import {
   providerModelsFromSettings,
   type CommandResult,
 } from "../../providerSnapshot.ts";
-import {
-  CURSOR_PARAMETERIZED_MODEL_PICKER_MIN_VERSION_DATE,
-  EMPTY_CAPABILITIES,
-  PROVIDER,
-} from "./Provider.shared.ts";
+import { EMPTY_CAPABILITIES, PROVIDER } from "./Provider.shared.ts";
 
 export const ABOUT_TIMEOUT_MS = 8_000;
 
@@ -81,33 +73,6 @@ interface CursorAboutJsonPayload {
   readonly cliVersion?: unknown;
   readonly subscriptionTier?: unknown;
   readonly userEmail?: unknown;
-}
-
-export function parseCursorVersionDate(version: string | null | undefined): number | undefined {
-  const match = version?.trim().match(/^(\d{4})\.(\d{2})\.(\d{2})(?:\b|-|$)/);
-  if (!match) {
-    return undefined;
-  }
-  const [, year, month, day] = match;
-  return Number(`${year}${month}${day}`);
-}
-
-export function parseCursorCliConfigChannel(raw: string): string | undefined {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "channel" in parsed &&
-      typeof parsed.channel === "string"
-    ) {
-      const channel = parsed.channel.trim().toLowerCase();
-      return channel.length > 0 ? channel : undefined;
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
 }
 
 function toTitleCaseWords(value: string): string {
@@ -179,48 +144,6 @@ export function isCursorAboutJsonFormatUnsupported(result: CommandResult): boole
     lowerOutput.includes("unrecognized option '--format'") ||
     lowerOutput.includes("unknown argument '--format'")
   );
-}
-
-export function readCursorCliConfigChannel(): string | undefined {
-  try {
-    const configPath = nodePath.join(nodeOs.homedir(), ".cursor", "cli-config.json");
-    return parseCursorCliConfigChannel(nodeFs.readFileSync(configPath, "utf8"));
-  } catch {
-    return undefined;
-  }
-}
-
-export function getCursorParameterizedModelPickerUnsupportedMessage(input: {
-  readonly version: string | null | undefined;
-  readonly channel: string | null | undefined;
-}): string | undefined {
-  const reasons: Array<string> = [];
-  const versionDate = parseCursorVersionDate(input.version);
-  if (
-    versionDate !== undefined &&
-    versionDate < CURSOR_PARAMETERIZED_MODEL_PICKER_MIN_VERSION_DATE
-  ) {
-    reasons.push(
-      `Cursor Agent CLI version ${input.version} is too old for Cursor ACP parameterized model picker`,
-    );
-  }
-
-  const normalizedChannel = input.channel?.trim().toLowerCase();
-  if (
-    normalizedChannel !== undefined &&
-    normalizedChannel.length > 0 &&
-    normalizedChannel !== "lab"
-  ) {
-    reasons.push(
-      `Cursor Agent CLI channel is ${JSON.stringify(input.channel)}, but parameterized model picker is only available on the lab channel`,
-    );
-  }
-
-  if (reasons.length === 0) {
-    return undefined;
-  }
-
-  return `${reasons.join(". ")}. Run \`agent set-channel lab && agent update\` and use Cursor Agent CLI 2026.04.08 or newer.`;
 }
 
 export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult {
