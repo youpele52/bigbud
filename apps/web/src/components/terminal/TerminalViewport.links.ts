@@ -7,6 +7,7 @@ import {
 import { openInPreferredEditor } from "../../models/editor";
 import { writeSystemMessage } from "./ThreadTerminalDrawer.logic";
 import { type readNativeApi } from "../../rpc/nativeApi";
+import { openTerminalWebLink } from "./TerminalViewport.links.web";
 
 type NativeApi = NonNullable<ReturnType<typeof readNativeApi>>;
 
@@ -88,12 +89,7 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
             if (!latestTerminal) return;
 
             if (match.kind === "url") {
-              void api.shell.openExternal(match.text).catch((error) => {
-                writeSystemMessage(
-                  latestTerminal,
-                  error instanceof Error ? error.message : "Unable to open link",
-                );
-              });
+              openTerminalWebLink(match.text);
               return;
             }
 

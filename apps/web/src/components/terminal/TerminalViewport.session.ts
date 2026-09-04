@@ -19,6 +19,7 @@ import {
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 import { applyPendingTerminalEvents, makeApplyTerminalEvent } from "./TerminalViewport.events";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
+import { createTerminalWebLinkHandler } from "./TerminalViewport.links.web";
 import {
   clearSelectionAction,
   fitAndResizeServerTerminal,
@@ -110,6 +111,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       scrollback: 5_000,
       fontFamily: input.terminalFontFamily,
       theme: terminalThemeFromApp(themeHost),
+      linkHandler: createTerminalWebLinkHandler(),
     });
     terminal.loadAddon(fitAddon);
     terminal.open(mount);
