@@ -36,6 +36,7 @@ import { RightPanelHost } from "~/components/right-panel/RightPanelHost";
 import { isAutomationRoute } from "~/lib/automationRoute";
 import { useStore } from "~/stores/main";
 import { navigateToMostRecentThread } from "./-_chat.automationRightPanel.logic";
+import { ChatFocusShortcutCoordinator } from "~/components/chat/ChatFocusShortcutCoordinator";
 
 function deriveProjectTitleFromCwd(cwd: string): string {
   const trimmed = cwd.trim();
@@ -294,6 +295,7 @@ function ChatRouteLayout() {
         onToggleSearch={toggleSearchOpen}
         onOpenFileSearch={openSearchForFileContext}
       />
+      <ChatFocusShortcutCoordinator />
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
       <RightPanelHost activeThreadId={routeThreadId ?? null} />

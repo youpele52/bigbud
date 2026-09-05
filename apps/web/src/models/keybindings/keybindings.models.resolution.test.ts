@@ -81,6 +81,51 @@ describe("cross-command precedence", () => {
 });
 
 describe("resolveShortcutCommand", () => {
+  it("resolves chat focus by platform only outside a focused terminal", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "l", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "chat.focus",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "l", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+      "chat.focus",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "l", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Win32",
+        context: { terminalFocus: false },
+      }),
+      "chat.focus",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "l", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: true },
+      }),
+    );
+  });
+
+  it("preserves user conflict precedence over chat focus", () => {
+    const keybindings = compile([
+      { shortcut: modShortcut("l"), command: "chat.focus" },
+      { shortcut: modShortcut("l"), command: "search.toggle" },
+    ]);
+
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "l", metaKey: true }), keybindings, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "search.toggle",
+    );
+  });
+
   it("returns dynamic script commands", () => {
     const keybindings = compile([{ shortcut: modShortcut("r"), command: "script.setup.run" }]);
 

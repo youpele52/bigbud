@@ -42,6 +42,7 @@ import { CompactLinkHandoffCoordinator } from "../components/CompactLinkHandoffC
 import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererReadyCoordinator";
 import { DraftOwnershipCoordinator } from "../components/DraftOwnershipCoordinator";
 import { DRAFT_OWNERSHIP_REPAIR_BY_RENDERER } from "../components/DraftOwnershipCoordinator.logic";
+import { ChatFocusShortcutCoordinator } from "../components/chat/ChatFocusShortcutCoordinator";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -167,6 +168,7 @@ function CompactChatRoot() {
     <ToastProvider>
       <AnchoredToastProvider>
         <ServerStateBootstrap />
+        <ChatFocusShortcutCoordinator />
         <DraftOwnershipCoordinator
           repairOnStartup={DRAFT_OWNERSHIP_REPAIR_BY_RENDERER.compact}
           scope="compact"

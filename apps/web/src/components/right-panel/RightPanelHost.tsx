@@ -135,6 +135,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                 return (
                   <div
                     key={tabId}
+                    data-active-browser-focus-scope={isActive ? "true" : undefined}
                     className={cn(
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",

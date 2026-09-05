@@ -37,6 +37,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Terminal and Workspace Navigation
 
+- Added `Cmd/Ctrl+L` keyboard navigation that focuses the active chat composer in the main window, Floating Assistant, or side chat, while focusing and selecting the browser URL when the in-app browser has focus. The browser does not take over the shortcut just because it is open, and terminal `Ctrl+L` clearing remains unchanged.
 - `Shift+Enter` now inserts exactly one new line in the terminal without interfering with IME composition, plain Enter, modified shortcuts, navigation, deletion, or terminal clearing.
 - Terminal file links now normalize POSIX, Windows, UNC, relative, and dot-segment paths; preserve line and column positions; verify whether targets are files or directories; and open supported HTML, image, and PDF files in browser previews.
 - Terminal links activate only with an exact `Cmd` primary single-click on macOS or `Ctrl` primary single-click on Windows/Linux. Extra modifiers, double clicks, and middle or secondary clicks no longer trigger navigation.

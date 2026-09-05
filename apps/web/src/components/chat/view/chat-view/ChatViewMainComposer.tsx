@@ -24,7 +24,11 @@ export function ChatViewMainComposer(props: {
 
   return (
     <>
-      <div className="px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">
+      <div
+        className="px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2"
+        data-chat-focus-scope="true"
+        data-default-chat-focus-scope="true"
+      >
         <ChatViewComposer
           {...props}
           onOpenSideChat={() => {

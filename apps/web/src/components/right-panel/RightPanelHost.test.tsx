@@ -162,9 +162,8 @@ describe("RightPanelHost", () => {
     expect(browserMarkup).toContain('data-testid="files-panel"');
     expect(browserMarkup).toContain('data-testid="notes-panel"');
     expect(browserMarkup).toContain('data-testid="terminal-panel"');
-    expect(browserMarkup).toMatch(
-      /<div class="[^"]*"><div data-testid="browser-panel">browser<\/div>/,
-    );
+    expect(browserMarkup).toContain('data-active-browser-focus-scope="true"');
+    expect(browserMarkup.match(/data-active-browser-focus-scope="true"/g)).toHaveLength(1);
     expect(browserMarkup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
     expect(browserMarkup).toContain('inert=""><div data-testid="files-panel">files</div>');
     expect(browserMarkup).toContain('inert=""><div data-testid="notes-panel">notes</div>');
@@ -190,6 +189,7 @@ describe("RightPanelHost", () => {
     expect(filesMarkup).toContain('data-testid="files-panel"');
     expect(filesMarkup).toContain('data-testid="notes-panel"');
     expect(filesMarkup).toContain('data-testid="terminal-panel"');
+    expect(filesMarkup).not.toContain('data-active-browser-focus-scope="true"');
     expect(filesMarkup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
     expect(filesMarkup).toMatch(/<div class="[^"]*"><div data-testid="files-panel">files<\/div>/);
     expect(filesMarkup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');

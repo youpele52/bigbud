@@ -11,6 +11,7 @@ import {
   isBrowserGuest,
 } from "./browserSession";
 import { certificateChallengeManager } from "./certificateChallengeManager";
+import { isBrowserGuestFocusLocationShortcut } from "./browserGuestShortcuts";
 
 const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
 const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
@@ -228,6 +229,11 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     if (isBrowserGuest(guestWebContents)) {
       bindBrowserNavigationPolicy(guestWebContents);
       guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      guestWebContents.on("before-input-event", (inputEvent, input) => {
+        if (!isBrowserGuestFocusLocationShortcut(input)) return;
+        inputEvent.preventDefault();
+        window.webContents.send(deps.menuActionChannel, "focus-browser-location");
+      });
     }
     guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
       if (input.type === "mouseDown" && input.button === "left") {

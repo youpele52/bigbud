@@ -239,6 +239,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
         onMouseLeave={() => setAddressBarHovered(false)}
       >
         <input
+          data-browser-omnibox="true"
           type="text"
           value={inputUrl}
           onChange={(e) => {

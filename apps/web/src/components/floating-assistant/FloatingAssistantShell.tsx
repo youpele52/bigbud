@@ -193,7 +193,11 @@ export function CompactChatShell({
   }
 
   return (
-    <main className="flex h-screen min-h-0 flex-col bg-background text-foreground">
+    <main
+      className="flex h-screen min-h-0 flex-col bg-background text-foreground"
+      data-chat-focus-scope="true"
+      data-default-chat-focus-scope="true"
+    >
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <BigbudLogo className="h-4 text-primary" />

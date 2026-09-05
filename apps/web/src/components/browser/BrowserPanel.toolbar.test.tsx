@@ -52,6 +52,7 @@ describe("BrowserToolbar page identity", () => {
     expect(markup).toContain("border-transparent bg-transparent");
     expect(markup).toContain("text-transparent");
     expect(markup).toContain("placeholder:text-transparent");
+    expect(markup).toContain('data-browser-omnibox="true"');
   });
 
   it("falls back to the hostname when the page title is missing", () => {
