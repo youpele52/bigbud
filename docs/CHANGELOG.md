@@ -10,30 +10,18 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.207 (4 September, 2026)
+## v0.2.207 (7 September, 2026)
 
-### Cursor ACP Compatibility
+### More Reliable Remote-Agent Setup
 
-- Cursor questions and plans now use the documented response format, with answers, skips, and cancellations handled cleanly—even when a session stops midway.
-- Cursor option IDs now travel safely from the provider to the UI and back, while older options still work and duplicate labels can be selected independently on web and mobile.
-- Cursor model discovery is more dependable: successful status checks are no longer blocked by version or channel checks, configured endpoints are normalized, and extension handling is easier to maintain.
+- Made remote-agent installation and upgrades recover from temporary network failures with bounded retries and timeouts, while cancellation stops pending work without leaving a partially activated installation.
+- Protected downloads with strict redirect rules, trusted release signatures, exact size checks, and SHA-256 verification before making changes on the remote computer.
+- Reused successfully loaded release information between agent health checks and installation, avoiding duplicate requests during setup.
 
 ### Provider Availability
 
 - Extended the shared availability-probe deadline to 30 seconds for every supported provider, preventing slower healthy CLIs and model discovery from being reported as unavailable.
 - OpenCode and KiloCode startup checks and model-catalog refreshes now reuse the same coordinated timeout policy instead of maintaining a separate provider-specific deadline.
-
-### Codex Model Discovery and Selection
-
-- Added live Codex model catalogs with advertised reasoning efforts and fast-mode capabilities, while keeping configured custom models available without claiming unverified capabilities.
-- Validated explicit Codex models and dynamic reasoning efforts before session and turn requests, preserved selections across turns, and applied model defaults when switching models or starting sessions.
-- Preserved custom-model fast mode for Codex CLI handoffs and Git text generation, and separated model parsing and selection logic for focused regression coverage.
-
-### CLIProxyAPI Diagnostics and Lifecycle
-
-- Replaced free-form CLIProxyAPI availability and activation failures with structured diagnostic codes, classifications, and recovery actions exposed through provider snapshots and WebSocket errors.
-- Distinguished service configuration, direct-process conflicts, startup failures, closed lifecycles, and reused processes during CLIProxyAPI activation while retaining provider state when refreshes fail.
-- Scoped concurrent CLIProxyAPI catalog inspections to normalized configuration and credential identities so unrelated credentials do not share in-flight requests.
 
 ### Terminal and Workspace Navigation
 
@@ -42,34 +30,51 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Terminal file links now normalize POSIX, Windows, UNC, relative, and dot-segment paths; preserve line and column positions; verify whether targets are files or directories; and open supported HTML, image, and PDF files in browser previews.
 - Terminal links activate only with an exact `Cmd` primary single-click on macOS or `Ctrl` primary single-click on Windows/Linux. Extra modifiers, double clicks, and middle or secondary clicks no longer trigger navigation.
 - Remote terminal links remain bound to their originating execution target and active workspace. Paths outside the remote workspace, and missing or inaccessible targets, are rejected before filesystem access or panel changes, while local external paths continue opening safely in Files.
+- Added **Open Terminal** to Quick actions and a header control for switching between split, terminal-only, and chat-only views, while keeping `Cmd/Ctrl+J` available for the bottom terminal.
+
+### CLIProxyAPI Diagnostics and Lifecycle
+
+- Replaced free-form CLIProxyAPI availability and activation failures with structured diagnostic codes, classifications, and recovery actions exposed through provider snapshots and WebSocket errors.
+- Distinguished service configuration, direct-process conflicts, startup failures, closed lifecycles, and reused processes during CLIProxyAPI activation while retaining provider state when refreshes fail.
+- Scoped concurrent CLIProxyAPI catalog inspections to normalized configuration and credential identities so unrelated credentials do not share in-flight requests.
+
+### Claude Usage Limits
+
+- Added native Claude subscription limits to the Usage page, including current five-hour, weekly, model-specific, reset-time, and extra-usage details when Claude exposes them.
+- Kept limit checks on the existing provider refresh cycle and preserved the last successful values when a later check cannot complete, while keeping historical token totals unchanged.
+
+### Cursor ACP Compatibility
+
+- Cursor questions and plans now use the documented response format, with answers, skips, and cancellations handled cleanly—even when a session stops midway.
+- Cursor option IDs now travel safely from the provider to the UI and back, while older options still work and duplicate labels can be selected independently on web and mobile.
+- Cursor model discovery is more dependable: successful status checks are no longer blocked by version or channel checks, configured endpoints are normalized, and extension handling is easier to maintain.
+
+### Codex Model Discovery and Selection
+
+- Added live Codex model catalogs with advertised reasoning efforts and fast-mode capabilities, while keeping configured custom models available without claiming unverified capabilities.
+- Validated explicit Codex models and dynamic reasoning efforts before session and turn requests, preserved selections across turns, and applied model defaults when switching models or starting sessions.
+- Preserved custom-model fast mode for Codex CLI handoffs and Git text generation, and separated model parsing and selection logic for focused regression coverage.
 
 ### Conversation Timeline Reliability
 
 - Fixed question choices with duplicate labels or descriptions so each option keeps its stable provider identity during rendering, while preserving compatibility with older options that do not include IDs.
 
-### More Reliable Remote-Agent Setup
+### Consistent Status Feedback
 
-- Made remote-agent installation and upgrades recover from temporary network failures with bounded retries and timeouts, while cancellation stops pending work without leaving a partially activated installation.
-- Protected downloads with strict redirect rules, trusted release signatures, exact size checks, and SHA-256 verification before making changes on the remote computer.
-- Reused successfully loaded release information between agent health checks and installation, avoiding duplicate requests during setup.
+- Unified usage, provider, context-window, thread-error, and sidebar banners around one reusable status component with consistent variants, icons, actions, and dismissal behavior.
+
+### OpenCode Agent Discovery
+
+- Fixed project OpenCode agents taking precedence over global agents with the same name, so project-specific instructions are selected reliably.
 
 ### Project Ordering
 
 - Fixed projects loaded through **Load more** so they can be reordered alongside projects that were already visible.
 
-### Terminal Layouts
-
-- Added **Open Terminal** to Quick actions and a header control for switching between split, terminal-only, and chat-only views, while keeping `Cmd/Ctrl+J` available for the bottom terminal.
-
 ### Recovery Reliability
 
 - Prevented cleanup recovery from overwhelming the backend and triggering health timeouts or repeated app reconnects.
 - Restored older recovery data safely when records reference threads that no longer exist.
-
-### Validation
-
-- Added regression and integration coverage for dynamic Codex model selection, catalog parsing, custom-model capabilities, CLI flags, and CLIProxyAPI diagnostics and lifecycle behavior.
-- Verified formatting, linting, workspace type checks, and focused server, web, contracts, and shared-package test suites.
 
 ## v0.2.206 (31 August, 2026)
 

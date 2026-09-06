@@ -1,5 +1,3 @@
-import * as OS from "node:os";
-
 import type {
   ServerDiscoveredAgent,
   ServerDiscoveredSkill,
@@ -30,6 +28,13 @@ const CLAUDE_JSON_NAME_REGEX = /"name"\s*:\s*"([^"]+)"/;
 const CLAUDE_JSON_DESCRIPTION_REGEX = /"description"\s*:\s*"([^"]+)"/;
 const SIMPLE_NAME_REGEX = /^(?:name|title):\s*(.+)$/im;
 const SIMPLE_DESCRIPTION_REGEX = /^description:\s*(.+)$/im;
+const DISCOVERY_SOURCE_PRIORITY = {
+  project: 0,
+  user: 1,
+  system: 2,
+  plugin: 3,
+  config: 4,
+} satisfies Record<ServerDiscoveredAgent["source"], number>;
 
 function trimToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -166,6 +171,7 @@ export function parseDiscoveryFile(
 function parseOpencodeJsonConfigAgents(
   configPath: string,
   content: string,
+  source: Extract<ServerDiscoveredAgent["source"], "project" | "user">,
 ): ReadonlyArray<ServerDiscoveredAgent> {
   OPENCODE_JSON_AGENT_KEY_REGEX.lastIndex = 0;
   const keyMatch = OPENCODE_JSON_AGENT_KEY_REGEX.exec(content);
@@ -188,10 +194,6 @@ function parseOpencodeJsonConfigAgents(
   }
 
   const agentBlock = content.slice(blockStart + 1, blockEnd);
-  const source: ServerDiscoveredAgent["source"] = configPath.includes(`${OS.homedir()}/`)
-    ? "user"
-    : "project";
-
   const entries: Array<ServerDiscoveredAgent> = [];
   OPENCODE_JSON_AGENT_ENTRY_START_REGEX.lastIndex = 0;
   let startMatch: RegExpExecArray | null;
@@ -234,6 +236,7 @@ function parseOpencodeJsonConfigAgents(
 export function parseOpencodeConfigAgents(
   configPath: string,
   content: string,
+  source: Extract<ServerDiscoveredAgent["source"], "project" | "user">,
 ): ReadonlyArray<ServerDiscoveredAgent> {
   const entries = Array.from(content.matchAll(OPENCODE_AGENT_SECTION_REGEX)).flatMap((match) => {
     const body = match[1] ?? "";
@@ -247,14 +250,14 @@ export function parseOpencodeConfigAgents(
         id: buildDiscoveryId("opencode", "agent", name),
         provider: "opencode" as const,
         name: sanitizeDiscoveredValue(name),
-        source: configPath.includes(`${OS.homedir()}/`) ? "user" : "project",
+        source,
         ...(description ? { description: sanitizeDiscoveredValue(description) } : {}),
         sourcePath: sanitizeDiscoveredValue(configPath),
       } satisfies ServerDiscoveredAgent,
     ];
   });
   if (entries.length === 0) {
-    return parseOpencodeJsonConfigAgents(configPath, content);
+    return parseOpencodeJsonConfigAgents(configPath, content, source);
   }
   return entries;
 }
@@ -277,7 +280,11 @@ export function mergeEntries<T extends ServerDiscoveredAgent | ServerDiscoveredS
   const deduped = new Map<string, T>();
   for (const entry of entries) {
     const key = `${entry.provider}:${entry.name.trim().toLowerCase()}`;
-    if (!deduped.has(key)) {
+    const existing = deduped.get(key);
+    if (
+      !existing ||
+      DISCOVERY_SOURCE_PRIORITY[entry.source] < DISCOVERY_SOURCE_PRIORITY[existing.source]
+    ) {
       deduped.set(key, entry);
     }
   }

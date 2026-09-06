@@ -1,7 +1,7 @@
 import { PROVIDER_DISPLAY_NAMES, type ServerProvider } from "@bigbud/contracts";
-import { CircleAlertIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { StatusBanner } from "../../common/StatusBanner";
 
 export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   status,
@@ -31,30 +31,19 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
       : `${providerLabel} provider has limited availability.`;
   const title = `${providerLabel} provider status`;
   const variant = status.status === "error" ? "error" : "warning";
-  const dismissButtonClass =
-    variant === "error"
-      ? "inline-flex size-6 items-center justify-center rounded-md text-destructive/60 transition-colors hover:text-destructive"
-      : "inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning";
-
   return (
     <div className="pt-3 mx-auto max-w-3xl">
-      <Alert variant={variant}>
-        <CircleAlertIcon />
-        <AlertTitle>{title}</AlertTitle>
-        <AlertDescription className="line-clamp-3" title={status.message ?? defaultMessage}>
-          {status.message ?? defaultMessage}
-        </AlertDescription>
-        <AlertAction>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className={dismissButtonClass}
-            onClick={() => setDismissed(true)}
-          >
-            <XIcon className="size-3.5" />
-          </button>
-        </AlertAction>
-      </Alert>
+      <StatusBanner
+        variant={variant}
+        icon={<CircleAlertIcon />}
+        title={title}
+        description={
+          <span className="line-clamp-3" title={status.message ?? defaultMessage}>
+            {status.message ?? defaultMessage}
+          </span>
+        }
+        onDismiss={() => setDismissed(true)}
+      />
     </div>
   );
 });

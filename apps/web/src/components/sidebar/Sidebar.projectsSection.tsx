@@ -6,7 +6,7 @@ import {
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
 } from "@bigbud/contracts/settings";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
+import { StatusBanner } from "../common/StatusBanner";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarGroup } from "../ui/sidebar";
@@ -112,12 +112,14 @@ export function SidebarProjectsSection({
     <>
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup className="px-2 pt-2 pb-0">
-          <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
-            <TriangleAlertIcon />
-            <AlertTitle>Intel build on Apple Silicon</AlertTitle>
-            <AlertDescription>{arm64IntelBuildWarningDescription}</AlertDescription>
-            {desktopUpdateButton.action !== "none" ? (
-              <AlertAction>
+          <StatusBanner
+            variant="warning"
+            icon={<TriangleAlertIcon />}
+            className="rounded-2xl border-warning/40 bg-warning/8"
+            title="Intel build on Apple Silicon"
+            description={arm64IntelBuildWarningDescription}
+            action={
+              desktopUpdateButton.action !== "none" ? (
                 <Button
                   size="xs"
                   variant="outline"
@@ -128,9 +130,9 @@ export function SidebarProjectsSection({
                     ? "Download ARM build"
                     : "Install ARM build"}
                 </Button>
-              </AlertAction>
-            ) : null}
-          </Alert>
+              ) : null
+            }
+          />
         </SidebarGroup>
       ) : null}
       <SidebarGroup className="px-2 py-2">

@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Path } from "effect";
 
+import { mergeEntries } from "./DiscoveryRegistry.parse";
 import { getCatalog, writeFile } from "./DiscoveryRegistry.test.shared";
 
 describe("DiscoveryRegistry — opencode config agents", () => {
@@ -80,6 +81,29 @@ describe("DiscoveryRegistry — opencode config agents", () => {
         );
         assert.isDefined(security, "should discover security-engineer agent with nested tools");
         assert.strictEqual(security?.description, "Security review");
+        assert.strictEqual(security?.source, "project");
+        assert.strictEqual(security?.sourcePath, path.join(cwd, ".opencode/opencode.json"));
+      }),
+    );
+
+    it.effect("prefers project agents over user agents with the same name", () =>
+      Effect.sync(() => {
+        const userAgent = {
+          id: "opencode:agent:security-engineer",
+          provider: "opencode" as const,
+          name: "security-engineer",
+          source: "user" as const,
+          description: "Global security review",
+          sourcePath: "/home/user/.config/opencode/agents/security-engineer.md",
+        };
+        const projectAgent = {
+          ...userAgent,
+          source: "project" as const,
+          description: "Project security review",
+          sourcePath: "/project/.opencode/opencode.json",
+        };
+
+        assert.deepEqual(mergeEntries([userAgent, projectAgent]), [projectAgent]);
       }),
     );
 

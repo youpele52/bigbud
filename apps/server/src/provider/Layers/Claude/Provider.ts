@@ -4,6 +4,7 @@ import type {
   ServerProviderModel,
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
+import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { Cache, Duration, Effect, Equal, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
@@ -36,6 +37,7 @@ import {
   parseClaudeAuthStatusFromOutput,
 } from "./ProviderAuth";
 import { makeClaudeInitialSnapshot } from "./Provider.initialSnapshot";
+import { makeClaudeUsageLimitsUnavailable } from "./Provider.usageLimits";
 
 const PROVIDER = "claudeAgent" as const;
 export { getClaudeModelCapabilities } from "./Provider.capabilities";
@@ -59,6 +61,7 @@ type ClaudeCapabilitySnapshot = Readonly<{
   slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
   models: ReadonlyArray<ServerProviderModel>;
   modelDiscovery?: import("@bigbud/contracts").ServerProviderModelDiscovery;
+  usageLimits: ServerProviderUsageLimits;
 }>;
 
 function isClaudeCapabilitySnapshot(value: unknown): value is ClaudeCapabilitySnapshot {
@@ -82,6 +85,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     Effect.map((settings) => settings.providers.claudeAgent),
   );
   const checkedAt = new Date().toISOString();
+  const unavailableUsageLimits = makeClaudeUsageLimitsUnavailable(checkedAt);
   const fallbackModels = dedupeClaudeModels(
     providerModelsFromSettings(
       BUILT_IN_MODELS,
@@ -103,6 +107,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: unavailableUsageLimits,
       probe: {
         installed: false,
         version: null,
@@ -131,6 +136,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: unavailableUsageLimits,
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -155,6 +161,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: unavailableUsageLimits,
       probe: {
         installed: true,
         version: null,
@@ -181,6 +188,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: unavailableUsageLimits,
       probe: {
         installed: true,
         version: parsedVersion,
@@ -256,6 +264,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,
       slashCommands: dedupedSlashCommands,
       probe: {
         installed: true,
@@ -282,6 +291,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: "0.3.219",
         durationMs: 0,
       },
+      usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,
       slashCommands: dedupedSlashCommands,
       probe: {
         installed: true,
@@ -306,6 +316,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       version: "0.3.219",
       durationMs: 0,
     },
+    usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,
     slashCommands: dedupedSlashCommands,
     probe: {
       installed: true,

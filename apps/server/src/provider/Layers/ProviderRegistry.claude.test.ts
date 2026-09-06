@@ -103,6 +103,49 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ),
       );
 
+      it.effect("keeps readiness and capability results when quota probing fails", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(() =>
+            Effect.succeed({
+              subscriptionType: undefined,
+              models: [
+                {
+                  slug: "claude-live",
+                  name: "Claude Live",
+                  isCustom: false,
+                  capabilities: null,
+                },
+              ],
+              modelDiscovery: { status: "live", source: "sdk", durationMs: 5 },
+              slashCommands: [{ name: "review" }],
+              usageLimits: {
+                status: "error",
+                source: "claude-agent-sdk",
+                checkedAt: "2026-09-06T12:00:00.000Z",
+                message: "Claude subscription limits could not be refreshed.",
+                windows: [],
+              },
+            }),
+          );
+
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(status.models[0]?.slug, "claude-live");
+          assert.strictEqual(status.slashCommands[0]?.name, "review");
+          assert.strictEqual(status.usageLimits?.status, "error");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status") {
+                return { stdout: '{"loggedIn":true}\n', stderr: "", code: 0 };
+              }
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
       it.effect("includes probed claude slash commands in the provider snapshot", () =>
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(

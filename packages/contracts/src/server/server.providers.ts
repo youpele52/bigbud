@@ -4,6 +4,7 @@ import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/base
 import { ModelCapabilities } from "../core/model";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
 import { ProviderKind } from "../orchestration/orchestration";
+import { ServerProviderUsageLimits } from "./usageLimits";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
   kind: Schema.Literal("keybindings.malformed-config"),
@@ -180,6 +181,7 @@ export const ServerProvider = Schema.Struct({
   cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
   models: Schema.Array(ServerProviderModel),
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
+  usageLimits: Schema.optional(ServerProviderUsageLimits),
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),

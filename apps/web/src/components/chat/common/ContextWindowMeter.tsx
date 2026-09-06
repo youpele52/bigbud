@@ -2,7 +2,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { useSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
+import { StatusBanner } from "../../common/StatusBanner";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
 
@@ -128,18 +128,22 @@ export function ContextWindowMeter(props: {
             </div>
           ) : null}
           {isOverWarningThreshold && (
-            <Alert variant="warning" className="mt-2">
-              <TriangleAlertIcon />
-              <AlertTitle>Context window warning</AlertTitle>
-              <AlertDescription>
-                Some models may start deteriorating past{" "}
-                {formatContextWindowTokens(warningThreshold)} tokens. Consider using handoff.
-                <ContextWindowRecoveryActions
-                  handoffAvailable={handoffAvailable}
-                  onUseHandoff={onUseHandoff}
-                />
-              </AlertDescription>
-            </Alert>
+            <StatusBanner
+              variant="warning"
+              icon={<TriangleAlertIcon />}
+              className="mt-2"
+              title="Context window warning"
+              description={
+                <>
+                  Some models may start deteriorating past{" "}
+                  {formatContextWindowTokens(warningThreshold)} tokens. Consider using handoff.
+                  <ContextWindowRecoveryActions
+                    handoffAvailable={handoffAvailable}
+                    onUseHandoff={onUseHandoff}
+                  />
+                </>
+              }
+            />
           )}
         </div>
       </PopoverPopup>

@@ -246,7 +246,9 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         configDescriptors,
         (descriptor) =>
           fs.readFileString(descriptor.path).pipe(
-            Effect.map((content) => parseOpencodeConfigAgents(descriptor.path, content)),
+            Effect.map((content) =>
+              parseOpencodeConfigAgents(descriptor.path, content, descriptor.source),
+            ),
             Effect.catch(() => Effect.succeed([] as ReadonlyArray<ServerDiscoveredAgent>)),
           ),
         { concurrency: "unbounded" },

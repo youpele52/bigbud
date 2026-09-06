@@ -1,8 +1,8 @@
-import { InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { PROVIDER_DISPLAY_NAMES, type ServerUsageSummaryResult } from "@bigbud/contracts";
+import { InfoIcon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
+import { StatusBanner } from "../common/StatusBanner";
 
 let unavailableUsageWarningDismissed = false;
 
@@ -21,38 +21,25 @@ export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSumm
   return (
     <div className="space-y-2">
       {summary.historyStatus === "building" ? (
-        <Alert variant="info">
-          <InfoIcon />
-          <AlertTitle>Indexing historical usage</AlertTitle>
-          <AlertDescription>
-            Recent usage is available now. Older usage will appear as background indexing completes.
-          </AlertDescription>
-        </Alert>
+        <StatusBanner
+          variant="info"
+          icon={<InfoIcon />}
+          title="Indexing historical usage"
+          description="Recent usage is available now. Older usage will appear as background indexing completes."
+        />
       ) : null}
       {unavailableProviders.length > 0 && !isUnavailableWarningDismissed ? (
-        <Alert variant="warning">
-          <TriangleAlertIcon />
-          <AlertTitle>Usage unavailable for some providers</AlertTitle>
-          <AlertDescription>
-            {unavailableProviders
-              .map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider])
-              .join(", ")}{" "}
-            do not expose reliable token usage, so their totals are not estimated.
-          </AlertDescription>
-          <AlertAction>
-            <button
-              type="button"
-              aria-label="Dismiss usage availability warning"
-              className="inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning"
-              onClick={() => {
-                unavailableUsageWarningDismissed = true;
-                setIsUnavailableWarningDismissed(true);
-              }}
-            >
-              <XIcon className="size-3.5" />
-            </button>
-          </AlertAction>
-        </Alert>
+        <StatusBanner
+          variant="warning"
+          icon={<TriangleAlertIcon />}
+          title="Usage unavailable for some providers"
+          description={`${unavailableProviders.map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider]).join(", ")} do not expose reliable token usage, so their totals are not estimated.`}
+          dismissLabel="Dismiss usage availability warning"
+          onDismiss={() => {
+            unavailableUsageWarningDismissed = true;
+            setIsUnavailableWarningDismissed(true);
+          }}
+        />
       ) : null}
     </div>
   );

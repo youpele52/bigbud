@@ -9,6 +9,7 @@ import type {
   ServerProviderSlashCommand,
   ServerProviderState,
 } from "@bigbud/contracts";
+import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { compareCodexCliVersions, MINIMUM_CODEX_CLI_VERSION } from "./codexCliVersion.ts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -174,6 +175,7 @@ export function buildServerProvider(input: {
   checkedAt: string;
   models: ReadonlyArray<ServerProviderModel>;
   modelDiscovery?: ServerProviderModelDiscovery;
+  usageLimits?: ServerProviderUsageLimits;
   slashCommands?: ReadonlyArray<ServerProviderSlashCommand>;
   skills?: ReadonlyArray<ServerProviderSkill>;
   supportsSteer?: boolean;
@@ -197,6 +199,7 @@ export function buildServerProvider(input: {
     ...(classifyProviderFailure(input) ? { failure: classifyProviderFailure(input) } : {}),
     models: input.models,
     ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
+    ...(input.usageLimits ? { usageLimits: input.usageLimits } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
     // App-level steering is universal; providers without native steering use

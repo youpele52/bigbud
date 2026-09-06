@@ -24,6 +24,7 @@ export interface DiscoveryFileDescriptor {
 
 export interface DiscoveryConfigDescriptor {
   readonly provider: "opencode";
+  readonly source: Extract<DiscoverySource, "project" | "user">;
   readonly path: string;
 }
 
@@ -380,9 +381,14 @@ export function buildDiscoveryConfigDescriptors(input: {
   readonly cwd: string;
 }): ReadonlyArray<DiscoveryConfigDescriptor> {
   return [
-    { provider: "opencode", path: input.path.join(input.cwd, ".opencode/opencode.json") },
     {
       provider: "opencode",
+      source: "project",
+      path: input.path.join(input.cwd, ".opencode/opencode.json"),
+    },
+    {
+      provider: "opencode",
+      source: "user",
       path: input.path.join(OS.homedir(), ".config/opencode/opencode.json"),
     },
   ] satisfies ReadonlyArray<DiscoveryConfigDescriptor>;
