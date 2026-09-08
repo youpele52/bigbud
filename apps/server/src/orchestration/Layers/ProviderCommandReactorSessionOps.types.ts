@@ -32,6 +32,8 @@ export interface SessionOpServices {
     readonly threadId: ThreadId;
     readonly session: OrchestrationSession;
     readonly createdAt: string;
+    readonly expectedSessionEpoch?: number;
+    readonly advanceSessionEpoch?: boolean;
   }) => Effect.Effect<void, OrchestrationDispatchError>;
   readonly assertRuntimeStartAllowed: (
     threadId: ThreadId,

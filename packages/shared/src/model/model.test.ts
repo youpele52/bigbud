@@ -244,6 +244,21 @@ describe("normalize*ModelOptionsWithCapabilities", () => {
     });
   });
 
+  it("preserves a dynamic Codex effort advertised by capabilities", () => {
+    expect(
+      normalizeCodexModelOptionsWithCapabilities(
+        {
+          ...codexCaps,
+          reasoningEffortLevels: [
+            ...codexCaps.reasoningEffortLevels,
+            { value: "future-depth", label: "Future Depth" },
+          ],
+        },
+        { reasoningEffort: "  future-depth  " },
+      ),
+    ).toEqual({ reasoningEffort: "future-depth" });
+  });
+
   it("preserves the default Claude context window explicitly", () => {
     expect(
       normalizeClaudeModelOptionsWithCapabilities(

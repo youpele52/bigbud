@@ -14,6 +14,7 @@ import {
   MODE_ARGS,
   OffsetConfig,
   createDevRunnerEnv,
+  devModeRequiresWorkspaceAgent,
   optionalBooleanConfig,
   optionalPortConfig,
   optionalStringConfig,
@@ -29,6 +30,7 @@ export {
   DevRunnerError,
   MODE_ARGS,
   createDevRunnerEnv,
+  devModeRequiresWorkspaceAgent,
   findFirstAvailableOffset,
   resolveModePortOffsets,
   resolveOffset,
@@ -173,6 +175,27 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
 
     if (input.dryRun) {
       return;
+    }
+
+    if (devModeRequiresWorkspaceAgent(input.mode)) {
+      yield* Effect.logInfo("[dev-runner] Building the local workspace watcher agent...");
+      const agentBuild = yield* ChildProcess.make(
+        "cargo",
+        ["build", "--locked", "--package", "bigbud-remote-agent"],
+        {
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+          detached: false,
+          forceKillAfter: "1500 millis",
+        },
+      );
+      const agentBuildExitCode = yield* agentBuild.exitCode;
+      if (agentBuildExitCode !== 0) {
+        return yield* new DevRunnerError({
+          message: `workspace agent build exited with code ${agentBuildExitCode}`,
+        });
+      }
     }
 
     const modeArgs = [...MODE_ARGS[input.mode]];

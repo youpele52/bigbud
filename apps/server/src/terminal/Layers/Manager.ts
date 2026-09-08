@@ -1,4 +1,7 @@
-import { TerminalCwdError } from "@bigbud/contracts";
+import {
+  TerminalCwdError,
+  TerminalRuntimeLeaseError,
+} from "@bigbud/contracts/workspace/terminal.ts";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -7,6 +10,7 @@ import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
 import { PtyAdapter } from "../Services/PTY";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
+import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
 import {
   captureLocalRuntimePathIdentity,
   reconcileWorktreeRuntimeLeases,
@@ -50,13 +54,19 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
         inode = excluded.inode, updated_at = excluded.updated_at
     `.pipe(
       Effect.asVoid,
-      Effect.mapError(
-        (cause) =>
-          new TerminalCwdError({
-            cwd: input.worktreePath ?? input.cwd,
-            reason: "statFailed",
+      Effect.catch((cause) =>
+        Effect.gen(function* () {
+          const cwd = input.worktreePath ?? input.cwd;
+          const reason = classifyTerminalRuntimeLeaseError(cause);
+          yield* Effect.logError("failed to reserve terminal runtime lease", {
+            threadId: input.threadId,
+            terminalId: input.terminalId,
+            cwd,
+            reason,
             cause,
-          }),
+          });
+          return yield* new TerminalRuntimeLeaseError({ cwd, reason });
+        }),
       ),
     );
   });

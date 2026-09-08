@@ -311,4 +311,74 @@ describe("thread queued prompt decider", () => {
     );
     expect(events).toEqual([]);
   });
+
+  it("cancels a pending interrupt flush without consuming prompts", async () => {
+    const intentId = CommandId.makeUnsafe("interrupt-intent");
+    const queuedPrompts = [{ id: MessageId.makeUnsafe("one"), text: "one", createdAt: now }];
+    const event = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: {
+          type: "thread.queued-prompt.flush-cancel",
+          commandId: CommandId.makeUnsafe("cancel-flush"),
+          threadId,
+          intentId,
+          createdAt: now,
+        },
+        readModel: readModel({
+          queuedPrompts,
+          pendingInterruptFlushIntent: {
+            intentId,
+            queuedPromptIds: [queuedPrompts[0]!.id],
+            requestedAt: now,
+          },
+        }),
+      }),
+    );
+    expect(event).toMatchObject({
+      type: "thread.queued-prompt-flush-cancelled",
+      payload: { threadId, intentId },
+    });
+  });
+
+  it("keeps automatic follow-ups queued while Stop holds the queue", async () => {
+    const event = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: submit(),
+        readModel: readModel({ queueHold: true }),
+      }),
+    );
+    expect(Array.isArray(event) ? null : (event as { readonly type: string }).type).toBe(
+      "thread.prompt-queued",
+    );
+  });
+
+  it("prevents removal of a prompt reserved by an incomplete operation", async () => {
+    const prompt = { id: MessageId.makeUnsafe("reserved"), text: "reserved", createdAt: now };
+    const event = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: {
+          type: "thread.queued-prompt.remove",
+          commandId: CommandId.makeUnsafe("remove-reserved"),
+          threadId,
+          messageId: prompt.id,
+          createdAt: now,
+        },
+        readModel: readModel({
+          queuedPrompts: [prompt],
+          pendingTurnControlOperation: {
+            operationId: CommandId.makeUnsafe("control"),
+            action: "steer",
+            reservedPromptIds: [prompt.id],
+            sessionEpoch: 0,
+            expectedTurnId: null,
+            strategy: "native-steer",
+            state: "ambiguous",
+            requestedAt: now,
+            updatedAt: now,
+          },
+        }),
+      }),
+    );
+    expect(event).toEqual([]);
+  });
 });

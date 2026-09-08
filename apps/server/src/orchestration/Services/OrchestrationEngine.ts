@@ -13,17 +13,20 @@
 import type {
   OrchestrationCommand,
   CommandId,
+  GetCommandOutcomeResult,
   OrchestrationEvent,
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
+  GetThreadOwnershipResult,
   OrchestrationThread,
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect, ServiceMap } from "effect";
-import type { Stream } from "effect";
+import type { Scope, Stream } from "effect";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
+import type { OrchestrationCommandReceiptRepositoryError } from "../../persistence/Errors.ts";
 import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion.ts";
 
 /**
@@ -45,6 +48,12 @@ export interface OrchestrationEngineShape {
     level: "operational" | "history",
   ) => Effect.Effect<OrchestrationThread | undefined>;
 
+  readonly resolveThreadOwnership?: (threadId: ThreadId) => Effect.Effect<GetThreadOwnershipResult>;
+
+  readonly getCommandOutcome?: (
+    commandId: CommandId,
+  ) => Effect.Effect<GetCommandOutcomeResult, OrchestrationCommandReceiptRepositoryError>;
+
   /**
    * Replay persisted orchestration events from an exclusive sequence cursor.
    *
@@ -57,7 +66,13 @@ export interface OrchestrationEngineShape {
 
   readonly readReplay: (
     fromSequenceExclusive: number,
+    limit?: number,
   ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
+
+  /** Opens an engine-owned bounded live capture for one delivery consumer. */
+  readonly openDeliveryLiveCapture?: (
+    capacity?: number,
+  ) => Effect.Effect<Stream.Stream<OrchestrationEvent>, never, Scope.Scope>;
 
   /** Internal keyed lookup for the event set committed by one command. */
   readonly readEventsByCommandId?: (
@@ -95,6 +110,34 @@ export function ensureOrchestrationThreadState(
     : engine
         .getReadModel()
         .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === threadId)));
+}
+
+export function resolveOrchestrationThreadOwnership(
+  engine: OrchestrationEngineShape,
+  threadId: ThreadId,
+) {
+  return engine.resolveThreadOwnership
+    ? engine.resolveThreadOwnership(threadId)
+    : Effect.succeed({
+        threadId,
+        status: "unavailable" as const,
+        ownership: "unconfirmed" as const,
+        reason: "Canonical ownership resolution is unavailable.",
+      });
+}
+
+export function getOrchestrationCommandOutcome(
+  engine: OrchestrationEngineShape,
+  commandId: CommandId,
+) {
+  return engine.getCommandOutcome
+    ? engine.getCommandOutcome(commandId)
+    : Effect.succeed({
+        commandId,
+        status: "unknown" as const,
+        serverEpoch: "unavailable",
+        canonicalRevision: 0,
+      });
 }
 
 /**

@@ -1,5 +1,5 @@
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import {
-  isCodeRelatedFilePath,
   parsePathPositionSuffix,
   openPathInPreferredApp,
   stripPathPositionSuffix,
@@ -10,7 +10,6 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
-  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
@@ -26,7 +25,7 @@ function normalizePathForCompare(pathValue: string): string {
 }
 
 function isWindowsStylePath(pathValue: string): boolean {
-  return /^[A-Za-z]:\//.test(pathValue);
+  return /^[A-Za-z]:\//.test(pathValue) || pathValue.startsWith("//");
 }
 
 export function resolveWorkspaceRelativeEntryPath(
@@ -156,9 +155,7 @@ export function canOpenPathInFilesPanel(
   if (openTarget === null) {
     return false;
   }
-  return (
-    isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath) || isVideoFilePath(targetPath)
-  );
+  return true;
 }
 
 export function canOpenPathInBrowserPanel(
@@ -193,6 +190,7 @@ export function canOpenDirectoryInFilesPanel(
 export function openPathInBrowserPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
+  executionTargetId?: ExecutionTargetId | undefined,
 ): boolean {
   const openTarget = resolveInternalOpenTarget(targetPath, workspaceRoot);
   if (!openTarget) {
@@ -211,6 +209,7 @@ export function openPathInBrowserPanelIfSupported(
     url: buildWorkspaceFilePreviewUrl({
       cwd,
       relativePath,
+      executionTargetId,
     }),
   });
   return true;
@@ -219,34 +218,33 @@ export function openPathInBrowserPanelIfSupported(
 export function openPathInFilesPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
+  executionTargetId?: ExecutionTargetId | undefined,
 ): boolean {
   const openTarget = resolveInternalOpenTarget(targetPath, workspaceRoot);
   if (!openTarget) {
     return false;
   }
   const { relativePath, workspaceRootOverride } = openTarget;
-  if (
-    !isCodeRelatedFilePath(targetPath) &&
-    !isImageFilePath(targetPath) &&
-    !isVideoFilePath(targetPath)
-  ) {
-    return false;
-  }
-
-  openFileInFilesPanel(relativePath, parsePathPositionSuffix(targetPath), workspaceRootOverride);
+  openFileInFilesPanel(
+    relativePath,
+    parsePathPositionSuffix(targetPath),
+    workspaceRootOverride,
+    executionTargetId,
+  );
   return true;
 }
 
 export function openDirectoryInFilesPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
+  executionTargetId?: ExecutionTargetId | undefined,
 ): boolean {
   const openTarget = resolveDirectoryOpenTarget(targetPath, workspaceRoot);
   if (!openTarget) {
     return false;
   }
 
-  openDirectoryInFilesPanel(openTarget.path, openTarget.workspaceRootOverride);
+  openDirectoryInFilesPanel(openTarget.path, openTarget.workspaceRootOverride, executionTargetId);
   return true;
 }
 

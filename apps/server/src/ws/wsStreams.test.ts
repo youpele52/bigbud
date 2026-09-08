@@ -8,7 +8,7 @@ import {
 } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertTrue } from "@effect/vitest/utils";
-import { Effect, Option, PubSub, Stream } from "effect";
+import { Effect, Exit, Option, PubSub, Stream } from "effect";
 
 import {
   makeOrderedOrchestrationDomainEventStream,
@@ -60,6 +60,39 @@ it.effect("does not miss domain events committed while replay events are being r
       events.value.map((event) => event.sequence),
       [2],
     );
+  }),
+);
+
+it.effect("fails explicitly instead of growing an unbounded pending sequence map", () =>
+  Effect.gen(function* () {
+    const stream = yield* makeOrderedOrchestrationDomainEventStream({
+      orchestrationEngine: {
+        getReadModel: () => Effect.succeed({ snapshotSequence: 0 }),
+        readEvents: () => Stream.empty,
+        streamDomainEvents: Stream.fromIterable([makeEvent(3), makeEvent(4)]),
+      },
+      pendingSequenceCapacity: 1,
+    });
+
+    const exit = yield* Effect.exit(Stream.runDrain(stream));
+
+    assert.isTrue(Exit.isFailure(exit));
+  }),
+);
+
+it.effect("fails canonical replay instead of bridging it with live delivery", () =>
+  Effect.gen(function* () {
+    const exit = yield* Effect.exit(
+      makeOrderedOrchestrationDomainEventStream({
+        orchestrationEngine: {
+          getReadModel: () => Effect.succeed({ snapshotSequence: 0 }),
+          readEvents: () => Stream.fail({ _tag: "OrchestrationEventStoreError" } as never),
+          streamDomainEvents: Stream.make(makeEvent(1)),
+        },
+      }).pipe(Effect.flatMap(Stream.runCollect)),
+    );
+
+    assert.isTrue(Exit.isFailure(exit));
   }),
 );
 

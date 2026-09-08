@@ -232,7 +232,7 @@ function AssistantTurnDiffCard({
 
   const summaryStat = summarizeTurnDiffStats(checkpointFiles);
   const changedFileCountLabel = String(checkpointFiles.length);
-  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? true;
+  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? false;
 
   return (
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
@@ -248,18 +248,18 @@ function AssistantTurnDiffCard({
         </p>
         <div className="flex items-center gap-1.5">
           <Button
-            type="button"
             size="xs"
-            variant="outline"
+            variant="text"
+            type="button"
             data-scroll-anchor-ignore
             onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
           >
             {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
           </Button>
           <Button
-            type="button"
             size="xs"
-            variant="outline"
+            variant="text"
+            type="button"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
             View diff

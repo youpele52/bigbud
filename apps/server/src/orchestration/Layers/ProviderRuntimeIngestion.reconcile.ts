@@ -4,10 +4,11 @@ import {
   type OrchestrationThread,
   type ProviderSession,
 } from "@bigbud/contracts";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Schema } from "effect";
 
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import { PersistenceSqlError } from "../../persistence/Errors.ts";
 
 import {
   DEFAULT_RUNTIME_MODE,
@@ -35,21 +36,33 @@ const PROVIDER_HEALTH_REASONS = new Set<string>([
 export function dispatchReconciliationCommandSafely(
   orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch">,
   command: OrchestrationCommand,
-): Effect.Effect<void, OrchestrationDispatchError> {
+): Effect.Effect<"applied" | "retryable" | "terminal", OrchestrationDispatchError> {
   return orchestrationEngine.dispatch(command).pipe(
+    Effect.as("applied" as const),
     Effect.catchCause((cause) => {
       if (Cause.hasInterruptsOnly(cause)) {
         return Effect.failCause(cause);
+      }
+      const failure = Cause.findErrorOption(cause);
+      if (failure._tag === "Some" && isDeletingParentReconciliationError(failure.value)) {
+        return Effect.logDebug("provider runtime reconciliation reached terminal deletion fence", {
+          commandId: command.commandId,
+          commandType: command.type,
+          ...(command.type === "thread.session.set" ? { threadId: command.threadId } : {}),
+        }).pipe(Effect.as("terminal" as const));
       }
       return Effect.logWarning("provider runtime reconciliation command failed", {
         commandId: command.commandId,
         commandType: command.type,
         ...("threadId" in command ? { threadId: command.threadId } : {}),
         cause: Cause.pretty(cause),
-      });
+      }).pipe(Effect.as("retryable" as const));
     }),
-    Effect.asVoid,
   );
+}
+
+export function isDeletingParentReconciliationError(error: unknown): boolean {
+  return Schema.is(PersistenceSqlError)(error) && error.detail === "parent thread is deleting";
 }
 
 function areSessionsEqual(
@@ -62,6 +75,7 @@ function areSessionsEqual(
     left?.providerName === right.providerName &&
     left?.runtimeMode === right.runtimeMode &&
     left?.activeTurnId === right.activeTurnId &&
+    (left?.sessionEpoch ?? 0) === (right.sessionEpoch ?? 0) &&
     (left.reason ?? null) === (right.reason ?? null) &&
     left?.lastError === right.lastError &&
     left?.updatedAt === right.updatedAt
@@ -77,6 +91,12 @@ function toReconciledSession(input: {
   const currentSession = thread.session;
 
   if (liveSession) {
+    if (
+      liveSession.sessionEpoch !== undefined &&
+      liveSession.sessionEpoch !== (currentSession?.sessionEpoch ?? 0)
+    ) {
+      return null;
+    }
     const status = mapProviderSessionStatusToOrchestrationStatus(liveSession.status);
     const currentReason = currentSession?.reason ?? null;
     const preserveSupervisorState =
@@ -94,6 +114,7 @@ function toReconciledSession(input: {
       providerName: liveSession.provider,
       runtimeMode: thread.runtimeMode ?? liveSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       activeTurnId: liveSession.activeTurnId ?? null,
+      sessionEpoch: currentSession?.sessionEpoch ?? liveSession.sessionEpoch ?? 0,
       reason: healLegacyChecking
         ? null
         : preserveSupervisorState
@@ -122,6 +143,7 @@ function toReconciledSession(input: {
     providerName: currentSession.providerName,
     runtimeMode: thread.runtimeMode ?? currentSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     activeTurnId: null,
+    sessionEpoch: currentSession.sessionEpoch ?? 0,
     reason: null,
     lastError: currentSession.lastError,
     updatedAt: occurredAt,
@@ -142,6 +164,10 @@ export function buildThreadReconciliationCommand(input: {
     commandId: serverCommandId("provider-runtime-session-reconcile"),
     threadId: input.thread.id,
     session: nextSession,
+    expectedSessionEpoch: input.thread.session?.sessionEpoch ?? 0,
+    ...(input.thread.session?.activeTurnId
+      ? { expectedActiveTurnId: input.thread.session.activeTurnId }
+      : {}),
     createdAt: input.occurredAt,
   };
 }

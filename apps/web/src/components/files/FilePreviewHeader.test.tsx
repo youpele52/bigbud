@@ -30,5 +30,9 @@ describe("FilePreviewHeader", () => {
     expect(markup).toContain('aria-label="Close"');
     expect(markup).toContain('aria-label="Back"');
     expect(markup).toContain("disabled");
+    expect(markup.match(/draggable="true"/g)).toHaveLength(1);
+    expect(markup).toMatch(
+      /<span draggable="true" class="cursor-grab truncate font-medium text-foreground active:cursor-grabbing"[^>]*>file\.md<\/span>/,
+    );
   });
 });

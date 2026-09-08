@@ -14,6 +14,10 @@ import {
 } from "@bigbud/contracts";
 
 import { type CodexAccountSnapshot } from "../provider/codexAccount";
+import type {
+  CodexEffectiveModelSelection,
+  CodexModelCatalog,
+} from "./codexAppServerManager.modelSelection";
 
 export type PendingRequestKey = string;
 
@@ -86,6 +90,8 @@ export interface CodexSessionContext {
   pendingApprovals: Map<ApprovalRequestId, PendingApprovalRequest>;
   pendingUserInputs: Map<ApprovalRequestId, PendingUserInputRequest>;
   collabReceiverTurns: Map<string, TurnId>;
+  activeModelCatalog: CodexModelCatalog;
+  effectiveModelSelection: CodexEffectiveModelSelection | undefined;
   nextRequestId: number;
   dynamicToolCallHandler?: CodexDynamicToolCallHandler | undefined;
   cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
@@ -126,6 +132,13 @@ export interface CodexAppServerSendTurnInput {
   readonly interactionMode?: ProviderInteractionMode;
 }
 
+export interface CodexAppServerSteerTurnInput {
+  readonly threadId: ThreadId;
+  readonly input: string;
+  readonly expectedTurnId: TurnId;
+  readonly clientUserMessageId: string;
+}
+
 export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
@@ -134,7 +147,9 @@ export interface CodexAppServerStartSessionInput {
   readonly executionTargetId?: string;
   readonly cwd?: string;
   readonly model?: string;
+  readonly effort?: string;
   readonly serviceTier?: string;
+  readonly customModels?: ReadonlyArray<string>;
   readonly resumeCursor?: unknown;
   readonly binaryPath: string;
   readonly homePath?: string;
@@ -145,6 +160,7 @@ export interface CodexAppServerStartSessionInput {
   readonly cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   readonly developerInstructions?: string;
   readonly runtimeMode: RuntimeMode;
+  readonly sessionEpoch?: number;
 }
 
 export interface CodexThreadTurnSnapshot {

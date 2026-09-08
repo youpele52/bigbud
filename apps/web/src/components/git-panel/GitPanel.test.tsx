@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GitCommitSummary, GitStatusResult } from "@bigbud/contracts";
 
-const gitStatusResult: GitStatusResult = {
+const defaultGitStatusResult: GitStatusResult = {
   isRepo: true,
   hasOriginRemote: true,
   isDefaultBranch: false,
@@ -23,6 +23,8 @@ const gitStatusResult: GitStatusResult = {
   behindCount: 0,
   pr: null,
 };
+let gitStatusResult: GitStatusResult | null = defaultGitStatusResult;
+let gitStatusError: Error | null = null;
 
 vi.mock("~/hooks/useResolvedGitWorkspace", () => ({
   useResolvedGitWorkspace: () => ({
@@ -89,7 +91,7 @@ vi.mock("@tanstack/react-query", async () => {
       const scope = options.queryKey?.[1];
 
       if (scope === "status") {
-        return { data: gitStatusResult, isLoading: false, error: null };
+        return { data: gitStatusResult, isLoading: false, error: gitStatusError };
       }
 
       if (scope === "working-tree-diff") {
@@ -139,6 +141,8 @@ describe("GitPanelContent", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    gitStatusResult = defaultGitStatusResult;
+    gitStatusError = null;
   });
 
   it("renders status text, matching file count, and toggle labels", () => {
@@ -151,6 +155,37 @@ describe("GitPanelContent", () => {
     expect(markup).toContain('aria-label="Changes"');
     expect(markup).toContain('aria-label="History"');
     expect(markup).toContain('draggable="true"');
+  });
+
+  it("explains that Git resolves from the configured workspace root", () => {
+    gitStatusResult = { ...defaultGitStatusResult, isRepo: false };
+
+    const markup = renderToStaticMarkup(<GitPanelContent activeThreadId={null} />);
+
+    expect(markup).toContain("No Git repository at");
+    expect(markup).toContain("/repo/project");
+    expect(markup).toContain("not the terminal&#x27;s current directory");
+  });
+
+  it("shows the Git status request error", () => {
+    gitStatusResult = null;
+    gitStatusError = new Error("Remote Git transport disconnected.");
+
+    const markup = renderToStaticMarkup(<GitPanelContent activeThreadId={null} />);
+
+    expect(markup).toContain("Failed to load Git state");
+    expect(markup).toContain("Remote Git transport disconnected.");
+  });
+
+  it("keeps cached Git status visible after a background refresh error", () => {
+    gitStatusError = new Error("Remote Git refresh disconnected.");
+
+    const markup = renderToStaticMarkup(<GitPanelContent activeThreadId={null} />);
+
+    expect(markup).toContain("dev");
+    expect(markup).toContain("29 changed files");
+    expect(markup).toContain("Git status refresh failed: Remote Git refresh disconnected.");
+    expect(markup).not.toContain("Failed to load Git state:");
   });
 
   it("renders history rows with author, relative time, and not-pushed state", () => {
@@ -180,6 +215,7 @@ describe("GitPanelContent", () => {
         history={history}
         historyError={null}
         isLoadingDetails={false}
+        isLoadingHistory={false}
         isLoadingMoreHistory={false}
         onLoadMoreHistory={() => Promise.resolve()}
         onSelectCommit={() => undefined}
@@ -235,6 +271,7 @@ describe("GitPanelContent", () => {
         history={history}
         historyError={null}
         isLoadingDetails={false}
+        isLoadingHistory={false}
         isLoadingMoreHistory={false}
         onLoadMoreHistory={() => Promise.resolve()}
         onSelectCommit={() => undefined}
@@ -248,5 +285,83 @@ describe("GitPanelContent", () => {
     expect(markup).toContain("abc123 by Youpele Michael, 2m");
 
     vi.useRealTimers();
+  });
+
+  it("shows the history loader only while the empty history query is pending", () => {
+    const markup = renderToStaticMarkup(
+      <GitPanelHistory
+        commitDetails={null}
+        detailError={null}
+        hasMoreHistory={false}
+        history={[]}
+        historyError={null}
+        isLoadingDetails={false}
+        isLoadingHistory={true}
+        isLoadingMoreHistory={false}
+        onLoadMoreHistory={() => Promise.resolve()}
+        onSelectCommit={() => undefined}
+        selectedCommitSha={null}
+        selectedCommitSummary={null}
+      />,
+    );
+
+    expect(markup).toContain("Loading commit history...");
+    expect(markup).not.toContain("No commits yet.");
+  });
+
+  it("shows the resolved empty state even if an obsolete detail request is pending", () => {
+    const markup = renderToStaticMarkup(
+      <GitPanelHistory
+        commitDetails={null}
+        detailError={null}
+        hasMoreHistory={false}
+        history={[]}
+        historyError={null}
+        isLoadingDetails={true}
+        isLoadingHistory={false}
+        isLoadingMoreHistory={false}
+        onLoadMoreHistory={() => Promise.resolve()}
+        onSelectCommit={() => undefined}
+        selectedCommitSha={null}
+        selectedCommitSummary={null}
+      />,
+    );
+
+    expect(markup).toContain("No commits yet.");
+    expect(markup).not.toContain("Loading commit...");
+  });
+
+  it("keeps history visible while the selected commit details load", () => {
+    const history: GitCommitSummary[] = [
+      {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "Visible history commit",
+        authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
+        authoredAt: "2026-06-08T00:00:00.000Z",
+        isPushed: true,
+        tags: [],
+      },
+    ];
+    const markup = renderToStaticMarkup(
+      <GitPanelHistory
+        commitDetails={null}
+        detailError={null}
+        hasMoreHistory={false}
+        history={history}
+        historyError={null}
+        isLoadingDetails={true}
+        isLoadingHistory={false}
+        isLoadingMoreHistory={false}
+        onLoadMoreHistory={() => Promise.resolve()}
+        onSelectCommit={() => undefined}
+        selectedCommitSha="abc123"
+        selectedCommitSummary={history[0] ?? null}
+      />,
+    );
+
+    expect(markup).toContain("Visible history commit");
+    expect(markup).toContain("Loading commit...");
+    expect(markup).not.toContain("Loading commit history...");
   });
 });

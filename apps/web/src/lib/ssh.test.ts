@@ -23,6 +23,12 @@ describe("ssh error parsing", () => {
     ).toBe("root@46.225.127.53:22");
   });
 
+  it("recognizes incorrect password failures as retryable authentication", () => {
+    expect(
+      getPasswordProtectedSshTargetLabel("Incorrect password for root@46.225.127.53:22."),
+    ).toBe("root@46.225.127.53:22");
+  });
+
   it("returns auth-specific toast titles", () => {
     expect(getSshAuthFailureToastTitle("password")).toBe("SSH login failed");
     expect(getSshAuthFailureToastTitle("ssh-key-passphrase")).toBe("SSH key unlock failed");

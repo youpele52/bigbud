@@ -4,8 +4,10 @@ import {
   clampPreviewTargetLine,
   getFilePreviewWatchRelativePath,
   getPreviewScrollTop,
+  inferPreviewLanguage,
   isMarkdownFilePath,
   shouldShowPreviewLoading,
+  shouldSyntaxHighlightPreviewPath,
 } from "./FilePreview.logic";
 
 describe("getFilePreviewWatchRelativePath", () => {
@@ -67,5 +69,38 @@ describe("isMarkdownFilePath", () => {
   it("returns false for non-markdown file paths", () => {
     expect(isMarkdownFilePath("src/index.ts")).toBe(false);
     expect(isMarkdownFilePath("docs/readme.markdown")).toBe(false);
+  });
+});
+
+describe("preview syntax highlighting", () => {
+  it("recognizes Dockerfile naming variants", () => {
+    expect(inferPreviewLanguage("Dockerfile")).toBe("dockerfile");
+    expect(inferPreviewLanguage("docker/Dockerfile-dev")).toBe("dockerfile");
+    expect(inferPreviewLanguage("docker/Dockerfile-prod")).toBe("dockerfile");
+    expect(inferPreviewLanguage("docker/Dockerfile.local")).toBe("dockerfile");
+    expect(shouldSyntaxHighlightPreviewPath("docker/Dockerfile-prod")).toBe(true);
+  });
+
+  it("maps environment variants to the bundled dotenv grammar", () => {
+    expect(inferPreviewLanguage(".env")).toBe("dotenv");
+    expect(inferPreviewLanguage("config/.env.local")).toBe("dotenv");
+    expect(inferPreviewLanguage("config/.env.production")).toBe("dotenv");
+    expect(inferPreviewLanguage("config/example.env")).toBe("dotenv");
+  });
+
+  it("maps structured text and prose files to supported grammars", () => {
+    expect(inferPreviewLanguage("settings.ini")).toBe("ini");
+    expect(inferPreviewLanguage("server.conf")).toBe("ini");
+    expect(inferPreviewLanguage("gradle.properties")).toBe("properties");
+    expect(inferPreviewLanguage("notes.txt")).toBe("markdown");
+    expect(inferPreviewLanguage("service.log")).toBe("log");
+    expect(inferPreviewLanguage(".gitignore")).toBe("ini");
+  });
+
+  it("highlights recognized text formats without treating unknown files as code", () => {
+    expect(shouldSyntaxHighlightPreviewPath("config/.env.test")).toBe(true);
+    expect(shouldSyntaxHighlightPreviewPath("notes.txt")).toBe(true);
+    expect(shouldSyntaxHighlightPreviewPath("settings.cfg")).toBe(true);
+    expect(shouldSyntaxHighlightPreviewPath("archive.unknown-format")).toBe(false);
   });
 });

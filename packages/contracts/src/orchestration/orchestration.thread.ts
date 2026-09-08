@@ -107,6 +107,8 @@ export const OrchestrationSession = Schema.Struct({
   providerName: Schema.NullOr(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   activeTurnId: Schema.NullOr(TurnId),
+  /** bigbud-owned provider-session incarnation fence. Legacy sessions decode as epoch zero. */
+  sessionEpoch: Schema.optional(NonNegativeInt),
   reason: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
@@ -258,6 +260,51 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 
+export const OrchestrationTurnControlAction = Schema.Literals([
+  "steer",
+  "interrupt-and-continue",
+  "stop",
+]);
+export type OrchestrationTurnControlAction = typeof OrchestrationTurnControlAction.Type;
+
+export const OrchestrationTurnControlStrategy = Schema.Literals([
+  "pending-selection",
+  "native-steer",
+  "interrupt-continue",
+  "stop-session",
+]);
+export type OrchestrationTurnControlStrategy = typeof OrchestrationTurnControlStrategy.Type;
+
+export const OrchestrationTurnControlState = Schema.Literals([
+  "requested",
+  "provider-acknowledged",
+  "waiting-for-settlement",
+  "completed",
+  "failed",
+  "ambiguous",
+  "superseded",
+  "cancelled",
+]);
+export type OrchestrationTurnControlState = typeof OrchestrationTurnControlState.Type;
+
+/** Durable provider-neutral operation and exact queue-prefix reservation. */
+export const OrchestrationTurnControlOperation = Schema.Struct({
+  operationId: CommandId,
+  action: OrchestrationTurnControlAction,
+  reservedPromptIds: Schema.Array(MessageId),
+  sessionEpoch: NonNegativeInt,
+  expectedTurnId: Schema.NullOr(TurnId),
+  strategy: OrchestrationTurnControlStrategy,
+  state: OrchestrationTurnControlState,
+  requestedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  acknowledgedAt: Schema.optional(IsoDateTime),
+  settledAt: Schema.optional(IsoDateTime),
+  error: Schema.optional(TrimmedNonEmptyString),
+  deliveryAmbiguous: Schema.optional(Schema.Boolean),
+});
+export type OrchestrationTurnControlOperation = typeof OrchestrationTurnControlOperation.Type;
+
 /** Durable Send now request; its captured prefix must be consumed exactly once. */
 export const OrchestrationPendingInterruptFlushIntent = Schema.Struct({
   intentId: CommandId,
@@ -292,6 +339,10 @@ export const OrchestrationThread = Schema.Struct({
   pendingInterruptFlushIntent: Schema.optional(
     Schema.NullOr(OrchestrationPendingInterruptFlushIntent),
   ).pipe(Schema.withDecodingDefault(() => null)),
+  pendingTurnControlOperation: Schema.optional(
+    Schema.NullOr(OrchestrationTurnControlOperation),
+  ).pipe(Schema.withDecodingDefault(() => null)),
+  queueHold: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

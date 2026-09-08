@@ -1,5 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Cause, Effect, Layer, Scope, Stream } from "effect";
+import { Cause, Effect, Layer, Option, Scope, Stream } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
 import {
@@ -7,6 +7,8 @@ import {
   type ProviderCommandReactorShape,
 } from "../Services/ProviderCommandReactor.ts";
 import { makeProviderCommandHandlers } from "./ProviderCommandReactorHandlers.ts";
+import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
+import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -18,6 +20,7 @@ type ProviderIntentEvent = Extract<
       | "thread.turn-start-requested"
       | "thread.message-sent"
       | "thread.turn-interrupt-requested"
+      | "thread.turn-steer-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
       | "thread.session-stop-requested"
@@ -30,6 +33,10 @@ import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const handlers = yield* makeProviderCommandHandlers;
+  const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
+  const cleanupRepository = Option.isSome(cleanupRepositoryService)
+    ? cleanupRepositoryService.value
+    : yield* makeDirectResourceCleanupRepository;
 
   const processDomainEventSafely = (event: ProviderIntentEvent) =>
     handlers.processDomainEvent(event).pipe(
@@ -72,6 +79,7 @@ const make = Effect.gen(function* () {
         event.type === "thread.turn-start-requested" ||
         event.type === "thread.message-sent" ||
         event.type === "thread.turn-interrupt-requested" ||
+        event.type === "thread.turn-steer-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||
         event.type === "thread.session-stop-requested" ||
@@ -86,9 +94,56 @@ const make = Effect.gen(function* () {
       }
     });
 
+    // Subscribe before either durable scan. The scans are the startup fence: any
+    // intent committed before subscription is found below, while later intents
+    // are delivered to the live worker stream.
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, processEvent),
     );
+    yield* Effect.yieldNow;
+
+    let cursorAt = "";
+    let cursorId = "";
+    while (true) {
+      const intents = yield* cleanupRepository
+        .listRecoverableIntents({
+          requestedAfter: cursorAt,
+          intentAfter: cursorId,
+          limit: 100,
+        })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("provider command reactor could not inspect cleanup intents", {
+              detail: String(error),
+            }).pipe(Effect.as([])),
+          ),
+        );
+      yield* Effect.forEach(
+        intents,
+        (intent) =>
+          orchestrationEngine.readEventsByCommandId!(intent.commandId as never).pipe(
+            Effect.flatMap((events) => {
+              const event = events.find((candidate) => candidate.eventId === intent.eventId);
+              return event &&
+                (event.type === "thread.deletion-requested" ||
+                  event.type === "project.deletion-requested")
+                ? processEvent(event)
+                : Effect.void;
+            }),
+            Effect.catch((error) =>
+              Effect.logWarning("provider command reactor could not recover cleanup intent", {
+                eventId: intent.eventId,
+                detail: String(error),
+              }),
+            ),
+          ),
+        { concurrency: 1, discard: true },
+      );
+      const last = intents.at(-1);
+      if (!last || intents.length < 100) break;
+      cursorAt = last.requestedAt;
+      cursorId = last.intentId;
+    }
   });
 
   return {

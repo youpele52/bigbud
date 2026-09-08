@@ -13,6 +13,19 @@ export interface UseSidebarRemoteProjectAddActionsInput {
   readonly isAddingProject: boolean;
 }
 
+export type SidebarRemoteAgentInstallRequest = {
+  readonly candidate: RemoteProjectDraft;
+  readonly executionTargetId: string;
+  readonly targetLabel: string;
+} & (
+  | { readonly kind: "install" }
+  | {
+      readonly kind: "upgrade";
+      readonly currentVersion: string;
+      readonly targetVersion: string;
+    }
+);
+
 export interface SidebarRemoteProjectAddActionsOutput {
   readonly remoteProjectDialogMode: "add" | "edit";
   readonly isRemoteProjectDialogOpen: boolean;
@@ -36,6 +49,9 @@ export interface SidebarRemoteProjectAddActionsOutput {
         : string,
   ) => void;
   readonly submitRemoteProjectDialog: () => Promise<void>;
+  readonly remoteAgentInstallRequest: SidebarRemoteAgentInstallRequest | null;
+  readonly declineRemoteAgentInstall: () => void;
+  readonly completeRemoteAgentInstall: (message: string) => Promise<void>;
   readonly isRemoteProjectUnlockDialogOpen: boolean;
   readonly remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
   readonly remoteProjectUnlockKeyPath: string;

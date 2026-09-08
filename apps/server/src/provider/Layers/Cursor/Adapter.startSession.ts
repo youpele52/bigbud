@@ -4,7 +4,9 @@ import { Effect, Exit, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
+import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
 import { prepareAcpThreadOrchestrationBridge } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
+import { prepareAcpRemoteWorkspaceSession } from "../AcpRemoteWorkspace.session.ts";
 import {
   type CursorAdapterLiveOptions,
   type CursorEventStamp,
@@ -20,16 +22,9 @@ import {
   mapAcpToAdapterError,
   makeAcpRequestOpenedEvent,
   makeAcpRequestResolvedEvent,
-  nodePath,
   parsePermissionRequest,
   makeAcpNativeLoggers,
   makeCursorAcpRuntime,
-  CursorAskQuestionRequest,
-  CursorCreatePlanRequest,
-  CursorUpdateTodosRequest,
-  extractAskQuestions,
-  extractPlanMarkdown,
-  extractTodosAsPlan,
   CURSOR_RESUME_VERSION,
   PROVIDER,
   applyRequestedSessionConfiguration,
@@ -37,11 +32,14 @@ import {
   scheduleFullAccessPermissionAutoApproval,
   selectAutoApprovedPermissionOption,
 } from "./Adapter.helpers.ts";
-import { emitPlanUpdate, forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { registerCursorExtensionHandlers } from "./Adapter.startSession.extensions.ts";
 
 interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly nativeEventLogger: CursorAdapterLiveOptions["nativeEventLogger"] | undefined;
+  readonly remoteAgentPtyResolver: RemoteAgentPtyResolver | undefined;
+  readonly remoteWorkspaceReadinessProbe: CursorAdapterLiveOptions["remoteWorkspaceReadinessProbe"];
   readonly serverConfig: {
     readonly stateDir: string;
     readonly host: string | undefined;
@@ -81,7 +79,7 @@ export function makeStartSessionEffect(
       });
     }
 
-    const cwd = nodePath.resolve(input.cwd.trim());
+    const sessionEpoch = input.sessionEpoch ?? 0;
     const cursorModelSelection =
       input.modelSelection?.provider === "cursor" ? input.modelSelection : undefined;
     const existing = deps.sessions.get(input.threadId);
@@ -121,10 +119,23 @@ export function makeStartSessionEffect(
           cause,
         }),
     });
+    const workspaceSession = yield* prepareAcpRemoteWorkspaceSession({
+      provider: PROVIDER,
+      sessionInput: input,
+      ptyResolver: deps.remoteAgentPtyResolver,
+      orchestrationCleanup: orchestration.bridge.cleanup,
+      ...(deps.remoteWorkspaceReadinessProbe
+        ? { readinessProbe: deps.remoteWorkspaceReadinessProbe }
+        : {}),
+    });
     const acp = yield* makeCursorAcpRuntime({
       cursorSettings,
       childProcessSpawner: deps.childProcessSpawner,
-      cwd,
+      cwd: workspaceSession.sessionCwd,
+      spawnCwd: workspaceSession.processCwd,
+      ...(workspaceSession.remoteBridge
+        ? { clientCapabilities: workspaceSession.remoteBridge.clientCapabilities }
+        : {}),
       ...(resumeSessionId ? { resumeSessionId } : {}),
       mcpServers: orchestration.mcpServers,
       clientInfo: { name: "bigbud", version: "0.0.0" },
@@ -140,80 +151,23 @@ export function makeStartSessionEffect(
             cause,
           }),
       ),
-      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
+      Effect.onError(() => Effect.promise(workspaceSession.cleanup)),
     );
 
     const started = yield* Effect.gen(function* () {
-      yield* acp.handleExtRequest("cursor/ask_question", CursorAskQuestionRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/ask_question", params);
-          const requestId = ApprovalRequestId.makeUnsafe(crypto.randomUUID());
-          const runtimeRequestId = RuntimeRequestId.makeUnsafe(requestId);
-          const answers =
-            yield* Deferred.make<import("@bigbud/contracts").ProviderUserInputAnswers>();
-          pendingUserInputs.set(requestId, { answers });
-          yield* deps.offerRuntimeEvent({
-            type: "user-input.requested",
-            ...(yield* deps.makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            requestId: runtimeRequestId,
-            payload: { questions: extractAskQuestions(params) },
-            raw: {
-              source: "acp.cursor.extension",
-              method: "cursor/ask_question",
-              payload: params,
-            },
-          });
-          const resolved = yield* Deferred.await(answers);
-          pendingUserInputs.delete(requestId);
-          yield* deps.offerRuntimeEvent({
-            type: "user-input.resolved",
-            ...(yield* deps.makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            requestId: runtimeRequestId,
-            payload: { answers: resolved },
-          });
-          return { answers: resolved };
-        }),
-      );
-      yield* acp.handleExtRequest("cursor/create_plan", CursorCreatePlanRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/create_plan", params);
-          yield* deps.offerRuntimeEvent({
-            type: "turn.proposed.completed",
-            ...(yield* deps.makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            turnId: ctx?.activeTurnId,
-            payload: { planMarkdown: extractPlanMarkdown(params) },
-            raw: {
-              source: "acp.cursor.extension",
-              method: "cursor/create_plan",
-              payload: params,
-            },
-          });
-          return { accepted: true } as const;
-        }),
-      );
-      yield* acp.handleExtNotification("cursor/update_todos", CursorUpdateTodosRequest, (params) =>
-        Effect.gen(function* () {
-          yield* logNative(deps, input.threadId, "cursor/update_todos", params);
-          if (ctx) {
-            yield* emitPlanUpdate(
-              deps,
-              ctx,
-              extractTodosAsPlan(params),
-              params,
-              "acp.cursor.extension",
-              "cursor/update_todos",
-            );
-          }
-        }),
-      );
+      if (workspaceSession.remoteBridge) {
+        yield* workspaceSession.remoteBridge.registerHandlers(acp);
+      }
+      yield* registerCursorExtensionHandlers({
+        acp,
+        nativeEventLogger: deps.nativeEventLogger,
+        pendingUserInputs,
+        sessionEpoch,
+        threadId: input.threadId,
+        getSessionContext: () => ctx,
+        makeEventStamp: deps.makeEventStamp,
+        offerRuntimeEvent: deps.offerRuntimeEvent,
+      });
       yield* acp.handleRequestPermission((params) =>
         Effect.gen(function* () {
           yield* logNative(deps, input.threadId, "session/request_permission", params);
@@ -239,6 +193,7 @@ export function makeStartSessionEffect(
           yield* deps.offerRuntimeEvent(
             makeAcpRequestOpenedEvent({
               stamp: yield* deps.makeEventStamp(),
+              session: { sessionEpoch },
               provider: PROVIDER,
               threadId: input.threadId,
               turnId: ctx?.activeTurnId,
@@ -265,6 +220,7 @@ export function makeStartSessionEffect(
           yield* deps.offerRuntimeEvent(
             makeAcpRequestResolvedEvent({
               stamp: yield* deps.makeEventStamp(),
+              session: { sessionEpoch },
               provider: PROVIDER,
               threadId: input.threadId,
               turnId: ctx?.activeTurnId,
@@ -289,7 +245,7 @@ export function makeStartSessionEffect(
       Effect.mapError((error) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, "session/start", error),
       ),
-      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
+      Effect.onError(() => Effect.promise(workspaceSession.cleanup)),
     );
 
     yield* applyRequestedSessionConfiguration({
@@ -299,16 +255,21 @@ export function makeStartSessionEffect(
       modelSelection: cursorModelSelection,
       mapError: ({ cause, method }) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
-    }).pipe(Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)));
+    }).pipe(Effect.onError(() => Effect.promise(workspaceSession.cleanup)));
 
     const now = yield* deps.nowIso;
     const session = {
       provider: PROVIDER,
       status: "ready",
       runtimeMode: input.runtimeMode,
-      cwd,
+      cwd: workspaceSession.sessionCwd,
+      providerRuntimeExecutionTargetId:
+        workspaceSession.executionContext.executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId:
+        workspaceSession.executionContext.executionTargets.workspaceExecutionTargetId,
       model: cursorModelSelection?.model,
       threadId: input.threadId,
+      sessionEpoch,
       resumeCursor: {
         schemaVersion: CURSOR_RESUME_VERSION,
         sessionId: started.sessionId,
@@ -319,10 +280,11 @@ export function makeStartSessionEffect(
 
     ctx = {
       threadId: input.threadId,
+      sessionEpoch,
       session,
       scope: sessionScope,
       acp,
-      orchestrationBridgeCleanup: orchestration.bridge.cleanup,
+      orchestrationBridgeCleanup: workspaceSession.cleanup,
       notificationFiber: undefined,
       pendingApprovals,
       pendingUserInputs,
@@ -339,6 +301,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "session.started",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { resume: started.initializeResult },
@@ -346,6 +309,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "session.state.changed",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { state: "ready", reason: "Cursor ACP session ready" },
@@ -353,6 +317,7 @@ export function makeStartSessionEffect(
     yield* deps.offerRuntimeEvent({
       type: "thread.started",
       ...(yield* deps.makeEventStamp()),
+      sessionEpoch,
       provider: PROVIDER,
       threadId: input.threadId,
       payload: { providerThreadId: started.sessionId },

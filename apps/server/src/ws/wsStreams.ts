@@ -1,4 +1,5 @@
-import { Effect, Queue, Ref, Stream } from "effect";
+import { Deferred, Effect, Queue, Ref, Stream } from "effect";
+import type { Scope } from "effect";
 import {
   KeybindingsConfigError,
   type OrchestrationEvent,
@@ -18,6 +19,8 @@ import {
 } from "../orchestration/thinkingActivity";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 
+export const ORDERED_ORCHESTRATION_PENDING_CAPACITY = 2_000;
+
 export function makeOrderedOrchestrationDomainEventStream(input: {
   readonly orchestrationEngine: {
     getReadModel: () => Effect.Effect<{ readonly snapshotSequence: number }>;
@@ -25,14 +28,37 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
       fromSequenceExclusive: number,
     ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
     streamDomainEvents: Stream.Stream<OrchestrationEvent>;
+    openDeliveryLiveCapture?: (
+      capacity?: number,
+    ) => Effect.Effect<Stream.Stream<OrchestrationEvent>, never, Scope.Scope>;
   };
+  readonly nonBlockingLiveCapacity?: number;
+  readonly pendingSequenceCapacity?: number;
 }) {
   return Effect.gen(function* () {
-    const liveEventQueue = yield* Queue.unbounded<OrchestrationEvent>();
-    yield* Stream.runForEach(input.orchestrationEngine.streamDomainEvents, (event) =>
-      Queue.offer(liveEventQueue, event),
-    ).pipe(Effect.forkScoped);
-    yield* Effect.yieldNow;
+    const engineCapture =
+      input.nonBlockingLiveCapacity && input.orchestrationEngine.openDeliveryLiveCapture
+        ? yield* input.orchestrationEngine.openDeliveryLiveCapture(input.nonBlockingLiveCapacity)
+        : null;
+    const liveOverflow = engineCapture === null ? yield* Deferred.make<void>() : null;
+    const liveEventQueue =
+      engineCapture === null
+        ? yield* input.nonBlockingLiveCapacity
+            ? Queue.dropping<OrchestrationEvent>(input.nonBlockingLiveCapacity)
+            : Queue.bounded<OrchestrationEvent>(2_000)
+        : null;
+    if (liveEventQueue !== null && liveOverflow !== null) {
+      yield* Stream.runForEach(input.orchestrationEngine.streamDomainEvents, (event) =>
+        Queue.offer(liveEventQueue, event).pipe(
+          Effect.flatMap((accepted) =>
+            accepted
+              ? Effect.void
+              : Deferred.succeed(liveOverflow, undefined).pipe(Effect.andThen(Effect.interrupt)),
+          ),
+        ),
+      ).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+    }
 
     const snapshot = yield* input.orchestrationEngine.getReadModel();
     const fromSequenceExclusive = snapshot.snapshotSequence;
@@ -40,10 +66,25 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
       input.orchestrationEngine.readEvents(fromSequenceExclusive),
     ).pipe(
       Effect.map((events) => Array.from(events)),
-      Effect.catch(() => Effect.succeed([] as Array<OrchestrationEvent>)),
+      Effect.orDie,
     );
     const replayStream = Stream.fromIterable(replayEvents);
-    const source = Stream.merge(replayStream, Stream.fromQueue(liveEventQueue));
+    const liveStream =
+      engineCapture ?? Stream.fromQueue(liveEventQueue as Queue.Queue<OrchestrationEvent>);
+    const replayAndLive = Stream.merge(replayStream, liveStream);
+    const source =
+      input.nonBlockingLiveCapacity && liveOverflow !== null
+        ? Stream.merge(
+            replayAndLive,
+            Stream.fromEffect(
+              Deferred.await(liveOverflow).pipe(
+                Effect.andThen(
+                  Effect.die(new Error("orchestration delivery live capture overflowed")),
+                ),
+              ),
+            ),
+          )
+        : replayAndLive;
     type SequenceState = {
       readonly nextSequence: number;
       readonly pendingBySequence: Map<number, OrchestrationEvent>;
@@ -52,36 +93,52 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
       nextSequence: fromSequenceExclusive + 1,
       pendingBySequence: new Map<number, OrchestrationEvent>(),
     });
+    const pendingSequenceCapacity =
+      input.pendingSequenceCapacity ?? ORDERED_ORCHESTRATION_PENDING_CAPACITY;
 
-    return source.pipe(
+    const ordered = source.pipe(
       Stream.mapEffect((event) =>
-        Ref.modify(
-          state,
-          ({ nextSequence, pendingBySequence }): [Array<OrchestrationEvent>, SequenceState] => {
-            if (event.sequence < nextSequence || pendingBySequence.has(event.sequence)) {
-              return [[], { nextSequence, pendingBySequence }];
-            }
+        Ref.modify(state, ({ nextSequence, pendingBySequence }) => {
+          if (event.sequence < nextSequence || pendingBySequence.has(event.sequence)) {
+            return [
+              Effect.succeed([] as Array<OrchestrationEvent>),
+              { nextSequence, pendingBySequence },
+            ];
+          }
+          if (
+            pendingBySequence.size >= pendingSequenceCapacity &&
+            event.sequence !== nextSequence
+          ) {
+            return [
+              Effect.die(new Error("orchestration ordered event pending buffer overflowed")),
+              { nextSequence, pendingBySequence },
+            ];
+          }
 
-            const updatedPending = new Map(pendingBySequence);
-            updatedPending.set(event.sequence, event);
+          const updatedPending = new Map(pendingBySequence);
+          updatedPending.set(event.sequence, event);
 
-            const emit: Array<OrchestrationEvent> = [];
-            let expected = nextSequence;
-            for (;;) {
-              const expectedEvent = updatedPending.get(expected);
-              if (!expectedEvent) break;
-              emit.push(expectedEvent);
-              updatedPending.delete(expected);
-              expected += 1;
-            }
+          const emit: Array<OrchestrationEvent> = [];
+          let expected = nextSequence;
+          for (;;) {
+            const expectedEvent = updatedPending.get(expected);
+            if (!expectedEvent) break;
+            emit.push(expectedEvent);
+            updatedPending.delete(expected);
+            expected += 1;
+          }
 
-            return [emit, { nextSequence: expected, pendingBySequence: updatedPending }];
-          },
-        ),
+          return [
+            Effect.succeed(emit),
+            { nextSequence: expected, pendingBySequence: updatedPending },
+          ];
+        }).pipe(Effect.flatten),
       ),
       Stream.flatMap((events) => Stream.fromIterable(events)),
-      Stream.ensuring(Queue.shutdown(liveEventQueue)),
     );
+    return liveEventQueue === null
+      ? ordered
+      : ordered.pipe(Stream.ensuring(Queue.shutdown(liveEventQueue)));
   });
 }
 

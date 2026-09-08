@@ -141,7 +141,7 @@ export function SttSettingsSection() {
             value={selectedModel}
             onValueChange={(value) => setSelectedModel(value as SttModel)}
           >
-            <SelectTrigger className="w-52">
+            <SelectTrigger variant="muted-outline" className="w-52">
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>

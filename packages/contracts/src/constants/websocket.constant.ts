@@ -72,10 +72,12 @@ export const WS_METHODS = {
   terminalClose: "terminal.close",
 
   // Server meta
+  serverPing: "server.ping",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
+  serverInstallRemoteAgent: "server.installRemoteAgent",
   serverUnlockSshKey: "server.unlockSshKey",
   serverUnlockSshPassword: "server.unlockSshPassword",
   serverUpsertKeybinding: "server.upsertKeybinding",
@@ -130,10 +132,14 @@ export const ORCHESTRATION_WS_METHODS = {
   getStartupProjectCatalog: "orchestration.getStartupProjectCatalog",
   getProjectThreadSummaries: "orchestration.getProjectThreadSummaries",
   getSelectedThreadDetail: "orchestration.getSelectedThreadDetail",
+  getThreadOwnership: "orchestration.getThreadOwnership",
+  getCommandOutcome: "orchestration.getCommandOutcome",
   getSnapshot: "orchestration.getSnapshot",
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   getMobileThread: "orchestration.getMobileThread",
   replayEvents: "orchestration.replayEvents",
+  acknowledgeDelivery: "orchestration.acknowledgeDelivery",
+  acknowledgeDeliveryBaseline: "orchestration.acknowledgeDeliveryBaseline",
 } as const;

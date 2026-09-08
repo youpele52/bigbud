@@ -202,6 +202,7 @@ export function MobileRemoteControlSettingsSection() {
           status={status}
           control={
             <Switch
+              tone="success"
               checked={settings.mobileRemoteControl.enabled}
               onCheckedChange={(checked) =>
                 updateSettings({

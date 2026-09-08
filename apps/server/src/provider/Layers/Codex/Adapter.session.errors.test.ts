@@ -68,7 +68,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
             provider: "codex",
             model: "gpt-5.3-codex",
             options: {
-              reasoningEffort: "high",
+              reasoningEffort: "future-depth",
               fastMode: true,
             },
           },
@@ -80,7 +80,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         threadId: asThreadId("sess-missing"),
         input: "hello",
         model: "gpt-5.3-codex",
-        effort: "high",
+        effort: "future-depth",
         serviceTier: "fast",
       });
     }),

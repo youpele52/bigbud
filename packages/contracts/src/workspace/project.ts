@@ -4,7 +4,6 @@ import { ExecutionTargetId, PositiveInt, TrimmedNonEmptyString } from "../core/b
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_SEARCH_FILE_CONTENTS_MAX_LIMIT = 100;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
-const PROJECT_READ_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
@@ -94,20 +93,74 @@ export const ProjectDirectoryWatchInput = Schema.Struct({
 });
 export type ProjectDirectoryWatchInput = typeof ProjectDirectoryWatchInput.Type;
 
+export const ProjectDirectoryWatchBackend = Schema.Literals(["native", "poll", "directSshPoll"]);
+export type ProjectDirectoryWatchBackend = typeof ProjectDirectoryWatchBackend.Type;
+
 export const ProjectDirectoryChangedEvent = Schema.Struct({
   version: Schema.Literal(1),
   type: Schema.Literal("directoryChanged"),
   relativePath: Schema.String,
+  generation: Schema.optional(Schema.Number),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
 });
 export type ProjectDirectoryChangedEvent = typeof ProjectDirectoryChangedEvent.Type;
 
-export const ProjectDirectoryWatchEvent = Schema.Union([ProjectDirectoryChangedEvent]);
+export const ProjectDirectoryChangedEventV2 = Schema.Struct({
+  version: Schema.Literal(2),
+  type: Schema.Literal("directoryChanged"),
+  relativePath: Schema.String,
+  changedPaths: Schema.Array(Schema.String),
+  generation: Schema.Number,
+  sequence: Schema.Number,
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
+});
+export type ProjectDirectoryChangedEventV2 = typeof ProjectDirectoryChangedEventV2.Type;
+
+export const ProjectDirectoryRescanRequiredEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("rescanRequired"),
+  relativePath: Schema.String,
+  generation: Schema.Number,
+  reason: Schema.Union([
+    Schema.Literal("transportLost"),
+    Schema.Literal("agentRestarted"),
+    Schema.Literal("leaseExpired"),
+    Schema.Literal("overflow"),
+  ]),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
+});
+export type ProjectDirectoryRescanRequiredEvent = typeof ProjectDirectoryRescanRequiredEvent.Type;
+
+export const ProjectDirectoryRescanRequiredEventV2 = Schema.Struct({
+  version: Schema.Literal(2),
+  type: Schema.Literal("rescanRequired"),
+  relativePath: Schema.String,
+  generation: Schema.Number,
+  sequence: Schema.Number,
+  reason: Schema.Union([
+    Schema.Literal("transportLost"),
+    Schema.Literal("agentRestarted"),
+    Schema.Literal("overflow"),
+    Schema.Literal("watchInvalidated"),
+  ]),
+  backend: Schema.optional(ProjectDirectoryWatchBackend),
+});
+export type ProjectDirectoryRescanRequiredEventV2 =
+  typeof ProjectDirectoryRescanRequiredEventV2.Type;
+
+export const ProjectDirectoryWatchEvent = Schema.Union([
+  ProjectDirectoryChangedEvent,
+  ProjectDirectoryChangedEventV2,
+  ProjectDirectoryRescanRequiredEvent,
+  ProjectDirectoryRescanRequiredEventV2,
+]);
 export type ProjectDirectoryWatchEvent = typeof ProjectDirectoryWatchEvent.Type;
 
 export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectDirectoryWatchError>()(
   "ProjectDirectoryWatchError",
   {
     message: TrimmedNonEmptyString,
+    retryable: Schema.Boolean,
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
@@ -116,9 +169,6 @@ export const ProjectReadFilePreviewInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
-  maxBytes: Schema.optional(
-    PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_READ_FILE_PREVIEW_MAX_BYTES)),
-  ),
 });
 export type ProjectReadFilePreviewInput = typeof ProjectReadFilePreviewInput.Type;
 
@@ -143,6 +193,8 @@ export const ProjectWriteFileInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
+  /** SHA-256 of the version the caller read before editing, when known. */
+  expectedSha256: Schema.optional(Schema.String),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 

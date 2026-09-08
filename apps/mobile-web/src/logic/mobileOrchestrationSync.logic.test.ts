@@ -94,15 +94,19 @@ function makeMessageSentEvent(input: {
 function makeQueryClient(initial?: {
   readonly snapshot?: OrchestrationReadModel;
   readonly thread?: OrchestrationThread;
+  readonly threadDetails?: ReadonlyArray<OrchestrationThread>;
 }) {
   const snapshotKey = JSON.stringify(["mobile-snapshot", sessionId]);
-  const threadKey = JSON.stringify(["mobile-thread", sessionId, threadId]);
   const store = new Map<string, unknown>();
   if (initial?.snapshot) {
     store.set(snapshotKey, initial.snapshot);
   }
   if (initial?.thread) {
-    store.set(threadKey, initial.thread);
+    store.set(JSON.stringify(["mobile-thread", sessionId, initial.thread.id]), initial.thread);
+  }
+  for (const thread of initial?.threadDetails ?? []) {
+    store.set(JSON.stringify(["mobile-thread", sessionId, thread.id]), thread);
+    store.set(JSON.stringify(["mobile-thread", sessionId, thread.id, "variant"]), thread);
   }
 
   const invalidatedKeys: Array<ReadonlyArray<string>> = [];
@@ -116,10 +120,17 @@ function makeQueryClient(initial?: {
         const encodedKey = JSON.stringify(queryKey);
         const next = updater(store.get(encodedKey) as T | undefined);
         if (next === undefined) {
-          store.delete(encodedKey);
           return;
         }
         store.set(encodedKey, next);
+      },
+      removeQueries({ queryKey }: { readonly queryKey: ReadonlyArray<string> }) {
+        for (const encodedKey of store.keys()) {
+          const candidate = JSON.parse(encodedKey) as ReadonlyArray<string>;
+          if (queryKey.every((part, index) => candidate[index] === part)) {
+            store.delete(encodedKey);
+          }
+        }
       },
       invalidateQueries: vi.fn(
         async ({ queryKey }: { readonly queryKey: ReadonlyArray<string> }) => {
@@ -131,8 +142,15 @@ function makeQueryClient(initial?: {
     getSnapshot() {
       return store.get(snapshotKey) as OrchestrationReadModel | undefined;
     },
-    getThread() {
-      return store.get(threadKey) as OrchestrationThread | undefined;
+    getThread(id = threadId) {
+      return store.get(JSON.stringify(["mobile-thread", sessionId, id])) as
+        | OrchestrationThread
+        | undefined;
+    },
+    getThreadVariant(id = threadId) {
+      return store.get(JSON.stringify(["mobile-thread", sessionId, id, "variant"])) as
+        | OrchestrationThread
+        | undefined;
     },
   };
 }
@@ -196,6 +214,64 @@ describe("mobileOrchestrationSync.logic", () => {
       ["mobile-snapshot", sessionId],
       ["mobile-thread", sessionId],
     ]);
+  });
+
+  it("removes every deleted detail cache and invalidates surviving thread details", () => {
+    const childThreadId = ThreadId.makeUnsafe("thread-child");
+    const survivingChildThreadId = ThreadId.makeUnsafe("thread-surviving-child");
+    const root = makeThread();
+    const child = {
+      ...makeThread(),
+      id: childThreadId,
+      parentThread: { threadId, title: "Thread" },
+    };
+    const survivingChild = {
+      ...makeThread(),
+      id: survivingChildThreadId,
+      parentThread: { threadId, title: "Thread" },
+    };
+    const cache = makeQueryClient({
+      snapshot: { ...makeSnapshot(), threads: [root, child, survivingChild] },
+      threadDetails: [root, child, survivingChild],
+    });
+    const scheduler = {
+      queueMicrotask: vi.fn((callback: () => void) => callback()),
+      setTimeout: vi.fn(() => 1),
+      clearTimeout: vi.fn(),
+    };
+    const controller = createMobileOrchestrationSyncController({
+      queryClient: cache.queryClient,
+      sessionId,
+      scheduler,
+    });
+
+    controller.queueEvent({
+      type: "thread.deleted",
+      sequence: 2,
+      occurredAt: "2026-01-01T00:00:02.000Z",
+      commandId: CommandId.makeUnsafe("command-delete"),
+      eventId: EventId.makeUnsafe("event-delete"),
+      aggregateKind: "thread",
+      aggregateId: threadId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: {
+        threadId,
+        threadIds: [threadId, childThreadId],
+        deletedAt: "2026-01-01T00:00:02.000Z",
+      },
+    });
+
+    expect(cache.getSnapshot()?.threads).toEqual([
+      expect.objectContaining({ id: survivingChildThreadId }),
+    ]);
+    expect(cache.getThread()).toBeUndefined();
+    expect(cache.getThread(childThreadId)).toBeUndefined();
+    expect(cache.getThreadVariant()).toBeUndefined();
+    expect(cache.getThreadVariant(childThreadId)).toBeUndefined();
+    expect(cache.getThread(survivingChildThreadId)?.parentThread).toBeUndefined();
+    expect(cache.invalidatedKeys).toContainEqual(["mobile-thread", sessionId]);
   });
 
   it("flushes queued non-immediate events during dispose", () => {

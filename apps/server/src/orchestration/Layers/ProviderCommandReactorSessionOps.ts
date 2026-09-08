@@ -37,7 +37,6 @@ import type {
   SendTurnForThreadInput,
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
-export type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
@@ -55,13 +54,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       capabilityContextStates,
       setThreadSession,
     } = services;
-
     const readModel = yield* orchestrationEngine.getReadModel();
     const thread = readModel.threads.find((entry) => entry.id === threadId);
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
     }
-
     const desiredRuntimeMode = thread.runtimeMode;
     const currentProvider: import("@bigbud/contracts").ProviderKind | undefined = Schema.is(
       ProviderKind,
@@ -93,12 +90,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         thread,
         projects: readModel.projects,
       }) ?? resolveDefaultChatCwd(serverSettings);
-
     const resolveActiveSession = (tId: ThreadId) =>
       providerService
         .listSessions()
         .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === tId)));
-
     const start = (input?: {
       readonly resumeCursor?: unknown;
       readonly fresh?: boolean;
@@ -120,7 +115,6 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         ...(input?.preserveExistingBinding ? { preserveExistingBinding: true } : {}),
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
       });
-
     const bindSessionToThread = (session: ProviderSession) =>
       setThreadSession({
         threadId,
@@ -134,6 +128,9 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
           updatedAt: session.updatedAt,
         },
         createdAt,
+        ...(session.sessionEpoch !== undefined
+          ? { expectedSessionEpoch: session.sessionEpoch }
+          : {}),
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
@@ -250,6 +247,7 @@ const sendTurnAttempt = (services: SessionOpServices) =>
       providerService,
       states: services.capabilityContextStates,
       threadId: input.threadId,
+      sessionEpoch: thread.session?.sessionEpoch ?? 0,
       activeSession,
       activities: thread.activities,
     });
@@ -351,6 +349,7 @@ const sendTurnAttempt = (services: SessionOpServices) =>
       ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
     });
 
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
@@ -376,11 +375,13 @@ const sendTurnAttempt = (services: SessionOpServices) =>
           runtimeMode:
             sessionAfterTurn?.runtimeMode ?? sessionBeforeTurn?.runtimeMode ?? thread.runtimeMode,
           activeTurnId: turn.turnId,
+          sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
           reason: null,
           lastError: null,
           updatedAt: input.createdAt,
         },
         createdAt: input.createdAt,
+        expectedSessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
       });
     }
   });

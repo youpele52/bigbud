@@ -22,6 +22,7 @@ import {
   type StreamedPromptDelta,
 } from "./Adapter.session.prompt.ts";
 import { toPromptTurnEvents } from "./Adapter.session.turn.sendTurn.events.ts";
+import { buildOpencodeSystemPrompt } from "./Adapter.session.turn.systemPrompt.ts";
 import type { TurnMethodDeps } from "./Adapter.session.ts";
 
 export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["sendTurn"] {
@@ -55,6 +56,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       yield* emitFn([
         yield* syntheticEventFn(
           input.threadId,
+          record.sessionEpoch,
           "turn.started",
           record.model ? { model: record.model } : {},
           { turnId },
@@ -124,12 +126,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
         appendAttachedFileContents(input.input ?? "", inlineTextBlocks),
         imageOcrBlocks,
       );
-      const systemPrompt =
-        "You have access to a Chromium browser in this environment. " +
-        "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
-        "Prefer codebase inspection first when the task is local-only. " +
-        "Summarize what was verified, including URL and important observations. " +
-        "Avoid unnecessary browser use when terminal or file tools are sufficient.";
+      const systemPrompt = buildOpencodeSystemPrompt(record.remoteWorkspaceSystemPrompt);
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
@@ -162,6 +159,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                 const runtimeEvent = await runPromise(
                   syntheticEventFn(
                     input.threadId,
+                    record.sessionEpoch,
                     "content.delta",
                     {
                       streamKind: delta.streamKind,
@@ -213,6 +211,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
             yield* emitFn([
               yield* syntheticEventFn(
                 input.threadId,
+                record.sessionEpoch,
                 "runtime.error",
                 {
                   message: errorMessage,
@@ -222,6 +221,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
               ),
               yield* syntheticEventFn(
                 input.threadId,
+                record.sessionEpoch,
                 "turn.completed",
                 {
                   state: "failed",
@@ -230,10 +230,15 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                 },
                 { turnId },
               ),
-              yield* syntheticEventFn(input.threadId, "session.state.changed", {
-                state: "ready",
-                reason: "session.prompt.failed",
-              }),
+              yield* syntheticEventFn(
+                input.threadId,
+                record.sessionEpoch,
+                "session.state.changed",
+                {
+                  state: "ready",
+                  reason: "session.prompt.failed",
+                },
+              ),
             ]);
           }),
         ),

@@ -3,6 +3,7 @@ import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 
 import {
   appendBrowserAnnotationsToPrompt,
+  buildCodeAnnotationPrompt,
   buildTerminalAnnotationPrompt,
 } from "./ChatView.annotations.logic";
 
@@ -184,6 +185,12 @@ describe("appendBrowserAnnotationsToPrompt", () => {
   });
 
   it("appends code annotation file and selected line context", () => {
+    const serializedDiff = [
+      "--- before",
+      "+++ after",
+      "-  const value = oldValue;  ",
+      "+  const value = newValue;  ",
+    ].join("\n");
     const annotation: ComposerAnnotationAttachment = {
       id: "code-annotation-1",
       kind: "code",
@@ -198,7 +205,7 @@ describe("appendBrowserAnnotationsToPrompt", () => {
       selection: {
         startLine: 20,
         endLine: 22,
-        text: "const value = createValue();",
+        text: serializedDiff,
       },
     };
 
@@ -207,8 +214,9 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(prompt).toContain("Project: bigbud");
     expect(prompt).toContain("Path: apps/web/src/main.ts");
     expect(prompt).toContain("Lines: 20-22");
-    expect(prompt).toContain("const value = createValue();");
+    expect(prompt).toContain(`Selected code:\n\`\`\`\n${serializedDiff}\n\`\`\``);
     expect(prompt).toContain("make the appropriate code change");
+    expect(buildCodeAnnotationPrompt(annotation)).toContain(serializedDiff);
   });
 
   it("appends terminal annotation metadata and selected output", () => {

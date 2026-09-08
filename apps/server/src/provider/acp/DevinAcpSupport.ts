@@ -16,13 +16,11 @@ import {
 
 type DevinAcpRuntimeDevinSettings = Pick<DevinSettings, "binaryPath">;
 
-export interface DevinAcpRuntimeInput extends Omit<
-  AcpSessionRuntimeOptions,
-  "clientCapabilities" | "spawn"
-> {
+export interface DevinAcpRuntimeInput extends Omit<AcpSessionRuntimeOptions, "spawn"> {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly devinSettings: DevinAcpRuntimeDevinSettings | null | undefined;
   readonly mcpServers?: ReadonlyArray<import("effect-acp/schema").McpServer>;
+  readonly spawnCwd?: string;
 }
 
 export interface DevinAcpModelSelectionErrorContext {
@@ -49,8 +47,8 @@ export const makeDevinAcpRuntime = (
     const acpContext = yield* Layer.build(
       AcpSessionRuntime.layer({
         ...input,
-        spawn: buildDevinAcpSpawnInput(input.devinSettings, input.cwd),
-        clientCapabilities: {},
+        spawn: buildDevinAcpSpawnInput(input.devinSettings, input.spawnCwd ?? input.cwd),
+        clientCapabilities: input.clientCapabilities ?? {},
         ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
       }).pipe(
         Layer.provide(

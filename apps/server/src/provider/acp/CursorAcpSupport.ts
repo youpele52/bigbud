@@ -1,4 +1,5 @@
-import { type CursorModelOptions, type CursorSettings } from "@bigbud/contracts";
+import type { CursorSettings } from "@bigbud/contracts/core/settings.ts";
+import type { CursorModelOptions } from "@bigbud/contracts/core/model.ts";
 import { Effect, Layer, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import type * as EffectAcpErrors from "effect-acp/errors";
@@ -19,11 +20,12 @@ type CursorAcpRuntimeCursorSettings = Pick<CursorSettings, "apiEndpoint" | "bina
 
 export interface CursorAcpRuntimeInput extends Omit<
   AcpSessionRuntimeOptions,
-  "authMethodId" | "clientCapabilities" | "spawn"
+  "authMethodId" | "spawn"
 > {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly cursorSettings: CursorAcpRuntimeCursorSettings | null | undefined;
   readonly mcpServers?: ReadonlyArray<import("effect-acp/schema").McpServer>;
+  readonly spawnCwd?: string;
 }
 
 export interface CursorAcpModelSelectionErrorContext {
@@ -36,13 +38,10 @@ export function buildCursorAcpSpawnInput(
   cursorSettings: CursorAcpRuntimeCursorSettings | null | undefined,
   cwd: string,
 ): AcpSpawnInput {
+  const endpoint = cursorSettings?.apiEndpoint?.trim();
   return {
     command: cursorSettings?.binaryPath || "agent",
-    args: [
-      ...(cursorSettings?.apiEndpoint ? (["-e", cursorSettings.apiEndpoint] as const) : []),
-      "--trust",
-      "acp",
-    ],
+    args: [...(endpoint ? (["-e", endpoint] as const) : []), "--trust", "acp"],
     cwd,
   };
 }
@@ -54,9 +53,12 @@ export const makeCursorAcpRuntime = (
     const acpContext = yield* Layer.build(
       AcpSessionRuntime.layer({
         ...input,
-        spawn: buildCursorAcpSpawnInput(input.cursorSettings, input.cwd),
+        spawn: buildCursorAcpSpawnInput(input.cursorSettings, input.spawnCwd ?? input.cwd),
         authMethodId: "cursor_login",
-        clientCapabilities: CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
+        clientCapabilities: {
+          ...CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
+          ...input.clientCapabilities,
+        },
         ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
       }).pipe(
         Layer.provide(

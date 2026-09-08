@@ -3,7 +3,7 @@ import type { ThreadId } from "@bigbud/contracts";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { SharedProjectItemProps } from "./Sidebar.types";
 import type { SidebarRenderedProjectsOutput } from "./Sidebar.renderedProjects";
-import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions";
+import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions.types";
 import type { SidebarThreadActionsOutput } from "./Sidebar.threadActions.types";
 
 interface BuildSharedProjectItemPropsInput {

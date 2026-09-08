@@ -39,10 +39,6 @@ layer("ThreadDelegationRepository", (it) => {
         sql,
         threadId: reservation.callerThreadId,
       });
-      yield* insertProjectionThreadParent({
-        sql,
-        threadId: reservation.childThreadId,
-      });
       const created = yield* repository.reserve(reservation);
       const existing = yield* repository.reserve({
         ...reservation,

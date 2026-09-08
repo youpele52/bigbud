@@ -2,9 +2,7 @@ import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { Layer } from "effect";
 
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
-import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
-import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
-import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
+import { WorkspaceRuntimeLayerLive } from "./workspace-runtime/Layers/WorkspaceRuntime.ts";
 
 export const defaultProjectId = ProjectId.makeUnsafe("project-default");
 export const defaultThreadId = ThreadId.makeUnsafe("thread-default");
@@ -80,11 +78,6 @@ export const makeDefaultOrchestrationReadModel = () => {
 };
 
 export const workspaceAndProjectServicesLayer = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
+  WorkspaceRuntimeLayerLive,
   ProjectFaviconResolverLive,
 );

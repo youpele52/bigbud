@@ -8,15 +8,13 @@ import {
 } from "@bigbud/contracts";
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { useStore } from "../stores/main";
 import { loadMoreProjectThreadSummaries, runBoundedBootstrap } from "./-__root.bounded-bootstrap";
-
 const project1 = ProjectId.makeUnsafe("project-1");
 const project2 = ProjectId.makeUnsafe("project-2");
 const project3 = ProjectId.makeUnsafe("project-3");
+const chatsProject = ProjectId.makeUnsafe("__chats__");
 const selectedThread = ThreadId.makeUnsafe("thread-selected");
-
 function makeThreadSummary(id: ThreadId, projectId: ProjectId, pinnedAt: string | null = null) {
   return {
     id,
@@ -46,24 +44,22 @@ function makeThreadSummary(id: ThreadId, projectId: ProjectId, pinnedAt: string 
     isAwaitingApproval: false,
   };
 }
-
-function makeProject(id: ProjectId, title: string, threadCount = 0) {
+function makeProject(id: ProjectId, title: string, count = 0, target = "ssh:workspace") {
   return {
     id,
     title,
-    providerRuntimeExecutionTargetId: "ssh:provider",
-    workspaceExecutionTargetId: "ssh:workspace",
-    executionTargetId: "ssh:legacy",
+    providerRuntimeExecutionTargetId: target,
+    workspaceExecutionTargetId: target,
+    executionTargetId: target,
     workspaceRoot: `/tmp/${id}`,
     lastUsedAt: "2026-07-30T00:00:00.000Z",
     updatedAt: "2026-07-30T00:00:00.000Z",
     deletingAt: null,
-    threadCount,
+    threadCount: count,
     exceptionalThreadCount: 0,
     hasExceptionalThreads: false,
   };
 }
-
 function makeApi() {
   const orchestration = {
     getSidebarThreadCatalog: vi.fn(
@@ -131,13 +127,16 @@ beforeEach(() => {
 });
 
 describe("bounded project catalog bootstrap", () => {
-  it("loads only the first project catalog page during bootstrap", async () => {
+  it("loads two local projects so hidden Chats cannot displace the real project", async () => {
     const { api, orchestration } = makeApi();
     const cursor = { lastUsedAt: "2026-07-30T00:00:00.000Z", projectId: project1 };
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [],
+        projects: [
+          makeProject(chatsProject, "Chats", 0, "local"),
+          makeProject(project2, "Local project", 0, "local"),
+        ],
         remainingCount: 0,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
@@ -148,17 +147,16 @@ describe("bounded project catalog bootstrap", () => {
       } satisfies GetStartupProjectCatalogResult);
 
     await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
-
     expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
-      [{ scope: "local", limit: 1 }],
+      [{ scope: "local", limit: 2 }],
       [{ scope: "remote", limit: 1 }],
     ]);
     expect(orchestration.getProjectThreadSummaries).not.toHaveBeenCalled();
-    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
-    expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
+    const loadedProjects = useStore.getState().projects;
+    expect(loadedProjects.map((project) => project.id)).toEqual([chatsProject, project2, project1]);
+    expect(loadedProjects.find((project) => project.id === project1)?.activeThreadCount).toBe(94);
     expect(useStore.getState().threadSummaryCursorByProjectId?.[project1]).toBeUndefined();
   });
-
   it("loads the first thread summary page for a catalog project that was initially deferred", async () => {
     const { api, orchestration } = makeApi();
 
@@ -169,7 +167,6 @@ describe("bounded project catalog bootstrap", () => {
       limit: 5,
     });
   });
-
   it("keeps a successful scope and exposes a head retry when the other scope fails", async () => {
     const { api, orchestration } = makeApi();
     orchestration.getStartupProjectCatalog
@@ -189,7 +186,6 @@ describe("bounded project catalog bootstrap", () => {
     expect(useStore.getState().projectCatalogRetryHeadByScope.remote).toBe(true);
     expect(useStore.getState().projectCatalogCursorByScope.remote).toBeNull();
   });
-
   it("keeps the remote scope when the local scope fails", async () => {
     const { api, orchestration } = makeApi();
     orchestration.getStartupProjectCatalog
@@ -209,7 +205,6 @@ describe("bounded project catalog bootstrap", () => {
     expect(useStore.getState().projectCatalogRetryHeadByScope.local).toBe(true);
     expect(useStore.getState().projectCatalogCursorByScope.local).toBeNull();
   });
-
   it("preserves the authoritative total while appending a thread summary page", async () => {
     const { api, orchestration } = makeApi();
     orchestration.getStartupProjectCatalog.mockResolvedValue({
@@ -257,7 +252,7 @@ describe("bounded project catalog bootstrap", () => {
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
 
     expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
-      [{ scope: "local", limit: 1, priorityProjectId: project1 }],
+      [{ scope: "local", limit: 2, priorityProjectId: project1 }],
       [{ scope: "remote", limit: 1, priorityProjectId: project1 }],
     ]);
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);

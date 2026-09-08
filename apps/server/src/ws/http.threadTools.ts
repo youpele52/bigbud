@@ -27,6 +27,7 @@ import {
   handleListPinnedThreadsAction,
   handleListThreadsAction,
 } from "./http.threadTools.reads.ts";
+import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
@@ -86,6 +87,11 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     }
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
+
+    if (body.action === "remote_workspace_process") {
+      const result = yield* runRemoteWorkspaceProcess({ callerThreadId: threadId, request: body });
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
 
     if (body.action === "workspace") {
       if (!dispatcher.workspace) {

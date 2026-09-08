@@ -5,9 +5,11 @@ import type { GitCoreShape } from "../../git/Services/GitCore.ts";
 export function isInsideGitWorkTree(
   gitOption: Option.Option<GitCoreShape>,
   cwd: string,
+  executionTargetId?: string,
 ): Effect.Effect<boolean> {
   return Option.match(gitOption, {
-    onSome: (git) => git.isInsideWorkTree(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
+    onSome: (git) =>
+      git.isInsideWorkTree(cwd, executionTargetId).pipe(Effect.catch(() => Effect.succeed(false))),
     onNone: () => Effect.succeed(false),
   });
 }
@@ -16,10 +18,11 @@ export function filterGitIgnoredPaths(
   gitOption: Option.Option<GitCoreShape>,
   cwd: string,
   relativePaths: string[],
+  executionTargetId?: string,
 ): Effect.Effect<string[], never> {
   return Option.match(gitOption, {
     onSome: (git) =>
-      git.filterIgnoredPaths(cwd, relativePaths).pipe(
+      git.filterIgnoredPaths(cwd, relativePaths, executionTargetId).pipe(
         Effect.map((paths) => [...paths]),
         Effect.catch(() => Effect.succeed(relativePaths)),
       ),

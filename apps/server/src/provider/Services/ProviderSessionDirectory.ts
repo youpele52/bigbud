@@ -12,6 +12,7 @@ import type {
   ProviderSessionDirectoryPersistenceError,
   ProviderValidationError,
 } from "../Errors.ts";
+import type { ProviderSessionRuntimeListInput } from "../../persistence/Services/ProviderSessionRuntime.ts";
 
 export interface ProviderRuntimeBinding {
   readonly threadId: ThreadId;
@@ -24,6 +25,7 @@ export interface ProviderRuntimeBinding {
   readonly resumeCursor?: unknown | null;
   readonly runtimePayload?: unknown | null;
   readonly runtimeMode?: RuntimeMode;
+  readonly lastSeenAt?: string;
 }
 
 export type ProviderSessionDirectoryReadError = ProviderSessionDirectoryPersistenceError;
@@ -51,6 +53,19 @@ export interface ProviderSessionDirectoryShape {
 
   readonly listThreadIds: () => Effect.Effect<
     ReadonlyArray<ThreadId>,
+    ProviderSessionDirectoryPersistenceError
+  >;
+
+  /**
+   * List all persisted runtime bindings in one repository read.
+   *
+   * Reconciliation uses this bulk operation instead of listing thread ids and
+   * issuing one getBinding query per historical row.
+   */
+  readonly listBindings: (
+    input?: ProviderSessionRuntimeListInput,
+  ) => Effect.Effect<
+    ReadonlyArray<ProviderRuntimeBinding>,
     ProviderSessionDirectoryPersistenceError
   >;
 }

@@ -1,5 +1,7 @@
 import type { GitStatusResult } from "@bigbud/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import { SidebarBottomIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CloudUploadIcon,
   DownloadIcon,
@@ -35,6 +37,7 @@ import { invalidateGitStatusQuery } from "~/lib/gitReactQuery";
 
 export interface GitActionsControlActionProps {
   gitCwd: string | null;
+  executionTargetId?: string | undefined;
   showGit: boolean;
   queryClient: QueryClient;
   isRepo: boolean;
@@ -51,6 +54,7 @@ export interface GitActionsControlActionProps {
   planCardOpen?: boolean | undefined;
   onMenuItemSelect: (item: GitActionMenuItem) => void;
   onTogglePlanCard?: (() => void) | undefined;
+  onOpenTerminal?: (() => void) | undefined;
 }
 
 function GitActionItemIcon({ icon }: { icon: GitActionIconName }) {
@@ -80,7 +84,9 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
   return (
     <Menu
       onOpenChange={(open) => {
-        if (open && props.gitCwd) void invalidateGitStatusQuery(props.queryClient, props.gitCwd);
+        if (open && props.gitCwd) {
+          void invalidateGitStatusQuery(props.queryClient, props.gitCwd, props.executionTargetId);
+        }
       }}
     >
       <MenuTrigger
@@ -180,15 +186,29 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
             </MenuItem>
           </>
         ) : null}
-        {props.onTogglePlanCard ? (
+        {props.onOpenTerminal || props.onTogglePlanCard ? (
           <>
             <MenuSeparator />
-            <MenuItem onClick={props.onTogglePlanCard}>
-              <ListTodoIcon aria-hidden="true" className="size-4" />
-              {props.planCardOpen
-                ? `Hide ${(props.planCardLabel ?? "Tasks").toLowerCase()}`
-                : `Show ${(props.planCardLabel ?? "Tasks").toLowerCase()}`}
-            </MenuItem>
+            {props.onOpenTerminal ? (
+              <MenuItem onClick={props.onOpenTerminal}>
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  className="size-4"
+                  icon={SidebarBottomIcon}
+                  size={16}
+                  strokeWidth={1.5}
+                />
+                Open Terminal
+              </MenuItem>
+            ) : null}
+            {props.onTogglePlanCard ? (
+              <MenuItem onClick={props.onTogglePlanCard}>
+                <ListTodoIcon aria-hidden="true" className="size-4" />
+                {props.planCardOpen
+                  ? `Hide ${(props.planCardLabel ?? "Tasks").toLowerCase()}`
+                  : `Show ${(props.planCardLabel ?? "Tasks").toLowerCase()}`}
+              </MenuItem>
+            ) : null}
           </>
         ) : null}
       </MenuPopup>

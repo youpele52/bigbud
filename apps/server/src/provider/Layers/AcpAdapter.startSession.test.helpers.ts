@@ -2,16 +2,15 @@ import { EventId, type ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import type { CursorSessionContext } from "./Cursor/Adapter.helpers.ts";
-import type { DevinSessionContext } from "./Devin/Adapter.helpers.ts";
-
-export function makeAcpStartSessionTestDeps(input: {
+export function makeAcpStartSessionTestDeps<SessionContext>(input: {
   readonly stateDir: string;
-  readonly sessions: Map<ThreadId, CursorSessionContext | DevinSessionContext>;
+  readonly sessions: Map<ThreadId, SessionContext>;
 }) {
   return {
     childProcessSpawner: {} as ChildProcessSpawner.ChildProcessSpawner["Service"],
     nativeEventLogger: undefined,
+    remoteAgentPtyResolver: undefined,
+    remoteWorkspaceReadinessProbe: async () => ({ os: "linux" as const, architecture: "x86_64" }),
     serverConfig: {
       stateDir: input.stateDir,
       host: "127.0.0.1" as const,

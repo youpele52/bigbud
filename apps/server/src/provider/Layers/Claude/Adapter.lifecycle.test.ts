@@ -29,7 +29,10 @@ describe("ClaudeAdapterLive", () => {
         threadId: THREAD_ID,
         provider: "claudeAgent",
         runtimeMode: "full-access",
+        sessionEpoch: 42,
       });
+
+      assert.equal(session.sessionEpoch, 42);
 
       const turn = yield* adapter.sendTurn({
         threadId: session.threadId,
@@ -58,6 +61,10 @@ describe("ClaudeAdapterLive", () => {
           "thread.started",
           "turn.completed",
         ],
+      );
+      assert.deepEqual(
+        runtimeEvents.map((event) => event.sessionEpoch),
+        [42, 42, 42, 42, 42, 42],
       );
 
       const turnCompleted = runtimeEvents[runtimeEvents.length - 1];
@@ -116,6 +123,10 @@ describe("ClaudeAdapterLive", () => {
           "turn.completed",
           "session.exited",
         ],
+      );
+      assert.deepEqual(
+        runtimeEvents.map((event) => event.sessionEpoch),
+        [0, 0, 0, 0, 0, 0],
       );
 
       const turnCompleted = runtimeEvents[4];
@@ -353,11 +364,13 @@ describe("ClaudeAdapterLive", () => {
             maxOutputTokens: 64000,
           },
         },
+        total_cost_usd: 0.1234,
       } as unknown as SDKMessage);
       harness.query.finish();
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
       const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
+      const completedEvent = runtimeEvents.find((event) => event.type === "turn.completed");
       assert.equal(usageEvent?.type, "thread.token-usage.updated");
       if (usageEvent?.type === "thread.token-usage.updated") {
         assert.deepEqual(usageEvent.payload.usage, {
@@ -376,6 +389,10 @@ describe("ClaudeAdapterLive", () => {
         assert.equal(usageEvent.payload.accounting?.outputTokens, 679);
         assert.equal(usageEvent.payload.accounting?.reasoningOutputTokens, 0);
         assert.equal(usageEvent.payload.accounting?.finalized, true);
+      }
+      assert.equal(completedEvent?.type, "turn.completed");
+      if (completedEvent?.type === "turn.completed") {
+        assert.equal(completedEvent.payload.totalCostUsd, 0.1234);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

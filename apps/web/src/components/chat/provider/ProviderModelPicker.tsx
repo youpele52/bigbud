@@ -23,6 +23,7 @@ import {
   formatSlugAsDisplayName,
   modelOptionValue,
   providerIconClassName,
+  providerModelListPopupClassName,
   providerSupportsSubProviderID,
   PROVIDER_ICON_BY_PROVIDER,
   getProviderModelAvailability,
@@ -37,15 +38,6 @@ import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
-const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;
-const LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS = "min-w-[40ch]";
-
-function providerModelListPopupClassName(options: ReadonlyArray<ModelOption>): string | undefined {
-  return options.length > LARGE_PROVIDER_MODEL_COUNT_THRESHOLD
-    ? LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS
-    : undefined;
-}
-
 export const ProviderModelPicker = memo(function ProviderModelPicker(
   props: ProviderModelPickerProps,
 ) {
@@ -215,6 +207,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                   providers: props.providers,
                   provider: activeProviderSnapshot,
                   modelCount: props.modelOptionsByProvider[props.lockedProvider].length,
+                  workspaceExecutionTargetId: props.workspaceExecutionTargetId,
                 }).loading
               }
               unavailableMessage={
@@ -222,6 +215,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                   providers: props.providers,
                   provider: activeProviderSnapshot,
                   modelCount: props.modelOptionsByProvider[props.lockedProvider].length,
+                  workspaceExecutionTargetId: props.workspaceExecutionTargetId,
                 }).unavailableMessage
               }
               {...(props.lockedProvider === "cliProxy" &&
@@ -259,6 +253,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                   providers: props.providers,
                   provider: liveProvider,
                   modelCount: props.modelOptionsByProvider[option.value].length,
+                  workspaceExecutionTargetId: props.workspaceExecutionTargetId,
                 });
                 const {
                   loading: isLoadingModels,
@@ -309,7 +304,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                       key={option.value}
                       className={props.menuItemClassName}
                       disabled
-                      title={liveProvider.message ?? unavailableLabel}
+                      title={unavailableMessage ?? liveProvider.message ?? unavailableLabel}
                     >
                       <OptionIcon
                         aria-hidden="true"
@@ -319,8 +314,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                         )}
                       />
                       <span>{option.label}</span>
-                      <span className="ms-auto shrink-0 text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                        {unavailableLabel}
+                      <span className="ms-auto max-w-64 truncate text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
+                        {unavailableMessage ?? unavailableLabel}
                       </span>
                     </MenuItem>
                   );

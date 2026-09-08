@@ -123,6 +123,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
         yield* offerRuntimeEvent({
           type: "session.exited",
           ...(yield* makeEventStamp()),
+          sessionEpoch: ctx.sessionEpoch,
           provider: PROVIDER,
           threadId: ctx.threadId,
           payload: { exitKind: "graceful" },
@@ -150,6 +151,8 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
           {
             childProcessSpawner,
             nativeEventLogger,
+            remoteAgentPtyResolver: options?.remoteAgentPtyResolver,
+            remoteWorkspaceReadinessProbe: options?.remoteWorkspaceReadinessProbe,
             serverConfig: {
               stateDir: serverConfig.stateDir,
               host: serverConfig.host,

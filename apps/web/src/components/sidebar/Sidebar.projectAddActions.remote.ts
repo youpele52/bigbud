@@ -12,12 +12,11 @@ import {
   createDefaultRemoteProjectDraft,
   createRemoteProjectDraft,
   createRemoteProjectExecutionTargetId,
-  deriveProjectTitleFromCwd,
   getRemoteProjectConnectionLabel,
   type RemoteProjectDraft,
 } from "./Sidebar.projects.logic";
 import type { Project } from "../../models/types";
-import { reconfigureRemoteProject } from "./Sidebar.projectAddActions.remote.edit";
+import { useRemoteProjectSubmit } from "./Sidebar.projectAddActions.remote.submit";
 import {
   createRemoteProjectFieldErrors,
   hasRemoteProjectFieldErrors,
@@ -25,6 +24,7 @@ import {
   type RemoteProjectFieldErrors,
 } from "./Sidebar.projectAddActions.helpers";
 import type {
+  SidebarRemoteAgentInstallRequest,
   SidebarRemoteProjectAddActionsOutput,
   UseSidebarRemoteProjectAddActionsInput,
 } from "./Sidebar.projectAddActions.remote.types";
@@ -56,6 +56,8 @@ export function useSidebarRemoteProjectAddActions({
   const [remoteProjectDialogMode, setRemoteProjectDialogMode] = useState<"add" | "edit">("add");
   const [editingProjectId, setEditingProjectId] = useState<ProjectId | null>(null);
   const [editingProjectUpdatedAt, setEditingProjectUpdatedAt] = useState<string | null>(null);
+  const [remoteAgentInstallRequest, setRemoteAgentInstallRequest] =
+    useState<SidebarRemoteAgentInstallRequest | null>(null);
   const verificationRequestIdRef = useRef(0);
 
   const resetRemoteProjectDialog = useCallback(() => {
@@ -75,6 +77,7 @@ export function useSidebarRemoteProjectAddActions({
     setRemoteProjectDialogMode("add");
     setEditingProjectId(null);
     setEditingProjectUpdatedAt(null);
+    setRemoteAgentInstallRequest(null);
     verificationRequestIdRef.current += 1;
   }, []);
 
@@ -174,6 +177,26 @@ export function useSidebarRemoteProjectAddActions({
       if (requestId !== verificationRequestIdRef.current) {
         return "invalid" as const;
       }
+      if (
+        result.remoteAgent?.status === "install-required" ||
+        result.remoteAgent?.status === "upgrade-required"
+      ) {
+        setRemoteProjectVerificationMessage(null);
+        const request = {
+          candidate: remoteProjectDraft,
+          executionTargetId: createRemoteProjectExecutionTargetId(remoteProjectDraft),
+          targetLabel: getRemoteProjectConnectionLabel(remoteProjectDraft),
+          ...(result.remoteAgent.status === "upgrade-required"
+            ? {
+                kind: "upgrade" as const,
+                currentVersion: result.remoteAgent.currentVersion,
+                targetVersion: result.remoteAgent.targetVersion,
+              }
+            : { kind: "install" as const }),
+        };
+        setRemoteAgentInstallRequest(request);
+        return result.remoteAgent.status;
+      }
       setRemoteProjectVerificationMessage(result.message);
       return "verified" as const;
     } catch (error) {
@@ -214,62 +237,29 @@ export function useSidebarRemoteProjectAddActions({
     }
   }, [remoteProjectDraft]);
 
-  const submitRemoteProject = useCallback(
-    async (candidate = remoteProjectDraft) => {
-      const remoteTargetLabel = getRemoteProjectConnectionLabel(candidate);
-      const title =
-        candidate.displayName.trim().length > 0
-          ? candidate.displayName.trim()
-          : `${deriveProjectTitleFromCwd(candidate.workspaceRoot)} (${remoteTargetLabel})`;
+  const submitRemoteProject = useRemoteProjectSubmit({
+    createProject,
+    dialogMode: remoteProjectDialogMode,
+    editingProjectId,
+    editingProjectUpdatedAt,
+    resetDialog: resetRemoteProjectDialog,
+    setError: setRemoteProjectError,
+    setSaving: setIsSavingRemoteProject,
+  });
 
-      if (remoteProjectDialogMode === "edit") {
-        if (!editingProjectId || !editingProjectUpdatedAt) {
-          setRemoteProjectError(
-            "Project revision is unavailable. Close and reopen the SSH configuration.",
-          );
-          return;
-        }
-        setIsSavingRemoteProject(true);
-        try {
-          const error = await reconfigureRemoteProject({
-            projectId: editingProjectId,
-            title,
-            draft: candidate,
-            expectedUpdatedAt: editingProjectUpdatedAt,
-          });
-          if (!error) {
-            resetRemoteProjectDialog();
-          } else {
-            setRemoteProjectError(error);
-          }
-        } finally {
-          setIsSavingRemoteProject(false);
-        }
-        return;
-      }
+  const declineRemoteAgentInstall = useCallback(() => {
+    resetRemoteProjectDialog();
+  }, [resetRemoteProjectDialog]);
 
-      const result = await createProject({
-        rawCwd: candidate.workspaceRoot,
-        providerRuntimeLocation: candidate.providerRuntimeLocation,
-        workspaceExecutionTargetId: createRemoteProjectExecutionTargetId(candidate),
-        title,
-      });
-
-      if (!result.ok) {
-        setRemoteProjectError(result.error);
-        return;
-      }
-
-      resetRemoteProjectDialog();
+  const completeRemoteAgentInstall = useCallback(
+    async (message: string) => {
+      const request = remoteAgentInstallRequest;
+      if (!request) return;
+      setRemoteAgentInstallRequest(null);
+      setRemoteProjectVerificationMessage(message);
+      await submitRemoteProject(request.candidate);
     },
-    [
-      createProject,
-      editingProjectId,
-      editingProjectUpdatedAt,
-      remoteProjectDialogMode,
-      remoteProjectDraft,
-      resetRemoteProjectDialog,
-    ],
+    [remoteAgentInstallRequest, submitRemoteProject],
   );
 
   const submitRemoteProjectDialog = useCallback(async () => {
@@ -346,7 +336,7 @@ export function useSidebarRemoteProjectAddActions({
         return;
       }
 
-      await submitRemoteProject();
+      await submitRemoteProject(remoteProjectDraft);
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -387,6 +377,9 @@ export function useSidebarRemoteProjectAddActions({
     closeRemoteProjectDialog,
     updateRemoteProjectDraft,
     submitRemoteProjectDialog,
+    remoteAgentInstallRequest,
+    declineRemoteAgentInstall,
+    completeRemoteAgentInstall,
     isRemoteProjectUnlockDialogOpen,
     remoteProjectUnlockMode,
     remoteProjectUnlockKeyPath,

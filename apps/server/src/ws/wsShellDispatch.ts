@@ -14,6 +14,7 @@ import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils";
 import type { OrchestrationDispatchError } from "../orchestration/Errors";
 import type { ThreadShellRunnerShape } from "../shell/Services/ThreadShellRunner";
 import type { ServerRuntimeStartupError } from "../startup/serverRuntimeStartup";
+import type { CommandAdmissionError } from "../command-admission/CommandAdmission.ts";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget";
 import { resolveDefaultChatCwd } from "./serverSettings";
@@ -36,7 +37,7 @@ class ShellCommandExecutionError extends Data.TaggedError("ShellCommandExecution
 interface DispatchShellCommandServices {
   readonly enqueueCommand: <A, E>(
     effect: Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
+  ) => Effect.Effect<A, E | ServerRuntimeStartupError | CommandAdmissionError>;
   readonly dispatchInitialShellCommand: (
     command: Extract<OrchestrationCommand, { type: "thread.shell.run" }>,
   ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError>;
@@ -50,6 +51,9 @@ interface DispatchShellCommandServices {
     readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
   };
   readonly threadShellRunner: ThreadShellRunnerShape;
+  readonly remoteThreadShellRunner?: (
+    executionTargetId: string,
+  ) => ThreadShellRunnerShape | undefined;
   readonly serverCommandId: (tag: string) => OrchestrationCommand["commandId"];
   readonly toDispatchCommandError: (
     cause: unknown,
@@ -67,6 +71,7 @@ export const makeDispatchShellCommand =
     orchestrationEngine,
     serverSettings,
     threadShellRunner,
+    remoteThreadShellRunner,
     serverCommandId,
     toDispatchCommandError,
   }: DispatchShellCommandServices) =>
@@ -74,7 +79,7 @@ export const makeDispatchShellCommand =
     normalizedCommand: Extract<OrchestrationCommand, { type: "thread.shell.run" }>,
   ): Effect.Effect<
     { readonly sequence: number },
-    OrchestrationDispatchCommandError | ServerRuntimeStartupError
+    OrchestrationDispatchCommandError | ServerRuntimeStartupError | CommandAdmissionError
   > =>
     enqueueCommand(
       Effect.gen(function* () {
@@ -128,7 +133,10 @@ export const makeDispatchShellCommand =
           (activeProject ? resolveWorkspaceExecutionTargetId(activeProject) : undefined) ??
           LOCAL_EXECUTION_TARGET_ID;
 
-        if (!isLocalExecutionTarget(executionTargetId)) {
+        const shellRunner = isLocalExecutionTarget(executionTargetId)
+          ? threadShellRunner
+          : remoteThreadShellRunner?.(executionTargetId);
+        if (!shellRunner) {
           return yield* new OrchestrationDispatchCommandError({
             message: formatRemoteExecutionTargetDetail({
               executionTargetId,
@@ -227,7 +235,7 @@ export const makeDispatchShellCommand =
         });
 
         runFork(
-          threadShellRunner
+          shellRunner
             .run({
               threadId: normalizedCommand.threadId,
               cwd,

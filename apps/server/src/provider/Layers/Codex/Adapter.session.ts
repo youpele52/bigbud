@@ -1,4 +1,3 @@
-/** Session lifecycle for the Codex provider adapter. */
 import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
 import { Effect, FileSystem, Queue, Stream } from "effect";
 
@@ -10,7 +9,6 @@ import {
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import type { CodexAppServerStartSessionInput } from "../../../codex/codexAppServerManager.ts";
-import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
 import {
   buildCodexSessionOrchestrationConfig,
   composeBridgeCleanups,
@@ -34,9 +32,16 @@ import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarg
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
-import { makeResolveAttachment, toRequestError } from "./Adapter.session.shared.ts";
+import { toCodexManagerModelSelection } from "./Adapter.session.modelSelection.ts";
+import {
+  makeResolveAttachment,
+  toRequestError,
+  toStartSessionError,
+} from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
 import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.session.bootstrap.ts";
+import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorkspace.ts";
+import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
@@ -95,20 +100,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : undefined,
         useLegacyExecutionTargetForProviderRuntime: false,
       });
-      const remoteWorkspaceBridge =
-        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
-        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
-          ? yield* Effect.tryPromise({
-              try: () => createCodexRemoteWorkspaceBridge(executionContext.workspaceTarget),
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: PROVIDER,
-                  threadId: input.threadId,
-                  detail: toMessage(cause, "Failed to prepare Codex remote workspace bridge."),
-                  cause,
-                }),
-            })
-          : undefined;
       const orchestrationBridge = yield* Effect.tryPromise({
         try: () =>
           prepareThreadOrchestrationMcpBridge({
@@ -125,6 +116,16 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             cause,
           }),
       });
+      const remoteWorkspaceBridge =
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+          ? yield* prepareCodexRemoteWorkspaceBridge({
+              workspaceTarget: executionContext.workspaceTarget,
+              orchestrationBridge,
+              threadId: input.threadId,
+              readinessProbe: options?.remoteWorkspaceReadinessProbe,
+            })
+          : undefined;
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
       const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools();
       const mergedConfigArgs = mergeCodexConfigArgs(
@@ -135,6 +136,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         remoteWorkspaceBridge?.cleanup,
         orchestrationBridge.cleanup,
       );
+      const managerModelSelection = toCodexManagerModelSelection(input.modelSelection);
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
@@ -149,7 +151,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,
+        ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
         binaryPath,
+        customModels: codexSettings.customModels,
         ...(homePath ? { homePath } : {}),
         ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
         expectedMcpServerNames: [orchestrationConfig.serverName],
@@ -159,23 +163,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(remoteWorkspaceBridge?.promptPrefix
           ? { developerInstructions: remoteWorkspaceBridge.promptPrefix }
           : {}),
-        ...(input.modelSelection?.provider === "codex"
-          ? { model: input.modelSelection.model }
-          : {}),
-        ...(input.modelSelection?.provider === "codex" && input.modelSelection.options?.fastMode
-          ? { serviceTier: "fast" }
-          : {}),
+        ...managerModelSelection,
       };
 
       return yield* Effect.tryPromise({
         try: () => manager.startSession(managerInput),
-        catch: (cause) =>
-          new ProviderAdapterProcessError({
-            provider: PROVIDER,
-            threadId: input.threadId,
-            detail: toMessage(cause, "Failed to start Codex adapter session."),
-            cause,
-          }),
+        catch: (cause) => toStartSessionError(input.threadId, cause),
       }).pipe(
         Effect.tapError(() =>
           Effect.sync(() => {
@@ -229,22 +222,14 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
     return yield* Effect.tryPromise({
       try: () => {
+        const managerModelSelection = toCodexManagerModelSelection(input.modelSelection);
         const managerInput = {
           threadId: input.threadId,
           input: appendAttachedImageOcrContents(
             appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
             imageOcrBlocks,
           ),
-          ...(input.modelSelection?.provider === "codex"
-            ? { model: input.modelSelection.model }
-            : {}),
-          ...(input.modelSelection?.provider === "codex" &&
-          input.modelSelection.options?.reasoningEffort !== undefined
-            ? { effort: input.modelSelection.options.reasoningEffort }
-            : {}),
-          ...(input.modelSelection?.provider === "codex" && input.modelSelection.options?.fastMode
-            ? { serviceTier: "fast" }
-            : {}),
+          ...managerModelSelection,
           ...(input.interactionMode !== undefined
             ? { interactionMode: input.interactionMode }
             : {}),
@@ -261,11 +246,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
   });
 
-  const interruptTurn: CodexAdapterShape["interruptTurn"] = (threadId, turnId) =>
-    Effect.tryPromise({
-      try: () => manager.interruptTurn(threadId, turnId),
-      catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-    });
+  const { interruptTurn, steerTurn } = makeCodexTurnControl(manager);
 
   const readThread: CodexAdapterShape["readThread"] = (threadId) =>
     Effect.tryPromise({
@@ -379,10 +360,18 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      supportsSteer: true,
+      turnControl: {
+        nativeSteer: true,
+        interruptTarget: "exact-turn",
+        activeTurnInspection: "unavailable",
+        continuation: true,
+      },
     },
     startSession,
     sendTurn,
     interruptTurn,
+    steerTurn,
     inspectActiveTurn: unavailableActiveTurnInspection("codex"),
     readThread,
     rollbackThread,

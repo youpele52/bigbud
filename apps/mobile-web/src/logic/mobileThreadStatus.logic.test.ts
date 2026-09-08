@@ -73,6 +73,41 @@ describe("buildMobileThreadStatusInput", () => {
     expect(input.hasPendingApprovals).toBe(true);
     expect(input.hasPendingUserInput).toBe(true);
   });
+
+  it.each([
+    ["idle", "closed"],
+    ["starting", "connecting"],
+    ["running", "running"],
+    ["ready", "ready"],
+    ["interrupted", "ready"],
+    ["stopped", "closed"],
+    ["error", "error"],
+  ] as const)("maps canonical session %s to legacy phase %s", (status, expectedPhase) => {
+    const input = buildMobileThreadStatusInput(
+      makeThread({
+        session: {
+          threadId,
+          status,
+          providerName: "claudeAgent",
+          runtimeMode: "approval-required",
+          activeTurnId: "turn-1",
+          sessionEpoch: 4,
+          reason: "provider state",
+          lastError: status === "error" ? "boom" : null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
+    expect(input.session).toMatchObject({
+      provider: "claudeAgent",
+      status: expectedPhase,
+      orchestrationStatus: status,
+      activeTurnId: "turn-1",
+      sessionEpoch: 4,
+      reason: "provider state",
+    });
+  });
 });
 
 describe("resolveMobileProviderIconClassName", () => {
@@ -110,5 +145,31 @@ describe("resolveMobileProviderIconClassName", () => {
         }),
       ),
     ).toBe("text-info-foreground");
+  });
+
+  it("returns completed styling for an unread successful turn", () => {
+    expect(
+      resolveMobileProviderIconClassName(
+        makeThread({
+          latestTurn: {
+            turnId: "turn-1",
+            state: "completed",
+            assistantMessageId: null,
+            requestedAt: "2026-01-01T00:00:00.000Z",
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:05:00.000Z",
+          },
+          session: {
+            threadId,
+            status: "ready",
+            providerName: "claudeAgent",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: "2026-01-01T00:05:00.000Z",
+          },
+        }),
+      ),
+    ).toBe("text-success");
   });
 });

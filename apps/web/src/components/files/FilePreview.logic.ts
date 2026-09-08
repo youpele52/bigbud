@@ -1,6 +1,39 @@
+import { isCodeRelatedFilePath } from "../../models/editor";
+
 export const FILE_PREVIEW_LINE_HEIGHT = 20;
 
 const MARKDOWN_FILE_EXTENSIONS = new Set([".md", ".mdx"]);
+const PREVIEW_LANGUAGE_BY_FILENAME = new Map<string, string>([
+  [".dockerignore", "ini"],
+  [".editorconfig", "ini"],
+  [".eslintignore", "ini"],
+  [".gitignore", "ini"],
+  [".npmignore", "ini"],
+  [".npmrc", "properties"],
+  [".prettierignore", "ini"],
+  [".prettierrc", "jsonc"],
+  [".yarnrc", "properties"],
+  ["authors", "markdown"],
+  ["changelog", "markdown"],
+  ["contributors", "markdown"],
+  ["gemfile", "ruby"],
+  ["license", "markdown"],
+  ["makefile", "makefile"],
+  ["notice", "markdown"],
+  ["rakefile", "ruby"],
+  ["readme", "markdown"],
+]);
+const PREVIEW_LANGUAGE_BY_EXTENSION = new Map<string, string>([
+  ["cfg", "ini"],
+  ["cnf", "ini"],
+  ["conf", "ini"],
+  ["env", "dotenv"],
+  ["ini", "ini"],
+  ["log", "log"],
+  ["properties", "properties"],
+  ["text", "markdown"],
+  ["txt", "markdown"],
+]);
 
 interface PreviewLoadingState {
   loading: boolean;
@@ -47,8 +80,20 @@ export function getPreviewScrollTop(
 }
 
 function fileNameFromPath(pathValue: string): string {
-  const segments = pathValue.split("/");
+  const segments = pathValue.split(/[\\/]/);
   return segments.at(-1) ?? pathValue;
+}
+
+function previewLanguageOverride(pathValue: string): string | null {
+  const name = fileNameFromPath(pathValue).toLowerCase();
+  if (name === "dockerfile" || name.startsWith("dockerfile-") || name.startsWith("dockerfile.")) {
+    return "dockerfile";
+  }
+  if (name === ".env" || name.startsWith(".env.")) return "dotenv";
+  const fromFilename = PREVIEW_LANGUAGE_BY_FILENAME.get(name);
+  if (fromFilename) return fromFilename;
+  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
+  return PREVIEW_LANGUAGE_BY_EXTENSION.get(extension) ?? null;
 }
 
 export function buildAbsolutePreviewPath(cwd: string, relativePath: string): string {
@@ -60,7 +105,8 @@ export function buildAbsolutePreviewPath(cwd: string, relativePath: string): str
 
 export function inferPreviewLanguage(pathValue: string): string {
   const name = fileNameFromPath(pathValue).toLowerCase();
-  if (name === "dockerfile") return "dockerfile";
+  const override = previewLanguageOverride(pathValue);
+  if (override) return override;
   const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "text";
   if (extension === "cts" || extension === "mts") return "ts";
   if (extension === "mdx") return "md";
@@ -68,6 +114,10 @@ export function inferPreviewLanguage(pathValue: string): string {
   if (extension === "ps1") return "powershell";
   if (extension === "sh" || extension === "bash" || extension === "zsh") return "shellscript";
   return extension || "text";
+}
+
+export function shouldSyntaxHighlightPreviewPath(pathValue: string): boolean {
+  return previewLanguageOverride(pathValue) !== null || isCodeRelatedFilePath(pathValue);
 }
 
 export function buildFilePreviewBreadcrumb(

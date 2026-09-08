@@ -12,6 +12,15 @@ import {
   prepareSendContext,
 } from "./ChatView.sendTurn.actions.shared";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
+import { digestMaterializationRequest } from "../../../stores/materialization/materializationRequestDigest";
+import {
+  classifyMaterializationFailure,
+  completeMaterialization,
+  markMaterializationDispatching,
+  prepareMaterializationForSend,
+  reconcileAcceptedMaterializationFailure,
+  repairRejectedMaterializationDraft,
+} from "./ChatView.sendTurn.materialization";
 
 interface SendTurnActionInput {
   api: NonNullable<ReturnType<typeof readNativeApi>>;
@@ -79,8 +88,39 @@ export async function sendShellCommand({
   }
   const { threadIdForSend, isFirstMessage, baseBranchForWorktree } = sendContext;
 
-  const messageIdForSend = newMessageId();
+  let messageIdForSend = newMessageId();
+  let commandIdForSend = newCommandId();
   const messageCreatedAt = new Date().toISOString();
+  const requestDigest = await digestMaterializationRequest({
+    kind: "shell",
+    threadId: threadIdForSend,
+    projectId: project.id,
+    shellCommand,
+    modelSelection: selectedModelSelection,
+    runtimeMode,
+    interactionMode,
+    bootstrap: { isFirstMessage, baseBranchForWorktree },
+  });
+  const materializationGate = await prepareMaterializationForSend({
+    api,
+    isDraft,
+    threadId: threadIdForSend,
+    projectId: project.id,
+    commandId: commandIdForSend,
+    messageId: messageIdForSend,
+    kind: "shell",
+    createdAt: messageCreatedAt,
+    requestDigest,
+    setThreadError: input.setThreadError,
+    onThreadMaterialized: input.onThreadMaterialized,
+  });
+  if (!materializationGate.proceed) return;
+  const materializationAttempt = materializationGate.attempt;
+  if (materializationAttempt) {
+    messageIdForSend = materializationAttempt.messageId;
+    commandIdForSend = materializationAttempt.commandId;
+  }
+
   input.sendInFlightRef.current = true;
   input.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
   input.setThreadError(threadIdForSend, null);
@@ -112,11 +152,13 @@ export async function sendShellCommand({
       runtimeMode,
       interactionMode,
       baseBranchForWorktree,
+      recoveryCommandId: commandIdForSend,
     });
     input.beginLocalDispatch({ preparingWorktree: false });
-    await api.orchestration.dispatchCommand({
+    await markMaterializationDispatching(materializationAttempt);
+    const dispatchResult = await api.orchestration.dispatchCommand({
       type: "thread.shell.run",
-      commandId: newCommandId(),
+      commandId: commandIdForSend,
       threadId: threadIdForSend,
       message: {
         messageId: messageIdForSend,
@@ -129,7 +171,28 @@ export async function sendShellCommand({
       createdAt: messageCreatedAt,
     });
     shellRunSucceeded = true;
-  })().catch((err: unknown) => {
+    await completeMaterialization(
+      { threadId: threadIdForSend, onThreadMaterialized: input.onThreadMaterialized },
+      materializationAttempt,
+      dispatchResult.sequence,
+    );
+  })().catch(async (err: unknown) => {
+    const materializationFailure = await classifyMaterializationFailure(
+      api,
+      materializationAttempt,
+    );
+    if (materializationFailure === "accepted" && materializationAttempt) {
+      shellRunSucceeded = true;
+      await reconcileAcceptedMaterializationFailure(
+        {
+          threadId: threadIdForSend,
+          onThreadMaterialized: input.onThreadMaterialized,
+        },
+        materializationAttempt,
+        "command",
+      );
+      return;
+    }
     restoreShellComposerDraftAfterFailure({
       currentDraftEmpty:
         !shellRunSucceeded &&
@@ -153,9 +216,21 @@ export async function sendShellCommand({
         input.setComposerTrigger(trigger);
       },
     });
+    if (materializationFailure !== "ambiguous") {
+      await repairRejectedMaterializationDraft({
+        api,
+        error: err,
+        threadId: threadIdForSend,
+        contentKind: "command",
+      });
+    }
     input.setThreadError(
       threadIdForSend,
-      err instanceof Error ? err.message : "Failed to run shell command.",
+      materializationFailure === "ambiguous"
+        ? "Your command is safe. bigbud is checking whether the previous send was accepted."
+        : err instanceof Error
+          ? err.message
+          : "Failed to run shell command.",
     );
   });
   input.sendInFlightRef.current = false;

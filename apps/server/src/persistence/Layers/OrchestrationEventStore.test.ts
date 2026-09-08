@@ -1,6 +1,6 @@
-import { CommandId, EventId, ProjectId, ThreadId } from "@bigbud/contracts";
+import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { PersistenceDecodeError } from "../Errors.ts";
@@ -220,20 +220,6 @@ layer("OrchestrationEventStore", (it) => {
       );
       assert.equal(duplicate._tag, "Failure");
       yield* sql`DELETE FROM orchestration_events`;
-    }),
-  );
-
-  it.effect("resolves a compacted thread's project from its content-free identity marker", () =>
-    Effect.gen(function* () {
-      const eventStore = yield* OrchestrationEventStore;
-      const sql = yield* SqlClient.SqlClient;
-      const threadId = ThreadId.makeUnsafe("thread-identity-marker");
-      const projectId = ProjectId.makeUnsafe("project-identity-marker");
-      yield* sql`
-        INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
-        VALUES (${threadId}, ${projectId}, 1)
-      `;
-      assert.deepEqual(yield* eventStore.findThreadProjectId(threadId), Option.some(projectId));
     }),
   );
 

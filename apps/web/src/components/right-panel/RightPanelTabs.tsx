@@ -170,6 +170,7 @@ export function RightPanelTabs({
   const moveTab = useRightPanelTabsStore((state) => state.moveTab);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const browserTabsById = useBrowserPanelStore((state) => state.tabsById);
+  const setBrowserTabFavicon = useBrowserPanelStore((state) => state.setTabFavicon);
   const browserTabLimitReached =
     countRightPanelTabsByKind(openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS;
   const browserTabMenuLabel = browserTabLimitReached
@@ -217,6 +218,7 @@ export function RightPanelTabs({
           const Icon = TAB_ICONS[kind];
           const isActive = activeTabId === tabId;
           const label = getTabLabel(tabId, openTabs, browserTabsById);
+          const faviconUrl = kind === "browser" ? browserTabsById[tabId]?.faviconUrl : null;
 
           return (
             <div
@@ -280,17 +282,27 @@ export function RightPanelTabs({
               <button
                 type="button"
                 draggable={false}
-                className="flex min-w-0 items-center justify-center gap-1.5 px-1.5"
+                className="absolute inset-0 z-0 flex min-w-0 items-center justify-center gap-1.5 rounded-t-xl px-1.5 pr-7"
                 title={label}
                 onClick={() => {
                   setActiveTab(tabId);
                   requestRightPanel(kind);
                 }}
               >
-                <Icon className="size-3.5" />
+                {faviconUrl ? (
+                  <img
+                    src={faviconUrl}
+                    alt=""
+                    className="size-3.5 shrink-0 rounded-sm"
+                    draggable={false}
+                    onError={() => setBrowserTabFavicon(tabId, null)}
+                  />
+                ) : (
+                  <Icon className="size-3.5" />
+                )}
                 <span className="truncate text-xs font-medium">{label}</span>
               </button>
-              <span className="flex items-center justify-center">
+              <span className="relative z-10 col-start-3 row-start-1 flex items-center justify-center">
                 <button
                   type="button"
                   draggable={false}

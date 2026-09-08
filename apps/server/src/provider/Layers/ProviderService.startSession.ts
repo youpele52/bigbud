@@ -20,6 +20,8 @@ import type { ProviderServiceShape } from "../Services/ProviderService.ts";
 import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
 import {
   formatUnsupportedProviderExecutionTargetDetail,
+  formatUnsupportedProviderLocalRuntimeRemoteWorkspaceDetail,
+  isUnsupportedProviderLocalRuntimeRemoteWorkspace,
   supportsProviderExecutionTarget,
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
@@ -119,6 +121,21 @@ export function makeStartSessionInternal(input: {
 
     return yield* Effect.gen(function* () {
       if (
+        isUnsupportedProviderLocalRuntimeRemoteWorkspace({
+          provider: startInput.provider,
+          providerRuntimeExecutionTargetId: startInput.providerRuntimeExecutionTargetId,
+          workspaceExecutionTargetId: startInput.workspaceExecutionTargetId,
+        })
+      ) {
+        return yield* toValidationError(
+          "ProviderService.startSession",
+          formatUnsupportedProviderLocalRuntimeRemoteWorkspaceDetail({
+            provider: startInput.provider,
+            workspaceExecutionTargetId: startInput.workspaceExecutionTargetId,
+          }),
+        );
+      }
+      if (
         !supportsProviderExecutionTarget(
           {
             provider: startInput.provider,
@@ -182,8 +199,20 @@ export function makeStartSessionInternal(input: {
           ? yield* Effect.exit(adapter.stopSession(threadId))
           : Exit.void;
         const restoreExit = admitted ? yield* Effect.exit(restoreBinding) : Exit.void;
-        if (Exit.isFailure(stopExit)) return yield* Effect.failCause(stopExit.cause);
-        if (Exit.isFailure(restoreExit)) return yield* Effect.failCause(restoreExit.cause);
+        if (Exit.isFailure(stopExit)) {
+          yield* Effect.logWarning("provider session rollback stop failed", {
+            provider: startInput.provider,
+            threadId,
+            cause: stopExit.cause,
+          });
+        }
+        if (Exit.isFailure(restoreExit)) {
+          yield* Effect.logWarning("provider session rollback binding restore failed", {
+            provider: startInput.provider,
+            threadId,
+            cause: restoreExit.cause,
+          });
+        }
       });
 
       return yield* Effect.gen(function* () {
@@ -196,6 +225,9 @@ export function makeStartSessionInternal(input: {
           runtimeMode: startInput.runtimeMode,
           status: "starting",
           runtimePayload: {
+            ...(startInput.sessionEpoch !== undefined
+              ? { sessionEpoch: startInput.sessionEpoch }
+              : {}),
             ...(startInput.cwd ? { cwd: startInput.cwd } : {}),
             ...(startInput.modelSelection ? { modelSelection: startInput.modelSelection } : {}),
             lastRuntimeEvent: "provider.startSession.admitted",
@@ -210,19 +242,24 @@ export function makeStartSessionInternal(input: {
             ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
           })
           .pipe(Effect.timeoutOption(PROVIDER_SESSION_START_TIMEOUT));
-        const session =
+        const adapterSession =
           Option.getOrUndefined(sessionOption) ??
           (yield* toValidationError(
             "ProviderService.startSession",
             `Provider '${startInput.provider}' session startup timed out after ${Duration.toSeconds(PROVIDER_SESSION_START_TIMEOUT)}s before the first turn could be sent.`,
           ));
-
-        if (session.provider !== adapter.provider) {
+        if (adapterSession.provider !== adapter.provider) {
           return yield* toValidationError(
             "ProviderService.startSession",
-            `Adapter/provider mismatch: requested '${adapter.provider}', received '${session.provider}'.`,
+            `Adapter/provider mismatch: requested '${adapter.provider}', received '${adapterSession.provider}'.`,
           );
         }
+        const session: ProviderSession = {
+          ...adapterSession,
+          ...(startInput.sessionEpoch !== undefined
+            ? { sessionEpoch: startInput.sessionEpoch }
+            : {}),
+        };
 
         yield* input.stopStaleSessionsForThread({
           threadId,

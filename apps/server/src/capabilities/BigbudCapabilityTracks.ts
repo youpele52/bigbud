@@ -114,11 +114,12 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     id: "thread.message.send",
     displayName: "Send thread message",
     description: SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
-    triggers: ["An agent needs to follow up in another thread in the current project."],
+    triggers: ["An agent needs to follow up in another thread or a directly delegated child."],
     risk: "mutating",
     workflow:
       "Call send_thread_message with the target thread ID and message. Use delivery queue only when explicitly desired.",
-    permissions: "The caller and target must exist in the same project.",
+    permissions:
+      "The caller and target must be in the same project, unless the target is a directly delegated child of the caller.",
     examples: ["Send the audit thread an additional constraint."],
     antiPatterns: ["Do not use this to steer or restart a running provider turn."],
     relatedCapabilityIds: ["thread.status"],
@@ -130,7 +131,8 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     triggers: ["Work depends on another thread finishing.", "A child thread startup is pending."],
     risk: "read-only",
     workflow: "Call get_thread_status with the target thread ID and poll when necessary.",
-    permissions: "Read-only within the current project.",
+    permissions:
+      "Read-only within the current project, or for a directly delegated child in another project.",
     examples: ["Check whether the delegated audit is complete."],
     antiPatterns: ["Do not infer completion from thread creation acceptance."],
     relatedCapabilityIds: ["thread.create"],

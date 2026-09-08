@@ -45,17 +45,17 @@ export function buildPiModels(
   models: ReadonlyArray<PiRpcModel>,
   customModels: ReadonlyArray<string>,
 ): ReadonlyArray<ServerProviderModel> {
-  const builtInModels = models.map(
-    (model) =>
-      ({
-        slug: model.id,
-        name: model.name.trim().length > 0 ? model.name : model.id,
-        isCustom: false,
-        group: getSubProviderDisplayName(model.provider),
-        subProviderID: model.provider,
-        capabilities: getPiModelCapabilities(model),
-      }) satisfies ServerProviderModel,
-  );
+  const builtInModels = models.map((model) => {
+    const name = model.name.trim();
+    return {
+      slug: model.id,
+      name: name.length > 0 ? name : model.id,
+      isCustom: false,
+      group: getSubProviderDisplayName(model.provider),
+      subProviderID: model.provider,
+      capabilities: getPiModelCapabilities(model),
+    } satisfies ServerProviderModel;
+  });
 
   return providerModelsFromSettings(
     builtInModels,

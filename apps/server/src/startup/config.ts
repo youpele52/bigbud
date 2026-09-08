@@ -8,6 +8,8 @@
  */
 import { Effect, FileSystem, Layer, LogLevel, Path, Schema, ServiceMap } from "effect";
 
+import type { TraceMode } from "../observability/TracePolicy.ts";
+
 export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
@@ -45,6 +47,8 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly traceBatchWindowMs: number;
   readonly traceMaxBytes: number;
   readonly traceMaxFiles: number;
+  readonly traceMode?: TraceMode;
+  readonly traceDiagnosticTtlMs?: number;
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;
   readonly otlpExportIntervalMs: number;

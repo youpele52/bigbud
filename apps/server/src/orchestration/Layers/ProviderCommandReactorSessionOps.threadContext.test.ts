@@ -28,15 +28,15 @@ describe("prependThreadContextToProviderInput", () => {
     expect(result).toContain("a self-contained task that includes all necessary context");
     expect(result).toContain("Omit `projectId` to target the current project");
     expect(result).toContain("only provide an explicitly authorized `projectId`");
-    expect(result).toContain(
-      "use it only for an authorized workspace once workspace-path policy support lands",
-    );
-    expect(result).toContain("the current implementation rejects it, so do not send it now");
+    expect(result).not.toContain("workspacePath");
     expect(result).toContain(
       "An accepted `create_thread` request means the request was accepted, not that the child agent has started",
     );
     expect(result).toContain(
       "Use `get_thread_status` with the returned thread ID to poll startup and workflow progress",
+    );
+    expect(result).toContain(
+      "your directly delegated children, not arbitrary cross-project threads",
     );
     expect(result).toContain(
       "retry `create_thread` only when the request was rejected or no acceptance was received",

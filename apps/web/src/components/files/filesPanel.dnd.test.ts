@@ -1,6 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { joinWorkspaceEntryPath } from "./filesPanel.dnd";
+import {
+  BIGBUD_FILES_PANEL_DRAG_MIME,
+  joinWorkspaceEntryPath,
+  writeFilesPanelDragEntry,
+} from "./filesPanel.dnd";
+
+describe("writeFilesPanelDragEntry", () => {
+  it("writes the shared entry payload and plain-text path as a copy", () => {
+    const setData = vi.fn();
+    const dataTransfer = { effectAllowed: "none", setData } as unknown as DataTransfer;
+
+    writeFilesPanelDragEntry(dataTransfer, {
+      name: "file.md",
+      path: "/workspace/docs/file.md",
+      entryKind: "file",
+    });
+
+    expect(dataTransfer.effectAllowed).toBe("copy");
+    expect(setData).toHaveBeenNthCalledWith(
+      1,
+      BIGBUD_FILES_PANEL_DRAG_MIME,
+      JSON.stringify({
+        name: "file.md",
+        path: "/workspace/docs/file.md",
+        entryKind: "file",
+      }),
+    );
+    expect(setData).toHaveBeenNthCalledWith(2, "text/plain", "/workspace/docs/file.md");
+  });
+});
 
 describe("joinWorkspaceEntryPath", () => {
   it("joins a workspace root with a relative path", () => {

@@ -20,7 +20,7 @@ describe("browser.store", () => {
     expect(stateAfter.tabsById).toBe(tabsBefore);
   });
 
-  it("does not replace state when setting the same title or url", () => {
+  it("does not replace state when setting the same title, favicon, or url", () => {
     useBrowserPanelStore.getState().ensureTab("browser:1", "https://example.com");
     useBrowserPanelStore.getState().setTabTitle("browser:1", "Example");
 
@@ -28,9 +28,23 @@ describe("browser.store", () => {
     useBrowserPanelStore.getState().setTabTitle("browser:1", "Example");
     expect(useBrowserPanelStore.getState()).toBe(stateBeforeTitle);
 
+    useBrowserPanelStore.getState().setTabFavicon("browser:1", "https://example.com/favicon.ico");
+    const stateBeforeFavicon = useBrowserPanelStore.getState();
+    useBrowserPanelStore.getState().setTabFavicon("browser:1", "https://example.com/favicon.ico");
+    expect(useBrowserPanelStore.getState()).toBe(stateBeforeFavicon);
+
     const stateBeforeUrl = useBrowserPanelStore.getState();
     useBrowserPanelStore.getState().setTabUrl("browser:1", "https://example.com");
     expect(useBrowserPanelStore.getState()).toBe(stateBeforeUrl);
+  });
+
+  it("clears a tab favicon when navigating to a new URL", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1", "https://example.com");
+    useBrowserPanelStore.getState().setTabFavicon("browser:1", "https://example.com/favicon.ico");
+
+    useBrowserPanelStore.getState().setTabUrl("browser:1", "https://iana.org");
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.faviconUrl).toBeNull();
   });
 
   it("keeps an agent lease while browser metadata changes and releases it explicitly", () => {

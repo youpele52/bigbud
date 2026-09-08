@@ -14,6 +14,7 @@ import {
 } from "../startup/config";
 import { readBootstrapEnvelope } from "../startup/bootstrap";
 import { expandHomePath, resolveBaseDir } from "../utils/os-jank";
+import { TraceModeSchema } from "../observability/TracePolicy.ts";
 
 export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -83,6 +84,15 @@ const EnvServerConfig = Config.all({
     Config.int("BIGBUD_TRACE_BATCH_WINDOW_MS"),
     Config.int("T3CODE_TRACE_BATCH_WINDOW_MS"),
     200,
+  ),
+  traceMode: aliasedOptional(
+    Config.schema(TraceModeSchema, "BIGBUD_TRACE_MODE"),
+    Config.schema(TraceModeSchema, "T3CODE_TRACE_MODE"),
+  ),
+  traceDiagnosticTtlMs: aliasedWithDefault(
+    Config.int("BIGBUD_TRACE_DIAGNOSTIC_TTL_MS"),
+    Config.int("T3CODE_TRACE_DIAGNOSTIC_TTL_MS"),
+    15 * 60 * 1000,
   ),
   otlpTracesUrl: aliasedOptional(
     Config.string("BIGBUD_OTLP_TRACES_URL"),
@@ -293,6 +303,8 @@ export const resolveServerConfig = (
       traceBatchWindowMs: env.traceBatchWindowMs,
       traceMaxBytes: env.traceMaxBytes,
       traceMaxFiles: env.traceMaxFiles,
+      ...(env.traceMode === undefined ? {} : { traceMode: env.traceMode }),
+      traceDiagnosticTtlMs: env.traceDiagnosticTtlMs,
       otlpTracesUrl:
         env.otlpTracesUrl ??
         Option.getOrUndefined(

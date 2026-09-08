@@ -37,12 +37,12 @@ export function BrowserPanelErrorPage({
         <div className="flex flex-wrap gap-2 pt-2">
           <Button onClick={onReload}>Reload</Button>
           {onGoBack && (
-            <Button variant="outline" onClick={onGoBack}>
+            <Button size="default" variant="outline" onClick={onGoBack}>
               Go back
             </Button>
           )}
           {onVisitAnyway && (
-            <Button variant="outline" onClick={onVisitAnyway}>
+            <Button size="default" variant="outline" onClick={onVisitAnyway}>
               Visit anyway
             </Button>
           )}

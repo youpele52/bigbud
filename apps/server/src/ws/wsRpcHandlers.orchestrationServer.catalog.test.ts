@@ -1,4 +1,4 @@
-import { ORCHESTRATION_WS_METHODS, ThreadId } from "@bigbud/contracts";
+import { CommandId, ORCHESTRATION_WS_METHODS, ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 
@@ -36,7 +36,7 @@ it.effect("routes selected-thread detail RPCs to the catalog query service", () 
           return Effect.succeed({
             projectionSequence: 7,
             threadId,
-            projectId: "project-rpc",
+            projectId: ProjectId.makeUnsafe("project-rpc"),
             activityTurnId: null,
             messages: [],
             messageWindow: {
@@ -68,6 +68,72 @@ it.effect("routes selected-thread detail RPCs to the catalog query service", () 
 
     assert.equal(receivedThreadId, threadId);
     assert.equal(result.projectionSequence, 7);
+  }),
+);
+
+it.effect("routes typed thread ownership RPCs to the orchestration engine", () =>
+  Effect.gen(function* () {
+    const threadId = ThreadId.makeUnsafe("thread-ownership-rpc");
+    const context = {
+      orchestrationEngine: {
+        resolveThreadOwnership: (receivedThreadId: ThreadId) =>
+          Effect.succeed({
+            threadId: receivedThreadId,
+            projectId: "project-rpc",
+            status: "archived" as const,
+            serverEpoch: "server-rpc",
+            canonicalRevision: 9,
+          }),
+      },
+    } as unknown as WsRpcContext;
+    const handlers = makeWsRpcOrchestrationServerHandlers(context);
+    const handler = handlers[ORCHESTRATION_WS_METHODS.getThreadOwnership];
+
+    assert.deepStrictEqual(yield* handler({ threadId }), {
+      threadId,
+      projectId: ProjectId.makeUnsafe("project-rpc"),
+      status: "archived",
+      serverEpoch: "server-rpc",
+      canonicalRevision: 9,
+    });
+  }),
+);
+
+it.effect("routes command outcome RPCs without exposing receipt errors", () =>
+  Effect.gen(function* () {
+    const commandId = CommandId.makeUnsafe("command-outcome-rpc");
+    const context = {
+      orchestrationEngine: {
+        getCommandOutcome: (receivedCommandId: CommandId) =>
+          Effect.succeed({
+            commandId: receivedCommandId,
+            status: "rejected" as const,
+            aggregateKind: "project" as const,
+            aggregateId: ProjectId.makeUnsafe("project-rpc"),
+            rejectedAt: "2026-08-26T12:00:00.000Z",
+            reason: "thread_already_exists" as const,
+            resultSequence: 9,
+            serverEpoch: "server-rpc",
+            canonicalRevision: 9,
+          }),
+      },
+    } as unknown as WsRpcContext;
+    const handlers = makeWsRpcOrchestrationServerHandlers(context);
+
+    assert.deepStrictEqual(
+      yield* handlers[ORCHESTRATION_WS_METHODS.getCommandOutcome]({ commandId }),
+      {
+        commandId,
+        status: "rejected",
+        aggregateKind: "project",
+        aggregateId: ProjectId.makeUnsafe("project-rpc"),
+        rejectedAt: "2026-08-26T12:00:00.000Z",
+        reason: "thread_already_exists",
+        resultSequence: 9,
+        serverEpoch: "server-rpc",
+        canonicalRevision: 9,
+      },
+    );
   }),
 );
 

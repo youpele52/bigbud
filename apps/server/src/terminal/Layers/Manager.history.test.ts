@@ -5,6 +5,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect } from "vitest";
 
+import { capHistory } from "./Manager.history";
 import {
   createManager,
   historyLogPath,
@@ -13,6 +14,11 @@ import {
   readFileString,
   writeFileString,
 } from "./Manager.test.helpers";
+
+it("does not retain history when the configured line limit is non-positive", () => {
+  expect(capHistory("one\ntwo\n", 0)).toBe("\n");
+  expect(capHistory("one", -1)).toBe("");
+});
 
 it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (it) => {
   it.effect("caps persisted history to configured line limit", () =>

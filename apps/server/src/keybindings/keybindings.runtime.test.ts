@@ -38,6 +38,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       assert.equal(defaultsByCommand.get("diff.toggle"), "mod+shift+g");
       assert.equal(defaultsByCommand.get("rightPanel.newTab"), "mod+t");
       assert.equal(defaultsByCommand.get("commandPalette.toggle"), "mod+p");
+      assert.equal(defaultsByCommand.get("chat.focus"), "mod+l");
       assert.equal(defaultsByCommand.get("sidecar.toggle"), "mod+shift+s");
       assert.equal(defaultsByCommand.get("planCard.toggle"), "mod+shift+t");
       assert.equal(defaultsByCommand.get("thread.previous"), "mod+shift+[");

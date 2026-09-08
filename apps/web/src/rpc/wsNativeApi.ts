@@ -5,9 +5,29 @@ import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
 import { resetWsConnectionStateForTests } from "./wsConnectionState";
+import {
+  resetOrchestrationDeliveryLifecycleForTests,
+  setOrchestrationDeliveryLifecycle,
+} from "./orchestrationDeliveryState";
+import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
+import { isWsSubscriptionListenerFailure } from "./wsTransport";
 
 let instance: { api: NativeApi } | null = null;
+const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
+const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
+
+function resolveDeliveryConsumerId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(DELIVERY_CONSUMER_STORAGE_KEY)?.trim();
+    if (existing) return existing;
+    const consumerId = crypto.randomUUID();
+    window.sessionStorage.setItem(DELIVERY_CONSUMER_STORAGE_KEY, consumerId);
+    return consumerId;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
 
 function shouldOpenViaDesktopShell(url: string): boolean {
   try {
@@ -24,6 +44,7 @@ export function __resetWsNativeApiForTests() {
   resetRequestLatencyStateForTests();
   resetServerStateForTests();
   resetWsConnectionStateForTests();
+  resetOrchestrationDeliveryLifecycleForTests();
 }
 
 export function createWsNativeApi(): NativeApi {
@@ -32,6 +53,94 @@ export function createWsNativeApi(): NativeApi {
   }
 
   const rpcClient = getWsRpcClient();
+  const deliveryConsumerId = resolveDeliveryConsumerId();
+  let deliveryAppliedSequence = readPersistedDeliveryCursor(deliveryConsumerId);
+  type DomainEventCallback = Parameters<NativeApi["orchestration"]["onDomainEvent"]>[0];
+  const domainEventCallbacks = new Set<DomainEventCallback>();
+  const domainResubscribeCallbacks = new Set<() => void>();
+  let activeBaselineRecovery: {
+    readonly recoveryId: string;
+    readonly consumerId: string;
+    readonly consumerGeneration: number;
+    readonly serverEpoch: string;
+  } | null = null;
+  let unsubscribeDomainEvents: (() => void) | null = null;
+  let orchestrationApplicationFailures = 0;
+  let latestDeliveryIdentity: {
+    readonly route: "direct-unmanaged" | "supervisor" | "fallback-fenced";
+    readonly consumerGeneration: number;
+    readonly acknowledgedSequence: number;
+  } | null = null;
+
+  const markDeliveryProgress = () => {
+    orchestrationApplicationFailures = 0;
+  };
+
+  const isActiveBaselineRecovery = (input: {
+    readonly recoveryId: string;
+    readonly consumerId: string;
+    readonly consumerGeneration: number;
+    readonly serverEpoch: string;
+  }) =>
+    activeBaselineRecovery?.recoveryId === input.recoveryId &&
+    activeBaselineRecovery.consumerId === input.consumerId &&
+    activeBaselineRecovery.consumerGeneration === input.consumerGeneration &&
+    activeBaselineRecovery.serverEpoch === input.serverEpoch;
+
+  const ensureDomainEventSubscription = () => {
+    if (unsubscribeDomainEvents) return;
+    unsubscribeDomainEvents = rpcClient.orchestration.onDomainEvent(
+      () => ({ consumerId: deliveryConsumerId, appliedSequence: deliveryAppliedSequence }),
+      (item) => {
+        latestDeliveryIdentity = {
+          route: item.route,
+          consumerGeneration: item.consumerGeneration,
+          acknowledgedSequence:
+            item.type === "batch" ? deliveryAppliedSequence : item.acknowledgedSequence,
+        };
+        if (item.type === "recovery") {
+          activeBaselineRecovery = {
+            recoveryId: item.recoveryId,
+            consumerId: item.consumerId,
+            consumerGeneration: item.consumerGeneration,
+            serverEpoch: item.serverEpoch,
+          };
+        } else if (item.type === "batch") {
+          activeBaselineRecovery = null;
+        }
+        return Promise.all(Array.from(domainEventCallbacks, (callback) => callback(item))).then(
+          () => undefined,
+        );
+      },
+      {
+        onResubscribe: () => {
+          activeBaselineRecovery = null;
+          for (const callback of domainResubscribeCallbacks) callback();
+        },
+        shouldRetry: (error) => {
+          if (!isWsSubscriptionListenerFailure(error)) return true;
+          orchestrationApplicationFailures += 1;
+          if (orchestrationApplicationFailures < MAX_ORCHESTRATION_NO_PROGRESS_FAILURES) {
+            return true;
+          }
+          const identity = latestDeliveryIdentity;
+          if (identity) {
+            setOrchestrationDeliveryLifecycle({
+              type: "lifecycle",
+              route: identity.route,
+              consumerId: deliveryConsumerId,
+              consumerGeneration: identity.consumerGeneration,
+              state: "degraded",
+              acknowledgedSequence: identity.acknowledgedSequence,
+              restartAttempt: 0,
+              reasonCode: "application_no_progress",
+            });
+          }
+          return false;
+        },
+      },
+    );
+  };
 
   const api: NativeApi = {
     dialogs: {
@@ -145,6 +254,7 @@ export function createWsNativeApi(): NativeApi {
       refreshProviders: rpcClient.server.refreshProviders,
       activateCliProxy: rpcClient.server.activateCliProxy,
       verifyExecutionTarget: rpcClient.server.verifyExecutionTarget,
+      installRemoteAgent: rpcClient.server.installRemoteAgent,
       unlockSshKey: rpcClient.server.unlockSshKey,
       unlockSshPassword: rpcClient.server.unlockSshPassword,
       upsertKeybinding: rpcClient.server.upsertKeybinding,
@@ -180,14 +290,63 @@ export function createWsNativeApi(): NativeApi {
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
+      resolveThreadOwnership: async (input) => {
+        try {
+          return await rpcClient.orchestration.getThreadOwnership(input);
+        } catch (error) {
+          const message = error instanceof Error ? error.message.trim() : "";
+          return {
+            threadId: input.threadId,
+            status: "unavailable",
+            ownership: "unconfirmed",
+            reason: message || "Thread ownership could not be confirmed.",
+          };
+        }
+      },
+      getCommandOutcome: (input) => rpcClient.orchestration.getCommandOutcome(input),
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
         rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
-      onDomainEvent: (callback, options) =>
-        rpcClient.orchestration.onDomainEvent(callback, options),
+      acknowledgeDelivery: async (input) => {
+        const result = await rpcClient.orchestration.acknowledgeDelivery(input);
+        if (result.accepted && !result.fenced) {
+          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
+          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+          markDeliveryProgress();
+        }
+        return result;
+      },
+      acknowledgeDeliveryBaseline: async (input) => {
+        if (!isActiveBaselineRecovery(input)) {
+          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
+        }
+        const result = await rpcClient.orchestration.acknowledgeDeliveryBaseline(input);
+        if (result.accepted && !result.fenced && isActiveBaselineRecovery(input)) {
+          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
+          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
+          markDeliveryProgress();
+        } else if (result.accepted && !result.fenced) {
+          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
+        }
+        return result;
+      },
+      onDomainEvent: (callback, options) => {
+        domainEventCallbacks.add(callback);
+        if (options?.onResubscribe) domainResubscribeCallbacks.add(options.onResubscribe);
+        ensureDomainEventSubscription();
+        return () => {
+          domainEventCallbacks.delete(callback);
+          if (options?.onResubscribe) domainResubscribeCallbacks.delete(options.onResubscribe);
+          if (domainEventCallbacks.size === 0) {
+            activeBaselineRecovery = null;
+            unsubscribeDomainEvents?.();
+            unsubscribeDomainEvents = null;
+          }
+        };
+      },
       onThinkingDelta: (callback, options) =>
         rpcClient.orchestration.onThinkingDelta(callback, options),
     },

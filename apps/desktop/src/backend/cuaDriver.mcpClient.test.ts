@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
 
 vi.mock("node:child_process", async (importOriginal) => {
@@ -10,17 +10,22 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import * as ChildProcess from "node:child_process";
-import { callCuaDriverTool, stopCuaDriverMcpClient } from "./cuaDriver.mcpClient";
+import {
+  callCuaDriverTool,
+  stopCuaDriverMcpClient,
+  stopCuaDriverMcpClientAndWait,
+} from "./cuaDriver.mcpClient";
 
 const mockedSpawn = vi.mocked(ChildProcess.spawn);
 
-function makeMcpChild(failOnMethod?: string) {
+function makeMcpChild(failOnMethod?: string, autoExit = true) {
   const child = new EventEmitter() as EventEmitter & {
     stdin: PassThrough;
     stdout: PassThrough;
     stderr: PassThrough;
     exitCode: number | null;
     signalCode: NodeJS.Signals | null;
+    pid: number;
     kill: ReturnType<typeof vi.fn>;
   };
   child.stdin = new PassThrough();
@@ -28,7 +33,18 @@ function makeMcpChild(failOnMethod?: string) {
   child.stderr = new PassThrough();
   child.exitCode = null;
   child.signalCode = null;
-  child.kill = vi.fn();
+  child.pid = 91;
+  child.kill = vi.fn((signal: NodeJS.Signals) => {
+    if (autoExit) {
+      queueMicrotask(() => {
+        child.exitCode = 0;
+        child.signalCode = signal;
+        child.emit("exit", 0, signal);
+        child.emit("close", 0, signal);
+      });
+    }
+    return true;
+  });
   let buffer = "";
   child.stdin.on("data", (chunk) => {
     buffer += chunk.toString();
@@ -57,9 +73,13 @@ function makeMcpChild(failOnMethod?: string) {
 }
 
 describe("callCuaDriverTool", () => {
-  beforeEach(() => {
-    stopCuaDriverMcpClient();
+  beforeEach(async () => {
+    await stopCuaDriverMcpClientAndWait();
     mockedSpawn.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("reuses one supported MCP bridge process for daemon-backed calls", async () => {
@@ -119,5 +139,61 @@ describe("callCuaDriverTool", () => {
     stopCuaDriverMcpClient();
 
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("awaits persistent bridge exit and coalesces concurrent shutdown", async () => {
+    const child = makeMcpChild(undefined, false);
+    mockedSpawn.mockReturnValue(child as never);
+    await callCuaDriverTool(
+      "/tmp/cua-driver",
+      "health_report",
+      {},
+      {
+        socketPath: "/tmp/bigbud-cua-await-stop.sock",
+        environment: { BIGBUD_CUA_HOST_BUNDLE_ID: "ai.bigbud.desktop.dev" },
+      },
+    );
+
+    const first = stopCuaDriverMcpClientAndWait();
+    const second = stopCuaDriverMcpClientAndWait();
+    expect(second).toBe(first);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+
+    child.exitCode = 0;
+    child.emit("exit", 0, "SIGTERM");
+    await Promise.all([first, second]);
+  });
+
+  it("propagates inability to confirm persistent bridge exit", async () => {
+    vi.useFakeTimers();
+    const child = makeMcpChild(undefined, false);
+    mockedSpawn.mockReturnValue(child as never);
+    await callCuaDriverTool(
+      "/tmp/cua-driver",
+      "health_report",
+      {},
+      {
+        socketPath: "/tmp/bigbud-cua-timeout-stop.sock",
+        environment: { BIGBUD_CUA_HOST_BUNDLE_ID: "ai.bigbud.desktop.dev" },
+      },
+    );
+
+    const expectation = expect(stopCuaDriverMcpClientAndWait(1_000)).rejects.toThrow(
+      "Could not confirm auxiliary cua-driver process shutdown",
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expectation;
+    child.exitCode = 0;
+    child.emit("exit", 0, "SIGTERM");
+  });
+
+  it("refuses to spawn an MCP client after update quiescence begins", async () => {
+    const { beginInstalledProcessQuiescence } = await import("./installedProcessQuiescence");
+    beginInstalledProcessQuiescence();
+
+    await expect(callCuaDriverTool("/tmp/cua-driver", "health_report", {})).rejects.toThrow(
+      "cannot start while update installation is preparing",
+    );
+    expect(mockedSpawn).not.toHaveBeenCalled();
   });
 });

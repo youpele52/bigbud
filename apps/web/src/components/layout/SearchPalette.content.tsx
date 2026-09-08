@@ -27,6 +27,7 @@ import {
 import { joinWorkspaceEntryPath } from "../files/filesPanel.dnd";
 import {
   findMessageSearchMatches,
+  findFileSearchMatches,
   findThreadSearchMatch,
   normalizeQuery,
 } from "./SearchPalette.logic";
@@ -51,6 +52,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const navigate = useNavigate();
   const open = useSearchStore((store) => store.searchOpen);
   const setOpen = useSearchStore((store) => store.setSearchOpen);
+  const activeFileSearchContext = useSearchStore((store) => store.activeFileSearchContext);
   const requestMessageFocus = useSearchStore((store) => store.requestMessageFocus);
   const projects = useStore(useShallow((store) => store.projects));
   const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
@@ -68,6 +70,9 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const [visibleThreadCount, setVisibleThreadCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
   const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
   const [visibleFileCount, setVisibleFileCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
+  const [visibleCurrentFileMatchCount, setVisibleCurrentFileMatchCount] = useState(
+    INITIAL_VISIBLE_RESULT_COUNT,
+  );
 
   useEffect(() => {
     if (!open) {
@@ -95,6 +100,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
     setVisibleThreadCount(INITIAL_VISIBLE_RESULT_COUNT);
     setVisibleProjectCount(INITIAL_VISIBLE_RESULT_COUNT);
     setVisibleFileCount(INITIAL_VISIBLE_RESULT_COUNT);
+    setVisibleCurrentFileMatchCount(INITIAL_VISIBLE_RESULT_COUNT);
   }, [debouncedQuery, open]);
 
   const fileContentsQuery = useQuery(
@@ -219,6 +225,13 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
     (result) => result.threadId !== activeThreadId,
   );
   const fileResults = toFileSearchResults(fileContentsQuery.data?.matches ?? []);
+  const currentFileMatches = useMemo(
+    () =>
+      activeFileSearchContext
+        ? findFileSearchMatches(activeFileSearchContext.contents, debouncedNormalizedQuery)
+        : [],
+    [activeFileSearchContext, debouncedNormalizedQuery],
+  );
   const projectResults = toProjectSearchResults({
     localProjects: projectCatalogQueries[0]?.data?.projects ?? [],
     remoteProjects: projectCatalogQueries[1]?.data?.projects ?? [],
@@ -239,6 +252,13 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const visibleThreadResults = threadResults.slice(0, visibleThreadCount);
   const visibleProjectResults = projectResults.slice(0, visibleProjectCount);
   const visibleFileResults = fileResults.slice(0, visibleFileCount);
+  const visibleCurrentFileMatches = currentFileMatches.slice(0, visibleCurrentFileMatchCount);
+
+  const handleSelectCurrentFileMatch = (line: number) => {
+    if (!activeFileSearchContext) return;
+    activeFileSearchContext.onSelectMatch(line);
+    setOpen(false);
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -275,6 +295,10 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       isSearchPending={isSearchPending}
                       isFileSearchPending={isFileSearchPending}
                       isProjectSearchPending={isProjectSearchPending}
+                      currentFilePath={activeFileSearchContext?.path ?? null}
+                      currentFileMatches={currentFileMatches}
+                      visibleCurrentFileMatches={visibleCurrentFileMatches}
+                      setVisibleCurrentFileMatchCount={setVisibleCurrentFileMatchCount}
                       inThreadMessageResults={inThreadMessageResults}
                       otherThreadMessageResults={otherThreadMessageResults}
                       visibleOtherThreadMessageResults={visibleOtherThreadMessageResults}
@@ -297,6 +321,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       onSelectThread={handleSelectThread}
                       onSelectProject={handleSelectProject}
                       onSelectFile={handleSelectFile}
+                      onSelectCurrentFileMatch={handleSelectCurrentFileMatch}
                       initialVisibleResultCount={INITIAL_VISIBLE_RESULT_COUNT}
                     />
                   </CommandList>

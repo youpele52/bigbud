@@ -5,10 +5,222 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ## What's new?
 
 - Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
-- Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
-- Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
-- Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
-- Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
+- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
+- Keep your workspace organized across launches and switches: the sidebar remembers which sections and projects you left open, while the Files panel stays in sync as you move between workspaces.
+- Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
+- Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
+
+## v0.2.207 (7 September, 2026)
+
+### More Reliable Remote-Agent Setup
+
+- Made remote-agent installation and upgrades recover from temporary network failures with bounded retries and timeouts, while cancellation stops pending work without leaving a partially activated installation.
+- Protected downloads with strict redirect rules, trusted release signatures, exact size checks, and SHA-256 verification before making changes on the remote computer.
+- Reused successfully loaded release information between agent health checks and installation, avoiding duplicate requests during setup.
+
+### Provider Availability
+
+- Extended the shared availability-probe deadline to 30 seconds for every supported provider, preventing slower healthy CLIs and model discovery from being reported as unavailable.
+- OpenCode and KiloCode startup checks and model-catalog refreshes now reuse the same coordinated timeout policy instead of maintaining a separate provider-specific deadline.
+
+### Terminal and Workspace Navigation
+
+- Added `Cmd/Ctrl+L` keyboard navigation that focuses the active chat composer in the main window, Floating Assistant, or side chat, while focusing and selecting the browser URL when the in-app browser has focus. The browser does not take over the shortcut just because it is open, and terminal `Ctrl+L` clearing remains unchanged.
+- `Shift+Enter` now inserts exactly one new line in the terminal without interfering with IME composition, plain Enter, modified shortcuts, navigation, deletion, or terminal clearing.
+- Terminal file links now normalize POSIX, Windows, UNC, relative, and dot-segment paths; preserve line and column positions; verify whether targets are files or directories; and open supported HTML, image, and PDF files in browser previews.
+- Terminal links activate only with an exact `Cmd` primary single-click on macOS or `Ctrl` primary single-click on Windows/Linux. Extra modifiers, double clicks, and middle or secondary clicks no longer trigger navigation.
+- Remote terminal links remain bound to their originating execution target and active workspace. Paths outside the remote workspace, and missing or inaccessible targets, are rejected before filesystem access or panel changes, while local external paths continue opening safely in Files.
+- Added **Open Terminal** to Quick actions and a header control for switching between split, terminal-only, and chat-only views, while keeping `Cmd/Ctrl+J` available for the bottom terminal.
+
+### CLIProxyAPI Diagnostics and Lifecycle
+
+- Replaced free-form CLIProxyAPI availability and activation failures with structured diagnostic codes, classifications, and recovery actions exposed through provider snapshots and WebSocket errors.
+- Distinguished service configuration, direct-process conflicts, startup failures, closed lifecycles, and reused processes during CLIProxyAPI activation while retaining provider state when refreshes fail.
+- Scoped concurrent CLIProxyAPI catalog inspections to normalized configuration and credential identities so unrelated credentials do not share in-flight requests.
+
+### Claude Usage Limits
+
+- Added native Claude subscription limits to the Usage page, including current five-hour, weekly, model-specific, reset-time, and extra-usage details when Claude exposes them.
+- Kept limit checks on the existing provider refresh cycle and preserved the last successful values when a later check cannot complete, while keeping historical token totals unchanged.
+
+### Cursor ACP Compatibility
+
+- Cursor questions and plans now use the documented response format, with answers, skips, and cancellations handled cleanly—even when a session stops midway.
+- Cursor option IDs now travel safely from the provider to the UI and back, while older options still work and duplicate labels can be selected independently on web and mobile.
+- Cursor model discovery is more dependable: successful status checks are no longer blocked by version or channel checks, configured endpoints are normalized, and extension handling is easier to maintain.
+
+### Codex Model Discovery and Selection
+
+- Added live Codex model catalogs with advertised reasoning efforts and fast-mode capabilities, while keeping configured custom models available without claiming unverified capabilities.
+- Validated explicit Codex models and dynamic reasoning efforts before session and turn requests, preserved selections across turns, and applied model defaults when switching models or starting sessions.
+- Preserved custom-model fast mode for Codex CLI handoffs and Git text generation, and separated model parsing and selection logic for focused regression coverage.
+
+### Conversation Timeline Reliability
+
+- Fixed question choices with duplicate labels or descriptions so each option keeps its stable provider identity during rendering, while preserving compatibility with older options that do not include IDs.
+
+### Consistent Status Feedback
+
+- Unified usage, provider, context-window, thread-error, and sidebar banners around one reusable status component with consistent variants, icons, actions, and dismissal behavior.
+
+### OpenCode Agent Discovery
+
+- Fixed project OpenCode agents taking precedence over global agents with the same name, so project-specific instructions are selected reliably.
+
+### Project Ordering
+
+- Fixed projects loaded through **Load more** so they can be reordered alongside projects that were already visible.
+
+### Recovery Reliability
+
+- Prevented cleanup recovery from overwhelming the backend and triggering health timeouts or repeated app reconnects.
+- Restored older recovery data safely when records reference threads that no longer exist.
+
+## v0.2.206 (31 August, 2026)
+
+### Broader Remote Workspace Providers
+
+- Enabled Cursor, Devin, CLI proxy, and existing providers on remote workspaces only when their capabilities check out.
+- Bridged ACP, MCP, filesystem, terminal, and PTY for local runtimes on remote workspaces.
+
+### More Reliable Delivery Across Reconnects
+
+- Kept chat, sidebar, compact chat, and connection recovery aligned across retries and thread collisions.
+- Reconnected WebSocket only after three failed heartbeats, ignoring delayed probes while events still arrive.
+- Restored a verified baseline when replay is too large or missing, then resumed delivery instead of falling back.
+- Showed a restoring-state notice during baseline recovery.
+- Added a supervised desktop delivery sidecar with acknowledged, ordered replay after reconnects.
+- Made command dispatch restart-safe with ordered WebSocket replay and controlled fallback.
+
+### Remote Workspace Reliability and Agent Upgrades
+
+- Added remote-agent identity checks and an upgrade flow that shows current vs target versions, including missing vs outdated.
+- Made install and activation transactional, with recovery that restores the previous agent or removes an incomplete candidate.
+- Blocked desktop connections and remote projects until backends are ready, and kept terminal and workspace state across agent restarts.
+- Hardened remote-agent paths, sockets, handoffs, and recovery against unsafe permissions, symlinks, stale supervisors, and protocol mismatches.
+
+### Files Panel Reliability
+
+- Isolated Files cache, expansion, previews, and history per workspace.
+- Removed deleted folders from the tree, preview history, and the active preview.
+- Stopped equivalent watch updates from reconnecting, and reconciled vanished folders through their parent.
+- Ordered preview and directory loads across workspace changes, refreshes, and reconnects.
+
+### Sidebar and Diff Improvements
+
+- Persisted sidebar and project expansion between launches; disconnected remotes stay closed until they reconnect.
+- Stopped startup from reopening a project you collapsed.
+- Started changed-file trees collapsed, remembering an explicit expand.
+- Native Diff text selection now opens the annotation composer, matching the file viewer.
+
+### Refined Interface
+
+- Made the full right-panel tab clickable, with close still independent.
+
+### Terminal Runtime Reliability
+
+- Allowed multiple terminal leases per thread and workspace without conflicting runtime identities.
+- Capped terminal history from the newest lines without copying the full buffer.
+- Added clear terminal lease errors for storage-full, database-busy, and runtime conflicts.
+- Hardened terminal locale values and remote modification timestamps.
+
+### Faster Local Server Load
+
+- Coalesced streaming writes and skipped unchanged session state.
+- Limited session reconciliation to recent and in-progress work.
+- Added a dry-run-first event compaction command with apply and server-stopped safeguards.
+- Kept traces for failures and slow spans, dropping fast successful ones from local files.
+
+### Safer Resource Cleanup
+
+- Moved ordinary thread and project resource removal into a restricted Rust cleanup executor with verified roots, path-identity checks, mount and symlink protection, bounded deadlines, and resumable quarantine cleanup.
+- Made cleanup durable after deletion commits with immutable plans, proof-bound requests, leases, retries, and startup recovery, while preserving shared attachments and keeping managed worktrees under their existing deletion path.
+- Packaged and verified the native cleanup capability with protocol compatibility checks, artifact smoke tests, and platform-specific CI coverage.
+
+### Cleanup and Startup Reliability
+
+- Fixed cleanup after canonical event purges so retained gaps remain part of the event sequence, preventing repeated restore loops and repairing existing mismatched event identifiers during migration.
+- Kept temporary baseline rejections inside the same bounded recovery session instead of repeatedly reconnecting, while continuing to reject stale or unsafe delivery generations.
+- Prevented cleanup-worker pipe failures from terminating the server, preserving committed deletions while deferred resource cleanup retries safely.
+- Normalized Pi model display names before publishing configuration, and cancelled superseded configuration subscriptions so malformed provider data no longer leaves the app stuck connecting or accumulates retry streams.
+
+### Validation
+
+- Added coverage for remote providers, delivery, command recovery, and load bounding.
+- Added coverage for baseline recovery, heartbeat reconnect, and terminal history capping.
+- Added regression coverage for remote-agent, Files, sidebar, Diff, and terminal work.
+- Added regression coverage for native cleanup safety, durable deletion recovery, event-gap replay, retention **Delete now**, configuration delivery, and subscription cleanup.
+- Verified formatting, linting, workspace type checks, the full test suite, and the Rust workspace checks.
+
+## v0.2.205 (25 August, 2026)
+
+### Remote Workspace Agent
+
+- Added a managed remote agent for remote workspaces. On first use, bigbud asks permission to install it under `~/.bigbud/agent` on the remote computer and verifies the setup before using the project.
+- Built the managed remote agent and its shared communication protocol in [Rust](https://rust-lang.org/) for lower-overhead remote execution, durable recovery, and reliable handling of files, Git, terminals, shell commands, and provider tools.
+- Made the managed remote agent the default transport for supported remote workspace files, Git, terminals, shell commands, and provider tools.
+- Routed Codex, Claude, Copilot, OpenCode, KiloCode, and Pi through one authenticated per-thread execution path instead of separate direct workspace SSH bridges.
+- Kept direct SSH as an explicit server-start compatibility mode via `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh`; there is no automatic transport switch after an agent operation is accepted.
+
+### Reliable Workspace Refresh
+
+- Unified local and remote Files refresh around one Rust agent-backed workspace-watch stream, while retaining direct SSH polling as an explicit fallback.
+- Added exact versioned events, backend identity, sequence-gap and overflow recovery, transport-loss rescans, and bounded crash recovery so refreshes remain ordered and resilient when a watcher fails.
+- Packaged native workspace watchers for every supported release target, with executable, architecture, and real protocol-handshake checks in development, CI, and release builds.
+
+### More Reliable Claude and CLIProxyAPI Sessions
+
+- Hardened Claude Agent SDK turn handling so overlapping sends are rejected safely, stale interrupts are ignored, malformed results fail cleanly, and stream recovery stays bounded and session-aware.
+- Made Claude task tracking follow the SDK's real lifecycle, including durable IDs returned by task creation, structured task snapshots, completed and deleted tasks, and protection against ordinary tool descriptions appearing as fake tasks.
+- Improved CLIProxyAPI configuration and lifecycle validation with selected-config checks, clearer startup diagnostics, health and authentication verification, live model catalog validation, and coalesced concurrent inspections.
+
+### A Safer, Smarter Browser
+
+- Isolated desktop browser tabs in a dedicated persistent session, denied unexpected guest permissions and pop-up windows, and restricted top-level navigation and redirects to HTTP(S) pages.
+- Added URL-or-search handling to the browser address bar, synchronized visit history and bookmarks, and added clearer loading, crash, annotation, and navigation error states.
+- Kept visible browser tabs attached to the thread using them, with safe fallback to a background browser when no tab is attached. Browser leases now release correctly after failures, cancellations, timeouts, renderer errors, tab closure, and handoffs.
+- Show each website's own icon on its browser tab in the right panel instead of a generic globe, with the globe kept as the fallback when a site has no icon or the icon fails to load.
+- Made the address bar quieter while you read: it shows just the site name centered when idle, reveals its field and open-in-default-browser shortcut on hover, and becomes a left-aligned URL editor when you click into it or when a tab is still empty.
+
+### Thread Orchestration and Cleanup
+
+- Restored follow-up messaging for directly delegated threads across authorized projects, aligned orchestration access across providers, and removed the unsupported workspace-path argument from thread creation tools.
+- Made normal thread deletion remove only the selected thread. Existing child threads now remain available as standalone threads, while project and automatic cleanup stay bounded to the relevant project and never delete cross-project descendants implicitly.
+- Hardened deletion and retention against concurrent work, including safe fence takeover, project-boundary protection, descendant eligibility checks, and recovery of delegation reservations before child threads are created.
+- Kept web and mobile thread views synchronized when deleted threads are removed or surviving children become standalone, including mobile detail-cache invalidation.
+
+### Files Preview
+
+- Automatically revealed a file's immediate parent directory when opening or reopening a local or remote preview, expanding the required ancestors and loading only missing directory levels.
+- Let workspace file-opening route any in-workspace file into the Files panel when a preview is available, including extensionless files and dotfiles such as Dockerfiles, `.env.example`, and `.gitattributes`.
+- Added drag-and-drop from the open file name in the preview header into the composer, matching the existing Files tree behavior for sharing file context.
+- Raised the text preview limit from 512 KiB to 5 MiB and removed the client-provided preview byte limit from the project contract.
+- Rejected oversized, binary, NUL-byte, and invalid UTF-8 previews with explicit errors instead of truncating or attempting to display non-text content.
+
+### Floating Assistant
+
+- Double-clicking the floating mascot now opens the main bigbud window without also opening compact chat; single-click still opens compact chat after the double-click window has passed.
+- Refined the compact pending-approval card in the Floating Assistant while preserving the same approve, deny, and action dispatch behavior as the main chat.
+- Aligned compact composer controls with the model picker's typography so the floating chat feels closer to the main composer.
+- Refined the main and floating composer project pickers so Chats supplies four shared Recents, stays pinned at the top of the project list, and each project opens its own recent threads and new-thread action.
+- Added clearer local and remote project icons and selection check marks across composer menus and the sidebar, while tightening the surrounding icon hierarchy.
+
+### Faster File Search
+
+- Made `Mod+F` current-file aware. When a file preview is focused, matches from that file appear first in the search palette, with global project results still available underneath.
+- Added focused preview context, result navigation, and plain-text preview support so search results can take you back to the exact file match.
+
+### Better Diff Annotations
+
+- Hold `Shift` and click a diff line number to annotate that line with the same composer flow used by normal file previews.
+- Diff annotations now include the surrounding before-and-after code in your prompt, and changed or renamed files are easier to spot with amber triangle markers in the diff header.
+
+### Validation
+
+- Added regression coverage for browser session isolation, navigation policy, visible-tab routing and lease cleanup, delegated thread access, deletion boundaries, retention safety, migration recovery, and web/mobile synchronization.
+- Verified formatting, linting, type checks, and the full workspace test suite.
+- Added regression coverage for Claude turn safety, task lifecycle and SDK message decoding, stream recovery, CLIProxyAPI lifecycle, authentication, and model catalog handling.
+- Verified the Claude and CLIProxyAPI provider suites with 201 passing tests and 1 skipped test, alongside formatting, lint, and workspace type checks.
 
 ## v0.2.204 (19 August, 2026)
 

@@ -107,7 +107,7 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
       cancelled: false,
     };
     const requestedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "user-input.requested",
       eventId: requestedStamp.eventId,
       provider: PROVIDER,
@@ -151,7 +151,7 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
     pendingUserInputs.delete(requestId);
 
     const resolvedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "user-input.resolved",
       eventId: resolvedStamp.eventId,
       provider: PROVIDER,
@@ -258,7 +258,7 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
         });
         trimRequestLedger(requestLedger);
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "user-input.requested",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -311,7 +311,7 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
           ...(request.elicitationId ? { providerRequestId: request.elicitationId } : {}),
         });
         trimRequestLedger(requestLedger);
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "user-input.resolved",
           eventId: resolvedStamp.eventId,
           provider: PROVIDER,

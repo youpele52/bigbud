@@ -1,7 +1,7 @@
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { resolveStartupSelectableProvider } from "./provider.models";
+import { resolveSelectableProvider, resolveStartupSelectableProvider } from "./provider.models";
 
 function provider(kind: ProviderKind, overrides: Partial<ServerProvider> = {}): ServerProvider {
   return {
@@ -58,5 +58,19 @@ describe("resolveStartupSelectableProvider", () => {
     const providers = [provider("opencode", { status: "error" }), provider("claudeAgent")];
 
     expect(resolveStartupSelectableProvider(providers, "opencode")).toBe("opencode");
+  });
+
+  it("keeps a Pi probe timeout isolated to explicit Pi selection", () => {
+    const providers = [
+      provider("pi", {
+        status: "error",
+        message: "Pi CLI is installed but failed to run. Timed out while running command.",
+        failure: { classification: "retryable", reason: "process-failed" },
+      }),
+      provider("codex"),
+    ];
+
+    expect(resolveSelectableProvider(providers, "codex")).toBe("codex");
+    expect(resolveSelectableProvider(providers, "pi")).toBe("pi");
   });
 });

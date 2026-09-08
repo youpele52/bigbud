@@ -11,6 +11,7 @@ import { isWebviewTagSupported } from "./BrowserPanel.viewport.webview.utils";
 
 export type {
   BrowserPageMetadata,
+  BrowserWebviewState,
   BrowserViewportProps,
   BrowserViewportRef,
 } from "./BrowserPanel.viewport.types";

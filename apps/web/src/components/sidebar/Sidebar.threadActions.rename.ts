@@ -1,6 +1,7 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { useCallback, useRef, useState } from "react";
 import { newCommandId } from "../../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
 
@@ -62,7 +63,7 @@ export function useSidebarThreadRenameActions() {
         return;
       }
       try {
-        await api.orchestration.dispatchCommand({
+        await dispatchCommandWithOutcomeRecovery(api, {
           type: "thread.meta.update",
           commandId: newCommandId(),
           threadId,

@@ -59,6 +59,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
     releaseServer: () => undefined,
     opencodeSessionId: "opencode-session-1",
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: new Date().toISOString(),
     runtimeMode: "full-access" as const,
     pendingPermissions: new Map(),
@@ -79,7 +80,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
   const { sendTurn } = makeTurnMethods({
     provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
-    syntheticEventFn: (_threadId, type, payload, extra) =>
+    syntheticEventFn: (_threadId, _sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         type,
         payload,

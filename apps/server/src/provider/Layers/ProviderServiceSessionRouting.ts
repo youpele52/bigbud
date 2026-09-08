@@ -25,6 +25,7 @@ import {
   toValidationError,
   readPersistedCwd,
   readPersistedModelSelection,
+  readPersistedSessionEpoch,
 } from "./ProviderServiceHelpers.ts";
 import {
   formatUnsupportedProviderExecutionTargetDetail,
@@ -185,6 +186,7 @@ export function makeResolveRoutableSession(
     readonly threadId: ThreadId;
     readonly operation: string;
     readonly allowRecovery: boolean;
+    readonly expectedSessionEpoch?: number;
   }): Effect.fn.Return<
     {
       readonly adapter: ProviderAdapterShape<ProviderServiceError>;
@@ -199,6 +201,17 @@ export function makeResolveRoutableSession(
       return yield* toValidationError(
         input.operation,
         `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
+      );
+    }
+    const persistedEpoch = readPersistedSessionEpoch(binding.runtimePayload);
+    if (
+      input.expectedSessionEpoch !== undefined &&
+      persistedEpoch !== undefined &&
+      persistedEpoch !== input.expectedSessionEpoch
+    ) {
+      return yield* toValidationError(
+        input.operation,
+        `Provider session epoch changed (expected=${input.expectedSessionEpoch}, current=${persistedEpoch}).`,
       );
     }
     if (!isProviderComposed(binding.provider)) {

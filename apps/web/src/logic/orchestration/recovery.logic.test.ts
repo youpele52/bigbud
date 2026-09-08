@@ -43,13 +43,48 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     coordinator.completeSnapshotRecovery(3);
 
     expect(coordinator.classifyDomainEvent(4)).toBe("apply");
-    expect(coordinator.markEventBatchApplied([{ sequence: 4 }])).toEqual([{ sequence: 4 }]);
+    const admitted = coordinator.admitEventBatch([{ sequence: 4 }]);
+    expect(admitted).toEqual([{ sequence: 4 }]);
+    expect(coordinator.getState().latestSequence).toBe(3);
+    coordinator.commitEventBatchApplied(admitted);
+    coordinator.acknowledgeAppliedSequence(4);
     expect(coordinator.getState()).toMatchObject({
       latestSequence: 4,
+      appliedSequence: 4,
+      acknowledgedSequence: 4,
+      receivedSequence: 4,
       highestObservedSequence: 4,
       bootstrapped: true,
       inFlight: null,
     });
+  });
+
+  it("keeps replay anchored to the last applied sequence after application fails", () => {
+    const coordinator = createOrchestrationRecoveryCoordinator();
+    coordinator.beginSnapshotRecovery("bootstrap");
+    coordinator.completeSnapshotRecovery(3);
+
+    const admitted = coordinator.admitEventBatch([{ sequence: 4 }]);
+    coordinator.markApplicationFailed();
+
+    expect(admitted).toEqual([{ sequence: 4 }]);
+    expect(coordinator.getState()).toMatchObject({
+      latestSequence: 3,
+      appliedSequence: 3,
+      acknowledgedSequence: 3,
+      pendingReplay: true,
+    });
+    expect(coordinator.beginReplayRecovery("sequence-gap")).toBe(true);
+  });
+
+  it("rejects acknowledgements beyond successfully applied state", () => {
+    const coordinator = createOrchestrationRecoveryCoordinator();
+    coordinator.beginSnapshotRecovery("bootstrap");
+    coordinator.completeSnapshotRecovery(3);
+
+    expect(() => coordinator.acknowledgeAppliedSequence(4)).toThrow(
+      "Cannot acknowledge unapplied orchestration sequence 4.",
+    );
   });
 
   it("does not advance past an unavailable replay range", () => {
@@ -59,7 +94,7 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     coordinator.classifyDomainEvent(6);
     coordinator.beginReplayRecovery("sequence-gap");
 
-    expect(coordinator.markEventBatchApplied([{ sequence: 5 }, { sequence: 6 }])).toEqual([]);
+    expect(coordinator.admitEventBatch([{ sequence: 5 }, { sequence: 6 }])).toEqual([]);
     expect(coordinator.getState()).toMatchObject({
       latestSequence: 3,
       highestObservedSequence: 6,
@@ -75,7 +110,12 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     coordinator.classifyDomainEvent(5);
     coordinator.beginReplayRecovery("sequence-gap");
     coordinator.classifyDomainEvent(7);
-    coordinator.markEventBatchApplied([{ sequence: 4 }, { sequence: 5 }, { sequence: 6 }]);
+    const admitted = coordinator.admitEventBatch([
+      { sequence: 4 },
+      { sequence: 5 },
+      { sequence: 6 },
+    ]);
+    coordinator.commitEventBatchApplied(admitted);
 
     expect(coordinator.completeReplayRecovery()).toEqual({
       replayMadeProgress: true,

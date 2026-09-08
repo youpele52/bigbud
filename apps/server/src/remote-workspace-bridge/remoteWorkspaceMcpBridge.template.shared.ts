@@ -1,19 +1,10 @@
-import type { RemoteWorkspaceBridgeConfig } from "./remoteWorkspaceBridge.ts";
+import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
 
-export function renderConfig(input: RemoteWorkspaceBridgeConfig): string {
-  return JSON.stringify(
-    {
-      ...(input.cwd ? { cwd: input.cwd } : {}),
-      destination: input.destination,
-      transportArgs: [...input.transportArgs],
-    },
-    null,
-    2,
-  );
+export function renderConfig(input: ThreadOrchestrationHttpConfig): string {
+  return JSON.stringify(input, null, 2);
 }
 
 export const MCP_SERVER_TEMPLATE_PRELUDE = [
-  'import { spawn } from "node:child_process";',
   'const JSONRPC_VERSION = "2.0";',
   'const DEFAULT_NEGOTIATED_PROTOCOL_VERSION = "2025-03-26";',
   "const SUPPORTED_PROTOCOL_VERSIONS = [",
@@ -28,8 +19,6 @@ export const MCP_SERVER_TEMPLATE_PRELUDE = [
   "const DEFAULT_GLOB_LIMIT = 250;",
   "const DEFAULT_LIST_LIMIT = 250;",
   "const MAX_BASH_OUTPUT_CHARS = 64 * 1024;",
-  "const REMOTE_EXEC_SCRIPT =",
-  '  \'if [ -n "$1" ]; then cd "$1" || exit 1; fi; shift; while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do export "$1"; shift; done; shift; exec "$@"\';',
   "",
 ];
 
@@ -37,7 +26,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "const TOOLS = [",
   "  {",
   '    name: "read",',
-  '    description: "Read a file from the remote workspace over SSH. Supports optional line pagination.",',
+  '    description: "Read a file from the remote workspace through bigbud. Supports optional line pagination.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -51,7 +40,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "write",',
-  '    description: "Write or overwrite a file in the remote workspace over SSH.",',
+  '    description: "Write or overwrite a file in the remote workspace through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -64,7 +53,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "edit",',
-  '    description: "Apply exact-text edits to a file in the remote workspace over SSH.",',
+  '    description: "Apply exact-text edits to a file in the remote workspace through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -91,7 +80,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "bash",',
-  '    description: "Run a shell command in the remote workspace over SSH and return stdout/stderr.",',
+  '    description: "Run a shell command in the remote workspace through bigbud and return stdout/stderr.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -103,7 +92,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "grep",',
-  '    description: "Search the remote workspace using ripgrep over SSH.",',
+  '    description: "Search the remote workspace using ripgrep through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -116,7 +105,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "glob",',
-  '    description: "List remote workspace files matching a glob pattern over SSH.",',
+  '    description: "List remote workspace files matching a glob pattern through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -129,7 +118,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "list",',
-  '    description: "List a remote directory over SSH.",',
+  '    description: "List a remote directory through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",
@@ -140,7 +129,7 @@ export const MCP_SERVER_TOOL_DEFINITIONS = [
   "  },",
   "  {",
   '    name: "apply_patch",',
-  '    description: "Apply a unified diff patch to the remote workspace over SSH.",',
+  '    description: "Apply a unified diff patch to the remote workspace through bigbud.",',
   "    inputSchema: {",
   '      type: "object",',
   "      properties: {",

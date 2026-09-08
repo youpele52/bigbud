@@ -176,7 +176,12 @@ export function ProjectScriptsDialog({
               Delete
             </Button>
           )}
-          <Button type="button" variant="outline" onClick={() => onDialogOpenChange(false)}>
+          <Button
+            type="button"
+            size="default"
+            variant="outline"
+            onClick={() => onDialogOpenChange(false)}
+          >
             Cancel
           </Button>
           <Button form={addScriptFormId} type="submit">

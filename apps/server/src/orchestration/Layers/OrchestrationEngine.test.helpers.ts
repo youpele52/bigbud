@@ -4,6 +4,10 @@ import { Effect, Layer, ManagedRuntime, Metric } from "effect";
 
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
+import {
+  OrchestrationCommandReceiptRepository,
+  type OrchestrationCommandReceiptRepositoryShape,
+} from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -39,7 +43,9 @@ export const hasMetricSnapshot = (
       Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
   );
 
-export async function createOrchestrationSystem() {
+export async function createOrchestrationSystem(input?: {
+  readonly receipts?: OrchestrationCommandReceiptRepositoryShape;
+}) {
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "t3-orchestration-engine-test-",
   });
@@ -48,7 +54,11 @@ export async function createOrchestrationSystem() {
     Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
-    Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+    Layer.provide(
+      input?.receipts
+        ? Layer.succeed(OrchestrationCommandReceiptRepository, input.receipts)
+        : OrchestrationCommandReceiptRepositoryLive,
+    ),
     Layer.provide(SqlitePersistenceMemory),
     Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(ServerConfigLayer),

@@ -27,7 +27,7 @@ import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
 import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
 import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
-
+import { BigbudLoader } from "../layout/BigbudLoader";
 interface IpynbPreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
   relativePath: string;
@@ -285,7 +285,7 @@ export const IpynbPreview = memo(function IpynbPreview({
       />
 
       {shouldShowPreviewLoading(state) ? (
-        <div className="p-3 text-sm text-muted-foreground/70">Loading notebook...</div>
+        <BigbudLoader className="min-h-0 flex-1" label="Loading notebook preview..." />
       ) : state.error ? (
         <div className="flex gap-2 p-3 text-sm text-destructive/80">
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />

@@ -17,11 +17,13 @@ export function formatRemoteExecutionToastDescription(
 type ActiveRemoteExecutionCheck = {
   readonly promise: Promise<void>;
   readonly unavailableTitle?: string;
+  readonly retry: () => void;
   backgroundToastId: ReturnType<typeof toastManager.add> | null;
   backgroundToastIntervalId: number | null;
 };
 
 const activeRemoteExecutionChecks = new Map<string, ActiveRemoteExecutionCheck>();
+const remoteExecutionFailureToastIds = new Map<string, ReturnType<typeof toastManager.add>>();
 
 export function readRemoteExecutionCheck(
   executionTargetId: string,
@@ -81,6 +83,36 @@ export function ensureBackgroundRemoteExecutionToast(input: {
   }, REMOTE_EXECUTION_BACKGROUND_TOAST_INTERVAL_MS);
 }
 
+export function showRemoteExecutionFailureToast(input: {
+  readonly executionTargetId: string;
+  readonly unavailableTitle?: string;
+  readonly check: Pick<RemoteExecutionCheckState, "message" | "tip">;
+  readonly retry: () => Promise<void> | void;
+}) {
+  const toast = {
+    type: "error" as const,
+    title: input.unavailableTitle ?? "Remote project unavailable",
+    description: formatRemoteExecutionToastDescription(input.check),
+    actionProps: {
+      children: "Retry",
+      onClick: () => {
+        const toastId = remoteExecutionFailureToastIds.get(input.executionTargetId);
+        if (toastId !== undefined) {
+          toastManager.close(toastId);
+          remoteExecutionFailureToastIds.delete(input.executionTargetId);
+        }
+        void input.retry();
+      },
+    },
+  };
+  const existingToastId = remoteExecutionFailureToastIds.get(input.executionTargetId);
+  if (existingToastId !== undefined) {
+    toastManager.close(existingToastId);
+  }
+  const toastId = toastManager.add(toast);
+  remoteExecutionFailureToastIds.set(input.executionTargetId, toastId);
+}
+
 function notifyRemoteExecutionCheckCompleted(executionTargetId: string) {
   const active = activeRemoteExecutionChecks.get(executionTargetId);
   const check = readRemoteExecutionCheck(executionTargetId);
@@ -111,10 +143,11 @@ function notifyRemoteExecutionCheckCompleted(executionTargetId: string) {
     return;
   }
   if (check.status === "error") {
-    toastManager.add({
-      type: "error",
-      title: active.unavailableTitle ?? "Remote project unavailable",
-      description: formatRemoteExecutionToastDescription(check),
+    showRemoteExecutionFailureToast({
+      executionTargetId,
+      ...(active.unavailableTitle ? { unavailableTitle: active.unavailableTitle } : {}),
+      check,
+      retry: active.retry,
     });
   }
 }
@@ -140,6 +173,9 @@ export function startRemoteExecutionCheck(input: {
   const active: ActiveRemoteExecutionCheck = {
     backgroundToastId: null,
     backgroundToastIntervalId: null,
+    retry: () => {
+      startRemoteExecutionCheck(input);
+    },
     promise: (async () => {
       try {
         await input.verify({

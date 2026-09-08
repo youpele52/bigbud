@@ -169,6 +169,61 @@ freshRecovery.layer("ProviderServiceLive CLIProxy fresh recovery", (it) => {
   );
 });
 
+const executionTargets = makeProviderServiceLayer();
+
+executionTargets.layer("ProviderServiceLive provider execution targets", (it) => {
+  it.effect("accepts local runtimes with remote workspaces for cliProxy and kilocode", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      for (const [providerKind, adapter] of [
+        ["cliProxy", executionTargets.cliProxy] as const,
+        ["kilocode", executionTargets.kilocode] as const,
+      ]) {
+        const threadId = asThreadId(`thread-${providerKind}-remote-workspace`);
+        const session = yield* provider.startSession(threadId, {
+          provider: providerKind,
+          threadId,
+          providerRuntimeExecutionTargetId: "local",
+          workspaceExecutionTargetId: "ssh:devbox",
+          runtimeMode: "full-access",
+        });
+
+        assert.equal(session.provider, providerKind);
+        assert.equal(adapter.startSession.mock.calls.length, 1);
+        yield* provider.stopSession({ threadId });
+      }
+    }),
+  );
+
+  it.effect("continues rejecting unsupported remote provider runtimes", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const threadId = asThreadId("thread-cli-proxy-remote-runtime");
+      const priorStarts = executionTargets.cliProxy.startSession.mock.calls.length;
+
+      const result = yield* provider
+        .startSession(threadId, {
+          provider: "cliProxy",
+          threadId,
+          providerRuntimeExecutionTargetId: "ssh:provider",
+          workspaceExecutionTargetId: "local",
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.result);
+
+      assertFailure(
+        result,
+        new ProviderValidationError({
+          operation: "ProviderService.startSession",
+          issue:
+            "Provider sessions is not implemented for provider 'cliProxy' on execution target 'ssh:provider' yet.",
+        }),
+      );
+      assert.equal(executionTargets.cliProxy.startSession.mock.calls.length, priorStarts);
+    }),
+  );
+});
+
 const settingsDisabled = makeProviderServiceLayer({
   settings: {
     providers: {

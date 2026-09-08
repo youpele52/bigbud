@@ -8,6 +8,7 @@ import {
 import { readNativeApi } from "../../../../rpc/nativeApi";
 import { modelSelectionsEqual } from "../ChatView.modelSelection.logic";
 import { newCommandId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 
 export async function persistThreadSettingsForNextTurn(input: {
   threadId: ThreadId;
@@ -36,7 +37,7 @@ export async function persistThreadSettingsForNextTurn(input: {
     input.modelSelection !== undefined &&
     !modelSelectionsEqual(input.modelSelection, input.serverThread.modelSelection)
   ) {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.meta.update",
       commandId: newCommandId(),
       threadId: input.threadId,
@@ -45,7 +46,7 @@ export async function persistThreadSettingsForNextTurn(input: {
   }
 
   if (input.runtimeMode !== input.serverThread.runtimeMode) {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.runtime-mode.set",
       commandId: newCommandId(),
       threadId: input.threadId,
@@ -55,7 +56,7 @@ export async function persistThreadSettingsForNextTurn(input: {
   }
 
   if (input.interactionMode !== input.serverThread.interactionMode) {
-    await api.orchestration.dispatchCommand({
+    await dispatchCommandWithOutcomeRecovery(api, {
       type: "thread.interaction-mode.set",
       commandId: newCommandId(),
       threadId: input.threadId,

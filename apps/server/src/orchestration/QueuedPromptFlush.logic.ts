@@ -44,6 +44,14 @@ export function makeQueuedPromptFlushCommand(input: {
   ) {
     return null;
   }
+  if (
+    thread.queueHold ||
+    (thread.pendingTurnControlOperation?.reservedPromptIds.length &&
+      !["completed", "failed", "superseded", "cancelled"].includes(
+        thread.pendingTurnControlOperation.state,
+      ))
+  )
+    return null;
   if (!isThreadConfirmedIdleForDispatch(thread)) return null;
 
   const messageIds =

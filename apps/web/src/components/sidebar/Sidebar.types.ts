@@ -12,6 +12,7 @@ import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
 import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
+import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -127,6 +128,10 @@ export interface SidebarState {
   setShowAllFavourites: (showAll: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
+  areProjectsExpanded: boolean;
+  setAreProjectsExpanded: (expanded: boolean) => void;
+  areRemoteProjectsExpanded: boolean;
+  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;
@@ -189,6 +194,9 @@ export interface SidebarState {
     value: string | ProviderRuntimeLocation,
   ) => void;
   submitRemoteProjectDialog: () => Promise<void>;
+  remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
+  declineRemoteAgentInstall: () => void;
+  completeRemoteAgentInstall: (message: string) => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;
   remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
   remoteProjectUnlockKeyPath: string;

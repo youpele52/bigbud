@@ -81,6 +81,20 @@ export interface PackagedBackendLauncherPlan {
   readonly source: "processExecPath" | "appDirExecutable";
 }
 
+export interface PackagedWorkspaceAgentPlan {
+  readonly serverDir: string;
+  readonly binDir: string;
+  readonly binaryName: string;
+  readonly binaryPath: string;
+}
+
+export interface PackagedDesktopSupervisorPlan {
+  readonly serverDir: string;
+  readonly binDir: string;
+  readonly binaryName: string;
+  readonly binaryPath: string;
+}
+
 // ---------------------------------------------------------------------------
 // Pure resolver (no I/O, fully testable)
 // ---------------------------------------------------------------------------
@@ -137,6 +151,27 @@ export function resolvePackagedOpencodeBinaryPlan(
     binaryName,
     binaryPath: Path.join(binDir, binaryName),
   };
+}
+
+export function resolvePackagedWorkspaceAgentPlan(
+  platform: string,
+  resourcesPath: string,
+): PackagedWorkspaceAgentPlan {
+  const serverDir = Path.join(resourcesPath, "server");
+  const binDir = Path.join(serverDir, "workspace-agent", "bin");
+  const binaryName = platform === "win32" ? "bigbud-remote-agent.exe" : "bigbud-remote-agent";
+  return { serverDir, binDir, binaryName, binaryPath: Path.join(binDir, binaryName) };
+}
+
+export function resolvePackagedDesktopSupervisorPlan(
+  platform: string,
+  resourcesPath: string,
+): PackagedDesktopSupervisorPlan {
+  const serverDir = Path.join(resourcesPath, "server");
+  const binDir = Path.join(serverDir, "delivery-supervisor", "bin");
+  const binaryName =
+    platform === "win32" ? "bigbud-desktop-supervisor.exe" : "bigbud-desktop-supervisor";
+  return { serverDir, binDir, binaryName, binaryPath: Path.join(binDir, binaryName) };
 }
 
 export function resolvePackagedBackendLauncherPlan(

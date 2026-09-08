@@ -16,6 +16,8 @@ export function settleInterruptAfterAcknowledgement(input: {
     readonly threadId: OrchestrationThread["id"];
     readonly session: OrchestrationSession;
     readonly createdAt: string;
+    readonly expectedSessionEpoch?: number;
+    readonly expectedActiveTurnId?: import("@bigbud/contracts").TurnId;
   }) => Effect.Effect<void, OrchestrationDispatchError, never>;
 }): Effect.Effect<void, ProviderServiceError | OrchestrationDispatchError, never> {
   return Effect.gen(function* () {
@@ -48,6 +50,10 @@ export function settleInterruptAfterAcknowledgement(input: {
         threadId: input.thread.id,
         session: reconciliation.session,
         createdAt: input.event.payload.createdAt,
+        expectedSessionEpoch: input.thread.session?.sessionEpoch ?? 0,
+        ...(input.thread.session?.activeTurnId
+          ? { expectedActiveTurnId: input.thread.session.activeTurnId }
+          : {}),
       });
     }
   });

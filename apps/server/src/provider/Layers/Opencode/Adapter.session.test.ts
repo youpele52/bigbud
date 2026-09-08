@@ -93,8 +93,11 @@ describe("Opencode session lifecycle", () => {
   it.effect("runs OpenCode locally against a synthetic workspace for remote projects", () =>
     Effect.gen(function* () {
       const acquireCalls: Array<unknown> = [];
+      const createInputs: Array<Record<string, unknown>> = [];
       const handle: OpencodeServerHandle = {
-        client: makeMockOpencodeClient(),
+        client: makeMockOpencodeClient({
+          onSessionCreate: (sessionInput) => createInputs.push(sessionInput),
+        }),
         url: "http://127.0.0.1:4097",
         release() {},
         invalidate() {},
@@ -153,10 +156,14 @@ describe("Opencode session lifecycle", () => {
       expect(acquireInput.executionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);
       expect(acquireInput.directory).not.toBe("/root/project");
       expect(acquireInput.directory).toContain("bigbud-opencode-remote-workspace-");
+      expect(createInputs[0]?.directory).toBeUndefined();
       yield* Effect.promise(() =>
         expect(
-          fs.access(`${acquireInput.directory}/.opencode/tools/read.ts`),
+          fs.access(`${acquireInput.directory}/.bigbud/remote-workspace-mcp-server.mjs`),
         ).resolves.toBeUndefined(),
+      );
+      yield* Effect.promise(() =>
+        expect(fs.access(`${acquireInput.directory}/.opencode/tools`)).rejects.toThrow(),
       );
 
       expect(session.providerRuntimeExecutionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);

@@ -1,3 +1,6 @@
+import { createHmac, randomBytes } from "node:crypto";
+import path from "node:path";
+
 import type { CliProxyConfig } from "./config.ts";
 
 export interface CliProxyModel {
@@ -7,6 +10,7 @@ export interface CliProxyModel {
 
 export type CliProxyClientErrorTag =
   | "HealthProbeFailed"
+  | "AuthenticationFailed"
   | "CatalogRequestFailed"
   | "CatalogMalformed"
   | "ModelUnavailable";
@@ -37,6 +41,14 @@ export type CliProxyHttpRequest = (config: CliProxyConfig, pathname: string) => 
 
 const REQUEST_TIMEOUT_MS = 2_000;
 const CLIENT_PROFILE_VERSION = "0.1.0";
+const inspectionFlightSecret = randomBytes(32);
+
+function inspectionFlightKey(config: CliProxyConfig): string {
+  const credentialIdentity = createHmac("sha256", inspectionFlightSecret)
+    .update(config.apiKey)
+    .digest("hex");
+  return `${path.resolve(config.configPath)}\u0000${config.baseUrl.href}\u0000${credentialIdentity}`;
+}
 
 const defaultRequest: CliProxyHttpRequest = (config, pathname) =>
   fetch(new URL(pathname, config.baseUrl), {
@@ -146,6 +158,22 @@ export async function inspectCliProxy(
   options: { readonly request?: CliProxyHttpRequest } = {},
 ): Promise<ReadonlyArray<CliProxyModel>> {
   const request = options.request ?? defaultRequest;
+  const key = inspectionFlightKey(config);
+  const existing = inspectionFlights.get(key);
+  if (existing) return existing;
+  const flight = inspectCliProxyUncached(config, request).finally(() => {
+    if (inspectionFlights.get(key) === flight) inspectionFlights.delete(key);
+  });
+  inspectionFlights.set(key, flight);
+  return flight;
+}
+
+const inspectionFlights = new Map<string, Promise<ReadonlyArray<CliProxyModel>>>();
+
+async function inspectCliProxyUncached(
+  config: CliProxyConfig,
+  request: CliProxyHttpRequest,
+): Promise<ReadonlyArray<CliProxyModel>> {
   let fingerprint: Response;
   try {
     fingerprint = await request(config, "/");
@@ -154,6 +182,12 @@ export async function inspectCliProxy(
       "HealthProbeFailed",
       "CLIProxyAPI health probe could not be completed.",
       { cause },
+    );
+  }
+  if (fingerprint.status === 401 || fingerprint.status === 403) {
+    throw new CliProxyClientError(
+      "AuthenticationFailed",
+      `CLIProxyAPI health probe was rejected with HTTP ${fingerprint.status}.`,
     );
   }
   if (!fingerprint.ok || !(await fingerprint.text()).includes("CLI Proxy API Server")) {
@@ -174,6 +208,12 @@ export async function inspectCliProxy(
     );
   }
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new CliProxyClientError(
+        "AuthenticationFailed",
+        `CLIProxyAPI model catalog request was rejected with HTTP ${response.status}.`,
+      );
+    }
     throw new CliProxyClientError(
       "CatalogRequestFailed",
       `CLIProxyAPI model catalog request failed with HTTP ${response.status}.`,

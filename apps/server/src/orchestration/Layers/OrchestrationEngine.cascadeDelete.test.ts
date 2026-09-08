@@ -73,6 +73,19 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.makeUnsafe("cmd-thread-cascade-single-delete"),
+        threadId: ThreadId.makeUnsafe("thread-cascade-1"),
+      }),
+    );
+    expect(
+      await system.run(
+        engine.threadDeletion!.isFenceRoot(ThreadId.makeUnsafe("thread-cascade-1"), "subtree"),
+      ),
+    ).toBe(false);
+
+    await system.run(
+      engine.dispatch({
         type: "project.delete",
         commandId: CommandId.makeUnsafe("cmd-project-cascade-delete"),
         projectId: asProjectId("project-cascade"),
@@ -89,8 +102,39 @@ describe("OrchestrationEngine", () => {
       "thread.created",
       "thread.created",
       "thread.deletion-requested",
+      "thread.deletion-requested",
+      "thread.deletion-requested",
       "project.deletion-requested",
     ]);
+    expect(
+      events
+        .filter((event) => event.type === "thread.deletion-requested")
+        .map((event) => event.payload.mode),
+    ).toEqual(["single", "subtree", "subtree"]);
+    expect(
+      await system.run(
+        engine.threadDeletion!.isFenceRoot(ThreadId.makeUnsafe("thread-cascade-1"), "subtree"),
+      ),
+    ).toBe(true);
+    expect(
+      await system.run(
+        engine.threadDeletion!.isFenced({
+          threadId: ThreadId.makeUnsafe("thread-cascade-2"),
+          readModel: await system.run(engine.getReadModel()),
+        }),
+      ),
+    ).toBe(true);
+    await system.run(
+      engine.threadDeletion!.releaseFence(ThreadId.makeUnsafe("thread-cascade-1"), "subtree"),
+    );
+    expect(
+      await system.run(
+        engine.threadDeletion!.isFenced({
+          threadId: ThreadId.makeUnsafe("thread-cascade-2"),
+          readModel: await system.run(engine.getReadModel()),
+        }),
+      ),
+    ).toBe(true);
 
     const readModel = await system.run(engine.getReadModel());
     expect(
@@ -108,7 +152,7 @@ describe("OrchestrationEngine", () => {
     expect(
       readModel.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-cascade-2"))
         ?.deletingAt,
-    ).toBeNull();
+    ).not.toBeNull();
 
     await system.dispose();
   });

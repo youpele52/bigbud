@@ -18,68 +18,71 @@ import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
 } from "./wsRetentionMutationAuthorization.ts";
+import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
-const WsRpcLayer = WsRpcGroup.toLayer(
-  Effect.gen(function* () {
-    const context = yield* makeWsRpcContext;
+const makeWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+  WsRpcGroup.toLayer(
+    Effect.gen(function* () {
+      const context = yield* makeWsRpcContext(withBootstrapCommandLock);
 
-    return WsRpcGroup.of({
-      ...makeWsRpcAutomationHandlers(context),
-      ...makeWsRpcOrchestrationServerHandlers(context),
-      ...makeWsRpcBrowserHandlers(),
-      ...makeWsRpcKanbanHandlers(context),
-      ...makeWsRpcNotesHandlers(context),
-      ...makeWsRpcTeachHandlers(context),
-      ...makeWsRpcUsageHandlers(context),
-      ...makeWsRpcGitTerminalHandlers(context),
-      ...makeWsRpcPluginHandlers(context),
-    });
-  }),
-);
-const WsRpcRuntimeLayer = Layer.mergeAll(
-  WsRpcLayer,
-  RpcSerialization.layerJson,
-  retentionMutationAuthorization.layer,
-);
+      return WsRpcGroup.of({
+        ...makeWsRpcAutomationHandlers(context),
+        ...makeWsRpcOrchestrationServerHandlers(context),
+        ...makeWsRpcBrowserHandlers(),
+        ...makeWsRpcKanbanHandlers(context),
+        ...makeWsRpcNotesHandlers(context),
+        ...makeWsRpcTeachHandlers(context),
+        ...makeWsRpcUsageHandlers(context),
+        ...makeWsRpcGitTerminalHandlers(context),
+        ...makeWsRpcPluginHandlers(context),
+      });
+    }),
+  );
 
-export const websocketRpcRouteLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
-      spanPrefix: "ws.rpc",
-      spanAttributes: {
-        "rpc.transport": "websocket",
-        "rpc.system": "effect-rpc",
-      },
-    }).pipe(Effect.provide(WsRpcRuntimeLayer));
+export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const wsRpcRuntimeLayer = Layer.mergeAll(
+        makeWsRpcLayer(withBootstrapCommandLock),
+        RpcSerialization.layerJson,
+        retentionMutationAuthorization.layer,
+      );
+      const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
+        spanPrefix: "ws.rpc",
+        spanAttributes: {
+          "rpc.transport": "websocket",
+          "rpc.system": "effect-rpc",
+        },
+      }).pipe(Effect.provide(wsRpcRuntimeLayer));
 
-    return HttpRouter.add(
-      "GET",
-      "/ws",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const config = yield* ServerConfig;
-        if (config.authToken) {
-          const url = HttpServerRequest.toURL(request);
-          if (Option.isNone(url)) {
-            return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
+      return HttpRouter.add(
+        "GET",
+        "/ws",
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const config = yield* ServerConfig;
+          if (config.authToken) {
+            const url = HttpServerRequest.toURL(request);
+            if (Option.isNone(url)) {
+              return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
+            }
+            const token = url.value.searchParams.get("token");
+            if (token !== config.authToken) {
+              return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
+            }
           }
-          const token = url.value.searchParams.get("token");
-          if (token !== config.authToken) {
-            return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
-          }
-        }
-        const requestWithAuthorization = request.modify({
-          headers: retentionMutationAuthorization.authorizeHeaders(
-            request.headers,
-            config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
-          ),
-        });
-        return yield* rpcWebSocketHttpEffect.pipe(
-          Effect.provideService(HttpServerRequest.HttpServerRequest, requestWithAuthorization),
-        );
-      }),
-    );
-  }),
-);
+          const requestWithAuthorization = request.modify({
+            headers: retentionMutationAuthorization.authorizeHeaders(
+              request.headers,
+              config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+            ),
+          });
+          return yield* rpcWebSocketHttpEffect.pipe(
+            Effect.provideService(HttpServerRequest.HttpServerRequest, requestWithAuthorization),
+          );
+        }),
+      );
+    }),
+  );

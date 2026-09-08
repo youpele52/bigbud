@@ -33,6 +33,7 @@ import { ProviderRegistry, type ProviderRegistryShape } from "../Services/Provid
 import type { ProviderRegistration } from "../ProviderRegistration.ts";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
 import { isProviderRetryable, needsProviderRefresh } from "../providerRecovery";
+import { providerAdvertisesRemoteWorkspaceSupport } from "../providerRemoteWorkspaceConformance.ts";
 
 const MANUAL_REFRESH_MAX_ATTEMPTS = 3;
 const MANUAL_REFRESH_DELAYS = ["1 second", "3 seconds"] as const;
@@ -61,7 +62,14 @@ const loadProviders = (
   registrations: ReadonlyArray<ProviderRegistration>,
 ): Effect.Effect<ReadonlyArray<ServerProvider>> =>
   Effect.all(
-    registrations.map((registration) => registration.service.getSnapshot),
+    registrations.map((registration) =>
+      registration.service.getSnapshot.pipe(
+        Effect.map((snapshot) => ({
+          ...snapshot,
+          supportsLocalRuntimeRemoteWorkspace: providerAdvertisesRemoteWorkspaceSupport(snapshot),
+        })),
+      ),
+    ),
     { concurrency: "unbounded" },
   );
 

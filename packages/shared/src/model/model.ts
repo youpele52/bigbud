@@ -98,7 +98,7 @@ export function normalizeCodexModelOptionsWithCapabilities(
   const nextOptions: CodexModelOptions = {
     ...(reasoningEffort
       ? {
-          reasoningEffort: reasoningEffort as CodexModelOptions["reasoningEffort"],
+          reasoningEffort,
         }
       : {}),
     ...(fastMode !== undefined ? { fastMode } : {}),

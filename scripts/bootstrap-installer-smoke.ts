@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const ps1 = readFileSync(join(repoRoot, "apps/marketing/public/install.ps1"), "utf8");
+const sh = readFileSync(join(repoRoot, "apps/marketing/public/install.sh"), "utf8");
 
 function assertContains(haystack: string, needle: string, message: string): void {
   if (!haystack.includes(needle)) {
@@ -53,6 +54,25 @@ assertContains(
   ps1,
   "Install-WindowsRelease",
   "install.ps1 must call Install-WindowsRelease as its entry point.",
+);
+
+for (const appName of [
+  "bigbud.app",
+  "bigbud Beta.app",
+  "bigbud Preview.app",
+  "bigbud Nightly.app",
+]) {
+  assertContains(sh, appName, `install.sh must allow the ${appName} bundle identity.`);
+}
+assertContains(
+  sh,
+  'destination="/Applications/$app_name"',
+  "install.sh must preserve the validated app bundle name.",
+);
+assertNotContains(
+  sh,
+  'destination="/Applications/bigbud.app"',
+  "install.sh must not force every channel into the Stable app path.",
 );
 
 // Must use $ErrorActionPreference = "Stop" for fail-fast behavior.

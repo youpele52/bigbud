@@ -105,11 +105,16 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
   ): Effect.Effect<Extract<ProviderRuntimeEvent, { type: TType }>> =>
     Effect.gen(function* () {
       const stamp = yield* makeEventStamp();
+      const session = sessions.get(threadId);
+      if (!session) {
+        return yield* Effect.die("Cannot emit a Copilot runtime event without an active session.");
+      }
       return {
         ...eventBase({
           eventId: stamp.eventId,
           createdAt: stamp.createdAt,
           threadId,
+          sessionEpoch: session.sessionEpoch,
           ...(extra?.turnId ? { turnId: extra.turnId } : {}),
           ...(extra?.itemId ? { itemId: extra.itemId } : {}),
           ...(extra?.requestId ? { requestId: extra.requestId } : {}),

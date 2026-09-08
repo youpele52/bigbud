@@ -1,0 +1,79 @@
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
+
+import {
+  findPackagedWorkspaceAgent,
+  type DesktopBuildPlatform,
+  validateCodeSignatureRequirement,
+  verifyPackagedCodeSignature,
+} from "./lib/packaged-workspace-agent.ts";
+import {
+  verifyWorkspaceAgentCleanupSmoke,
+  verifyWorkspaceAgentHandshake,
+} from "./lib/workspace-agent-handshake.ts";
+
+const rawArguments = process.argv.slice(2);
+const requireCodeSignature = rawArguments.includes("--require-code-signature");
+const [releaseRoot, buildPlatform, architecture, copyDirectory] = rawArguments.filter(
+  (argument) => argument !== "--require-code-signature",
+);
+if (!releaseRoot || !buildPlatform || !architecture) {
+  throw new Error(
+    "Usage: node scripts/verify-packaged-workspace-agent.ts <release-root> <mac|linux|win> <arm64|x64> [copy-directory] [--require-code-signature]",
+  );
+}
+if (!(["mac", "linux", "win"] as const).includes(buildPlatform as DesktopBuildPlatform)) {
+  throw new Error(`Unsupported desktop platform: ${buildPlatform}`);
+}
+
+const desktopPlatform = buildPlatform as DesktopBuildPlatform;
+const expectedWindowsPublisher = process.env.BIGBUD_WINDOWS_SIGNING_SUBJECT;
+validateCodeSignatureRequirement(desktopPlatform, requireCodeSignature, expectedWindowsPublisher);
+const platform =
+  desktopPlatform === "mac" ? "darwin" : desktopPlatform === "win" ? "win32" : "linux";
+
+if (!statSync(releaseRoot).isDirectory())
+  throw new Error(`Release root is not a directory: ${releaseRoot}`);
+const binaryPath = findPackagedWorkspaceAgent(releaseRoot, desktopPlatform);
+if (!binaryPath)
+  throw new Error(`Packaged workspace watcher agent was not found under ${releaseRoot}`);
+
+if (requireCodeSignature) {
+  verifyPackagedCodeSignature(
+    binaryPath,
+    desktopPlatform as "mac" | "win",
+    expectedWindowsPublisher,
+  );
+}
+
+const result = spawnSync(binaryPath, ["--check"], { encoding: "utf8" });
+const fields = result.stdout.trim().split("\t");
+const expectedOs = platform === "darwin" ? "macos" : platform === "win32" ? "windows" : platform;
+const expectedArch = architecture === "arm64" ? "aarch64" : "x86_64";
+if (
+  result.status !== 0 ||
+  fields[0] !== "bigbud-remote-agent" ||
+  fields.at(-2) !== expectedOs ||
+  fields.at(-1) !== expectedArch
+) {
+  throw new Error(
+    `Packaged workspace watcher identity mismatch for ${platform}/${architecture}: ${result.stderr.trim()}`,
+  );
+}
+
+await verifyWorkspaceAgentHandshake(binaryPath);
+await verifyWorkspaceAgentCleanupSmoke(binaryPath);
+
+if (copyDirectory) {
+  mkdirSync(copyDirectory, { recursive: true });
+  const extension = platform === "win32" ? ".exe" : "";
+  copyFileSync(
+    binaryPath,
+    join(copyDirectory, `server-workspace-agent-${platform}-${architecture}${extension}`),
+  );
+}
+
+console.log(
+  `Verified packaged workspace watcher: ${basename(binaryPath)} (${platform}/${architecture})`,
+);

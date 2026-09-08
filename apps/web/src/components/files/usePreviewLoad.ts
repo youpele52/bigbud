@@ -34,7 +34,7 @@ export function usePreviewLoad({
   const previewRequestIdRef = useRef(0);
 
   const loadPreview = useCallback(
-    (options?: { readonly preserveContents?: boolean }) => {
+    (options?: { readonly preserveContents?: boolean }): Promise<void> => {
       const requestId = ++previewRequestIdRef.current;
       const preserveContents = options?.preserveContents ?? false;
 
@@ -69,10 +69,10 @@ export function usePreviewLoad({
             error: "Native API not found.",
           };
         });
-        return;
+        return Promise.resolve();
       }
 
-      void api.projects
+      return api.projects
         .readFilePreview({
           cwd,
           relativePath,
@@ -124,7 +124,7 @@ export function usePreviewLoad({
   );
 
   const refreshPreview = useCallback(() => {
-    loadPreview({ preserveContents: true });
+    return loadPreview({ preserveContents: true });
   }, [loadPreview]);
 
   return { state, loadPreview, refreshPreview };

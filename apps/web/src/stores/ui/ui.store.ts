@@ -7,13 +7,16 @@ import {
   persistState,
   readPersistedState,
   reorderProjects,
-  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
+import {
+  sanitizePersistedLastActiveThreadId,
+  sanitizePersistedThreadLastVisitedAt,
+} from "./ui.store.persistence";
 import { type SyncProjectInput, type SyncThreadInput, type UiState } from "./ui.store.types";
 
 export {
@@ -22,18 +25,22 @@ export {
   persistState,
   readPersistedState,
   reorderProjects,
-  sanitizePersistedThreadLastVisitedAt,
   setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
   toggleProject,
 } from "./ui.store.projects";
+export {
+  sanitizePersistedLastActiveThreadId,
+  sanitizePersistedThreadLastVisitedAt,
+} from "./ui.store.persistence";
 export type {
   PersistedUiState,
   SyncProjectInput,
   SyncThreadInput,
   UiProjectState,
+  UiSidebarState,
   UiState,
   UiThreadState,
 } from "./ui.store.types";
@@ -129,6 +136,10 @@ export function markThreadVisited(state: UiState, threadId: ThreadId, visitedAt?
   };
 }
 
+export function setLastActiveThreadId(state: UiState, threadId: ThreadId | null): UiState {
+  return state.lastActiveThreadId === threadId ? state : { ...state, lastActiveThreadId: threadId };
+}
+
 export function markThreadUnread(
   state: UiState,
   threadId: ThreadId,
@@ -178,12 +189,12 @@ export function setThreadChangedFilesExpanded(
   expanded: boolean,
 ): UiState {
   const currentThreadState = state.threadChangedFilesExpandedById[threadId] ?? {};
-  const currentExpanded = currentThreadState[turnId] ?? true;
+  const currentExpanded = currentThreadState[turnId] ?? false;
   if (currentExpanded === expanded) {
     return state;
   }
 
-  if (expanded) {
+  if (!expanded) {
     if (!(turnId in currentThreadState)) {
       return state;
     }
@@ -214,10 +225,18 @@ export function setThreadChangedFilesExpanded(
       ...state.threadChangedFilesExpandedById,
       [threadId]: {
         ...currentThreadState,
-        [turnId]: false,
+        [turnId]: true,
       },
     },
   };
+}
+
+export function setSidebarSectionExpanded(
+  state: UiState,
+  section: "chatsExpanded" | "projectsExpanded" | "remoteProjectsExpanded",
+  expanded: boolean,
+): UiState {
+  return state[section] === expanded ? state : { ...state, [section]: expanded };
 }
 
 interface UiStateStore extends UiState {
@@ -226,8 +245,12 @@ interface UiStateStore extends UiState {
   markThreadVisited: (threadId: ThreadId, visitedAt?: string) => void;
   markThreadUnread: (threadId: ThreadId, latestTurnCompletedAt: string | null | undefined) => void;
   clearThreadUi: (threadId: ThreadId) => void;
+  setLastActiveThreadId: (threadId: ThreadId | null) => void;
   setThreadChangedFilesExpanded: (threadId: ThreadId, turnId: string, expanded: boolean) => void;
+  setChatsExpanded: (expanded: boolean) => void;
   setFavouritesExpanded: (expanded: boolean) => void;
+  setProjectsExpanded: (expanded: boolean) => void;
+  setRemoteProjectsExpanded: (expanded: boolean) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   setSelectedProject: (projectId: ProjectId | null) => void;
@@ -243,9 +266,16 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   markThreadUnread: (threadId, latestTurnCompletedAt) =>
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
+  setLastActiveThreadId: (threadId) => set((state) => setLastActiveThreadId(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setChatsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "chatsExpanded", expanded)),
   setFavouritesExpanded: (expanded) => set((state) => setFavouritesExpanded(state, expanded)),
+  setProjectsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "projectsExpanded", expanded)),
+  setRemoteProjectsExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "remoteProjectsExpanded", expanded)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),
@@ -266,8 +296,12 @@ if (typeof window !== "undefined") {
     }
     try {
       const parsed = JSON.parse(event.newValue) as {
+        lastActiveThreadId?: unknown;
         threadLastVisitedAtById?: Record<string, string>;
       };
+      useUiStateStore
+        .getState()
+        .setLastActiveThreadId(sanitizePersistedLastActiveThreadId(parsed.lastActiveThreadId));
       const incoming = sanitizePersistedThreadLastVisitedAt(parsed.threadLastVisitedAtById);
       const markVisited = useUiStateStore.getState().markThreadVisited;
       for (const [threadId, visitedAt] of Object.entries(incoming)) {

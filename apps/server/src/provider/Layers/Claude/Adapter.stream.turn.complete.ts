@@ -1,9 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import {
-  type EventId,
-  type ProviderRuntimeEvent,
-  type ProviderRuntimeTurnStatus,
-} from "@bigbud/contracts";
+import { type EventId, type ProviderRuntimeTurnStatus } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { asRuntimeItemId, nativeProviderRefs, normalizeClaudeTokenUsage } from "./Adapter.utils.ts";
@@ -11,6 +7,7 @@ import { turnStatusFromResult } from "./Adapter.utils.sdk.ts";
 import { decodeClaudeResultMessage, type ClaudeSdkResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic } from "./Adapter.sdk.projections.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
@@ -20,7 +17,7 @@ export interface TurnCompletionDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly updateResumeCursor: (context: ClaudeSessionContext) => Effect.Effect<void>;
@@ -80,7 +77,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     if (!turnState) {
       if (usageSnapshot) {
         const usageStamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "thread.token-usage.updated",
           eventId: usageStamp.eventId,
           provider: PROVIDER,
@@ -92,7 +89,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
       }
 
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "turn.completed",
         eventId: stamp.eventId,
         provider: PROVIDER,
@@ -101,6 +98,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
         payload: {
           state: status,
           ...(result?.stopReason !== undefined ? { stopReason: result.stopReason } : {}),
+          ...(result?.totalCostUsd !== undefined ? { totalCostUsd: result.totalCostUsd } : {}),
           ...(result ? { usageAvailable: accumulatedSnapshot !== undefined } : {}),
           ...(errorMessage ? { errorMessage } : {}),
         },
@@ -111,7 +109,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
 
     for (const [index, tool] of context.inFlightTools.entries()) {
       const toolStamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "item.completed",
         eventId: toolStamp.eventId,
         provider: PROVIDER,
@@ -157,7 +155,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
             finalized: true,
           })
         : undefined;
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "thread.token-usage.updated",
         eventId: usageStamp.eventId,
         provider: PROVIDER,
@@ -170,7 +168,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     }
 
     const stamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "turn.completed",
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -180,6 +178,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
       payload: {
         state: status,
         ...(result?.stopReason !== undefined ? { stopReason: result.stopReason } : {}),
+        ...(result?.totalCostUsd !== undefined ? { totalCostUsd: result.totalCostUsd } : {}),
         ...(result ? { usageAvailable: accumulatedSnapshot !== undefined } : {}),
         ...(errorMessage ? { errorMessage } : {}),
       },
@@ -206,18 +205,16 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
 
     const result = decodeClaudeResultMessage(message);
     if (!result) {
-      yield* emitRuntimeError(
-        context,
-        "Invalid Claude SDK result message.",
-        claudeSdkDiagnostic(message),
-      );
+      const errorMessage = "Invalid Claude SDK result message.";
+      yield* emitRuntimeError(context, errorMessage, claudeSdkDiagnostic(message));
+      yield* completeTurn(context, "failed", errorMessage);
       return;
     }
     const status = turnStatusFromResult(message);
     const errorMessage = status === "completed" ? undefined : result.errors[0];
     if (result.fastModeDisabledReason || result.apiErrorStatus !== undefined) {
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "runtime.warning",
         eventId: stamp.eventId,
         provider: PROVIDER,

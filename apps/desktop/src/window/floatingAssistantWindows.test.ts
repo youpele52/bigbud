@@ -7,15 +7,23 @@ import {
 } from "./floatingAssistantWindows";
 
 interface MockWindow {
-  readonly handlers: Map<string, (...args: never[]) => void>;
+  minimized: boolean;
+  readonly handlers: Map<string, Array<(...args: never[]) => void>>;
+  readonly operations: string[];
   readonly options: Record<string, unknown>;
   readonly webContents: { id: number };
   readonly hide: ReturnType<typeof vi.fn>;
   readonly destroy: ReturnType<typeof vi.fn>;
+  readonly focus: ReturnType<typeof vi.fn>;
   readonly getBounds: ReturnType<typeof vi.fn>;
   readonly isDestroyed: ReturnType<typeof vi.fn>;
+  readonly isMinimized: ReturnType<typeof vi.fn>;
+  readonly restore: ReturnType<typeof vi.fn>;
+  readonly setAlwaysOnTop: ReturnType<typeof vi.fn>;
   readonly setPosition: ReturnType<typeof vi.fn>;
   readonly setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>;
+  readonly show: ReturnType<typeof vi.fn>;
+  readonly showInactive: ReturnType<typeof vi.fn>;
 }
 
 const { mockWindowInstances } = vi.hoisted(() => ({
@@ -25,20 +33,23 @@ const { mockWindowInstances } = vi.hoisted(() => ({
 vi.mock("electron", () => ({
   BrowserWindow: class MockBrowserWindow {
     private destroyed = false;
-    readonly handlers = new Map<string, (...args: never[]) => void>();
+    minimized = false;
+    readonly handlers = new Map<string, Array<(...args: never[]) => void>>();
+    readonly operations: string[] = [];
     readonly webContents = {
       id: mockWindowInstances.length + 1,
       on: vi.fn(),
       setWindowOpenHandler: vi.fn(),
     };
     readonly hide = vi.fn();
-    readonly show = vi.fn();
-    readonly showInactive = vi.fn();
-    readonly focus = vi.fn();
+    readonly show = vi.fn(() => this.operations.push("show"));
+    readonly showInactive = vi.fn(() => this.operations.push("showInactive"));
+    readonly focus = vi.fn(() => this.operations.push("focus"));
     readonly destroy = vi.fn(() => {
       this.destroyed = true;
-      this.handlers.get("closed")?.();
+      this.emit("closed");
     });
+    readonly setAlwaysOnTop = vi.fn(() => this.operations.push("alwaysOnTop"));
     readonly setVisibleOnAllWorkspaces = vi.fn();
     readonly setPosition = vi.fn();
     readonly loadURL = vi.fn();
@@ -47,19 +58,34 @@ vi.mock("electron", () => ({
       return { x: 920, y: 720, width: 64, height: 64 };
     });
     readonly isDestroyed = vi.fn(() => this.destroyed);
+    readonly isMinimized = vi.fn(() => this.minimized);
+    readonly restore = vi.fn(() => {
+      this.minimized = false;
+      this.operations.push("restore");
+    });
 
     constructor(readonly options: Record<string, unknown>) {
       mockWindowInstances.push(this);
     }
 
     on(event: string, handler: (...args: never[]) => void): this {
-      this.handlers.set(event, handler);
+      this.addHandler(event, handler);
       return this;
     }
 
     once(event: string, handler: (...args: never[]) => void): this {
-      this.handlers.set(event, handler);
+      this.addHandler(event, handler);
       return this;
+    }
+
+    private addHandler(event: string, handler: (...args: never[]) => void): void {
+      const handlers = this.handlers.get(event) ?? [];
+      handlers.push(handler);
+      this.handlers.set(event, handlers);
+    }
+
+    private emit(event: string, ...args: never[]): void {
+      for (const handler of this.handlers.get(event) ?? []) handler(...args);
     }
   },
   Menu: { buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })) },
@@ -101,9 +127,14 @@ function createWindows(mascotBounds: { x: number; y: number } | null = null) {
   return { registry, updatePreferences, windows };
 }
 
+function emitWindow(window: MockWindow, event: string, ...args: never[]): void {
+  for (const handler of window.handlers.get(event) ?? []) handler(...args);
+}
+
 describe("FloatingAssistantWindows", () => {
   beforeEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     mockWindowInstances.length = 0;
   });
 
@@ -114,7 +145,7 @@ describe("FloatingAssistantWindows", () => {
     const compactChat = registry.get("compact-chat") as unknown as MockWindow;
     const preventDefault = vi.fn();
 
-    compactChat.handlers.get("close")?.({ preventDefault } as never);
+    emitWindow(compactChat, "close", { preventDefault } as never);
 
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(compactChat.hide).toHaveBeenCalledOnce();
@@ -167,8 +198,8 @@ describe("FloatingAssistantWindows", () => {
     await windows.ensureMascot();
     const mascot = registry.get("mascot") as unknown as MockWindow;
 
-    mascot.handlers.get("moved")?.();
-    mascot.handlers.get("moved")?.();
+    emitWindow(mascot, "moved");
+    emitWindow(mascot, "moved");
 
     expect(updatePreferences).not.toHaveBeenCalled();
     vi.advanceTimersByTime(150);
@@ -184,6 +215,59 @@ describe("FloatingAssistantWindows", () => {
     expect(compactChat.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
       visibleOnFullScreen: true,
     });
+  });
+
+  it("requests always-on-top for both windows even in a Wayland session", async () => {
+    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
+    const { windows } = createWindows();
+
+    await windows.openCompactChat();
+
+    expect(mockWindowInstances).toHaveLength(2);
+    expect(mockWindowInstances[0]?.options.alwaysOnTop).toBe(true);
+    expect(mockWindowInstances[1]?.options.alwaysOnTop).toBe(true);
+  });
+
+  it("reasserts topmost state before displaying each newly ready window", async () => {
+    const { registry, windows } = createWindows();
+    await windows.openCompactChat();
+    const mascot = registry.get("mascot") as unknown as MockWindow;
+    const compactChat = registry.get("compact-chat") as unknown as MockWindow;
+    mascot.operations.length = 0;
+    compactChat.operations.length = 0;
+
+    emitWindow(mascot, "ready-to-show");
+    emitWindow(compactChat, "ready-to-show");
+
+    expect(mascot.operations).toEqual(["alwaysOnTop", "showInactive"]);
+    expect(mascot.show).not.toHaveBeenCalled();
+    expect(mascot.focus).not.toHaveBeenCalled();
+    expect(compactChat.operations).toEqual(["alwaysOnTop", "show"]);
+  });
+
+  it("reasserts topmost state when reopening hidden compact chat", async () => {
+    const { registry, windows } = createWindows();
+    await windows.openCompactChat();
+    const compactChat = registry.get("compact-chat") as unknown as MockWindow;
+    windows.hideCompactChat();
+    compactChat.operations.length = 0;
+
+    await windows.openCompactChat();
+
+    expect(compactChat.operations).toEqual(["alwaysOnTop", "show", "focus"]);
+    expect(compactChat.restore).not.toHaveBeenCalled();
+  });
+
+  it("restores minimized compact chat before reasserting, showing, and focusing", async () => {
+    const { registry, windows } = createWindows();
+    await windows.openCompactChat();
+    const compactChat = registry.get("compact-chat") as unknown as MockWindow;
+    compactChat.minimized = true;
+    compactChat.operations.length = 0;
+
+    await windows.openCompactChat();
+
+    expect(compactChat.operations).toEqual(["restore", "alwaysOnTop", "show", "focus"]);
   });
 
   it("does not touch a destroyed mascot when disable races compact chat creation", async () => {

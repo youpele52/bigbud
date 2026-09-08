@@ -94,6 +94,7 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     case "thread.message.submit":
     case "thread.queued-prompt.remove":
     case "thread.queued-prompt.flush":
+    case "thread.queued-prompt.flush-cancel":
       return yield* decideThreadQueueCommand({ command, readModel });
 
     case "thread.turn.start": {
@@ -126,11 +127,13 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.turn.interrupt":
+    case "thread.turn.steer":
     case "thread.approval.respond":
     case "thread.user-input.respond":
     case "thread.session.stop":
     case "thread.session.set":
     case "thread.turn.start.failed":
+    case "thread.turn-control.set":
       return yield* decideThreadSessionCommand({ command, readModel });
 
     case "thread.checkpoint.revert": {

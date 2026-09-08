@@ -42,6 +42,7 @@ export function ComposerProvidersSettingsSection() {
             }
             control={
               <Switch
+                tone="success"
                 checked={visible}
                 onCheckedChange={(checked) =>
                   setProviderVisible(descriptor.provider, Boolean(checked))

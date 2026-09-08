@@ -120,6 +120,11 @@ export const DEFAULT_BINDINGS = compile([
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
+    shortcut: modShortcut("l"),
+    command: "chat.focus",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
     shortcut: modShortcut("n"),
     command: "chat.new",
     whenAst: whenNot(whenIdentifier("terminalFocus")),

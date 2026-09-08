@@ -76,6 +76,7 @@ const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+let quitTeardownComplete = false;
 let desktopProtocolRegistered = false;
 let desktopLogSink: QueuedLogSink | null = null;
 let backendLogSink: QueuedLogSink | null = null;
@@ -271,7 +272,8 @@ function openMainWindow(threadId?: string): BrowserWindow {
  * Idempotent — safe to call multiple times.
  */
 function prepareForAppQuit(reason: string): void {
-  if (isQuitting) return;
+  if (quitTeardownComplete) return;
+  quitTeardownComplete = true;
   isQuitting = true;
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
@@ -341,6 +343,7 @@ app
       getIsQuitting: () => isQuitting,
       getMainWindow: () => mainWindow,
       isDevelopment,
+      isPackaged: app.isPackaged,
       logHeader,
       makeWindow,
       prepareForAppQuit,
@@ -355,10 +358,9 @@ app
           windowRegistry,
         }),
       resolveIconPath,
+      resourcesPath: process.resourcesPath,
       serverSettingsPath: SERVER_SETTINGS_PATH,
-      setIsQuitting: (value) => {
-        isQuitting = value;
-      },
+      setIsQuitting: (value) => (isQuitting = value),
       setMainWindow: (window) => {
         mainWindow = window;
       },

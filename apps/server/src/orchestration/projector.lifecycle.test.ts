@@ -69,6 +69,8 @@ describe("orchestration projector — thread lifecycle", () => {
         proposedPlans: [],
         queuedPrompts: [],
         pendingInterruptFlushIntent: null,
+        pendingTurnControlOperation: null,
+        queueHold: false,
         tasks: [],
         activities: [],
         checkpoints: [],

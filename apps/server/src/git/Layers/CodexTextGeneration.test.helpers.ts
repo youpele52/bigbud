@@ -171,6 +171,7 @@ export function withFakeCodexEnv<A, E, R>(
     requireReasoningEffort?: string;
     requireSkipGitRepoCheck?: boolean;
     forbidReasoningEffort?: boolean;
+    customModels?: ReadonlyArray<string>;
     stdinMustContain?: string;
     stdinMustNotContain?: string;
   },
@@ -187,18 +188,26 @@ export function withFakeCodexEnv<A, E, R>(
         providers: {
           codex: {
             binaryPath: codexPath,
+            ...(input.customModels !== undefined
+              ? { customModels: Array.from(input.customModels) }
+              : {}),
           },
         },
       });
-      return { serverSettings, previousBinaryPath: previousSettings.providers.codex.binaryPath };
+      return {
+        serverSettings,
+        previousBinaryPath: previousSettings.providers.codex.binaryPath,
+        previousCustomModels: previousSettings.providers.codex.customModels,
+      };
     }),
     () => effect,
-    ({ serverSettings, previousBinaryPath }) =>
+    ({ serverSettings, previousBinaryPath, previousCustomModels }) =>
       serverSettings
         .updateSettings({
           providers: {
             codex: {
               binaryPath: previousBinaryPath,
+              customModels: previousCustomModels,
             },
           },
         })

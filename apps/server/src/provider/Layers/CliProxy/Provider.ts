@@ -11,7 +11,13 @@ import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import { CliProxyProvider } from "../../Services/CliProxy/Provider.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { inspectCliProxy } from "./Client.ts";
+import { CliProxyClientError, inspectCliProxy } from "./Client.ts";
+import {
+  cliProxyDiagnostic,
+  diagnosticForClientError,
+  diagnosticForCommandResult,
+  diagnosticForConfigError,
+} from "./Diagnostic.ts";
 import { CliProxyConfigError, resolveCliProxyConfig } from "./config.ts";
 
 const PROVIDER = "cliProxy" as const;
@@ -36,7 +42,7 @@ function toModels(
   }));
 }
 
-function disabledSnapshot(checkedAt: string, message: string): ServerProvider {
+function disabledSnapshot(checkedAt: string): ServerProvider {
   return buildServerProvider({
     provider: PROVIDER,
     enabled: false,
@@ -47,50 +53,46 @@ function disabledSnapshot(checkedAt: string, message: string): ServerProvider {
       version: null,
       status: "warning",
       auth: { status: "unknown" },
-      message,
+    },
+  });
+}
+
+function pendingSnapshot(checkedAt: string): ServerProvider {
+  return buildServerProvider({
+    provider: PROVIDER,
+    enabled: true,
+    checkedAt,
+    models: [],
+    probe: {
+      installed: false,
+      version: null,
+      status: "warning",
+      auth: { status: "unknown", type: "local-config" },
     },
   });
 }
 
 function unavailableSnapshot(input: {
   readonly checkedAt: string;
-  readonly message: string;
+  readonly diagnostic: NonNullable<ServerProvider["cliProxyDiagnostic"]>;
   readonly installed?: boolean;
   readonly authStatus?: "authenticated" | "unknown";
 }): ServerProvider {
-  return buildServerProvider({
-    provider: PROVIDER,
-    enabled: true,
-    checkedAt: input.checkedAt,
-    models: [],
-    probe: {
-      installed: input.installed ?? false,
-      version: null,
-      status: "warning",
-      auth: { status: input.authStatus ?? "unknown", type: "local-config" },
-      message: input.message,
-    },
-  });
-}
-
-function configErrorMessage(error: CliProxyConfigError): string {
-  switch (error._tag) {
-    case "ConfigNotFound":
-      return "CLIProxyAPI configuration was not found.";
-    case "ConfigUnreadable":
-      return "CLIProxyAPI configuration could not be read.";
-    case "ConfigMalformed":
-    case "ConfigInvalidShape":
-      return "CLIProxyAPI configuration is malformed or has an invalid shape.";
-    case "UnsupportedProtocol":
-      return "CLIProxyAPI configuration uses an unsupported protocol.";
-    case "UnsafeAddress":
-      return "CLIProxyAPI must use a local loopback address.";
-    case "InvalidPort":
-      return "CLIProxyAPI configuration contains an invalid port.";
-    case "MissingCredential":
-      return "CLIProxyAPI configuration does not contain an API key.";
-  }
+  return {
+    ...buildServerProvider({
+      provider: PROVIDER,
+      enabled: true,
+      checkedAt: input.checkedAt,
+      models: [],
+      probe: {
+        installed: input.installed ?? false,
+        version: null,
+        status: "warning",
+        auth: { status: input.authStatus ?? "unknown", type: "local-config" },
+      },
+    }),
+    cliProxyDiagnostic: input.diagnostic,
+  };
 }
 
 function attemptConfigResolution(configPath: string | undefined) {
@@ -113,17 +115,17 @@ export const checkCliProxyProvider = Effect.fn("checkCliProxyProvider")(
     const cliProxySettings = providerSettings.providers.cliProxy;
     const checkedAt = new Date().toISOString();
     if (!cliProxySettings.enabled || process.env.BIGBUD_DISABLE_CLIPROXY === "1") {
-      return disabledSnapshot(checkedAt, "CLIProxyAPI is disabled.");
+      return disabledSnapshot(checkedAt);
     }
 
     const configResult = attemptConfigResolution(cliProxySettings.configPath || undefined);
     if (configResult._tag === "failure") {
       return unavailableSnapshot({
         checkedAt,
-        message:
+        diagnostic:
           configResult.cause instanceof CliProxyConfigError
-            ? configErrorMessage(configResult.cause)
-            : "CLIProxyAPI configuration could not be resolved.",
+            ? diagnosticForConfigError(configResult.cause)
+            : cliProxyDiagnostic("configuration-invalid"),
       });
     }
 
@@ -134,20 +136,14 @@ export const checkCliProxyProvider = Effect.fn("checkCliProxyProvider")(
       return unavailableSnapshot({
         checkedAt,
         installed: true,
-        message: "CLIProxyAPI requires a runnable configured Claude CLI.",
+        diagnostic: cliProxyDiagnostic("claude-cli-unavailable"),
       });
     }
-    if (claudeRunnable._tag === "Success" && claudeRunnable.success._tag !== "available") {
-      const detail =
-        claudeRunnable.success._tag === "timeout"
-          ? "The configured Claude CLI version check timed out."
-          : claudeRunnable.success._tag === "missing"
-            ? "The configured Claude CLI is not installed or not on PATH."
-            : claudeRunnable.success.detail;
+    if (claudeRunnable.success._tag !== "available") {
       return unavailableSnapshot({
         checkedAt,
         installed: true,
-        message: `CLIProxyAPI requires a runnable configured Claude CLI. ${detail}`,
+        diagnostic: diagnosticForCommandResult(claudeRunnable.success),
       });
     }
 
@@ -155,16 +151,20 @@ export const checkCliProxyProvider = Effect.fn("checkCliProxyProvider")(
       Effect.result,
     );
     if (result._tag === "Failure") {
+      const failure: unknown = result.failure;
       return unavailableSnapshot({
         checkedAt,
         installed: true,
-        authStatus: "authenticated",
-        message: "CLIProxyAPI is configured but is not responding.",
+        authStatus: "unknown",
+        diagnostic:
+          failure instanceof CliProxyClientError
+            ? diagnosticForClientError(failure)
+            : cliProxyDiagnostic("activation-unavailable"),
       });
     }
 
     const models = toModels(result.success);
-    return buildServerProvider({
+    const snapshot = buildServerProvider({
       provider: PROVIDER,
       enabled: true,
       checkedAt,
@@ -179,13 +179,11 @@ export const checkCliProxyProvider = Effect.fn("checkCliProxyProvider")(
         version: null,
         status: models.length > 0 ? "ready" : "warning",
         auth: { status: "authenticated", type: "local-config" },
-        ...(models.length > 0
-          ? {}
-          : {
-              message: "CLIProxyAPI returned no models for the Claude-compatible client profile.",
-            }),
       },
     });
+    return models.length > 0
+      ? snapshot
+      : { ...snapshot, cliProxyDiagnostic: cliProxyDiagnostic("catalog-empty") };
   },
 );
 
@@ -208,11 +206,8 @@ export const CliProxyProviderLive = Layer.effect(
       checkProvider,
       initialSnapshot: (providerSettings) =>
         providerSettings.enabled
-          ? unavailableSnapshot({
-              checkedAt: new Date().toISOString(),
-              message: "CLIProxyAPI inspection is pending.",
-            })
-          : disabledSnapshot(new Date().toISOString(), "CLIProxyAPI is disabled."),
+          ? pendingSnapshot(new Date().toISOString())
+          : disabledSnapshot(new Date().toISOString()),
       refreshInterval: "30 seconds",
     });
   }),

@@ -2,11 +2,13 @@ import { ThreadId, TurnId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
+import { PersistenceSqlError } from "../../persistence/Errors.ts";
 import {
   STARTUP_STALE_DELETE_RETRY_LIMIT,
   buildStartupReconciliationCommands,
   buildThreadReconciliationCommand,
   dispatchReconciliationCommandSafely,
+  isDeletingParentReconciliationError,
 } from "./ProviderRuntimeIngestion.reconcile.ts";
 
 const occurredAt = "2026-08-04T00:00:00.000Z";
@@ -251,5 +253,54 @@ describe("provider startup reconciliation", () => {
         occurredAt,
       }).map((command) => command.type),
     ).toEqual(["thread.delete"]);
+  });
+
+  it("treats only the exact deleting-parent persistence result as terminal", async () => {
+    const terminal = new PersistenceSqlError({
+      operation: "ProjectionThreadRepository.upsert:query",
+      detail: "parent thread is deleting",
+    });
+    const similar = new PersistenceSqlError({
+      operation: "ProjectionThreadRepository.upsert:query",
+      detail: "parent thread is deleting temporarily",
+    });
+    expect(isDeletingParentReconciliationError(terminal)).toBe(true);
+    expect(isDeletingParentReconciliationError(similar)).toBe(false);
+    expect(isDeletingParentReconciliationError(new Error("parent thread is deleting"))).toBe(false);
+
+    const command = { type: "thread.session.set", commandId: "terminal" } as never;
+    const outcome = await Effect.runPromise(
+      dispatchReconciliationCommandSafely({ dispatch: () => Effect.fail(terminal) }, command),
+    );
+    expect(outcome).toBe("terminal");
+    expect(
+      await Effect.runPromise(
+        dispatchReconciliationCommandSafely({ dispatch: () => Effect.fail(similar) }, command),
+      ),
+    ).toBe("retryable");
+  });
+
+  it("leaves transient reconciliation dispatch failures retryable", async () => {
+    let dispatches = 0;
+    const engine = {
+      dispatch: () => {
+        dispatches += 1;
+        return Effect.fail(
+          new PersistenceSqlError({
+            operation: "ProjectionThreadRepository.upsert:query",
+            detail: "The database is busy. Retry the action in a moment.",
+          }),
+        );
+      },
+    };
+    const command = { type: "thread.session.set", commandId: "retryable" } as never;
+
+    expect(await Effect.runPromise(dispatchReconciliationCommandSafely(engine, command))).toBe(
+      "retryable",
+    );
+    expect(await Effect.runPromise(dispatchReconciliationCommandSafely(engine, command))).toBe(
+      "retryable",
+    );
+    expect(dispatches).toBe(2);
   });
 });

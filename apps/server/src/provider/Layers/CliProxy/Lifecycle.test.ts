@@ -67,49 +67,32 @@ describe("makeCliProxyCommandRunner", () => {
       timedOut: false,
     }));
 
-    await expect(timeout("cli-proxy-api", ["--version"])).resolves.toEqual({
-      _tag: "timeout",
-      command: "cli-proxy-api",
-    });
-    await expect(missing("cli-proxy-api", ["--version"])).resolves.toEqual({
-      _tag: "missing",
-      command: "cli-proxy-api",
-    });
+    await expect(timeout("cli-proxy-api", ["--version"])).resolves.toEqual({ _tag: "timeout" });
+    await expect(missing("cli-proxy-api", ["--version"])).resolves.toEqual({ _tag: "missing" });
     await expect(failed("cli-proxy-api", ["--version"])).resolves.toEqual({
-      _tag: "failed",
-      command: "cli-proxy-api",
-      detail: "failed detail",
+      _tag: "execution-failed",
     });
   });
 });
 
 describe("makeCliProxyLifecycle", () => {
   it("single-flights activation and clears the flight after completion", async () => {
-    let releaseStart: (() => void) | undefined;
-    const startGate = new Promise<void>((resolve) => {
-      releaseStart = resolve;
-    });
     const runner = vi.fn(async (command: string, args: ReadonlyArray<string>) => {
       if (command === "brew" && args[0] === "list") return { _tag: "available" } as const;
-      if (command === "brew" && args[0] === "services") {
-        await startGate;
-        return { _tag: "available" } as const;
-      }
-      return { _tag: "missing", command } as const;
+      return { _tag: "missing" } as const;
     });
     const lifecycle = makeCliProxyLifecycle({ commandRunner: runner, platform: "darwin" });
 
     const first = lifecycle.activate({ configPath: "/tmp/config.yaml" });
     const second = lifecycle.activate({ configPath: "/tmp/config.yaml" });
-    releaseStart?.();
     await expect(Promise.all([first, second])).resolves.toEqual([
-      { _tag: "started", strategy: "homebrew" },
-      { _tag: "started", strategy: "homebrew" },
+      { _tag: "service-configuration-unverified" },
+      { _tag: "service-configuration-unverified" },
     ]);
-    expect(runner.mock.calls.filter((call) => call[1][0] === "services")).toHaveLength(1);
+    expect(runner.mock.calls.filter((call) => call[1][0] === "services")).toHaveLength(0);
 
     await lifecycle.activate({ configPath: "/tmp/config.yaml" });
-    expect(runner.mock.calls.filter((call) => call[1][0] === "services")).toHaveLength(2);
+    expect(runner.mock.calls.filter((call) => call[1][0] === "services")).toHaveLength(0);
   });
 
   it("tracks direct child ownership and refuses a second config", async () => {
@@ -121,7 +104,7 @@ describe("makeCliProxyLifecycle", () => {
     };
     const runner = vi.fn(
       async (command: string): Promise<CliProxyCommandResult> =>
-        command === "cli-proxy-api" ? { _tag: "available" } : { _tag: "missing", command },
+        command === "cli-proxy-api" ? { _tag: "available" } : { _tag: "missing" },
     );
     const spawnDirect = vi.fn(() => child as never);
     const lifecycle = makeCliProxyLifecycle({
@@ -132,18 +115,63 @@ describe("makeCliProxyLifecycle", () => {
 
     await expect(lifecycle.activate({ configPath: "/tmp/one.yaml" })).resolves.toEqual({
       _tag: "started",
-      strategy: "direct",
+      reused: false,
     });
     await expect(lifecycle.activate({ configPath: "/tmp/one.yaml" })).resolves.toEqual({
       _tag: "started",
-      strategy: "direct",
+      reused: true,
     });
-    await expect(lifecycle.activate({ configPath: "/tmp/two.yaml" })).resolves.toMatchObject({
-      _tag: "unavailable",
-      detail: expect.stringContaining("/tmp/one.yaml"),
+    await expect(lifecycle.activate({ configPath: "/tmp/two.yaml" })).resolves.toEqual({
+      _tag: "direct-process-configuration-conflict",
     });
     expect(spawnDirect).toHaveBeenCalledOnce();
     lifecycle.close();
     expect(child.kill).toHaveBeenCalledOnce();
+  });
+
+  it("does not report a direct process that exits immediately as started", async () => {
+    const child = {
+      exitCode: 1,
+      pid: undefined,
+      once: vi.fn(),
+      kill: vi.fn(),
+      stderr: undefined,
+      stdout: undefined,
+    };
+    const runner = vi.fn(
+      async (command: string): Promise<CliProxyCommandResult> =>
+        command === "cli-proxy-api" ? { _tag: "available" } : { _tag: "missing" },
+    );
+    const lifecycle = makeCliProxyLifecycle({
+      commandRunner: runner,
+      platform: "darwin",
+      spawnDirect: vi.fn(() => child as never),
+    });
+
+    await expect(lifecycle.activate({ configPath: "/tmp/config.yaml" })).resolves.toEqual({
+      _tag: "startup-failed",
+    });
+  });
+
+  it("returns unavailable when closed during direct activation", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runner = vi.fn(async (command: string, args: ReadonlyArray<string>) => {
+      if (command === "cli-proxy-api" && args[0] === "--version") {
+        await gate;
+        return { _tag: "available" } as const;
+      }
+      return command === "cli-proxy-api"
+        ? ({ _tag: "available" } as const)
+        : ({ _tag: "missing" } as const);
+    });
+    const lifecycle = makeCliProxyLifecycle({ commandRunner: runner, platform: "darwin" });
+    const activation = lifecycle.activate({ configPath: "/tmp/config.yaml" });
+    lifecycle.close();
+    release?.();
+
+    await expect(activation).resolves.toEqual({ _tag: "closed" });
   });
 });

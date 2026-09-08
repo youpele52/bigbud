@@ -24,6 +24,10 @@ interface AcpEventStamp {
   readonly createdAt: string;
 }
 
+interface AcpEventSession {
+  readonly sessionEpoch: number;
+}
+
 type AcpCanonicalRequestType = Extract<
   CanonicalRequestType,
   "exec_command_approval" | "file_read_approval" | "file_change_approval" | "unknown"
@@ -78,6 +82,7 @@ function runtimeItemStatusFromAcpToolStatus(
 
 export function makeAcpRequestOpenedEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -93,6 +98,7 @@ export function makeAcpRequestOpenedEvent(input: {
   return {
     type: "request.opened",
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,
@@ -115,6 +121,7 @@ export function makeAcpRequestOpenedEvent(input: {
 
 export function makeAcpRequestResolvedEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -125,6 +132,7 @@ export function makeAcpRequestResolvedEvent(input: {
   return {
     type: "request.resolved",
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,
@@ -138,6 +146,7 @@ export function makeAcpRequestResolvedEvent(input: {
 
 export function makeAcpPlanUpdatedEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -149,6 +158,7 @@ export function makeAcpPlanUpdatedEvent(input: {
   return {
     type: "turn.plan.updated",
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,
@@ -163,6 +173,7 @@ export function makeAcpPlanUpdatedEvent(input: {
 
 export function makeAcpToolCallEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -176,6 +187,7 @@ export function makeAcpToolCallEvent(input: {
         ? "item.completed"
         : "item.updated",
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,
@@ -197,6 +209,7 @@ export function makeAcpToolCallEvent(input: {
 
 export function makeAcpAssistantItemEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -206,6 +219,7 @@ export function makeAcpAssistantItemEvent(input: {
   return {
     type: input.lifecycle,
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,
@@ -219,6 +233,7 @@ export function makeAcpAssistantItemEvent(input: {
 
 export function makeAcpContentDeltaEvent(input: {
   readonly stamp: AcpEventStamp;
+  readonly session: AcpEventSession;
   readonly provider: ProviderKind;
   readonly threadId: ThreadId;
   readonly turnId: TurnId | undefined;
@@ -229,6 +244,7 @@ export function makeAcpContentDeltaEvent(input: {
   return {
     type: "content.delta",
     ...input.stamp,
+    sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,
     threadId: input.threadId,
     turnId: input.turnId,

@@ -1,4 +1,4 @@
-import { Effect, FileSystem } from "effect";
+import { Effect } from "effect";
 
 import { dedupeRemoteBranchesWithLocalMatches } from "@bigbud/shared/git";
 import { type GitCoreShape } from "../Services/GitCore.ts";
@@ -14,10 +14,23 @@ import {
 } from "./GitCoreUtils.ts";
 import { type GitHelpers } from "./GitCoreExecutor.ts";
 
-export function makeListBranchesOp(
-  helpers: GitHelpers,
-  fileSystem: FileSystem.FileSystem,
-): GitCoreShape["listBranches"] {
+export function parseWorktreeBranchPaths(stdout: string): Map<string, string> {
+  const worktreeMap = new Map<string, string>();
+  for (const record of stdout.split(/\r?\n\r?\n/g)) {
+    const lines = record.split(/\r?\n/g);
+    if (lines.some((line) => line.startsWith("prunable"))) continue;
+    const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+    const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
+    if (!worktreeLine || !branchLine) continue;
+    worktreeMap.set(
+      branchLine.slice("branch refs/heads/".length),
+      worktreeLine.slice("worktree ".length),
+    );
+  }
+  return worktreeMap;
+}
+
+export function makeListBranchesOp(helpers: GitHelpers): GitCoreShape["listBranches"] {
   const { executeGit } = helpers;
 
   const readBranchMetadata = Effect.fn("readBranchMetadata")(function* (cwd: string) {
@@ -235,24 +248,10 @@ export function makeListBranchesOp(
         ? defaultRef.stdout.trim().replace(/^refs\/remotes\/origin\//, "")
         : null;
 
-    const worktreeMap = new Map<string, string>();
-    if (worktreeList.code === 0) {
-      let currentPath: string | null = null;
-      for (const line of worktreeList.stdout.split("\n")) {
-        if (line.startsWith("worktree ")) {
-          const candidatePath = line.slice("worktree ".length);
-          const exists = yield* fileSystem.stat(candidatePath).pipe(
-            Effect.map(() => true),
-            Effect.catch(() => Effect.succeed(false)),
-          );
-          currentPath = exists ? candidatePath : null;
-        } else if (line.startsWith("branch refs/heads/") && currentPath) {
-          worktreeMap.set(line.slice("branch refs/heads/".length), currentPath);
-        } else if (line === "") {
-          currentPath = null;
-        }
-      }
-    }
+    const worktreeMap =
+      worktreeList.code === 0
+        ? parseWorktreeBranchPaths(worktreeList.stdout)
+        : new Map<string, string>();
 
     const localBranches = localBranchResult.stdout
       .split("\n")

@@ -1,6 +1,6 @@
 /** ClaudeAdapter SDK message dispatchers. Routes raw SDK messages to specialized handlers. @module ClaudeAdapter.stream.handlers */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { type EventId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import {
@@ -19,6 +19,7 @@ import type {
   ClaudeSessionContext,
   ToolInFlight,
 } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeMessageSpecificHandlers } from "./Adapter.stream.handlers.messages.ts";
@@ -34,7 +35,7 @@ export interface MessageHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
@@ -92,7 +93,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
           assistantBlockEntry.block.emittedTextDelta = true;
         }
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "content.delta",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -149,7 +150,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         context.inFlightTools.set(event.index, nextTool);
 
         const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent({
+        yield* offerRuntimeEvent(context, {
           type: "item.updated",
           eventId: stamp.eventId,
           provider: PROVIDER,
@@ -174,7 +175,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
           ),
         });
 
-        if (parsedInput) {
+        if (parsedInput && nextTool.toolName !== "TaskList" && nextTool.toolName !== "TaskGet") {
           yield* updateClaudeTaskPlan({
             context,
             toolUseId: nextTool.itemId,
@@ -226,7 +227,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
       context.inFlightTools.set(index, tool);
 
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "item.started",
         eventId: stamp.eventId,
         provider: PROVIDER,
@@ -266,16 +267,17 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         return;
       }
 
-      yield* updateClaudeTaskPlan({
-        context,
-        toolUseId: tool.itemId,
-        toolName: tool.toolName,
-        input: tool.input,
-        ...(tool.toolName === "TaskList" ? { authoritativeSnapshot: true } : {}),
-        now: yield* nowIso,
-        makeEventStamp,
-        offerRuntimeEvent,
-      });
+      if (tool.toolName !== "TaskList" && tool.toolName !== "TaskGet") {
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: tool.itemId,
+          toolName: tool.toolName,
+          input: tool.input,
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
+      }
     }
   });
 

@@ -66,10 +66,9 @@ export function ThinkingMessageBody({
         {shouldCollapse && (
           <div className="mt-2 flex justify-start">
             <Button
-              type="button"
               size="xs"
-              variant="ghost"
-              className="h-auto px-1.5 py-0.5 text-[10px] text-muted-foreground/55"
+              variant="text"
+              type="button"
               onClick={() => setExpanded((current) => !current)}
             >
               {expanded ? "Collapse thinking" : "Expand thinking"}

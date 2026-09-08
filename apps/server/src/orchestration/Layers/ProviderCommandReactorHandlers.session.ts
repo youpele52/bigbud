@@ -1,5 +1,6 @@
 import {
   DEFAULT_RUNTIME_MODE,
+  MessageId,
   type OrchestrationSession,
   ThreadId,
   type TurnId,
@@ -8,15 +9,14 @@ import { Effect } from "effect";
 
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
+import { makeProcessSessionResponseHandlers } from "./ProviderCommandReactorHandlers.session.responses.ts";
 import { settleInterruptAfterAcknowledgement } from "./ProviderCommandReactorHandlers.session.settle.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import {
-  formatProviderServiceCauseDetail,
-  isUnknownPendingApprovalRequestError,
-  isUnknownPendingUserInputRequestError,
-  stalePendingRequestDetail,
-} from "./ProviderCommandReactorHelpers.ts";
+import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
+import { setTurnControlOperation } from "./ProviderCommandReactorHandlers.steer.ts";
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -30,6 +30,7 @@ type ProviderIntentEvent = Extract<
 >;
 
 interface ProcessSessionHandlersDeps {
+  readonly orchestrationEngine: OrchestrationEngineShape;
   readonly providerService: typeof ProviderService.Service;
   readonly appendProviderFailureActivity: (input: {
     readonly threadId: ThreadId;
@@ -51,20 +52,65 @@ interface ProcessSessionHandlersDeps {
     readonly threadId: ThreadId;
     readonly session: OrchestrationSession;
     readonly createdAt: string;
+    readonly expectedSessionEpoch?: number;
+    readonly expectedActiveTurnId?: TurnId;
   }) => Effect.Effect<void, OrchestrationDispatchError, never>;
 }
 
 export const makeProcessSessionHandlers = ({
+  orchestrationEngine,
   providerService,
   appendProviderFailureActivity,
   resolveThread,
   setThreadSession,
 }: ProcessSessionHandlersDeps) => {
+  const cancelPendingFlush = (
+    event: Extract<ProviderIntentEvent, { type: "thread.turn-interrupt-requested" }>,
+  ) =>
+    event.payload.pendingFlushIntent === undefined
+      ? Effect.void
+      : orchestrationEngine
+          .dispatch({
+            type: "thread.queued-prompt.flush-cancel",
+            commandId: serverCommandId("cancel-interrupt-flush"),
+            threadId: event.payload.threadId,
+            intentId: event.payload.pendingFlushIntent.intentId,
+            createdAt: event.payload.createdAt,
+          })
+          .pipe(Effect.asVoid);
+
+  const completeInterruptContinue = Effect.fn("completeInterruptContinue")(function* (
+    event: Extract<ProviderIntentEvent, { type: "thread.turn-interrupt-requested" }>,
+  ) {
+    const operation = event.payload.operation;
+    if (!operation) return;
+    if (operation.reservedPromptIds.length > 0) {
+      yield* orchestrationEngine.dispatch({
+        type: "thread.queued-prompt.flush",
+        commandId: serverCommandId("interrupt-continue-flush"),
+        threadId: event.payload.threadId,
+        messageIds: operation.reservedPromptIds,
+        messageId: MessageId.makeUnsafe(`continued:${operation.operationId}`),
+        acknowledged: true,
+        controlOperationId: operation.operationId,
+        createdAt: event.payload.createdAt,
+      });
+    }
+    yield* setTurnControlOperation({
+      orchestrationEngine,
+      threadId: event.payload.threadId,
+      operation,
+      state: "completed",
+      createdAt: event.payload.createdAt,
+    });
+  });
+
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.turn-interrupt-requested" }>,
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
     const thread = yield* resolveThread(event.payload.threadId);
     if (!thread) {
+      yield* cancelPendingFlush(event);
       return;
     }
     let runtimeSession = yield* providerService
@@ -90,6 +136,7 @@ export const makeProcessSessionHandlers = ({
         createdAt: event.payload.createdAt,
       });
       if (event.payload.pendingFlushIntent !== undefined) {
+        yield* cancelPendingFlush(event);
         yield* setThreadSession({
           threadId: thread.id,
           session: {
@@ -103,6 +150,10 @@ export const makeProcessSessionHandlers = ({
             updatedAt: event.payload.createdAt,
           },
           createdAt: event.payload.createdAt,
+          expectedSessionEpoch: thread.session?.sessionEpoch ?? 0,
+          ...(thread.session?.activeTurnId
+            ? { expectedActiveTurnId: thread.session.activeTurnId }
+            : {}),
         });
       }
       return;
@@ -129,11 +180,13 @@ export const makeProcessSessionHandlers = ({
         turnId: event.payload.turnId,
         createdAt: event.payload.createdAt,
       });
+      yield* cancelPendingFlush(event);
       return;
     }
 
     const projectedTurnFence = boundSession?.activeTurnId ?? thread.latestTurn?.turnId ?? null;
     if (
+      event.payload.pendingFlushIntent !== undefined &&
       event.payload.turnId === undefined &&
       runtimeSession?.activeTurnId != null &&
       runtimeSession.activeTurnId !== projectedTurnFence
@@ -151,6 +204,7 @@ export const makeProcessSessionHandlers = ({
         turnId: runtimeSession.activeTurnId,
         createdAt: event.payload.createdAt,
       });
+      yield* cancelPendingFlush(event);
       return;
     }
 
@@ -168,6 +222,10 @@ export const makeProcessSessionHandlers = ({
           threadId: thread.id,
           session: reconciliation.session,
           createdAt: event.payload.createdAt,
+          expectedSessionEpoch: thread.session?.sessionEpoch ?? 0,
+          ...(thread.session?.activeTurnId
+            ? { expectedActiveTurnId: thread.session.activeTurnId }
+            : {}),
         });
       }
       return;
@@ -189,8 +247,14 @@ export const makeProcessSessionHandlers = ({
             threadId: thread.id,
             session: reconciliation.session,
             createdAt: event.payload.createdAt,
+            expectedSessionEpoch: thread.session?.sessionEpoch ?? 0,
+            ...(thread.session?.activeTurnId
+              ? { expectedActiveTurnId: thread.session.activeTurnId }
+              : {}),
           });
         }
+        if (event.payload.operation) yield* completeInterruptContinue(event);
+        else yield* cancelPendingFlush(event);
         return;
       }
       if (
@@ -210,22 +274,55 @@ export const makeProcessSessionHandlers = ({
           turnId: event.payload.turnId,
           createdAt: event.payload.createdAt,
         });
+        yield* cancelPendingFlush(event);
         return;
       }
     }
 
-    yield* providerService.interruptTurn({
-      threadId: event.payload.threadId,
-      ...(event.payload.turnId !== undefined ? { turnId: event.payload.turnId } : {}),
-    });
-    yield* Effect.logInfo("provider turn interrupt acknowledged", {
-      threadId: thread.id,
-      requestedTurnId: event.payload.turnId ?? null,
-      liveActiveTurnId: runtimeSession?.activeTurnId ?? null,
-      queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
-      queuedPromptCount: thread.queuedPrompts?.length ?? 0,
-      hasPendingFlushIntent: event.payload.pendingFlushIntent !== undefined,
-    });
+    let interruptAcknowledged = false;
+    yield* providerService
+      .interruptTurn({
+        threadId: event.payload.threadId,
+        ...(event.payload.turnId !== undefined ? { turnId: event.payload.turnId } : {}),
+        sessionEpoch: event.payload.operation?.sessionEpoch ?? thread.session?.sessionEpoch ?? 0,
+      })
+      .pipe(
+        Effect.tap(() => Effect.sync(() => (interruptAcknowledged = true))),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            const detail = formatProviderServiceCauseDetail(cause);
+            yield* appendProviderFailureActivity({
+              threadId: thread.id,
+              kind: "provider.turn.interrupt.failed",
+              summary: "Provider turn interrupt failed",
+              detail,
+              turnId: event.payload.turnId ?? null,
+              createdAt: event.payload.createdAt,
+            });
+            yield* cancelPendingFlush(event);
+            if (event.payload.operation) {
+              yield* setTurnControlOperation({
+                orchestrationEngine,
+                threadId: thread.id,
+                operation: event.payload.operation,
+                state: "failed",
+                error: detail,
+                createdAt: event.payload.createdAt,
+              });
+            }
+          }),
+        ),
+      );
+    if (!interruptAcknowledged) return;
+    if (event.payload.operation) {
+      yield* setTurnControlOperation({
+        orchestrationEngine,
+        threadId: thread.id,
+        operation: event.payload.operation,
+        state: "waiting-for-settlement",
+        createdAt: event.payload.createdAt,
+      });
+    }
     if (event.payload.pendingFlushIntent !== undefined) {
       yield* settleInterruptAfterAcknowledgement({
         event,
@@ -233,146 +330,26 @@ export const makeProcessSessionHandlers = ({
         providerService,
         setThreadSession,
       });
+      const settledThread = yield* resolveThread(thread.id);
+      if (event.payload.operation && settledThread?.session?.activeTurnId == null) {
+        yield* completeInterruptContinue(event);
+      }
       return;
     }
-    yield* setThreadSession({
-      threadId: thread.id,
-      session: {
-        threadId: thread.id,
-        status: "ready",
-        providerName: runtimeSession?.provider ?? boundSession?.providerName ?? null,
-        runtimeMode:
-          runtimeSession?.runtimeMode ?? boundSession?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-        activeTurnId: null,
-        reason: null,
-        lastError: boundSession?.lastError ?? runtimeSession?.lastError ?? null,
-        updatedAt: event.payload.createdAt,
-      },
-      createdAt: event.payload.createdAt,
-    });
+    // Interrupt acknowledgement only confirms that the provider accepted the
+    // request. Keep the projected turn active until runtime ingestion or
+    // authoritative reconciliation confirms terminal settlement.
   });
 
-  const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (
-    event: Extract<ProviderIntentEvent, { type: "thread.approval-response-requested" }>,
-  ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
-    if (event.payload.requestId.startsWith("learning-skill:")) {
-      return;
-    }
-    const thread = yield* resolveThread(event.payload.threadId);
-    if (!thread) {
-      return;
-    }
-    const hasSession = thread.session && thread.session.status !== "stopped";
-    if (!hasSession) {
-      return yield* appendProviderFailureActivity({
-        threadId: event.payload.threadId,
-        kind: "provider.approval.respond.failed",
-        summary: "Provider approval response failed",
-        detail: "No active provider session is bound to this thread.",
-        turnId: null,
-        createdAt: event.payload.createdAt,
-        requestId: event.payload.requestId,
-      });
-    }
-
-    yield* providerService
-      .respondToRequest({
-        threadId: event.payload.threadId,
-        requestId: event.payload.requestId,
-        decision: event.payload.decision,
-      })
-      .pipe(
-        Effect.catchCause((cause) =>
-          Effect.gen(function* () {
-            yield* appendProviderFailureActivity({
-              threadId: event.payload.threadId,
-              kind: "provider.approval.respond.failed",
-              summary: "Provider approval response failed",
-              detail: isUnknownPendingApprovalRequestError(cause)
-                ? stalePendingRequestDetail("approval", event.payload.requestId)
-                : formatProviderServiceCauseDetail(cause),
-              turnId: null,
-              createdAt: event.payload.createdAt,
-              requestId: event.payload.requestId,
-            });
-
-            if (!isUnknownPendingApprovalRequestError(cause)) return;
-          }),
-        ),
-      );
-  });
-
-  const processUserInputResponseRequested = Effect.fn("processUserInputResponseRequested")(
-    function* (
-      event: Extract<ProviderIntentEvent, { type: "thread.user-input-response-requested" }>,
-    ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
-      const thread = yield* resolveThread(event.payload.threadId);
-      if (!thread) {
-        return;
-      }
-      const hasSession = thread.session && thread.session.status !== "stopped";
-      if (!hasSession) {
-        return yield* appendProviderFailureActivity({
-          threadId: event.payload.threadId,
-          kind: "provider.user-input.respond.failed",
-          summary: "Provider user input response failed",
-          detail: "No active provider session is bound to this thread.",
-          turnId: null,
-          createdAt: event.payload.createdAt,
-          requestId: event.payload.requestId,
-        });
-      }
-
-      yield* providerService
-        .respondToUserInput({
-          threadId: event.payload.threadId,
-          requestId: event.payload.requestId,
-          answers: event.payload.answers,
-        })
-        .pipe(
-          Effect.catchCause((cause) =>
-            appendProviderFailureActivity({
-              threadId: event.payload.threadId,
-              kind: "provider.user-input.respond.failed",
-              summary: "Provider user input response failed",
-              detail: isUnknownPendingUserInputRequestError(cause)
-                ? stalePendingRequestDetail("user-input", event.payload.requestId)
-                : formatProviderServiceCauseDetail(cause),
-              turnId: null,
-              createdAt: event.payload.createdAt,
-              requestId: event.payload.requestId,
-            }),
-          ),
-        );
-    },
-  );
-
-  const processSessionStopRequested = Effect.fn("processSessionStopRequested")(function* (
-    event: Extract<ProviderIntentEvent, { type: "thread.session-stop-requested" }>,
-  ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
-    const thread = yield* resolveThread(event.payload.threadId);
-    if (!thread) {
-      return;
-    }
-
-    const now = event.payload.createdAt;
-    if (thread.session && thread.session.status !== "stopped") {
-      yield* providerService.stopSession({ threadId: thread.id });
-    }
-
-    yield* setThreadSession({
-      threadId: thread.id,
-      session: {
-        threadId: thread.id,
-        status: "stopped",
-        providerName: thread.session?.providerName ?? null,
-        runtimeMode: thread.session?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-        activeTurnId: null,
-        lastError: thread.session?.lastError ?? null,
-        updatedAt: now,
-      },
-      createdAt: now,
-    });
+  const {
+    processApprovalResponseRequested,
+    processSessionStopRequested,
+    processUserInputResponseRequested,
+  } = makeProcessSessionResponseHandlers({
+    providerService,
+    orchestrationEngine,
+    appendProviderFailureActivity,
+    resolveThread,
   });
 
   return {

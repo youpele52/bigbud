@@ -17,25 +17,13 @@ export interface PrStatusIndicator {
   url: string;
 }
 
-export function providerIconPresentationClass({
-  isCompleted,
-  isCompacting,
-  isConnecting,
-  isError,
-  isRunning,
-}: {
-  isCompleted: boolean;
-  isCompacting: boolean;
-  isConnecting: boolean;
-  isError: boolean;
-  isRunning: boolean;
-}): string {
-  if (isError) return "text-destructive";
-  if (isCompacting) return "text-warning";
-  if (isRunning) return "text-info-foreground";
-  if (isCompleted) return "text-success";
+export function providerIconPresentationClass(
+  status: ThreadStatusPill | null,
+  isConnecting: boolean,
+): string {
   if (isConnecting) return "text-warning";
-  return "text-muted-foreground";
+  if (status?.label === "Done") return "text-success";
+  return status?.colorClass ?? "text-muted-foreground";
 }
 
 export function shouldAnimateProviderIcon({
@@ -46,6 +34,17 @@ export function shouldAnimateProviderIcon({
   isRunning: boolean;
 }): boolean {
   return isConnecting || isRunning;
+}
+
+export function shouldShowThreadStatusLabel(status: ThreadStatusPill | null): boolean {
+  return (
+    status !== null &&
+    status.label !== "Failed" &&
+    status.label !== "Working" &&
+    status.label !== "Compacting" &&
+    status.label !== "Done" &&
+    status.label !== "Idle"
+  );
 }
 
 export function terminalStatusFromRunningIds(
@@ -101,5 +100,5 @@ export function shouldShowThreadConnectingPresentation(
   visibleThreadStatus: ThreadStatusPill | null,
   connectingStartedAt: string | null,
 ): connectingStartedAt is string {
-  return connectingStartedAt !== null && visibleThreadStatus?.label === "Connecting";
+  return connectingStartedAt !== null && visibleThreadStatus?.label === "Getting Ready";
 }

@@ -52,4 +52,59 @@ describe("getProviderModelAvailability", () => {
       unavailableMessage: "CLIProxyAPI returned no Codex-compatible models.",
     });
   });
+
+  it("explains unsupported providers for remote workspaces", () => {
+    const remoteProvider = provider({
+      provider: "cursor",
+      status: "ready",
+      supportsLocalRuntimeRemoteWorkspace: false,
+    });
+    expect(
+      getProviderModelAvailability({
+        providers: [remoteProvider],
+        provider: remoteProvider,
+        modelCount: 1,
+        workspaceExecutionTargetId: "ssh:devbox",
+      }),
+    ).toMatchObject({
+      unavailable: true,
+      unavailableMessage: "Provider does not support a remote workspace with a local runtime",
+    });
+  });
+
+  it("keeps missing or unknown capability metadata selectable", () => {
+    const snapshot = provider({ provider: "cursor", status: "ready" });
+    expect(
+      getProviderModelAvailability({
+        providers: [snapshot],
+        provider: snapshot,
+        modelCount: 1,
+        workspaceExecutionTargetId: "ssh:devbox",
+      }).unavailable,
+    ).toBe(false);
+    expect(
+      getProviderModelAvailability({
+        providers: [snapshot],
+        provider: snapshot,
+        modelCount: 1,
+        workspaceExecutionTargetId: "local",
+      }).unavailable,
+    ).toBe(false);
+  });
+
+  it("keeps supported providers selectable for remote workspaces", () => {
+    const snapshot = provider({
+      provider: "kilocode",
+      status: "ready",
+      supportsLocalRuntimeRemoteWorkspace: true,
+    });
+    expect(
+      getProviderModelAvailability({
+        providers: [snapshot],
+        provider: snapshot,
+        modelCount: 1,
+        workspaceExecutionTargetId: "ssh:devbox",
+      }).unavailable,
+    ).toBe(false);
+  });
 });

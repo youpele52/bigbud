@@ -10,6 +10,7 @@ import {
   SidebarMenuSubItem,
 } from "../ui/sidebar";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
+import { getPreviewItemsIncludingActive } from "./Sidebar.logic";
 
 export const PINNED_THREAD_INITIAL_VISIBLE_COUNT = 4;
 
@@ -30,11 +31,15 @@ export function SidebarFavoritesSection({
   onShowAllChange,
   sharedProjectItemProps,
 }: SidebarFavoritesSectionProps) {
-  const hasMoreFavorites = renderedFavorites.length > PINNED_THREAD_INITIAL_VISIBLE_COUNT;
-  const visibleFavorites = showAll
-    ? renderedFavorites
-    : renderedFavorites.slice(0, PINNED_THREAD_INITIAL_VISIBLE_COUNT);
-  const hiddenCount = renderedFavorites.length - PINNED_THREAD_INITIAL_VISIBLE_COUNT;
+  const preview = getPreviewItemsIncludingActive({
+    items: renderedFavorites,
+    activeId: sharedProjectItemProps.routeThreadId,
+    showAll,
+    previewLimit: PINNED_THREAD_INITIAL_VISIBLE_COUNT,
+    getId: (entry) => entry.threadId,
+  });
+  const hasMoreFavorites = preview.totalCount > PINNED_THREAD_INITIAL_VISIBLE_COUNT;
+  const visibleFavorites = preview.visibleItems;
 
   return (
     <SidebarGroup className="px-2 py-2">
@@ -117,7 +122,7 @@ export function SidebarFavoritesSection({
                       onClick={() => onShowAllChange(!showAll)}
                     >
                       <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <span>{showAll ? "Show less" : `See more (${hiddenCount})`}</span>
+                        <span>{showAll ? "Show less" : `See more (${preview.hiddenCount})`}</span>
                       </span>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

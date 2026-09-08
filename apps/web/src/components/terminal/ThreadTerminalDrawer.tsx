@@ -55,6 +55,7 @@ interface ThreadTerminalDrawerProps {
   terminalLabelOverrides: Readonly<Record<string, string>>;
   terminalProviderById: Readonly<Record<string, ProviderKind>>;
   mode?: "drawer" | "panel";
+  fillAvailableSpace?: boolean;
   onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
   onClearTerminalLabelOverride: (terminalId: string) => void;
 }
@@ -86,6 +87,7 @@ export default function ThreadTerminalDrawer({
   terminalLabelOverrides,
   terminalProviderById,
   mode = "drawer",
+  fillAvailableSpace = false,
   onSetTerminalLabelOverride,
   onClearTerminalLabelOverride,
 }: ThreadTerminalDrawerProps) {
@@ -281,12 +283,13 @@ export default function ThreadTerminalDrawer({
     <aside
       className={cn(
         "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background",
-        mode === "panel" ? "h-full" : "border-t border-border/80",
+        mode === "panel" || fillAvailableSpace ? "h-full" : "border-t border-border/80",
       )}
-      style={mode === "drawer" ? { height: `${drawerHeight}px` } : undefined}
+      style={mode === "drawer" && !fillAvailableSpace ? { height: `${drawerHeight}px` } : undefined}
     >
-      {mode === "drawer" && (
+      {mode === "drawer" && !fillAvailableSpace && (
         <div
+          data-terminal-resize-handle
           className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
           onPointerDown={handleResizePointerDown}
           onPointerMove={handleResizePointerMove}

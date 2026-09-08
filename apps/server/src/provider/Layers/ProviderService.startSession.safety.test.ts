@@ -3,7 +3,7 @@ import { assertFailure } from "@effect/vitest/utils";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { ProviderValidationError } from "../Errors.ts";
+import { ProviderAdapterProcessError, ProviderValidationError } from "../Errors.ts";
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { asThreadId, makeProviderServiceLayer } from "./ProviderService.test.helpers.ts";
@@ -117,6 +117,66 @@ safety.layer("ProviderServiceLive start-session safety", (it) => {
       assert.equal(safety.codex.stopSession.mock.calls.length, priorStops + 1);
       assert.isFalse(yield* safety.codex.hasSession(threadId));
       assert.isTrue(Option.isNone(yield* directory.getBinding(threadId)));
+    }),
+  );
+
+  it.effect("cleans up after an adapter startup failure and preserves its error", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const threadId = asThreadId("thread-provider-startup-failure");
+      const priorStops = safety.codex.stopSession.mock.calls.length;
+      const startupError = new ProviderAdapterProcessError({
+        provider: "codex",
+        threadId,
+        detail: "distinct startup failure",
+      });
+      safety.codex.startSession.mockImplementationOnce(() => Effect.fail(startupError) as never);
+      safety.codex.stopSession.mockImplementationOnce(
+        () =>
+          Effect.fail(
+            new ProviderAdapterProcessError({
+              provider: "codex",
+              threadId,
+              detail: "cleanup failure",
+            }),
+          ) as never,
+      );
+
+      const result = yield* provider
+        .startSession(threadId, {
+          provider: "codex",
+          threadId,
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.result);
+
+      assertFailure(result, startupError);
+      assert.equal(safety.codex.stopSession.mock.calls.length, priorStops + 1);
+    }),
+  );
+
+  it.effect("cleans up a partially registered adapter startup", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const threadId = asThreadId("thread-provider-partial-startup");
+      const start = safety.codex.startSession.getMockImplementation();
+      if (!start) return yield* Effect.die("missing start implementation");
+      const startupError = new ProviderAdapterProcessError({
+        provider: "codex",
+        threadId,
+        detail: "partial startup failure",
+      });
+      safety.codex.startSession.mockImplementationOnce(
+        (startInput) =>
+          start(startInput).pipe(Effect.flatMap(() => Effect.fail(startupError))) as never,
+      );
+
+      const result = yield* provider
+        .startSession(threadId, { provider: "codex", threadId, runtimeMode: "full-access" })
+        .pipe(Effect.result);
+
+      assertFailure(result, startupError);
+      assert.isFalse(yield* safety.codex.hasSession(threadId));
     }),
   );
 });

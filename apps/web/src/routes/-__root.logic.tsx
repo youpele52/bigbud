@@ -11,6 +11,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
+import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
+import {
+  containDeliveryApplicationFailure,
+  recoverAndAcknowledgeDeliveryBaseline,
+  routeOrchestrationDeliveryBatch,
+} from "./-__root.delivery-routing";
 import {
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
@@ -29,11 +35,16 @@ import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
+import { createAsyncOperationQueue } from "./-__root.recovery.serial";
+import {
+  restoreStartupContext,
+  runCoalescedStartupFreshChat,
+  validateStartupRestorationCandidate,
+} from "./-__root.startup-restoration";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
-  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
   const syncThreads = useUiStateStore((store) => store.syncThreads);
   const clearThreadUi = useUiStateStore((store) => store.clearThreadUi);
@@ -53,8 +64,8 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
   const { handleNewThread } = useHandleNewThread();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const readPathname = useEffectEvent(() => pathname);
-  const handledBootstrapThreadIdRef = useRef<string | null>(null);
-  const startedFreshChatRef = useRef(false);
+  const restorationRunIdRef = useRef(0);
+  const freshChatInFlightRef = useRef<{ promise: Promise<void>; runId: number } | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const disposedRef = useRef(false);
   const bootstrapBoundedRef = useRef<(threadId: ThreadId | null) => Promise<void>>(
@@ -75,38 +86,42 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         return;
       }
 
+      const runId = ++restorationRunIdRef.current;
+      const launchPathname = readPathname();
+      const isCurrent = () =>
+        !disposedRef.current &&
+        restorationRunIdRef.current === runId &&
+        readPathname() === launchPathname;
       migrateLocalSettingsToServer();
-      const selectedThreadId = resolveSelectedThreadIdFromPath(
-        readPathname(),
-        payload.bootstrapThreadId ?? null,
-      );
-      await bootstrapBoundedRef.current(selectedThreadId);
-      if (disposedRef.current) {
+      const api = readNativeApi();
+      if (!api) {
         return;
       }
-
-      if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
-        if (readPathname() !== "/" || startedFreshChatRef.current) {
-          return;
-        }
-        startedFreshChatRef.current = true;
-        await handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions());
-        return;
-      }
-      setProjectExpanded(payload.bootstrapProjectId, true);
-
-      if (readPathname() !== "/") {
-        return;
-      }
-      if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
-        return;
-      }
-      await navigate({
-        to: "/$threadId",
-        params: { threadId: payload.bootstrapThreadId },
-        replace: true,
+      await restoreStartupContext({
+        pathname: launchPathname,
+        bootstrapProjectId: payload.bootstrapProjectId ?? null,
+        bootstrapThreadId: payload.bootstrapThreadId ?? null,
+        persistedThreadId: useUiStateStore.getState().lastActiveThreadId,
+        bootstrap: (threadId) => bootstrapBoundedRef.current(threadId),
+        validate: (candidate) => validateStartupRestorationCandidate({ api, candidate }),
+        clearPersistedThread: () => useUiStateStore.getState().setLastActiveThreadId(null),
+        isCurrent,
+        navigateToThread: async (threadId) => {
+          if (!isCurrent()) return;
+          await navigate({ to: "/$threadId", params: { threadId }, replace: true });
+        },
+        startFreshChat: async () => {
+          await runCoalescedStartupFreshChat({
+            inFlight: freshChatInFlightRef,
+            isCurrent,
+            runId,
+            start: () =>
+              handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions(), {
+                shouldActivate: isCurrent,
+              }),
+          });
+        },
       });
-      handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
     })().catch(() => undefined);
   });
 
@@ -200,6 +215,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     disposedRef.current = false;
     const eventRecovery = createEventRouterRecovery({
       api,
+      ownershipScope: ownsThread ? "compact" : "main",
       queryClient,
       clearAllThinkingDeltas,
       reconcileThinkingActivities,
@@ -212,6 +228,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       removeOrphanedTerminalStates,
       applyTerminalEvent: (event) => applyTerminalEvents([event]),
     });
+    const deliveryApplicationQueue = createAsyncOperationQueue();
 
     const pendingTerminalEvents: Array<import("@bigbud/contracts").TerminalEvent> = [];
     let flushPendingTerminalEventsScheduled = false;
@@ -233,6 +250,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     };
 
     let selectedThreadId: ThreadId | null = readOwnedThreadId();
+    const deliveryBaselineAbort = new AbortController();
     const bootstrapBounded = async (nextSelectedThreadId: ThreadId | null): Promise<void> => {
       selectedThreadId = nextSelectedThreadId;
       await eventRecovery.runBoundedRecovery("bootstrap", selectedThreadId, () => disposed);
@@ -246,39 +264,51 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       await eventRecovery.runBoundedRecovery("replay-failed", selectedThreadId, () => disposed);
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
-      (event) => {
-        const action = eventRecovery.classifyDomainEvent(event.sequence);
-        if (action === "apply") {
-          eventRecovery.pushPendingDomainEvent(event);
-          if (eventRecovery.shouldFlushImmediately(event)) {
-            eventRecovery.flushPendingDomainEvents(disposed);
-          } else {
-            eventRecovery.schedulePendingDomainEventFlush(() => disposed);
-          }
-          return;
-        }
-        if (action === "recover") {
-          eventRecovery.flushPendingDomainEvents(disposed);
-          void eventRecovery.runReplayRecovery(
-            "sequence-gap",
-            () => disposed,
-            () => {
-              void fallbackToBoundedRecovery();
-            },
-          );
-        }
-      },
+      (item) =>
+        deliveryApplicationQueue
+          .enqueue(async () => {
+            if (disposed) return;
+            if (item.type === "lifecycle") {
+              setOrchestrationDeliveryLifecycle(item);
+              if (item.state === "fallback" && item.reasonCode === "replay_gap") {
+                await fallbackToBoundedRecovery();
+              }
+              return;
+            }
+            if (item.type === "recovery") {
+              selectedThreadId = ownsThread
+                ? readOwnedThreadId()
+                : resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
+              await recoverAndAcknowledgeDeliveryBaseline({
+                recovery: item,
+                recover: () =>
+                  eventRecovery.runDeliveryBaselineRecovery(selectedThreadId, () => disposed),
+                acknowledge: api.orchestration.acknowledgeDeliveryBaseline,
+                signal: deliveryBaselineAbort.signal,
+                shouldAbort: () => disposed,
+              });
+              return;
+            }
+            await routeOrchestrationDeliveryBatch({
+              batch: item,
+              classify: eventRecovery.classifyDomainEvent,
+              recover: fallbackToBoundedRecovery,
+              apply: (events) =>
+                eventRecovery.applyEventBatch(events, { disposed: () => disposed }),
+              getAppliedSequence: eventRecovery.getAppliedSequence,
+              acknowledge: api.orchestration.acknowledgeDelivery,
+            });
+          })
+          .catch((error: unknown) => {
+            console.error("[orchestration-recovery] Event application failed.", { error });
+            return containDeliveryApplicationFailure({
+              itemType: item.type,
+              error,
+              fallbackToBoundedRecovery,
+            });
+          }),
       {
-        onResubscribe: () => {
-          eventRecovery.flushPendingDomainEvents(disposed);
-          void eventRecovery.runReplayRecovery(
-            "resubscribe",
-            () => disposed,
-            () => {
-              void fallbackToBoundedRecovery();
-            },
-          );
-        },
+        onResubscribe: () => undefined,
       },
     );
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
@@ -291,8 +321,10 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     });
     return () => {
       disposed = true;
+      deliveryBaselineAbort.abort();
       disposedRef.current = true;
       eventRecovery.cancel();
+      setOrchestrationDeliveryLifecycle(null);
       flushPendingTerminalEventsScheduled = false;
       pendingTerminalEvents.length = 0;
       unsubDomainEvent();

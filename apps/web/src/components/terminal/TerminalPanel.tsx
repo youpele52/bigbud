@@ -1,6 +1,7 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { memo, useCallback, useEffect } from "react";
 
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { isElectron } from "~/config/env";
 import { cn, randomUUID } from "~/lib/utils";
 import { useServerKeybindings } from "../../rpc/serverState";
@@ -60,11 +61,7 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
       </div>
     );
   } else if (activeThreadId && drawer.cwd && !hasPanelTerminalState) {
-    body = (
-      <div className="flex h-full items-center justify-center px-3 py-2 text-sm text-muted-foreground/70">
-        Initializing terminal...
-      </div>
-    );
+    body = <BigbudLoader label="Initializing terminal..." />;
   } else if (activeThreadId && drawer.project && drawer.cwd && hasPanelTerminalState) {
     body = (
       <ThreadTerminalDrawer

@@ -14,6 +14,7 @@ import {
 } from "@bigbud/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { isMacPlatform, newCommandId } from "../../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
@@ -25,11 +26,6 @@ import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Side
 import { isRemoteExecutionTargetId, isSshExecutionTargetId } from "./Sidebar.projects.logic";
 import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
 import type {
-  SidebarProjectActionsInput,
-  SidebarProjectActionsOutput,
-} from "./Sidebar.projectActions.types";
-
-export type {
   SidebarProjectActionsInput,
   SidebarProjectActionsOutput,
 } from "./Sidebar.projectActions.types";
@@ -130,7 +126,7 @@ export function useSidebarProjectActions({
             })
           : null;
 
-      await api.orchestration.dispatchCommand({
+      await dispatchCommandWithOutcomeRecovery(api, {
         type: "project.delete",
         commandId: newCommandId(),
         projectId,

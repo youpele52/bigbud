@@ -5,11 +5,7 @@ import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
 import { EMPTY_ENTRIES, entryName, type DirectoryState } from "./FilesPanel.shared";
-import {
-  BIGBUD_FILES_PANEL_DRAG_MIME,
-  joinWorkspaceEntryPath,
-  serializeFilesPanelDragEntry,
-} from "./filesPanel.dnd";
+import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "./filesPanel.dnd";
 
 interface FilesPanelTreeProps {
   entries: ReadonlyArray<ProjectEntry>;
@@ -46,16 +42,11 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
           onDragStart={(event) => {
             if (!props.workspaceRoot) return;
             const absolutePath = joinWorkspaceEntryPath(props.workspaceRoot, entry.path);
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData(
-              BIGBUD_FILES_PANEL_DRAG_MIME,
-              serializeFilesPanelDragEntry({
-                name,
-                path: absolutePath,
-                entryKind: isDirectory ? "directory" : "file",
-              }),
-            );
-            event.dataTransfer.setData("text/plain", absolutePath);
+            writeFilesPanelDragEntry(event.dataTransfer, {
+              name,
+              path: absolutePath,
+              entryKind: isDirectory ? "directory" : "file",
+            });
           }}
           onClick={() => {
             if (isDirectory) {

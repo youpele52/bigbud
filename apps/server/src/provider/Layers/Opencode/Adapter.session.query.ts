@@ -75,6 +75,7 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
       for (const [requestId, pending] of record.pendingUserInputs) {
         const resolvedEvent = yield* syntheticEventFn(
           threadId,
+          record.sessionEpoch,
           "user-input.resolved",
           { answers: {} },
           {
@@ -89,7 +90,7 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
 
       // Notify the orchestration pipeline that the session has exited
       yield* emitFn([
-        yield* syntheticEventFn(threadId, "session.exited", {
+        yield* syntheticEventFn(threadId, record.sessionEpoch, "session.exited", {
           reason: "stopSession",
         }),
       ]);
@@ -110,6 +111,7 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
               ? { workspaceExecutionTargetId: record.workspaceExecutionTargetId }
               : {}),
             threadId: record.threadId,
+            sessionEpoch: record.sessionEpoch,
             resumeCursor: { sessionId: record.opencodeSessionId },
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,

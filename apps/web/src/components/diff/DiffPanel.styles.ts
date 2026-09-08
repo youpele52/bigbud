@@ -60,4 +60,26 @@ export const DIFF_PANEL_UNSAFE_CSS = `
   color: color-mix(in srgb, var(--foreground) 84%, var(--primary)) !important;
   text-decoration-color: currentColor;
 }
+
+[data-change-icon] {
+  display: none;
+}
+
+[data-diffs-header][data-change-type="new"] [data-header-content]::before,
+[data-diffs-header][data-change-type="deleted"] [data-header-content]::before {
+  display: inline-block;
+  width: 1ch;
+  font-family: var(--diffs-font-fallback);
+  font-weight: 600;
+}
+
+[data-diffs-header][data-change-type="new"] [data-header-content]::before {
+  content: "+";
+  color: var(--success);
+}
+
+[data-diffs-header][data-change-type="deleted"] [data-header-content]::before {
+  content: "-";
+  color: var(--destructive);
+}
 `;

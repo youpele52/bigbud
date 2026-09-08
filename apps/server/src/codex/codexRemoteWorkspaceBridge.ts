@@ -1,6 +1,8 @@
 import { createRemoteWorkspaceMcpBridge } from "../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
+import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 const CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 
@@ -21,6 +23,8 @@ function quoteTomlStringArray(values: ReadonlyArray<string>): string {
 
 export async function createCodexRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
+  httpConfig: ThreadOrchestrationHttpConfig,
+  readinessProbe?: RemoteWorkspaceReadinessProbe,
 ): Promise<CodexRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceMcpBridge(
     workspaceTarget,
@@ -30,6 +34,8 @@ export async function createCodexRemoteWorkspaceBridge(
       "The actual project files live on the remote host configured for this thread.",
       "",
     ],
+    httpConfig,
+    readinessProbe,
   );
 
   return {
@@ -46,7 +52,7 @@ export async function createCodexRemoteWorkspaceBridge(
       `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.cwd=${quoteTomlString(bridge.cwd)}`,
     ],
     promptPrefix: [
-      `Bigbud remote workspace mode: the actual workspace lives on ${
+      `bigbud remote workspace mode: the actual workspace lives on ${
         workspaceTarget.executionTargetId
       }${workspaceTarget.cwd ? ` at ${workspaceTarget.cwd}` : ""}.`,
       "Ignore the local synthetic working directory.",

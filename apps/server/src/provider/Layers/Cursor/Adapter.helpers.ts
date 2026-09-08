@@ -73,6 +73,8 @@ import {
   extractTodosAsPlan,
 } from "../../acp/CursorAcpExtension.ts";
 import { CursorAdapter } from "../../Services/Cursor/Adapter.ts";
+import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import { resolveCursorAcpBaseModelId } from "./Provider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 
@@ -85,6 +87,8 @@ export const ACP_APPROVAL_MODE_ALIASES = ["ask"];
 export interface CursorAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly remoteAgentPtyResolver?: RemoteAgentPtyResolver;
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 
 export interface PendingApproval {
@@ -93,11 +97,16 @@ export interface PendingApproval {
 }
 
 export interface PendingUserInput {
-  readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  readonly resolution: Deferred.Deferred<CursorUserInputResolution>;
 }
+
+export type CursorUserInputResolution =
+  | { readonly outcome: "answered"; readonly answers: ProviderUserInputAnswers }
+  | { readonly outcome: "cancelled" };
 
 export interface CursorSessionContext {
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
   readonly acp: AcpSessionRuntimeShape;
@@ -127,13 +136,13 @@ export function settlePendingApprovalsAsCancelled(
   );
 }
 
-export function settlePendingUserInputsAsEmptyAnswers(
+export function settlePendingUserInputsAsCancelled(
   pendingUserInputs: ReadonlyMap<ApprovalRequestId, PendingUserInput>,
 ): Effect.Effect<void> {
   const pendingEntries = Array.from(pendingUserInputs.values());
   return Effect.forEach(
     pendingEntries,
-    (pending) => Deferred.succeed(pending.answers, {}).pipe(Effect.ignore),
+    (pending) => Deferred.succeed(pending.resolution, { outcome: "cancelled" }).pipe(Effect.ignore),
     { discard: true },
   );
 }

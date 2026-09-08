@@ -268,7 +268,7 @@ function main(args: ReadonlyArray<string>): void {
   const [arm64PathArg, x64PathArg, outputPathArg] = args;
   if (!arm64PathArg || !x64PathArg) {
     throw new Error(
-      "Usage: node scripts/merge-mac-update-manifests.ts <latest-mac.yml> <latest-mac-x64.yml> [output-path]",
+      "Usage: node scripts/merge-mac-update-manifests.ts <channel-mac.yml> <channel-mac-x64.yml> [output-path]",
     );
   }
 

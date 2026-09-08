@@ -20,7 +20,7 @@ import {
   shouldShowDesktopUpdateButton,
   shouldToastDesktopUpdateActionResult,
 } from "../layout/desktopUpdate.logic";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { StatusBanner } from "../common/StatusBanner";
 import {
   Progress,
   ProgressIndicator,
@@ -146,11 +146,13 @@ export function SidebarUpdatePill() {
   return (
     <div className="flex flex-col gap-1">
       {showArm64Warning && arm64Description && (
-        <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8 text-xs">
-          <TriangleAlertIcon />
-          <AlertTitle>Intel build on Apple Silicon</AlertTitle>
-          <AlertDescription>{arm64Description}</AlertDescription>
-        </Alert>
+        <StatusBanner
+          variant="warning"
+          icon={<TriangleAlertIcon />}
+          className="rounded-2xl border-warning/40 bg-warning/8 text-xs"
+          title="Intel build on Apple Silicon"
+          description={arm64Description}
+        />
       )}
       {visible && (
         <div className="group/update relative w-full text-xs">

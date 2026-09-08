@@ -1,15 +1,21 @@
 import fsPromises from "node:fs/promises";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it, afterEach, describe, expect, vi } from "@effect/vitest";
+import { it, afterEach, describe, expect } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, PlatformError } from "effect";
+import { vi } from "vitest";
 
 import { ServerConfig } from "../../startup/config.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
+import { runSshCommand } from "../../ssh/sshProcess.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
+
+vi.mock("../../ssh/sshProcess.ts", () => ({
+  runSshCommand: vi.fn(),
+}));
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
@@ -260,6 +266,91 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
         yield* searchWorkspaceEntries({ cwd, query: "", limit: 200 });
 
         expect(peakReads).toBeLessThanOrEqual(32);
+      }),
+    );
+
+    it.effect("lists direct children for a remote workspace through SSH", () =>
+      Effect.gen(function* () {
+        vi.mocked(runSshCommand)
+          .mockResolvedValueOnce({
+            stdout: "d\tsrc\0f\tREADME.md\0",
+            stderr: "",
+            code: 0,
+            signal: null,
+            timedOut: false,
+          })
+          .mockResolvedValueOnce({
+            stdout: "f\tindex.ts\0",
+            stderr: "",
+            code: 0,
+            signal: null,
+            timedOut: false,
+          });
+
+        const workspaceEntries = yield* WorkspaceEntries;
+        const root = yield* workspaceEntries.listDirectory({
+          cwd: "/srv/project",
+          executionTargetId: "ssh:dev",
+        });
+        const nested = yield* workspaceEntries.listDirectory({
+          cwd: "/srv/project",
+          executionTargetId: "ssh:dev",
+          relativePath: "src",
+        });
+
+        expect(root.entries).toEqual([
+          { path: "src", kind: "directory" },
+          { path: "README.md", kind: "file" },
+        ]);
+        expect(nested.entries).toEqual([{ path: "src/index.ts", kind: "file", parentPath: "src" }]);
+        expect(runSshCommand).toHaveBeenCalledTimes(2);
+      }),
+    );
+
+    it.effect("lists all remote dotfiles without recursively truncating the home directory", () =>
+      Effect.gen(function* () {
+        vi.mocked(runSshCommand).mockResolvedValueOnce({
+          stdout:
+            "d\t.bigbud\0d\t.bun\0f\t.bash_history\0f\t.bash_logout\0f\t.bashrc\0" +
+            "d\t.cache\0d\tDevWorld\0f\t.gitconfig\0",
+          stderr: "",
+          code: 0,
+          signal: null,
+          timedOut: false,
+          stdoutTruncated: false,
+        });
+
+        const workspaceEntries = yield* WorkspaceEntries;
+        const result = yield* workspaceEntries.listDirectory({
+          cwd: "/home/youpele",
+          executionTargetId: "ssh:dev",
+        });
+
+        expect(result.entries.map((entry) => entry.path)).toEqual([
+          ".bigbud",
+          ".bun",
+          "DevWorld",
+          ".bash_history",
+          ".bash_logout",
+          ".bashrc",
+          ".gitconfig",
+        ]);
+        expect(vi.mocked(runSshCommand).mock.calls[0]?.[0]?.args).toEqual([
+          ".",
+          "-mindepth",
+          "1",
+          "-maxdepth",
+          "1",
+          "(",
+          "-type",
+          "d",
+          "-o",
+          "-type",
+          "f",
+          ")",
+          "-printf",
+          "%y\\t%P\\0",
+        ]);
       }),
     );
   });

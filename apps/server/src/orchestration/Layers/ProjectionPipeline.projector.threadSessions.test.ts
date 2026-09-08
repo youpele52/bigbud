@@ -20,6 +20,7 @@ describe("thread sessions projector", () => {
           ),
       },
       projectionThreadSessionRepository: {
+        getByThreadId: () => Effect.succeed(Option.none()),
         upsert: (next: unknown) => Effect.sync(() => void (session = next)),
       },
     } as never);
@@ -51,6 +52,7 @@ describe("thread sessions projector", () => {
       providerName: "codex",
       runtimeMode: "full-access",
       activeTurnId: null,
+      sessionEpoch: 0,
       updatedAt: now,
     });
   });

@@ -4,6 +4,7 @@ import { isElectron } from "../../../config/env";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
 import { commandForProjectScript, nextProjectScriptId } from "../../../logic/project-scripts";
 import { newCommandId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { toastManager } from "../../ui/toast";
 import type { NewProjectScriptInput } from "../../project/ProjectScriptsControl";
@@ -42,7 +43,7 @@ export function useProjectScripts(input: UseProjectScriptsInput): UseProjectScri
       const api = readNativeApi();
       if (!api) return;
 
-      await api.orchestration.dispatchCommand({
+      await dispatchCommandWithOutcomeRecovery(api, {
         type: "project.meta.update",
         commandId: newCommandId(),
         projectId: persistInput.projectId,

@@ -17,6 +17,83 @@ export function makeVisibleBrowserRetentionControl(input: {
   readonly commands: PubSub.PubSub<VisibleBrowserCommand>;
   readonly releaseDurableLease: (leaseId: string) => Effect.Effect<void>;
 }) {
+  const releaseLease = (request: {
+    readonly leaseId: string;
+    readonly reason: string;
+    readonly pendingCommandId?: string;
+    readonly notifyRenderer?: boolean;
+  }) =>
+    Ref.modify(input.state, (current): readonly [ReleasedLeases, State] => {
+      const lease = current.leases.get(request.leaseId);
+      if (
+        !lease ||
+        (request.pendingCommandId !== undefined && !current.pending.has(request.pendingCommandId))
+      ) {
+        return [{ leases: [], pending: [], releases: [] }, current] as const;
+      }
+
+      const leases = new Map(current.leases);
+      leases.delete(request.leaseId);
+      const pending = new Map(current.pending);
+      const releasedPending: PendingCommand[] = [];
+      for (const [commandId, entry] of pending) {
+        if (entry.command.leaseId === request.leaseId) {
+          pending.delete(commandId);
+          releasedPending.push(entry);
+        }
+      }
+      const releases = new Map(current.releases);
+      const releaseCommand =
+        lease.tabId === null || request.notifyRenderer === false
+          ? undefined
+          : ({
+              commandId: crypto.randomUUID(),
+              leaseId: lease.leaseId,
+              rendererId: lease.rendererId,
+              threadId: lease.threadId,
+              turnId: lease.turnId,
+              action: {
+                action: "release_tab",
+                target: "visible",
+                tabId: lease.tabId,
+              },
+            } satisfies VisibleBrowserCommand);
+      if (releaseCommand) releases.set(releaseCommand.commandId, releaseCommand);
+      return [
+        {
+          leases: [lease],
+          pending: releasedPending,
+          releases: releaseCommand ? [releaseCommand] : [],
+        },
+        { ...current, leases, pending, releases },
+      ] as const;
+    }).pipe(
+      Effect.flatMap((released) =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(
+            released.pending,
+            (entry) =>
+              Deferred.fail(
+                entry.deferred,
+                new VisibleBrowserControlError({ message: request.reason }),
+              ),
+            { discard: true },
+          );
+          yield* Effect.forEach(
+            released.releases,
+            (command) => PubSub.publish(input.commands, command),
+            { discard: true },
+          );
+          yield* Effect.forEach(
+            released.leases,
+            (releasedLease) => input.releaseDurableLease(releasedLease.leaseId),
+            { discard: true },
+          );
+        }),
+      ),
+      Effect.asVoid,
+    );
+
   const reconcileThread: VisibleBrowserControlShape["reconcileThread"] = (request) =>
     Ref.modify(input.state, (current): readonly [ReleasedLeases, State] => {
       const releasedLeaseIds = new Set<string>();
@@ -176,5 +253,5 @@ export function makeVisibleBrowserRetentionControl(input: {
       ),
     );
 
-  return { reconcileThread, revokeLease, getLeases };
+  return { reconcileThread, revokeLease, getLeases, releaseLease };
 }

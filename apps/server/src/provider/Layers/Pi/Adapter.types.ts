@@ -13,6 +13,7 @@ import type { Effect } from "effect";
 
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { PiRpcProcess, PiRpcStdoutMessage } from "./RpcProcess.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export const PROVIDER = "pi" as const;
 export const USER_INPUT_FALLBACK_QUESTION_ID = "answer";
@@ -50,6 +51,7 @@ export interface PendingPiUserInputRequest {
 export interface ActivePiSession {
   readonly process: PiRpcProcess;
   readonly threadId: ThreadId;
+  readonly sessionEpoch: number;
   readonly createdAt: string;
   readonly runtimeMode: PiSessionRuntimeMode;
   readonly pendingUserInputs: Map<string, PendingPiUserInputRequest>;
@@ -100,6 +102,7 @@ export interface ActivePiSession {
 }
 
 export interface PiAdapterLiveOptions {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
 }
@@ -119,6 +122,7 @@ export type PiRunPromise = <A, E>(effect: Effect.Effect<A, E, never>) => Promise
 
 export type PiSyntheticEventFn = <TType extends ProviderRuntimeEvent["type"]>(
   threadId: ThreadId,
+  sessionEpoch: number,
   type: TType,
   payload: Extract<ProviderRuntimeEvent, { type: TType }>["payload"],
   extra?: {

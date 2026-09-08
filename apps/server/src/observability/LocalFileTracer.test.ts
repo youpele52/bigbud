@@ -7,6 +7,7 @@ import { Effect, Layer, Logger, References, Tracer } from "effect";
 
 import type { EffectTraceRecord } from "./TraceRecord.ts";
 import { makeLocalFileTracer } from "./LocalFileTracer.ts";
+import type { TracePolicy } from "./TracePolicy.ts";
 
 const makeTestLayer = (tracePath: string) =>
   Layer.mergeAll(
@@ -21,6 +22,18 @@ const makeTestLayer = (tracePath: string) =>
     ),
     Logger.layer([Logger.tracerLogger], { mergeWithExisting: false }),
     Layer.succeed(References.MinimumLogLevel, "Info"),
+  );
+
+const makePolicyLayer = (tracePath: string, tracePolicy: TracePolicy) =>
+  Layer.effect(
+    Tracer.Tracer,
+    makeLocalFileTracer({
+      filePath: tracePath,
+      maxBytes: 1024 * 1024,
+      maxFiles: 2,
+      batchWindowMs: 10_000,
+      tracePolicy,
+    }),
   );
 
 const readTraceRecords = (tracePath: string): Array<EffectTraceRecord> =>
@@ -109,6 +122,79 @@ describe("LocalFileTracer", () => {
         assert.equal(records.length, 1);
         assert.equal(records[0]?.name, "interrupt-span");
         assert.equal(records[0]?.exit._tag, "Interrupted");
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("drops fast successful spans while retaining failures", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-local-tracer-policy-"));
+      const tracePath = path.join(tempDir, "server.trace.ndjson");
+
+      try {
+        yield* Effect.scoped(
+          Effect.exit(
+            Effect.gen(function* () {
+              yield* Effect.succeed("fast").pipe(Effect.withSpan("fast-span"));
+              return yield* Effect.fail("expected failure").pipe(Effect.withSpan("failure-span"));
+            }).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  makePolicyLayer(tracePath, {
+                    mode: "production",
+                    successSampleRate: 0,
+                    slowSpanMs: Number.MAX_SAFE_INTEGER,
+                    slowSqlSpanMs: Number.MAX_SAFE_INTEGER,
+                  }),
+                  Logger.layer([Logger.tracerLogger], { mergeWithExisting: false }),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        const records = readTraceRecords(tracePath);
+        assert.equal(
+          records.some((record) => record.name === "fast-span"),
+          false,
+        );
+        assert.equal(
+          records.some((record) => record.name === "failure-span"),
+          true,
+        );
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("retains slow SQL spans in production mode", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-local-tracer-policy-"));
+      const tracePath = path.join(tempDir, "server.trace.ndjson");
+
+      try {
+        yield* Effect.scoped(
+          Effect.succeed("slow").pipe(
+            Effect.withSpan("sql.execute"),
+            Effect.provide(
+              makePolicyLayer(tracePath, {
+                mode: "production",
+                successSampleRate: 0,
+                slowSpanMs: Number.MAX_SAFE_INTEGER,
+                slowSqlSpanMs: 0,
+              }),
+            ),
+          ),
+        );
+
+        const records = readTraceRecords(tracePath);
+        assert.equal(
+          records.some((record) => record.name === "sql.execute"),
+          true,
+        );
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }

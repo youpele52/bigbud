@@ -12,6 +12,8 @@ describe("codexAppServerManager server requests", () => {
     const writeMessage = vi.fn();
     const context = {
       session: { threadId: "caller-thread" },
+      activeModelCatalog: undefined,
+      effectiveModelSelection: undefined,
       dynamicToolCallHandler,
     } as unknown as CodexSessionContext;
 

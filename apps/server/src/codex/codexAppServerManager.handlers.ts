@@ -184,6 +184,7 @@ export function handleServerNotification(
     kind: "notification",
     provider: "codex",
     threadId: context.session.threadId,
+    sessionEpoch: context.session.sessionEpoch!,
     createdAt: new Date().toISOString(),
     method: notification.method,
     ...((childParentTurnId ?? rawRoute.turnId)
@@ -313,6 +314,7 @@ export function handleServerRequest(
     kind: "request",
     provider: "codex",
     threadId: context.session.threadId,
+    sessionEpoch: context.session.sessionEpoch!,
     createdAt: new Date().toISOString(),
     method: request.method,
     ...(effectiveTurnId ? { turnId: effectiveTurnId } : {}),

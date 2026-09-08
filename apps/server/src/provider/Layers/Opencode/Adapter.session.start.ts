@@ -23,7 +23,6 @@ import {
   buildOpencodeAllowedTools,
   buildOpencodeThreadOrchestrationServerName,
   composeBridgeCleanups,
-  disconnectOpencodeOrchestrationMcpBridge,
   prepareThreadOrchestrationMcpBridge,
   registerOpencodeOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
@@ -32,8 +31,11 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { startEventStream, toMessage } from "./Adapter.stream.ts";
-
-const OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT = Duration.millis(5_500);
+import { formatOpencodeSdkError } from "./Provider.sdk.ts";
+import {
+  makeOpencodeBridgeCleanup,
+  registerOpencodeRemoteWorkspaceMcp,
+} from "./Adapter.session.remoteWorkspaceMcp.ts";
 
 export interface StartSessionDeps {
   readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
@@ -83,6 +85,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           ...(existing.executionTargetId ? { executionTargetId: existing.executionTargetId } : {}),
           ...(existing.cwd ? { cwd: existing.cwd } : {}),
           ...(existing.model ? { model: existing.model } : {}),
+          sessionEpoch: existing.sessionEpoch,
           resumeCursor: { sessionId: existing.opencodeSessionId },
           createdAt: existing.createdAt,
           updatedAt: existing.updatedAt,
@@ -117,24 +120,6 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           : undefined,
         useLegacyExecutionTargetForProviderRuntime: false,
       });
-      const remoteWorkspaceBridge =
-        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
-        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
-          ? yield* Effect.tryPromise({
-              try: () => createOpencodeRemoteWorkspaceBridge(executionContext.workspaceTarget),
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: deps.provider as Extract<ProviderKind, "opencode" | "kilocode">,
-                  threadId: input.threadId,
-                  detail: toMessage(
-                    cause,
-                    `Failed to prepare ${deps.provider} remote workspace bridge.`,
-                  ),
-                  cause,
-                }),
-            })
-          : undefined;
-
       const orchestrationBridge = yield* Effect.tryPromise({
         try: () =>
           prepareThreadOrchestrationMcpBridge({
@@ -155,6 +140,31 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             cause,
           }),
       });
+      const remoteWorkspaceBridge =
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+          ? yield* Effect.tryPromise({
+              try: () =>
+                createOpencodeRemoteWorkspaceBridge(
+                  executionContext.workspaceTarget,
+                  orchestrationBridge.httpConfig,
+                ),
+              catch: (cause) =>
+                new ProviderAdapterProcessError({
+                  provider: deps.provider as Extract<ProviderKind, "opencode" | "kilocode">,
+                  threadId: input.threadId,
+                  detail: toMessage(
+                    cause,
+                    `Failed to prepare ${deps.provider} remote workspace bridge.`,
+                  ),
+                  cause,
+                }),
+            }).pipe(
+              Effect.tapError(() =>
+                Effect.promise(() => orchestrationBridge.cleanup()).pipe(Effect.ignore),
+              ),
+            )
+          : undefined;
       const serverDirectory = remoteWorkspaceBridge?.cwd ?? input.cwd;
       const cleanupBridge = composeBridgeCleanups(
         remoteWorkspaceBridge?.cleanup,
@@ -201,7 +211,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             cause,
           }),
       }).pipe(
-        Effect.timeout(OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT),
+        Effect.timeout(Duration.millis(5_500)),
         Effect.catchCause((cause) =>
           Effect.logWarning("opencode orchestration MCP registration failed; continuing", {
             provider: deps.provider,
@@ -210,31 +220,38 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           }),
         ),
       );
+      if (remoteWorkspaceBridge) {
+        yield* registerOpencodeRemoteWorkspaceMcp({
+          provider: deps.provider,
+          threadId: input.threadId,
+          serverHandle,
+          serverDirectory,
+          bridge: remoteWorkspaceBridge,
+          cleanup: cleanupBridge,
+        });
+      }
       const client = serverHandle.client;
-      const cleanupConnectedBridge = composeBridgeCleanups(async () => {
-        try {
-          await disconnectOpencodeOrchestrationMcpBridge({
-            client,
-            ...(serverDirectory ? { directory: serverDirectory } : {}),
-            serverName: orchestrationBridge.serverName,
-          });
-        } catch {
-          // Best effort: bridge cleanup below removes BigBud auth and files.
-        }
-      }, cleanupBridge);
+      const cleanupConnectedBridge = makeOpencodeBridgeCleanup({
+        serverHandle,
+        serverDirectory,
+        orchestrationServerName: orchestrationBridge.serverName,
+        remoteWorkspaceServerName: remoteWorkspaceBridge?.serverName,
+        cleanup: cleanupBridge,
+      });
       const allowedTools = yield* Effect.tryPromise({
         try: async () => {
-          const toolIdsResponse = await client.tool.ids(
-            serverDirectory ? { directory: serverDirectory } : undefined,
-          );
+          const toolIdsResponse = await client.tool.ids();
           if (toolIdsResponse.error || !Array.isArray(toolIdsResponse.data)) {
             throw new Error(
-              `Failed to list ${deps.provider} tool IDs: ${String(toolIdsResponse.error)}`,
+              `Failed to list ${deps.provider} tool IDs: ${formatOpencodeSdkError(toolIdsResponse.error)}`,
             );
           }
           return buildOpencodeAllowedTools({
             toolIds: toolIdsResponse.data,
             serverName: orchestrationBridge.serverName,
+            ...(remoteWorkspaceBridge
+              ? { remoteWorkspaceServerName: remoteWorkspaceBridge.serverName }
+              : {}),
           });
         },
         catch: (cause) =>
@@ -293,7 +310,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         return yield* new ProviderAdapterProcessError({
           provider: deps.provider,
           threadId: input.threadId,
-          detail: `Failed to create ${deps.provider} session: ${String(sessionResp.error)}`,
+          detail: `Failed to create ${deps.provider} session: ${formatOpencodeSdkError(sessionResp.error)}`,
         });
       }
 
@@ -304,8 +321,10 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         client,
         releaseServer: () => serverHandle.release(),
         cleanupBridge: cleanupConnectedBridge,
+        remoteWorkspaceSystemPrompt: remoteWorkspaceBridge?.systemPrompt,
         opencodeSessionId,
         threadId: input.threadId,
+        sessionEpoch: input.sessionEpoch ?? 0,
         createdAt,
         runtimeMode: input.runtimeMode,
         providerRuntimeExecutionTargetId:
@@ -344,13 +363,14 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       yield* deps.emitFn([
         yield* deps.syntheticEventFn(
           input.threadId,
+          record.sessionEpoch,
           "session.started",
           input.resumeCursor !== undefined ? { resume: input.resumeCursor } : {},
         ),
-        yield* deps.syntheticEventFn(input.threadId, "thread.started", {
+        yield* deps.syntheticEventFn(input.threadId, record.sessionEpoch, "thread.started", {
           providerThreadId: opencodeSessionId,
         }),
-        yield* deps.syntheticEventFn(input.threadId, "session.state.changed", {
+        yield* deps.syntheticEventFn(input.threadId, record.sessionEpoch, "session.state.changed", {
           state: "ready",
           reason: "session.started",
         }),
@@ -367,6 +387,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         executionTargetId: executionContext.executionTargets.executionTargetId,
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(modelID ? { model: modelID } : {}),
+        sessionEpoch: record.sessionEpoch,
         resumeCursor: { sessionId: opencodeSessionId },
         createdAt,
         updatedAt: createdAt,

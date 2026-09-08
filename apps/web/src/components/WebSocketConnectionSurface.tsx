@@ -12,16 +12,19 @@ import {
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
+import { useOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
 import {
   shouldAutoReconnect,
   shouldShowDesktopStartupBlockingState,
   shouldRestartStalledReconnect,
+  syncDeliveryRecoveryToast,
   type WsAutoReconnectTrigger,
 } from "./WebSocketConnectionSurface.logic";
 import {
   formatConnectionMoment,
   WebSocketBlockingState,
 } from "./WebSocketConnectionSurface.blocking";
+import { useWebSocketHeartbeat } from "./WebSocketConnectionSurface.heartbeat";
 import { toastManager } from "./ui/toast";
 import { useDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
 
@@ -68,14 +71,25 @@ function describeRecoveredToast(
 
 export function WebSocketConnectionCoordinator() {
   const status = useWsConnectionStatus();
+  const delivery = useOrchestrationDeliveryLifecycle();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastForcedReconnectAtRef = useRef(0);
   const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
+  const deliveryToastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const toastResetTimerRef = useRef<number | null>(null);
   const previousUiStateRef = useRef<WsConnectionUiState>(getWsConnectionUiState(status));
   const previousDisconnectedAtRef = useRef<string | null>(status.disconnectedAt);
 
+  useEffect(() => {
+    deliveryToastIdRef.current = syncDeliveryRecoveryToast(
+      toastManager,
+      deliveryToastIdRef.current,
+      delivery,
+    );
+  }, [delivery]);
+
   const runReconnect = useEffectEvent((showFailureToast: boolean) => {
+    invalidateHeartbeat();
     if (toastResetTimerRef.current !== null) {
       window.clearTimeout(toastResetTimerRef.current);
       toastResetTimerRef.current = null;
@@ -98,6 +112,10 @@ export function WebSocketConnectionCoordinator() {
           },
         });
       });
+  });
+
+  const invalidateHeartbeat = useWebSocketHeartbeat(status.phase === "connected", () => {
+    runReconnect(false);
   });
 
   const syncBrowserOnlineStatus = useEffectEvent(() => {
@@ -284,6 +302,7 @@ export function WebSocketConnectionCoordinator() {
 
   useEffect(() => {
     return () => {
+      if (deliveryToastIdRef.current) toastManager.close(deliveryToastIdRef.current);
       if (toastResetTimerRef.current !== null) {
         window.clearTimeout(toastResetTimerRef.current);
       }

@@ -14,6 +14,8 @@ import {
 } from "./WorkspaceEntriesSearch.ts";
 
 const REMOTE_WORKSPACE_SCAN_TIMEOUT_MS = 30_000;
+const REMOTE_DIRECTORY_LIST_TIMEOUT_MS = 10_000;
+const REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 const WORKSPACE_INDEX_MAX_ENTRIES = 25_000;
 const IGNORED_DIRECTORY_NAMES = new Set([
   ".git",
@@ -32,6 +34,109 @@ export interface RemoteWorkspaceIndex {
   entries: SearchableWorkspaceEntry[];
   truncated: boolean;
 }
+
+export function listRemoteWorkspaceDirectory(
+  entries: ReadonlyArray<SearchableWorkspaceEntry>,
+  relativeDir: string,
+): ProjectEntry[] {
+  const normalizedRelativeDir = toPosixPath(relativeDir).replace(/^\.\//, "").replace(/\/$/, "");
+  return entries
+    .filter((entry) => (entry.parentPath ?? "") === normalizedRelativeDir)
+    .map((entry): ProjectEntry => {
+      if (entry.parentPath === undefined) {
+        return { path: entry.path, kind: entry.kind };
+      }
+      return { path: entry.path, kind: entry.kind, parentPath: entry.parentPath };
+    })
+    .toSorted((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind === "directory" ? -1 : 1;
+      }
+      return left.path.localeCompare(right.path);
+    });
+}
+
+function normalizeRemoteRelativeDirectory(relativeDir: string): string {
+  const normalized = toPosixPath(relativeDir.trim());
+  if (normalized.includes("\u0000") || normalized.startsWith("/")) {
+    throw new Error("Remote workspace directory must stay within the workspace root.");
+  }
+
+  const segments = normalized.split("/").filter((segment) => segment.length > 0 && segment !== ".");
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error("Remote workspace directory must stay within the workspace root.");
+  }
+  return segments.join("/");
+}
+
+export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspaceDirectoryFromSsh")(
+  function* (input: {
+    readonly cwd: string;
+    readonly executionTargetId: string;
+    readonly relativeDir: string;
+  }): Effect.fn.Return<ReadonlyArray<ProjectEntry>, WorkspaceEntriesError> {
+    const relativeDir = yield* Effect.try({
+      try: () => normalizeRemoteRelativeDirectory(input.relativeDir),
+      catch: (cause) =>
+        new WorkspaceEntriesError({
+          cwd: input.cwd,
+          operation: "workspaceEntries.remoteDirectoryPath",
+          detail: processErrorDetail(cause),
+          cause,
+        }),
+    });
+    const findRoot = relativeDir.length > 0 ? `./${relativeDir}` : ".";
+    const result = yield* Effect.tryPromise({
+      try: () =>
+        runSshCommand({
+          executionTargetId: input.executionTargetId,
+          cwd: input.cwd,
+          command: "find",
+          args: [
+            findRoot,
+            "-mindepth",
+            "1",
+            "-maxdepth",
+            "1",
+            "(",
+            "-type",
+            "d",
+            "-o",
+            "-type",
+            "f",
+            ")",
+            "-printf",
+            "%y\\t%P\\0",
+          ],
+          allowNonZeroExit: false,
+          timeoutMs: REMOTE_DIRECTORY_LIST_TIMEOUT_MS,
+          maxBufferBytes: REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES,
+          outputMode: "truncate",
+        }),
+      catch: (cause) =>
+        new WorkspaceEntriesError({
+          cwd: input.cwd,
+          operation: "workspaceEntries.remoteDirectory",
+          detail: processErrorDetail(cause),
+          cause,
+        }),
+    });
+
+    const entries = splitNullSeparatedOutput(result.stdout, result.stdoutTruncated ?? false)
+      .map((entry) => {
+        const [kindRaw = "", pathRaw = ""] = entry.split("\t");
+        const childPath = toPosixPath(pathRaw.replace(/^\.\//, "").trim());
+        if (!childPath || childPath === ".") return null;
+        return {
+          path: relativeDir ? `${relativeDir}/${childPath}` : childPath,
+          kind: kindRaw === "d" ? ("directory" as const) : ("file" as const),
+        };
+      })
+      .filter((entry): entry is { path: string; kind: "file" | "directory" } => entry !== null);
+
+    return listRemoteWorkspaceDirectory(toRemoteProjectEntries(entries), relativeDir);
+  },
+);
 
 const processErrorDetail = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -187,7 +292,7 @@ export const buildRemoteWorkspaceIndex = Effect.fn("buildRemoteWorkspaceIndex")(
           "-prune",
           "-o",
           "-printf",
-          "%y\t%P\0",
+          "%y\\t%P\\0",
         ],
         allowNonZeroExit: false,
         timeoutMs: REMOTE_WORKSPACE_SCAN_TIMEOUT_MS,

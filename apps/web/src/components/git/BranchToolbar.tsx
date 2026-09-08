@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import BranchToolbarProjectMenu from "./BranchToolbarProjectMenu";
 
 import { newCommandId } from "../../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
@@ -66,7 +67,7 @@ export default function BranchToolbar({
           .catch(() => undefined);
       }
       if (api && hasServerThread) {
-        void api.orchestration.dispatchCommand({
+        void dispatchCommandWithOutcomeRecovery(api, {
           type: "thread.meta.update",
           commandId: newCommandId(),
           threadId: activeThreadId,
@@ -105,7 +106,9 @@ export default function BranchToolbar({
 
   return (
     <div className="mx-auto flex w-full max-w-[calc(52rem+theme(spacing.6))] items-center justify-between px-8 pb-3 pt-1 sm:max-w-[calc(52rem+theme(spacing.10))] sm:px-12">
-      {activeProject && <BranchToolbarProjectMenu activeProject={activeProject} />}
+      {activeProject && (
+        <BranchToolbarProjectMenu activeProject={activeProject} activeThreadId={activeThreadId} />
+      )}
 
       {activeProject && isGitRepo ? (
         <BranchToolbarBranchSelector

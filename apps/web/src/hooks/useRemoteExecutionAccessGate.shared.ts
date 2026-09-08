@@ -1,4 +1,5 @@
 import { type AppCheckStatus } from "../lib/checkStatus";
+import type { ServerVerifyExecutionTargetResult } from "@bigbud/contracts/server/server";
 import { getPassphraseProtectedSshKeyPath, getPasswordProtectedSshTargetLabel } from "../lib/ssh";
 import type { RemoteExecutionAuthMode } from "../stores/remoteAccess/remoteAccess.store";
 
@@ -11,6 +12,18 @@ export interface RemoteExecutionCheckStatus {
   readonly tip: string | null;
   readonly authMode: RemoteExecutionAuthMode | null;
   readonly promptLabel: string | null;
+}
+
+export function getRemoteAgentAccessError(
+  remoteAgent: ServerVerifyExecutionTargetResult["remoteAgent"],
+): string | null {
+  if (remoteAgent?.status === "install-required") {
+    return "The bigbud remote agent is not installed. Edit the remote project to review and approve installation.";
+  }
+  if (remoteAgent?.status === "upgrade-required") {
+    return `The bigbud remote agent must be upgraded from ${remoteAgent.currentVersion} to ${remoteAgent.targetVersion}. Edit the remote project to review and approve the upgrade.`;
+  }
+  return null;
 }
 
 export function resolveRemoteExecutionCheckingStatus(): RemoteExecutionCheckStatus {

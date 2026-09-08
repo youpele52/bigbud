@@ -8,8 +8,9 @@ import { ThreadRetention, type ThreadRetentionShape } from "../Services/ThreadRe
 import { runThreadRetentionScheduledTick } from "./ThreadRetention.scheduler.ts";
 import { makeThreadRetentionPreview } from "./ThreadRetention.preview.ts";
 import { makeSetThreadRetentionPolicy } from "./ThreadRetention.policy.ts";
-import { runDirectThreadRetention } from "./ThreadRetention.direct.ts";
 import { runThreadRetentionSchedule } from "./ThreadRetention.scheduler.ts";
+import { makeThreadRetentionExecutionCoordinator } from "./ThreadRetention.coordinator.ts";
+import { cutoffForRetentionPolicy } from "./ThreadRetention.logic.ts";
 
 const retentionError = (code: ServerThreadRetentionError["code"], message: string) =>
   new ServerThreadRetentionError({ code, message });
@@ -27,18 +28,7 @@ const makeThreadRetention = Effect.gen(function* () {
     ),
   );
   const preview = makeThreadRetentionPreview({ repository });
-  const run = (
-    policy: import("@bigbud/contracts").FiniteThreadRetentionPolicy,
-    trigger: "manual" | "scheduled",
-    cutoffAt?: string,
-  ) =>
-    runDirectThreadRetention({
-      policy,
-      trigger,
-      repository,
-      orchestration,
-      ...(cutoffAt === undefined ? {} : { cutoffAt }),
-    });
+  const coordinator = yield* makeThreadRetentionExecutionCoordinator({ repository, orchestration });
 
   const enqueue: ThreadRetentionShape["enqueue"] = ({ challengeToken }) =>
     Effect.gen(function* () {
@@ -48,9 +38,12 @@ const makeThreadRetention = Effect.gen(function* () {
           "Thread retention is disabled by the server administrator.",
         );
       }
-      const accepted = yield* repository.consumeManualChallenge({
+      const consumedAt = new Date().toISOString();
+      const accepted = yield* repository.consumeChallengeAndCreateRun({
         token: challengeToken,
-        consumedAt: new Date().toISOString(),
+        trigger: "manual",
+        runId: crypto.randomUUID(),
+        consumedAt,
       });
       if (!accepted.consumed) {
         if (accepted.result === "expired")
@@ -62,7 +55,7 @@ const makeThreadRetention = Effect.gen(function* () {
           return yield* retentionError("challenge_consumed", "The confirmation was already used.");
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
-      return yield* run(accepted.policy, "manual", accepted.cutoffAt);
+      return yield* coordinator.execute(accepted.run.runId);
     }).pipe(
       Effect.mapError((error) =>
         Schema.is(ServerThreadRetentionError)(error)
@@ -74,7 +67,18 @@ const makeThreadRetention = Effect.gen(function* () {
   const runScheduledOnce = runThreadRetentionScheduledTick({
     getPolicy: getAuthoritativePolicy,
     isDisabled: () => process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1",
-    run: (policy) => run(policy, "scheduled").pipe(Effect.asVoid),
+    run: (policy) =>
+      Effect.gen(function* () {
+        const createdAt = new Date().toISOString();
+        const scheduled = yield* repository.createScheduledQueuedRun({
+          runId: crypto.randomUUID(),
+          trigger: "scheduled",
+          policy,
+          cutoffAt: cutoffForRetentionPolicy(policy, Date.parse(createdAt)),
+          createdAt,
+        });
+        yield* coordinator.execute(scheduled.run.runId);
+      }).pipe(Effect.asVoid),
   }).pipe(
     Effect.mapError((error) =>
       Schema.is(ServerThreadRetentionError)(error)
@@ -92,7 +96,14 @@ const makeThreadRetention = Effect.gen(function* () {
       getPolicy: getAuthoritativePolicy,
     }),
     runScheduledOnce,
-    start: runThreadRetentionSchedule(runScheduledOnce),
+    start: coordinator.drain().pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("thread retention startup recovery deferred", {
+          detail: String(error),
+        }),
+      ),
+      Effect.andThen(runThreadRetentionSchedule(runScheduledOnce)),
+    ),
   } satisfies ThreadRetentionShape;
 });
 

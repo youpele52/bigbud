@@ -2,6 +2,8 @@ import { CommandId, MessageId, type ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import { stableThreadToolId } from "./ThreadOrchestrationTools.ts";
 
 type SendThreadMessageOutcome =
@@ -29,6 +31,7 @@ function outcomeFromEvents(input: {
 export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageViaOrchestration")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
+    readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly message: string;
@@ -48,17 +51,26 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
     if (!target || target.deletedAt !== null) {
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
     }
-    if (caller.projectId !== target.projectId) {
-      return yield* Effect.fail(
-        new Error(`Thread '${input.threadId}' is not accessible from the current project.`),
-      );
-    }
+    yield* requireThreadCoordinationAccess({
+      threadDelegationRepository: input.threadDelegationRepository,
+      callerThread: caller,
+      targetThread: target,
+    });
     if (target.archivedAt !== null || target.deletingAt) {
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' is not available.`));
     }
     const identity = `${input.callerThreadId}\n${input.threadId}\n${input.invocationId}`;
     const messageId = MessageId.makeUnsafe(stableThreadToolId("message", identity));
     const commandId = CommandId.makeUnsafe(stableThreadToolId("command", identity));
+    const readEventsByCommandId = input.orchestrationEngine.readEventsByCommandId;
+    if (!readEventsByCommandId) {
+      return yield* Effect.fail(new Error("Command event lookup is not available."));
+    }
+    const committedOutcome = outcomeFromEvents({
+      commandId,
+      events: yield* readEventsByCommandId(commandId),
+    });
+    if (committedOutcome) return committedOutcome;
     yield* input.orchestrationEngine.dispatch({
       type: "thread.message.submit",
       commandId,
@@ -67,10 +79,6 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
       delivery: input.delivery,
       createdAt: new Date().toISOString(),
     });
-    const readEventsByCommandId = input.orchestrationEngine.readEventsByCommandId;
-    if (!readEventsByCommandId) {
-      return yield* Effect.fail(new Error("Command event lookup is not available."));
-    }
     const events = yield* readEventsByCommandId(commandId);
     const outcome = outcomeFromEvents({ commandId, events });
     if (outcome) return outcome;

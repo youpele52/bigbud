@@ -10,7 +10,11 @@ export interface OrchestrationRecoveryPhase {
 }
 
 export interface OrchestrationRecoveryState {
+  /** Highest contiguous sequence successfully applied to required renderer state. */
   latestSequence: number;
+  appliedSequence: number;
+  acknowledgedSequence: number;
+  receivedSequence: number;
   highestObservedSequence: number;
   bootstrapped: boolean;
   pendingReplay: boolean;
@@ -88,6 +92,9 @@ export function deriveReplayRetryDecision(input: {
 export function createOrchestrationRecoveryCoordinator() {
   let state: OrchestrationRecoveryState = {
     latestSequence: 0,
+    appliedSequence: 0,
+    acknowledgedSequence: 0,
+    receivedSequence: 0,
     highestObservedSequence: 0,
     bootstrapped: false,
     pendingReplay: false,
@@ -102,6 +109,7 @@ export function createOrchestrationRecoveryCoordinator() {
 
   const observeSequence = (sequence: number) => {
     state.highestObservedSequence = Math.max(state.highestObservedSequence, sequence);
+    state.receivedSequence = state.highestObservedSequence;
   };
 
   const resolveReplayNeedAfterRecovery = () => {
@@ -141,7 +149,7 @@ export function createOrchestrationRecoveryCoordinator() {
       return "apply";
     },
 
-    markEventBatchApplied<T extends SequencedEvent>(events: ReadonlyArray<T>): ReadonlyArray<T> {
+    admitEventBatch<T extends SequencedEvent>(events: ReadonlyArray<T>): ReadonlyArray<T> {
       const candidates = events
         .filter((event) => event.sequence > state.latestSequence)
         .toSorted((left, right) => left.sequence - right.sequence);
@@ -162,9 +170,36 @@ export function createOrchestrationRecoveryCoordinator() {
         nextEvents.push(event);
         expectedSequence += 1;
       }
-      state.latestSequence = nextEvents.at(-1)?.sequence ?? state.latestSequence;
-      state.highestObservedSequence = Math.max(state.highestObservedSequence, state.latestSequence);
       return nextEvents;
+    },
+
+    commitEventBatchApplied<T extends SequencedEvent>(events: ReadonlyArray<T>): void {
+      if (events.length === 0) return;
+      let expectedSequence = state.latestSequence + 1;
+      for (const event of events) {
+        if (event.sequence !== expectedSequence) {
+          state.pendingReplay = true;
+          throw new Error(
+            `Cannot commit orchestration sequence ${event.sequence}; expected ${expectedSequence}.`,
+          );
+        }
+        expectedSequence += 1;
+      }
+      state.latestSequence = events.at(-1)!.sequence;
+      state.appliedSequence = state.latestSequence;
+      state.highestObservedSequence = Math.max(state.highestObservedSequence, state.latestSequence);
+      state.receivedSequence = state.highestObservedSequence;
+    },
+
+    acknowledgeAppliedSequence(sequence: number): void {
+      if (sequence > state.appliedSequence) {
+        throw new Error(`Cannot acknowledge unapplied orchestration sequence ${sequence}.`);
+      }
+      state.acknowledgedSequence = Math.max(state.acknowledgedSequence, sequence);
+    },
+
+    markApplicationFailed(): void {
+      state.pendingReplay = true;
     },
 
     beginSnapshotRecovery(reason: OrchestrationRecoveryReason): boolean {
@@ -182,7 +217,10 @@ export function createOrchestrationRecoveryCoordinator() {
 
     completeSnapshotRecovery(snapshotSequence: number): boolean {
       state.latestSequence = Math.max(state.latestSequence, snapshotSequence);
+      state.appliedSequence = state.latestSequence;
+      state.acknowledgedSequence = state.latestSequence;
       state.highestObservedSequence = Math.max(state.highestObservedSequence, state.latestSequence);
+      state.receivedSequence = state.highestObservedSequence;
       state.bootstrapped = true;
       state.inFlight = null;
       return resolveReplayNeedAfterRecovery().shouldReplay;

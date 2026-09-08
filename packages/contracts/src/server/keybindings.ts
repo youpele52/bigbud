@@ -44,6 +44,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "sidebar.toggle",
   "settings.toggle",
   "search.toggle",
+  "chat.focus",
   "chat.new",
   "chat.newLocal",
   "editor.openFavorite",

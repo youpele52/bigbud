@@ -1,14 +1,18 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   clearThreadUi,
   markThreadUnread,
   markThreadVisited,
+  PERSISTED_STATE_KEY,
+  persistState,
+  readPersistedState,
   reorderProjects,
   sanitizePersistedThreadLastVisitedAt,
   setFavouritesExpanded,
   setProjectExpanded,
+  setSidebarSectionExpanded,
   setThreadChangedFilesExpanded,
   syncProjects,
   syncThreads,
@@ -17,9 +21,13 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    chatsExpanded: true,
     favouritesExpanded: true,
+    lastActiveThreadId: null,
     projectExpandedById: {},
     projectOrder: [],
+    projectsExpanded: true,
+    remoteProjectsExpanded: false,
     selectedProjectId: null,
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
@@ -28,6 +36,38 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
 }
 
 describe("uiStateStore pure functions", () => {
+  it("opens local projects when accordion state is fresh or missing", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+      },
+    });
+
+    try {
+      expect(readPersistedState().projectsExpanded).toBe(true);
+      values.set(PERSISTED_STATE_KEY, JSON.stringify({}));
+      expect(readPersistedState().projectsExpanded).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps a persisted local projects collapse choice", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === PERSISTED_STATE_KEY ? JSON.stringify({ projectsExpanded: false }) : null,
+      },
+    });
+
+    try {
+      expect(readPersistedState().projectsExpanded).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("markThreadUnread moves lastVisitedAt before completion for a completed thread", () => {
     const threadId = ThreadId.makeUnsafe("thread-1");
     const latestTurnCompletedAt = "2026-02-25T12:30:00.000Z";
@@ -207,6 +247,58 @@ describe("uiStateStore pure functions", () => {
     expect(next.favouritesExpanded).toBe(false);
   });
 
+  it("setSidebarSectionExpanded updates each persisted sidebar section", () => {
+    const initialState = makeUiState();
+
+    const chatsCollapsed = setSidebarSectionExpanded(initialState, "chatsExpanded", false);
+    const projectsExpanded = setSidebarSectionExpanded(chatsCollapsed, "projectsExpanded", true);
+    const remoteProjectsExpanded = setSidebarSectionExpanded(
+      projectsExpanded,
+      "remoteProjectsExpanded",
+      true,
+    );
+
+    expect(remoteProjectsExpanded).toMatchObject({
+      chatsExpanded: false,
+      projectsExpanded: true,
+      remoteProjectsExpanded: true,
+    });
+  });
+
+  it("persists sidebar section expansion for the next launch", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+
+    try {
+      persistState(
+        makeUiState({
+          chatsExpanded: false,
+          projectsExpanded: true,
+          remoteProjectsExpanded: true,
+        }),
+      );
+
+      expect(JSON.parse(values.get(PERSISTED_STATE_KEY)!)).toMatchObject({
+        chatsExpanded: false,
+        projectsExpanded: true,
+        remoteProjectsExpanded: true,
+      });
+      expect(readPersistedState()).toMatchObject({
+        chatsExpanded: false,
+        projectsExpanded: true,
+        remoteProjectsExpanded: true,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("clearThreadUi removes visit state for deleted threads", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const initialState = makeUiState({
@@ -226,30 +318,30 @@ describe("uiStateStore pure functions", () => {
     expect(next.threadChangedFilesExpandedById).toEqual({});
   });
 
-  it("setThreadChangedFilesExpanded stores collapsed turns per thread", () => {
+  it("setThreadChangedFilesExpanded stores expanded turns per thread", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const initialState = makeUiState();
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", false);
+    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
 
     expect(next.threadChangedFilesExpandedById).toEqual({
       [thread1]: {
-        "turn-1": false,
+        "turn-1": true,
       },
     });
   });
 
-  it("setThreadChangedFilesExpanded removes thread overrides when expanded again", () => {
+  it("setThreadChangedFilesExpanded removes thread overrides when collapsed again", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const initialState = makeUiState({
       threadChangedFilesExpandedById: {
         [thread1]: {
-          "turn-1": false,
+          "turn-1": true,
         },
       },
     });
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
+    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", false);
 
     expect(next.threadChangedFilesExpandedById).toEqual({});
   });

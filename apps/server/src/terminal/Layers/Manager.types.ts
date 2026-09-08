@@ -2,6 +2,7 @@ import type { Effect, Fiber } from "effect";
 
 import type {
   TerminalCwdError,
+  TerminalRuntimeLeaseError,
   TerminalDropPathMode,
   TerminalSessionStatus,
 } from "@bigbud/contracts";
@@ -13,7 +14,7 @@ import type { TerminalSubprocessChecker } from "./Manager.shell";
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_HISTORY_LINE_LIMIT = 5_000;
-export const DEFAULT_PERSIST_DEBOUNCE_MS = 40;
+export const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 export const DEFAULT_SUBPROCESS_POLL_INTERVAL_MS = 1_000;
 export const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
 export const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
@@ -109,7 +110,7 @@ export interface TerminalManagerOptions {
     executionTargetId: string;
     cwd: string;
     worktreePath: string | null;
-  }) => Effect.Effect<void, TerminalCwdError>;
+  }) => Effect.Effect<void, TerminalCwdError | TerminalRuntimeLeaseError>;
   markWorktreeLeaseStarted?: (input: {
     threadId: string;
     terminalId: string;

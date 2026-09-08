@@ -9,6 +9,7 @@ import {
   OrchestrationProposedPlanId,
   OrchestrationQueuedPrompt,
   OrchestrationPendingInterruptFlushIntent,
+  OrchestrationTurnControlOperation,
   ParentThreadReference,
   ProjectId,
   ProjectScript,
@@ -52,6 +53,10 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
     pendingInterruptFlushIntent: Schema.NullOr(
       Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
     ),
+    pendingTurnControlOperation: Schema.NullOr(
+      Schema.fromJsonString(OrchestrationTurnControlOperation),
+    ),
+    queueHold: Schema.Number,
   }),
 );
 

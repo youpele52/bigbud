@@ -1,4 +1,5 @@
 import type { PathPosition } from "../../models/editor";
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createDebouncedStorage, resolveStorage } from "../../lib/storage";
@@ -26,6 +27,7 @@ if (typeof window !== "undefined") {
 interface FilesPanelState {
   open: boolean;
   workspaceRootOverride: string | null;
+  workspaceExecutionTargetIdOverride: ExecutionTargetId | null;
   previewPath: string | null;
   previewPosition: PathPosition | null;
   fileOpenRequest: {
@@ -50,8 +52,13 @@ interface FilesPanelState {
     path: string,
     position: PathPosition | null,
     workspaceRootOverride: string | null,
+    workspaceExecutionTargetIdOverride?: ExecutionTargetId | null,
   ) => void;
-  requestDirectoryNavigation: (path: string, workspaceRootOverride: string | null) => void;
+  requestDirectoryNavigation: (
+    path: string,
+    workspaceRootOverride: string | null,
+    workspaceExecutionTargetIdOverride?: ExecutionTargetId | null,
+  ) => void;
   consumeFileOpenRequest: (requestId: number) => void;
   consumeDirectoryNavigationRequest: (requestId: number) => void;
   setWorkspaceKey: (workspaceKey: string | null) => void;
@@ -113,6 +120,7 @@ export const useFilesPanelStore = create<FilesPanelState>()(
     (set) => ({
       open: false,
       workspaceRootOverride: null,
+      workspaceExecutionTargetIdOverride: null,
       previewPath: null,
       previewPosition: null,
       fileOpenRequest: null,
@@ -124,9 +132,15 @@ export const useFilesPanelStore = create<FilesPanelState>()(
       setWorkspaceRootOverride: (workspaceRootOverride) => set({ workspaceRootOverride }),
       setPreviewPath: (previewPath) => set({ previewPath }),
       setPreviewPosition: (previewPosition) => set({ previewPosition }),
-      requestFileOpen: (path, position, workspaceRootOverride) =>
+      requestFileOpen: (
+        path,
+        position,
+        workspaceRootOverride,
+        workspaceExecutionTargetIdOverride = null,
+      ) =>
         set((state) => ({
           workspaceRootOverride,
+          workspaceExecutionTargetIdOverride,
           fileOpenRequest: {
             path,
             position,
@@ -134,9 +148,14 @@ export const useFilesPanelStore = create<FilesPanelState>()(
             requestId: (state.fileOpenRequest?.requestId ?? 0) + 1,
           },
         })),
-      requestDirectoryNavigation: (path, workspaceRootOverride) =>
+      requestDirectoryNavigation: (
+        path,
+        workspaceRootOverride,
+        workspaceExecutionTargetIdOverride = null,
+      ) =>
         set((state) => ({
           workspaceRootOverride,
+          workspaceExecutionTargetIdOverride,
           directoryNavigationRequest: {
             path,
             workspaceRootOverride,

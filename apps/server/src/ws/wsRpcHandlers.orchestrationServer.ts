@@ -2,16 +2,21 @@ import { Effect, Option, Schema } from "effect";
 import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetCommandOutcomeError,
   OrchestrationGetSnapshotError,
   OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetProjectThreadSummariesError,
   OrchestrationGetStartupProjectCatalogError,
   OrchestrationGetSelectedThreadDetailError,
+  OrchestrationGetThreadOwnershipError,
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
   ProjectDirectoryWatchError,
+  type ThreadId,
   WS_METHODS,
+  STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+  STARTUP_PROJECT_CATALOG_MAX_LIMIT,
 } from "@bigbud/contracts";
 
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
@@ -22,11 +27,13 @@ import {
   makeServerWsRpcHandlers,
   makeWorkspaceWsRpcHandlers,
 } from "./wsRpcHandlers.orchestrationServer.helpers";
-import {
-  makeOrderedOrchestrationDomainEventStream,
-  makeThinkingActivityDeltaStream,
-} from "./wsStreams";
+import { makeThinkingActivityDeltaStream } from "./wsStreams";
+import { makeOrchestrationDeliveryStream } from "./wsOrchestrationDelivery.ts";
 import { makeThreadRetentionWsRpcHandlers } from "./wsRpcHandlers.retention.ts";
+import {
+  getOrchestrationCommandOutcome,
+  resolveOrchestrationThreadOwnership,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 
 export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   const toProjectDirectoryWatchError = (
@@ -35,7 +42,11 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
     const message = Schema.is(WorkspacePathOutsideRootError)(cause)
       ? "Workspace directory path must stay within the project root."
       : `Failed to watch workspace directory: ${cause.detail}`;
-    return new ProjectDirectoryWatchError({ message, cause });
+    return new ProjectDirectoryWatchError({
+      message,
+      retryable: Schema.is(WorkspaceFileSystemError)(cause) ? cause.retryable !== false : false,
+      cause,
+    });
   };
 
   return {
@@ -67,7 +78,15 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               }),
           ),
         ),
-        { "rpc.aggregate": "orchestration" },
+        {
+          "rpc.aggregate": "orchestration",
+          "rpc.project_catalog.scope": input.scope,
+          "rpc.project_catalog.limit": Math.min(
+            Math.max(input.limit ?? STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT, 1),
+            STARTUP_PROJECT_CATALOG_MAX_LIMIT,
+          ),
+          "rpc.project_catalog.cursor_present": input.cursor !== undefined,
+        },
       ),
     [ORCHESTRATION_WS_METHODS.getProjectThreadSummaries]: (
       input: Parameters<WsRpcContext["projectionCatalogQuery"]["getProjectThreadSummaries"]>[0],
@@ -96,6 +115,34 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               new OrchestrationGetSelectedThreadDetailError({
                 message: "Failed to load selected thread detail",
                 cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getThreadOwnership]: (input: { readonly threadId: ThreadId }) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getThreadOwnership,
+        resolveOrchestrationThreadOwnership(context.orchestrationEngine, input.threadId).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationGetThreadOwnershipError({
+                message: "Failed to resolve thread ownership",
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getCommandOutcome]: (input: {
+      readonly commandId: import("@bigbud/contracts").CommandId;
+    }) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getCommandOutcome,
+        getOrchestrationCommandOutcome(context.orchestrationEngine, input.commandId).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationGetCommandOutcomeError({
+                message: "Failed to resolve command outcome",
               }),
           ),
         ),
@@ -207,11 +254,37 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         ),
         { "rpc.aggregate": "orchestration" },
       ),
-    [WS_METHODS.subscribeOrchestrationDomainEvents]: (_input: unknown) =>
+    [ORCHESTRATION_WS_METHODS.acknowledgeDelivery]: (
+      input: Parameters<WsRpcContext["desktopSupervisorDelivery"]["acknowledge"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.acknowledgeDelivery,
+        Effect.tryPromise(() => context.desktopSupervisorDelivery.acknowledge(input)).pipe(
+          Effect.orDie,
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline]: (
+      input: Parameters<WsRpcContext["desktopSupervisorDelivery"]["acknowledgeBaseline"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline,
+        Effect.tryPromise(() => context.desktopSupervisorDelivery.acknowledgeBaseline(input)).pipe(
+          Effect.orDie,
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [WS_METHODS.subscribeOrchestrationDomainEvents]: (input: {
+      readonly consumerId?: string | undefined;
+      readonly appliedSequence?: number | undefined;
+    }) =>
       observeRpcStreamEffect(
         WS_METHODS.subscribeOrchestrationDomainEvents,
-        makeOrderedOrchestrationDomainEventStream({
+        makeOrchestrationDeliveryStream({
+          consumerId: input.consumerId ?? crypto.randomUUID(),
+          appliedSequence: input.appliedSequence ?? 0,
           orchestrationEngine: context.orchestrationEngine,
+          delivery: context.desktopSupervisorDelivery,
         }),
         { "rpc.aggregate": "orchestration" },
       ),

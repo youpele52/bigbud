@@ -132,7 +132,7 @@ it.effect("enqueueCommand waits for readiness and then drains queued work", () =
   Effect.scoped(
     Effect.gen(function* () {
       const executionCount = yield* Ref.make(0);
-      const commandGate = yield* makeCommandGate;
+      const commandGate = yield* makeCommandGate();
 
       const queuedCommandFiber = yield* commandGate
         .enqueueCommand(Ref.updateAndGet(executionCount, (count) => count + 1))
@@ -153,7 +153,7 @@ it.effect("enqueueCommand waits for readiness and then drains queued work", () =
 it.effect("enqueueCommand fails queued work when readiness fails", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const commandGate = yield* makeCommandGate;
+      const commandGate = yield* makeCommandGate();
       const failure = yield* Deferred.make<void, never>();
 
       const queuedCommandFiber = yield* commandGate

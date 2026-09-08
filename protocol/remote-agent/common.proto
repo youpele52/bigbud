@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+message ClientHello {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string client_instance_id = 3;
+  string connection_id = 4;
+  string server_nonce = 5;
+  uint64 max_frame_bytes = 6;
+}
+
+message AgentHello {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string agent_version = 3;
+  string build_digest = 4;
+  string os = 5;
+  string architecture = 6;
+  string agent_instance_id = 7;
+  string agent_epoch = 8;
+  repeated Capability capabilities = 9;
+  uint64 max_frame_bytes = 10;
+  uint64 max_operation_output_bytes = 11;
+  uint64 max_journal_bytes = 12;
+}
+
+message Capability {
+  string name = 1;
+  uint32 major = 2;
+  uint32 minor = 3;
+}
+
+message DiagnosticRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  uint64 deadline_unix_ms = 5;
+  string kind = 6;
+}
+
+message DiagnosticResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool accepted = 3;
+  bool terminal = 4;
+  string message = 5;
+}
+
+message CancelRequest {
+  string request_id = 1;
+  string operation_id = 2;
+}
+
+message CancelResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool cancelled = 3;
+  bool terminal = 4;
+  string detail = 5;
+}
+
+message ProtocolError {
+  string request_id = 1;
+  string code = 2;
+  string message = 3;
+}

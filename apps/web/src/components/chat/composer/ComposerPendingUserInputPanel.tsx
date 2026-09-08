@@ -1,8 +1,10 @@
-import { type ApprovalRequestId } from "@bigbud/contracts";
+import { type ApprovalRequestId, type UserInputQuestion } from "@bigbud/contracts";
 import { memo, useCallback, useEffect, useRef } from "react";
 import { type PendingUserInput } from "../../../logic/session";
 import {
   derivePendingUserInputProgress,
+  getPendingUserInputOptionIdentity,
+  isPendingUserInputOptionSelected,
   type PendingUserInputDraftAnswer,
 } from "../../../logic/user-input";
 import { CheckIcon } from "lucide-react";
@@ -13,7 +15,11 @@ interface PendingUserInputPanelProps {
   respondingRequestIds: ApprovalRequestId[];
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
-  onToggleOption: (questionId: string, optionLabel: string) => void;
+  onToggleOption: (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => void;
   onAdvance: () => void;
 }
 
@@ -54,7 +60,11 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   isResponding: boolean;
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
-  onToggleOption: (questionId: string, optionLabel: string) => void;
+  onToggleOption: (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => void;
   onAdvance: () => void;
 }) {
   const progress = derivePendingUserInputProgress(prompt.questions, answers, questionIndex);
@@ -71,8 +81,8 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   }, []);
 
   const handleOptionSelection = useCallback(
-    (questionId: string, optionLabel: string) => {
-      onToggleOption(questionId, optionLabel);
+    (questionId: string, option: UserInputQuestion["options"][number], optionIndex: number) => {
+      onToggleOption(questionId, option, optionIndex);
       if (activeQuestion?.multiSelect) {
         return;
       }
@@ -111,7 +121,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
       const option = activeQuestion.options[optionIndex];
       if (!option) return;
       event.preventDefault();
-      handleOptionSelection(activeQuestion.id, option.label);
+      handleOptionSelection(activeQuestion.id, option, optionIndex);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -141,14 +151,19 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
       ) : null}
       <div className="mt-3 space-y-1">
         {activeQuestion.options.map((option, index) => {
-          const isSelected = progress.selectedOptionLabels.includes(option.label);
+          const isSelected = isPendingUserInputOptionSelected(
+            activeQuestion,
+            progress.activeDraft,
+            option,
+            index,
+          );
           const shortcutKey = index < 9 ? index + 1 : null;
           return (
             <button
-              key={`${activeQuestion.id}:${option.label}`}
+              key={`${activeQuestion.id}:${getPendingUserInputOptionIdentity(option, index)}`}
               type="button"
               disabled={isResponding}
-              onClick={() => handleOptionSelection(activeQuestion.id, option.label)}
+              onClick={() => handleOptionSelection(activeQuestion.id, option, index)}
               className={cn(
                 "group flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all duration-150",
                 isSelected

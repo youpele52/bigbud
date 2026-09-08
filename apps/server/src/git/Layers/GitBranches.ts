@@ -3,7 +3,7 @@
  *
  * @module GitBranches
  */
-import { Effect, FileSystem } from "effect";
+import { Effect } from "effect";
 
 import { GitCommandError } from "@bigbud/contracts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
@@ -34,7 +34,6 @@ export interface GitBranchOps {
 export function makeGitBranchOps(
   helpers: GitHelpers,
   statusOps: Pick<GitStatusOpsResult, "branchExists">,
-  fileSystem: FileSystem.FileSystem,
 ): GitBranchOps {
   const { executeGit, runGit, runGitStdout } = helpers;
   const { branchExists } = statusOps;
@@ -64,7 +63,7 @@ export function makeGitBranchOps(
     );
   });
 
-  const listBranches = makeListBranchesOp(helpers, fileSystem);
+  const listBranches = makeListBranchesOp(helpers);
 
   const checkoutBranch: GitCoreShape["checkoutBranch"] = Effect.fn("checkoutBranch")(
     function* (input) {

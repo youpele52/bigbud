@@ -38,7 +38,9 @@ describe("BranchToolbarProjectMenu", () => {
   it("mounts with a stable standard-thread store snapshot", async () => {
     useStore.setState({ projects: [activeProject], threads: [] });
 
-    await render(<BranchToolbarProjectMenu activeProject={activeProject} />);
+    await render(
+      <BranchToolbarProjectMenu activeProject={activeProject} activeThreadId={undefined} />,
+    );
 
     await expect.element(page.getByText("Selector project")).toBeInTheDocument();
   });

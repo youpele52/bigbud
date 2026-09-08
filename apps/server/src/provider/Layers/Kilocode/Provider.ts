@@ -20,10 +20,7 @@ import {
   MANAGED_SERVER_EMPTY_MODEL_CAPABILITIES as EMPTY_MODEL_CAPABILITIES,
   managedServerBuiltInModels,
 } from "../../managedServerCatalogFallback";
-import {
-  MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT,
-  withManagedServerProbe,
-} from "../../managedServerProbe.ts";
+import { withManagedServerProbe } from "../../managedServerProbe.ts";
 import { KilocodeProvider } from "../../Services/Kilocode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
@@ -332,7 +329,6 @@ export const KilocodeProviderLive = Layer.effect(
           : Effect.void,
       preserveEnrichedSnapshot: true,
       initialSnapshot: makeInitialKilocodeSnapshot(initialSettings),
-      probeTimeout: MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT,
     });
   }),
 );

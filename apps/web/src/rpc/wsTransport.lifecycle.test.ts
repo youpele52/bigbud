@@ -100,13 +100,12 @@ describe("WsTransport dispose ordering", () => {
       resolveClose = resolve;
     });
 
+    const closeScope = vi.fn(async () => {
+      callOrder.push("close:start");
+      await closePromise;
+      callOrder.push("close:done");
+    });
     const runtime = {
-      runPromise: vi.fn(async () => {
-        callOrder.push("close:start");
-        await closePromise;
-        callOrder.push("close:done");
-        return undefined;
-      }),
       dispose: vi.fn(async () => {
         callOrder.push("runtime:dispose");
       }),
@@ -118,6 +117,7 @@ describe("WsTransport dispose ordering", () => {
       disposed: false,
       session: {
         clientScope: {} as never,
+        closeScope,
         runtime,
       },
       closeSession,
@@ -125,7 +125,7 @@ describe("WsTransport dispose ordering", () => {
 
     const disposePromise = WsTransport.prototype.dispose.call(transport);
 
-    expect(runtime.runPromise).toHaveBeenCalledTimes(1);
+    expect(closeScope).toHaveBeenCalledTimes(1);
     expect(runtime.dispose).not.toHaveBeenCalled();
     expect((transport as unknown as { disposed: boolean }).disposed).toBe(true);
 

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { executeBrowserTabActionWhenReady } from "./browserAgentControl";
+import {
+  executeBrowserTabActionWhenReady,
+  registerBrowserTabAgentHandler,
+  waitForBrowserTabAgentHandler,
+} from "./browserAgentControl";
 
 describe("executeBrowserTabActionWhenReady", () => {
   it("retries the initial visible-browser action until its viewport is ready", async () => {
@@ -25,5 +29,16 @@ describe("executeBrowserTabActionWhenReady", () => {
     ).resolves.toEqual({ url: "https://example.com" });
 
     expect(execute).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("browser tab agent handlers", () => {
+  it("makes a mounted tab handler available to waiting agent commands", async () => {
+    const handler = { execute: vi.fn() };
+    const unregister = registerBrowserTabAgentHandler("browser:characterization", handler);
+
+    await expect(waitForBrowserTabAgentHandler("browser:characterization")).resolves.toBe(handler);
+
+    unregister();
   });
 });

@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
-export function addThreadRetentionResourceSecurity(sql: SqlClient.SqlClient) {
-  const unavailableEndpoint = (column: string) =>
-    sql.unsafe(`
+export function threadRetentionUnavailableEndpoint(sql: SqlClient.SqlClient, column: string) {
+  return sql.unsafe(`
       EXISTS (
         SELECT 1 FROM projection_threads AS endpoint
         WHERE endpoint.thread_id = NEW.${column}
@@ -20,6 +19,10 @@ export function addThreadRetentionResourceSecurity(sql: SqlClient.SqlClient) {
         WHERE claim.entity_kind = 'thread' AND claim.entity_id = NEW.${column}
       )
     `);
+}
+
+export function addThreadRetentionResourceSecurity(sql: SqlClient.SqlClient) {
+  const unavailableEndpoint = (column: string) => threadRetentionUnavailableEndpoint(sql, column);
   return Effect.gen(function* () {
     yield* sql`
     CREATE TABLE purge_resource_claims (

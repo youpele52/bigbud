@@ -4,7 +4,7 @@ import type { Project } from "../../models/types";
 import type { ThreadId } from "@bigbud/contracts";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { SidebarProjectAddActionsOutput } from "./Sidebar.projectAddActions";
-import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions";
+import type { SidebarProjectActionsOutput } from "./Sidebar.projectActions.types";
 import type { SidebarRenderedProjectsOutput } from "./Sidebar.renderedProjects";
 import type { SidebarThreadActionsOutput } from "./Sidebar.threadActions.types";
 import type {
@@ -24,6 +24,10 @@ export interface BuildSidebarStateResultInput {
   setShowAllFavourites: (showAll: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
+  areProjectsExpanded: boolean;
+  setAreProjectsExpanded: (expanded: boolean) => void;
+  areRemoteProjectsExpanded: boolean;
+  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;
@@ -65,6 +69,10 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     setShowAllFavourites: input.setShowAllFavourites,
     areChatsExpanded: input.areChatsExpanded,
     setAreChatsExpanded: input.setAreChatsExpanded,
+    areProjectsExpanded: input.areProjectsExpanded,
+    setAreProjectsExpanded: input.setAreProjectsExpanded,
+    areRemoteProjectsExpanded: input.areRemoteProjectsExpanded,
+    setAreRemoteProjectsExpanded: input.setAreRemoteProjectsExpanded,
     showAllChats: input.showAllChats,
     setShowAllChats: input.setShowAllChats,
     hasMoreChats: input.hasMoreChats,

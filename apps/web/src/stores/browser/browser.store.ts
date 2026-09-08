@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 interface BrowserTabState {
+  faviconUrl: string | null;
   title: string;
   url: string;
   openedByAgent?: true;
@@ -19,6 +20,7 @@ interface BrowserPanelState {
   setOpen: (open: boolean) => void;
   ensureTab: (tabId: string, url?: string) => void;
   markTabOpenedByAgent: (tabId: string) => void;
+  setTabFavicon: (tabId: string, faviconUrl: string | null) => void;
   setTabTitle: (tabId: string, title: string) => void;
   setTabUrl: (tabId: string, url: string) => void;
   setAgentLease: (
@@ -57,7 +59,7 @@ export const useBrowserPanelStore = create<BrowserPanelState>((set) => ({
       return {
         tabsById: {
           ...state.tabsById,
-          [tabId]: { title: "", url },
+          [tabId]: { faviconUrl: null, title: "", url },
         },
       };
     }),
@@ -72,7 +74,30 @@ export const useBrowserPanelStore = create<BrowserPanelState>((set) => ({
         tabsById: {
           ...state.tabsById,
           [tabId]: {
+            faviconUrl: currentTab?.faviconUrl ?? null,
             title,
+            url: currentTab?.url ?? "",
+            ...(currentTab?.agentLease ? { agentLease: currentTab.agentLease } : {}),
+            ...(currentTab?.agentCursor ? { agentCursor: currentTab.agentCursor } : {}),
+            ...(currentTab?.agentHandoff ? { agentHandoff: currentTab.agentHandoff } : {}),
+            ...(currentTab?.openedByAgent ? { openedByAgent: true } : {}),
+          },
+        },
+      };
+    }),
+  setTabFavicon: (tabId, faviconUrl) =>
+    set((state) => {
+      const currentTab = state.tabsById[tabId];
+      if (currentTab?.faviconUrl === faviconUrl) {
+        return state;
+      }
+
+      return {
+        tabsById: {
+          ...state.tabsById,
+          [tabId]: {
+            faviconUrl,
+            title: currentTab?.title ?? "",
             url: currentTab?.url ?? "",
             ...(currentTab?.agentLease ? { agentLease: currentTab.agentLease } : {}),
             ...(currentTab?.agentCursor ? { agentCursor: currentTab.agentCursor } : {}),
@@ -93,6 +118,7 @@ export const useBrowserPanelStore = create<BrowserPanelState>((set) => ({
         tabsById: {
           ...state.tabsById,
           [tabId]: {
+            faviconUrl: null,
             title: currentTab?.title ?? "",
             url,
             ...(currentTab?.agentLease ? { agentLease: currentTab.agentLease } : {}),

@@ -1,6 +1,7 @@
 import type { SessionConfig, SessionFsConfig, Tool, ToolResultObject } from "@github/copilot-sdk";
 
 import { createRemoteWorkspaceSessionFsBridge } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import {
   runToolCommand,
   resolveToolTransportTarget,
@@ -48,7 +49,7 @@ function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command:
   const transportTarget = resolveToolTransportTarget(workspaceTarget);
   return {
     name: "bash",
-    description: "Run a shell command in the remote workspace over SSH.",
+    description: "Run a shell command in the remote workspace through bigbud.",
     parameters: {
       type: "object",
       properties: {
@@ -87,6 +88,7 @@ export interface CopilotRemoteWorkspaceBridge {
 
 export async function createCopilotRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
+  readinessProbe?: RemoteWorkspaceReadinessProbe,
 ): Promise<CopilotRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceSessionFsBridge(
     workspaceTarget,
@@ -96,6 +98,7 @@ export async function createCopilotRemoteWorkspaceBridge(
       "The actual project files live on the remote host configured for this thread.",
       "",
     ],
+    readinessProbe,
   );
 
   return {
@@ -109,8 +112,8 @@ export async function createCopilotRemoteWorkspaceBridge(
       systemMessage: {
         mode: "append",
         content: [
-          "Bigbud remote workspace mode is enabled.",
-          `The working directory for repository work is ${bridge.initialCwd} on the remote host ${bridge.destination}.`,
+          "bigbud remote workspace mode is enabled.",
+          `The working directory for repository work is ${bridge.initialCwd} on the configured remote host.`,
           "Use the normal file and edit tools; they are backed by the remote workspace session filesystem.",
           "Use the bash tool for shell commands in the remote workspace.",
           "Do not rely on local filesystem or local shell context for repository work in this session.",

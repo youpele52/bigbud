@@ -10,4 +10,5 @@ export interface FilePreviewNavigationProps {
 export interface FilePreviewScrollProps {
   readonly initialScrollTop?: number | null | undefined;
   readonly onScrollPositionChange?: ((scrollTop: number) => void) | undefined;
+  readonly onSearchMatch?: ((line: number) => void) | undefined;
 }

@@ -19,6 +19,7 @@ vi.mock("../hooks/useSettings", () => ({
 }));
 vi.mock("../hooks/useWindowMaterial", () => ({ useWindowMaterial: () => undefined }));
 vi.mock("../rpc/serverState", () => ({
+  useDefaultChatCwd: () => null,
   useServerConfig: () => null,
   useServerProviders: () => [],
 }));

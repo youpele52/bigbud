@@ -9,3 +9,5 @@ export * from "./orchestration.events";
 export * from "./orchestration.rpc";
 export * from "./orchestration.catalog";
 export * from "./orchestration.detail";
+export * from "./orchestration.ownership";
+export * from "./orchestration.delivery";

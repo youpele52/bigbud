@@ -4,6 +4,7 @@ import {
   type ProviderApprovalDecision,
   type ProviderKind,
   type ServerProvider,
+  type UserInputQuestion,
 } from "@bigbud/contracts";
 import { ChevronLeftIcon } from "lucide-react";
 import { useRef, type KeyboardEvent } from "react";
@@ -44,7 +45,11 @@ interface MobileComposerProps {
   userInputAnswers?: Record<string, PendingUserInputDraftAnswer> | undefined;
   userInputQuestionIndex?: number | undefined;
   isRespondingToUserInput?: boolean | undefined;
-  onToggleUserInputOption?: (questionId: string, optionLabel: string) => void;
+  onToggleUserInputOption?: (
+    questionId: string,
+    option: UserInputQuestion["options"][number],
+    optionIndex: number,
+  ) => void;
   onChangeUserInputCustomAnswer?: (questionId: string, value: string) => void;
   onAdvanceUserInput?: () => void;
   onPreviousUserInputQuestion?: () => void;

@@ -12,7 +12,10 @@ import {
   observeRpcStreamEffect,
 } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
+import { isLocalExecutionTarget } from "../executionTargets.ts";
+import { makeRemoteGitStatusStream } from "../git/remoteGitStatusStream.ts";
 import {
+  installRemoteAgentEffect,
   unlockSshKeyEffect,
   unlockSshPasswordEffect,
   verifyExecutionTargetEffect,
@@ -23,9 +26,19 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.serverVerifyExecutionTarget]: (
       input: Parameters<typeof verifyExecutionTargetEffect>[0],
     ) =>
-      observeRpcEffect(WS_METHODS.serverVerifyExecutionTarget, verifyExecutionTargetEffect(input), {
-        "rpc.aggregate": "server",
-      }),
+      observeRpcEffect(
+        WS_METHODS.serverVerifyExecutionTarget,
+        verifyExecutionTargetEffect(input, context.remoteAgentHealth),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverInstallRemoteAgent]: (
+      input: Parameters<typeof installRemoteAgentEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverInstallRemoteAgent,
+        installRemoteAgentEffect(input, context.remoteAgentInstaller),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverUnlockSshKey]: (input: Parameters<typeof unlockSshKeyEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverUnlockSshKey, unlockSshKeyEffect(input), {
         "rpc.aggregate": "server",
@@ -40,13 +53,18 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     }) =>
       observeRpcStreamEffect(
         WS_METHODS.subscribeGitStatus,
-        context
-          .assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.subscribeStatus")
-          .pipe(Effect.andThen(context.gitStatusBroadcaster.subscribe(input.cwd))),
+        isLocalExecutionTarget(input.executionTargetId)
+          ? context.gitStatusBroadcaster.subscribe(input.cwd)
+          : makeRemoteGitStatusStream({
+              git: context.git,
+              cwd: input.cwd,
+              executionTargetId: input.executionTargetId!,
+              invalidation: context.remoteGitStatusInvalidation,
+            }),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitRefreshStatus]: (input: Parameters<WsRpcContext["gitManager"]["status"]>[0]) =>
-      observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
+      observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitStatus(input), {
         "rpc.aggregate": "git",
       }),
     [WS_METHODS.gitListCommits]: (input: Parameters<WsRpcContext["git"]["listCommits"]>[0]) =>
@@ -71,10 +89,9 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     }) =>
       observeRpcEffect(
         WS_METHODS.gitPull,
-        context.assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.pull").pipe(
-          Effect.andThen(context.git.pullCurrentBranch(input.cwd)),
-          Effect.tap(() => context.refreshGitStatus(input.cwd)),
-        ),
+        context.git
+          .pullCurrentBranch(input.cwd, input.executionTargetId)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -85,10 +102,9 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     }) =>
       observeRpcEffect(
         WS_METHODS.gitFetch,
-        context.assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.fetch").pipe(
-          Effect.andThen(context.git.fetch(input.cwd)),
-          Effect.tap(() => context.refreshGitStatus(input.cwd)),
-        ),
+        context.git
+          .fetch(input.cwd, input.executionTargetId)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -99,12 +115,9 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     }) =>
       observeRpcEffect(
         WS_METHODS.gitDiscardChanges,
-        context
-          .assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.discardChanges")
-          .pipe(
-            Effect.andThen(context.git.discardChanges(input.cwd)),
-            Effect.tap(() => context.refreshGitStatus(input.cwd)),
-          ),
+        context.git
+          .discardChanges(input.cwd, input.executionTargetId)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -125,7 +138,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
               },
             })
             .pipe(
-              Effect.tap(() => context.refreshGitStatus(input.cwd)),
+              Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId)),
               Effect.matchCauseEffect({
                 onFailure: (cause) => Queue.failCause(queue, cause),
                 onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
@@ -149,7 +162,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitPreparePullRequestThread,
         context.gitManager
           .preparePullRequestThread(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitListBranches]: (input: Parameters<WsRpcContext["git"]["listBranches"]>[0]) =>
@@ -161,7 +174,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitCreateWorktree,
         context.git
           .createWorktree(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -171,7 +184,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitRemoveWorktree,
         context.git
           .removeWorktree(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -179,7 +192,9 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitCreateBranch]: (input: Parameters<WsRpcContext["git"]["createBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitCreateBranch,
-        context.git.createBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .createBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -189,7 +204,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
         WS_METHODS.gitCheckout,
         context.git
           .checkoutBranch(input)
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -197,19 +212,25 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitRenameBranch]: (input: Parameters<WsRpcContext["git"]["renameBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitRenameBranch,
-        context.git.renameBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .renameBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitDeleteBranch]: (input: Parameters<WsRpcContext["git"]["deleteBranch"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitDeleteBranch,
-        context.git.deleteBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .deleteBranch(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.gitInit]: (input: Parameters<WsRpcContext["git"]["initRepo"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitInit,
-        context.git.initRepo(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        context.git
+          .initRepo(input)
+          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
     [WS_METHODS.terminalOpen]: (input: Parameters<WsRpcContext["terminalManager"]["open"]>[0]) =>

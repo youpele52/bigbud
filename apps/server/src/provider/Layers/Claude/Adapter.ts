@@ -1,25 +1,11 @@
-/**
- * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
- *
- * Wraps `@anthropic-ai/claude-agent-sdk` query sessions behind the generic
- * provider adapter contract and emits canonical runtime events.
- *
- * @module ClaudeAdapterLive
- */
 import {
   query,
   type Options as ClaudeQueryOptions,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import {
-  EventId,
-  type ProviderRuntimeEvent,
-  type ProviderSendTurnInput,
-  ThreadId,
-  TurnId,
-} from "@bigbud/contracts";
+import { type ProviderSendTurnInput, ThreadId, TurnId } from "@bigbud/contracts";
 import { resolveApiModelId } from "@bigbud/shared/model";
-import { DateTime, Deferred, Effect, FileSystem, Layer, Queue, Random, Stream } from "effect";
+import { Deferred, Effect, FileSystem, Layer, Queue, Random } from "effect";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -33,17 +19,14 @@ import {
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
-import type {
-  PendingApprovalLedgerEntry,
-  PendingUserInputLedgerEntry,
-} from "./Adapter.requestLedger.ts";
-import type {
-  ClaudeAdapterLiveOptions,
-  ClaudeQueryRuntime,
-  ClaudeSessionContext,
-  ClaudeTurnState,
+import type * as RequestLedger from "./Adapter.requestLedger.ts";
+import {
+  PROVIDER,
+  type ClaudeAdapterLiveOptions,
+  type ClaudeQueryRuntime,
+  type ClaudeSessionContext,
+  type ClaudeTurnState,
 } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { makeStartSession } from "./Adapter.session.ts";
@@ -51,6 +34,7 @@ import { applyClaudeRuntimeTraits } from "./Adapter.session.traits.ts";
 import { toRequestError } from "./Adapter.utils.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 import { makeClaudeControlOperations } from "./Adapter.controls.ts";
+import { makeClaudeEventRuntime } from "./Adapter.events.ts";
 
 export type { ClaudeAdapterLiveOptions };
 
@@ -75,15 +59,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }): ClaudeQueryRuntime => query({ prompt: input.prompt, options: input.options }));
 
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
-  const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const serverSettingsService = yield* ServerSettingsService;
-
-  const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-  const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
-  const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
-
-  const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+  const eventRuntime = yield* makeClaudeEventRuntime(sessions);
+  const { makeEventStamp, nowIso, offerRuntimeEvent } = eventRuntime;
 
   const streamHandlers = makeStreamHandlers({
     makeEventStamp,
@@ -93,6 +71,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   });
 
   const startSession: ClaudeAdapterShape["startSession"] = makeStartSession({
+    ...(options?.remoteWorkspaceReadinessProbe
+      ? { remoteWorkspaceReadinessProbe: options.remoteWorkspaceReadinessProbe }
+      : {}),
     fileSystem,
     serverConfig,
     serverSettingsService,
@@ -146,8 +127,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     if (context.turnState) {
-      // Auto-close a stale synthetic turn (from background agent responses
-      // between user prompts) to prevent blocking the user's next turn.
+      if (!context.turnState.synthetic) {
+        return yield* new ProviderAdapterValidationError({
+          provider: PROVIDER,
+          operation: "sendTurn",
+          issue: `Turn '${context.turnState.turnId}' is already active. Interrupt or wait for it to complete before starting another turn.`,
+        });
+      }
+      // Only the explicitly marked background turn is safe to close here.
       yield* streamHandlers.completeTurn(context, "completed");
     }
 
@@ -191,6 +178,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const turnId = TurnId.makeUnsafe(yield* Random.nextUUIDv4);
     const turnState: ClaudeTurnState = {
       turnId,
+      synthetic: false,
       startedAt: yield* nowIso,
       items: [],
       assistantTextBlocks: new Map(),
@@ -209,7 +197,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     };
 
     const turnStartedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
+    yield* offerRuntimeEvent(context, {
       type: "turn.started",
       eventId: turnStartedStamp.eventId,
       provider: PROVIDER,
@@ -267,7 +255,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
       const ledgerEntry = context.requestLedger.get(requestId);
       if (ledgerEntry?.kind === "approval" && ledgerEntry.state === "pending") {
-        (ledgerEntry as PendingApprovalLedgerEntry).uiDecision = decision;
+        (ledgerEntry as RequestLedger.PendingApprovalLedgerEntry).uiDecision = decision;
       }
 
       context.pendingApprovals.delete(requestId);
@@ -308,7 +296,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     const ledgerEntry = context.requestLedger.get(requestId);
     if (ledgerEntry?.kind === "user-input" && ledgerEntry.state === "pending") {
-      (ledgerEntry as PendingUserInputLedgerEntry).uiAnswers = answers;
+      (ledgerEntry as RequestLedger.PendingUserInputLedgerEntry).uiAnswers = answers;
     }
 
     context.pendingUserInputs.delete(requestId);
@@ -357,7 +345,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           emitExitEvent: false,
         }),
       { discard: true },
-    ).pipe(Effect.tap(() => Queue.shutdown(runtimeEventQueue))),
+    ).pipe(Effect.tap(() => eventRuntime.shutdown)),
   );
 
   return {
@@ -382,7 +370,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     hasSession,
     stopAll,
     get streamEvents() {
-      return Stream.fromQueue(runtimeEventQueue);
+      return eventRuntime.stream;
     },
   } satisfies ClaudeAdapterShape;
 });

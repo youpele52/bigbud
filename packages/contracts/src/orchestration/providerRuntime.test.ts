@@ -124,6 +124,38 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.questions[0]?.options).toHaveLength(2);
   });
 
+  it("preserves optional user-input option ids while accepting legacy options", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "user-input.requested",
+      eventId: "event-option-ids",
+      provider: "cursor",
+      createdAt: "2026-02-28T00:00:01.000Z",
+      threadId: "thread-option-ids",
+      requestId: "request-option-ids",
+      payload: {
+        questions: [
+          {
+            id: "model",
+            header: "Model",
+            question: "Which model should be used?",
+            options: [
+              { id: "  fast-model  ", label: "Fast", description: "Fast model" },
+              { label: "Legacy", description: "Legacy option without an id" },
+            ],
+          },
+        ],
+      },
+    });
+
+    if (parsed.type !== "user-input.requested") {
+      throw new Error("expected user-input.requested");
+    }
+    expect(parsed.payload.questions[0]?.options).toEqual([
+      { id: "fast-model", label: "Fast", description: "Fast model" },
+      { label: "Legacy", description: "Legacy option without an id" },
+    ]);
+  });
+
   it("decodes user-input.resolved with answer map", () => {
     const parsed = decodeRuntimeEvent({
       type: "user-input.resolved",

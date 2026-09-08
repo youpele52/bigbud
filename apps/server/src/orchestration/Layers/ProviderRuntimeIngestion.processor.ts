@@ -46,6 +46,7 @@ export interface RuntimeProcessorCacheHelpers {
   readonly appendBufferedAssistantText: (
     messageId: MessageId,
     delta: string,
+    streaming?: boolean,
   ) => Effect.Effect<string>;
   readonly takeBufferedAssistantText: (messageId: MessageId) => Effect.Effect<string>;
   readonly clearBufferedAssistantText: (messageId: MessageId) => Effect.Effect<void>;

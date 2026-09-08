@@ -1,6 +1,6 @@
 import { getSharedHighlighter } from "@pierre/diffs";
 import type { DiffsHighlighter, SupportedLanguages } from "@pierre/diffs";
-import React, { Suspense, use, useEffect, useMemo, type ReactNode } from "react";
+import React, { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { resolveDiffThemeName, type DiffThemeName } from "../../../lib/diffRendering";
 import { fnv1a32 } from "../../../lib/diffRendering";
@@ -84,32 +84,35 @@ function RenderedHighlightedCode({
   );
 }
 
-function RenderedShikiCodeBlock(props: {
+function LoadedShikiCodeBlock(props: {
   cacheKey: string;
   code: string;
+  highlighter: DiffsHighlighter;
   isStreaming: boolean;
   language: string;
   themeName: DiffThemeName;
   className?: string | undefined;
   bgTransparent?: boolean | undefined;
 }) {
-  const highlighter = use(getHighlighterPromise(props.language));
   const highlightedHtml = useMemo(() => {
     let html: string;
     try {
-      html = highlighter.codeToHtml(props.code, { lang: props.language, theme: props.themeName });
+      html = props.highlighter.codeToHtml(props.code, {
+        lang: props.language,
+        theme: props.themeName,
+      });
     } catch (error) {
       console.warn(
         `Code highlighting failed for language "${props.language}", falling back to plain text.`,
         error instanceof Error ? error.message : error,
       );
-      html = highlighter.codeToHtml(props.code, { lang: "text", theme: props.themeName });
+      html = props.highlighter.codeToHtml(props.code, { lang: "text", theme: props.themeName });
     }
     if (props.bgTransparent) {
       html = html.replace(/background-color:[^;]+;?/, "");
     }
     return html;
-  }, [highlighter, props.code, props.language, props.themeName, props.bgTransparent]);
+  }, [props.highlighter, props.code, props.language, props.themeName, props.bgTransparent]);
 
   useEffect(() => {
     if (!props.isStreaming) {
@@ -124,8 +127,55 @@ function RenderedShikiCodeBlock(props: {
   return <RenderedHighlightedCode html={highlightedHtml} className={props.className} />;
 }
 
+function RenderedShikiCodeBlock(props: {
+  cacheKey: string;
+  code: string;
+  fallback: ReactNode;
+  isStreaming: boolean;
+  language: string;
+  themeName: DiffThemeName;
+  className?: string | undefined;
+  bgTransparent?: boolean | undefined;
+}) {
+  const [loadedHighlighter, setLoadedHighlighter] = useState<{
+    language: string;
+    value: DiffsHighlighter;
+  } | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const highlighter =
+    loadedHighlighter?.language === props.language ? loadedHighlighter.value : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+
+    void getHighlighterPromise(props.language).then(
+      (value) => {
+        if (!cancelled) {
+          setLoadedHighlighter({ language: props.language, value });
+        }
+      },
+      (error: unknown) => {
+        if (!cancelled) {
+          setLoadError(error);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [props.language]);
+
+  if (loadError) throw loadError;
+  if (!highlighter) return props.fallback;
+
+  return <LoadedShikiCodeBlock {...props} highlighter={highlighter} />;
+}
+
 function SuspenseShikiCodeBlock(props: {
   code: string;
+  fallback: ReactNode;
   language: string;
   themeName: DiffThemeName;
   isStreaming: boolean;
@@ -161,6 +211,7 @@ export function SyntaxHighlightedCode(props: {
       <Suspense fallback={props.fallback}>
         <SuspenseShikiCodeBlock
           code={props.code}
+          fallback={props.fallback}
           language={props.language}
           themeName={props.themeName}
           isStreaming={props.isStreaming ?? false}

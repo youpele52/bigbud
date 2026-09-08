@@ -56,7 +56,10 @@ export function makePreparePullRequestThreadStep(input: {
 
     return yield* Effect.gen(function* () {
       const normalizedReference = normalizePullRequestReference(input.reference);
-      const rootWorktreePath = canonicalizeExistingPath(input.cwd);
+      // Remote worktree paths are meaningful only on the execution target.
+      const normalizeWorktreePath = (value: string) =>
+        input.executionTargetId ? value : canonicalizeExistingPath(value);
+      const rootWorktreePath = normalizeWorktreePath(input.cwd);
       const pullRequestSummary = yield* gitHubCli.getPullRequest({
         cwd: input.cwd,
         reference: normalizedReference,
@@ -124,7 +127,7 @@ export function makePreparePullRequestThreadStep(input: {
                   !branch.isRemote &&
                   branch.name === pullRequest.headBranch &&
                   branch.worktreePath !== null &&
-                  canonicalizeExistingPath(branch.worktreePath) !== rootWorktreePath,
+                  normalizeWorktreePath(branch.worktreePath) !== rootWorktreePath,
               ) ?? null
             );
           }),
@@ -132,7 +135,7 @@ export function makePreparePullRequestThreadStep(input: {
 
       const existingBranchBeforeFetch = yield* findLocalHeadBranch(input.cwd);
       const existingBranchBeforeFetchPath = existingBranchBeforeFetch?.worktreePath
-        ? canonicalizeExistingPath(existingBranchBeforeFetch.worktreePath)
+        ? normalizeWorktreePath(existingBranchBeforeFetch.worktreePath)
         : null;
       if (
         existingBranchBeforeFetch?.worktreePath &&
@@ -160,7 +163,7 @@ export function makePreparePullRequestThreadStep(input: {
 
       const existingBranchAfterFetch = yield* findLocalHeadBranch(input.cwd);
       const existingBranchAfterFetchPath = existingBranchAfterFetch?.worktreePath
-        ? canonicalizeExistingPath(existingBranchAfterFetch.worktreePath)
+        ? normalizeWorktreePath(existingBranchAfterFetch.worktreePath)
         : null;
       if (
         existingBranchAfterFetch?.worktreePath &&

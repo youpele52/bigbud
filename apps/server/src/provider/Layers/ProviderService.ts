@@ -56,6 +56,7 @@ import {
 } from "./ProviderService.turnLiveness.ts";
 import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
+import { makeSteerTurn } from "./ProviderService.steer.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -173,6 +174,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         threadId: input.threadId,
         operation: "ProviderService.sendTurn",
         allowRecovery: true,
+        ...(input.sessionEpoch !== undefined ? { expectedSessionEpoch: input.sessionEpoch } : {}),
       });
       metricProvider = routed.adapter.provider;
       metricModel = input.modelSelection?.model;
@@ -186,6 +188,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         threadId: input.threadId,
         turnId: turn.turnId,
         provider: routed.adapter.provider,
+        sessionEpoch: input.sessionEpoch ?? 0,
         startedAt: turnStartedAt,
       });
       yield* directory.upsert({
@@ -226,8 +229,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const interruptTurn = makeInterruptTurn({
     resolveRoutableSession,
     analytics,
-    liveness: turnLiveness,
   });
+  const steerTurn = makeSteerTurn({ resolveRoutableSession });
 
   const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
 
@@ -314,6 +317,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           threadId: input.threadId,
           operation: "ProviderService.stopSession",
           allowRecovery: false,
+          ...(input.sessionEpoch !== undefined ? { expectedSessionEpoch: input.sessionEpoch } : {}),
         });
         metricProvider = routed.adapter.provider;
         yield* Effect.annotateCurrentSpan({
@@ -367,6 +371,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     startSessionFresh,
     sendTurn,
     interruptTurn,
+    steerTurn,
     inspectActiveTurn,
     listActiveTurnLiveness,
     recordTurnInspection,

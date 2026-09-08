@@ -10,6 +10,7 @@ import type { TerminalContextSelection } from "../../../lib/terminalContext";
 interface PersistentThreadTerminalDrawerProps {
   threadId: ThreadId;
   visible: boolean;
+  presentation?: "split" | "fill" | "hidden";
   launchContext: PersistentTerminalLaunchContext | null;
   focusRequestId: number;
   splitShortcutLabel: string | undefined;
@@ -27,6 +28,7 @@ interface PersistentTerminalLaunchContext {
 export function PersistentThreadTerminalDrawer({
   threadId,
   visible,
+  presentation = "split",
   launchContext,
   focusRequestId,
   splitShortcutLabel,
@@ -41,6 +43,7 @@ export function PersistentThreadTerminalDrawer({
   const drawerOpen = drawer.terminalState.terminalOpen;
   const canRenderDrawer = Boolean(project && cwd);
   const animatedVisible = visible && drawerOpen;
+  const terminalVisible = animatedVisible && presentation !== "hidden";
   const [shouldRender, setShouldRender] = useState(() => canRenderDrawer && animatedVisible);
   const [isTransitionVisible, setIsTransitionVisible] = useState(
     () => canRenderDrawer && animatedVisible,
@@ -75,9 +78,13 @@ export function PersistentThreadTerminalDrawer({
 
   return (
     <div
-      aria-hidden={!animatedVisible}
+      aria-hidden={!terminalVisible}
+      inert={!terminalVisible || undefined}
+      data-terminal-presentation={presentation}
       className={cn(
         "overflow-hidden transition-[max-height,opacity,transform] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[max-height,opacity,transform]",
+        presentation === "fill" && "min-h-0 flex-1",
+        presentation === "hidden" && "hidden pointer-events-none",
         isTransitionVisible
           ? "translate-y-0 opacity-100"
           : "pointer-events-none translate-y-3 opacity-0",
@@ -91,7 +98,12 @@ export function PersistentThreadTerminalDrawer({
         }
       }}
       style={{
-        maxHeight: isTransitionVisible ? `${drawer.terminalState.terminalHeight}px` : "0px",
+        maxHeight:
+          presentation === "fill"
+            ? undefined
+            : isTransitionVisible
+              ? `${drawer.terminalState.terminalHeight}px`
+              : "0px",
       }}
     >
       <ThreadTerminalDrawer
@@ -100,7 +112,7 @@ export function PersistentThreadTerminalDrawer({
         cwd={cwd}
         worktreePath={drawer.effectiveWorktreePath}
         runtimeEnv={drawer.runtimeEnv}
-        visible={animatedVisible}
+        visible={terminalVisible}
         height={drawer.terminalState.terminalHeight}
         terminalIds={drawer.terminalState.terminalIds}
         activeTerminalId={drawer.terminalState.activeTerminalId}
@@ -122,6 +134,7 @@ export function PersistentThreadTerminalDrawer({
         onClearTerminalLabelOverride={drawer.clearTerminalLabelOverride}
         onHeightChange={drawer.setTerminalHeight}
         onAddTerminalContext={handleAddTerminalContext}
+        fillAvailableSpace={presentation === "fill"}
       />
     </div>
   );

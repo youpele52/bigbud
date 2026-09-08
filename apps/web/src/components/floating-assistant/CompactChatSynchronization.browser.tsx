@@ -283,6 +283,7 @@ describe("compact chat synchronization", () => {
               providerName: "codex",
               runtimeMode: "approval-required",
               activeTurnId: TURN_2,
+              sessionEpoch: 0,
               reason: null,
               lastError: null,
               updatedAt: NOW,

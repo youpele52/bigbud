@@ -6,7 +6,7 @@ import type { WsConnectionStatus } from "../rpc/wsConnectionState";
 import { WebSocketBlockingState } from "./WebSocketConnectionSurface.blocking";
 import {
   shouldContinueDesktopStartupReconnect,
-  shouldReconnectAfterTimedOutDesktopStartup,
+  shouldReconnectAfterDesktopStartupTransition,
   shouldShowDesktopStartupBlockingState,
 } from "./WebSocketConnectionSurface.logic";
 import { getInitialDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
@@ -77,19 +77,30 @@ describe("desktop backend startup UX", () => {
     expect(shouldShowDesktopStartupBlockingState(startup("timedOut"))).toBe(true);
     expect(shouldContinueDesktopStartupReconnect(startup("timedOut"))).toBe(false);
     expect(shouldShowDesktopStartupBlockingState(startup("ready"))).toBe(false);
-    expect(shouldReconnectAfterTimedOutDesktopStartup(true, null, startup("ready"))).toBe(false);
+    expect(shouldReconnectAfterDesktopStartupTransition(true, null, startup("ready"))).toBe(false);
     expect(
-      shouldReconnectAfterTimedOutDesktopStartup(true, startup("starting"), startup("ready")),
+      shouldReconnectAfterDesktopStartupTransition(true, startup("starting"), startup("ready")),
     ).toBe(false);
     expect(
-      shouldReconnectAfterTimedOutDesktopStartup(true, startup("timedOut"), startup("ready")),
+      shouldReconnectAfterDesktopStartupTransition(true, startup("timedOut"), startup("ready")),
     ).toBe(true);
     expect(
-      shouldReconnectAfterTimedOutDesktopStartup(true, startup("timedOut", 1), startup("ready", 2)),
+      shouldReconnectAfterDesktopStartupTransition(
+        true,
+        startup("timedOut", 1),
+        startup("ready", 2),
+      ),
     ).toBe(false);
     expect(
-      shouldReconnectAfterTimedOutDesktopStartup(false, startup("timedOut"), startup("ready")),
+      shouldReconnectAfterDesktopStartupTransition(false, startup("timedOut"), startup("ready")),
     ).toBe(false);
+    expect(
+      shouldReconnectAfterDesktopStartupTransition(
+        true,
+        startup("failed", 1),
+        startup("starting", 2),
+      ),
+    ).toBe(true);
   });
 
   it("recovers when the desktop startup IPC fetch rejects", async () => {

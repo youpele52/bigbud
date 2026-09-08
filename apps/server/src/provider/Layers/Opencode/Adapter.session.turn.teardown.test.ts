@@ -26,6 +26,7 @@ it.effect("tears down broken OpenCode sessions when prompt transport fails", () 
     releaseServer: () => undefined,
     opencodeSessionId: "opencode-session-transport-failure",
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: new Date().toISOString(),
     runtimeMode: "full-access" as const,
     pendingPermissions: new Map(),
@@ -46,7 +47,7 @@ it.effect("tears down broken OpenCode sessions when prompt transport fails", () 
   const { sendTurn } = makeTurnMethods({
     provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
-    syntheticEventFn: (_threadId, type, payload) =>
+    syntheticEventFn: (_threadId, _sessionEpoch, type, payload) =>
       Effect.succeed({
         type,
         payload,

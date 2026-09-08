@@ -33,6 +33,24 @@ function assertPackagedBundledSkills(serverDir) {
   }
 }
 
+function assertPackagedDesktopSupervisor(serverDir, platformName) {
+  const binaryName =
+    platformName === "win32" ? "bigbud-desktop-supervisor.exe" : "bigbud-desktop-supervisor";
+  const supervisorDir = path.join(serverDir, "delivery-supervisor", "bin");
+  const requiredFiles = [binaryName, "artifact-manifest.json", "sbom.cdx.json"];
+  const missingFiles = requiredFiles.filter(
+    (name) => !fs.existsSync(path.join(supervisorDir, name)),
+  );
+  if (missingFiles.length > 0) {
+    throw new Error(
+      `[afterPack] Missing desktop delivery supervisor files in ${supervisorDir}: ${missingFiles.join(", ")}`,
+    );
+  }
+  if (platformName !== "win32") {
+    fs.accessSync(path.join(supervisorDir, binaryName), fs.constants.X_OK);
+  }
+}
+
 function ensureLinuxBackendModulesSymlink(serverDir) {
   const modulesDir = path.join(serverDir, "_modules");
   const nodeModulesPath = path.join(serverDir, "node_modules");
@@ -63,5 +81,6 @@ module.exports = {
   REQUIRED_BUNDLED_SKILL_NAMES,
   resolvePackagedServerDir,
   assertPackagedBundledSkills,
+  assertPackagedDesktopSupervisor,
   ensureLinuxBackendModulesSymlink,
 };

@@ -1,4 +1,4 @@
-import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
+import type { ExecutionTargetId, ProviderKind, ServerProvider } from "@bigbud/contracts";
 import type { VariantProps } from "class-variance-authority";
 
 import type { buttonVariants } from "../../ui/button";
@@ -9,6 +9,7 @@ export interface ProviderModelPickerProps {
   model: string;
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProvider>;
+  workspaceExecutionTargetId?: ExecutionTargetId | null | undefined;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<ModelOption>>;
   activeProviderIconClassName?: string;
   compact?: boolean;

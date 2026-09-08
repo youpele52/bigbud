@@ -143,6 +143,7 @@ export function OrchestraPlayerComposer(props: {
               model={composer.providerModelValue}
               lockedProvider={null}
               providers={props.providers}
+              workspaceExecutionTargetId={props.workspaceExecutionTargetId}
               modelOptionsByProvider={props.modelOptionsByProvider}
               enableRecentlyUsed
               {...(composer.providerState.modelPickerIconClassName

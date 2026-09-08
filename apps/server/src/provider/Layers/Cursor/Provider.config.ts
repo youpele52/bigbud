@@ -194,18 +194,6 @@ export function buildCursorDiscoveredModels(
   });
 }
 
-export function hasCursorModelCapabilities(
-  model: Pick<ServerProviderModel, "capabilities">,
-): boolean {
-  return (
-    (model.capabilities?.reasoningEffortLevels.length ?? 0) > 0 ||
-    model.capabilities?.supportsFastMode === true ||
-    model.capabilities?.supportsThinkingToggle === true ||
-    (model.capabilities?.contextWindowOptions.length ?? 0) > 0 ||
-    (model.capabilities?.promptInjectedEffortLevels.length ?? 0) > 0
-  );
-}
-
 export function buildCursorDiscoveredModelsFromConfigOptions(
   configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
 ): ReadonlyArray<ServerProviderModel> {

@@ -9,6 +9,7 @@ export type ProviderFailureActivityInput = {
   readonly kind:
     | "provider.turn.start.failed"
     | "provider.turn.interrupt.failed"
+    | "provider.turn.steer.failed"
     | "provider.approval.respond.failed"
     | "provider.user-input.respond.failed"
     | "provider.session.stop.failed";

@@ -20,4 +20,15 @@ Set `BIGBUD_DISABLE_THREAD_RETENTION=1` on the server to prevent finite policy c
 
 Cleanup removes deleted thread subtrees from bigbud's local projections, canonical event history, and associated bigbud-managed resources, such as attachments, checkpoints, logs, and managed worktrees. Canonical cleanup runs only after a replacement projection baseline is verified; deferred roots can be retried with the bounded `canonical-thread-cleanup` maintenance command. Provider-remote conversations remain out of scope. SQLite normally places deleted database pages on its reusable free-page list. The database file may therefore remain the same size while SQLite reuses that space for later writes. bigbud does **not** run `VACUUM` as part of cleanup because it requires additional disk space and disruptive database rewriting.
 
+Manual confirmation consumption and creation (or coalescing) of its durable run
+are one SQLite transaction. The synchronous manual request executes that exact
+persisted run rather than creating a second run. Manual, scheduled, startup
+recovery, and queued execution share one coordinator permit. A run may select
+or delete threads only while it owns the durable `active_slot`; startup resumes
+that owner first, queued manual work has priority at safe handoff points, and
+scheduled selection checks for that work between atomically persisted pages.
+Cursor advancement plus selected items are persisted atomically with stable
+deletion command IDs, so a yielded scheduled run resumes without selecting or
+dispatching the same work under a new command ID.
+
 Cleanup has no in-app per-thread undo. Recovery is backup-only: stop bigbud, restore a consistent backup of the SQLite database and any associated state directories, and then restart. Restoring only selected rows or only filesystem resources is unsupported and can produce inconsistent state. Validate backups and restore procedures before enabling a finite policy.

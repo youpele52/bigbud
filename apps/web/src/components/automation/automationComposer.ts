@@ -1,6 +1,7 @@
 import { type ModelSelection, type ThreadId } from "@bigbud/contracts";
 
 import { newCommandId } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { type ComposerThreadDraftState } from "~/stores/composer";
 
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -27,7 +28,7 @@ export async function syncAutomationTargetThreadModelSelection(
     return;
   }
 
-  await api.orchestration.dispatchCommand({
+  await dispatchCommandWithOutcomeRecovery(api, {
     type: "thread.meta.update",
     commandId: newCommandId(),
     threadId: input.targetThreadId,

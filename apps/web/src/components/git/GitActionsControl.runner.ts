@@ -17,6 +17,7 @@ import { resolveProgressDescription } from "./GitActionsControl.progress";
 import { toastManager, type ThreadToastData } from "~/components/ui/toast";
 import { gitMutationKeys, gitRunStackedActionMutationOptions } from "~/lib/gitReactQuery";
 import { newCommandId, randomUUID } from "~/lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
@@ -127,15 +128,13 @@ export function useGitActionRunner({
         const worktreePath = activeServerThread.worktreePath;
         const api = readNativeApi();
         if (api) {
-          void api.orchestration
-            .dispatchCommand({
-              type: "thread.meta.update",
-              commandId: newCommandId(),
-              threadId: activeThreadId,
-              branch,
-              worktreePath,
-            })
-            .catch(() => undefined);
+          void dispatchCommandWithOutcomeRecovery(api, {
+            type: "thread.meta.update",
+            commandId: newCommandId(),
+            threadId: activeThreadId,
+            branch,
+            worktreePath,
+          }).catch(() => undefined);
         }
         setThreadBranch(activeThreadId, branch, worktreePath);
         return;

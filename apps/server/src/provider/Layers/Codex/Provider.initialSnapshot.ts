@@ -1,17 +1,12 @@
 import type { CodexSettings } from "@bigbud/contracts";
 
-import { buildServerProvider, providerModelsFromSettings } from "../../providerSnapshot";
-import { BUILT_IN_MODELS, DEFAULT_CODEX_MODEL_CAPABILITIES } from "./Provider.models";
+import { buildServerProvider } from "../../providerSnapshot";
+import { getCodexFallbackModels } from "./Provider.models";
 
 const PROVIDER = "codex" as const;
 
 export function makeCodexInitialSnapshot(codexSettings: CodexSettings) {
-  const models = providerModelsFromSettings(
-    BUILT_IN_MODELS,
-    PROVIDER,
-    codexSettings.customModels,
-    DEFAULT_CODEX_MODEL_CAPABILITIES,
-  );
+  const models = getCodexFallbackModels(codexSettings.customModels);
   const checkedAt = new Date().toISOString();
 
   return buildServerProvider({

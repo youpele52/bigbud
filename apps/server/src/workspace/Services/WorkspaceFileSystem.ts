@@ -28,9 +28,25 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
     relativePath: Schema.optional(Schema.String),
     operation: Schema.String,
     detail: Schema.String,
+    retryable: Schema.optional(Schema.Boolean),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
+
+export interface WorkspaceFileRangeInput {
+  readonly executionTargetId?: string | undefined;
+  readonly cwd: string;
+  readonly relativePath: string;
+  readonly offset: number;
+  readonly maxBytes: number;
+}
+
+export interface WorkspaceFileRangeResult {
+  readonly relativePath: string;
+  readonly bytes: Uint8Array;
+  readonly sizeBytes: number;
+  readonly truncated: boolean;
+}
 
 /**
  * WorkspaceFileSystemShape - Service API for workspace-relative file operations.
@@ -43,6 +59,16 @@ export interface WorkspaceFileSystemShape {
     input: ProjectReadFilePreviewInput,
   ) => Effect.Effect<
     ProjectReadFilePreviewResult,
+    WorkspaceFileSystemError | WorkspacePathOutsideRootError
+  >;
+
+  /**
+   * Read a bounded byte range from a workspace-relative file.
+   */
+  readonly readFileRange: (
+    input: WorkspaceFileRangeInput,
+  ) => Effect.Effect<
+    WorkspaceFileRangeResult,
     WorkspaceFileSystemError | WorkspacePathOutsideRootError
   >;
 

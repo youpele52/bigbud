@@ -64,6 +64,7 @@ import {
   type TeachListProjectsInput,
   type TeachListProjectsResult,
   type ThinkingActivityDeltaEvent,
+  type OrchestrationDeliverySubscriptionInput,
   type VisibleBrowserCommandResult,
   type VisibleBrowserLeaseRevokeInput,
   type VisibleBrowserLeaseSnapshot,
@@ -86,7 +87,9 @@ type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
+  readonly shouldRetry?: (error: unknown) => boolean;
 }
 
 export type RpcUnaryMethod<TTag extends RpcTag> =
@@ -210,10 +213,12 @@ export interface WsRpcClient {
     >;
   };
   readonly server: {
+    readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
+    readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly unlockSshKey: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshKey>;
     readonly unlockSshPassword: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshPassword>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
@@ -289,12 +294,26 @@ export interface WsRpcClient {
     readonly getSelectedThreadDetail: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
     >;
+    readonly getThreadOwnership: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getThreadOwnership>;
+    readonly getCommandOutcome: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getCommandOutcome>;
     readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
-    readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
+    readonly acknowledgeDelivery: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.acknowledgeDelivery
+    >;
+    readonly acknowledgeDeliveryBaseline: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline
+    >;
+    readonly onDomainEvent: (
+      input: () => OrchestrationDeliverySubscriptionInput,
+      listener: Parameters<
+        RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>
+      >[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
     readonly onThinkingDelta: (
       listener: (event: ThinkingActivityDeltaEvent) => void,
       options?: StreamSubscriptionOptions,

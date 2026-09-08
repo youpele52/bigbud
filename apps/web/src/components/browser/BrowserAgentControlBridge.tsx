@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { BrowserAction, BrowserResult, VisibleBrowserCommand } from "@bigbud/contracts";
 
 import { getWsRpcClient } from "~/rpc/wsRpcClient";
+import type { WsRpcClient } from "~/rpc/wsRpcClient.types";
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 import { closeBrowserTabsAfterRevocation } from "~/stores/browser/browserPanel.actions";
 import {
@@ -33,6 +34,14 @@ function messageFromError(error: unknown): string {
   return error instanceof Error && error.message.trim().length > 0
     ? error.message
     : "Visible browser command failed.";
+}
+
+export function clearVisibleBrowserRendererLease(leaseId: string): void {
+  for (const [tabId, tab] of Object.entries(useBrowserPanelStore.getState().tabsById)) {
+    if (tab.agentLease?.leaseId === leaseId) {
+      useBrowserPanelStore.getState().clearAgentLease(tabId, leaseId);
+    }
+  }
 }
 
 type ResolvedBrowserTab = { readonly tabId: string } | { readonly limitResult: BrowserResult };
@@ -100,9 +109,24 @@ async function executeCommand(command: VisibleBrowserCommand) {
   return { ...result, tabId, target: "visible" as const };
 }
 
-async function reconcileBrowserLeases(rendererId: string) {
-  const leases = await getWsRpcClient().browser.getLeases({ rendererId });
-  useBrowserPanelStore.getState().reconcileAgentLeases(leases);
+export async function reconcileBrowserLeases(
+  rendererId: string,
+  browser: Pick<WsRpcClient["browser"], "getLeases" | "revokeLease"> = getWsRpcClient().browser,
+) {
+  const leases = await browser.getLeases({ rendererId });
+  const tabsById = useBrowserPanelStore.getState().tabsById;
+  const openTabs = new Set(useRightPanelTabsStore.getState().openTabs);
+  const existingLeases = leases.filter(
+    (lease) => tabsById[lease.tabId] !== undefined && openTabs.has(lease.tabId as RightPanelTabId),
+  );
+  useBrowserPanelStore.getState().reconcileAgentLeases(existingLeases);
+  await Promise.all(
+    leases
+      .filter((lease) => !existingLeases.includes(lease))
+      .map((lease) =>
+        browser.revokeLease({ rendererId, leaseId: lease.leaseId, tabId: lease.tabId }),
+      ),
+  );
 }
 
 function cursorForAction(action: BrowserAction): { readonly x: number; readonly y: number } | null {
@@ -118,6 +142,35 @@ function cursorForAction(action: BrowserAction): { readonly x: number; readonly 
   }
 }
 
+export async function executeAndCompleteVisibleBrowserCommand(input: {
+  readonly command: VisibleBrowserCommand;
+  readonly rendererId: string;
+  readonly execute: (command: VisibleBrowserCommand) => Promise<BrowserResult>;
+  readonly complete: WsRpcClient["browser"]["completeCommand"];
+  readonly reconcile: (rendererId: string) => Promise<void>;
+}): Promise<void> {
+  let result: BrowserResult;
+  try {
+    result = await input.execute(input.command);
+  } catch (error) {
+    clearVisibleBrowserRendererLease(input.command.leaseId);
+    try {
+      await input.complete({
+        commandId: input.command.commandId,
+        rendererId: input.rendererId,
+        error: messageFromError(error),
+      });
+    } catch {
+      await input.reconcile(input.rendererId).catch(() => undefined);
+    }
+    return;
+  }
+
+  await input
+    .complete({ commandId: input.command.commandId, rendererId: input.rendererId, result })
+    .catch(() => undefined);
+}
+
 export function BrowserAgentControlBridge() {
   const rendererId = useRef(getVisibleBrowserRendererId()).current;
 
@@ -130,17 +183,13 @@ export function BrowserAgentControlBridge() {
     return client.browser.onCommand(
       rendererId,
       (command) => {
-        void executeCommand(command)
-          .then((result) =>
-            client.browser.completeCommand({ commandId: command.commandId, rendererId, result }),
-          )
-          .catch((error) =>
-            client.browser.completeCommand({
-              commandId: command.commandId,
-              rendererId,
-              error: messageFromError(error),
-            }),
-          );
+        void executeAndCompleteVisibleBrowserCommand({
+          command,
+          rendererId,
+          execute: executeCommand,
+          complete: client.browser.completeCommand,
+          reconcile: reconcileBrowserLeases,
+        });
       },
       { onResubscribe: () => void reconcileBrowserLeases(rendererId).catch(() => undefined) },
     );

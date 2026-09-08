@@ -70,6 +70,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "alt+mod+b", command: "rightPanel.toggle", when: "!terminalFocus" },
   { key: "mod+t", command: "rightPanel.newTab", when: "!terminalFocus" },
   { key: "mod+p", command: "commandPalette.toggle", when: "!terminalFocus" },
+  { key: "mod+l", command: "chat.focus", when: "!terminalFocus" },
   { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
   { key: "mod+alt+n", command: "chat.newLocal", when: "!terminalFocus" },
   { key: "mod+shift+n", command: "notes.toggle", when: "!terminalFocus" },

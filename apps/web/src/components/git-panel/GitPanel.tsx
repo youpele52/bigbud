@@ -4,6 +4,7 @@ import { GitBranchIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { isElectron } from "~/config/env";
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
 import { cn } from "~/lib/utils";
 import {
@@ -23,6 +24,10 @@ interface GitPanelProps {
   visible?: boolean;
 }
 
+function queryErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProps) {
   const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
   const activeView = useGitPanelViewStore((state) => state.activeView);
@@ -36,6 +41,9 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   });
   const gitStatus = gitStatusQuery.data ?? null;
   const isGitRepo = gitStatus?.isRepo ?? false;
+  const gitStatusError = gitStatusQuery.error
+    ? queryErrorMessage(gitStatusQuery.error, "The Git status request failed.")
+    : null;
 
   const workingTreeDiffQuery = useQuery(
     gitWorkingTreeDiffQueryOptions({
@@ -73,7 +81,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   useEffect(() => {
     setSelectedFilePath(null);
     setSelectedCommitSha(null);
-  }, [cwd]);
+  }, [cwd, executionTargetId]);
 
   useEffect(() => {
     const files = gitStatus?.workingTree.files ?? [];
@@ -104,12 +112,28 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
     );
   }
 
-  if (gitStatusQuery.isLoading) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading git state...</div>;
+  if (gitStatusQuery.isLoading && !gitStatusQuery.data) {
+    return <BigbudLoader label="Loading git state..." />;
+  }
+
+  if (gitStatusError && !gitStatusQuery.data) {
+    return (
+      <div className="p-4 text-sm text-destructive">Failed to load Git state: {gitStatusError}</div>
+    );
   }
 
   if (!isGitRepo || !gitStatus) {
-    return <div className="p-4 text-sm text-muted-foreground">Nothing to show here.</div>;
+    return (
+      <div className="space-y-2 p-4 text-sm text-muted-foreground">
+        <p>
+          No Git repository at <code className="break-all text-foreground">{cwd}</code>.
+        </p>
+        <p>
+          Git uses the project workspace root, not the terminal&apos;s current directory. Edit the
+          remote project and set its workspace root to the repository directory.
+        </p>
+      </div>
+    );
   }
 
   const branchLabel = gitStatus.branch ?? "Detached HEAD";
@@ -160,6 +184,11 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
           </ToggleGroup>
         </div>
       </div>
+      {gitStatusError ? (
+        <div className="border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          Git status refresh failed: {gitStatusError}
+        </div>
+      ) : null}
       {activeView === "changes" ? (
         <GitPanelChanges
           diffError={
@@ -195,7 +224,8 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
                 ? "Failed to load git history."
                 : null
           }
-          isLoadingDetails={commitDetailsQuery.isLoading || commitHistoryQuery.isLoading}
+          isLoadingDetails={commitDetailsQuery.isLoading}
+          isLoadingHistory={commitHistoryQuery.isLoading}
           isLoadingMoreHistory={commitHistoryQuery.isFetchingNextPage}
           onLoadMoreHistory={() => {
             if (!commitHistoryQuery.hasNextPage || commitHistoryQuery.isFetchingNextPage) {

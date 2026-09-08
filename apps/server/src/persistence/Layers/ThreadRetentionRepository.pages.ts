@@ -17,33 +17,50 @@ const OUTSTANDING_STATUSES = ["selected", "deletion_requested", "prepared", "pur
 const clampLimit = (limit: number) => Math.max(1, Math.min(250, Math.floor(limit)));
 
 export const retentionSubtreeCteSql = `
-  WITH RECURSIVE thread_subtree(root_thread_id, thread_id) AS (
-    SELECT t.thread_id, t.thread_id
+  WITH RECURSIVE thread_subtree(root_thread_id, root_project_id, thread_id) AS (
+    SELECT t.thread_id, t.project_id, t.thread_id
     FROM projection_threads AS t
     WHERE t.deleted_at IS NULL
       AND NOT EXISTS (
         SELECT 1 FROM projection_threads AS parent
-        WHERE parent.thread_id = t.parent_thread_id AND parent.deleted_at IS NULL
+        WHERE parent.thread_id = t.parent_thread_id
+          AND parent.project_id = t.project_id
+          AND parent.deleted_at IS NULL
       )
-    UNION ALL
-    SELECT subtree.root_thread_id, child.thread_id
+  UNION ALL
+    SELECT subtree.root_thread_id, subtree.root_project_id, child.thread_id
     FROM thread_subtree AS subtree
-    JOIN projection_threads AS child ON child.parent_thread_id = subtree.thread_id
+    JOIN projection_threads AS child
+      ON child.parent_thread_id = subtree.thread_id
+      AND child.project_id = subtree.root_project_id
     WHERE child.deleted_at IS NULL
   ), subtree_activity AS (
     SELECT subtree.root_thread_id, MAX(${retentionVisibleActivitySql("thread")}) AS last_activity_at
     FROM thread_subtree AS subtree
     JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
     GROUP BY subtree.root_thread_id
+  ), subtree_exclusion_candidates AS (
+    SELECT subtree.root_thread_id, thread.thread_id,
+      (${retentionExclusionCaseSql("thread")}) AS reason
+    FROM thread_subtree AS subtree
+    JOIN projection_threads AS thread ON thread.thread_id = subtree.thread_id
+  ), subtree_exclusions AS (
+    SELECT root_thread_id, reason FROM (
+      SELECT root_thread_id, reason,
+        ROW_NUMBER() OVER (PARTITION BY root_thread_id ORDER BY thread_id) AS position
+      FROM subtree_exclusion_candidates
+      WHERE reason IS NOT NULL
+    ) WHERE position = 1
   )
 `;
 
 export const retentionEligibleRootFromSql = `
   FROM projection_threads AS t
   JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
+  LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = t.thread_id
   WHERE t.deleted_at IS NULL AND t.deleting_at IS NULL AND t.pinned_at IS NULL
     AND activity.last_activity_at <= ?
-    AND (${retentionExclusionCaseSql}) IS NULL
+    AND exclusion.reason IS NULL
 `;
 
 export const retentionCandidateSelectSql = `
@@ -83,6 +100,7 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
             SET cursor_last_activity_at = ${input.nextCursor.lastActivityAt},
               cursor_thread_id = ${input.nextCursor.threadId}, updated_at = ${input.createdAt}
             WHERE run_id = ${input.runId} AND status = ${input.expectedStatus}
+              AND active_slot = 1
               AND ((${
                 input.expectedCursor === null ? 1 : 0
               } = 1 AND cursor_last_activity_at IS NULL AND cursor_thread_id IS NULL)
@@ -116,7 +134,7 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
         yield* sql`
             UPDATE thread_retention_runs
             SET selected_count = selected_count + ${insertedCount}, updated_at = ${input.createdAt}
-            WHERE run_id = ${input.runId}
+            WHERE run_id = ${input.runId} AND active_slot = 1
           `;
         const outstanding = yield* sql<{ count: number }>`
             SELECT COUNT(*) AS count FROM thread_retention_run_items
@@ -139,6 +157,11 @@ export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
   ) {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
+        const ownership = yield* sql`
+          SELECT 1 FROM thread_retention_runs
+          WHERE run_id = ${input.runId} AND active_slot = 1
+        `;
+        if (ownership.length !== 1) return 0;
         let insertedCount = 0;
         for (const candidate of input.candidates) {
           const rows = yield* sql`

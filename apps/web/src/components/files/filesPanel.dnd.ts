@@ -10,6 +10,15 @@ export function serializeFilesPanelDragEntry(entry: FilesPanelDragEntry): string
   return JSON.stringify(entry);
 }
 
+export function writeFilesPanelDragEntry(
+  dataTransfer: DataTransfer,
+  entry: FilesPanelDragEntry,
+): void {
+  dataTransfer.effectAllowed = "copy";
+  dataTransfer.setData(BIGBUD_FILES_PANEL_DRAG_MIME, serializeFilesPanelDragEntry(entry));
+  dataTransfer.setData("text/plain", entry.path);
+}
+
 export function parseFilesPanelDragEntry(value: string): FilesPanelDragEntry | null {
   try {
     const parsed = JSON.parse(value) as Partial<FilesPanelDragEntry>;

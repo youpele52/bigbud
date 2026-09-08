@@ -66,6 +66,7 @@ export function FloatingAssistantSettingsSection() {
         description="Keeps bigbud running after the main window closes. Quit bigbud stops active local work."
         control={
           <Switch
+            tone="success"
             checked={enabled}
             aria-label="Enable floating assistant"
             onCheckedChange={(checked) => {

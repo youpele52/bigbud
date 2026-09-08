@@ -1,13 +1,10 @@
 import type { GitStatusResult } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { cn } from "~/lib/utils";
 import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
-import {
-  BIGBUD_FILES_PANEL_DRAG_MIME,
-  joinWorkspaceEntryPath,
-  serializeFilesPanelDragEntry,
-} from "../files/filesPanel.dnd";
+import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "../files/filesPanel.dnd";
 import { showGitChangedFileCopyMenu } from "./GitPanel.copy";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
@@ -86,16 +83,11 @@ export function GitPanelChanges({
                   onDragStart={(event) => {
                     const absolutePath = joinWorkspaceEntryPath(workspaceRoot, file.path);
                     const name = file.path.split("/").at(-1) ?? file.path;
-                    event.dataTransfer.effectAllowed = "copy";
-                    event.dataTransfer.setData(
-                      BIGBUD_FILES_PANEL_DRAG_MIME,
-                      serializeFilesPanelDragEntry({
-                        name,
-                        path: absolutePath,
-                        entryKind: "file",
-                      }),
-                    );
-                    event.dataTransfer.setData("text/plain", absolutePath);
+                    writeFilesPanelDragEntry(event.dataTransfer, {
+                      name,
+                      path: absolutePath,
+                      entryKind: "file",
+                    });
                   }}
                   onClick={(event) => {
                     onSelectFile(file.path);
@@ -141,7 +133,7 @@ export function GitPanelChanges({
         diffError ? (
           <div className="p-4 text-sm text-destructive">{diffError}</div>
         ) : isLoadingDiff ? (
-          <div className="p-4 text-sm text-muted-foreground">Loading diff...</div>
+          <BigbudLoader label="Loading diff..." />
         ) : (
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <GitPatchViewer emptyLabel="No diff available for this file." patch={diffPatch} />

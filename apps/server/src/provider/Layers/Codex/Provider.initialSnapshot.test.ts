@@ -21,6 +21,9 @@ describe("makeCodexInitialSnapshot", () => {
       message: "Checking Codex availability...",
     });
     expect(snapshot.models.some((model) => model.isCustom)).toBe(true);
+    expect(
+      snapshot.models.every((model) => model.capabilities?.reasoningEffortLevels.length === 0),
+    ).toBe(true);
   });
 
   it("retains the disabled snapshot", () => {

@@ -15,7 +15,8 @@ export function isProviderLifecycleEvent(event: ProviderRuntimeEvent): boolean {
     event.type === "session.state.changed" ||
     event.type === "thread.started" ||
     event.type === "turn.started" ||
-    event.type === "turn.completed"
+    event.type === "turn.completed" ||
+    event.type === "turn.aborted"
   );
 }
 
@@ -30,10 +31,12 @@ export function resolveProviderLifecycleGuard(input: {
   readonly providerConflictsWithLiveSession: boolean;
   readonly conflictsWithLiveTurn: boolean;
   readonly missingTurnForLiveTurn: boolean;
+  readonly sessionEpochMismatch: boolean;
   readonly rejectionReason:
     | "provider-mismatch"
     | "missing-turn-id"
     | "turn-mismatch"
+    | "session-epoch-mismatch"
     | "strict-lifecycle-guard"
     | null;
 } {
@@ -50,6 +53,9 @@ export function resolveProviderLifecycleGuard(input: {
     input.liveSession?.activeTurnId != null && input.eventTurnId === undefined;
   const providerConflictsWithLiveSession =
     input.liveSession !== undefined && input.liveSession.provider !== input.event.provider;
+  const sessionEpochMismatch =
+    input.liveSession?.sessionEpoch !== undefined &&
+    input.liveSession.sessionEpoch !== (input.thread.session?.sessionEpoch ?? 0);
   const isRecoveryStateChangedEvent =
     input.event.type === "session.state.changed" &&
     input.event.payload.reason === PROVIDER_RECOVERING_SESSION_REASON;
@@ -71,35 +77,40 @@ export function resolveProviderLifecycleGuard(input: {
       providerConflictsWithLiveSession,
       conflictsWithLiveTurn,
       missingTurnForLiveTurn,
+      sessionEpochMismatch,
       rejectionReason: null,
     };
   }
 
   const rejected =
     providerConflictsWithLiveSession ||
+    sessionEpochMismatch ||
     recoveryTurnMismatch ||
     (input.event.type === "turn.started" && conflictsWithActiveTurn) ||
     (input.event.type === "session.exited" && (conflictsWithLiveTurn || missingTurnForLiveTurn)) ||
-    (input.event.type === "turn.completed" &&
+    ((input.event.type === "turn.completed" || input.event.type === "turn.aborted") &&
       (conflictsWithActiveTurn ||
         missingTurnForActiveTurn ||
         conflictsWithLiveTurn ||
         missingTurnForLiveTurn));
   const rejectionReason = providerConflictsWithLiveSession
     ? "provider-mismatch"
-    : missingTurnForActiveTurn || missingTurnForLiveTurn
-      ? "missing-turn-id"
-      : conflictsWithActiveTurn || conflictsWithLiveTurn
-        ? "turn-mismatch"
-        : rejected
-          ? "strict-lifecycle-guard"
-          : null;
+    : sessionEpochMismatch
+      ? "session-epoch-mismatch"
+      : missingTurnForActiveTurn || missingTurnForLiveTurn
+        ? "missing-turn-id"
+        : conflictsWithActiveTurn || conflictsWithLiveTurn
+          ? "turn-mismatch"
+          : rejected
+            ? "strict-lifecycle-guard"
+            : null;
 
   return {
     shouldApply: !rejected,
     providerConflictsWithLiveSession,
     conflictsWithLiveTurn,
     missingTurnForLiveTurn,
+    sessionEpochMismatch,
     rejectionReason,
   };
 }

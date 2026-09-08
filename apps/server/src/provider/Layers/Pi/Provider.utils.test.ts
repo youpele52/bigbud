@@ -53,6 +53,37 @@ describe("buildPiModels", () => {
     expect(models[1]!.group).toBe("Google");
   });
 
+  it("trims model names received from Pi", () => {
+    const upstream = {
+      id: "google/gemma-4-26b-a4b",
+      name: "Google: Gemma 4 26B A4B ",
+      provider: "openrouter",
+    } as const;
+    const [model] = buildPiModels([upstream], []);
+
+    expect(model?.name).toBe("Google: Gemma 4 26B A4B");
+    expect(model?.slug).toBe(upstream.id);
+    expect(model?.subProviderID).toBe(upstream.provider);
+    expect(upstream).toEqual({
+      id: "google/gemma-4-26b-a4b",
+      name: "Google: Gemma 4 26B A4B ",
+      provider: "openrouter",
+    });
+  });
+
+  it("falls back to the unchanged model ID for a whitespace-only display name", () => {
+    const [model] = buildPiModels(
+      [{ id: "openrouter/google/gemma", name: " \t\n ", provider: "openrouter" }],
+      [],
+    );
+
+    expect(model).toMatchObject({
+      slug: "openrouter/google/gemma",
+      name: "openrouter/google/gemma",
+      subProviderID: "openrouter",
+    });
+  });
+
   it("derives model-specific thinking levels from Pi metadata", () => {
     const [reasoning, nonReasoning] = buildPiModels(
       [

@@ -104,6 +104,7 @@ function autoResolveConfirm(deps: {
     yield* deps.emit([
       yield* deps.makeSyntheticEvent(
         deps.session.threadId,
+        deps.session.sessionEpoch,
         "user-input.resolved",
         { answers: { [pending.question.id]: "Yes" } },
         {
@@ -111,10 +112,15 @@ function autoResolveConfirm(deps: {
           requestId: deps.requestId,
         },
       ),
-      yield* deps.makeSyntheticEvent(deps.session.threadId, "session.state.changed", {
-        state: deps.session.activeTurnId ? "running" : "ready",
-        reason: "user-input.resolved",
-      }),
+      yield* deps.makeSyntheticEvent(
+        deps.session.threadId,
+        deps.session.sessionEpoch,
+        "session.state.changed",
+        {
+          state: deps.session.activeTurnId ? "running" : "ready",
+          reason: "user-input.resolved",
+        },
+      ),
     ]);
   })
     .pipe(deps.runPromise)
@@ -153,6 +159,7 @@ export const handleExtensionUiRequest = Effect.fn("handleExtensionUiRequest")(fu
 
   const opened = yield* deps.makeSyntheticEvent(
     deps.session.threadId,
+    deps.session.sessionEpoch,
     "user-input.requested",
     { questions: [question] },
     {
@@ -160,10 +167,15 @@ export const handleExtensionUiRequest = Effect.fn("handleExtensionUiRequest")(fu
       requestId: deps.message.id,
     },
   );
-  const waiting = yield* deps.makeSyntheticEvent(deps.session.threadId, "session.state.changed", {
-    state: "waiting",
-    reason: "user-input.requested",
-  });
+  const waiting = yield* deps.makeSyntheticEvent(
+    deps.session.threadId,
+    deps.session.sessionEpoch,
+    "session.state.changed",
+    {
+      state: "waiting",
+      reason: "user-input.requested",
+    },
+  );
   yield* emitWithTurnAppend({ emit: deps.emit, session: deps.session, events: [opened, waiting] });
 
   if (deps.session.runtimeMode === "full-access" && deps.message.method === "confirm") {

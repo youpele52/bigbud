@@ -46,14 +46,16 @@ vi.mock("./SidebarThreadRow", () => ({
   SidebarThreadRow: ({ threadId }: { threadId: ThreadId }) => <div>thread:{threadId}</div>,
 }));
 
-function buildSharedProjectItemProps(): SharedProjectItemProps {
+function buildSharedProjectItemProps(
+  routeThreadId: ThreadId | null = null,
+): SharedProjectItemProps {
   return {
     isManualProjectSorting: false,
     newThreadShortcutLabel: null,
     showThreadJumpHints: false,
     threadJumpLabelById: new Map(),
     appSettingsDefaultThreadEnvMode: "local",
-    routeThreadId: null,
+    routeThreadId,
     selectedThreadIds: new Set(),
     renamingThreadId: null,
     renamingTitle: "",
@@ -102,10 +104,12 @@ function renderFavoritesSection({
   renderedFavorites = [],
   isExpanded = true,
   showAll = false,
+  activeThreadId = null,
 }: {
   renderedFavorites?: SidebarRenderedThreadEntry[];
   isExpanded?: boolean;
   showAll?: boolean;
+  activeThreadId?: ThreadId | null;
 } = {}) {
   return renderToStaticMarkup(
     <SidebarFavoritesSection
@@ -114,7 +118,7 @@ function renderFavoritesSection({
       onExpandedChange={vi.fn()}
       showAll={showAll}
       onShowAllChange={vi.fn()}
-      sharedProjectItemProps={buildSharedProjectItemProps()}
+      sharedProjectItemProps={buildSharedProjectItemProps(activeThreadId)}
     />,
   );
 }
@@ -190,5 +194,19 @@ describe("SidebarFavoritesSection", () => {
 
     expect(html).toContain("thread:thread-5");
     expect(html).toContain("Show less");
+  });
+
+  it("includes an active fifth pin once and adjusts the folded hidden count", () => {
+    const orderedThreadIds = Array.from({ length: 6 }, (_, index) =>
+      ThreadId.makeUnsafe(`thread-${index + 1}`),
+    );
+    const html = renderFavoritesSection({
+      renderedFavorites: orderedThreadIds.map((threadId) => ({ threadId, orderedThreadIds })),
+      activeThreadId: orderedThreadIds[4]!,
+    });
+
+    expect(html).toContain("thread:thread-5");
+    expect(html.match(/thread:thread-5/g)).toHaveLength(1);
+    expect(html).toContain("See more (1)");
   });
 });

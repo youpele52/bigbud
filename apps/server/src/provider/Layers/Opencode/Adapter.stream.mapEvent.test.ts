@@ -9,6 +9,7 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 const CREATED_AT = "2026-05-04T00:00:00.000Z";
 const THREAD_ID = ThreadId.makeUnsafe("thread-opencode-stream-map-event-test");
 const TURN_ID = TurnId.makeUnsafe("turn-opencode-stream-map-event-test");
+const SESSION_EPOCH = 7;
 
 function makeSession(): ActiveOpencodeSession {
   return {
@@ -16,6 +17,7 @@ function makeSession(): ActiveOpencodeSession {
     releaseServer: () => undefined,
     opencodeSessionId: "opencode-session-1",
     threadId: THREAD_ID,
+    sessionEpoch: SESSION_EPOCH,
     createdAt: CREATED_AT,
     runtimeMode: "full-access",
     providerRuntimeExecutionTargetId: "local",
@@ -74,6 +76,7 @@ it.effect("infers context compaction from busy status messages as a fallback", (
         eventId: EventId.makeUnsafe("evt-next"),
         provider: "opencode",
         threadId: THREAD_ID,
+        sessionEpoch: SESSION_EPOCH,
         createdAt: CREATED_AT,
         turnId: TURN_ID,
         providerRefs: {
@@ -126,6 +129,7 @@ it.effect("maps native session.compacted events to thread compacted state", () =
         eventId: EventId.makeUnsafe("evt-1"),
         provider: "opencode",
         threadId: THREAD_ID,
+        sessionEpoch: SESSION_EPOCH,
         createdAt: CREATED_AT,
         turnId: TURN_ID,
         providerRefs: {
@@ -179,6 +183,7 @@ it.effect("maps todo.updated events to canonical turn.plan.updated events", () =
         eventId: EventId.makeUnsafe("evt-1"),
         provider: "opencode",
         threadId: THREAD_ID,
+        sessionEpoch: SESSION_EPOCH,
         createdAt: CREATED_AT,
         turnId: TURN_ID,
         providerRefs: {

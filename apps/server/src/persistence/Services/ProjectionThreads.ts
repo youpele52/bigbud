@@ -16,6 +16,7 @@ import {
   OrchestrationThreadPurpose,
   OrchestrationQueuedPrompt,
   OrchestrationPendingInterruptFlushIntent,
+  OrchestrationTurnControlOperation,
   ProjectId,
   ProviderInteractionMode,
   RuntimeMode,
@@ -50,6 +51,8 @@ export const ProjectionThread = Schema.Struct({
   pendingInterruptFlushIntent: Schema.optional(
     Schema.NullOr(OrchestrationPendingInterruptFlushIntent),
   ),
+  pendingTurnControlOperation: Schema.optional(Schema.NullOr(OrchestrationTurnControlOperation)),
+  queueHold: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   lastActivityAt: IsoDateTime,

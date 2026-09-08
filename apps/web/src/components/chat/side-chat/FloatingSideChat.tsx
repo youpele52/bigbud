@@ -1,4 +1,8 @@
-import { type ThreadId } from "@bigbud/contracts";
+import {
+  type ApprovalRequestId,
+  type ProviderApprovalDecision,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { MessageCirclePlus, MinusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
@@ -19,6 +23,7 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useSideChatStore } from "~/stores/sideChat";
+import type { PendingApproval } from "~/logic/session";
 
 import { attachSidecarToComposer, closeSideChat } from "./sideChat.actions";
 import { useSideChatAutoScroll } from "./sideChat.scroll.hooks";
@@ -53,12 +58,23 @@ function SidecarHeaderAction(props: {
 export function CompactThreadConversation({
   composerClassName,
   projectPicker,
+  renderPendingApproval,
   workspaceRoot,
   onMarkdownAnchorClick,
   ...context
 }: ThreadComposerSurfaceContext & {
   composerClassName?: string;
   projectPicker?: ReactNode;
+  renderPendingApproval?:
+    | ((input: {
+        readonly approval: PendingApproval;
+        readonly isResponding: boolean;
+        readonly onRespondToApproval: (
+          requestId: ApprovalRequestId,
+          decision: ProviderApprovalDecision,
+        ) => Promise<void>;
+      }) => ReactNode)
+    | undefined;
   workspaceRoot: string | undefined;
   onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
 }) {
@@ -130,17 +146,27 @@ export function CompactThreadConversation({
         {showScrollToBottom ? <ScrollToBottomPill onScrollToBottom={scrollToBottom} /> : null}
       </div>
       <div className="px-3 py-2">
-        <ChatViewComposer
-          base={context.base}
-          compact
-          composer={context.composer}
-          thread={context.thread}
-          runtime={context.runtime}
-          interactions={context.interactions}
-          {...(composerClassName ? { className: composerClassName } : {})}
-          onOpenOrchestra={() => undefined}
-          onOpenReplySource={() => undefined}
-        />
+        {context.thread.activePendingApproval && renderPendingApproval ? (
+          renderPendingApproval({
+            approval: context.thread.activePendingApproval,
+            isResponding: context.runtime.turnActions.respondingRequestIds.includes(
+              context.thread.activePendingApproval.requestId,
+            ),
+            onRespondToApproval: context.runtime.turnActions.onRespondToApproval,
+          })
+        ) : (
+          <ChatViewComposer
+            base={context.base}
+            compact
+            composer={context.composer}
+            thread={context.thread}
+            runtime={context.runtime}
+            interactions={context.interactions}
+            {...(composerClassName ? { className: composerClassName } : {})}
+            onOpenOrchestra={() => undefined}
+            onOpenReplySource={() => undefined}
+          />
+        )}
       </div>
       {projectPicker ? (
         <div className="px-3 pb-2">
@@ -262,6 +288,7 @@ export function FloatingSideChat({
   return (
     <div
       ref={panelRef}
+      data-chat-focus-scope="true"
       className="absolute right-3 z-30 flex h-[min(66dvh,var(--side-chat-available-height,66dvh))] min-h-0 max-h-[var(--side-chat-available-height,calc(100dvh-1.5rem))] w-[min(32rem,calc(50%-0.75rem))] resize-y flex-col overflow-hidden rounded-[24px] border border-border/80 bg-background/92 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)] supports-[backdrop-filter]:bg-background/80 supports-[backdrop-filter]:backdrop-blur-md"
       style={{ bottom: "calc(var(--side-chat-composer-height, 7rem) + 0.75rem)" }}
     >

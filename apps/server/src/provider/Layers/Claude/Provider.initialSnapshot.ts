@@ -6,6 +6,10 @@ import {
   DEFAULT_CLAUDE_MODEL_CAPABILITIES,
   dedupeClaudeModels,
 } from "./Provider.capabilities";
+import {
+  makeClaudeUsageLimitsPending,
+  makeClaudeUsageLimitsUnavailable,
+} from "./Provider.usageLimits";
 
 const PROVIDER = "claudeAgent" as const;
 
@@ -32,6 +36,9 @@ export function makeClaudeInitialSnapshot(claudeSettings: ClaudeSettings) {
     checkedAt,
     models,
     modelDiscovery,
+    usageLimits: claudeSettings.enabled
+      ? makeClaudeUsageLimitsPending(checkedAt)
+      : makeClaudeUsageLimitsUnavailable(checkedAt),
     probe: claudeSettings.enabled
       ? {
           installed: true,

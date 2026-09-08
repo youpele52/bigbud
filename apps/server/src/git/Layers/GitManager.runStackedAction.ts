@@ -39,7 +39,7 @@ export function makeRunStackedActionStep(input: {
         GitRunStackedActionResult,
         GitManagerServiceError
       > {
-        const initialStatus = yield* gitCore.statusDetails(input.cwd);
+        const initialStatus = yield* gitCore.statusDetails(input.cwd, input.executionTargetId);
         const wantsCommit = isCommitAction(input.action);
         const wantsPush =
           input.action === "push" ||
@@ -114,6 +114,7 @@ export function makeRunStackedActionStep(input: {
             initialStatus.branch,
             input.commitMessage,
             input.filePaths,
+            input.executionTargetId,
           );
           branchStep = result.branchStep;
           commitMessageForStep = result.resolvedCommitMessage;
@@ -138,6 +139,7 @@ export function makeRunStackedActionStep(input: {
                   input.filePaths,
                   options?.progressReporter,
                   progress.actionId,
+                  input.executionTargetId,
                 ),
               ),
             )
@@ -152,7 +154,9 @@ export function makeRunStackedActionStep(input: {
               })
               .pipe(
                 Effect.tap(() => Ref.set(currentPhase, Option.some("push"))),
-                Effect.flatMap(() => gitCore.pushCurrentBranch(input.cwd, currentBranch)),
+                Effect.flatMap(() =>
+                  gitCore.pushCurrentBranch(input.cwd, currentBranch, input.executionTargetId),
+                ),
               )
           : { status: "skipped_not_requested" as const };
 
@@ -171,13 +175,17 @@ export function makeRunStackedActionStep(input: {
               )
           : { status: "skipped_not_requested" as const };
 
-        const toast = yield* buildCompletionToast(input.cwd, {
-          action: input.action,
-          branch: branchStep,
-          commit,
-          push,
-          pr,
-        });
+        const toast = yield* buildCompletionToast(
+          input.cwd,
+          {
+            action: input.action,
+            branch: branchStep,
+            commit,
+            push,
+            pr,
+          },
+          input.executionTargetId,
+        );
 
         const result = {
           action: input.action,

@@ -25,6 +25,7 @@ import {
   type CodexAppServerManagerEvents,
   type CodexAppServerSendTurnInput,
   type CodexAppServerStartSessionInput,
+  type CodexAppServerSteerTurnInput,
   type CodexSessionContext,
   type CodexThreadSnapshot,
   type JsonRpcNotification,
@@ -45,6 +46,7 @@ import {
   respondToUserInput,
   rollbackThread,
   sendTurn,
+  steerTurn,
 } from "./codexAppServerManager.turn";
 
 export { buildCodexInitializeParams } from "../provider/codexAppServer";
@@ -60,6 +62,7 @@ export { classifyCodexStderrLine, isRecoverableThreadResumeError } from "./codex
 export type {
   CodexAppServerSendTurnInput,
   CodexAppServerStartSessionInput,
+  CodexAppServerSteerTurnInput,
   CodexAppServerManagerEvents,
   CodexThreadSnapshot,
 } from "./codexAppServerManager.types";
@@ -99,6 +102,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   async interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void> {
     const context = this.requireSession(threadId);
     return interruptTurn(context, turnId, this.turnOps());
+  }
+
+  async steerTurn(input: CodexAppServerSteerTurnInput): Promise<void> {
+    const context = this.requireSession(input.threadId);
+    return steerTurn(input, context, this.turnOps());
   }
 
   async readThread(threadId: ThreadId): Promise<CodexThreadSnapshot> {
@@ -288,6 +296,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       kind: "session",
       provider: "codex",
       threadId: context.session.threadId,
+      sessionEpoch: context.session.sessionEpoch!,
       createdAt: new Date().toISOString(),
       method,
       message,
@@ -300,6 +309,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       kind: "error",
       provider: "codex",
       threadId: context.session.threadId,
+      sessionEpoch: context.session.sessionEpoch!,
       createdAt: new Date().toISOString(),
       method,
       message,
@@ -316,6 +326,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
+      sessionEpoch: context.session.sessionEpoch!,
       createdAt: new Date().toISOString(),
       method,
       message,

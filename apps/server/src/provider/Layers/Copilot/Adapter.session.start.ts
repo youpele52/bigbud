@@ -102,6 +102,7 @@ export const makeStartSession =
           status: existing.activeTurnId ? "running" : "ready",
           runtimeMode: existing.runtimeMode,
           threadId: input.threadId,
+          sessionEpoch: existing.sessionEpoch,
           ...(existing.providerRuntimeExecutionTargetId
             ? { providerRuntimeExecutionTargetId: existing.providerRuntimeExecutionTargetId }
             : {}),
@@ -136,7 +137,11 @@ export const makeStartSession =
         isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
         isRemoteWorkspaceTarget(executionContext.workspaceTarget)
           ? yield* Effect.tryPromise({
-              try: () => createCopilotRemoteWorkspaceBridge(executionContext.workspaceTarget),
+              try: () =>
+                createCopilotRemoteWorkspaceBridge(
+                  executionContext.workspaceTarget,
+                  deps.options?.remoteWorkspaceReadinessProbe,
+                ),
               catch: (cause) =>
                 new ProviderAdapterProcessError({
                   provider: PROVIDER,
@@ -150,8 +155,7 @@ export const makeStartSession =
             })
           : undefined;
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
-      const sessionWorkingDirectory =
-        remoteWorkspaceBridge?.clientSessionFsConfig.initialCwd ?? input.cwd;
+      const sessionWorkingDirectory = runtimeCwd;
       const clientOptions = makeCopilotClientOptions({
         binaryPath: copilotSettings.binaryPath,
         ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
@@ -224,10 +228,12 @@ export const makeStartSession =
       );
 
       const createdAt = new Date().toISOString();
+      const sessionEpoch = input.sessionEpoch ?? 0;
       const record: ActiveCopilotSession = {
         client,
         session,
         threadId: input.threadId,
+        sessionEpoch,
         createdAt,
         runtimeMode: input.runtimeMode,
         providerRuntimeExecutionTargetId:
@@ -291,6 +297,7 @@ export const makeStartSession =
         status: "ready",
         runtimeMode: input.runtimeMode,
         threadId: input.threadId,
+        sessionEpoch: record.sessionEpoch,
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(executionContext.executionTargets.providerRuntimeExecutionTargetId
           ? {

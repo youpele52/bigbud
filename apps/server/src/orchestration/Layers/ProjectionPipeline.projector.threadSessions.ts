@@ -35,6 +35,7 @@ export function makeThreadSessionsProjector(
         providerName: event.payload.session.providerName,
         runtimeMode: event.payload.session.runtimeMode,
         activeTurnId: event.payload.session.activeTurnId,
+        sessionEpoch: event.payload.session.sessionEpoch ?? 0,
         reason: event.payload.session.reason ?? null,
         lastError: event.payload.session.lastError,
         updatedAt: event.payload.session.updatedAt,
@@ -43,6 +44,9 @@ export function makeThreadSessionsProjector(
     }
 
     if (event.type === "thread.turn-start-requested") {
+      const existingSession = yield* projectionThreadSessionRepository.getByThreadId({
+        threadId: event.payload.threadId,
+      });
       const thread = yield* projectionThreadRepository.getById({
         threadId: event.payload.threadId,
       });
@@ -55,6 +59,7 @@ export function makeThreadSessionsProjector(
         providerName: thread.value.modelSelection.provider,
         runtimeMode: thread.value.runtimeMode,
         activeTurnId: null,
+        sessionEpoch: Option.getOrUndefined(existingSession)?.sessionEpoch ?? 0,
         reason: null,
         lastError: null,
         updatedAt: event.payload.createdAt,
@@ -92,6 +97,7 @@ export function makeThreadSessionsProjector(
       providerName: thread.value.modelSelection.provider,
       runtimeMode: thread.value.runtimeMode,
       activeTurnId: null,
+      sessionEpoch: 0,
       reason: event.payload.context,
       lastError: event.payload.detail,
       updatedAt: event.payload.createdAt,

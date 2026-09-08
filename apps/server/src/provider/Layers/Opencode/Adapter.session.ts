@@ -177,6 +177,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
           session.pendingPermissions.delete(requestId);
           const cancelEvent = yield* syntheticEventFn(
             session.threadId,
+            session.sessionEpoch,
             "request.resolved",
             { requestType: pending.requestType, decision: "cancel" },
             {

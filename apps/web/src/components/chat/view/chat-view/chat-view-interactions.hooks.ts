@@ -40,6 +40,7 @@ interface ChatViewInteractionsInput {
   transformPromptForSend?: ((prompt: string) => string) | undefined;
   runtime: ChatViewRuntimeState;
   enableKeybindings?: boolean | undefined;
+  toggleTerminalVisibility?: (() => void) | undefined;
 }
 
 export function useChatViewInteractions({
@@ -52,6 +53,7 @@ export function useChatViewInteractions({
   transformPromptForSend,
   runtime,
   enableKeybindings = true,
+  toggleTerminalVisibility,
 }: ChatViewInteractionsInput) {
   const { closeExpandedImage, navigateExpandedImage } = useChatViewExpandedImage(base);
 
@@ -232,7 +234,8 @@ export function useChatViewInteractions({
     activeProject: base.activeProject,
     terminalState: base.terminalState,
     keybindings: composer.keybindings,
-    toggleTerminalVisibility: runtime.terminalActions.toggleTerminalVisibility,
+    toggleTerminalVisibility:
+      toggleTerminalVisibility ?? runtime.terminalActions.toggleTerminalVisibility,
     toggleTerminalPanel: runtime.onToggleTerminalPanel,
     setTerminalOpen: runtime.terminalActions.setTerminalOpen,
     splitTerminal: runtime.terminalActions.splitTerminal,

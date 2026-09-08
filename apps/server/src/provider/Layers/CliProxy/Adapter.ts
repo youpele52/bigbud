@@ -159,6 +159,7 @@ function unsupported(threadId: ThreadId, operation: string) {
 export interface CliProxyAdapterLiveOptions {
   readonly createQuery?: ClaudeAdapterLiveOptions["createQuery"];
   readonly resolveRuntimeConfig?: typeof resolveCliProxyRuntimeConfig;
+  readonly remoteWorkspaceReadinessProbe?: ClaudeAdapterLiveOptions["remoteWorkspaceReadinessProbe"];
 }
 
 const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
@@ -169,6 +170,9 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
   const resolveRuntimeConfig = options?.resolveRuntimeConfig ?? resolveCliProxyRuntimeConfig;
   const claude = yield* makeClaudeAdapter({
     ...(options?.createQuery ? { createQuery: options.createQuery } : {}),
+    ...(options?.remoteWorkspaceReadinessProbe
+      ? { remoteWorkspaceReadinessProbe: options.remoteWorkspaceReadinessProbe }
+      : {}),
     resolveHarness: (input) =>
       resolveRuntimeConfig(toCliProxySessionStartInput(input)).pipe(
         Effect.provideService(ServerSettingsService, settings),
@@ -191,9 +195,6 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
     startSession: (input) =>
       requireCliProxyModelSelection(input, "startSession").pipe(
         Effect.flatMap((selection) => {
-          if (input.resumeCursor !== undefined) {
-            return Effect.fail(unsupported(input.threadId, "session recovery"));
-          }
           return claude
             .startSession(
               toClaudeSessionStartInput({

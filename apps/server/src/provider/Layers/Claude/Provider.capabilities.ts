@@ -12,6 +12,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 
+import { readClaudeUsageLimits } from "./Provider.usageLimits";
+
 export const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
   supportsFastMode: false,
@@ -353,9 +355,16 @@ export const probeClaudeCapabilities = (binaryPath: string) =>
         models: init.models,
         durationMs: Date.now() - discoveryStartedAt,
       });
+      const usageLimits = await Effect.runPromise(
+        readClaudeUsageLimits(
+          () => queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+          Math.max(1, CAPABILITIES_PROBE_TIMEOUT_MS - (Date.now() - discoveryStartedAt) - 100),
+        ),
+      );
       return {
         subscriptionType: init.account?.subscriptionType,
         slashCommands: parseClaudeInitializationCommands(init.commands),
+        usageLimits,
         ...modelDiscovery,
       };
     } finally {

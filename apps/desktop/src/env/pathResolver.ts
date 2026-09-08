@@ -9,6 +9,8 @@ import {
   resolveBackendModulesLinkPlan,
   resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
+  resolvePackagedWorkspaceAgentPlan,
+  resolvePackagedDesktopSupervisorPlan,
 } from "./pathResolver.platform";
 
 // ---------------------------------------------------------------------------
@@ -214,6 +216,20 @@ export function resolvePackagedOpencodeBinaryDir(): string | null {
 
   const plan = resolvePackagedOpencodeBinaryPlan(process.platform, process.resourcesPath);
   return FS.existsSync(plan.binaryPath) ? plan.binDir : null;
+}
+
+export function resolvePackagedWorkspaceAgentBinary(): string | null {
+  if (!app.isPackaged) return null;
+
+  const plan = resolvePackagedWorkspaceAgentPlan(process.platform, process.resourcesPath);
+  return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
+}
+
+export function resolvePackagedDesktopSupervisorBinary(): string | null {
+  if (!app.isPackaged) return null;
+
+  const plan = resolvePackagedDesktopSupervisorPlan(process.platform, process.resourcesPath);
+  return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
 }
 
 export function resolvePackagedBundledSkillsDir(): string | null {

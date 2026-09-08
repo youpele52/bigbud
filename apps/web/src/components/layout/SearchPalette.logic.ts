@@ -56,6 +56,22 @@ export interface MessageSearchMatch {
   matchIndex: number;
 }
 
+export interface FileSearchMatch {
+  line: number;
+  lineText: string;
+}
+
+export function findFileSearchMatches(contents: string, query: string): FileSearchMatch[] {
+  const normalizedQuery = normalizeQuery(query);
+  if (!normalizedQuery) return [];
+
+  return contents
+    .split("\n")
+    .flatMap((lineText, index) =>
+      lineText.toLowerCase().includes(normalizedQuery) ? [{ line: index + 1, lineText }] : [],
+    );
+}
+
 export function findThreadSearchMatch(
   thread: Pick<Thread, "title" | "messages">,
   query: string,

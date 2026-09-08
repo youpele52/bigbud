@@ -2,6 +2,7 @@ import { ProjectId, type GetStartupProjectCatalogResult, type NativeApi } from "
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useStore } from "../stores/main";
+import { useUiStateStore } from "../stores/ui/ui.store";
 import { loadAllProjectCatalog, loadMoreProjectCatalog } from "./-__root.bounded-bootstrap";
 
 const project1 = ProjectId.makeUnsafe("project-1");
@@ -64,6 +65,7 @@ beforeEach(() => {
     latestProjectEventSequenceById: {},
     projectThreadCountsById: {},
   });
+  useUiStateStore.setState({ projectExpandedById: {}, projectOrder: [], selectedProjectId: null });
 });
 
 describe("lazy project catalog pagination", () => {
@@ -112,6 +114,18 @@ describe("lazy project catalog pagination", () => {
     localPage.resolve(makePage(project1));
     await localLoad;
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2, project1]);
+  });
+
+  it("adds paginated projects to the reorderable project state", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.getState().appendProjectCatalogPage("local", makePage(project1, cursor1));
+    useUiStateStore.getState().syncProjects([{ id: project1, cwd: `/tmp/${project1}` }]);
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api, scope: "local" });
+    useUiStateStore.getState().reorderProjects(project2, project1);
+
+    expect(useUiStateStore.getState().projectOrder).toEqual([project2, project1]);
   });
 
   it("stores remaining counts independently for each catalog scope", async () => {
@@ -203,19 +217,30 @@ describe("lazy project catalog pagination", () => {
     expect(useStore.getState().projectCatalogRetryHeadByScope.remote).toBe(false);
   });
 
-  it("preserves the cursor after failure and retries", async () => {
+  it("contains a rejected page to its scope, preserves state, and retries", async () => {
     const { api, orchestration } = makeApi();
+    useStore.getState().appendProjectCatalogPage("remote", makePage(project2, cursor2), 1);
+    useStore.setState({
+      projectCatalogCursorByScope: { local: cursor1, remote: cursor2 },
+      projectCatalogErrorByScope: { local: undefined, remote: "remote warning" },
+    });
     orchestration.getStartupProjectCatalog.mockRejectedValueOnce(new Error("offline"));
 
     await expect(loadMoreProjectCatalog({ api, scope: "local" })).rejects.toThrow("offline");
 
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2]);
     expect(useStore.getState().projectCatalogCursorByScope.local).toEqual(cursor1);
+    expect(useStore.getState().projectCatalogCursorByScope.remote).toEqual(cursor2);
+    expect(useStore.getState().projectCatalogGenerationByScope).toEqual({ local: 1, remote: 1 });
     expect(useStore.getState().projectCatalogErrorByScope.local).toBe("offline");
+    expect(useStore.getState().projectCatalogErrorByScope.remote).toBe("remote warning");
     orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project1));
     await loadMoreProjectCatalog({ api, scope: "local" });
 
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(2);
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2, project1]);
     expect(useStore.getState().projectCatalogErrorByScope.local).toBeUndefined();
+    expect(useStore.getState().projectCatalogErrorByScope.remote).toBe("remote warning");
   });
 
   it("loads every remaining page only for the explicit load-all action", async () => {

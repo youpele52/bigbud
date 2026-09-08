@@ -34,6 +34,12 @@ export function ChatViewComposerHeader({ thread, interactions }: ChatViewCompose
         onInterruptAndFlush={() => {
           void interactions.promptQueue.interruptAndFlushQueuedPrompts();
         }}
+        canSteer={thread.activeSessionTurnRunning && interactions.promptQueue.canSteer}
+        nativeSteer={interactions.promptQueue.nativeSteer}
+        controlOperation={interactions.promptQueue.controlOperation}
+        onSteer={() => {
+          void interactions.promptQueue.steerQueuedPrompts();
+        }}
       />
     </>
   );

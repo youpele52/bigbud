@@ -10,10 +10,12 @@ import {
 } from "@bigbud/shared/cua-driver/invocation";
 
 import { resolveComputerUseRuntime } from "./cuaDriver";
+import { stopChildProcessTreeAndWait } from "./backendShutdown";
 import { parseCuaDriverHealthReport, type CuaDriverHealthReport } from "./cuaDriver.health";
-import { callCuaDriverTool, stopCuaDriverMcpClient } from "./cuaDriver.mcpClient";
+import { callCuaDriverTool, stopCuaDriverMcpClientAndWait } from "./cuaDriver.mcpClient";
 import { resolveManagedPaths } from "./cuaDriver.paths";
 import { runCommand } from "./cuaDriver.process";
+import { isInstalledProcessQuiescing } from "./installedProcessQuiescence";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const RESTART_BACKOFF_MAX_MS = 10_000;
@@ -44,6 +46,7 @@ export interface CuaDriverDaemonStatus {
 
 let daemonState: DaemonState | null = null;
 let startPromise: Promise<NodeJS.ProcessEnv> | null = null;
+let stopPromise: Promise<void> | null = null;
 let runtimeGeneration = 0;
 let startGeneration = 0;
 
@@ -58,17 +61,8 @@ function resolvePrivateEndpoint(baseDir: string): string {
   return Path.join(runDir, "cua.sock");
 }
 
-function killProcessTree(child: ChildProcess.ChildProcess, signal: NodeJS.Signals): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    ChildProcess.spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-    });
-    return;
-  }
-  child.kill(signal);
-}
-
 function spawnDaemon(state: DaemonState): void {
+  if (state.stopping || isInstalledProcessQuiescing()) return;
   state.reachable = false;
   state.ready = false;
   const child = ChildProcess.spawn(
@@ -104,7 +98,7 @@ function spawnDaemon(state: DaemonState): void {
     state.restartAttempt += 1;
     state.restartTimer = setTimeout(() => {
       state.restartTimer = null;
-      if (!state.stopping) {
+      if (!state.stopping && !isInstalledProcessQuiescing()) {
         spawnDaemon(state);
         void waitUntilReady(state).then((health) => {
           if (health && !state.stopping) {
@@ -171,6 +165,11 @@ export async function startCuaDriverDaemon(
   baseDir: string,
   hostBundleId: string,
 ): Promise<NodeJS.ProcessEnv> {
+  if (isInstalledProcessQuiescing()) return {};
+  if (stopPromise) await stopPromise;
+  if (isInstalledProcessQuiescing()) return {};
+  if (daemonState?.stopping) await stopCuaDriverDaemonAndWait();
+  if (isInstalledProcessQuiescing()) return {};
   if (daemonState && !daemonState.stopping) return daemonState.environment;
   if (startPromise) return startPromise;
 
@@ -294,21 +293,46 @@ export async function refreshCuaDriverDaemonHealth(): Promise<CuaDriverHealthRep
   return health;
 }
 
-export function stopCuaDriverDaemon(): void {
+export function stopCuaDriverDaemonAndWait(timeoutMs = 5_000): Promise<void> {
+  if (stopPromise) return stopPromise;
   startGeneration += 1;
   startPromise = null;
-  stopCuaDriverMcpClient();
+  const mcpStop = stopCuaDriverMcpClientAndWait(timeoutMs);
   const state = daemonState;
-  daemonState = null;
-  if (!state) return;
+  if (!state) return mcpStop;
   state.stopping = true;
-  if (state.restartTimer) clearTimeout(state.restartTimer);
+  if (state.restartTimer) {
+    clearTimeout(state.restartTimer);
+    state.restartTimer = null;
+  }
   const child = state.child;
-  state.child = null;
-  if (child && child.exitCode === null && child.signalCode === null) {
-    killProcessTree(child, "SIGTERM");
-  }
-  if (process.platform !== "win32") {
-    FS.rmSync(Path.dirname(state.endpoint), { recursive: true, force: true });
-  }
+  const request = (async () => {
+    const daemonStop = child
+      ? stopChildProcessTreeAndWait(child, new WeakSet(), timeoutMs)
+      : Promise.resolve();
+    const results = await Promise.allSettled([mcpStop, daemonStop]);
+    const errors = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Could not confirm cua-driver process shutdown.");
+    }
+    if (state.child === child) state.child = null;
+    if (daemonState === state) daemonState = null;
+    if (process.platform !== "win32") {
+      FS.rmSync(Path.dirname(state.endpoint), { recursive: true, force: true });
+    }
+  })();
+  stopPromise = request;
+  const clearRequest = () => {
+    if (stopPromise === request) stopPromise = null;
+  };
+  void request.then(clearRequest, clearRequest);
+  return request;
+}
+
+export function stopCuaDriverDaemon(): void {
+  void stopCuaDriverDaemonAndWait().catch((error: unknown) => {
+    console.error(`[desktop] Failed to confirm cua-driver daemon shutdown: ${String(error)}`);
+  });
 }

@@ -32,6 +32,87 @@ describe("OrchestrationEngine", () => {
       ),
     ).rejects.toThrow("Thread 'thread-missing' does not exist");
 
+    await expect(
+      system.run(engine.getCommandOutcome!(CommandId.makeUnsafe("cmd-invariant-missing-thread"))),
+    ).resolves.toMatchObject({ status: "rejected", reason: "other" });
+
+    await system.dispose();
+  });
+
+  it("does not report an empty queued-prompt flush as accepted", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+    const projectId = asProjectId("project-empty-flush");
+    const threadId = ThreadId.makeUnsafe("thread-empty-flush");
+
+    const acceptedCommand = {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-empty-flush"),
+      projectId,
+      title: "Empty Flush Project",
+      workspaceRoot: "/tmp/project-empty-flush",
+      defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+      createdAt,
+    } as const;
+    const acceptedResult = await system.run(engine.dispatch(acceptedCommand));
+    await expect(system.run(engine.dispatch(acceptedCommand))).resolves.toEqual(acceptedResult);
+    await expect(
+      system.run(engine.getCommandOutcome!(acceptedCommand.commandId)),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      resultSequence: acceptedResult.sequence,
+    });
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-thread-empty-flush"),
+        threadId,
+        projectId,
+        title: "Empty Flush Thread",
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-empty-flush"),
+        threadId,
+        message: {
+          messageId: asMessageId("message-empty-flush"),
+          role: "user",
+          text: "Keep this turn active.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt,
+      }),
+    );
+
+    const commandId = CommandId.makeUnsafe("cmd-empty-flush");
+    await expect(
+      system.run(
+        engine.dispatch({
+          type: "thread.queued-prompt.flush",
+          commandId,
+          threadId,
+          messageIds: [],
+          messageId: asMessageId("message-empty-flush-retry"),
+          createdAt,
+        }),
+      ),
+    ).rejects.toThrow("Queued prompt flush produced no canonical event");
+    await expect(system.run(engine.getCommandOutcome!(commandId))).resolves.toMatchObject({
+      commandId,
+      status: "unknown",
+    });
+
     await system.dispose();
   });
 
@@ -74,11 +155,12 @@ describe("OrchestrationEngine", () => {
       }),
     );
 
+    const duplicateCommandId = CommandId.makeUnsafe("cmd-thread-duplicate-2");
     await expect(
       system.run(
         engine.dispatch({
           type: "thread.create",
-          commandId: CommandId.makeUnsafe("cmd-thread-duplicate-2"),
+          commandId: duplicateCommandId,
           threadId: ThreadId.makeUnsafe("thread-duplicate"),
           projectId: asProjectId("project-duplicate"),
           title: "duplicate",
@@ -94,6 +176,11 @@ describe("OrchestrationEngine", () => {
         }),
       ),
     ).rejects.toThrow("already exists");
+
+    await expect(system.run(engine.getCommandOutcome!(duplicateCommandId))).resolves.toMatchObject({
+      status: "rejected",
+      reason: "thread_already_exists",
+    });
 
     await system.dispose();
   });

@@ -12,7 +12,6 @@ import {
   buildExpiredTerminalContextToastCopy,
   deriveComposerSendState,
   formatOutgoingPrompt,
-  revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import {
@@ -20,15 +19,20 @@ import {
   buildThreadBootstrap,
   buildTurnAttachments,
   IMAGE_ONLY_BOOTSTRAP_PROMPT,
-  restoreMessageComposerDraftAfterFailure,
 } from "./ChatView.sendTurn.helpers";
 import {
-  isCurrentComposerDraftEmpty,
   persistThreadSettingsForNextTurnIfServer,
   prepareSendContext,
 } from "./ChatView.sendTurn.actions.shared";
 import { formatReadDocumentPrompt, parseReadDocumentCommand } from "./ChatView.sendTurn.read";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
+import { digestMaterializationRequest } from "../../../stores/materialization/materializationRequestDigest";
+import {
+  completeMaterialization,
+  markMaterializationDispatching,
+  prepareMaterializationForSend,
+} from "./ChatView.sendTurn.materialization";
+import { handleChatSendFailure } from "./ChatView.sendTurn.chat.failure";
 
 interface SendTurnActionInput {
   api: NonNullable<ReturnType<typeof readNativeApi>>;
@@ -54,13 +58,9 @@ export async function sendChatTurn({
     isLocalDraftThread: isDraft,
     promptRef,
     composerImages,
-    composerImagesRef,
     composerFiles,
-    composerFilesRef,
     composerAnnotations,
-    composerAnnotationsRef,
     composerTerminalContexts,
-    composerTerminalContextsRef,
     selectedProvider,
     selectedModel,
     selectedProviderModels,
@@ -148,9 +148,6 @@ export async function sendChatTurn({
   }
   const { threadIdForSend, isFirstMessage, baseBranchForWorktree } = sendContext;
 
-  input.sendInFlightRef.current = true;
-  input.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
-
   const composerImagesSnapshot = [...composerImages];
   const composerFilesSnapshot = [...composerFiles];
   const composerAnnotationsSnapshot = [...composerAnnotations];
@@ -163,7 +160,8 @@ export async function sendChatTurn({
     messageTextWithTerminalContexts,
     composerAnnotationsSnapshot,
   );
-  const messageIdForSend = newMessageId();
+  let messageIdForSend = newMessageId();
+  let commandIdForSend = newCommandId();
   const messageCreatedAt = new Date().toISOString();
   const outgoingMessageText = formatOutgoingPrompt({
     provider: selectedProvider,
@@ -172,6 +170,51 @@ export async function sendChatTurn({
     effort: selectedPromptEffort,
     text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
   });
+  const requestDigest = await digestMaterializationRequest({
+    kind: "turn",
+    threadId: threadIdForSend,
+    projectId: project.id,
+    message: {
+      role: "user",
+      text: outgoingMessageText,
+      replyToMessageId: replyTarget?.messageId ?? null,
+      attachments: [
+        ...composerImagesSnapshot.map(({ id, name, mimeType, sizeBytes }) => ({
+          id,
+          name,
+          mimeType,
+          sizeBytes,
+        })),
+        ...composerFilesSnapshot.map(({ id, name, sizeBytes }) => ({ id, name, sizeBytes })),
+      ],
+    },
+    modelSelection: selectedModelSelection,
+    runtimeMode,
+    interactionMode,
+    bootstrap: { isFirstMessage, baseBranchForWorktree, bootstrapSourceThreadId },
+  });
+  const materializationGate = await prepareMaterializationForSend({
+    api,
+    isDraft,
+    threadId: threadIdForSend,
+    projectId: project.id,
+    commandId: commandIdForSend,
+    messageId: messageIdForSend,
+    kind: "turn",
+    createdAt: messageCreatedAt,
+    requestDigest,
+    setThreadError: input.setThreadError,
+    onThreadMaterialized: input.onThreadMaterialized,
+  });
+  if (!materializationGate.proceed) return;
+  const materializationAttempt = materializationGate.attempt;
+  if (materializationAttempt) {
+    messageIdForSend = materializationAttempt.messageId;
+    commandIdForSend = materializationAttempt.commandId;
+  }
+
+  input.sendInFlightRef.current = true;
+  input.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
   const turnAttachmentsPromise = buildTurnAttachments(
     composerImagesSnapshot,
     composerFilesSnapshot,
@@ -236,11 +279,13 @@ export async function sendChatTurn({
       runtimeMode,
       interactionMode,
       baseBranchForWorktree,
+      recoveryCommandId: commandIdForSend,
     });
     input.beginLocalDispatch({ preparingWorktree: false });
-    await api.orchestration.dispatchCommand({
+    await markMaterializationDispatching(materializationAttempt);
+    const dispatchResult = await api.orchestration.dispatchCommand({
       type: "thread.turn.start",
-      commandId: newCommandId(),
+      commandId: commandIdForSend,
       threadId: threadIdForSend,
       message: {
         messageId: messageIdForSend,
@@ -261,58 +306,32 @@ export async function sendChatTurn({
       input.clearBootstrapSourceThreadId(threadIdForSend);
     }
     turnStartSucceeded = true;
+    await completeMaterialization(
+      { threadId: threadIdForSend, onThreadMaterialized: input.onThreadMaterialized },
+      materializationAttempt,
+      dispatchResult.sequence,
+    );
     recordModelUsage(
       selectedModelSelection.provider,
       selectedModelSelection.model,
       "subProviderID" in selectedModelSelection ? selectedModelSelection.subProviderID : undefined,
     );
   })().catch(async (err: unknown) => {
-    restoreMessageComposerDraftAfterFailure({
-      currentDraftEmpty:
-        !turnStartSucceeded &&
-        isCurrentComposerDraftEmpty({
-          promptRef,
-          composerImagesRef,
-          composerFilesRef,
-          composerAnnotationsRef,
-          composerTerminalContextsRef,
-        }),
-      messageIdForSend,
+    turnStartSucceeded = await handleChatSendFailure({
+      api,
+      sendInput: input,
+      error: err,
+      materializationAttempt,
+      turnStartSucceeded,
+      threadId: threadIdForSend,
+      messageId: messageIdForSend,
       promptText: promptForSend,
-      promptRef,
-      replyTarget,
-      composerImages: composerImagesSnapshot,
-      composerFiles: composerFilesSnapshot,
-      composerAnnotations: composerAnnotationsSnapshot,
-      composerTerminalContexts: composerTerminalContextsSnapshot,
-      setOptimisticUserMessages: input.setOptimisticUserMessages,
-      revokeUserMessagePreviewUrls,
-      setPrompt: input.setPrompt,
-      setComposerCursor: (next) => {
-        input.setComposerCursor(next);
-      },
-      addComposerImagesToDraft: input.addComposerImagesToDraft,
-      addComposerFilesToDraft: input.addComposerFilesToDraft,
-      addComposerAnnotationsToDraft: input.addComposerAnnotationsToDraft,
-      addComposerTerminalContextsToDraft: input.addComposerTerminalContextsToDraft,
-      setReplyTarget: (nextReplyTarget) => {
-        input.setReplyTarget(threadIdForSend, nextReplyTarget);
-      },
-      setComposerTrigger: (trigger) => {
-        input.setComposerTrigger(trigger);
-      },
+      images: composerImagesSnapshot,
+      files: composerFilesSnapshot,
+      annotations: composerAnnotationsSnapshot,
+      terminalContexts: composerTerminalContextsSnapshot,
     });
-    input.setThreadError(
-      threadIdForSend,
-      err instanceof Error ? err.message : "Failed to send message.",
-    );
-    if (bootstrapSourceThreadId) {
-      input.clearBootstrapSourceThreadId(threadIdForSend);
-    }
   });
-  if (turnStartSucceeded && isDraft) {
-    await input.onThreadMaterialized?.(threadIdForSend);
-  }
   input.sendInFlightRef.current = false;
   if (!turnStartSucceeded) {
     input.resetLocalDispatch();

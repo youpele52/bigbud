@@ -173,7 +173,12 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
           ) : null}
         </DialogPanel>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+          <Button
+            size="default"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
           <Button

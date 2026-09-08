@@ -1,6 +1,6 @@
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import type { AppCheckStatus } from "../../lib/checkStatus";
-import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 
 type RemoteProjectConnectionState = "connected" | "connecting" | "disconnected";
 
@@ -53,7 +53,7 @@ export function SidebarRemoteProjectStatusIcon({
     >
       <svg
         aria-hidden="true"
-        className={SIDEBAR_ICON_SIZE_CLASS}
+        className={SIDEBAR_COMPACT_ICON_SIZE_CLASS}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

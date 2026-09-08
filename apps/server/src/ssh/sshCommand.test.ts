@@ -36,4 +36,15 @@ describe("buildSshCommandInvocation", () => {
       "'sh' '-lc' 'if [ -n \"$1\" ]; then cd \"$1\" || exit 1; fi; shift; while [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do export \"$1\"; shift; done; shift; exec \"$@\"' 'sh' '/root/project' '--' 'printf' 'hello world'",
     );
   });
+
+  it("does not place NUL bytes in process arguments", () => {
+    const invocation = buildSshCommandInvocation({
+      executionTargetId: "ssh:host=devbox&user=root&auth=ssh-key",
+      cwd: "/root/project",
+      command: "find",
+      args: [".", "-printf", "%y\\t%P\\0"],
+    });
+
+    expect(invocation.args.some((argument) => argument.includes("\0"))).toBe(false);
+  });
 });

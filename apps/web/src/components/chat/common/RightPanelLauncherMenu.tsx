@@ -1,4 +1,5 @@
-import { PanelRightCloseIcon, PanelRightIcon } from "lucide-react";
+import { SidebarRight01Icon, SidebarRightIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "../../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
@@ -27,9 +28,21 @@ export function RightPanelToggleButton({
             variant="toolbar"
           >
             {rightPanelOpen ? (
-              <PanelRightCloseIcon className="size-3" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                className="size-3.5"
+                icon={SidebarRight01Icon}
+                size={14}
+                strokeWidth={1.5}
+              />
             ) : (
-              <PanelRightIcon className="size-3" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                className="size-3.5"
+                icon={SidebarRightIcon}
+                size={14}
+                strokeWidth={1.5}
+              />
             )}
           </Button>
         }

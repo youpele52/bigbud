@@ -19,6 +19,7 @@ function makeSession(
     releaseServer: () => undefined,
     opencodeSessionId: "opencode-session-1",
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: CREATED_AT,
     runtimeMode,
     providerRuntimeExecutionTargetId: "local",
@@ -192,11 +193,12 @@ it("emits a turn-scoped recovery state when the SSE stream disconnects", async (
   startEventStream(
     session,
     () => Effect.void,
-    (threadId, type, payload, extra) =>
+    (threadId, sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         eventId: EventId.makeUnsafe("evt-sse-disconnected"),
         provider: "opencode",
         threadId,
+        sessionEpoch,
         createdAt: CREATED_AT,
         type,
         ...(extra?.turnId ? { turnId: extra.turnId } : {}),

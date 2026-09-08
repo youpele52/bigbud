@@ -3,6 +3,15 @@ import { isWebviewReady } from "./BrowserPanel.viewport.webview.utils";
 
 const ABORTED_WEBVIEW_LOAD = /ERR_ABORTED|\(-3\)/;
 
+export function isAllowedWebviewNavigation(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function isAbortedWebviewNavigation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return ABORTED_WEBVIEW_LOAD.test(message);
@@ -21,6 +30,10 @@ export function webviewIsShowingUrl(webview: ElectronWebview, url: string): bool
 
 export function navigateElectronWebview(webview: ElectronWebview, url: string): void {
   if (url.length === 0 || webviewIsShowingUrl(webview, url)) return;
+  if (!isAllowedWebviewNavigation(url)) {
+    console.error("Refused to load non-HTTP(S) browser URL:", url);
+    return;
+  }
 
   if (isWebviewReady(webview) && typeof webview.loadURL === "function") {
     void webview.loadURL(url).catch((error: unknown) => {

@@ -178,6 +178,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
     },
     server: {
+      ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
       refreshProviders: () =>
         transport.request((client) => client[WS_METHODS.serverRefreshProviders]({})),
@@ -185,6 +186,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
+      installRemoteAgent: (input) =>
+        transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
       unlockSshKey: (input) =>
         transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
       unlockSshPassword: (input) =>
@@ -272,6 +275,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getSelectedThreadDetail](input),
         ),
+      getThreadOwnership: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getThreadOwnership](input)),
+      getCommandOutcome: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getCommandOutcome](input)),
       getSnapshot: () =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
       dispatchCommand: (input) =>
@@ -282,10 +289,15 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
       replayEvents: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input)),
-      onDomainEvent: (listener, options) =>
-        subscribeEmptyInput(
-          transport,
-          (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents],
+      acknowledgeDelivery: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.acknowledgeDelivery](input)),
+      acknowledgeDeliveryBaseline: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline](input),
+        ),
+      onDomainEvent: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents](input()),
           listener,
           options,
         ),

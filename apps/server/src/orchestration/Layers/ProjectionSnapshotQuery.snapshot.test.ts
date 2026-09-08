@@ -323,6 +323,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           ],
           queuedPrompts: [],
           pendingInterruptFlushIntent: null,
+          pendingTurnControlOperation: null,
+          queueHold: false,
           tasks: [
             {
               id: RuntimeTaskId.makeUnsafe("task-1"),

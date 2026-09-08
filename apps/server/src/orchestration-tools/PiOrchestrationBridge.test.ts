@@ -25,13 +25,13 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("delivery: delivery === 'queue' ? 'queue' : 'auto'");
     expect(source).toContain("invocationId: toolCallId");
     expect(source).toContain(
-      "async execute(toolCallId, { title, task, projectId, workspacePath, watchForCompletion })",
+      "async execute(toolCallId, { title, task, projectId, watchForCompletion })",
     );
     expect(source).toContain("action: 'create_thread'");
     expect(source).toContain("invocationId: toolCallId");
     expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
     expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
-    expect(source).toContain("workspacePath: String(workspacePath).trim()");
+    expect(source).not.toContain("workspacePath");
     expect(source).toContain("watchForCompletion: watchForCompletion === true");
     expect(source).toContain('name: "get_thread_status"');
     expect(source).toContain('name: "search_capabilities"');

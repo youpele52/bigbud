@@ -121,13 +121,21 @@ install_macos() {
   log "Mounting disk image..."
   hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
 
-  set -- "$mount_dir"/*.app
-  if [ ! -d "$1" ]; then
-    fail "Could not find an app bundle inside the mounted DMG."
-  fi
+  app_bundle=""
+  app_count=0
+  for candidate in "$mount_dir"/*.app; do
+    [ -d "$candidate" ] || continue
+    app_bundle="$candidate"
+    app_count=$((app_count + 1))
+  done
+  [ "$app_count" -eq 1 ] || fail "Expected exactly one app bundle inside the mounted DMG."
 
-  app_bundle="$1"
-  destination="/Applications/bigbud.app"
+  app_name="$(basename "$app_bundle")"
+  case "$app_name" in
+    bigbud.app|"bigbud Beta.app"|"bigbud Preview.app"|"bigbud Nightly.app") ;;
+    *) fail "Unexpected app bundle identity in DMG: $app_name" ;;
+  esac
+  destination="/Applications/$app_name"
 
   log "Installing bigbud to /Applications..."
   if [ -w /Applications ]; then

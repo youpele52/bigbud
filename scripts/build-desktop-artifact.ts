@@ -57,7 +57,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   ),
   signed: Flag.boolean("signed").pipe(
     Flag.withDescription(
-      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: BIGBUD_DESKTOP_SIGNED, legacy: T3CODE_DESKTOP_SIGNED).",
+      "Require macOS signing and notarization (env: BIGBUD_DESKTOP_SIGNED, legacy: T3CODE_DESKTOP_SIGNED).",
     ),
     Flag.optional,
   ),

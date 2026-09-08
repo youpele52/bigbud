@@ -215,6 +215,7 @@ export const RequestResolvedPayload = Schema.Struct({
 export type RequestResolvedPayload = typeof RequestResolvedPayload.Type;
 
 const UserInputQuestionOption = Schema.Struct({
+  id: Schema.optional(TrimmedNonEmptyStringSchema),
   label: TrimmedNonEmptyStringSchema,
   description: TrimmedNonEmptyStringSchema,
 });

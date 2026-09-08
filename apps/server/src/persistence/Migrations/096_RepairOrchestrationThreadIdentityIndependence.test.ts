@@ -72,3 +72,43 @@ it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()))(
     );
   },
 );
+
+it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()))(
+  "096_RepairOrchestrationThreadIdentityIndependence - legacy deleted identity",
+  (it) => {
+    it.effect("preserves deletion evidence after the 093 identity cascade", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const threadId = ThreadId.makeUnsafe("legacy-deleted-thread");
+        yield* runMigrations({ toMigrationInclusive: 92 });
+        yield* insertProjectionThreadParent({ sql, threadId, projectId: "legacy-project" });
+        yield* sql`
+          INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
+          VALUES (${threadId}, 'legacy-project', 10)
+        `;
+        yield* sql`
+          INSERT INTO orchestration_deletion_markers (
+            entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+          ) VALUES ('thread', ${threadId}, 11, '2026-08-26T10:02:35.000Z', NULL)
+        `;
+        yield* runMigrations({ toMigrationInclusive: 93 });
+        yield* sql`DELETE FROM projection_threads WHERE thread_id = ${threadId}`;
+        yield* runMigrations();
+
+        assert.deepEqual(
+          yield* sql`
+            SELECT entity_id AS "entityId", deletion_sequence AS "deletionSequence"
+            FROM orchestration_deletion_markers WHERE entity_id = ${threadId}
+          `,
+          [{ entityId: threadId, deletionSequence: 11 }],
+        );
+        assert.deepEqual(
+          yield* sql`
+            SELECT thread_id FROM orchestration_thread_identity WHERE thread_id = ${threadId}
+          `,
+          [],
+        );
+      }),
+    );
+  },
+);

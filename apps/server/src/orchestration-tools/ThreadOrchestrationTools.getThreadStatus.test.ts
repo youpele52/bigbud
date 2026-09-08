@@ -106,6 +106,7 @@ describe("getThreadStatusViaOrchestration", () => {
         threadId: childThreadId,
       }),
     ).resolves.toMatchObject({ workflowStatus: "idle" });
+    expect(repository.findDirectByChild).not.toHaveBeenCalled();
 
     const archived = makeThread(childThreadId, otherProjectId, {
       archivedAt: new Date().toISOString(),

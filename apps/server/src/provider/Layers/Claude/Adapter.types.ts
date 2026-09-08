@@ -14,6 +14,7 @@ import type {
   CanonicalItemType,
   CanonicalRequestType,
   ProviderApprovalDecision,
+  ProviderRuntimeEvent,
   ProviderSession,
   ProviderSessionStartInput,
   ProviderUserInputAnswers,
@@ -26,6 +27,7 @@ import type {
 import type { Deferred, Effect, Fiber, Queue } from "effect";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ProviderAdapterError, ProviderAdapterProcessError } from "../../Errors.ts";
+import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type { McpServerStatusEntry } from "@bigbud/contracts";
 import type { ClaudeInterruptReceipt, ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 import type { ClaudeTaskState } from "./Adapter.tasks.ts";
@@ -34,6 +36,9 @@ import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
 export type { ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 
 export const PROVIDER = "claudeAgent" as const;
+
+type WithoutSessionEpoch<T> = T extends unknown ? Omit<T, "sessionEpoch"> : never;
+export type UnstampedProviderRuntimeEvent = WithoutSessionEpoch<ProviderRuntimeEvent>;
 
 export type ClaudeTextStreamKind = Extract<
   RuntimeContentStreamKind,
@@ -62,6 +67,8 @@ export interface ClaudeResumeState {
 
 export interface ClaudeTurnState {
   readonly turnId: TurnId;
+  /** Background SDK output may create a synthetic turn before the next prompt. */
+  readonly synthetic: boolean;
   readonly startedAt: string;
   readonly items: Array<unknown>;
   readonly assistantTextBlocks: Map<number, AssistantTextBlockState>;
@@ -106,6 +113,7 @@ export interface ToolInFlight {
 
 export interface ClaudeSessionContext {
   session: ProviderSession;
+  readonly sessionEpoch: number;
   readonly promptQueue: Queue.Queue<PromptQueueItem>;
   readonly query: ClaudeQueryRuntime;
   readonly cleanupRemoteWorkspaceBridge?: () => Promise<void>;
@@ -148,10 +156,12 @@ export interface ClaudeSessionContext {
   refreshMcpStatuses: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
   recoverStream: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
   recoveryInFlight: Promise<void> | undefined;
+  recoveryAttempts: number;
   stopped: boolean;
 }
 
 export interface ClaudeAdapterLiveOptions {
+  readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly harness?: ClaudeHarnessConfig;
   readonly resolveHarness?: (
     input: ProviderSessionStartInput,

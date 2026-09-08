@@ -2,6 +2,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
+  type UserInputQuestion,
 } from "@bigbud/contracts";
 import { useCallback } from "react";
 import {
@@ -295,7 +296,7 @@ export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersIn
   );
 
   const onToggleActivePendingUserInputOption = useCallback(
-    (questionId: string, optionLabel: string) => {
+    (questionId: string, option: UserInputQuestion["options"][number], optionIndex: number) => {
       if (!activePendingUserInput) return;
       const question = activePendingUserInput.questions.find((entry) => entry.id === questionId);
       if (!question) return;
@@ -306,7 +307,8 @@ export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersIn
           [questionId]: togglePendingUserInputOptionSelection(
             question,
             existing[activePendingUserInput.requestId]?.[questionId],
-            optionLabel,
+            option,
+            optionIndex,
           ),
         },
       }));

@@ -98,7 +98,7 @@ it.layer(TestLayer)("git integration", (it) => {
           });
         });
 
-        const result = yield* core.filterIgnoredPaths(cwd, relativePaths);
+        const result = yield* core.filterIgnoredPaths(cwd, relativePaths, "local");
 
         expect(seenChunks.length).toBeGreaterThan(1);
         expect(seenChunks.flat()).toEqual(relativePaths);

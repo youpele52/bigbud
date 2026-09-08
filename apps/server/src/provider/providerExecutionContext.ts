@@ -1,10 +1,6 @@
 import type { ExecutionTargetId } from "@bigbud/contracts";
 
 import {
-  resolveRemoteWorkspaceBridgeConfig,
-  type RemoteWorkspaceBridgeConfig,
-} from "../remote-workspace-bridge/remoteWorkspaceBridge.ts";
-import {
   resolveProviderRuntimeTarget,
   type ProviderRuntimeTarget,
 } from "../provider-runtime/providerRuntimeTarget.ts";
@@ -20,7 +16,6 @@ import {
 export interface ProviderExecutionContext {
   readonly providerRuntimeTarget: ProviderRuntimeTarget;
   readonly workspaceTarget: WorkspaceTarget;
-  readonly remoteWorkspaceBridgeConfig: RemoteWorkspaceBridgeConfig | undefined;
   readonly executionTargets: ProviderSessionExecutionTargets;
 }
 
@@ -45,7 +40,6 @@ export function resolveProviderExecutionContext(input: {
   return {
     providerRuntimeTarget,
     workspaceTarget,
-    remoteWorkspaceBridgeConfig: resolveRemoteWorkspaceBridgeConfig(workspaceTarget),
     executionTargets,
   };
 }

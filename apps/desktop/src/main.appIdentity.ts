@@ -13,7 +13,7 @@ type LinuxDesktopNamedApp = Electron.App & {
 export interface DesktopAppIdentity {
   readonly appDisplayName: string;
   readonly appUserModelId: string;
-  readonly legacyUserDataDirName: string;
+  readonly legacyUserDataDirName: string | null;
   readonly linuxDesktopEntryName: string;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly rootDir: string;
@@ -28,9 +28,9 @@ export interface DesktopAppIdentity {
  * This is
  * unfriendly for shell usage and violates Linux naming conventions.
  *
- * We override it to a clean lowercase name (`bigbud`). If the legacy
- * `T3 Code (...)` directory already exists we keep using it so existing users don't
- * lose their Chromium profile data (localStorage, cookies, sessions).
+ * We override it to a clean lowercase channel name. Stable and development
+ * may opt into a legacy `T3 Code (...)` directory so existing users retain
+ * Chromium profile data; prerelease channels deliberately never do so.
  */
 export function resolveUserDataPath({
   legacyUserDataDirName,
@@ -43,9 +43,11 @@ export function resolveUserDataPath({
         ? Path.join(OS.homedir(), "Library", "Application Support")
         : process.env.XDG_CONFIG_HOME || Path.join(OS.homedir(), ".config");
 
-  const legacyPath = Path.join(appDataBase, legacyUserDataDirName);
-  if (FS.existsSync(legacyPath)) {
-    return legacyPath;
+  if (legacyUserDataDirName) {
+    const legacyPath = Path.join(appDataBase, legacyUserDataDirName);
+    if (FS.existsSync(legacyPath)) {
+      return legacyPath;
+    }
   }
 
   return Path.join(appDataBase, userDataDirName);

@@ -4,14 +4,21 @@
 
 export function capHistory(history: string, maxLines: number): string {
   if (history.length === 0) return history;
-  const hasTrailingNewline = history.endsWith("\n");
-  const lines = history.split("\n");
-  if (hasTrailingNewline) {
-    lines.pop();
+  if (maxLines <= 0) return history.endsWith("\n") ? "\n" : "";
+  let remainingLines = maxLines;
+  let searchFrom = history.endsWith("\n") ? history.length - 2 : history.length - 1;
+  let lineStart = 0;
+  while (remainingLines > 0 && searchFrom >= 0) {
+    const newline = history.lastIndexOf("\n", searchFrom);
+    if (newline === -1) break;
+    remainingLines -= 1;
+    if (remainingLines === 0) {
+      lineStart = newline + 1;
+      break;
+    }
+    searchFrom = newline - 1;
   }
-  if (lines.length <= maxLines) return history;
-  const capped = lines.slice(lines.length - maxLines).join("\n");
-  return hasTrailingNewline ? `${capped}\n` : capped;
+  return lineStart === 0 ? history : history.slice(lineStart);
 }
 
 // ---------------------------------------------------------------------------

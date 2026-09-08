@@ -179,3 +179,32 @@ it.effect("completes and clears an interrupted baseline flight", () =>
     assert.equal(compactCount, 2);
   }),
 );
+
+it.effect("does not reload a baseline during cooldown and resumes after expiry", () =>
+  Effect.gen(function* () {
+    let latestVerifiedCount = 0;
+    let compactCount = 0;
+    const ensure = yield* makeProjectionBaselineCoordinator({
+      baselines: coordinatorBaselines(() => {
+        latestVerifiedCount += 1;
+        return compactCount > 1 ? Option.some(baselineAt(1)) : Option.none();
+      }),
+      compact: Effect.suspend(() => {
+        compactCount += 1;
+        return compactCount === 1
+          ? Effect.fail(new Error("verification failed") as never)
+          : Effect.void;
+      }),
+    });
+
+    assert.equal((yield* Effect.exit(ensure(1)))._tag, "Failure");
+    assert.equal(latestVerifiedCount, 1);
+    assert.equal((yield* Effect.exit(ensure(1)))._tag, "Failure");
+    assert.equal(latestVerifiedCount, 1);
+
+    yield* TestClock.adjust(`${PROJECTION_BASELINE_FAILURE_COOLDOWN_MS} millis`);
+    yield* ensure(1);
+    assert.equal(latestVerifiedCount, 3);
+    assert.equal(compactCount, 2);
+  }).pipe(Effect.provide(TestClock.layer())),
+);

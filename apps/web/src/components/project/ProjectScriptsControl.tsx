@@ -296,7 +296,9 @@ export default function ProjectScriptsControl({
             >
               Delete action
             </Button>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose render={<Button size="default" variant="outline" />}>
+              Cancel
+            </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>

@@ -172,6 +172,15 @@ describe("ClaudeAdapter permission modes", () => {
         interactionMode: "plan",
         attachments: [],
       });
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "permission-session",
+        uuid: "permission-result",
+      } as never);
+      yield* Effect.yieldNow;
       yield* adapter.sendTurn({
         threadId: session.threadId,
         input: "still plan",

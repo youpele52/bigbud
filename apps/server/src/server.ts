@@ -4,21 +4,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
-import {
-  attachmentsRouteLayer,
-  otlpTracesProxyRouteLayer,
-  projectFaviconRouteLayer,
-  staticAndDevRouteLayer,
-  workspacePdfViewerRouteLayer,
-  workspaceFilePreviewRouteLayer,
-} from "./ws/http";
-import { mobilePairingRoutesLayer } from "./ws/http.mobile";
-import { mobileWebStaticRouteLayer } from "./ws/http.mobileWeb";
-import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
-import { websocketRpcRouteLayer } from "./ws/ws";
-import { pluginAssetRouteLayer } from "./ws/http.plugins";
-import { mobileWebsocketRpcRouteLayer } from "./ws/ws.mobile";
+import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
@@ -40,21 +27,20 @@ import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerMana
 import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
+import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
 import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/OrchestrationCommandReceipts";
+import { OrchestrationBootstrapRecipeRepositoryLive } from "./persistence/Layers/OrchestrationBootstrapRecipes.ts";
 import { AutomationScheduleRepositoryLive } from "./persistence/Layers/AutomationScheduleRepository";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
 import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
 import { ProjectionCatalogQueryLive } from "./orchestration/Layers/ProjectionCatalogQuery";
 import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/ProjectionOperationalStateQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
-import { GitCoreLive } from "./git/Layers/GitCore";
-import { GitHubCliLive } from "./git/Layers/GitHubCli";
-import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
+import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
-import { GitManagerLive } from "./git/Layers/GitManager";
-import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
+import { PtyAdapter } from "./terminal/Services/PTY";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
 import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
@@ -79,10 +65,7 @@ import {
 } from "./provider/providerCapabilities";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
-import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries";
-import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem";
-import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
-import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
+import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { CuaDriverLive } from "./computer-use/Layers/CuaDriver";
@@ -103,6 +86,11 @@ import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
+import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
+import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
+import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
+import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -129,6 +117,7 @@ const ReactorLayerLive = Layer.empty.pipe(
 const OrchestrationEventInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationEventStoreLive,
   OrchestrationCommandReceiptRepositoryLive,
+  OrchestrationBootstrapRecipeRepositoryLive,
 );
 
 const AutomationInfrastructureLayerLive = AutomationScheduleRepositoryLive;
@@ -154,15 +143,21 @@ const ComputerUseLayerLive = ComputerUseLive.pipe(
   Layer.provide(OpenLive),
 );
 
+const OrchestrationEngineLayerLive = OrchestrationEngineLive.pipe(
+  Layer.provide(OrchestrationInfrastructureLayerLive),
+  Layer.provide(ComputerUseLayerLive),
+  Layer.provide(VisibleBrowserControlLive),
+);
+
+const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(
+  Layer.provideMerge(OrchestrationEngineLayerLive),
+);
+
 const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationInfrastructureLayerLive,
   ComputerUseLayerLive,
   VisibleBrowserControlLive,
-  OrchestrationEngineLive.pipe(
-    Layer.provide(OrchestrationInfrastructureLayerLive),
-    Layer.provide(ComputerUseLayerLive),
-    Layer.provide(VisibleBrowserControlLive),
-  ),
+  OrchestrationCommandLayerLive,
 );
 
 const ThreadRetentionLayerLive = ThreadRetentionLive.pipe(
@@ -196,12 +191,18 @@ const makeProviderLayerLive = (
       const copilotAdapterLayer = makeCopilotAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
-      const cursorAdapterLayer = makeCursorAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
-      const devinAdapterLayer = makeDevinAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
+      const cursorAdapterLayer = makeCursorAdapterLive({
+        ...(nativeEventLogger ? { nativeEventLogger } : {}),
+        ...(configuredRemoteAgentLayers.ptyResolver
+          ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
+          : {}),
+      });
+      const devinAdapterLayer = makeDevinAdapterLive({
+        ...(nativeEventLogger ? { nativeEventLogger } : {}),
+        ...(configuredRemoteAgentLayers.ptyResolver
+          ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
+          : {}),
+      });
       const kilocodeAdapterLayer = makeKilocodeAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
@@ -271,33 +272,34 @@ const ProjectionPersistenceLayerLive = Layer.mergeAll(
   MemoryStoreLive,
 );
 
-const GitLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(
-    GitManagerLive.pipe(
-      Layer.provideMerge(ProjectSetupScriptRunnerLive),
-      Layer.provideMerge(GitCoreLive),
-      Layer.provideMerge(GitHubCliLive),
-      Layer.provideMerge(RoutingTextGenerationLive),
-    ),
-  ),
-  Layer.provideMerge(GitStatusBroadcasterLive.pipe(Layer.provideMerge(GitCoreLive))),
-  Layer.provideMerge(GitCoreLive),
-);
+const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
+const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
+const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
+const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
+  ? Layer.effect(
+      PtyAdapter,
+      Effect.gen(function* () {
+        const base = yield* PtyAdapter;
+        const resolver = configuredRemoteAgentLayers.ptyResolver;
+        if (!resolver) return base;
+        return makeRemoteAgentPtyAdapter(base, resolver);
+      }),
+    ).pipe(Layer.provide(PtyAdapterLive))
+  : PtyAdapterLive;
+const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
 
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(PtyAdapterLive));
-
-const WorkspaceLayerLive = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
+const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
+const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
+  Layer.provideMerge(DirectResourceCleanupExecutorLive),
+  Layer.provideMerge(DirectResourceCleanupRepositoryLive),
+  Layer.provideMerge(OrchestrationProjectionPipelineLayerLive),
+  Layer.provideMerge(OrchestrationEngineLayerLive),
+  Layer.provide(PersistenceLayerLive),
 );
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
-  Layer.provideMerge(CheckpointingLayerLive),
+  Layer.provideMerge(Layer.mergeAll(RemoteAgentLayerLive, CheckpointingLayerLive)),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ThreadRetentionLayerLive),
@@ -305,7 +307,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
-  Layer.provideMerge(KeybindingsLive),
+  Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
@@ -320,27 +322,19 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
-  Layer.provideMerge(MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive))),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive)),
+      DesktopSupervisorDeliveryLive,
+    ),
+  ),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
 );
 
-export const makeRoutesLayer = Layer.mergeAll(
-  attachmentsRouteLayer,
-  otlpTracesProxyRouteLayer,
-  projectFaviconRouteLayer,
-  pluginAssetRouteLayer,
-  workspacePdfViewerRouteLayer,
-  workspaceFilePreviewRouteLayer,
-  mobilePairingRoutesLayer,
-  mobileWebStaticRouteLayer,
-  staticAndDevRouteLayer,
-  threadOrchestrationToolsRouteLayer,
-  websocketRpcRouteLayer,
-  mobileWebsocketRpcRouteLayer,
-);
+export { makeRoutesLayer } from "./server.routes.ts";
 
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {

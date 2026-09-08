@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { WsTerminalOpenRpc } from "../server/rpc.core";
 import {
   DEFAULT_TERMINAL_ID,
   LOCAL_EXECUTION_TARGET_ID,
@@ -9,6 +10,7 @@ import {
   TerminalEvent,
   TerminalOpenInput,
   TerminalResizeInput,
+  TerminalRuntimeLeaseError,
   TerminalSessionSnapshot,
   TerminalThreadInput,
   TerminalWriteInput,
@@ -256,5 +258,22 @@ describe("TerminalEvent", () => {
         },
       }),
     ).toBe(true);
+  });
+});
+
+describe("TerminalError RPC codec", () => {
+  it("round-trips a safe runtime lease reason without exposing an internal cause", () => {
+    const internal = new TerminalRuntimeLeaseError({
+      cwd: "/srv/project",
+      reason: "storageFull",
+    });
+    const encoded = Schema.encodeUnknownSync(WsTerminalOpenRpc.errorSchema)(internal);
+    const decoded = decodeSync(WsTerminalOpenRpc.errorSchema, encoded);
+
+    expect(encoded).not.toHaveProperty("cause");
+    expect(decoded).toBeInstanceOf(TerminalRuntimeLeaseError);
+    if (decoded._tag !== "TerminalRuntimeLeaseError") throw new Error("unexpected error tag");
+    expect(decoded.reason).toBe("storageFull");
+    expect(decoded.message).toBe("Failed to reserve terminal runtime lease for: /srv/project");
   });
 });

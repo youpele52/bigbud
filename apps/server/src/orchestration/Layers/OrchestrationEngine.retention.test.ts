@@ -79,6 +79,27 @@ it("claims in the command transaction, safely skips races, and deduplicates comm
         }),
       );
     }
+    const retentionChildId = ThreadId.makeUnsafe("retention-duplicate-child");
+    await run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("create-retention-duplicate-child"),
+        threadId: retentionChildId,
+        projectId,
+        title: "Retention child",
+        modelSelection: { provider: "codex", model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("retention-duplicate"),
+          projectId,
+          title: "retention-duplicate",
+        },
+        createdAt: oldAt,
+      }),
+    );
 
     await run(
       repository.createOrGetActiveRun({
@@ -138,7 +159,21 @@ it("claims in the command transaction, safely skips races, and deduplicates comm
       commandId: CommandId.makeUnsafe("retention-duplicate-command"),
       threadId: ThreadId.makeUnsafe("retention-duplicate"),
     };
+    assert.isTrue(
+      await run(engine.threadDeletion!.acquireFence(duplicateCommand.threadId, "single")),
+    );
     const first = await run(engine.dispatch(duplicateCommand));
+    assert.isTrue(
+      await run(engine.threadDeletion!.isFenceRoot(duplicateCommand.threadId, "subtree")),
+    );
+    assert.isTrue(
+      await run(
+        engine.threadDeletion!.isFenced({
+          threadId: retentionChildId,
+          readModel: await run(engine.getReadModel()),
+        }),
+      ),
+    );
     const second = await run(engine.dispatch(duplicateCommand));
     assert.equal(second.sequence, first.sequence);
     assert.equal(

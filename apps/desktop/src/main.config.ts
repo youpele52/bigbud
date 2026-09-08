@@ -2,7 +2,10 @@ import * as OS from "node:os";
 import * as Path from "node:path";
 
 import type { App } from "electron";
-import { releaseChannelLabel, resolveReleaseChannel } from "@bigbud/shared/releaseChannel";
+import {
+  desktopReleaseIdentityForChannel,
+  resolveDesktopReleaseIdentity,
+} from "@bigbud/shared/desktopReleaseIdentity";
 
 import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
 import {
@@ -13,29 +16,29 @@ import {
 import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
 
 export function resolveDesktopMainConfig(app: App, desktopDir: string) {
-  const baseDir =
-    process.env.BIGBUD_HOME?.trim() ||
-    process.env.T3CODE_HOME?.trim() ||
-    Path.join(OS.homedir(), ".bigbud");
-  const stateDir = Path.join(baseDir, "userdata");
   const rootDir = Path.resolve(desktopDir, "../../..");
   const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-  const releaseChannel = resolveReleaseChannel(app.getVersion());
-  const appDisplayName = isDevelopment
-    ? "bigbud (Dev)"
-    : releaseChannel
-      ? `bigbud (${releaseChannelLabel(releaseChannel)})`
-      : "bigbud";
-  const userDataDirName = isDevelopment ? "bigbud-dev" : "bigbud";
-  // Retain the Alpha-era name during the legacy profile migration window.
-  const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+  const releaseIdentity = isDevelopment
+    ? desktopReleaseIdentityForChannel("stable")
+    : resolveDesktopReleaseIdentity(app.getVersion());
+  const configuredBaseDir = process.env.BIGBUD_HOME?.trim() || process.env.T3CODE_HOME?.trim();
+  const baseDir =
+    configuredBaseDir ?? Path.join(OS.homedir(), ".bigbud", ...releaseIdentity.baseDirSuffix);
+  const stateDir = Path.join(baseDir, "userdata");
+  const appDisplayName = isDevelopment ? "bigbud (Dev)" : releaseIdentity.productName;
+  const userDataDirName = isDevelopment ? "bigbud-dev" : releaseIdentity.userDataDirName;
+  const legacyUserDataDirName = isDevelopment
+    ? "T3 Code (Dev)"
+    : releaseIdentity.channel === "stable"
+      ? "T3 Code (Alpha)"
+      : null;
   const linuxGpuFallbackMarkerPath = resolveLinuxGpuFallbackMarkerPath(stateDir);
 
   return {
     appDisplayName,
-    appUserModelId: "ai.bigbud.desktop",
+    appUserModelId: releaseIdentity.appUserModelId,
     baseDir,
-    cuaDriverHostBundleId: resolveCuaDriverHostBundleId(app.isPackaged),
+    cuaDriverHostBundleId: resolveCuaDriverHostBundleId(app.isPackaged, releaseIdentity.appId),
     desktopLinuxRuntimeConfig: resolveLinuxDesktopRuntimeConfig({
       gpuFallbackMarkerArmed: readLinuxGpuFallbackMarker(linuxGpuFallbackMarkerPath),
     }),
@@ -48,9 +51,12 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
     isDevelopment,
     isDevelopmentDiagnostics: !app.isPackaged,
     legacyUserDataDirName,
-    linuxDesktopEntryName: isDevelopment ? "bigbud-dev.desktop" : "bigbud.desktop",
+    linuxDesktopEntryName: isDevelopment
+      ? "bigbud-dev.desktop"
+      : releaseIdentity.linuxDesktopEntryName,
     linuxGpuFallbackMarkerPath,
-    linuxWmClass: isDevelopment ? "bigbud-dev" : "bigbud",
+    linuxWmClass: isDevelopment ? "bigbud-dev" : releaseIdentity.linuxWmClass,
+    releaseIdentity,
     rootDir,
     serverSettingsPath: Path.join(stateDir, "settings.json"),
     userDataDirName,

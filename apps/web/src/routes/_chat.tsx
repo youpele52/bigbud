@@ -9,6 +9,7 @@ import {
 } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { newCommandId, newProjectId } from "../lib/utils";
+import { dispatchCommandWithOutcomeRecovery } from "../lib/orchestrationCommandRecovery";
 import { buildExplicitExecutionTargets } from "../lib/providerExecutionTargets";
 import { getDefaultModelSelection } from "../models/provider/provider.models";
 import { resolveShortcutCommand } from "../models/keybindings";
@@ -35,6 +36,7 @@ import { RightPanelHost } from "~/components/right-panel/RightPanelHost";
 import { isAutomationRoute } from "~/lib/automationRoute";
 import { useStore } from "~/stores/main";
 import { navigateToMostRecentThread } from "./-_chat.automationRightPanel.logic";
+import { ChatFocusShortcutCoordinator } from "~/components/chat/ChatFocusShortcutCoordinator";
 
 function deriveProjectTitleFromCwd(cwd: string): string {
   const trimmed = cwd.trim();
@@ -44,9 +46,13 @@ function deriveProjectTitleFromCwd(cwd: string): string {
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
+  onOpenFileSearch: () => boolean;
 }
 
-function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsProps) {
+function ChatRouteGlobalShortcuts({
+  onToggleSearch,
+  onOpenFileSearch,
+}: ChatRouteGlobalShortcutsProps) {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadIdsSize = useThreadSelectionStore((state) => state.selectedThreadIds.size);
   const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
@@ -137,7 +143,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "search.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        onToggleSearch();
+        if (!onOpenFileSearch()) onToggleSearch();
         return;
       }
 
@@ -190,7 +196,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
               workspaceExecutionTargetId: "local",
               providerRuntimeLocation: "local",
             });
-            await api.orchestration.dispatchCommand({
+            await dispatchCommandWithOutcomeRecovery(api, {
               type: "project.create",
               commandId: newCommandId(),
               projectId: newProjectId(),
@@ -269,6 +275,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     toggleSidebar,
     navigate,
     onToggleSearch,
+    onOpenFileSearch,
     serverProviders,
     location.pathname,
     exitAutomationForRightPanel,
@@ -280,10 +287,15 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
 function ChatRouteLayout() {
   const { routeThreadId } = useHandleNewThread();
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
+  const openSearchForFileContext = useSearchStore((state) => state.openSearchForFileContext);
 
   return (
     <>
-      <ChatRouteGlobalShortcuts onToggleSearch={toggleSearchOpen} />
+      <ChatRouteGlobalShortcuts
+        onToggleSearch={toggleSearchOpen}
+        onOpenFileSearch={openSearchForFileContext}
+      />
+      <ChatFocusShortcutCoordinator />
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
       <RightPanelHost activeThreadId={routeThreadId ?? null} />

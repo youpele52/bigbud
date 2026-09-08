@@ -1,5 +1,4 @@
-import { useCallback, useRef, type ReactNode } from "react";
-import { autoAnimate } from "@formkit/auto-animate";
+import { useCallback, type ReactNode } from "react";
 import {
   DndContext,
   type CollisionDetection,
@@ -23,11 +22,9 @@ import {
   loadAllProjectCatalog,
   loadMoreProjectCatalog,
 } from "../../routes/-__root.bounded-bootstrap";
+import { useSidebarAutoAnimateRef } from "./Sidebar.autoAnimate";
 
-const SIDEBAR_LIST_ANIMATION_OPTIONS = {
-  duration: 180,
-  easing: "ease-out",
-} as const;
+export const SIDEBAR_PROJECT_LIST_CLASS_NAME = "ml-1 mr-1 gap-0.5 overflow-hidden pl-1 pr-1";
 
 export interface RenderedProject {
   project: { id: ProjectId };
@@ -85,14 +82,7 @@ export function SidebarProjectList({
   const hasMoreProjects =
     retryCatalogHead || (projectCatalogCursor !== null && projectCatalogCursor !== undefined);
   const loadMoreCount = Math.min(5, projectCatalogRemainingCount ?? 5);
-  const animatedListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachAutoAnimateRef = useCallback((node: HTMLElement | null) => {
-    if (!node || animatedListsRef.current.has(node)) {
-      return;
-    }
-    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-    animatedListsRef.current.add(node);
-  }, []);
+  const attachAutoAnimateRef = useSidebarAutoAnimateRef();
 
   return (
     <>
@@ -105,7 +95,7 @@ export function SidebarProjectList({
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <SidebarMenu>
+          <SidebarMenu className={SIDEBAR_PROJECT_LIST_CLASS_NAME}>
             <SortableContext
               items={renderedProjects.map((rp) => rp.project.id)}
               strategy={verticalListSortingStrategy}
@@ -119,7 +109,7 @@ export function SidebarProjectList({
           </SidebarMenu>
         </DndContext>
       ) : (
-        <SidebarMenu ref={attachAutoAnimateRef}>
+        <SidebarMenu ref={attachAutoAnimateRef} className={SIDEBAR_PROJECT_LIST_CLASS_NAME}>
           {renderedProjects.map((rp) => (
             <SidebarMenuItem key={rp.project.id} className="rounded-md">
               {renderProjectItem(rp, null)}

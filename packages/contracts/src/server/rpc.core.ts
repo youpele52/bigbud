@@ -65,6 +65,9 @@ import {
   ServerExportThreadContextError,
   ServerExportThreadContextInput,
   ServerExportThreadContextResult,
+  ServerInstallRemoteAgentError,
+  ServerInstallRemoteAgentInput,
+  ServerInstallRemoteAgentResult,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
   ServerUnlockSshKeyInput,
@@ -95,6 +98,12 @@ import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../cor
 import { OrchestrationDispatchCommandError } from "../orchestration/orchestration.rpc";
 import { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import { WS_METHODS } from "../constants/websocket.constant";
+import { IsoDateTime } from "../core/baseSchemas";
+
+export const WsServerPingRpc = Rpc.make(WS_METHODS.serverPing, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({ serverTime: IsoDateTime }),
+});
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
   payload: ServerUpsertKeybindingInput,
@@ -123,6 +132,12 @@ export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerify
   payload: ServerVerifyExecutionTargetInput,
   success: ServerVerifyExecutionTargetResult,
   error: ServerVerifyExecutionTargetError,
+});
+
+export const WsServerInstallRemoteAgentRpc = Rpc.make(WS_METHODS.serverInstallRemoteAgent, {
+  payload: ServerInstallRemoteAgentInput,
+  success: ServerInstallRemoteAgentResult,
+  error: ServerInstallRemoteAgentError,
 });
 
 export const WsServerUnlockSshKeyRpc = Rpc.make(WS_METHODS.serverUnlockSshKey, {

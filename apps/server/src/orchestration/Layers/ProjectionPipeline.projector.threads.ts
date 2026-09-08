@@ -13,6 +13,7 @@ import {
 } from "./ProjectionPipeline.helpers.ts";
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
 import { advancesThreadActivityAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
+import { projectThreadQueueControlEvent } from "./ProjectionPipeline.projector.threadQueueControl.ts";
 
 function resolveSyncedElevatorSummary(input: {
   readonly currentTitle: string;
@@ -62,6 +63,8 @@ export function makeThreadsProjector(
         occurredAt: event.occurredAt,
       });
     }
+    if (yield* projectThreadQueueControlEvent({ event, repository: projectionThreadRepository }))
+      return;
     switch (event.type) {
       case "thread.created":
         yield* projectionThreadRepository.upsert({
@@ -91,6 +94,8 @@ export function makeThreadsProjector(
           latestTurnId: null,
           queuedPrompts: [],
           pendingInterruptFlushIntent: null,
+          pendingTurnControlOperation: null,
+          queueHold: false,
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           lastActivityAt: event.payload.updatedAt,
@@ -278,60 +283,6 @@ export function makeThreadsProjector(
         }
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
-          updatedAt: event.occurredAt,
-        });
-        return;
-      }
-
-      case "thread.prompt-queued":
-      case "thread.queued-prompt-removed":
-      case "thread.queued-prompts-flushed": {
-        const existingRow = yield* projectionThreadRepository.getById({
-          threadId: event.payload.threadId,
-        });
-        if (Option.isNone(existingRow)) return;
-        const current = existingRow.value.queuedPrompts;
-        const queuedPrompts =
-          event.type === "thread.prompt-queued"
-            ? current.some((prompt) => prompt.id === event.payload.prompt.id)
-              ? current
-              : [...current, event.payload.prompt]
-            : event.type === "thread.queued-prompt-removed"
-              ? current.filter((prompt) => prompt.id !== event.payload.messageId)
-              : current.filter((prompt) => !event.payload.messageIds.includes(prompt.id));
-        yield* projectionThreadRepository.upsert({
-          ...existingRow.value,
-          queuedPrompts,
-          pendingInterruptFlushIntent:
-            event.type === "thread.queued-prompt-removed" &&
-            existingRow.value.pendingInterruptFlushIntent?.queuedPromptIds.includes(
-              event.payload.messageId,
-            )
-              ? null
-              : event.type === "thread.queued-prompts-flushed" &&
-                  existingRow.value.pendingInterruptFlushIntent !== null &&
-                  existingRow.value.pendingInterruptFlushIntent !== undefined &&
-                  existingRow.value.pendingInterruptFlushIntent.queuedPromptIds.length ===
-                    event.payload.messageIds.length &&
-                  existingRow.value.pendingInterruptFlushIntent.queuedPromptIds.every(
-                    (id, index) => id === event.payload.messageIds[index],
-                  )
-                ? null
-                : existingRow.value.pendingInterruptFlushIntent,
-          updatedAt: event.occurredAt,
-        });
-        return;
-      }
-
-      case "thread.turn-interrupt-requested": {
-        if (event.payload.pendingFlushIntent === undefined) return;
-        const existingRow = yield* projectionThreadRepository.getById({
-          threadId: event.payload.threadId,
-        });
-        if (Option.isNone(existingRow)) return;
-        yield* projectionThreadRepository.upsert({
-          ...existingRow.value,
-          pendingInterruptFlushIntent: event.payload.pendingFlushIntent,
           updatedAt: event.occurredAt,
         });
         return;

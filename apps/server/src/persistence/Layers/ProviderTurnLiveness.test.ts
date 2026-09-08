@@ -12,6 +12,7 @@ const layer = ProviderTurnLivenessRepositoryLive.pipe(Layer.provideMerge(SqliteP
 const threadId = ThreadId.makeUnsafe("persisted-liveness-thread");
 const turnId = TurnId.makeUnsafe("persisted-liveness-turn");
 const startedAt = "2026-08-13T00:00:00.000Z";
+const sessionEpoch = 0;
 
 it.layer(layer)("provider turn liveness repository", (it) => {
   it.effect("persists active liveness and meaningful progress across reads", () =>
@@ -21,13 +22,14 @@ it.layer(layer)("provider turn liveness repository", (it) => {
         threadId,
       });
       const repository = yield* ProviderTurnLivenessRepository;
-      yield* repository.startTurn({ threadId, turnId, provider: "codex", startedAt });
+      yield* repository.startTurn({ threadId, turnId, provider: "codex", sessionEpoch, startedAt });
       const progressAt = "2026-08-13T00:01:00.000Z";
       yield* repository.observeEvent(
         {
           type: "content.delta",
           eventId: "progress" as never,
           provider: "codex",
+          sessionEpoch,
           threadId,
           turnId,
           createdAt: progressAt,
@@ -40,6 +42,7 @@ it.layer(layer)("provider turn liveness repository", (it) => {
           threadId,
           turnId,
           provider: "codex",
+          sessionEpoch,
           turnStartedAt: startedAt,
           lastRuntimeEventAt: progressAt,
           lastMeaningfulProgressAt: progressAt,
@@ -64,6 +67,7 @@ it.layer(layer)("provider turn liveness repository", (it) => {
           threadId,
           turnId,
           provider: "codex",
+          sessionEpoch,
           terminalAt: startedAt,
         }),
       );
@@ -72,10 +76,11 @@ it.layer(layer)("provider turn liveness repository", (it) => {
           threadId,
           turnId,
           provider: "codex",
+          sessionEpoch,
           terminalAt: startedAt,
         }),
       );
-      yield* repository.startTurn({ threadId, turnId, provider: "codex", startedAt });
+      yield* repository.startTurn({ threadId, turnId, provider: "codex", sessionEpoch, startedAt });
       assert.deepEqual(yield* repository.listActive(), []);
     }),
   );
@@ -93,11 +98,13 @@ it.layer(layer)("provider turn liveness repository", (it) => {
         threadId: checkingThreadId,
         turnId: checkingTurnId,
         provider: "codex",
+        sessionEpoch,
         startedAt,
       });
       yield* repository.recordInspection({
         threadId: checkingThreadId,
         turnId: checkingTurnId,
+        sessionEpoch,
         observedAt: startedAt,
         status: "timed-out",
         failed: true,
@@ -105,6 +112,7 @@ it.layer(layer)("provider turn liveness repository", (it) => {
       yield* repository.recordInspection({
         threadId: checkingThreadId,
         turnId: checkingTurnId,
+        sessionEpoch,
         observedAt: "2026-08-13T00:01:00.000Z",
         status: "checking",
         failed: false,
@@ -112,6 +120,7 @@ it.layer(layer)("provider turn liveness repository", (it) => {
       yield* repository.recordInspection({
         threadId: checkingThreadId,
         turnId: checkingTurnId,
+        sessionEpoch,
         observedAt: "2026-08-13T00:02:00.000Z",
         status: "unavailable",
         failed: false,

@@ -7,8 +7,11 @@ import { Command } from "effect/unstable/cli";
 import { NetService } from "@bigbud/shared/Net";
 import { cli } from "./cli/cli";
 import { version } from "../package.json" with { type: "json" };
+import { registerServerLifecycleDiagnostics } from "./serverLifecycleDiagnostics.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
+
+registerServerLifecycleDiagnostics();
 
 Command.run(cli, { version }).pipe(
   Effect.scoped,

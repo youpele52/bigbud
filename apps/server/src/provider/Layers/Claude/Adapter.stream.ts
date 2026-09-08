@@ -7,7 +7,7 @@
  *
  * @module ClaudeAdapter.stream
  */
-import { type EventId, type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
+import { type EventId, ThreadId } from "@bigbud/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Queue, Stream } from "effect";
 
 import { ProviderAdapterProcessError } from "../../Errors.ts";
@@ -18,6 +18,7 @@ import {
   toError,
 } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { makeBlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnHandlers } from "./Adapter.stream.turn.ts";
@@ -29,7 +30,7 @@ export interface StreamHandlerDeps {
     eventId: EventId;
     createdAt: string;
   }>;
-  readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly sessions: Map<ThreadId, ClaudeSessionContext>;
 }
@@ -61,6 +62,13 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
     if (context.stopped) return;
 
     context.stopped = true;
+    const updatedAt = yield* nowIso;
+    context.session = {
+      ...context.session,
+      status: "closed",
+      activeTurnId: undefined,
+      updatedAt,
+    };
 
     for (const pending of context.pendingApprovals.values()) {
       yield* Deferred.succeed(pending.decision, "cancel");
@@ -117,17 +125,9 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       yield* cleanupBridge;
     }
 
-    const updatedAt = yield* nowIso;
-    context.session = {
-      ...context.session,
-      status: "closed",
-      activeTurnId: undefined,
-      updatedAt,
-    };
-
-    if (options?.emitExitEvent !== false) {
+    if (options?.emitExitEvent !== false && sessions.get(context.session.threadId) === context) {
       const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
+      yield* offerRuntimeEvent(context, {
         type: "session.exited",
         eventId: stamp.eventId,
         provider: PROVIDER,
@@ -141,7 +141,9 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       });
     }
 
-    sessions.delete(context.session.threadId);
+    if (sessions.get(context.session.threadId) === context) {
+      sessions.delete(context.session.threadId);
+    }
   });
 
   const handleStreamExit = Effect.fn("handleStreamExit")(function* (

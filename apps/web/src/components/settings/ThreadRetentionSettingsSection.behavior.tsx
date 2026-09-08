@@ -35,7 +35,11 @@ export function ThreadBehaviorSettingsRows() {
               }
             }}
           >
-            <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-full sm:w-44"
+              aria-label="Default thread mode"
+            >
               <SelectValue>
                 {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
               </SelectValue>
@@ -69,6 +73,7 @@ export function ThreadBehaviorSettingsRows() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.confirmThreadArchive}
             onCheckedChange={(checked) =>
               updateSettings({ confirmThreadArchive: Boolean(checked) })
@@ -95,6 +100,7 @@ export function ThreadBehaviorSettingsRows() {
         }
         control={
           <Switch
+            tone="success"
             checked={settings.confirmThreadDelete}
             onCheckedChange={(checked) => updateSettings({ confirmThreadDelete: Boolean(checked) })}
             aria-label="Confirm thread deletion"

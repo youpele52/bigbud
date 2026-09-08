@@ -57,6 +57,7 @@ describe("ProviderCommandReactorSessionOps recovery", () => {
           providerService: {} as never,
           states: new Map(),
           threadId: activeSession.threadId,
+          sessionEpoch: 0,
           activeSession,
           activities: [],
         }),

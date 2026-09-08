@@ -76,6 +76,11 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       const threadIds = yield* directory.listThreadIds();
       assert.deepEqual(threadIds, [nextThreadId]);
+      const bindings = yield* directory.listBindings();
+      assert.deepEqual(
+        bindings.map((binding) => binding.threadId),
+        [nextThreadId],
+      );
 
       yield* directory.remove(nextThreadId);
       const missingProvider = yield* directory.getProvider(nextThreadId).pipe(Effect.result);

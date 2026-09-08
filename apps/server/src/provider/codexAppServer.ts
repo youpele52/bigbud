@@ -1,11 +1,12 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import readline from "node:readline";
 import type {
-  ModelCapabilities,
   ServerProviderModel,
   ServerProviderSkill,
-} from "@bigbud/contracts";
+} from "@bigbud/contracts/server/server.providers.ts";
 import { readCodexAccountSnapshot, type CodexAccountSnapshot } from "./codexAccount";
+import { parseCodexModelsResult } from "./codexAppServer.models";
+import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
 
 interface JsonRpcProbeResponse {
   readonly id?: unknown;
@@ -23,94 +24,6 @@ export interface CodexDiscoverySnapshot {
 
 function readErrorMessage(response: JsonRpcProbeResponse): string | undefined {
   return typeof response.error?.message === "string" ? response.error.message : undefined;
-}
-
-function readObject(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-}
-
-function readArray(value: unknown): ReadonlyArray<unknown> | undefined {
-  return Array.isArray(value) ? value : undefined;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function readBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function nonEmptyTrimmed(value: unknown): string | undefined {
-  const trimmed = readString(value)?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
-
-function titleCaseReasoningEffort(value: string): string {
-  return value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function parseCodexModelCapabilities(model: Record<string, unknown>): ModelCapabilities {
-  const effortEntries = readArray(model.supportedReasoningEfforts) ?? [];
-  const defaultEffort = nonEmptyTrimmed(model.defaultReasoningEffort);
-  const reasoningEffortLevels = effortEntries.flatMap((entry) => {
-    const effort = nonEmptyTrimmed(readObject(entry)?.reasoningEffort) ?? nonEmptyTrimmed(entry);
-    if (!effort) {
-      return [];
-    }
-
-    return [
-      {
-        value: effort,
-        label: titleCaseReasoningEffort(effort),
-        ...(effort === defaultEffort ? { isDefault: true } : {}),
-      },
-    ];
-  });
-
-  const additionalSpeedTiers = readArray(model.additionalSpeedTiers) ?? [];
-  const serviceTiers = readArray(model.serviceTiers) ?? [];
-  return {
-    ...EMPTY_MODEL_CAPABILITIES,
-    reasoningEffortLevels,
-    supportsFastMode:
-      additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast") ||
-      serviceTiers.length > 0,
-  };
-}
-
-function parseCodexModelsResult(result: unknown): ReadonlyArray<ServerProviderModel> {
-  const resultRecord = readObject(result);
-  const rawModels = readArray(resultRecord?.data) ?? [];
-
-  return rawModels.flatMap((value) => {
-    const model = readObject(value);
-    if (!model || readBoolean(model.hidden) === true) {
-      return [];
-    }
-
-    const slug = nonEmptyTrimmed(model.model) ?? nonEmptyTrimmed(model.id);
-    if (!slug) {
-      return [];
-    }
-
-    return [
-      {
-        slug,
-        name: nonEmptyTrimmed(model.displayName) ?? slug,
-        isCustom: false,
-        capabilities: parseCodexModelCapabilities(model),
-      } satisfies ServerProviderModel,
-    ];
-  });
 }
 
 function parseCodexSkillsResult(result: unknown, cwd: string): ReadonlyArray<ServerProviderSkill> {
@@ -287,7 +200,16 @@ export async function probeCodexDiscovery(input: {
 
       if (response.id === 2) {
         const errorMessage = readErrorMessage(response);
-        models = errorMessage ? [] : parseCodexModelsResult(response.result);
+        if (errorMessage) {
+          fail(new Error(`model/list failed: ${errorMessage}`));
+          return;
+        }
+
+        models = parseCodexModelsResult(response.result);
+        if (models === undefined) {
+          fail(new Error("model/list returned malformed data."));
+          return;
+        }
         maybeResolve();
         return;
       }

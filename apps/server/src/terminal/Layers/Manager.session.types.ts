@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 
 import {
   type TerminalCwdError,
+  type TerminalRuntimeLeaseError,
   type TerminalManagerShape,
   type TerminalSessionLookupError,
 } from "../Services/Manager";
@@ -51,7 +52,7 @@ export interface SessionApiContext {
     executionTargetId: string;
     cwd: string;
     worktreePath: string | null | undefined;
-  }) => Effect.Effect<void, TerminalCwdError>;
+  }) => Effect.Effect<void, TerminalCwdError | TerminalRuntimeLeaseError>;
   markWorktreeLeaseStarted: (input: {
     threadId: string;
     terminalId: string;

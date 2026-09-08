@@ -1,34 +1,22 @@
-import {
-  CommandId,
-  EventId,
-  IsoDateTime,
-  NonNegativeInt,
-  OrchestrationActorKind,
-  OrchestrationAggregateKind,
-  OrchestrationEvent,
-  OrchestrationEventType,
-  ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
+import { OrchestrationEvent, ProjectId, ThreadId } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 
-import {
-  toPersistenceDecodeError,
-  toPersistenceSqlError,
-  type OrchestrationEventStoreError,
-} from "../Errors.ts";
+import { toPersistenceDecodeError, type OrchestrationEventStoreError } from "../Errors.ts";
+import { orchestrationSequenceFrontierSql } from "../OrchestrationSequenceFrontier.ts";
 import {
   OrchestrationEventStore,
   type OrchestrationEventStoreShape,
 } from "../Services/OrchestrationEventStore.ts";
 import { makeCompactVerifiedPrefix } from "./OrchestrationEventStore.compaction.ts";
 import { makeReadByCommandId } from "./OrchestrationEventStore.commandEvents.ts";
+import { makeThreadIdentityQueries } from "./OrchestrationEventStore.threadIdentity.ts";
 import {
-  EventMetadataFromJsonString,
+  AppendEventRequestSchema,
+  EventRangeRowSchema,
   OrchestrationEventPersistedRowSchema,
-  UnknownFromJsonString,
+  ReadFromSequenceRequestSchema,
 } from "./OrchestrationEventStore.schemas.ts";
 import {
   decodeEventCompat,
@@ -36,29 +24,6 @@ import {
   toPersistenceSqlOrDecodeError,
 } from "./OrchestrationEventStore.utils.ts";
 
-const AppendEventRequestSchema = Schema.Struct({
-  eventId: EventId,
-  aggregateKind: OrchestrationAggregateKind,
-  streamId: Schema.Union([ProjectId, ThreadId]),
-  type: OrchestrationEventType,
-  causationEventId: Schema.NullOr(EventId),
-  correlationId: Schema.NullOr(CommandId),
-  actorKind: OrchestrationActorKind,
-  occurredAt: IsoDateTime,
-  commandId: Schema.NullOr(CommandId),
-  payloadJson: UnknownFromJsonString,
-  metadataJson: EventMetadataFromJsonString,
-});
-
-const ReadFromSequenceRequestSchema = Schema.Struct({
-  sequenceExclusive: NonNegativeInt,
-  limit: Schema.Number,
-});
-const EventRangeRowSchema = Schema.Struct({
-  earliestAvailableSequence: Schema.NullOr(NonNegativeInt),
-  latestSequence: NonNegativeInt,
-  retainedThroughSequence: NonNegativeInt,
-});
 const DEFAULT_READ_FROM_SEQUENCE_LIMIT = 1_000,
   READ_PAGE_SIZE = 500;
 
@@ -71,6 +36,7 @@ const makeEventStore = Effect.gen(function* () {
     execute: (request) =>
       sql`
         INSERT INTO orchestration_events (
+          sequence,
           event_id,
           aggregate_kind,
           stream_id,
@@ -85,6 +51,7 @@ const makeEventStore = Effect.gen(function* () {
           metadata_json
         )
         VALUES (
+          ${request.sequence},
           ${request.eventId},
           ${request.aggregateKind},
           ${request.streamId},
@@ -145,12 +112,9 @@ const makeEventStore = Effect.gen(function* () {
     Result: EventRangeRowSchema,
     execute: () => sql`
        SELECT
-         (SELECT MIN(sequence) FROM orchestration_events) AS "earliestAvailableSequence",
-         MAX(
-           retention.retained_through_sequence,
-           COALESCE((SELECT MAX(sequence) FROM orchestration_events), 0)
-         ) AS "latestSequence",
-         retention.retained_through_sequence AS "retainedThroughSequence"
+          (SELECT MIN(sequence) FROM orchestration_events) AS "earliestAvailableSequence",
+          ${orchestrationSequenceFrontierSql(sql)} AS "latestSequence",
+          retention.retained_through_sequence AS "retainedThroughSequence"
        FROM orchestration_retention_state AS retention
        WHERE retention.singleton_id = 1
     `,
@@ -159,16 +123,20 @@ const makeEventStore = Effect.gen(function* () {
     sql
       .withTransaction(
         Effect.gen(function* () {
-          yield* sql`
+          const reservations = yield* sql<{ readonly sequence: number }>`
             INSERT INTO orchestration_event_ids (event_id, sequence)
             VALUES (
               ${event.eventId},
-              COALESCE((SELECT MAX(sequence) + 1 FROM orchestration_events),
-                (SELECT retained_through_sequence + 1 FROM orchestration_retention_state WHERE singleton_id = 1),
-                1)
+              ${orchestrationSequenceFrontierSql(sql)} + 1
             )
+            RETURNING sequence
           `;
+          const sequence = reservations[0]?.sequence;
+          if (sequence === undefined) {
+            return yield* Effect.fail(new Error("event sequence reservation returned no row"));
+          }
           const persisted = yield* appendEventRow({
+            sequence,
             eventId: event.eventId,
             aggregateKind: event.aggregateKind,
             streamId: event.aggregateId,
@@ -215,7 +183,9 @@ const makeEventStore = Effect.gen(function* () {
             yield* sql`
               INSERT INTO orchestration_thread_identity (thread_id, project_id, created_sequence)
               VALUES (${event.aggregateId}, ${projectId}, ${persisted.sequence})
-              ON CONFLICT (thread_id) DO NOTHING
+              ON CONFLICT (thread_id) DO UPDATE SET
+                project_id = excluded.project_id,
+                created_sequence = excluded.created_sequence
             `;
           }
           if (persisted.type === "thread.deleted" && "threadIds" in event.payload) {
@@ -387,24 +357,9 @@ const makeEventStore = Effect.gen(function* () {
       );
   };
 
-  const findThreadProjectId: OrchestrationEventStoreShape["findThreadProjectId"] = (threadId) =>
-    sql<{ readonly projectId: ProjectId | null }>`
-      SELECT COALESCE(
-        (SELECT json_extract(payload_json, '$.projectId')
-         FROM orchestration_events
-         WHERE aggregate_kind = 'thread'
-           AND stream_id = ${threadId}
-           AND event_type = 'thread.created'
-         ORDER BY sequence DESC LIMIT 1),
-        (SELECT project_id FROM orchestration_thread_identity WHERE thread_id = ${threadId})
-      ) AS "projectId"
-    `.pipe(
-      Effect.map((rows) => Option.fromNullishOr(rows[0]?.projectId)),
-      Effect.mapError(toPersistenceSqlError("OrchestrationEventStore.findThreadProjectId:query")),
-    );
-
   const compactVerifiedPrefix = makeCompactVerifiedPrefix(sql);
   const readByCommandId = makeReadByCommandId(sql);
+  const { findThreadOwnershipEvidence, findThreadProjectId } = makeThreadIdentityQueries(sql);
 
   return {
     append,
@@ -412,6 +367,7 @@ const makeEventStore = Effect.gen(function* () {
     readFromSequence,
     readByCommandId,
     readReplay,
+    findThreadOwnershipEvidence,
     findThreadProjectId,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),
   } satisfies OrchestrationEventStoreShape;

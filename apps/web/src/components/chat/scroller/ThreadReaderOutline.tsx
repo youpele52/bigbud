@@ -3,10 +3,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
 
-const BASE_SEGMENT_WIDTH_PX = 8;
-const NEIGHBOR_SEGMENT_WIDTH_PX = 16;
-const CURRENT_SEGMENT_WIDTH_PX = 22;
-const HOVERED_SEGMENT_WIDTH_PX = 32;
+const BASE_SEGMENT_WIDTH_PX = 7;
+const NEIGHBOR_SEGMENT_WIDTH_PX = 14;
+const CURRENT_SEGMENT_WIDTH_PX = BASE_SEGMENT_WIDTH_PX;
+const HOVERED_SEGMENT_WIDTH_PX = 28;
 const SEGMENT_BUTTON_HEIGHT_PX = 10;
 const SEGMENT_GAP_PX = 1;
 const OUTLINE_VERTICAL_PADDING_PX = 8;

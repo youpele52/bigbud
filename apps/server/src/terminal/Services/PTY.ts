@@ -38,6 +38,8 @@ export interface PtySpawnInput {
   cols: number;
   rows: number;
   env: NodeJS.ProcessEnv;
+  readonly executionTargetId?: string;
+  readonly remoteCwd?: string;
 }
 
 /**

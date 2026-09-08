@@ -33,6 +33,7 @@ describe("OrchestrationEngine", () => {
         ),
       readFromSequence: () => Stream.empty,
       readReplay: () => Effect.die("unused replay"),
+      findThreadOwnershipEvidence: () => Effect.die("unused thread ownership lookup"),
       findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll: () =>
         Stream.fail(

@@ -21,7 +21,7 @@ const projectId = ProjectId.makeUnsafe("project-1");
 const turnId = TurnId.makeUnsafe("turn-1");
 const messageId = MessageId.makeUnsafe("message-1");
 
-function makeThread(): OrchestrationThread {
+function makeThread(overrides: Partial<OrchestrationThread> = {}): OrchestrationThread {
   return {
     id: threadId,
     projectId,
@@ -47,6 +47,7 @@ function makeThread(): OrchestrationThread {
     checkpoints: [],
     session: null,
     watchingThreads: [],
+    ...overrides,
   };
 }
 
@@ -137,6 +138,79 @@ describe("mobileOrchestrationEvents.logic", () => {
     expect(next.snapshot.threads[0]?.messages[0]?.streaming).toBe(false);
   });
 
+  it("removes every deleted thread and detaches surviving children", () => {
+    const deletedParentId = ThreadId.makeUnsafe("deleted-parent");
+    const deletedChildId = ThreadId.makeUnsafe("deleted-child");
+    const survivingChildId = ThreadId.makeUnsafe("surviving-child");
+    const snapshot: OrchestrationReadModel = {
+      snapshotSequence: 1,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      projects: [],
+      threads: [
+        makeThread({ id: deletedParentId }),
+        makeThread({
+          id: deletedChildId,
+          parentThread: { threadId: deletedParentId, title: "Deleted parent" },
+        }),
+        makeThread({
+          id: survivingChildId,
+          parentThread: { threadId: deletedParentId, title: "Deleted parent" },
+        }),
+      ],
+    };
+    const next = applyOrchestrationEventToSnapshot(snapshot, {
+      type: "thread.deleted",
+      sequence: 2,
+      occurredAt: "2026-01-01T00:00:02.000Z",
+      commandId: CommandId.makeUnsafe("command-delete"),
+      eventId: EventId.makeUnsafe("event-delete"),
+      aggregateKind: "thread",
+      aggregateId: deletedParentId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: {
+        threadId: deletedParentId,
+        threadIds: [deletedParentId, deletedChildId],
+        deletedAt: "2026-01-01T00:00:02.000Z",
+      },
+    });
+
+    expect(next.changed).toBe(true);
+    expect(next.snapshot.threads).toEqual([expect.objectContaining({ id: survivingChildId })]);
+    expect(next.snapshot.threads[0]?.parentThread).toBeUndefined();
+  });
+
+  it("detaches a child when the deleted parent is absent from the snapshot", () => {
+    const deletedParentId = ThreadId.makeUnsafe("absent-parent");
+    const child = makeThread({
+      id: ThreadId.makeUnsafe("partial-snapshot-child"),
+      parentThread: { threadId: deletedParentId, title: "Absent parent" },
+    });
+    const snapshot: OrchestrationReadModel = {
+      snapshotSequence: 1,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      projects: [],
+      threads: [child],
+    };
+    const next = applyOrchestrationEventToSnapshot(snapshot, {
+      type: "thread.deleted",
+      sequence: 2,
+      occurredAt: "2026-01-01T00:00:02.000Z",
+      commandId: CommandId.makeUnsafe("command-delete-absent"),
+      eventId: EventId.makeUnsafe("event-delete-absent"),
+      aggregateKind: "thread",
+      aggregateId: deletedParentId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: { threadId: deletedParentId, deletedAt: "2026-01-01T00:00:02.000Z" },
+    });
+
+    expect(next.changed).toBe(true);
+    expect(next.snapshot.threads[0]?.parentThread).toBeUndefined();
+  });
+
   it("replaces the final assistant message content when the event requests replacement", () => {
     const thread = applyOrchestrationEventToThread(makeThread(), makeMessageSentEvent("Hel", true));
     const finalEvent = makeMessageSentEvent("Hello", false);
@@ -177,6 +251,7 @@ describe("mobileOrchestrationEvents.logic", () => {
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: turnId,
+          sessionEpoch: 0,
           lastError: null,
           reason: null,
           updatedAt: "2026-01-01T00:00:02.000Z",

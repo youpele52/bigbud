@@ -75,7 +75,11 @@ function shouldUseRawPdfPreview(): boolean {
   return typeof window !== "undefined" && window.desktopBridge !== undefined;
 }
 
-export function buildWorkspaceFilePreviewUrl(input: { cwd: string; relativePath: string }): string {
+export function buildWorkspaceFilePreviewUrl(input: {
+  cwd: string;
+  relativePath: string;
+  executionTargetId?: string | undefined;
+}): string {
   const origin = resolveWsHttpOrigin();
   const url = new URL(
     isPdfFilePath(input.relativePath) && !shouldUseRawPdfPreview()
@@ -85,5 +89,8 @@ export function buildWorkspaceFilePreviewUrl(input: { cwd: string; relativePath:
   );
   url.searchParams.set("cwd", input.cwd);
   url.searchParams.set("relativePath", input.relativePath);
+  if (input.executionTargetId && input.executionTargetId !== "local") {
+    url.searchParams.set("executionTargetId", input.executionTargetId);
+  }
   return origin.length > 0 ? url.href : `${url.pathname}${url.search}`;
 }

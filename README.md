@@ -107,8 +107,30 @@ Provider status is checked in real-time and displayed in Settings. Each provider
 bigbud can connect to remote projects over SSH while keeping the app experience local.
 
 - **Remote workspace support** — Open and work in remote projects across Codex, Claude, Copilot, OpenCode, and Pi where supported
+- **Agent-backed by default** — Supported remote workspace operations use the managed Rust agent at `$HOME/.bigbud/agent/bin/current`, including provider shell and file bridges
 - **Safer reconnects** — After restart, saved remote workspaces stay disconnected until SSH access is verified again
 - **Flexible unlock flow** — Reconnect with SSH keys or temporary password-based SSH unlock without saving secrets
+- **Consent-gated setup** — On first use, bigbud explains the remote-agent installation and waits for an explicit Yes before writing anything to the remote host or creating the project
+- **Explicit recovery mode** — Set `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` before starting the server to use the centralized compatibility transport; accepted agent operations never silently retry over SSH
+
+Packaged desktop builds use the managed agent transport by default. `bun dev:desktop` uses `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` automatically so local development does not require a published remote-agent release; set `BIGBUD_REMOTE_AGENT_TRANSPORT=agent` to exercise the managed-agent installer. Packaged builds use the signed `remote-agent-install-source.json` published with the same release. `BIGBUD_REMOTE_AGENT_BINARY` remains available for testing a custom remote path.
+
+Local and managed-remote file watching share the Rust `bigbud-workspace-watch` implementation. Server-bearing development commands build the native `bigbud-remote-agent` automatically, and packaged desktop builds include it. Standalone server deployments can set `BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to an executable built with `cargo build --locked --package bigbud-remote-agent`; a missing or incompatible binary is reported as a typed watcher diagnostic instead of falling back to a different local watcher.
+
+## Desktop Event Delivery
+
+Packaged desktop sessions ship `bigbud-desktop-supervisor` as the authoritative
+orchestration delivery coordinator. The TypeScript server remains the source
+of truth for events and SQLite state; Rust owns bounded delivery order,
+consumer generations, application ACKs, timeout recovery, and reconnect
+reattachment. Electron only packages and resolves the executable—the protocol
+travels directly between the server and the sidecar over framed stdio.
+
+Development can exercise this path with `bun run smoke:desktop-supervisor` and
+`BIGBUD_DESKTOP_SUPERVISOR_ENABLED=1`. `BIGBUD_DESKTOP_SUPERVISOR_ENABLED=0`
+selects the startup rollback route. After exhausted native recovery, the UI
+reports a fenced TypeScript fallback that remains active until the session
+reconnects; the two delivery routes never run concurrently.
 
 ## Computer Use
 

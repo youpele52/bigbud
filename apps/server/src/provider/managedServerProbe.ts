@@ -6,7 +6,6 @@ import { ProviderAdapterProcessError } from "./Errors.ts";
 import { OpencodeServerManager } from "./Services/Opencode/ServerManager.ts";
 
 type ManagedServerProvider = Extract<ProviderKind, "opencode" | "kilocode">;
-export const MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT = "30 seconds";
 
 export function withManagedServerProbe<A>(input: {
   readonly provider: ManagedServerProvider;

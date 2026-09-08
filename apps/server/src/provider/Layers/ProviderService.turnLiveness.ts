@@ -17,6 +17,7 @@ export function observeProviderRuntimeEvent(liveness: LivenessOption, event: Pro
           threadId: event.threadId,
           turnId: event.turnId,
           provider: event.provider,
+          sessionEpoch: event.sessionEpoch ?? 0,
           terminalAt: event.createdAt,
         })
       : liveness.value
@@ -107,7 +108,13 @@ export function makeTurnLivenessOperations(
 
 export function startAcceptedTurnLiveness(
   liveness: LivenessOption,
-  input: { threadId: ThreadId; turnId: TurnId; provider: ProviderKind; startedAt: string },
+  input: {
+    threadId: ThreadId;
+    turnId: TurnId;
+    provider: ProviderKind;
+    sessionEpoch: number;
+    startedAt: string;
+  },
 ) {
   if (!Option.isSome(liveness)) return Effect.void;
   return liveness.value
@@ -121,7 +128,7 @@ export function startAcceptedTurnLiveness(
 
 export function markProviderTurnTerminal(
   liveness: LivenessOption,
-  input: { threadId: ThreadId; turnId?: TurnId; terminalAt: string },
+  input: { threadId: ThreadId; turnId?: TurnId; sessionEpoch?: number; terminalAt: string },
 ) {
   return Option.isSome(liveness)
     ? liveness.value

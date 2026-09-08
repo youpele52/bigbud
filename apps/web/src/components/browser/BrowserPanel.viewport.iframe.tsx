@@ -6,36 +6,51 @@ import { iframeNavigationError } from "./BrowserPanel.navigationError";
 
 export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function BrowserIframeViewport(
-    { url, onUrlChange, onLoadStart, onLoadSuccess, onLoadFail, onPageMetadataChange },
+    {
+      url,
+      onUrlChange,
+      onNavigationCommit,
+      onLoadStart,
+      onLoadSuccess,
+      onLoadFail,
+      onPageMetadataChange,
+    },
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const onUrlChangeRef = useRef(onUrlChange);
+    const onNavigationCommitRef = useRef(onNavigationCommit);
     const onLoadStartRef = useRef(onLoadStart);
     const onLoadSuccessRef = useRef(onLoadSuccess);
     const onLoadFailRef = useRef(onLoadFail);
+    const requestedUrlRef = useRef<string | null>(null);
     const [errorUrl, setErrorUrl] = useState<string | null>(null);
 
     onUrlChangeRef.current = onUrlChange;
+    onNavigationCommitRef.current = onNavigationCommit;
     onLoadStartRef.current = onLoadStart;
     onLoadSuccessRef.current = onLoadSuccess;
     onLoadFailRef.current = onLoadFail;
 
+    const reloadIframe = () => {
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+      onLoadStartRef.current?.();
+      try {
+        iframe.contentWindow?.location.reload();
+      } catch {
+        iframe.src = url;
+      }
+    };
+
     useImperativeHandle(ref, () => ({
       goBack: () => undefined,
       goForward: () => undefined,
-      reload: () => {
-        const iframe = iframeRef.current;
-        if (!iframe) return;
-        try {
-          iframe.contentWindow?.location.reload();
-        } catch {
-          iframe.src = url;
-        }
-      },
+      reload: reloadIframe,
       reloadIgnoringCache: () => {
         const iframe = iframeRef.current;
         if (!iframe) return;
+        onLoadStartRef.current?.();
         iframe.src = url;
       },
       openDevTools: () => undefined,
@@ -56,8 +71,8 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
     useEffect(() => {
       const iframe = iframeRef.current;
       if (!iframe) return;
-      const currentSrc = iframe.getAttribute("src");
-      if (currentSrc !== url) {
+      if (requestedUrlRef.current !== url) {
+        requestedUrlRef.current = url;
         iframe.setAttribute("src", url);
         setErrorUrl(null);
         onLoadStartRef.current?.();
@@ -68,6 +83,7 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
     const handleLoad = () => {
       setErrorUrl(null);
       onLoadSuccessRef.current?.();
+      onNavigationCommitRef.current?.(url);
       try {
         onUrlChangeRef.current?.(url);
       } catch {
@@ -91,6 +107,7 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
     return (
       <>
         <iframe
+          key={url}
           ref={iframeRef}
           src={url}
           className="absolute inset-0 h-full w-full border-0"
@@ -99,13 +116,8 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
           onLoad={handleLoad}
           onError={handleError}
         />
-        {errorUrl && (
-          <BrowserPanelErrorPage
-            content={iframeNavigationError}
-            onReload={() => {
-              iframeRef.current?.contentWindow?.location.reload();
-            }}
-          />
+        {errorUrl === url && (
+          <BrowserPanelErrorPage content={iframeNavigationError} onReload={reloadIframe} />
         )}
       </>
     );

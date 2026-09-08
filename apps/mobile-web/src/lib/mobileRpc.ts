@@ -72,12 +72,11 @@ export class MobileRpcClient {
         this.runtime.runCallback(
           Effect.promise(() => this.clientPromise).pipe(
             Effect.flatMap((client) =>
-              Stream.runForEach(
-                client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
-                (event) =>
-                  Effect.sync(() => {
-                    dispatchEvent(event);
-                  }),
+              Stream.runForEach(client[WS_METHODS.subscribeOrchestrationDomainEvents]({}), (item) =>
+                Effect.sync(() => {
+                  if (item.type !== "batch") return;
+                  for (const event of item.events) dispatchEvent(event);
+                }),
               ),
             ),
             Effect.catch(() => Effect.void),

@@ -75,6 +75,34 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       ),
   );
 
+  it.effect("preserves fast mode for configured custom Codex models", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          subject: "Add important change",
+          body: "",
+        }),
+        requireFastServiceTier: true,
+        customModels: ["custom-codex"],
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        yield* textGeneration.generateCommitMessage({
+          cwd: process.cwd(),
+          branch: "feature/codex-effect",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md b/README.md",
+          modelSelection: {
+            provider: "codex",
+            model: "custom-codex",
+            options: { fastMode: true },
+          },
+        });
+      }),
+    ),
+  );
+
   it.effect("defaults git text generation codex effort to low", () =>
     withFakeCodexEnv(
       {

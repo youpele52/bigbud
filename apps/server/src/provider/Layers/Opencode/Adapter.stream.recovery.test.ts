@@ -15,6 +15,7 @@ function session(client: unknown): ActiveOpencodeSession {
     releaseServer() {},
     opencodeSessionId: "opencode-stream-recovery-session",
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: "2026-08-18T00:00:00.000Z",
     runtimeMode: "full-access",
     providerRuntimeExecutionTargetId: "local",
@@ -67,6 +68,7 @@ function runtimeEvent(
 
 const makeSyntheticEvent = ((
   _threadId: ThreadId,
+  _sessionEpoch: number,
   type: string,
   payload: unknown,
   extra?: { readonly turnId?: TurnId },

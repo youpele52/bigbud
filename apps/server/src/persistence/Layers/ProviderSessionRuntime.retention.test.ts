@@ -14,7 +14,15 @@ const layer = ProviderSessionRuntimeRepositoryLive.pipe(
 const NOW = "2026-08-04T00:00:00.000Z";
 const local = ExecutionTargetId.makeUnsafe("local");
 
-function runtime(threadId: ThreadId, input?: { remote?: boolean; cwd?: string | null }) {
+function runtime(
+  threadId: ThreadId,
+  input?: {
+    remote?: boolean;
+    cwd?: string | null;
+    lastSeenAt?: string;
+    status?: "running" | "stopped";
+  },
+) {
   const target = input?.remote ? ExecutionTargetId.makeUnsafe("ssh:test") : local;
   return {
     threadId,
@@ -24,8 +32,8 @@ function runtime(threadId: ThreadId, input?: { remote?: boolean; cwd?: string | 
     workspaceExecutionTargetId: target,
     executionTargetId: target,
     runtimeMode: "full-access" as const,
-    status: "running" as const,
-    lastSeenAt: NOW,
+    status: input?.status ?? ("running" as const),
+    lastSeenAt: input?.lastSeenAt ?? NOW,
     resumeCursor: null,
     runtimePayload: input?.cwd === null ? null : { cwd: input?.cwd ?? process.cwd() },
   };
@@ -86,6 +94,65 @@ it.layer(layer)("provider retention runtime leases", (it) => {
         SELECT COUNT(*) AS count FROM worktree_runtime_leases WHERE thread_id = ${remote}
       `;
       assert.deepEqual(leases, [{ count: 0 }]);
+    }),
+  );
+
+  it.effect("bounds hot reconciliation reads to active or recent runtimes", () =>
+    Effect.gen(function* () {
+      const repository = yield* ProviderSessionRuntimeRepository;
+      const oldStopped = ThreadId.makeUnsafe("provider-old-stopped");
+      const recentStopped = ThreadId.makeUnsafe("provider-recent-stopped");
+      const oldRunning = ThreadId.makeUnsafe("provider-old-running");
+      yield* repository.upsert(
+        runtime(oldStopped, { status: "stopped", lastSeenAt: "2025-01-01T00:00:00.000Z" }),
+      );
+      yield* repository.upsert(runtime(recentStopped, { status: "stopped", lastSeenAt: NOW }));
+      yield* repository.upsert(
+        runtime(oldRunning, { status: "running", lastSeenAt: "2025-01-01T00:00:00.000Z" }),
+      );
+
+      const rows = yield* repository.list({
+        mode: "hot",
+        recentSince: "2026-01-01T00:00:00.000Z",
+        limit: 10,
+      });
+
+      const rowIds = new Set(rows.map((row) => row.threadId));
+      assert.equal(rowIds.has(recentStopped), true);
+      assert.equal(rowIds.has(oldRunning), false);
+      assert.equal(rowIds.has(oldStopped), false);
+    }),
+  );
+
+  it.effect("pages the safety audit with a stable last-seen cursor", () =>
+    Effect.gen(function* () {
+      const repository = yield* ProviderSessionRuntimeRepository;
+      const first = ThreadId.makeUnsafe("provider-audit-first");
+      const second = ThreadId.makeUnsafe("provider-audit-second");
+      const third = ThreadId.makeUnsafe("provider-audit-third");
+      yield* repository.upsert(
+        runtime(first, { status: "stopped", lastSeenAt: "2099-01-01T00:00:00.000Z" }),
+      );
+      yield* repository.upsert(
+        runtime(second, { status: "stopped", lastSeenAt: "2099-01-02T00:00:00.000Z" }),
+      );
+      yield* repository.upsert(
+        runtime(third, { status: "stopped", lastSeenAt: "2099-01-03T00:00:00.000Z" }),
+      );
+
+      const page = yield* repository.list({ mode: "audit", limit: 2 });
+      const next = page.find((row) => row.threadId === second);
+      assert.equal(page.length, 2);
+      if (!next) return;
+      const remainder = yield* repository.list({
+        mode: "audit",
+        cursor: { lastSeenAt: next.lastSeenAt, threadId: next.threadId },
+        limit: 2,
+      });
+      assert.deepEqual(
+        remainder.map((row) => row.threadId),
+        [third],
+      );
     }),
   );
 });

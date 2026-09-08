@@ -76,6 +76,7 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
     readonly sql: SqlClient.SqlClient;
     readonly threadId: ThreadId;
     readonly deletionSequence: number;
+    readonly recordCheckpoint?: Effect.Effect<void, Error>;
   }) {
     const verifyReplacement =
       input.projectionPipeline.ensureVerifiedBaselineThroughWithoutCompaction;
@@ -85,20 +86,31 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
       );
     }
     yield* verifyReplacement(input.deletionSequence);
-    const queries = makeEntityPurgeSql(input.sql);
-    yield* input.sql.withTransaction(
-      Effect.gen(function* () {
-        yield* verifyCanonicalPurgeProof({
-          queries,
-          entityKind: "thread",
-          entityId: input.threadId,
-        });
-        yield* queries.deleteProvenReceipts({ entityKind: "thread", entityId: input.threadId });
-        yield* queries.deleteProvenThreadCanonical({ threadId: input.threadId });
-      }),
-    );
+    yield* finalizeThreadCanonicalHistoryWithCoverage(input);
   },
 );
+
+export const finalizeThreadCanonicalHistoryWithCoverage = Effect.fn(
+  "finalizeThreadCanonicalHistoryWithCoverage",
+)(function* (input: {
+  readonly sql: SqlClient.SqlClient;
+  readonly threadId: ThreadId;
+  readonly recordCheckpoint?: Effect.Effect<void, Error>;
+}) {
+  const queries = makeEntityPurgeSql(input.sql);
+  yield* input.sql.withTransaction(
+    Effect.gen(function* () {
+      yield* verifyCanonicalPurgeProof({
+        queries,
+        entityKind: "thread",
+        entityId: input.threadId,
+      });
+      yield* queries.deleteProvenReceipts({ entityKind: "thread", entityId: input.threadId });
+      yield* queries.deleteProvenThreadCanonical({ threadId: input.threadId });
+      yield* input.recordCheckpoint ?? Effect.void;
+    }),
+  );
+});
 
 export function makeDeferredCanonicalThreadCleanup<E>(input: {
   readonly listCandidates: () => Effect.Effect<

@@ -17,6 +17,7 @@ import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 /** Function type for creating synthetic provider runtime events. */
 export type SyntheticEventFn = <TType extends ProviderRuntimeEvent["type"]>(
   threadId: import("@bigbud/contracts").ThreadId,
+  sessionEpoch: number,
   type: TType,
   payload: Extract<ProviderRuntimeEvent, { type: TType }>["payload"],
   extra?: { turnId?: TurnId; itemId?: string; requestId?: string },
@@ -63,6 +64,7 @@ export function makeSyntheticEventFn(
 ) {
   const fn = <TType extends ProviderRuntimeEvent["type"]>(
     threadId: import("@bigbud/contracts").ThreadId,
+    sessionEpoch: number,
     type: TType,
     payload: Extract<ProviderRuntimeEvent, { type: TType }>["payload"],
     extra?: { turnId?: TurnId; itemId?: string; requestId?: string },
@@ -74,6 +76,7 @@ export function makeSyntheticEventFn(
           eventId: stamp.eventId,
           createdAt: stamp.createdAt,
           threadId,
+          sessionEpoch,
           provider,
           ...(extra?.turnId ? { turnId: extra.turnId } : {}),
           ...(extra?.itemId ? { itemId: extra.itemId } : {}),

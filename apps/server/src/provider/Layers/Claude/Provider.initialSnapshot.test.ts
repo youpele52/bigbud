@@ -32,6 +32,7 @@ describe("makeClaudeInitialSnapshot", () => {
       auth: { status: "unknown" },
       message: "Checking Claude availability...",
       modelDiscovery: { status: "unavailable", source: "fallback", durationMs: 0 },
+      usageLimits: { status: "pending", source: "claude-agent-sdk", windows: [] },
     });
     expect(snapshot.models.some((model) => model.isCustom)).toBe(true);
   });
@@ -44,6 +45,7 @@ describe("makeClaudeInitialSnapshot", () => {
       installed: false,
       status: "disabled",
       message: "Claude is disabled in bigbud settings.",
+      usageLimits: { status: "unavailable", source: "claude-agent-sdk", windows: [] },
     });
   });
 });

@@ -100,6 +100,8 @@ describe("usePromptQueue command rejection", () => {
       expect(page.getByRole("alert")).toHaveTextContent("Queue command rejected");
     });
     expect(document.querySelector("output")?.textContent).toBe("Projected prompt");
+    await page.getByRole("button", { name: "Dismiss error" }).click();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
 
   it("renders projection after remount and dispatches remove and idle Send now", async () => {

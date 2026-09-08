@@ -53,6 +53,7 @@ function projectHealthState(input: {
     );
     const current = thread?.session;
     if (!thread || !current || current.activeTurnId !== input.liveness.turnId) return;
+    if ((input.liveness.sessionEpoch ?? 0) !== (current.sessionEpoch ?? 0)) return;
     const isHealthProjection =
       current.reason === PROVIDER_CHECKING_SESSION_REASON ||
       current.reason === PROVIDER_RECOVERING_SESSION_REASON ||
@@ -67,6 +68,7 @@ function projectHealthState(input: {
         commandId: serverCommandId("provider-turn-health"),
         threadId: thread.id,
         expectedActiveTurnId: input.liveness.turnId,
+        expectedSessionEpoch: current.sessionEpoch ?? 0,
         session: {
           ...current,
           status: input.status,
@@ -100,16 +102,22 @@ export function superviseProviderTurns(input: {
         Effect.gen(function* () {
           const thread = threadsById.get(liveness.threadId);
           if (!thread || thread.session?.activeTurnId !== liveness.turnId) return;
+          if ((liveness.sessionEpoch ?? 0) !== (thread.session.sessionEpoch ?? 0)) return;
 
           yield* input.providerService.recordTurnInspection({
             threadId: liveness.threadId,
             turnId: liveness.turnId,
+            sessionEpoch: liveness.sessionEpoch ?? 0,
             observedAt: occurredAt,
             status: "checking",
             failed: false,
           });
           const inspection = yield* input.providerService
-            .inspectActiveTurn({ threadId: liveness.threadId, turnId: liveness.turnId })
+            .inspectActiveTurn({
+              threadId: liveness.threadId,
+              turnId: liveness.turnId,
+              sessionEpoch: liveness.sessionEpoch ?? 0,
+            })
             .pipe(Effect.timeoutOption(PROVIDER_TURN_INSPECTION_TIMEOUT_MS), Effect.option);
           const result = Option.getOrUndefined(Option.flatten(inspection));
           const inspectionStatus = result?.status ?? "timed-out";
@@ -117,6 +125,7 @@ export function superviseProviderTurns(input: {
           yield* input.providerService.recordTurnInspection({
             threadId: liveness.threadId,
             turnId: liveness.turnId,
+            sessionEpoch: liveness.sessionEpoch ?? 0,
             observedAt: result?.observedAt ?? occurredAt,
             status: inspectionStatus,
             failed: failedInspection,
@@ -127,6 +136,7 @@ export function superviseProviderTurns(input: {
               threadId: liveness.threadId,
               turnId: liveness.turnId,
               provider: liveness.provider,
+              sessionEpoch: liveness.sessionEpoch ?? 0,
               terminalAt: occurredAt,
             });
             if (claimed) {

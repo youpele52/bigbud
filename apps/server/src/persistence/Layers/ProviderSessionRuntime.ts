@@ -14,6 +14,7 @@ import {
 import {
   ProviderSessionRuntime,
   ProviderSessionRuntimeRepository,
+  type ProviderSessionRuntimeListInput,
   type ProviderSessionRuntimeRepositoryShape,
 } from "../Services/ProviderSessionRuntime.ts";
 
@@ -35,6 +36,25 @@ const GetRuntimeRequestSchema = Schema.Struct({
 });
 
 const DeleteRuntimeRequestSchema = GetRuntimeRequestSchema;
+const ListRuntimeHotRequestSchema = Schema.Struct({
+  recentSince: Schema.String,
+  limit: Schema.Int,
+});
+const ListRuntimeAuditRequestSchema = Schema.Struct({
+  cursorLastSeenAt: Schema.NullOr(Schema.String),
+  cursorThreadId: Schema.NullOr(ThreadId),
+  limit: Schema.Int,
+});
+
+const MAX_RECONCILIATION_BINDINGS = 250;
+const DEFAULT_RECONCILIATION_BINDINGS = 100;
+
+function boundedLimit(limit: number | undefined): number {
+  return Math.min(
+    Math.max(Math.floor(limit ?? DEFAULT_RECONCILIATION_BINDINGS), 1),
+    MAX_RECONCILIATION_BINDINGS,
+  );
+}
 
 function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: string) {
   return (cause: unknown): ProviderSessionRuntimeRepositoryError =>
@@ -180,6 +200,57 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       `,
   });
 
+  const listRuntimeHotRows = SqlSchema.findAll({
+    Request: ListRuntimeHotRequestSchema,
+    Result: ProviderSessionRuntimeDbRowSchema,
+    execute: ({ recentSince, limit }) =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          provider_name AS "providerName",
+          adapter_key AS "adapterKey",
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
+          runtime_mode AS "runtimeMode",
+          status,
+          last_seen_at AS "lastSeenAt",
+          resume_cursor_json AS "resumeCursor",
+          runtime_payload_json AS "runtimePayload"
+        FROM provider_session_runtime
+        WHERE last_seen_at >= ${recentSince}
+        ORDER BY last_seen_at DESC, thread_id ASC
+        LIMIT ${limit}
+      `,
+  });
+
+  const listRuntimeAuditRows = SqlSchema.findAll({
+    Request: ListRuntimeAuditRequestSchema,
+    Result: ProviderSessionRuntimeDbRowSchema,
+    execute: ({ cursorLastSeenAt, cursorThreadId, limit }) =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          provider_name AS "providerName",
+          adapter_key AS "adapterKey",
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
+          runtime_mode AS "runtimeMode",
+          status,
+          last_seen_at AS "lastSeenAt",
+          resume_cursor_json AS "resumeCursor",
+          runtime_payload_json AS "runtimePayload"
+        FROM provider_session_runtime
+        WHERE
+          ${cursorLastSeenAt === null || cursorThreadId === null ? 1 : 0}
+          OR last_seen_at > ${cursorLastSeenAt}
+          OR (last_seen_at = ${cursorLastSeenAt} AND thread_id > ${cursorThreadId})
+        ORDER BY last_seen_at ASC, thread_id ASC
+        LIMIT ${limit}
+      `,
+  });
+
   const deleteRuntimeByThreadId = SqlSchema.void({
     Request: DeleteRuntimeRequestSchema,
     execute: ({ threadId }) =>
@@ -250,8 +321,9 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       ),
     );
 
-  const list: ProviderSessionRuntimeRepositoryShape["list"] = () =>
-    listRuntimeRows(undefined).pipe(
+  const list: ProviderSessionRuntimeRepositoryShape["list"] = (input = {}) => {
+    const rows = selectRuntimeRows(input);
+    return rows.pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
           "ProviderSessionRuntimeRepository.list:query",
@@ -271,6 +343,25 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
         ),
       ),
     );
+  };
+
+  function selectRuntimeRows(input: ProviderSessionRuntimeListInput) {
+    if (input.mode === "hot") {
+      return listRuntimeHotRows({
+        recentSince: input.recentSince ?? new Date(0).toISOString(),
+        limit: boundedLimit(input.limit),
+      });
+    }
+    if (input.mode === "audit") {
+      const limit = boundedLimit(input.limit);
+      return listRuntimeAuditRows({
+        cursorLastSeenAt: input.cursor?.lastSeenAt ?? null,
+        cursorThreadId: input.cursor?.threadId ?? null,
+        limit,
+      });
+    }
+    return listRuntimeRows(undefined);
+  }
 
   const deleteByThreadId: ProviderSessionRuntimeRepositoryShape["deleteByThreadId"] = (input) =>
     sql

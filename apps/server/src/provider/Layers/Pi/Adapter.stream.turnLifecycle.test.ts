@@ -18,11 +18,12 @@ describe("PiAdapter stream ingestion — turn deferral", () => {
     const provider = createProviderServiceHarness();
     let eventSequence = 0;
     const sessions = new Map<ThreadId, ActivePiSession>();
-    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         eventId: asEventId(`synthetic-${++eventSequence}`),
         provider: "pi",
         threadId,
+        sessionEpoch,
         createdAt,
         ...(extra?.turnId ? { turnId: extra.turnId } : {}),
         ...(extra?.itemId ? { itemId: extra.itemId as never } : {}),
@@ -56,6 +57,7 @@ describe("PiAdapter stream ingestion — turn deferral", () => {
         stop: async () => undefined,
       },
       threadId: asThreadId("thread-1"),
+      sessionEpoch: 0,
       createdAt,
       runtimeMode: "approval-required",
       providerRuntimeExecutionTargetId: "local",
@@ -165,11 +167,12 @@ describe("PiAdapter stream ingestion — turn queuing", () => {
     const provider = createProviderServiceHarness();
     let eventSequence = 0;
     const sessions = new Map<ThreadId, ActivePiSession>();
-    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         eventId: asEventId(`synthetic-${++eventSequence}`),
         provider: "pi",
         threadId,
+        sessionEpoch,
         createdAt,
         ...(extra?.turnId ? { turnId: extra.turnId } : {}),
         ...(extra?.itemId ? { itemId: extra.itemId as never } : {}),
@@ -203,6 +206,7 @@ describe("PiAdapter stream ingestion — turn queuing", () => {
         stop: async () => undefined,
       },
       threadId: asThreadId("thread-queued"),
+      sessionEpoch: 0,
       createdAt,
       runtimeMode: "approval-required",
       providerRuntimeExecutionTargetId: "local",
@@ -278,11 +282,12 @@ describe("PiAdapter stream ingestion — plan tracking", () => {
     const provider = createProviderServiceHarness();
     let eventSequence = 0;
     const sessions = new Map<ThreadId, ActivePiSession>();
-    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         eventId: asEventId(`synthetic-${++eventSequence}`),
         provider: "pi",
         threadId,
+        sessionEpoch,
         createdAt,
         ...(extra?.turnId ? { turnId: extra.turnId } : {}),
         ...(extra?.itemId ? { itemId: extra.itemId as never } : {}),
@@ -316,6 +321,7 @@ describe("PiAdapter stream ingestion — plan tracking", () => {
         stop: async () => undefined,
       },
       threadId: asThreadId("thread-plan"),
+      sessionEpoch: 0,
       createdAt,
       runtimeMode: "approval-required",
       providerRuntimeExecutionTargetId: "local",

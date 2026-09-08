@@ -33,15 +33,21 @@ vi.mock("./SidebarThreadRow", () => ({
 
 function renderChatsSection(input: {
   renderedChats: SidebarRenderedThreadEntry[];
+  isExpanded?: boolean;
   showAll: boolean;
   hasMoreChats: boolean;
   collapsedHiddenChatCount: number | null;
   unloadedChatCount: number | null;
+  activeThreadId?: ThreadId;
 }) {
   return renderToStaticMarkup(
     <SidebarChatsSection
-      {...input}
-      isExpanded
+      renderedChats={input.renderedChats}
+      showAll={input.showAll}
+      hasMoreChats={input.hasMoreChats}
+      collapsedHiddenChatCount={input.collapsedHiddenChatCount}
+      unloadedChatCount={input.unloadedChatCount}
+      isExpanded={input.isExpanded ?? true}
       onExpandedChange={vi.fn()}
       onShowAllChange={vi.fn()}
       isLoadingMoreChats={false}
@@ -52,6 +58,7 @@ function renderChatsSection(input: {
         {
           threadJumpLabelById: new Map(),
           prByThreadId: new Map(),
+          routeThreadId: input.activeThreadId ?? null,
         } as SharedProjectItemProps
       }
     />,
@@ -94,5 +101,34 @@ describe("SidebarChatsSection", () => {
     expect(html).toContain("thread:chat-6");
     expect(html).toContain("Show less");
     expect(html).toContain("Load more (1)");
+  });
+
+  it("hides the nested Recents content when Chats is collapsed", () => {
+    const html = renderChatsSection({
+      renderedChats,
+      isExpanded: false,
+      showAll: false,
+      hasMoreChats: true,
+      collapsedHiddenChatCount: 2,
+      unloadedChatCount: 1,
+    });
+
+    expect(html).not.toContain("Recents");
+    expect(html).not.toContain("thread:chat-1");
+  });
+
+  it("includes an active fifth chat in the folded preview with an accurate hidden count", () => {
+    const html = renderChatsSection({
+      renderedChats,
+      activeThreadId: orderedThreadIds[4]!,
+      showAll: false,
+      hasMoreChats: true,
+      collapsedHiddenChatCount: 2,
+      unloadedChatCount: 0,
+    });
+
+    expect(html).toContain("thread:chat-5");
+    expect(html.match(/thread:chat-5/g)).toHaveLength(1);
+    expect(html).toContain("See more (1)");
   });
 });

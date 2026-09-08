@@ -10,6 +10,9 @@ describe("isConfirmedMissingFileError", () => {
   it("recognizes confirmed missing-path failures", () => {
     expect(isConfirmedMissingFileError(new Error("ENOENT: no such file or directory"))).toBe(true);
     expect(isConfirmedMissingFileError(new Error("ENOTDIR: not a directory"))).toBe(true);
+    expect(
+      isConfirmedMissingFileError(new Error("NOT_FOUND: workspace path was not found: workspace")),
+    ).toBe(true);
   });
 
   it("does not classify transient preview failures as missing files", () => {

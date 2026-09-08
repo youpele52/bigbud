@@ -79,4 +79,25 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
       assert.match(String(error), /--apply requires --server-stopped/);
     }),
   );
+
+  it.effect("requires server shutdown confirmation for canonical event compaction", () =>
+    Effect.gen(function* () {
+      const error = yield* Command.runWith(cli, { version: "0.0.0" })([
+        "canonical-event-compaction",
+        "--apply",
+      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
+      assert.match(String(error), /--apply requires --server-stopped/);
+    }),
+  );
+
+  it.effect("accepts bounded canonical event compaction flags in dry-run mode", () =>
+    Command.runWith(cli, { version: "0.0.0" })([
+      "canonical-event-compaction",
+      "--batch-size",
+      "25",
+      "--passes",
+      "2",
+      "--help",
+    ]).pipe(Effect.provide(CliRuntimeLayer)),
+  );
 });

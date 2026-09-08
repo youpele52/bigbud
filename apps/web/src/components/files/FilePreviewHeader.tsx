@@ -3,6 +3,7 @@ import { ArrowLeftIcon, ArrowRightIcon, XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { writeFilesPanelDragEntry } from "./filesPanel.dnd";
 
 interface FilePreviewHeaderProps {
   readonly breadcrumb: ReadonlyArray<{ id: string; label: string }>;
@@ -67,7 +68,19 @@ export function FilePreviewHeader({
                   <TooltipTrigger
                     delay={0}
                     render={
-                      <span className="truncate font-medium text-foreground">{part.label}</span>
+                      <span
+                        draggable
+                        className="cursor-grab truncate font-medium text-foreground active:cursor-grabbing"
+                        onDragStart={(event) => {
+                          writeFilesPanelDragEntry(event.dataTransfer, {
+                            name: part.label,
+                            path: absolutePath,
+                            entryKind: "file",
+                          });
+                        }}
+                      >
+                        {part.label}
+                      </span>
                     }
                   />
                   <TooltipPopup>{absolutePath}</TooltipPopup>

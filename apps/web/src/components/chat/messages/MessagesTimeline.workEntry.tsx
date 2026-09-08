@@ -272,9 +272,9 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
         <MessageCopyButton text={copyText} />
         {sshKeyPath ? (
           <Button
-            type="button"
             size="xs"
-            variant="outline"
+            variant="text"
+            type="button"
             onClick={() => {
               setSshKeyUnlockError(null);
               setIsUnlockDialogOpen(true);

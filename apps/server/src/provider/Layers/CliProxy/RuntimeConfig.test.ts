@@ -45,7 +45,7 @@ describe("activateCliProxyRuntime", () => {
       .fn()
       .mockRejectedValueOnce(new CliProxyClientError("HealthProbeFailed", "not running"))
       .mockResolvedValue([{ id: "gpt-5-codex", name: "GPT-5 Codex" }]);
-    const activate = vi.fn(async () => ({ _tag: "started", strategy: "direct" }) as const);
+    const activate = vi.fn(async () => ({ _tag: "started", reused: false }) as const);
     const settings = await Effect.runPromise(
       Effect.gen(function* () {
         return yield* ServerSettingsService;
@@ -108,7 +108,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
     const originalNodeExecutable = process.env.BIGBUD_NODE_EXECUTABLE;
     const originalUnrelatedSecret = process.env.BIGBUD_RUNTIME_CONFIG_TEST_SECRET;
     const inspect = vi.fn(async () => [{ id: "gpt-5-codex", name: "GPT-5 Codex" }]);
-    const activate = vi.fn(async () => ({ _tag: "started", strategy: "direct" }) as const);
+    const activate = vi.fn(async () => ({ _tag: "started", reused: false }) as const);
     const settingsLayer = ServerSettingsService.layerTest({
       providers: { cliProxy: { configPath: firstPath } },
     });
@@ -165,7 +165,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       .fn()
       .mockRejectedValueOnce(new CliProxyClientError("HealthProbeFailed", "not running"))
       .mockResolvedValueOnce([{ id: "gpt-5-codex", name: "GPT-5 Codex" }]);
-    const activate = vi.fn(async () => ({ _tag: "started", strategy: "homebrew" }) as const);
+    const activate = vi.fn(async () => ({ _tag: "started", reused: false }) as const);
     const sleep = vi.fn(async () => undefined);
     const layer = Layer.mergeAll(
       ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),
@@ -191,7 +191,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),
       Layer.succeed(CliProxyLifecycle, {
         isClaudeRunnable: async () => ({ _tag: "available" }) as const,
-        activate: async () => ({ _tag: "started", strategy: "direct" }) as const,
+        activate: async () => ({ _tag: "started", reused: false }) as const,
       }),
     );
 
@@ -208,7 +208,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       failure: { _tag: "ProviderAdapterValidationError", provider: "cliProxy" },
     });
     if (result._tag === "Failure" && result.failure._tag === "ProviderAdapterValidationError") {
-      expect(result.failure.issue).toContain("Available models: available");
+      expect(result.failure.issue).toBe("The selected CLIProxyAPI model is unavailable.");
     }
   });
 
@@ -218,7 +218,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),
       Layer.succeed(CliProxyLifecycle, {
         isClaudeRunnable: async () => ({ _tag: "available" }) as const,
-        activate: async () => ({ _tag: "started", strategy: "direct" }) as const,
+        activate: async () => ({ _tag: "started", reused: false }) as const,
       }),
     );
 

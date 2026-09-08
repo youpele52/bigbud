@@ -180,6 +180,7 @@ describe("OrchestrationEngine", () => {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
       readReplay: () => Effect.die("unused replay"),
+      findThreadOwnershipEvidence: () => Effect.die("unused thread ownership lookup"),
       findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll() {
         return Stream.fromIterable(events);

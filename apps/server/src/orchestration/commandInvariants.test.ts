@@ -201,8 +201,8 @@ describe("commandInvariants", () => {
       }),
     );
 
-    await expect(
-      Effect.runPromise(
+    const duplicateError = await Effect.runPromise(
+      Effect.flip(
         requireThreadAbsent({
           readModel,
           command: {
@@ -224,7 +224,12 @@ describe("commandInvariants", () => {
           threadId: ThreadId.makeUnsafe("thread-1"),
         }),
       ),
-    ).rejects.toThrow("already exists");
+    );
+    expect(duplicateError).toMatchObject({
+      _tag: "OrchestrationCommandInvariantError",
+      code: "thread_already_exists",
+    });
+    expect(duplicateError.message).toContain("already exists");
   });
 
   it("requires non-negative integers", async () => {

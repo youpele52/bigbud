@@ -27,6 +27,9 @@ describe("capability catalog operations", () => {
     });
     expect(workflow.content).toContain("create_thread");
     expect(workflow.content.length).toBeLessThanOrEqual(CAPABILITY_GUIDE_CHARACTER_LIMIT);
+    expect(
+      readCapabilityGuide({ capabilityId: "thread.message.send", section: "permissions" }).content,
+    ).toContain("directly delegated child");
     expect(readCapabilityGuide({ capabilityId: "thread.create" }).section).toBe("summary");
   });
 

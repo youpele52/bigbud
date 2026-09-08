@@ -7,6 +7,7 @@ import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth
 import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
+  type ThreadOrchestrationHttpConfig,
   type ThreadOrchestrationSessionBridgeInput,
 } from "./threadOrchestrationBridge.shared.ts";
 
@@ -14,6 +15,7 @@ export interface PiOrchestrationBridge {
   readonly extensionPath: string;
   readonly bridgeDir: string;
   readonly extraArgs: ReadonlyArray<string>;
+  readonly httpConfig: ThreadOrchestrationHttpConfig;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -36,6 +38,7 @@ export async function createPiOrchestrationBridge(
     extensionPath,
     bridgeDir,
     extraArgs: ["--extension", extensionPath],
+    httpConfig,
     cleanup: async () => {
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,

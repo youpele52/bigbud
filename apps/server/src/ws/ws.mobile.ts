@@ -11,7 +11,7 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -25,6 +25,7 @@ import {
   makeThinkingActivityDeltaStream,
 } from "./wsStreams";
 import { makeWsRpcContext } from "./wsRpcContext";
+import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 
 const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.turn.start",
@@ -34,192 +35,212 @@ const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.archive",
 ]);
 
-const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
-  Effect.gen(function* () {
-    const context = yield* makeWsRpcContext;
+const makeMobileWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+  MobileWsRpcGroup.toLayer(
+    Effect.gen(function* () {
+      const context = yield* makeWsRpcContext(withBootstrapCommandLock);
 
-    return MobileWsRpcGroup.of({
-      [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getSnapshot,
-          context.projectionSnapshotQuery.getSnapshot().pipe(
-            Effect.map(trimOrchestrationSnapshotForMobile),
-            Effect.mapError(
-              (cause) =>
-                new OrchestrationGetSnapshotError({
-                  message: "Failed to load orchestration snapshot",
-                  cause,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [ORCHESTRATION_WS_METHODS.getMobileThread]: (input: { threadId: ThreadId }) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getMobileThread,
-          context.projectionSnapshotQuery.getSnapshot().pipe(
-            Effect.flatMap((snapshot) => {
-              const thread = getThreadFromOrchestrationSnapshot(snapshot, input.threadId);
-              if (thread === null) {
-                return Effect.fail(
-                  new OrchestrationGetMobileThreadError({
-                    message: "Thread not found in orchestration snapshot",
+      return MobileWsRpcGroup.of({
+        [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getSnapshot,
+            context.projectionSnapshotQuery.getSnapshot().pipe(
+              Effect.map(trimOrchestrationSnapshotForMobile),
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationGetSnapshotError({
+                    message: "Failed to load orchestration snapshot",
+                    cause,
                   }),
-                );
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.getMobileThread]: (input: { threadId: ThreadId }) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getMobileThread,
+            context.projectionSnapshotQuery.getSnapshot().pipe(
+              Effect.flatMap((snapshot) => {
+                const thread = getThreadFromOrchestrationSnapshot(snapshot, input.threadId);
+                if (thread === null) {
+                  return Effect.fail(
+                    new OrchestrationGetMobileThreadError({
+                      message: "Thread not found in orchestration snapshot",
+                    }),
+                  );
+                }
+                return Effect.succeed(thread);
+              }),
+              Effect.mapError((cause) =>
+                Schema.is(OrchestrationGetMobileThreadError)(cause)
+                  ? cause
+                  : new OrchestrationGetMobileThreadError({
+                      message: "Failed to load mobile thread",
+                      cause,
+                    }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command: unknown) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.dispatchCommand,
+            Effect.gen(function* () {
+              const normalizedCommand = yield* context.normalizeDispatchCommand(
+                command as ClientOrchestrationCommand,
+              );
+              if (!ALLOWED_MOBILE_COMMAND_TYPES.has(normalizedCommand.type)) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message: `Command ${normalizedCommand.type} is not available on mobile.`,
+                });
               }
-              return Effect.succeed(thread);
+              return yield* context.dispatchNormalizedCommand(normalizedCommand, "mobile");
+            }).pipe(
+              Effect.mapError((cause) =>
+                Schema.is(OrchestrationDispatchCommandError)(cause)
+                  ? cause
+                  : new OrchestrationDispatchCommandError({
+                      message: "Failed to dispatch orchestration command",
+                      cause,
+                    }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.getTurnDiff]: (input: any) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getTurnDiff,
+            context.checkpointDiffQuery.getTurnDiff(input).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationGetTurnDiffError({
+                    message: "Failed to load turn diff",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.getFullThreadDiff]: (input: any) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getFullThreadDiff,
+            context.checkpointDiffQuery.getFullThreadDiff(input).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationGetFullThreadDiffError({
+                    message: "Failed to load full thread diff",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.replayEvents]: (input: {
+          readonly fromSequenceExclusive: number;
+        }) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.replayEvents,
+            context.orchestrationEngine.readReplay(input.fromSequenceExclusive).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationReplayEventsError({
+                    message: "Failed to replay orchestration events",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [WS_METHODS.subscribeOrchestrationDomainEvents]: (input: {
+          readonly consumerId?: string | undefined;
+          readonly appliedSequence?: number | undefined;
+        }) =>
+          observeRpcStreamEffect(
+            WS_METHODS.subscribeOrchestrationDomainEvents,
+            makeOrderedOrchestrationDomainEventStream({
+              orchestrationEngine: context.orchestrationEngine,
+            }).pipe(
+              Effect.map((events) => {
+                const consumerId = input.consumerId ?? crypto.randomUUID();
+                return events.pipe(
+                  Stream.map((event) => ({
+                    type: "batch" as const,
+                    route: "direct-unmanaged" as const,
+                    consumerId,
+                    consumerGeneration: 0,
+                    serverEpoch: "mobile-direct",
+                    subscriptionGeneration: 0,
+                    batchId: `mobile-${event.eventId}`,
+                    events: [event],
+                  })),
+                );
+              }),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [WS_METHODS.subscribeThinkingActivityDeltas]: (_input: unknown) =>
+          observeRpcStreamEffect(
+            WS_METHODS.subscribeThinkingActivityDeltas,
+            makeThinkingActivityDeltaStream({
+              providerService: context.providerService,
+              serverSettings: context.serverSettings,
             }),
-            Effect.mapError((cause) =>
-              Schema.is(OrchestrationGetMobileThreadError)(cause)
-                ? cause
-                : new OrchestrationGetMobileThreadError({
-                    message: "Failed to load mobile thread",
-                    cause,
-                  }),
-            ),
+            { "rpc.aggregate": "mobile-orchestration" },
           ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command: unknown) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.dispatchCommand,
-          Effect.gen(function* () {
-            const normalizedCommand = yield* context.normalizeDispatchCommand(
-              command as ClientOrchestrationCommand,
-            );
-            if (!ALLOWED_MOBILE_COMMAND_TYPES.has(normalizedCommand.type)) {
-              return yield* new OrchestrationDispatchCommandError({
-                message: `Command ${normalizedCommand.type} is not available on mobile.`,
-              });
-            }
-            return yield* context.dispatchNormalizedCommand(normalizedCommand);
-          }).pipe(
-            Effect.mapError((cause) =>
-              Schema.is(OrchestrationDispatchCommandError)(cause)
-                ? cause
-                : new OrchestrationDispatchCommandError({
-                    message: "Failed to dispatch orchestration command",
-                    cause,
-                  }),
-            ),
+        [WS_METHODS.subscribeServerConfig]: (_input: unknown) =>
+          observeRpcStreamEffect(
+            WS_METHODS.subscribeServerConfig,
+            makeServerConfigUpdateStream({
+              loadServerConfig: context.loadServerConfig,
+              keybindings: context.keybindings,
+              providerRegistry: context.providerRegistry,
+              discoveryRegistry: context.discoveryRegistry,
+              serverSettings: context.serverSettings,
+            }),
+            { "rpc.aggregate": "mobile-server" },
           ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [ORCHESTRATION_WS_METHODS.getTurnDiff]: (input: any) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getTurnDiff,
-          context.checkpointDiffQuery.getTurnDiff(input).pipe(
-            Effect.mapError(
-              (cause) =>
-                new OrchestrationGetTurnDiffError({
-                  message: "Failed to load turn diff",
-                  cause,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [ORCHESTRATION_WS_METHODS.getFullThreadDiff]: (input: any) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getFullThreadDiff,
-          context.checkpointDiffQuery.getFullThreadDiff(input).pipe(
-            Effect.mapError(
-              (cause) =>
-                new OrchestrationGetFullThreadDiffError({
-                  message: "Failed to load full thread diff",
-                  cause,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [ORCHESTRATION_WS_METHODS.replayEvents]: (input: {
-        readonly fromSequenceExclusive: number;
-      }) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.replayEvents,
-          context.orchestrationEngine.readReplay(input.fromSequenceExclusive).pipe(
-            Effect.mapError(
-              (cause) =>
-                new OrchestrationReplayEventsError({
-                  message: "Failed to replay orchestration events",
-                  cause,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [WS_METHODS.subscribeOrchestrationDomainEvents]: (_input: unknown) =>
-        observeRpcStreamEffect(
-          WS_METHODS.subscribeOrchestrationDomainEvents,
-          makeOrderedOrchestrationDomainEventStream({
-            orchestrationEngine: context.orchestrationEngine,
+        [WS_METHODS.gitRefreshStatus]: (input: Parameters<typeof context.gitManager.status>[0]) =>
+          observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
+            "rpc.aggregate": "mobile-git",
           }),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [WS_METHODS.subscribeThinkingActivityDeltas]: (_input: unknown) =>
-        observeRpcStreamEffect(
-          WS_METHODS.subscribeThinkingActivityDeltas,
-          makeThinkingActivityDeltaStream({
-            providerService: context.providerService,
-            serverSettings: context.serverSettings,
-          }),
-          { "rpc.aggregate": "mobile-orchestration" },
-        ),
-      [WS_METHODS.subscribeServerConfig]: (_input: unknown) =>
-        observeRpcStreamEffect(
-          WS_METHODS.subscribeServerConfig,
-          makeServerConfigUpdateStream({
-            loadServerConfig: context.loadServerConfig,
-            keybindings: context.keybindings,
-            providerRegistry: context.providerRegistry,
-            discoveryRegistry: context.discoveryRegistry,
-            serverSettings: context.serverSettings,
-          }),
-          { "rpc.aggregate": "mobile-server" },
-        ),
-      [WS_METHODS.gitRefreshStatus]: (input: Parameters<typeof context.gitManager.status>[0]) =>
-        observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
-          "rpc.aggregate": "mobile-git",
+      });
+    }),
+  );
+
+export const makeMobileWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const mobileWsRpcRuntimeLayer = makeMobileWsRpcLayer(withBootstrapCommandLock).pipe(
+        Layer.provideMerge(RpcSerialization.layerJson),
+      );
+      const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(MobileWsRpcGroup, {
+        spanPrefix: "mobile.ws.rpc",
+        spanAttributes: {
+          "rpc.transport": "websocket",
+          "rpc.system": "effect-rpc",
+        },
+      }).pipe(Effect.provide(mobileWsRpcRuntimeLayer));
+
+      return HttpRouter.add(
+        "GET",
+        "/mobile-ws",
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const url = HttpServerRequest.toURL(request);
+          if (Option.isNone(url)) {
+            return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
+          }
+          const token = url.value.searchParams.get("token");
+          if (!token) {
+            return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
+          }
+          const mobileRemoteControl = yield* MobileRemoteControl;
+          const session = yield* mobileRemoteControl.validateSessionToken(token);
+          if (session === null) {
+            return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
+          }
+          return yield* rpcWebSocketHttpEffect;
         }),
-    });
-  }),
-);
-
-const MobileWsRpcRuntimeLayer = MobileWsRpcLayer.pipe(
-  Layer.provideMerge(RpcSerialization.layerJson),
-);
-
-export const mobileWebsocketRpcRouteLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(MobileWsRpcGroup, {
-      spanPrefix: "mobile.ws.rpc",
-      spanAttributes: {
-        "rpc.transport": "websocket",
-        "rpc.system": "effect-rpc",
-      },
-    }).pipe(Effect.provide(MobileWsRpcRuntimeLayer));
-
-    return HttpRouter.add(
-      "GET",
-      "/mobile-ws",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const url = HttpServerRequest.toURL(request);
-        if (Option.isNone(url)) {
-          return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
-        }
-        const token = url.value.searchParams.get("token");
-        if (!token) {
-          return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
-        }
-        const mobileRemoteControl = yield* MobileRemoteControl;
-        const session = yield* mobileRemoteControl.validateSessionToken(token);
-        if (session === null) {
-          return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
-        }
-        return yield* rpcWebSocketHttpEffect;
-      }),
-    );
-  }),
-);
+      );
+    }),
+  );

@@ -6,7 +6,7 @@ import { getWsConnectionStatus } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
 import {
   shouldContinueDesktopStartupReconnect,
-  shouldReconnectAfterTimedOutDesktopStartup,
+  shouldReconnectAfterDesktopStartupTransition,
 } from "./WebSocketConnectionSurface.logic";
 import { toastManager } from "./ui/toast";
 
@@ -94,7 +94,7 @@ export function DesktopBackendStartupCoordinator() {
   useEffect(() => {
     const previousState = previousStateRef.current;
     previousStateRef.current = state;
-    if (shouldReconnectAfterTimedOutDesktopStartup(isElectron, previousState, state)) {
+    if (shouldReconnectAfterDesktopStartupTransition(isElectron, previousState, state)) {
       void getWsRpcClient().reconnect();
     }
   }, [state]);

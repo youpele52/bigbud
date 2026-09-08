@@ -1,10 +1,14 @@
 import type { ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type {
   ClientOrchestrationCommand,
+  GetCommandOutcomeInput,
+  GetCommandOutcomeResult,
   GetProjectThreadSummariesInput,
   GetProjectThreadSummariesResult,
   GetSelectedThreadDetailInput,
   GetSelectedThreadDetailResult,
+  GetThreadOwnershipInput,
+  GetThreadOwnershipResult,
   GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
@@ -12,7 +16,11 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
-  OrchestrationEvent,
+  OrchestrationApplicationAckInput,
+  OrchestrationApplicationAckResult,
+  OrchestrationBaselineAckInput,
+  OrchestrationBaselineAckResult,
+  OrchestrationDeliveryStreamItem,
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
@@ -64,7 +72,11 @@ export interface NativeApi {
     onDirectoryChange: (
       input: Project.ProjectDirectoryWatchInput,
       callback: (event: Project.ProjectDirectoryWatchEvent) => void,
-      options?: { onResubscribe?: () => void },
+      options?: {
+        onError?: (error: unknown) => void;
+        onResubscribe?: () => void;
+        shouldRetry?: (error: unknown) => boolean;
+      },
     ) => () => void;
     readFilePreview: (
       input: Project.ProjectReadFilePreviewInput,
@@ -146,6 +158,9 @@ export interface NativeApi {
     verifyExecutionTarget: (
       input: Server.ServerVerifyExecutionTargetInput,
     ) => Promise<Server.ServerVerifyExecutionTargetResult>;
+    installRemoteAgent: (
+      input: Server.ServerInstallRemoteAgentInput,
+    ) => Promise<Server.ServerInstallRemoteAgentResult>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;
@@ -231,6 +246,8 @@ export interface NativeApi {
     getSelectedThreadDetail: (
       input: GetSelectedThreadDetailInput,
     ) => Promise<GetSelectedThreadDetailResult>;
+    resolveThreadOwnership: (input: GetThreadOwnershipInput) => Promise<GetThreadOwnershipResult>;
+    getCommandOutcome: (input: GetCommandOutcomeInput) => Promise<GetCommandOutcomeResult>;
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
@@ -238,8 +255,14 @@ export interface NativeApi {
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationReplayEventsResult>;
+    acknowledgeDelivery: (
+      input: OrchestrationApplicationAckInput,
+    ) => Promise<OrchestrationApplicationAckResult>;
+    acknowledgeDeliveryBaseline: (
+      input: OrchestrationBaselineAckInput,
+    ) => Promise<OrchestrationBaselineAckResult>;
     onDomainEvent: (
-      callback: (event: OrchestrationEvent) => void,
+      callback: (event: OrchestrationDeliveryStreamItem) => void | Promise<void>,
       options?: { onResubscribe?: () => void },
     ) => () => void;
     onThinkingDelta: (

@@ -23,6 +23,8 @@ export type ThreadWorkflowStatusLabel =
   | "error"
   | "idle"
   | "plan_ready"
+  | "provider_unavailable"
+  | "warning"
   | "working"
   | "workflow_complete";
 
@@ -230,13 +232,16 @@ export function resolveThreadWorkflowStatus(
   if (thread.archivedAt !== null) {
     workflowStatus = "archived";
   } else if (
-    session?.status === "error" ||
-    latestTurn?.state === "error" ||
     session?.reason === PROVIDER_STALLED_SESSION_REASON ||
+    session?.reason === PROVIDER_LOST_SESSION_REASON
+  ) {
+    workflowStatus = "provider_unavailable";
+  } else if (
     session?.reason === PROVIDER_CHECKING_SESSION_REASON ||
-    session?.reason === PROVIDER_LOST_SESSION_REASON ||
     session?.reason === PROVIDER_RECOVERING_SESSION_REASON
   ) {
+    workflowStatus = "warning";
+  } else if (session?.status === "error" || latestTurn?.state === "error") {
     workflowStatus = "error";
   } else if (hasPendingApprovals) {
     workflowStatus = "awaiting_approval";

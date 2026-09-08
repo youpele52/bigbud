@@ -52,6 +52,7 @@ export function toPromptTurnEvents(input: {
         events.push(
           yield* syntheticEventFn(
             threadId,
+            record.sessionEpoch,
             "thread.token-usage.updated",
             {
               usage,
@@ -93,6 +94,7 @@ export function toPromptTurnEvents(input: {
         events.push(
           yield* syntheticEventFn(
             threadId,
+            record.sessionEpoch,
             "item.completed",
             {
               itemType: "dynamic_tool_call",
@@ -131,6 +133,7 @@ export function toPromptTurnEvents(input: {
     events.push(
       yield* syntheticEventFn(
         threadId,
+        record.sessionEpoch,
         "item.completed",
         {
           itemType: "assistant_message",
@@ -165,6 +168,7 @@ export function toPromptTurnEvents(input: {
       events.push(
         yield* syntheticEventFn(
           threadId,
+          record.sessionEpoch,
           "runtime.error",
           {
             message: errorMessage,
@@ -177,6 +181,7 @@ export function toPromptTurnEvents(input: {
       events.push(
         yield* syntheticEventFn(
           threadId,
+          record.sessionEpoch,
           "turn.completed",
           {
             state: "failed",
@@ -191,6 +196,7 @@ export function toPromptTurnEvents(input: {
       events.push(
         yield* syntheticEventFn(
           threadId,
+          record.sessionEpoch,
           "turn.completed",
           {
             state: "completed",
@@ -202,7 +208,7 @@ export function toPromptTurnEvents(input: {
     }
 
     events.push(
-      yield* syntheticEventFn(threadId, "session.state.changed", {
+      yield* syntheticEventFn(threadId, record.sessionEpoch, "session.state.changed", {
         state: "ready",
         reason: "session.prompt.completed",
       }),

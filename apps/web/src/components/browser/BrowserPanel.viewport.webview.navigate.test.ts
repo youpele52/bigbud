@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ElectronWebview } from "./BrowserPanel.viewport.types";
 import {
   isAbortedWebviewNavigation,
+  isAllowedWebviewNavigation,
   navigateElectronWebview,
   webviewIsShowingUrl,
 } from "./BrowserPanel.viewport.webview.navigate";
@@ -40,6 +41,17 @@ function makeWebview(overrides: Partial<ElectronWebview> = {}): ElectronWebview 
 }
 
 describe("electron webview navigation", () => {
+  it.each([
+    ["https://example.com", true],
+    ["http://example.com", true],
+    ["javascript:alert(1)", false],
+    ["file:///etc/passwd", false],
+    ["data:text/html,blocked", false],
+    ["not a URL", false],
+  ])("allows %s: %s", (url, expected) => {
+    expect(isAllowedWebviewNavigation(url)).toBe(expected);
+  });
+
   it("treats Electron abort errors as superseded navigations", () => {
     expect(
       isAbortedWebviewNavigation(
@@ -97,5 +109,24 @@ describe("electron webview navigation", () => {
     navigateElectronWebview(webview, "https://example.com");
     expect(webview.setAttribute).toHaveBeenCalledWith("src", "https://example.com");
     expect(webview.loadURL).not.toHaveBeenCalled();
+  });
+
+  it("does not load non-HTTP(S) URLs through either navigation path", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const readyWebview = makeWebview();
+    const attachingWebview = makeWebview({
+      getWebContentsId: vi.fn(() => {
+        throw new Error("Guest has not been attached yet");
+      }),
+    });
+
+    navigateElectronWebview(readyWebview, "file:///etc/passwd");
+    navigateElectronWebview(attachingWebview, "javascript:alert(1)");
+
+    expect(readyWebview.loadURL).not.toHaveBeenCalled();
+    expect(readyWebview.setAttribute).not.toHaveBeenCalled();
+    expect(attachingWebview.loadURL).not.toHaveBeenCalled();
+    expect(attachingWebview.setAttribute).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(2);
   });
 });

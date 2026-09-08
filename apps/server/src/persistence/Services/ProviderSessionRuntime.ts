@@ -38,6 +38,22 @@ export type GetProviderSessionRuntimeInput = typeof GetProviderSessionRuntimeInp
 export const DeleteProviderSessionRuntimeInput = Schema.Struct({ threadId: ThreadId });
 export type DeleteProviderSessionRuntimeInput = typeof DeleteProviderSessionRuntimeInput.Type;
 
+export interface ProviderSessionRuntimeListCursor {
+  readonly lastSeenAt: string;
+  readonly threadId: ThreadId;
+}
+
+export interface ProviderSessionRuntimeListInput {
+  /** `all` preserves the existing unbounded administrative read. */
+  readonly mode?: "all" | "hot" | "audit";
+  /** Lower bound used by the hot reconciliation read. */
+  readonly recentSince?: string;
+  /** Maximum rows returned by bounded reconciliation reads. */
+  readonly limit?: number;
+  /** Stable cursor used by the slow safety audit. */
+  readonly cursor?: ProviderSessionRuntimeListCursor | null;
+}
+
 /**
  * ProviderSessionRuntimeRepositoryShape - Service API for provider runtime records.
  */
@@ -63,10 +79,9 @@ export interface ProviderSessionRuntimeRepositoryShape {
    *
    * Returned in ascending last-seen order.
    */
-  readonly list: () => Effect.Effect<
-    ReadonlyArray<ProviderSessionRuntime>,
-    ProviderSessionRuntimeRepositoryError
-  >;
+  readonly list: (
+    input?: ProviderSessionRuntimeListInput,
+  ) => Effect.Effect<ReadonlyArray<ProviderSessionRuntime>, ProviderSessionRuntimeRepositoryError>;
 
   /**
    * Delete provider runtime state by canonical thread id.

@@ -18,9 +18,16 @@ import {
 
 const validationManager = new FakeCodexManager();
 const validationLayer = it.layer(
-  makeCodexAdapterLive({ manager: validationManager }).pipe(
+  makeCodexAdapterLive({
+    manager: validationManager,
+    remoteWorkspaceReadinessProbe: async () => ({ os: "linux", architecture: "x86_64" }),
+  }).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
-    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(
+      ServerSettingsService.layerTest({
+        providers: { codex: { customModels: ["custom-model"] } },
+      }),
+    ),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
     Layer.provideMerge(NodeServices.layer),
   ),
@@ -62,6 +69,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
           provider: "codex",
           model: "gpt-5.3-codex",
           options: {
+            reasoningEffort: "ultra",
             fastMode: true,
           },
         },
@@ -75,7 +83,9 @@ validationLayer("CodexAdapterLive validation", (it) => {
       assert.equal(startInput?.workspaceExecutionTargetId, "local");
       assert.equal(startInput?.executionTargetId, "local");
       assert.equal(startInput?.binaryPath, "codex");
+      assert.deepStrictEqual(startInput?.customModels, ["custom-model"]);
       assert.equal(startInput?.model, "gpt-5.3-codex");
+      assert.equal(startInput?.effort, "ultra");
       assert.equal(startInput?.serviceTier, "fast");
       assert.equal(startInput?.runtimeMode, "full-access");
       assert.deepStrictEqual(startInput?.expectedMcpServerNames, ["bigbud_orchestration"]);
@@ -118,7 +128,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
       expect(startInput?.configArgs?.[1]).toBe("app.default_tools_enabled=false");
       expect(startInput?.configArgs?.[2]).toBe("-c");
       expect(startInput?.configArgs?.[3]).toContain("mcp_servers.bigbud_remote_workspace.command=");
-      expect(startInput?.developerInstructions).toContain("Bigbud remote workspace mode");
+      expect(startInput?.developerInstructions).toContain("bigbud remote workspace mode");
     }),
   );
 });

@@ -166,9 +166,28 @@ export function reduceDesktopUpdateStateOnInstallFailure(
 ): DesktopUpdateState {
   return {
     ...state,
-    status: "downloaded",
+    status: "error",
+    availableVersion: null,
+    downloadedVersion: null,
+    downloadPercent: null,
     message,
     errorContext: "install",
-    canRetry: true,
+    canRetry: false,
+  };
+}
+
+export function reduceDesktopUpdateStateOnInstallRestartRequired(
+  state: DesktopUpdateState,
+  message: string,
+): DesktopUpdateState {
+  return {
+    ...state,
+    status: "error",
+    availableVersion: null,
+    downloadedVersion: null,
+    downloadPercent: null,
+    message,
+    errorContext: "install",
+    canRetry: false,
   };
 }

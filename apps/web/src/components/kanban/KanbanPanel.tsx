@@ -7,6 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useDirectoryChangeRefresh } from "~/hooks/useDirectoryChangeRefresh";
@@ -361,7 +362,7 @@ export const KanbanPanelContent = memo(function KanbanPanelContent({
         <div className="border-b border-border px-3 py-2 text-sm text-destructive">{error}</div>
       ) : null}
       {loading && cards.length === 0 ? (
-        <div className="p-4 text-sm text-muted-foreground">Loading kanban board...</div>
+        <BigbudLoader className="flex-1" label="Loading kanban board..." />
       ) : (
         <KanbanBoard
           cards={boardCards}

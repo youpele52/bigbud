@@ -12,6 +12,7 @@ function makeSession(
   return {
     process: { request },
     threadId: ThreadId.makeUnsafe("pi-thinking-thread"),
+    sessionEpoch: 0,
     model: "reasoning-model",
     providerID: "openai",
     thinkingLevel,

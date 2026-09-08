@@ -71,6 +71,12 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedLocal.command, "chat.newLocal");
 
+    const parsedChatFocus = yield* decode(KeybindingRule, {
+      key: "mod+l",
+      command: "chat.focus",
+    });
+    assert.strictEqual(parsedChatFocus.command, "chat.focus");
+
     const parsedNotes = yield* decode(KeybindingRule, {
       key: "mod+shift+n",
       command: "notes.toggle",

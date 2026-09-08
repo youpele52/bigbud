@@ -9,6 +9,7 @@ import {
   reduceDesktopUpdateStateOnDownloadProgress,
   reduceDesktopUpdateStateOnDownloadStart,
   reduceDesktopUpdateStateOnInstallFailure,
+  reduceDesktopUpdateStateOnInstallRestartRequired,
   reduceDesktopUpdateStateOnInstallStart,
   reduceDesktopUpdateStateOnNoUpdate,
   reduceDesktopUpdateStateOnUpdateAvailable,
@@ -76,7 +77,7 @@ describe("updateMachine", () => {
     expect(state.canRetry).toBe(true);
   });
 
-  it("transitions to downloaded and then preserves install retry state", () => {
+  it("makes every post-quiescence install failure nonretryable", () => {
     const downloaded = reduceDesktopUpdateStateOnDownloadComplete(
       {
         ...createInitialDesktopUpdateState("1.0.0", runtimeInfo),
@@ -93,9 +94,11 @@ describe("updateMachine", () => {
 
     expect(downloaded.status).toBe("downloaded");
     expect(downloaded.downloadedVersion).toBe("1.1.0");
-    expect(failedInstall.status).toBe("downloaded");
+    expect(failedInstall.status).toBe("error");
+    expect(failedInstall.availableVersion).toBeNull();
+    expect(failedInstall.downloadedVersion).toBeNull();
     expect(failedInstall.errorContext).toBe("install");
-    expect(failedInstall.canRetry).toBe(true);
+    expect(failedInstall.canRetry).toBe(false);
   });
 
   it("clears stale download state when no update is available", () => {
@@ -150,8 +153,11 @@ describe("updateMachine", () => {
       },
       "1.1.0",
     );
-    // Simulate a prior install failure that left an error message.
-    const withError = reduceDesktopUpdateStateOnInstallFailure(downloaded, "previous failure");
+    const withError = {
+      ...downloaded,
+      message: "previous failure",
+      errorContext: "install" as const,
+    };
     const installing = reduceDesktopUpdateStateOnInstallStart(withError);
 
     expect(installing.status).toBe("installing");
@@ -162,7 +168,7 @@ describe("updateMachine", () => {
     expect(installing.downloadedVersion).toBe("1.1.0");
   });
 
-  it("recovers from installing back to downloaded when install fails asynchronously", () => {
+  it("requires restart when install fails asynchronously", () => {
     const installing = reduceDesktopUpdateStateOnInstallStart({
       ...createInitialDesktopUpdateState("1.0.0", runtimeInfo),
       enabled: true,
@@ -175,9 +181,30 @@ describe("updateMachine", () => {
     const failed = reduceDesktopUpdateStateOnInstallFailure(installing, "updater handoff error");
 
     expect(installing.status).toBe("installing");
-    expect(failed.status).toBe("downloaded");
+    expect(failed.status).toBe("error");
+    expect(failed.downloadedVersion).toBeNull();
     expect(failed.errorContext).toBe("install");
     expect(failed.message).toBe("updater handoff error");
-    expect(failed.canRetry).toBe(true);
+    expect(failed.canRetry).toBe(false);
+  });
+
+  it("does not expose an in-process retry after a restart-required install failure", () => {
+    const state = reduceDesktopUpdateStateOnInstallRestartRequired(
+      {
+        ...createInitialDesktopUpdateState("1.0.0", runtimeInfo),
+        enabled: true,
+        status: "installing",
+        availableVersion: "1.1.0",
+        downloadedVersion: "1.1.0",
+        downloadPercent: 100,
+      },
+      "Restart bigbud before trying again.",
+    );
+
+    expect(state.status).toBe("error");
+    expect(state.availableVersion).toBeNull();
+    expect(state.downloadedVersion).toBeNull();
+    expect(state.errorContext).toBe("install");
+    expect(state.canRetry).toBe(false);
   });
 });

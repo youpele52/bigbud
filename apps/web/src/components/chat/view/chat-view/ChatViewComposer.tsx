@@ -249,6 +249,10 @@ export function ChatViewComposer({
                 }
                 lockedProvider={composer.lockedProvider}
                 providerStatuses={composer.providerStatuses}
+                workspaceExecutionTargetId={
+                  base.activeProject?.workspaceExecutionTargetId ??
+                  base.activeProject?.executionTargetId
+                }
                 modelOptionsByProvider={composer.modelOptionsByProvider}
                 composerProviderState={composer.composerProviderState}
                 hasThreadStarted={composer.hasThreadStarted}

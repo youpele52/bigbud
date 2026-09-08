@@ -160,6 +160,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: null,
+          sessionEpoch: 0,
           lastError: null,
           updatedAt: NOW_ISO,
         },

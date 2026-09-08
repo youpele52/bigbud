@@ -40,6 +40,9 @@ import { MascotStateCoordinator } from "../components/floating-assistant/MascotS
 import { useCompactChatThread } from "../hooks/useCompactChatThread";
 import { CompactLinkHandoffCoordinator } from "../components/CompactLinkHandoffCoordinator";
 import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererReadyCoordinator";
+import { DraftOwnershipCoordinator } from "../components/DraftOwnershipCoordinator";
+import { DRAFT_OWNERSHIP_REPAIR_BY_RENDERER } from "../components/DraftOwnershipCoordinator.logic";
+import { ChatFocusShortcutCoordinator } from "../components/chat/ChatFocusShortcutCoordinator";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -115,6 +118,10 @@ export function RootRouteView() {
       <AnchoredToastProvider>
         <CompactLinkHandoffCoordinator />
         <DesktopRendererReadyCoordinator />
+        <DraftOwnershipCoordinator
+          repairOnStartup={DRAFT_OWNERSHIP_REPAIR_BY_RENDERER.main}
+          scope="main"
+        />
         <ServerStateBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />
@@ -161,6 +168,11 @@ function CompactChatRoot() {
     <ToastProvider>
       <AnchoredToastProvider>
         <ServerStateBootstrap />
+        <ChatFocusShortcutCoordinator />
+        <DraftOwnershipCoordinator
+          repairOnStartup={DRAFT_OWNERSHIP_REPAIR_BY_RENDERER.compact}
+          scope="compact"
+        />
         <EventRouter ownedThreadId={compactChat.threadId} />
         <WebSocketConnectionCoordinator />
         <DesktopBackendStartupCoordinator />

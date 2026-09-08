@@ -17,6 +17,7 @@ export const ThreadToolRequest = Schema.Struct({
     "search_capabilities",
     "read_capability_guide",
     "workspace",
+    "remote_workspace_process",
   ]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
@@ -40,6 +41,13 @@ export const ThreadToolRequest = Schema.Struct({
   ),
   workspaceTool: Schema.optional(Schema.Literals(AGENT_WORKSPACE_TOOL_NAMES)),
   workspaceArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  remoteCommand: Schema.optional(Schema.String),
+  remoteArgs: Schema.optional(Schema.Array(Schema.String)),
+  remoteStdin: Schema.optional(Schema.String),
+  remoteAllowNonZeroExit: Schema.optional(Schema.Boolean),
+  remoteTimeoutMs: Schema.optional(Schema.Number),
+  remoteMaxOutputBytes: Schema.optional(Schema.Number),
+  remoteOutputMode: Schema.optional(Schema.Literals(["error", "truncate"])),
 });
 
 export class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{

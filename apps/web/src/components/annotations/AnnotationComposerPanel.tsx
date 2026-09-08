@@ -4,6 +4,7 @@ import { useState } from "react";
 
 interface AnnotationComposerPanelProps {
   targetLabel: string;
+  fillContainer?: boolean;
   onCancel: () => void;
   onSubmit: (input: { intent: AnnotationIntent; comment: string }) => void;
 }
@@ -21,6 +22,7 @@ export function formatAnnotationTargetLabel(range: { startLine: number; endLine:
 
 export function AnnotationComposerPanel({
   targetLabel,
+  fillContainer = false,
   onCancel,
   onSubmit,
 }: AnnotationComposerPanelProps) {
@@ -28,8 +30,9 @@ export function AnnotationComposerPanel({
 
   return (
     <div
+      data-annotation-composer="true"
       className="rounded-[20px] border border-border bg-card p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]"
-      style={{ width: "min(420px, calc(100vw - 32px))" }}
+      style={{ width: fillContainer ? "100%" : "min(420px, calc(100vw - 32px))" }}
     >
       <p id="annotation-composer-title" className="mb-2 text-sm font-medium text-foreground">
         {COMMENT_TITLE}

@@ -1,18 +1,18 @@
+import type { ExecutionTargetId, NativeApi } from "@bigbud/contracts";
 import { type ILink, type Terminal } from "@xterm/xterm";
 import {
   extractWrappedTerminalLinkSegments,
   isTerminalLinkActivation,
-  resolvePathLinkTarget,
-} from "../../utils/terminal";
-import { openInPreferredEditor } from "../../models/editor";
+} from "../../utils/terminal/links.utils";
 import { writeSystemMessage } from "./ThreadTerminalDrawer.logic";
-import { type readNativeApi } from "../../rpc/nativeApi";
-
-type NativeApi = NonNullable<ReturnType<typeof readNativeApi>>;
+import { openTerminalPath } from "./TerminalViewport.links.open";
+import { openTerminalWebLink } from "./TerminalViewport.links.web";
 
 interface TerminalLinkProviderOptions {
   terminalRef: { current: Terminal | null };
   cwd: string;
+  workspaceRoot: string;
+  executionTargetId?: ExecutionTargetId | undefined;
   api: NativeApi;
 }
 
@@ -20,7 +20,7 @@ interface TerminalLinkProviderOptions {
  * Creates a link provider for the xterm.js terminal that handles path and URL links.
  */
 export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
-  const { terminalRef, cwd, api } = options;
+  const { terminalRef, cwd, workspaceRoot, executionTargetId, api } = options;
 
   return {
     provideLinks: (bufferLineNumber: number, callback: (links: ILink[] | undefined) => void) => {
@@ -88,19 +88,21 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
             if (!latestTerminal) return;
 
             if (match.kind === "url") {
-              void api.shell.openExternal(match.text).catch((error) => {
-                writeSystemMessage(
-                  latestTerminal,
-                  error instanceof Error ? error.message : "Unable to open link",
-                );
-              });
+              openTerminalWebLink(match.text);
               return;
             }
 
-            const target = resolvePathLinkTarget(match.text, cwd);
-            void openInPreferredEditor(api, target).catch((error) => {
+            void openTerminalPath({
+              api,
+              rawPath: match.text,
+              cwd,
+              workspaceRoot,
+              executionTargetId,
+            }).catch((error) => {
+              const activeTerminal = terminalRef.current;
+              if (!activeTerminal) return;
               writeSystemMessage(
-                latestTerminal,
+                activeTerminal,
                 error instanceof Error ? error.message : "Unable to open path",
               );
             });

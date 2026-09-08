@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+enum ResourceCleanupEntryType {
+  RESOURCE_CLEANUP_ENTRY_TYPE_UNSPECIFIED = 0;
+  RESOURCE_CLEANUP_ENTRY_TYPE_FILE = 1;
+  RESOURCE_CLEANUP_ENTRY_TYPE_DIRECTORY = 2;
+}
+
+enum ResourceCleanupAction {
+  RESOURCE_CLEANUP_ACTION_UNSPECIFIED = 0;
+  RESOURCE_CLEANUP_ACTION_DELETE = 1;
+}
+
+enum ResourceCleanupOutcome {
+  RESOURCE_CLEANUP_OUTCOME_UNSPECIFIED = 0;
+  RESOURCE_CLEANUP_OUTCOME_REMOVED = 1;
+  RESOURCE_CLEANUP_OUTCOME_ALREADY_ABSENT = 2;
+  RESOURCE_CLEANUP_OUTCOME_RESUMED_AND_REMOVED = 3;
+  RESOURCE_CLEANUP_OUTCOME_IDENTITY_MISMATCH = 4;
+  RESOURCE_CLEANUP_OUTCOME_UNSUPPORTED_ENTRY = 5;
+  RESOURCE_CLEANUP_OUTCOME_BUSY = 6;
+  RESOURCE_CLEANUP_OUTCOME_PERMISSION_DENIED = 7;
+  RESOURCE_CLEANUP_OUTCOME_DEADLINE_EXCEEDED = 8;
+  RESOURCE_CLEANUP_OUTCOME_IO_FAILURE = 9;
+  RESOURCE_CLEANUP_OUTCOME_PROCESS_FAILURE = 10;
+  RESOURCE_CLEANUP_OUTCOME_PROTOCOL_FAILURE = 11;
+}
+
+message ResourceCleanupIdentity {
+  string device_or_volume = 1;
+  string inode_or_file_id = 2;
+  ResourceCleanupEntryType entry_type = 3;
+}
+
+message ResourceCleanupRoot {
+  string root_id = 1;
+  string path = 2;
+  ResourceCleanupIdentity identity = 3;
+}
+
+message ResourceCleanupRootBootstrapRequest {
+  string request_id = 1;
+  string platform = 2;
+  repeated ResourceCleanupRoot roots = 3;
+}
+
+message ResourceCleanupRootHandle {
+  string root_id = 1;
+  string root_handle = 2;
+}
+
+message ResourceCleanupRootBootstrapResponse {
+  string request_id = 1;
+  bool accepted = 2;
+  string error_code = 3;
+  repeated ResourceCleanupRootHandle roots = 4;
+}
+
+message ResourceCleanupResource {
+  string resource_id = 1;
+  string root_handle = 2;
+  string relative_path = 3;
+  string quarantine_name = 4;
+  ResourceCleanupIdentity identity = 5;
+  ResourceCleanupIdentity root_identity = 6;
+  ResourceCleanupIdentity parent_identity = 7;
+  ResourceCleanupAction action = 8;
+}
+
+message ResourceCleanupRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes page_digest = 3;
+  uint64 deadline_unix_ms = 4;
+  string platform = 5;
+  repeated ResourceCleanupResource resources = 6;
+  bytes plan_digest = 7;
+  bytes finalize_proof_digest = 8;
+  bytes authorization_digest = 9;
+}
+
+message ResourceCleanupResult {
+  string resource_id = 1;
+  ResourceCleanupOutcome outcome = 2;
+  string error_code = 3;
+}
+
+message ResourceCleanupResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  repeated ResourceCleanupResult results = 3;
+}
+
+message ResourceCleanupKeepAliveRequest {
+  string request_id = 1;
+}
+
+message ResourceCleanupKeepAliveResponse {
+  string request_id = 1;
+}
+
+message ResourceCleanupCancelRequest {
+  string request_id = 1;
+  string operation_id = 2;
+}
+
+message ResourceCleanupCancelResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool cancellation_requested = 3;
+  bool terminal = 4;
+}

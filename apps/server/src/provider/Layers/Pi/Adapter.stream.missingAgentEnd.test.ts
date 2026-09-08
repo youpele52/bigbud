@@ -25,11 +25,12 @@ function createHarness(getState: () => Promise<boolean>) {
   const provider = createProviderServiceHarness();
   const sessions = new Map<ThreadId, ActivePiSession>();
   let sequence = 0;
-  const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+  const makeSyntheticEvent: PiSyntheticEventFn = (threadId, sessionEpoch, type, payload, extra) =>
     Effect.succeed({
       eventId: asEventId(`pi-missing-agent-end-${++sequence}`),
       provider: "pi",
       threadId,
+      sessionEpoch,
       createdAt: CREATED_AT,
       ...(extra?.turnId ? { turnId: extra.turnId } : {}),
       type,
@@ -52,6 +53,7 @@ function createHarness(getState: () => Promise<boolean>) {
       stop: async () => undefined,
     },
     threadId: THREAD_ID,
+    sessionEpoch: 0,
     createdAt: CREATED_AT,
     runtimeMode: "full-access",
     providerRuntimeExecutionTargetId: "local",

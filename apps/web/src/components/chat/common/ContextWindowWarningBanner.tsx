@@ -1,7 +1,7 @@
 import { useSettings } from "~/hooks/useSettings";
-import { TriangleAlertIcon, XIcon } from "lucide-react";
+import { TriangleAlertIcon } from "lucide-react";
 import { memo, useEffect, useState } from "react";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { StatusBanner } from "../../common/StatusBanner";
 import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
 import {
   type ContextWindowSnapshot,
@@ -44,33 +44,27 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
 
   return (
     <div className="pt-3 mx-auto max-w-3xl">
-      <Alert variant="warning">
-        <TriangleAlertIcon />
-        <AlertTitle>Context window warning</AlertTitle>
-        <AlertDescription>
-          Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
-          tokens. Consider using handoff.
-          <ContextWindowRecoveryActions
-            handoffAvailable={handoffAvailable}
-            onUseHandoff={onUseHandoff}
-          />
-        </AlertDescription>
-        <AlertAction>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning"
-            onClick={() =>
-              setDismissUntilByThreadId((dismissals) => ({
-                ...dismissals,
-                [threadId]: getContextWindowWarningRearmTokens(usage.usedTokens, warningThreshold),
-              }))
-            }
-          >
-            <XIcon className="size-3.5" />
-          </button>
-        </AlertAction>
-      </Alert>
+      <StatusBanner
+        variant="warning"
+        icon={<TriangleAlertIcon />}
+        title="Context window warning"
+        description={
+          <>
+            Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
+            tokens. Consider using handoff.
+            <ContextWindowRecoveryActions
+              handoffAvailable={handoffAvailable}
+              onUseHandoff={onUseHandoff}
+            />
+          </>
+        }
+        onDismiss={() =>
+          setDismissUntilByThreadId((dismissals) => ({
+            ...dismissals,
+            [threadId]: getContextWindowWarningRearmTokens(usage.usedTokens, warningThreshold),
+          }))
+        }
+      />
     </div>
   );
 });

@@ -19,8 +19,10 @@ export function makeClaudeControlOperations(input: {
   ) => Effect.Effect<ClaudeSessionContext, ProviderAdapterError>;
 }) {
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
-    function* (threadId, _turnId) {
+    function* (threadId, turnId) {
       const context = yield* input.requireSession(threadId);
+      const activeTurnId = context.turnState?.turnId;
+      if (turnId !== undefined && activeTurnId !== turnId) return;
       const receipt = yield* Effect.tryPromise({
         try: () => context.query.interrupt(),
         catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),

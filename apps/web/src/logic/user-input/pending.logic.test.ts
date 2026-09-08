@@ -40,6 +40,28 @@ const multiSelectQuestion = {
   multiSelect: true,
 } as const;
 
+const cursorQuestion = {
+  id: "cursor-model",
+  header: "Model",
+  question: "Which model should be used?",
+  options: [
+    { id: "model-fast", label: "Fast", description: "Fast model" },
+    { id: "model-safe", label: "Safe", description: "Safe model" },
+  ],
+  multiSelect: false,
+} as const;
+
+const duplicateLabelQuestion = {
+  id: "duplicate-labels",
+  header: "Choices",
+  question: "Choose independently",
+  options: [
+    { label: "Same", description: "First same choice" },
+    { label: "Same", description: "Second same choice" },
+  ],
+  multiSelect: true,
+} as const;
+
 describe("resolvePendingUserInputAnswer", () => {
   it("prefers a custom answer over selected options", () => {
     expect(
@@ -100,6 +122,49 @@ describe("togglePendingUserInputOptionSelection", () => {
     ).toEqual({
       customAnswer: "",
       selectedOptionLabels: ["Web"],
+    });
+  });
+
+  it("stores Cursor ids without changing the displayed labels", () => {
+    const draft = togglePendingUserInputOptionSelection(
+      cursorQuestion,
+      undefined,
+      cursorQuestion.options[0],
+      0,
+    );
+    expect(draft).toEqual({ customAnswer: "", selectedOptionIds: ["model-fast"] });
+    expect(resolvePendingUserInputAnswer(cursorQuestion, draft)).toBe("model-fast");
+  });
+
+  it("keeps duplicate labels independently selectable by stable identity", () => {
+    const first = togglePendingUserInputOptionSelection(
+      duplicateLabelQuestion,
+      undefined,
+      duplicateLabelQuestion.options[0],
+      0,
+    );
+    const both = togglePendingUserInputOptionSelection(
+      duplicateLabelQuestion,
+      first,
+      duplicateLabelQuestion.options[1],
+      1,
+    );
+    expect(both).toEqual({
+      customAnswer: "",
+      selectedOptionLabels: ["Same", "Same"],
+      selectedOptionKeys: ["index:0", "index:1"],
+    });
+
+    const onlySecond = togglePendingUserInputOptionSelection(
+      duplicateLabelQuestion,
+      both,
+      duplicateLabelQuestion.options[0],
+      0,
+    );
+    expect(onlySecond).toEqual({
+      customAnswer: "",
+      selectedOptionLabels: ["Same"],
+      selectedOptionKeys: ["index:1"],
     });
   });
 });

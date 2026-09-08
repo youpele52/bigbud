@@ -1,9 +1,4 @@
-import {
-  DEFAULT_SERVER_SETTINGS,
-  type ModelSelection,
-  type OrchestrationSession,
-  ThreadId,
-} from "@bigbud/contracts";
+import { DEFAULT_SERVER_SETTINGS, type ModelSelection } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
 import { Cache, Cause, Duration, Effect, FileSystem, Path, Scope } from "effect";
 
@@ -13,7 +8,6 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
-import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
 import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -32,6 +26,7 @@ import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.d
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
 import { makeProcessSessionHandlers } from "./ProviderCommandReactorHandlers.session.ts";
+import { makeProcessTurnSteerRequested } from "./ProviderCommandReactorHandlers.steer.ts";
 import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.failures.ts";
 import { makeProviderCommandProjectResolvers } from "./ProviderCommandReactorHandlers.projects.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
@@ -40,12 +35,11 @@ import {
   maybeGenerateAndRenameWorktreeBranchForFirstTurn,
   maybeGenerateThreadTitleForFirstTurn,
   sendTurnForThread,
-  type SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.ts";
+import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import { OrchestrationCommandInvariantError } from "../Errors.ts";
 import {
   createEffectiveCapabilityCatalog,
   setEffectiveCapabilityCatalog,
@@ -62,6 +56,7 @@ import {
   turnStartKeyForEvent,
   type ProviderIntentEvent,
 } from "./ProviderCommandReactorHandlers.events.ts";
+import { makeProviderCommandSessionStateHelpers } from "./ProviderCommandReactorHandlers.sessionState.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -91,38 +86,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const { appendProviderFailureActivity, recordTurnStartFailure } =
     makeProviderFailureHandlers(orchestrationEngine);
 
-  const setThreadSession = (input: {
-    readonly threadId: ThreadId;
-    readonly session: OrchestrationSession;
-    readonly createdAt: string;
-  }) =>
-    orchestrationEngine
-      .dispatch({
-        type: "thread.session.set",
-        commandId: serverCommandId("provider-session-set"),
-        threadId: input.threadId,
-        session: input.session,
-        createdAt: input.createdAt,
-      })
-      .pipe(Effect.asVoid);
-
-  const resolveThread = Effect.fn("resolveThread")(function* (threadId: ThreadId) {
-    return yield* ensureOrchestrationThreadState(orchestrationEngine, threadId, "history");
-  });
+  const { assertRuntimeStartAllowed, resolveThread, setThreadSession } =
+    makeProviderCommandSessionStateHelpers(orchestrationEngine);
 
   const { resolveProject, resolveThreadsByProject } =
     makeProviderCommandProjectResolvers(orchestrationEngine);
-  const assertRuntimeStartAllowed = (threadId: ThreadId) =>
-    Effect.gen(function* () {
-      const readModel = yield* orchestrationEngine.getReadModel();
-      if (yield* orchestrationEngine.threadDeletion!.isFenced({ threadId, readModel })) {
-        return yield* new OrchestrationCommandInvariantError({
-          commandType: "thread.session.start",
-          detail: `Thread '${threadId}' or an ancestor is being deleted.`,
-        });
-      }
-    });
-
   const sessionOpServices: SessionOpServices = {
     orchestrationEngine,
     providerService,
@@ -140,10 +108,17 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const processDeletionRequested = yield* makeProcessDeletionRequested;
   const processProjectDeletionRequested = yield* makeProcessProjectDeletionRequested;
   const processSessionHandlers = makeProcessSessionHandlers({
+    orchestrationEngine,
     providerService,
     appendProviderFailureActivity,
     resolveThread,
     setThreadSession,
+  });
+  const processTurnSteerRequested = makeProcessTurnSteerRequested({
+    providerService,
+    orchestrationEngine,
+    resolveThread: orchestrationEngine.getReadModel,
+    appendProviderFailureActivity,
   });
   const expandTurnMessageText = expandProviderInputMentions({
     discoveryRegistry,
@@ -346,11 +321,24 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         if (!thread?.session || thread.session.status === "stopped") {
           return;
         }
+        const previousSession = thread.session;
         const cachedModelSelection = threadModelSelections.get(event.payload.threadId);
         yield* ensureSessionForThread(sessionOpServices)(
           event.payload.threadId,
           event.occurredAt,
           cachedModelSelection !== undefined ? { modelSelection: cachedModelSelection } : {},
+        ).pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              yield* setThreadSession({
+                threadId: event.payload.threadId,
+                session: previousSession,
+                createdAt: event.occurredAt,
+                expectedSessionEpoch: (previousSession.sessionEpoch ?? 0) + 1,
+              });
+              return yield* Effect.failCause(cause);
+            }),
+          ),
         );
         return;
       }
@@ -370,6 +358,9 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         return;
       case "thread.turn-interrupt-requested":
         yield* processTurnInterruptRequested(event);
+        return;
+      case "thread.turn-steer-requested":
+        yield* processTurnSteerRequested(event);
         return;
       case "thread.approval-response-requested":
         yield* processApprovalResponseRequested(event);

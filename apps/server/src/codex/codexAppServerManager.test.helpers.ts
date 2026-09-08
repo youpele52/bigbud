@@ -1,10 +1,17 @@
 import { vi } from "vitest";
 import { ApprovalRequestId, ThreadId } from "@bigbud/contracts";
 import { CodexAppServerManager } from "./codexAppServerManager";
+import type {
+  CodexEffectiveModelSelection,
+  CodexModelCatalog,
+} from "./codexAppServerManager.modelSelection";
 
 export const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
 
-export function createSendTurnHarness() {
+export function createSendTurnHarness(options?: {
+  readonly activeModelCatalog?: CodexModelCatalog;
+  readonly effectiveModelSelection?: CodexEffectiveModelSelection;
+}) {
   const manager = new CodexAppServerManager();
   const context = {
     session: {
@@ -20,9 +27,11 @@ export function createSendTurnHarness() {
     account: {
       type: "unknown",
       planType: null,
-      sparkEnabled: true,
+      sparkEnabled: false,
     },
     collabReceiverTurns: new Map(),
+    activeModelCatalog: options?.activeModelCatalog,
+    effectiveModelSelection: options?.effectiveModelSelection,
   };
 
   const requireSession = vi
@@ -62,6 +71,8 @@ export function createThreadControlHarness() {
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
     collabReceiverTurns: new Map(),
+    activeModelCatalog: undefined,
+    effectiveModelSelection: undefined,
   };
 
   const requireSession = vi
@@ -105,6 +116,8 @@ export function createPendingUserInputHarness() {
       ],
     ]),
     collabReceiverTurns: new Map(),
+    activeModelCatalog: undefined,
+    effectiveModelSelection: undefined,
   };
 
   const requireSession = vi
@@ -140,12 +153,14 @@ export function createCollabNotificationHarness() {
     account: {
       type: "unknown",
       planType: null,
-      sparkEnabled: true,
+      sparkEnabled: false,
     },
     pending: new Map(),
     pendingApprovals: new Map(),
     pendingUserInputs: new Map(),
     collabReceiverTurns: new Map<string, string>(),
+    activeModelCatalog: undefined,
+    effectiveModelSelection: undefined,
     nextRequestId: 1,
     stopping: false,
   };

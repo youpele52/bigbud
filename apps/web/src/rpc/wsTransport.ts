@@ -2,6 +2,8 @@ import { Cause, Duration, Effect, Exit, ManagedRuntime, Option, Scope, Stream } 
 import { RpcClient } from "effect/unstable/rpc";
 
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
+import { markWsInboundActivity } from "./wsActivity";
+import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
@@ -11,7 +13,9 @@ import {
 
 interface SubscribeOptions {
   readonly retryDelay?: Duration.Input;
+  readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
+  readonly shouldRetry?: (error: unknown) => boolean;
 }
 
 interface RequestOptions {
@@ -20,10 +24,35 @@ interface RequestOptions {
 
 const DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS = Duration.millis(250);
 const NOOP: () => void = () => undefined;
+const SUBSCRIPTION_LISTENER_FAILURE_NAME = "WsSubscriptionListenerError";
+
+class WsSubscriptionListenerError extends Error {
+  readonly listenerCause: unknown;
+
+  constructor(cause: unknown) {
+    super(formatErrorMessage(cause));
+    this.name = SUBSCRIPTION_LISTENER_FAILURE_NAME;
+    this.listenerCause = cause;
+  }
+}
+
+export function markWsSubscriptionListenerFailure(error: unknown): unknown {
+  return isWsSubscriptionListenerFailure(error) ? error : new WsSubscriptionListenerError(error);
+}
+
+export function isWsSubscriptionListenerFailure(error: unknown): boolean {
+  return error instanceof Error && error.name === SUBSCRIPTION_LISTENER_FAILURE_NAME;
+}
+
+function subscriptionErrorCause(error: unknown): unknown {
+  return error instanceof WsSubscriptionListenerError ? error.listenerCause : error;
+}
 
 interface TransportSession {
   readonly clientPromise: Promise<WsRpcProtocolClient>;
   readonly clientScope: Scope.Closeable;
+  readonly closeScope: () => Promise<void>;
+  readonly readinessController: AbortController;
   readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
 }
 
@@ -69,7 +98,7 @@ export class WsTransport {
 
   async requestStream<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
   ): Promise<void> {
     if (this.disposed) {
       throw new Error("Transport disposed");
@@ -79,12 +108,9 @@ export class WsTransport {
     const client = await session.clientPromise;
     await session.runtime.runPromise(
       Stream.runForEach(connect(client), (value) =>
-        Effect.sync(() => {
-          try {
-            listener(value);
-          } catch {
-            // Swallow listener errors so the stream can finish cleanly.
-          }
+        Effect.promise(() => {
+          markWsInboundActivity();
+          return Promise.resolve(listener(value));
         }),
       ),
     );
@@ -92,7 +118,7 @@ export class WsTransport {
 
   subscribe<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
     options?: SubscribeOptions,
   ): () => void {
     if (this.disposed) {
@@ -115,11 +141,7 @@ export class WsTransport {
         const session = this.session;
         try {
           if (hasReceivedValue) {
-            try {
-              options?.onResubscribe?.();
-            } catch {
-              // Swallow reconnect hook errors so the stream can recover.
-            }
+            options?.onResubscribe?.();
           }
 
           const runningStream = this.runStreamOnSession(
@@ -133,14 +155,29 @@ export class WsTransport {
             },
           );
           cancelCurrentStream = runningStream.cancel;
-          await runningStream.completed;
-          cancelCurrentStream = NOOP;
+          try {
+            await runningStream.completed;
+          } finally {
+            // Every attempt owns a scoped RPC client. Interrupting it is idempotent after
+            // completion and guarantees its server request is disposed before a retry starts.
+            runningStream.cancel();
+            cancelCurrentStream = NOOP;
+          }
         } catch (error) {
-          cancelCurrentStream = NOOP;
           if (!active || this.disposed) {
             return;
           }
-          if (isUnknownRequestTagError(error)) {
+          const listenerFailure = isWsSubscriptionListenerFailure(error);
+          const reportedError = subscriptionErrorCause(error);
+          if (!listenerFailure && isUnknownRequestTagError(error)) {
+            options?.onError?.(reportedError);
+            console.warn("WebSocket RPC subscription unavailable", {
+              error: formatErrorMessage(error),
+            });
+            return;
+          }
+          if (options?.shouldRetry?.(error) === false) {
+            options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
               error: formatErrorMessage(error),
             });
@@ -197,7 +234,8 @@ export class WsTransport {
   }
 
   private closeSession(session: TransportSession) {
-    return session.runtime.runPromise(Scope.close(session.clientScope, Exit.void)).finally(() => {
+    session.readinessController?.abort();
+    return session.closeScope().finally(() => {
       session.runtime.dispose();
     });
   }
@@ -212,18 +250,31 @@ export class WsTransport {
         isActive: () => !this.disposed && this.activeSessionId === sessionId,
       }),
     );
-    const clientScope = runtime.runSync(Scope.make());
+    const clientScope = Effect.runSync(Scope.make());
+    const readinessController = new AbortController();
+    const clientPromise = waitForDesktopBackendReady(
+      typeof window === "undefined" ? undefined : window.desktopBridge,
+      readinessController.signal,
+    ).then(() => {
+      if (readinessController.signal.aborted) {
+        throw new Error("WebSocket transport session closed before backend readiness.");
+      }
+      return runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient));
+    });
+    void clientPromise.catch(() => undefined);
     return {
       runtime,
       clientScope,
-      clientPromise: runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient)),
+      closeScope: () => Effect.runPromise(Scope.close(clientScope, Exit.void)),
+      readinessController,
+      clientPromise,
     };
   }
 
   private runStreamOnSession<TValue>(
     session: TransportSession,
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void,
+    listener: (value: TValue) => void | Promise<void>,
     isActive: () => boolean,
     markValueReceived: () => void,
   ): {
@@ -232,26 +283,31 @@ export class WsTransport {
   } {
     let resolveCompleted!: () => void;
     let rejectCompleted!: (error: unknown) => void;
+    let listenerFailure: unknown;
     const completed = new Promise<void>((resolve, reject) => {
       resolveCompleted = resolve;
       rejectCompleted = reject;
     });
     const cancel = session.runtime.runCallback(
-      Effect.promise(() => session.clientPromise).pipe(
-        Effect.flatMap((client) =>
-          Stream.runForEach(connect(client), (value) =>
-            Effect.sync(() => {
-              if (!isActive()) {
-                return;
-              }
+      Effect.scoped(
+        Effect.promise(() => session.clientPromise).pipe(
+          Effect.flatMap((client) =>
+            Stream.runForEach(connect(client), (value) =>
+              Effect.promise(() => {
+                if (!isActive()) {
+                  return Promise.resolve();
+                }
 
-              markValueReceived();
-              try {
-                listener(value);
-              } catch {
-                // Swallow listener errors so the stream stays live.
-              }
-            }),
+                markWsInboundActivity();
+                markValueReceived();
+                return Promise.resolve()
+                  .then(() => listener(value))
+                  .catch((error: unknown) => {
+                    listenerFailure = markWsSubscriptionListenerFailure(error);
+                    return Promise.reject(listenerFailure);
+                  });
+              }),
+            ),
           ),
         ),
       ),
@@ -262,7 +318,7 @@ export class WsTransport {
             return;
           }
 
-          rejectCompleted(Cause.squash(exit.cause));
+          rejectCompleted(listenerFailure ?? Cause.squash(exit.cause));
         },
       },
     );

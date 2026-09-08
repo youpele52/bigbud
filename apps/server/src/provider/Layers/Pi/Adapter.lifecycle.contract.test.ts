@@ -28,6 +28,7 @@ function makeSession(): ActivePiSession {
       stop: async () => undefined,
     },
     threadId: THREAD_ID,
+    sessionEpoch: 7,
     createdAt: "2026-08-11T00:00:00.000Z",
     runtimeMode: "full-access",
     providerRuntimeExecutionTargetId: "local",
@@ -63,11 +64,12 @@ describe("Pi adapter lifecycle contract", () => {
     const session = makeSession();
     const sessions = new Map([[THREAD_ID, session]]);
     let sequence = 0;
-    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, sessionEpoch, type, payload, extra) =>
       Effect.succeed({
         eventId: asEventId(`pi-lifecycle-${++sequence}`),
         provider: "pi",
         threadId,
+        sessionEpoch,
         createdAt: "2026-08-11T00:00:00.000Z",
         ...(extra?.turnId ? { turnId: extra.turnId } : {}),
         type,
@@ -108,5 +110,8 @@ describe("Pi adapter lifecycle contract", () => {
     expect(await Effect.runPromise(methods.listSessions())).toMatchObject([
       { threadId: THREAD_ID, status: "ready" },
     ]);
+    expect(
+      provider.emittedEvents.every((event) => event.sessionEpoch === session.sessionEpoch),
+    ).toBe(true);
   });
 });

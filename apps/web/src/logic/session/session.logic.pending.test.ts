@@ -236,6 +236,7 @@ describe("derivePendingUserInputs", () => {
               question: "Which mode should be used?",
               options: [
                 {
+                  id: "workspace-write",
                   label: "workspace-write",
                   description: "Allow workspace writes only",
                 },
@@ -295,6 +296,7 @@ describe("derivePendingUserInputs", () => {
             question: "Which mode should be used?",
             options: [
               {
+                id: "workspace-write",
                 label: "workspace-write",
                 description: "Allow workspace writes only",
               },
