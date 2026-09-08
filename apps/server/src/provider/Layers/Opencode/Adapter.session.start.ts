@@ -128,6 +128,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             host: deps.serverConfig.host,
             port: deps.serverConfig.port,
             serverName: buildOpencodeThreadOrchestrationServerName(input.threadId),
+            providerSessionId: `opencode:${input.threadId}:${input.sessionEpoch ?? 0}`,
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({

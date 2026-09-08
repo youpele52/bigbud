@@ -1,10 +1,40 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import type { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
+import {
+  RemoteAgentProcessError,
+  type RemoteAgentProcessClient,
+} from "./remoteAgentProcessClient.ts";
 import { makeRemoteAgentShellRunnerResolver } from "./remoteAgentShell.ts";
 
 describe("remote agent shell runner", () => {
+  it("retains unresolved owners and exposes cancellation failure without redispatch", async () => {
+    let runs = 0;
+    const client = {
+      connection: {
+        request: async () => ({ type: "workspaceOpenResponse", value: { errorCode: "" } }),
+      },
+      run: async () => {
+        runs++;
+        throw new RemoteAgentProcessError("PROCESS_OUTCOME_UNKNOWN", "missing history");
+      },
+      cancelAndWait: async () => {
+        throw new RemoteAgentProcessError("PROCESS_OUTCOME_UNKNOWN", "missing history");
+      },
+    } as unknown as RemoteAgentProcessClient;
+    const runner = makeRemoteAgentShellRunnerResolver({ resolve: async () => client }).resolve(
+      "ssh:fixture",
+    );
+    const input = { threadId: "thread", cwd: "/tmp", command: "side-effect" };
+    await expect(Effect.runPromise(runner.run(input))).rejects.toThrow("missing history");
+    await expect(Effect.runPromise(runner.closeThread("thread"))).rejects.toThrow(
+      "missing history",
+    );
+    await expect(Effect.runPromise(runner.run(input))).rejects.toThrow("unresolved");
+    expect(runs).toBe(1);
+    expect(await Effect.runPromise(runner.isActive!("thread"))).toBe(true);
+  });
+
   it("opens the remote workspace and runs a bounded shell command", async () => {
     const received: Array<{
       command: string;

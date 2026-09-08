@@ -125,6 +125,7 @@ describe("remote agent artifact lifecycle", () => {
     expect(script.command).toContain('ln "$staged" "$installed"');
     expect(script.command).not.toContain("target-triple");
     expect(script.command).toContain('[ -e "$path" ] || [ -L "$path" ]');
+    expect(script.command).not.toContain("state_root");
     expect(script.command).not.toContain("StrictHostKeyChecking=no");
     expect(script.stdin).toBe("AQID");
   });

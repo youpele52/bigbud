@@ -13,7 +13,7 @@ mod inspect;
 #[path = "journal/recovery.rs"]
 mod recovery;
 
-pub use inspect::inspect_active_operations;
+pub use inspect::{JournalInspection, inspect_active_operations, validate_journal_read_only};
 
 use codec::{
     CompactOperation, append_encoded, decode_record, encode_record, set_private_permissions,

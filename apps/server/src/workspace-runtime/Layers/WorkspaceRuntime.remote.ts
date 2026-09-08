@@ -28,6 +28,7 @@ import { RemoteWorkspaceRuntime as RemoteWorkspaceRuntimeService } from "../Serv
 import { makeRemoteWorkspaceWatch } from "../../remote-agent/remoteAgentWorkspaceWatch.ts";
 import { readRemoteFile } from "./WorkspaceRuntime.remote.read.ts";
 import { withRemoteReadReconnect } from "./WorkspaceRuntime.remote.reconnect.ts";
+import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 
 export interface RemoteAgentClientResolver {
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentWorkspaceClient>;
@@ -143,7 +144,7 @@ export function makeRemoteWorkspaceRuntime(
               workspaceHandle: handle,
               path: input.relativePath,
               operationId: id,
-              requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+              requestDigest: remoteAgentRequestDigest(input),
               offset: 0,
               maxBytes: MAX_PREVIEW_BYTES,
             });
@@ -221,8 +222,8 @@ export function makeRemoteWorkspaceRuntime(
             workspaceHandle: handle,
             path: input.relativePath,
             bytes,
-            operationId: operationId("write"),
-            requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+            operationId: input.operationId ?? operationId("write"),
+            requestDigest: remoteAgentRequestDigest(input),
             ...(input.expectedSha256 !== undefined ? { expectedSha256: input.expectedSha256 } : {}),
           });
         },
@@ -255,7 +256,7 @@ export function makeRemoteWorkspaceRuntime(
               workspaceHandle: handle,
               path: input.relativePath,
               operationId: id,
-              requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+              requestDigest: remoteAgentRequestDigest(input),
               offset: Math.max(0, Math.floor(input.offset)),
               maxBytes: input.maxBytes,
             });
@@ -295,7 +296,7 @@ export function makeRemoteWorkspaceRuntime(
               workspaceHandle: handle,
               path: relativePath,
               operationId: id,
-              requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+              requestDigest: remoteAgentRequestDigest(input),
             });
           },
         });
@@ -328,7 +329,7 @@ export function makeRemoteWorkspaceRuntime(
               query: input.query,
               maxResults: input.limit,
               operationId: id,
-              requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+              requestDigest: remoteAgentRequestDigest(input),
             });
           },
         });
@@ -361,7 +362,7 @@ export function makeRemoteWorkspaceRuntime(
               query: input.query,
               maxResults: input.limit,
               operationId: id,
-              requestDigest: new TextEncoder().encode(JSON.stringify(input)),
+              requestDigest: remoteAgentRequestDigest(input),
             });
           },
         });

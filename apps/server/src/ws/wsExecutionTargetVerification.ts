@@ -17,6 +17,7 @@ import type {
   RemoteAgentHealth,
   RemoteAgentInstaller,
 } from "../remote-agent/remoteAgentServerLayer.ts";
+import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
 
 import {
   unlockSshExecutionTargetCredential,
@@ -27,6 +28,7 @@ import {
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
   remoteAgentHealth?: RemoteAgentHealth,
+  remoteAgentUpdateCoordinator?: RemoteAgentUpdateCoordinatorShape,
 ): Effect.fn.Return<ServerVerifyExecutionTargetResult, ServerVerifyExecutionTargetError> {
   const sshResult = yield* Effect.tryPromise({
     try: () =>
@@ -39,6 +41,11 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
         message: cause instanceof Error ? cause.message : "Failed to verify SSH execution target.",
         cause,
       }),
+  });
+  remoteAgentUpdateCoordinator?.enqueue({
+    target: input.executionTargetId,
+    trigger: "authenticated",
+    authenticated: true,
   });
   if (!remoteAgentHealth) {
     return { ...sshResult, remoteAgent: { status: "disabled" } };
@@ -76,7 +83,11 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
   return {
     ...sshResult,
     message: `${sshResult.message} Remote agent ${agent.agentVersion} is ready.`,
-    remoteAgent: { status: "ready", version: agent.agentVersion },
+    remoteAgent: {
+      status: "ready",
+      version: agent.agentVersion,
+      ...(agent.runtimeSummary ? { runtimeSummary: agent.runtimeSummary } : {}),
+    },
   };
 });
 
@@ -93,14 +104,15 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
     try: (signal) => remoteAgentInstaller.install(input.executionTargetId, signal),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
-        message: cause instanceof Error ? cause.message : "Failed to install the remote agent.",
+        message: "Remote agent staging failed. Existing connections were not changed.",
         cause,
       }),
   });
   return {
     executionTargetId: input.executionTargetId,
     version: result.version,
-    message: `bigbud remote agent ${result.version} was installed successfully.`,
+    message: `Update ${result.version} staged. It will be used on your next new connection.`,
+    ...(result.runtimeSummary ? { runtimeSummary: result.runtimeSummary } : {}),
   };
 });
 

@@ -1,34 +1,28 @@
+use super::control::exit_supervisor;
+use super::shutdown_response;
+use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace_watch_event_frame};
+use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
+use bigbud_workspace_watch::WorkspaceWatchRegistry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+#[cfg(unix)]
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-
-use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
-use bigbud_workspace_watch::WorkspaceWatchRegistry;
-
-use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace_watch_event_frame};
-
-#[cfg(unix)]
-use std::os::unix::net::{UnixListener, UnixStream};
-
 #[cfg(unix)]
 pub(super) type Writer = Arc<Mutex<BufWriter<UnixStream>>>;
-
 #[cfg(unix)]
 pub(super) type Subscribers = Arc<Mutex<HashMap<String, Vec<Writer>>>>;
-
 #[cfg(unix)]
 #[path = "io.rs"]
 mod io_helpers;
 #[cfg(unix)]
 use io_helpers::*;
-
 #[cfg(test)]
 #[path = "test_hooks.rs"]
 mod test_hooks;
-
 #[cfg(unix)]
 pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<()> {
     let listener = UnixListener::bind(socket_path)?;
@@ -65,14 +59,12 @@ pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<(
     }
     Ok(())
 }
-
 #[cfg(unix)]
 fn set_private_socket_permissions(socket_path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o700))
 }
-
 #[cfg(not(unix))]
 pub fn run_supervisor(_session: AgentSession, _socket_path: &Path) -> io::Result<()> {
     Err(io::Error::new(
@@ -80,7 +72,6 @@ pub fn run_supervisor(_session: AgentSession, _socket_path: &Path) -> io::Result
         "the remote agent supervisor requires Unix-domain sockets on this platform",
     ))
 }
-
 #[cfg(unix)]
 fn serve_connection(
     stream: UnixStream,
@@ -248,6 +239,29 @@ fn serve_connection_loop(
                         remove_subscriber(&subscribers, &pty_id, &writer)?;
                         write_protocol_error(&writer, &error)?;
                     }
+                }
+            }
+            Some(bigbud_protocol::v1::frame::Payload::SupervisorShutdownRequest(request)) => {
+                let active_watchers = !watch_ids.is_empty() || watchers.has_active_subscriptions();
+                let active_subscribers = subscribers
+                    .lock()
+                    .map_err(|_| io::Error::other("subscriber lock was poisoned"))?
+                    .values()
+                    .any(|writers| !writers.is_empty());
+                let (response, accepted) = sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))
+                    .map(|mut session| {
+                        shutdown_response(
+                            &mut session,
+                            request,
+                            active_watchers,
+                            active_subscribers,
+                        )
+                    })?;
+                write_responses(&writer, vec![response])?;
+                if accepted {
+                    exit_supervisor();
                 }
             }
             other_payload => {

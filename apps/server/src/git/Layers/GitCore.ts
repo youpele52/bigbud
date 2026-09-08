@@ -1,11 +1,8 @@
-import { Cache, Effect, Layer, Option, Path } from "effect";
+import { Effect, Layer, Option, Path } from "effect";
+import { makeRemoteGitOps } from "./GitCore.remoteOps.ts";
+import { bindRemoteGitMutations } from "../../remote-agent/remoteAgentGit.mutations.ts";
 
-import {
-  GitCore,
-  type GitCoreShape,
-  type ExecuteGitInput,
-  type ExecuteGitResult,
-} from "../Services/GitCore.ts";
+import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
 import { GitCommandError } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
 import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCoreExecutor.ts";
@@ -18,12 +15,13 @@ import {
   formatRemoteExecutionTargetDetail,
   isLocalExecutionTarget,
 } from "../../executionTargets.ts";
-import { RemoteAgentGitExecutorService } from "../../remote-agent/remoteAgentGit.ts";
-import { requireRemoteGitAgent } from "./GitCore.target.ts";
+import {
+  RemoteAgentGitExecutorService,
+  RemoteAgentGitOwnership,
+} from "../../remote-agent/remoteAgentGit.ts";
+import { requireRemoteGitAgent, assertLocalExecutionTarget } from "./GitCore.target.ts";
 
 export { makeGitCore };
-
-type GitWorktreeRoutingOps = GitWorktreeOps;
 
 const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   executeOverride?: GitCoreShape["execute"];
@@ -32,7 +30,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const path = yield* Path.Path;
   const { worktreesDir } = yield* ServerConfig;
 
-  let executeRaw: (input: ExecuteGitInput) => Effect.Effect<ExecuteGitResult, GitCommandError>;
+  let executeRaw: GitCoreShape["execute"];
 
   if (options?.executeOverride) {
     executeRaw = options.executeOverride;
@@ -51,46 +49,20 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const historyOps = makeGitHistoryOps(helpers);
 
   const remoteAgentGitExecutor = yield* Effect.serviceOption(RemoteAgentGitExecutorService);
+  const ownership = yield* Effect.serviceOption(RemoteAgentGitOwnership);
   const remoteExecute = options?.remoteExecuteOverride
     ? wrapExecuteWithMetrics(options.remoteExecuteOverride)
     : Option.isSome(remoteAgentGitExecutor)
       ? wrapExecuteWithMetrics(remoteAgentGitExecutor.value)
       : undefined;
 
-  const makeRemoteOpsForTarget = (executionTargetId: string) =>
-    Effect.gen(function* () {
-      const executeForTarget: GitCoreShape["execute"] = (input) =>
-        remoteExecute!({
-          ...input,
-          executionTargetId: input.executionTargetId ?? executionTargetId,
-        });
-      const targetHelpers = makeGitHelpers(executeForTarget);
-      const targetStatusOps = yield* makeGitStatusOps(targetHelpers, path);
-      const targetWorktreeOps = makeGitWorktreeOps(
-        targetHelpers,
-        targetStatusOps,
-        path,
-        worktreesDir,
-      );
-      return {
-        statusOps: targetStatusOps,
-        branchOps: makeGitBranchOps(targetHelpers, targetStatusOps),
-        worktreeOps: targetWorktreeOps,
-        historyOps: makeGitHistoryOps(targetHelpers),
-      };
-    });
-  const remoteOpsByTarget = yield* Cache.make({
-    capacity: 64,
-    lookup: makeRemoteOpsForTarget,
-  });
-  const remoteOpsForTarget = (executionTargetId: string) =>
-    Cache.get(remoteOpsByTarget, executionTargetId);
+  const remoteOpsForTarget = yield* makeRemoteGitOps(remoteExecute, path, worktreesDir);
   const routeWorktreeOp = <A>(input: {
     cwd: string;
     executionTargetId?: string;
     operation: string;
     local: () => Effect.Effect<A, GitCommandError>;
-    remote: (worktreeOps: GitWorktreeRoutingOps) => Effect.Effect<A, GitCommandError>;
+    remote: (worktreeOps: GitWorktreeOps) => Effect.Effect<A, GitCommandError>;
   }) =>
     input.executionTargetId && !isLocalExecutionTarget(input.executionTargetId)
       ? remoteExecute
@@ -100,26 +72,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         : requireRemoteGitAgent(input.operation, input.cwd, input.executionTargetId)
       : input.local();
 
-  const assertLocalExecutionTarget = (
-    operation: string,
-    cwd: string,
-    executionTargetId: string | null | undefined,
-  ) =>
-    isLocalExecutionTarget(executionTargetId)
-      ? Effect.void
-      : Effect.fail(
-          new GitCommandError({
-            operation,
-            command: "execution-target",
-            cwd,
-            detail: formatRemoteExecutionTargetDetail({
-              executionTargetId,
-              surface: "Git execution",
-            }),
-          }),
-        );
-
-  return {
+  const core = {
     execute: (input) => {
       if (!isLocalExecutionTarget(input.executionTargetId)) {
         return remoteExecute
@@ -166,16 +119,16 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
             )
           : requireRemoteGitAgent("git.statusDetailsLocal", cwd, executionTargetId)
         : statusOps.statusDetailsLocal(cwd),
-    prepareCommitContext: (cwd, filePaths, executionTargetId) =>
+    prepareCommitContext: (cwd, filePaths, executionTargetId, operationId?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
           ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
-                targetStatusOps.prepareCommitContext(cwd, filePaths),
+                targetStatusOps.prepareCommitContext(cwd, filePaths, undefined, operationId),
               ),
             )
           : requireRemoteGitAgent("git.prepareCommitContext", cwd, executionTargetId)
-        : statusOps.prepareCommitContext(cwd, filePaths),
+        : statusOps.prepareCommitContext(cwd, filePaths, undefined, operationId),
     commit: (cwd, subject, body, options) =>
       options?.executionTargetId && !isLocalExecutionTarget(options.executionTargetId)
         ? remoteExecute
@@ -186,44 +139,46 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
             )
           : requireRemoteGitAgent("git.commit", cwd, options.executionTargetId)
         : statusOps.commit(cwd, subject, body, options),
-    pushCurrentBranch: (cwd, fallbackBranch, executionTargetId) =>
+    pushCurrentBranch: (cwd, fallbackBranch, executionTargetId, operationId?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
           ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
-                targetStatusOps.pushCurrentBranch(cwd, fallbackBranch),
+                targetStatusOps.pushCurrentBranch(cwd, fallbackBranch, undefined, operationId),
               ),
             )
           : requireRemoteGitAgent("git.push", cwd, executionTargetId)
-        : statusOps.pushCurrentBranch(cwd, fallbackBranch),
-    pullCurrentBranch: (cwd, executionTargetId) =>
+        : statusOps.pushCurrentBranch(cwd, fallbackBranch, undefined, operationId),
+    pullCurrentBranch: (cwd, executionTargetId, operationId?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
           ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
-                targetStatusOps.pullCurrentBranch(cwd),
+                targetStatusOps.pullCurrentBranch(cwd, undefined, operationId),
               ),
             )
           : requireRemoteGitAgent("git.pull", cwd, executionTargetId)
-        : statusOps.pullCurrentBranch(cwd),
-    fetch: (cwd, executionTargetId) =>
-      executionTargetId && !isLocalExecutionTarget(executionTargetId)
-        ? remoteExecute
-          ? remoteOpsForTarget(executionTargetId).pipe(
-              Effect.flatMap(({ statusOps: targetStatusOps }) => targetStatusOps.fetch(cwd)),
-            )
-          : requireRemoteGitAgent("git.fetch", cwd, executionTargetId)
-        : statusOps.fetch(cwd),
-    discardChanges: (cwd, executionTargetId) =>
+        : statusOps.pullCurrentBranch(cwd, undefined, operationId),
+    fetch: (cwd, executionTargetId, operationId?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
           ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
-                targetStatusOps.discardChanges(cwd),
+                targetStatusOps.fetch(cwd, undefined, operationId),
+              ),
+            )
+          : requireRemoteGitAgent("git.fetch", cwd, executionTargetId)
+        : statusOps.fetch(cwd, undefined, operationId),
+    discardChanges: (cwd, executionTargetId, operationId?) =>
+      executionTargetId && !isLocalExecutionTarget(executionTargetId)
+        ? remoteExecute
+          ? remoteOpsForTarget(executionTargetId).pipe(
+              Effect.flatMap(({ statusOps: targetStatusOps }) =>
+                targetStatusOps.discardChanges(cwd, undefined, operationId),
               ),
             )
           : requireRemoteGitAgent("git.discardChanges", cwd, executionTargetId)
-        : statusOps.discardChanges(cwd),
+        : statusOps.discardChanges(cwd, undefined, operationId),
     readRangeContext: (cwd, baseBranch, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
@@ -436,6 +391,9 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         remote: (ops) => ops.filterIgnoredPaths(cwd, relativePaths),
       }),
   } satisfies GitCoreShape;
+  return Option.isSome(ownership) && ownership.value === "managed"
+    ? bindRemoteGitMutations(core)
+    : core;
 });
 
 export const GitCoreLive = Layer.effect(GitCore, makeGitCore());

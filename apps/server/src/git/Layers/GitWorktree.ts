@@ -13,7 +13,7 @@ import {
   commandLabel,
   createGitCommandError,
 } from "./GitCoreUtils.ts";
-import { type GitHelpers } from "./GitCoreExecutor.ts";
+import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
 import type { GitStatusOpsResult } from "./GitStatus.ts";
 
 const WORKSPACE_FILES_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
@@ -56,6 +56,7 @@ export function makeGitWorktreeOps(
 
       yield* executeGit("GitCore.createWorktree", input.cwd, args, {
         fallbackErrorMessage: "git worktree add failed",
+        operationId: input.operationId,
       });
 
       return {
@@ -77,6 +78,7 @@ export function makeGitWorktreeOps(
       yield* executeGit("GitCore.removeWorktree", input.cwd, args, {
         timeoutMs: 15_000,
         fallbackErrorMessage: "git worktree remove failed",
+        operationId: input.operationId,
       }).pipe(
         Effect.mapError((error) =>
           createGitCommandError(
@@ -107,19 +109,26 @@ export function makeGitWorktreeOps(
       ],
       {
         fallbackErrorMessage: "git fetch pull request branch failed",
+        operationId: input.operationId,
       },
     );
   });
 
   const fetchRemoteBranch: GitCoreShape["fetchRemoteBranch"] = Effect.fn("fetchRemoteBranch")(
     function* (input): Effect.fn.Return<void, GitCommandError, never> {
-      yield* runGit("GitCore.fetchRemoteBranch.fetch", input.cwd, [
-        "fetch",
-        "--quiet",
-        "--no-tags",
-        input.remoteName,
-        `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
-      ]);
+      yield* runGit(
+        "GitCore.fetchRemoteBranch.fetch",
+        input.cwd,
+        [
+          "fetch",
+          "--quiet",
+          "--no-tags",
+          input.remoteName,
+          `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
+        ],
+        false,
+        { operationId: gitMutationOperationId(input.operationId, "fetch") },
+      );
 
       const localBranchAlreadyExists = yield* branchExists(input.cwd, input.localBranch);
       const targetRef = `${input.remoteName}/${input.remoteBranch}`;
@@ -129,6 +138,8 @@ export function makeGitWorktreeOps(
         localBranchAlreadyExists
           ? ["branch", "--force", input.localBranch, targetRef]
           : ["branch", input.localBranch, targetRef],
+        false,
+        { operationId: gitMutationOperationId(input.operationId, "materialize") },
       );
     },
   );

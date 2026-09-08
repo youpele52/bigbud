@@ -1,7 +1,7 @@
 import { Layer, ServiceMap } from "effect";
 
 import { makeSshGitExecutor } from "../git/Layers/GitCore.ssh.ts";
-import { RemoteAgentGitExecutorService } from "./remoteAgentGit.ts";
+import { RemoteAgentGitExecutorService, RemoteAgentGitOwnership } from "./remoteAgentGit.ts";
 import type { RemoteAgentPtyResolver } from "./remoteAgentPtyAdapter.ts";
 import { RemoteAgentShellRunner } from "./remoteAgentShell.ts";
 import {
@@ -12,6 +12,7 @@ import {
   makeRemoteAgentInstallManager,
   type RemoteAgentInstallSource,
 } from "./remoteAgentInstallManager.ts";
+import type { RemoteAgentArtifact } from "./remoteAgentArtifact.ts";
 import { loadProcessScopedRemoteAgentInstallSource } from "./remoteAgentInstallSource.ts";
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 import {
@@ -24,6 +25,15 @@ import {
   makeWorkspaceRuntimeLayer,
 } from "../workspace-runtime/Layers/WorkspaceRuntime.ts";
 import { runSshCommand } from "../ssh/sshProcess.ts";
+import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
+import { RemoteAgentRuntimeBindingsLive } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
+import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
+import {
+  makeRemoteAgentUpdateCoordinator,
+  RemoteAgentUpdateCoordinator,
+  type RemoteAgentUpdateCoordinatorShape,
+} from "./remoteAgentUpdate.coordinator.ts";
+import type { RemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
 
 export type RemoteAgentHealthResult =
   | { readonly status: "install-required" }
@@ -34,6 +44,7 @@ export type RemoteAgentHealthResult =
     }
   | {
       readonly status: "ready";
+      readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
       readonly agentVersion: string;
       readonly buildDigest: string;
       readonly agentEpoch: string;
@@ -57,6 +68,7 @@ export interface RemoteAgentInstaller {
     signal?: AbortSignal,
   ) => Promise<{
     readonly version: string;
+    readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
   }>;
 }
 
@@ -66,6 +78,8 @@ export class RemoteAgentInstallerService extends ServiceMap.Service<
 >()("bigbud/remote-agent/RemoteAgentInstaller") {}
 
 interface RemoteAgentHealthDependencies {
+  readonly managedSummary?: typeof remoteAgentAdmission.status;
+  readonly managedBinding?: typeof remoteAgentAdmission.resolveBinding;
   readonly binaryPath: string;
   readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
   readonly resolveArtifact: ReturnType<typeof makeRemoteAgentInstallManager>["resolveArtifact"];
@@ -85,6 +99,28 @@ export function makeRemoteAgentHealth(
 ): RemoteAgentHealth {
   return {
     verify: async (executionTargetId, signal) => {
+      const binding = await dependencies.managedBinding?.(executionTargetId);
+      if (binding) {
+        await dependencies.pool.get(executionTargetId);
+        const snapshot = dependencies.pool.snapshot(executionTargetId);
+        if (
+          snapshot.agentEpoch !== binding.expectedEpoch ||
+          snapshot.buildDigest !== binding.runtime.buildDigest
+        ) {
+          throw new Error(
+            "Remote runtime continuity is unavailable; existing owners remain pinned.",
+          );
+        }
+        return {
+          status: "ready",
+          agentVersion: binding.runtime.version,
+          buildDigest: binding.runtime.buildDigest,
+          agentEpoch: binding.expectedEpoch,
+          ...(dependencies.managedSummary
+            ? { runtimeSummary: await dependencies.managedSummary(executionTargetId) }
+            : {}),
+        };
+      }
       const checkOutput = await dependencies.runIdentityProbe(
         executionTargetId,
         buildRemoteAgentIdentityProbeCommand(dependencies.binaryPath),
@@ -157,11 +193,14 @@ interface RemoteAgentServerServicesDependencies {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
       readonly signal?: AbortSignal;
-    }) => Promise<{ readonly artifact: { readonly version: string } }>;
+    }) => Promise<{
+      readonly artifact: RemoteAgentArtifact;
+      readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
+    }>;
+    readonly cleanup?: (target: string) => Promise<unknown>;
   };
-  readonly resolveInstallSourceLoader?: () => (
-    signal?: AbortSignal,
-  ) => Promise<RemoteAgentInstallSource>;
+  readonly resolveInstallSourceLoader?: () => RemoteAgentInstallSourceLoader;
+  readonly beginRetirement?: (executionTargetId: string, generation: string) => Promise<() => void>;
   readonly runIdentityProbe: (executionTargetId: string, command: string) => Promise<string>;
   readonly pool: RemoteAgentHealthDependencies["pool"] & {
     readonly close: (executionTargetId: string) => void;
@@ -170,23 +209,44 @@ interface RemoteAgentServerServicesDependencies {
 
 export function makeRemoteAgentServerServices(
   dependencies: RemoteAgentServerServicesDependencies,
-): { readonly health: RemoteAgentHealth; readonly installer: RemoteAgentInstaller } {
-  const installManager = dependencies.installManager ?? makeRemoteAgentInstallManager();
+): {
+  readonly health: RemoteAgentHealth;
+  readonly installer: RemoteAgentInstaller;
+  readonly updateCoordinator: RemoteAgentUpdateCoordinatorShape;
+} {
+  const installManager =
+    dependencies.installManager ??
+    makeRemoteAgentInstallManager(
+      dependencies.beginRetirement ? { beginRetirement: dependencies.beginRetirement } : {},
+    );
   const loadInstallSource = (
     dependencies.resolveInstallSourceLoader ?? (() => loadProcessScopedRemoteAgentInstallSource)
   )();
+  const health = makeRemoteAgentHealth({
+    ...(dependencies.binaryPath === "$HOME/.bigbud/agent/bin/current" &&
+    !dependencies.installManager
+      ? {
+          managedBinding: remoteAgentAdmission.resolveBinding,
+          managedSummary: remoteAgentAdmission.status,
+        }
+      : {}),
+    binaryPath: dependencies.binaryPath,
+    loadInstallSource,
+    resolveArtifact: installManager.resolveArtifact,
+    pool: dependencies.pool,
+    runIdentityProbe: dependencies.runIdentityProbe,
+  });
+  const installer = makeRemoteAgentInstaller({
+    installManager,
+    loadInstallSource,
+    pool: dependencies.pool,
+  });
   return {
-    health: makeRemoteAgentHealth({
-      binaryPath: dependencies.binaryPath,
-      loadInstallSource,
-      resolveArtifact: installManager.resolveArtifact,
-      pool: dependencies.pool,
-      runIdentityProbe: dependencies.runIdentityProbe,
-    }),
-    installer: makeRemoteAgentInstaller({
+    health,
+    installer,
+    updateCoordinator: makeRemoteAgentUpdateCoordinator({
       installManager,
       loadInstallSource,
-      pool: dependencies.pool,
     }),
   };
 }
@@ -200,7 +260,10 @@ export function makeConfiguredRemoteAgentLayers() {
   const composition = getConfiguredRemoteAgentComposition();
   if (!composition) {
     return {
-      services: Layer.succeed(RemoteAgentGitExecutorService, makeSshGitExecutor()),
+      services: Layer.merge(
+        Layer.succeed(RemoteAgentGitExecutorService, makeSshGitExecutor()),
+        Layer.succeed(RemoteAgentGitOwnership, "external"),
+      ),
       workspace: WorkspaceRuntimeLayerLive,
       ptyResolver: undefined as RemoteAgentPtyResolver | undefined,
       health: undefined as RemoteAgentHealth | undefined,
@@ -208,9 +271,11 @@ export function makeConfiguredRemoteAgentLayers() {
     };
   }
 
-  const { health, installer } = makeRemoteAgentServerServices({
+  const { health, installer, updateCoordinator } = makeRemoteAgentServerServices({
     binaryPath: configuration.binaryPath!,
     pool: composition.pool,
+    beginRetirement: (executionTargetId, generation) =>
+      composition.pool.beginRetirement(executionTargetId, generation),
     runIdentityProbe: async (executionTargetId, command) => {
       const presence = await runSshCommand({
         executionTargetId,
@@ -224,11 +289,14 @@ export function makeConfiguredRemoteAgentLayers() {
     },
   });
   const services = Layer.mergeAll(
+    composition.managed ? RemoteAgentRuntimeBindingsLive : Layer.empty,
+    Layer.succeed(RemoteAgentGitOwnership, composition.managed ? "managed" : "external"),
     Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),
     Layer.succeed(RemoteAgentGitExecutorService, composition.gitExecutor),
     Layer.succeed(RemoteAgentShellRunner, composition.shellRunner),
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
+    Layer.succeed(RemoteAgentUpdateCoordinator, updateCoordinator),
   );
   return {
     services,
@@ -237,6 +305,7 @@ export function makeConfiguredRemoteAgentLayers() {
     ),
     ptyResolver: composition.ptyResolver,
     health,
+    updateCoordinator,
     enabled: true,
   };
 }
@@ -247,7 +316,10 @@ export function makeRemoteAgentInstaller(input: {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
       readonly signal?: AbortSignal;
-    }) => Promise<{ readonly artifact: { readonly version: string } }>;
+    }) => Promise<{
+      readonly artifact: { readonly version: string };
+      readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
+    }>;
   };
   readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
   readonly pool: { readonly close: (executionTargetId: string) => void };
@@ -259,8 +331,10 @@ export function makeRemoteAgentInstaller(input: {
         source: await input.loadInstallSource(signal),
         ...(signal ? { signal } : {}),
       });
-      input.pool.close(executionTargetId);
-      return { version: result.artifact.version };
+      return {
+        version: result.artifact.version,
+        ...(result.runtimeSummary ? { runtimeSummary: result.runtimeSummary } : {}),
+      };
     },
   };
 }

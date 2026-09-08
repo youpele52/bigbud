@@ -190,6 +190,8 @@ export class ProjectReadFilePreviewError extends Schema.TaggedErrorClass<Project
 
 export const ProjectWriteFileInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
+  /** Stable caller identity reused when an ambiguous write is retried. */
+  operationId: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,

@@ -8,16 +8,21 @@ import {
   type RemoteAgentArtifactTrustStore,
   type RemoteAgentTargetTriple,
 } from "./remoteAgentArtifact.ts";
+import { installRemoteAgentArtifact, type RemoteAgentInstallPaths } from "./remoteAgentInstall.ts";
+import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import {
-  buildRemoteAgentCandidateCheckScript,
-  installRemoteAgentArtifact,
-  type RemoteAgentInstallPaths,
-} from "./remoteAgentInstall.ts";
-import { runRemoteAgentActivationTransaction } from "./remoteAgentInstall.transaction.ts";
+  RemoteAgentStageDefinitiveError,
+  stageRemoteAgentBuild,
+} from "./remoteAgentInstall.stage.ts";
+import { cleanupRemoteAgentBuilds } from "./remoteAgentInstall.cleanup.ts";
+import { prepareRemoteAgentPredecessorRetirement } from "./remoteAgentInstall.retirement.ts";
+import { remoteAgentRuntimeSummary } from "./remoteAgentStatus.ts";
+import { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.ts";
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 import { downloadRemoteAgentArtifact } from "./remoteAgentArtifactDownload.ts";
+import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 
 export class RemoteAgentInstallManagerError extends Error {
   readonly _tag = "RemoteAgentInstallManagerError";
@@ -35,6 +40,8 @@ export interface RemoteAgentInstallSource {
 }
 
 export interface RemoteAgentInstallResult {
+  readonly runtimeSummary: ReturnType<typeof remoteAgentRuntimeSummary>;
+  readonly status: "staged";
   readonly platform: RemoteAgentPlatformInfo;
   readonly targetTriple: RemoteAgentTargetTriple;
   readonly artifact: RemoteAgentArtifact;
@@ -56,6 +63,7 @@ function remoteCommandStdout(result: unknown): string {
 }
 
 interface RemoteAgentInstallManagerDependencies {
+  readonly openControl: (executionTargetId: string) => Promise<RemoteAgentControl>;
   readonly probePlatform: (executionTargetId: string) => Promise<RemoteAgentPlatformInfo>;
   readonly readArtifactBytes: (
     artifact: RemoteAgentArtifact,
@@ -68,21 +76,27 @@ interface RemoteAgentInstallManagerDependencies {
     readonly bytes: Uint8Array;
     readonly trustStore: RemoteAgentArtifactTrustStore;
     readonly skipSignatureVerification?: boolean;
+    readonly reservationId?: string;
   }) => Promise<RemoteAgentInstallPaths>;
   readonly runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>;
   readonly verifyInstalledAgent: (input: {
+    readonly binaryPath: string;
+    readonly targetTriple: RemoteAgentTargetTriple;
     readonly executionTargetId: string;
     readonly version: string;
     readonly buildDigest: string;
     readonly protocolMajor: number;
     readonly protocolMinor: number;
   }) => Promise<void>;
+  readonly beginRetirement?: (executionTargetId: string, generation: string) => Promise<() => void>;
+  readonly referencedBuildIds?: (executionTargetId: string) => Promise<ReadonlySet<string>>;
 }
 
 function defaultDependencies(
   runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>,
 ): RemoteAgentInstallManagerDependencies {
   return {
+    openControl: (executionTargetId) => openRemoteAgentControl(executionTargetId, runRemoteCommand),
     probePlatform: probeRemoteAgentPlatform,
     readArtifactBytes: (artifact, signal) =>
       downloadRemoteAgentArtifact(artifact, signal ? { signal } : {}),
@@ -92,15 +106,28 @@ function defaultDependencies(
       const result = await runRemoteCommand({
         executionTargetId: input.executionTargetId,
         command: "sh",
-        args: ["-lc", buildRemoteAgentCandidateCheckScript()],
+        args: ["-lc", buildRemoteAgentIdentityProbeCommand(input.binaryPath)],
         timeoutMs: 30_000,
         maxBufferBytes: 64 * 1024,
         outputMode: "error",
       });
-      const stdout = remoteCommandStdout(result);
-      if (!remoteAgentIdentityMatches(parseRemoteAgentCheckOutput(stdout), input)) {
-        throw new RemoteAgentInstallManagerError(
-          "Installed remote agent candidate returned an invalid handshake.",
+      try {
+        const stdout = remoteCommandStdout(result);
+        const identity = parseRemoteAgentCheckOutput(stdout);
+        const architecture = input.targetTriple.startsWith("aarch64") ? "aarch64" : "x86_64";
+        if (
+          !remoteAgentIdentityMatches(identity, input) ||
+          identity.operatingSystem !== "linux" ||
+          identity.architecture !== architecture
+        ) {
+          throw new RemoteAgentInstallManagerError(
+            "Installed remote agent candidate returned an invalid handshake.",
+          );
+        }
+      } catch (cause) {
+        throw new RemoteAgentStageDefinitiveError(
+          "Installed remote agent candidate returned an invalid check.",
+          { cause },
         );
       }
     },
@@ -155,6 +182,17 @@ export function makeRemoteAgentInstallManager(
 
   return {
     resolveArtifact,
+    cleanup: async (executionTargetId: string) => {
+      const control = await dependencies.openControl(executionTargetId);
+      let referencedBuildIds: (() => Promise<ReadonlySet<string>>) | undefined;
+      try {
+        const owners = remoteAgentOwners();
+        referencedBuildIds = () => owners.referencedBuildIds(executionTargetId);
+      } catch {
+        // Standalone install-manager tests and pre-persistence bootstrap have no local owner store.
+      }
+      return cleanupRemoteAgentBuilds(control, referencedBuildIds, executionTargetId);
+    },
     install: (input: {
       readonly executionTargetId: string;
       readonly source: RemoteAgentInstallSource;
@@ -173,35 +211,70 @@ export function makeRemoteAgentInstallManager(
         if (input.signal?.aborted) {
           throw input.signal.reason ?? new DOMException("caller", "AbortError");
         }
-        const paths = await dependencies.installArtifact({
-          executionTargetId: input.executionTargetId,
+        const control = await dependencies.openControl(input.executionTargetId);
+        const paths = await stageRemoteAgentBuild({
+          control,
           artifact,
-          targetTriple,
-          bytes,
-          trustStore: input.source.trustStore,
-          ...(input.source.allowUntrustedDevelopmentArtifact
-            ? { skipSignatureVerification: true }
-            : {}),
+          authenticated: !input.source.allowUntrustedDevelopmentArtifact,
+          ...(input.signal ? { signal: input.signal } : {}),
+          prepareCapacity: async (capacity) => {
+            let referencedBuildIds: (() => Promise<ReadonlySet<string>>) | undefined;
+            if (dependencies.referencedBuildIds) {
+              referencedBuildIds = () => dependencies.referencedBuildIds!(input.executionTargetId);
+            } else {
+              try {
+                const owners = remoteAgentOwners();
+                referencedBuildIds = () => owners.referencedBuildIds(input.executionTargetId);
+              } catch {
+                // Capacity reclamation requires durable local owner evidence.
+              }
+            }
+            return prepareRemoteAgentPredecessorRetirement({
+              target: input.executionTargetId,
+              control: capacity.control,
+              build: capacity.build,
+              inventory: capacity.inventory,
+              ...(referencedBuildIds ? { referencedBuildIds } : {}),
+              ...(dependencies.beginRetirement
+                ? {
+                    beginRetirement: (generation) =>
+                      dependencies.beginRetirement!(input.executionTargetId, generation),
+                  }
+                : {}),
+            });
+          },
+          installAndCheck: async (binaryPath, reservationId) => {
+            const installed = await dependencies.installArtifact({
+              executionTargetId: input.executionTargetId,
+              artifact,
+              targetTriple,
+              bytes,
+              trustStore: input.source.trustStore,
+              ...(input.source.allowUntrustedDevelopmentArtifact
+                ? { skipSignatureVerification: true }
+                : {}),
+              reservationId,
+            });
+            await dependencies.verifyInstalledAgent({
+              executionTargetId: input.executionTargetId,
+              binaryPath,
+              targetTriple,
+              version: artifact.version,
+              buildDigest: artifact.buildDigest,
+              protocolMajor: artifact.protocolMajor,
+              protocolMinor: artifact.protocolMinor,
+            });
+            return installed;
+          },
         });
-        try {
-          await runRemoteAgentActivationTransaction({
-            executionTargetId: input.executionTargetId,
-            artifact,
-            paths,
-            runRemoteCommand: dependencies.runRemoteCommand,
-            verifyInstalledAgent: dependencies.verifyInstalledAgent,
-          });
-        } catch (error) {
-          throw new RemoteAgentInstallManagerError(
-            error instanceof Error ? error.message : String(error),
-          );
-        }
         return {
+          runtimeSummary: remoteAgentRuntimeSummary(await control.registry.read()),
+          status: "staged",
           platform,
           targetTriple,
           artifact,
           paths,
-          binaryPath: paths.activeLink,
+          binaryPath: paths.installedBinary,
         };
       }),
   };

@@ -12,7 +12,6 @@ import {
   stopProcessWith,
 } from "./Manager.process-drain";
 import {
-  cleanupProcessHandles,
   clearKillFiberWith,
   enqueueProcessEvent,
   registerKillFiberWith,
@@ -22,6 +21,7 @@ import {
 } from "./Manager.process-lifecycle";
 import { buildSessionApi } from "./Manager.session";
 import { makeTerminalPersistence } from "./Manager.process.persistence.ts";
+import { cleanupTerminalSessions } from "./Manager.process.shutdown.ts";
 import {
   DEFAULT_HISTORY_LINE_LIMIT,
   DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS,
@@ -202,11 +202,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       yield* ptyOutputWorker.drainKey(toSessionKey(threadId, terminalId));
     });
 
-    const { readHistory, deleteHistory, deleteAllHistoryForThread } = makeHistoryAccessors({
-      logsDir,
-      historyLineLimit,
-      fileSystem,
-    });
+    const { readHistory, historyExists, deleteHistory, deleteAllHistoryForThread } =
+      makeHistoryAccessors({
+        logsDir,
+        historyLineLimit,
+        fileSystem,
+      });
     const assertValidCwd = makeAssertValidCwd(fileSystem);
 
     const evictInactiveSessionsIfNeeded = Effect.fn("terminal.evictInactiveSessionsIfNeeded")(
@@ -344,27 +345,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             ] as const,
         );
 
-        const cleanupSession = Effect.fn("terminal.cleanupSession")(function* (
-          session: TerminalSessionState,
-        ) {
-          cleanupProcessHandles(session);
-          if (!session.process) return;
-          yield* clearKillFiber(session.process);
-          yield* runKillEscalationWith(
-            processKillGraceMs,
-            session.process,
-            session.threadId,
-            session.terminalId,
-          );
-          yield* releaseWorktreeLease({
-            threadId: session.threadId,
-            terminalId: session.terminalId,
-          });
-        });
-
-        yield* Effect.forEach(sessions, cleanupSession, {
-          concurrency: "unbounded",
-          discard: true,
+        yield* cleanupTerminalSessions({
+          sessions,
+          processKillGraceMs,
+          clearKillFiber,
+          releaseWorktreeLease,
         });
       }).pipe(Effect.ignoreCause({ log: true })),
     );
@@ -382,6 +367,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       persistHistory,
       flushPersist,
       readHistory,
+      historyExists,
       deleteHistory,
       deleteAllHistoryForThread,
       evictInactiveSessionsIfNeeded,

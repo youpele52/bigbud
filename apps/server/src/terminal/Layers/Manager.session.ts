@@ -2,7 +2,7 @@ import { DEFAULT_TERMINAL_ID, resolveExecutionTargetId } from "@bigbud/contracts
 import { Effect, Equal, Option } from "effect";
 
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
-import { TerminalNotRunningError } from "../Services/Manager";
+import { makeTerminalSessionControls } from "./Manager.session.controls.ts";
 import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
 import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state.ts";
@@ -72,6 +72,10 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           });
 
           const createdSession = session;
+          session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
+            input.threadId,
+            terminalId,
+          );
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
             sessions.set(sessionKey, createdSession);
@@ -185,29 +189,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       }),
     );
 
-  const write: TerminalManagerShape["write"] = Effect.fn("terminal.write")(function* (input) {
-    const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-    const session = yield* requireSession(input.threadId, terminalId);
-    const proc = session.process;
-    if (!proc || session.status !== "running") {
-      if (session.status === "exited") return;
-      return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
-    }
-    yield* Effect.sync(() => proc.write(input.data));
-  });
-
-  const resize: TerminalManagerShape["resize"] = Effect.fn("terminal.resize")(function* (input) {
-    const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-    const session = yield* requireSession(input.threadId, terminalId);
-    const proc = session.process;
-    if (!proc || session.status !== "running") {
-      return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
-    }
-    session.cols = input.cols;
-    session.rows = input.rows;
-    session.updatedAt = new Date().toISOString();
-    yield* Effect.sync(() => proc.resize(input.cols, input.rows));
-  });
+  const { write, resize } = makeTerminalSessionControls(requireSession);
 
   const clear: TerminalManagerShape["clear"] = (input) =>
     withThreadLock(
@@ -261,6 +243,10 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             runtimeEnv: normalizedRuntimeEnv(input.env),
           });
           const createdSession = session;
+          session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
+            input.threadId,
+            terminalId,
+          );
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
             sessions.set(sessionKey, createdSession);

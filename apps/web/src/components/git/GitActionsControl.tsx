@@ -21,6 +21,7 @@ import {
   gitInitMutationOptions,
   gitMutationKeys,
   gitPullMutationOptions,
+  createGitMutationOperationId,
   gitStatusQueryOptions,
 } from "~/lib/gitReactQuery";
 import { openGitPanelToView } from "~/stores/git/gitPanel.coordinator";
@@ -158,7 +159,9 @@ export default function GitActionsControl({
   );
 
   const runPull = useCallback(() => {
-    const promise = pullMutation.mutateAsync();
+    const promise = pullMutation.mutateAsync({
+      operationId: createGitMutationOperationId(),
+    });
     toastManager.promise(promise, {
       loading: { title: "Pulling...", data: threadToastData },
       success: (result) => ({
@@ -179,7 +182,9 @@ export default function GitActionsControl({
   }, [pullMutation, threadToastData]);
 
   const runFetch = useCallback(() => {
-    const promise = fetchMutation.mutateAsync();
+    const promise = fetchMutation.mutateAsync({
+      operationId: createGitMutationOperationId(),
+    });
     toastManager.promise(promise, {
       loading: { title: "Fetching...", data: threadToastData },
       success: () => ({
@@ -197,7 +202,9 @@ export default function GitActionsControl({
   }, [fetchMutation, threadToastData]);
 
   const runDiscard = useCallback(() => {
-    const promise = discardMutation.mutateAsync();
+    const promise = discardMutation.mutateAsync({
+      operationId: createGitMutationOperationId(),
+    });
     toastManager.promise(promise, {
       loading: { title: "Discarding changes...", data: threadToastData },
       success: () => ({
@@ -276,7 +283,7 @@ export default function GitActionsControl({
       if (item.disabled) return;
 
       if (item.id === "initialize_git") {
-        initMutation.mutate();
+        initMutation.mutate({ operationId: createGitMutationOperationId() });
         return;
       }
 

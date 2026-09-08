@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
+import {
+  remoteAgentCancelEvidence,
+  remoteAgentProcessTerminalEvidence,
+} from "./remoteAgentTerminalEvidence.ts";
 import type {
   RemoteAgentCancelResponse,
   RemoteAgentProcessCompleted,
@@ -34,6 +38,7 @@ export class RemoteAgentProcessError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly outcome: "unknown" | "terminal" | "rejected" = "unknown",
   ) {
     super(message);
     this.name = "RemoteAgentProcessError";
@@ -53,15 +58,21 @@ function append(chunks: Uint8Array[], bytes: Uint8Array): Uint8Array {
 }
 
 function errorFromCompleted(completed: RemoteAgentProcessCompleted): Error | null {
+  if (remoteAgentProcessTerminalEvidence(completed) !== "verified-terminal")
+    return new RemoteAgentProcessError(
+      "PROCESS_OUTCOME_UNKNOWN",
+      "Remote process history expired without a verified execution outcome.",
+    );
   return completed.errorCode && completed.errorCode !== "NONZERO_EXIT"
-    ? new RemoteAgentProcessError(completed.errorCode, completed.errorMessage)
+    ? new RemoteAgentProcessError(completed.errorCode, completed.errorMessage, "terminal")
     : null;
 }
 
 function isUnknownOperationError(cause: unknown): boolean {
   return (
-    cause instanceof RemoteAgentConnectionError &&
-    cause.message.includes("operation is unknown or expired")
+    (cause instanceof RemoteAgentProcessError && cause.code === "PROCESS_OUTCOME_UNKNOWN") ||
+    (cause instanceof RemoteAgentConnectionError &&
+      cause.message.includes("operation is unknown or expired"))
   );
 }
 
@@ -93,7 +104,14 @@ export class RemoteAgentProcessClient {
     readonly requestId?: string;
   }): Promise<RemoteAgentCancelResponse> {
     const response = await this.cancel(input);
-    if (response.terminal) return response;
+    const evidence = remoteAgentCancelEvidence(response);
+    if (evidence === "verified-terminal") return response;
+    if (evidence === "outcome-unknown" || evidence === "control-rejected") {
+      throw new RemoteAgentProcessError(
+        evidence === "outcome-unknown" ? "PROCESS_OUTCOME_UNKNOWN" : "PROCESS_CANCEL_REJECTED",
+        "Remote cancellation did not establish a terminal operation outcome.",
+      );
+    }
 
     const active = this.activeResults.get(input.operationId);
     if (active) {
@@ -107,18 +125,21 @@ export class RemoteAgentProcessClient {
       return { ...response, terminal: true, detail: "cancellation-terminal" };
     }
 
-    await this.attach({ operationId: input.operationId });
+    try {
+      await this.attach({ operationId: input.operationId });
+    } catch (cause) {
+      if (!(cause instanceof RemoteAgentProcessError) || cause.outcome !== "terminal") throw cause;
+    }
     return { ...response, terminal: true, detail: "cancellation-terminal" };
   }
 
   async run(input: RemoteAgentProcessRunInput): Promise<RemoteAgentProcessResult> {
-    return this.requestProcess(input, input.requestId ?? randomUUID(), true);
+    return this.requestProcess(input, input.requestId ?? randomUUID());
   }
 
   private async requestProcess(
     input: RemoteAgentProcessRunInput,
     requestId: string,
-    allowResubmit: boolean,
   ): Promise<RemoteAgentProcessResult> {
     let accepted: Extract<
       Awaited<ReturnType<RemoteAgentConnection["nextFrame"]>>,
@@ -150,17 +171,18 @@ export class RemoteAgentProcessClient {
         return await replacement.attach({ operationId: input.operationId });
       } catch (attachCause) {
         if (!isUnknownOperationError(attachCause)) throw attachCause;
-        if (!allowResubmit) {
-          throw new RemoteAgentProcessError(
-            "PROCESS_OUTCOME_UNKNOWN",
-            `Remote process ${input.operationId} has no retained acceptance record after resubmission.`,
-          );
-        }
-        return replacement.requestProcess(input, `${requestId}:retry`, false);
+        throw new RemoteAgentProcessError(
+          "PROCESS_OUTCOME_UNKNOWN",
+          "Remote process acceptance is unknown; missing or expired history does not authorize replay.",
+        );
       }
     }
     if (!accepted.value.accepted) {
-      throw new RemoteAgentProcessError(accepted.value.errorCode, accepted.value.errorMessage);
+      throw new RemoteAgentProcessError(
+        accepted.value.errorCode,
+        accepted.value.errorMessage,
+        "rejected",
+      );
     }
     return this.trackResult(
       input.operationId,
@@ -240,6 +262,15 @@ export class RemoteAgentProcessClient {
         });
       }
       if (frame.type === "protocolError") {
+        if (
+          frame.value.code === "PROCESS_REPLAY_ERROR" &&
+          frame.value.message.includes("operation is unknown or expired")
+        ) {
+          throw new RemoteAgentProcessError(
+            "PROCESS_OUTCOME_UNKNOWN",
+            "Remote process history is missing or expired; the operation was not replayed.",
+          );
+        }
         throw new RemoteAgentConnectionError(`${frame.value.code}: ${frame.value.message}`);
       }
       if (frame.type === "processOutput") {
@@ -288,6 +319,12 @@ export class RemoteAgentProcessClient {
       }
       if (frame.type === "processAttachResponse") {
         if (frame.value.operationId !== operationId) continue;
+        if (frame.value.firstRetainedSequence > nextSequence) {
+          throw new RemoteAgentProcessError(
+            "PROCESS_OUTPUT_GAP",
+            "Remote process output was acknowledged or expired without recoverable local bytes.",
+          );
+        }
         continue;
       }
       if (frame.type !== "processCompleted" || frame.value.operationId !== operationId) continue;

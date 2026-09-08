@@ -56,6 +56,7 @@ describe("remote workspace thread tool", () => {
       runRemoteWorkspaceProcess({
         callerThreadId: threadId,
         request: {
+          remoteInvocationId: "provider-call-1",
           remoteCommand: "git",
           remoteArgs: ["status", "--short"],
           remoteTimeoutMs: 5_000,
@@ -73,6 +74,7 @@ describe("remote workspace thread tool", () => {
 
     expect(result.stdout).toBe("ok\n");
     expect(runToolCommand).toHaveBeenCalledWith({
+      invocationId: expect.stringMatching(/^[a-f0-9]{64}$/),
       target: {
         transport: "agent",
         executionTargetId: "ssh:host=devbox&user=root&port=22",
@@ -92,7 +94,7 @@ describe("remote workspace thread tool", () => {
       Effect.result(
         runRemoteWorkspaceProcess({
           callerThreadId: threadId,
-          request: { remoteCommand: "pwd" },
+          request: { remoteCommand: "pwd", remoteInvocationId: "provider-call-2" },
         }).pipe(
           Effect.provide(
             engineLayer({ executionTargetId: "local", workspaceRoot: "/tmp/project" }),

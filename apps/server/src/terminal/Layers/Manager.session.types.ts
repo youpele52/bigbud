@@ -41,6 +41,7 @@ export interface SessionApiContext {
   persistHistory: (threadId: string, terminalId: string, history: string) => Effect.Effect<void>;
   flushPersist: (threadId: string, terminalId: string) => Effect.Effect<void>;
   readHistory: (threadId: string, terminalId: string) => Effect.Effect<string>;
+  historyExists: (threadId: string, terminalId: string) => Effect.Effect<boolean>;
   deleteHistory: (threadId: string, terminalId: string) => Effect.Effect<void>;
   deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;

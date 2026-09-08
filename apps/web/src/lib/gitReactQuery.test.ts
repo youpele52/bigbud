@@ -1,11 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../nativeApi", () => ({
+vi.mock("../rpc/nativeApi", () => ({
   ensureNativeApi: vi.fn(),
 }));
 
-vi.mock("../wsRpcClient", () => ({
+vi.mock("../rpc/wsRpcClient", () => ({
   getWsRpcClient: vi.fn(),
 }));
 
@@ -13,6 +13,7 @@ import type { InfiniteData } from "@tanstack/react-query";
 import type { GitListBranchesResult, GitListCommitsResult } from "@bigbud/contracts";
 
 import {
+  createGitMutationOperationId,
   gitBranchSearchInfiniteQueryOptions,
   gitListCommitsInfiniteQueryOptions,
   gitMutationKeys,
@@ -24,6 +25,7 @@ import {
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "./gitReactQuery";
+import { ensureNativeApi } from "../rpc/nativeApi";
 
 const BRANCH_QUERY_RESULT: GitListBranchesResult = {
   branches: [],
@@ -83,6 +85,29 @@ describe("git mutation options", () => {
       queryClient,
     });
     expect(options.mutationKey).toEqual(gitMutationKeys.preparePullRequestThread("/repo/a"));
+  });
+
+  it("reuses one operation id when a pull response is lost and the mutation retries", async () => {
+    const pull = vi.fn().mockRejectedValueOnce(new Error("response lost")).mockResolvedValue({
+      status: "skipped_up_to_date",
+      branch: "main",
+      upstreamBranch: "origin/main",
+    });
+    const api = { git: { pull } } as unknown as ReturnType<typeof ensureNativeApi>;
+    vi.mocked(ensureNativeApi).mockReturnValue(api);
+    const options = gitPullMutationOptions({ cwd: "/repo/a", queryClient });
+    if (!options.mutationFn) throw new Error("Expected a Git pull mutation function.");
+    const variables = { operationId: "git-retry-1" };
+    const mutationContext = {} as Parameters<NonNullable<typeof options.mutationFn>>[1];
+
+    await expect(options.mutationFn(variables, mutationContext)).rejects.toThrow("response lost");
+    await expect(options.mutationFn(variables, mutationContext)).resolves.toMatchObject({
+      status: "skipped_up_to_date",
+    });
+
+    expect(pull).toHaveBeenNthCalledWith(1, expect.objectContaining(variables));
+    expect(pull).toHaveBeenNthCalledWith(2, expect.objectContaining(variables));
+    expect(createGitMutationOperationId()).not.toBe(createGitMutationOperationId());
   });
 });
 

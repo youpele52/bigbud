@@ -161,6 +161,12 @@ export interface NativeApi {
     installRemoteAgent: (
       input: Server.ServerInstallRemoteAgentInput,
     ) => Promise<Server.ServerInstallRemoteAgentResult>;
+    connectRemoteAgent: (
+      input: Server.ServerConnectRemoteAgentInput,
+    ) => Promise<Server.ServerConnectRemoteAgentResult>;
+    getRemoteAgentUpdateStatus: (
+      input: Server.ServerGetRemoteAgentUpdateStatusInput,
+    ) => Promise<Server.ServerRemoteAgentUpdateStatus>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;

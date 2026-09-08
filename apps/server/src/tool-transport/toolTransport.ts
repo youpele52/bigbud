@@ -19,6 +19,7 @@ export interface ToolTransportTarget {
 }
 
 export interface RunToolCommandInput {
+  readonly invocationId?: string;
   readonly target: ToolTransportTarget;
   readonly command: string;
   readonly args?: ReadonlyArray<string>;
@@ -68,6 +69,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
       throw new Error("Remote agent transport requires an explicit workspace root.");
     }
     return composition.toolRunner({
+      ...(input.invocationId !== undefined ? { invocationId: input.invocationId } : {}),
       executionTargetId: input.target.executionTargetId,
       cwd: input.target.cwd,
       command: input.command,

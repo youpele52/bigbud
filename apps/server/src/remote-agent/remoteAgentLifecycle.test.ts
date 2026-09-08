@@ -35,8 +35,10 @@ describe("remote agent lifecycle", () => {
     expect(lifecycle.supportsCapability("workspace.files")).toBe(false);
     lifecycle.markTransportLoss();
     expect(lifecycle.snapshot.state).toBe("reconnecting");
-    expect(lifecycle.canFallback(false)).toBe(true);
-    expect(lifecycle.canFallback(true)).toBe(false);
+    expect(lifecycle.canFallback("unadmitted")).toBe(true);
+    expect(lifecycle.canFallback("accepted")).toBe(false);
+    expect(lifecycle.canFallback("may-have-been-sent")).toBe(false);
+    expect(lifecycle.canFallback("not-dispatched")).toBe(false);
   });
 
   it("degrades when a reconnect sees a new agent epoch", async () => {
@@ -48,5 +50,8 @@ describe("remote agent lifecycle", () => {
     epoch = "2";
     await expect(lifecycle.connect({ reconnect: true })).rejects.toThrow("epoch changed");
     expect(lifecycle.snapshot.state).toBe("degraded");
+    expect(lifecycle.snapshot.agentEpoch).toBe("1");
+    await expect(lifecycle.connect({ reconnect: true })).rejects.toThrow("epoch changed");
+    expect(lifecycle.snapshot.agentEpoch).toBe("1");
   });
 });

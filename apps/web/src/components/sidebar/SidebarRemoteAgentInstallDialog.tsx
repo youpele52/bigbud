@@ -4,6 +4,11 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
 import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.projectAddActions.remote.types";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+import {
+  completeRemoteAgentAdmission,
+  getRemoteAgentAdmissionRequestId,
+} from "../../stores/remoteAccess/remoteAgentAdmissionRequest";
 
 interface SidebarRemoteAgentInstallDialogProps {
   readonly request: SidebarRemoteAgentInstallRequest | null;
@@ -18,9 +23,13 @@ export function SidebarRemoteAgentInstallDialog({
 }: SidebarRemoteAgentInstallDialogProps) {
   const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stagedMessage, setStagedMessage] = useState<string | null>(null);
+  const [connectionRequestId, setConnectionRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
+    setStagedMessage(null);
+    setConnectionRequestId(null);
   }, [request]);
 
   const install = async () => {
@@ -33,10 +42,29 @@ export function SidebarRemoteAgentInstallDialog({
     setIsInstalling(true);
     setError(null);
     try {
+      if (stagedMessage) {
+        const admissionRequestId =
+          connectionRequestId ?? getRemoteAgentAdmissionRequestId(request.executionTargetId);
+        setConnectionRequestId(admissionRequestId);
+        const connected = await api.server.connectRemoteAgent({
+          executionTargetId: request.executionTargetId,
+          requestId: admissionRequestId,
+          intent: "fresh",
+        });
+        useRemoteAccessStore
+          .getState()
+          .recordRemoteConnection(request.executionTargetId, connected);
+        completeRemoteAgentAdmission(request.executionTargetId, admissionRequestId);
+        setConnectionRequestId(null);
+        await onInstalled(
+          `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`,
+        );
+        return;
+      }
       const result = await api.server.installRemoteAgent({
         executionTargetId: request.executionTargetId,
       });
-      await onInstalled(result.message);
+      setStagedMessage(result.message);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Failed to install the remote agent.");
     } finally {
@@ -54,38 +82,17 @@ export function SidebarRemoteAgentInstallDialog({
       <AlertDialogPopup className="max-w-md p-0" bottomStickOnMobile={false}>
         {request ? (
           <ConfirmationPanel
-            title={
-              request.kind === "upgrade"
-                ? "Upgrade the bigbud remote agent?"
-                : "Install the bigbud remote agent?"
-            }
+            title={stagedMessage ? "Remote agent update staged" : "Download remote agent update"}
             description=""
             descriptionSlot={
               <div className="space-y-2">
                 <p>
-                  {request.kind === "upgrade" ? (
-                    <>
-                      {request.currentVersion === request.targetVersion ? (
-                        <>
-                          bigbud needs to replace the current remote agent build for{" "}
-                          <strong>{request.targetLabel}</strong> before this remote project can be
-                          used.
-                        </>
-                      ) : (
-                        <>
-                          bigbud needs to upgrade its remote agent for{" "}
-                          <strong>{request.targetLabel}</strong> from {request.currentVersion} to{" "}
-                          {request.targetVersion} before this remote project can be used.
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      bigbud needs to install its remote agent for{" "}
-                      <strong>{request.targetLabel}</strong> before this remote project can be
-                      created or updated.
-                    </>
-                  )}
+                  {stagedMessage ??
+                    `Download a verified agent for ${request.targetLabel}. Existing connections remain on their current runtime.`}
+                </p>
+                <p>
+                  The update starts only when you choose Connect new session. Reloads, reconnects
+                  and retries do not activate it.
                 </p>
                 <p>
                   The agent is installed under <code>~/.bigbud/agent</code>, runs with your SSH user
@@ -98,19 +105,15 @@ export function SidebarRemoteAgentInstallDialog({
                 {error ? <p className="text-destructive">{error}</p> : null}
               </div>
             }
-            cancelLabel="No, cancel setup"
+            cancelLabel={stagedMessage ? "Later" : "Cancel"}
             confirmLabel={
               isInstalling
-                ? request.kind === "upgrade"
-                  ? "Upgrading..."
-                  : "Installing..."
-                : error
-                  ? request.kind === "upgrade"
-                    ? "Retry upgrade"
-                    : "Retry installation"
-                  : request.kind === "upgrade"
-                    ? "Yes, upgrade agent"
-                    : "Yes, install agent"
+                ? stagedMessage
+                  ? "Connecting..."
+                  : "Downloading..."
+                : stagedMessage
+                  ? "Connect new session"
+                  : "Download update"
             }
             busy={isInstalling}
             onCancel={onDecline}

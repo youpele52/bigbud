@@ -4,6 +4,7 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  createGitMutationOperationId,
   gitPreparePullRequestThreadMutationOptions,
   gitResolvePullRequestQueryOptions,
 } from "~/lib/gitReactQuery";
@@ -136,6 +137,7 @@ export function PullRequestThreadDialog({
         const result = await preparePullRequestThreadMutation.mutateAsync({
           reference: parsedReference,
           mode,
+          operationId: createGitMutationOperationId(),
           ...(mode === "worktree" ? { threadId } : {}),
         });
         await onPrepared({

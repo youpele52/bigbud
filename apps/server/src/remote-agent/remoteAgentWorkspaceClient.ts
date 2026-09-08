@@ -13,6 +13,7 @@ import {
   type RemoteAgentWorkspaceWatchSubscription,
 } from "./remoteAgentWorkspaceWatchClient.ts";
 import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
+import type { RemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
 
 export class RemoteAgentWorkspaceError extends Error {
   readonly _tag = "RemoteAgentWorkspaceError";
@@ -45,7 +46,11 @@ function assertTerminalSuccess(response: {
 }
 
 export class RemoteAgentWorkspaceClient {
-  constructor(readonly connection: RemoteAgentConnection) {}
+  constructor(
+    readonly connection: RemoteAgentConnection,
+    readonly reconnect?: () => Promise<RemoteAgentWorkspaceClient>,
+    private readonly mutation?: RemoteAgentWorkspaceMutation,
+  ) {}
 
   async openWorkspace(
     workspaceHandle: string,
@@ -143,6 +148,7 @@ export class RemoteAgentWorkspaceClient {
     readonly requestId?: string;
   }): Promise<RemoteAgentWriteFileResponse> {
     const requestId = input.requestId ?? randomUUID();
+    await this.mutation?.prepare(input.operationId, input.requestDigest);
     try {
       const response = (await this.connection.request(
         {
@@ -151,10 +157,22 @@ export class RemoteAgentWorkspaceClient {
         },
         (frame) => frame.type === "writeFileResponse" && frame.value.requestId === requestId,
       )) as { readonly type: "writeFileResponse"; readonly value: RemoteAgentWriteFileResponse };
-      assertTerminalSuccess(response.value);
+      if (!response.value.terminal) {
+        await this.mutation?.unknown(input.operationId);
+        throw new RemoteAgentWorkspaceError(
+          "UNKNOWN_OUTCOME",
+          "Remote write outcome is not terminal.",
+        );
+      }
+      if (response.value.errorCode) {
+        await this.mutation?.terminal(input.operationId);
+        throw new RemoteAgentWorkspaceError(response.value.errorCode, response.value.errorMessage);
+      }
+      await this.mutation?.terminal(input.operationId);
       return response.value;
     } catch (cause) {
       if (cause instanceof RemoteAgentConnectionError) {
+        await this.mutation?.unknown(input.operationId);
         throw new RemoteAgentWorkspaceError(
           "UNKNOWN_OUTCOME",
           "The remote file write may have been accepted before the connection was lost; it was not retried.",

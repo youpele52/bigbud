@@ -5,7 +5,7 @@ import { Button } from "../../ui/button";
 import { ScrollArea } from "../../ui/scroll-area";
 import ChatMarkdown from "../common/ChatMarkdown";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisIcon, XIcon } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import type { ActivePlanState } from "../../../logic/session";
 import type { LatestProposedPlanState } from "../../../logic/session";
 import { formatTimestamp } from "../../../utils/timestamp";
@@ -96,6 +96,7 @@ const PlanSidebar = memo(function PlanSidebar({
     void api.projects
       .writeFile({
         cwd: workspaceRoot,
+        operationId: `workspace-write-${randomUUID()}`,
         ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
         relativePath: filename,
         contents: normalizePlanMarkdownForExport(planMarkdown),

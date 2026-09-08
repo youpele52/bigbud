@@ -11,6 +11,7 @@ import {
 import { Input } from "../ui/input";
 import type { RemoteProjectAuthMode, RemoteProjectDraft } from "./Sidebar.projects.logic";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import { remoteProjectAgentTarget, SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
 
 type RemoteProjectField =
   | "displayName"
@@ -97,6 +98,7 @@ export function SidebarRemoteProjectDialog({
   onSubmit,
 }: SidebarRemoteProjectDialogProps) {
   const isEditing = mode === "edit";
+  const agentTarget = isEditing ? remoteProjectAgentTarget(draft) : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl">
@@ -237,6 +239,9 @@ export function SidebarRemoteProjectDialog({
             <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-emerald-700 text-xs leading-4 dark:text-emerald-300">
               {verificationMessage}
             </div>
+          ) : null}
+          {agentTarget && open ? (
+            <SidebarRemoteAgentStatus executionTargetId={agentTarget} cwd={draft.workspaceRoot} />
           ) : null}
 
           {error ? (

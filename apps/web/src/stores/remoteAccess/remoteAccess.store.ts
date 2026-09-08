@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { type AppCheckStatus } from "../../lib/checkStatus";
+import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
 
 interface PendingRemoteAccessAction {
   readonly executionTargetId: string;
@@ -20,6 +21,8 @@ export interface RemoteExecutionCheckState {
 }
 
 interface RemoteAccessState {
+  remoteConnections: Record<string, ServerRemoteAgentRuntimeSummary>;
+  recordRemoteConnection: (target: string, summary: ServerRemoteAgentRuntimeSummary) => void;
   verifiedExecutionTargetIds: Record<string, true>;
   executionTargetChecks: Record<string, RemoteExecutionCheckState>;
   pendingAction: PendingRemoteAccessAction | null;
@@ -47,6 +50,9 @@ interface RemoteAccessState {
 }
 
 export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
+  remoteConnections: {},
+  recordRemoteConnection: (target, summary) =>
+    set((state) => ({ remoteConnections: { ...state.remoteConnections, [target]: summary } })),
   verifiedExecutionTargetIds: {},
   executionTargetChecks: {},
   pendingAction: null,

@@ -66,6 +66,8 @@ import {
   ServerExportThreadContextInput,
   ServerExportThreadContextResult,
   ServerInstallRemoteAgentError,
+  ServerConnectRemoteAgentInput,
+  ServerConnectRemoteAgentResult,
   ServerInstallRemoteAgentInput,
   ServerInstallRemoteAgentResult,
   ServerProviderUpdatedPayload,
@@ -137,6 +139,12 @@ export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerify
 export const WsServerInstallRemoteAgentRpc = Rpc.make(WS_METHODS.serverInstallRemoteAgent, {
   payload: ServerInstallRemoteAgentInput,
   success: ServerInstallRemoteAgentResult,
+  error: ServerInstallRemoteAgentError,
+});
+
+export const WsServerConnectRemoteAgentRpc = Rpc.make(WS_METHODS.serverConnectRemoteAgent, {
+  payload: ServerConnectRemoteAgentInput,
+  success: ServerConnectRemoteAgentResult,
   error: ServerInstallRemoteAgentError,
 });
 

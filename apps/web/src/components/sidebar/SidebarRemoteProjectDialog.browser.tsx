@@ -1,173 +1,16 @@
-import "../../index.css";
-
-import { ProjectId } from "@bigbud/contracts";
-import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 
-const nativeApi = vi.hoisted(() => ({ current: null as never }));
-
-vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => nativeApi.current }));
-vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
-  useParams: () => null,
-}));
-vi.mock("../../stores/main", () => ({ useStore: () => ({ threads: [] }) }));
-vi.mock("../../stores/ui", () => ({
-  useUiStateStore: (
-    selector: (state: {
-      reorderProjects: () => void;
-      setProjectExpanded: () => void;
-      setSelectedProject: () => void;
-      toggleProject: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      reorderProjects: vi.fn(),
-      setProjectExpanded: vi.fn(),
-      setSelectedProject: vi.fn(),
-      toggleProject: vi.fn(),
-    }),
-}));
-vi.mock("../../stores/remoteAccess/remoteAccess.store", () => ({
-  useRemoteAccessStore: () => new Set(),
-}));
-vi.mock("../../hooks/useRemoteExecutionAccessGate", () => ({
-  useRemoteExecutionAccessGate: () => ({ beginRemoteExecutionTargetAccessCheck: vi.fn() }),
-}));
-vi.mock("./Sidebar.projectActions.rename", () => ({
-  useSidebarProjectRenameActions: () => ({
-    renamingProjectId: null,
-    setRenamingProjectId: vi.fn(),
-    renamingProjectTitle: "",
-    setRenamingProjectTitle: vi.fn(),
-    projectRenamingCommittedRef: { current: false },
-    cancelProjectRename: vi.fn(),
-    onProjectRenamingInputMount: vi.fn(),
-    hasProjectRenameCommitted: () => false,
-    markProjectRenameCommitted: vi.fn(),
-    commitProjectRename: vi.fn(),
-  }),
-}));
-
-import { useRef } from "react";
-
-import { useSidebarProjectActions } from "./Sidebar.projectActions";
-import { useSidebarRemoteProjectAddActions } from "./Sidebar.projectAddActions.remote";
-import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
-import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
-import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
-
-type CreateProject = (input: CreateProjectInput) => Promise<CreateProjectResult>;
-
-const project = {
-  id: ProjectId.makeUnsafe("project-1"),
-  name: "Remote project",
-  providerRuntimeExecutionTargetId: "local",
-  workspaceExecutionTargetId: "ssh:host=old-host&user=alice&port=2222&auth=ssh-key",
-  cwd: "/srv/project",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-};
-
-function RemoteProjectEditHarness({
-  createProject = vi.fn<CreateProject>().mockResolvedValue({ ok: true }),
-}: {
-  createProject?: CreateProject;
-}) {
-  const remote = useSidebarRemoteProjectAddActions({
-    createProject,
-    isAddingProject: false,
-  });
-  const projectActions = useSidebarProjectActions({
-    projects: [project] as never,
-    threadIdsByProjectId: {},
-    sidebarProjects: [],
-    appSettings: { sidebarProjectSortOrder: "manual" } as never,
-    dragInProgressRef: useRef(false),
-    suppressProjectClickAfterDragRef: useRef(false),
-    suppressProjectClickForContextMenuRef: useRef(false),
-    selectedThreadIdsSize: 0,
-    clearSelection: vi.fn(),
-    copyPathToClipboard: vi.fn(),
-    cancelThreadRename: vi.fn(),
-    openRemoteProjectEditDialog: remote.openRemoteProjectEditDialog,
-  });
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => projectActions.handleProjectContextMenu(project.id, { x: 1, y: 1 })}
-      >
-        Open project menu
-      </button>
-      <button type="button" onClick={remote.openRemoteProjectDialog}>
-        Open add dialog
-      </button>
-      <SidebarRemoteProjectDialog
-        mode={remote.remoteProjectDialogMode}
-        open={remote.isRemoteProjectDialogOpen}
-        draft={remote.remoteProjectDraft}
-        fieldErrors={remote.remoteProjectFieldErrors}
-        error={remote.remoteProjectError}
-        verificationMessage={remote.remoteProjectVerificationMessage}
-        isSubmitting={remote.isSavingRemoteProject}
-        isVerifying={remote.isVerifyingRemoteProject}
-        onOpenChange={(open) => {
-          if (!open) remote.closeRemoteProjectDialog();
-        }}
-        onFieldChange={remote.updateRemoteProjectDraft}
-        onSubmit={() => {
-          void remote.submitRemoteProjectDialog();
-        }}
-      />
-      <SidebarRemoteAgentInstallDialog
-        request={remote.remoteAgentInstallRequest}
-        onDecline={remote.declineRemoteAgentInstall}
-        onInstalled={remote.completeRemoteAgentInstall}
-      />
-    </>
-  );
-}
-
-async function mountHarness(createProject?: CreateProject) {
-  const host = document.createElement("div");
-  document.body.append(host);
-  const props = createProject === undefined ? {} : { createProject };
-  const screen = await render(<RemoteProjectEditHarness {...props} />, { container: host });
-  return {
-    [Symbol.asyncDispose]: async () => {
-      await screen.unmount();
-      host.remove();
-    },
-  };
-}
-
-function setApi(input: {
-  readonly verifyExecutionTarget: ReturnType<typeof vi.fn>;
-  readonly installRemoteAgent?: ReturnType<typeof vi.fn>;
-  readonly getSnapshot: ReturnType<typeof vi.fn>;
-  readonly dispatchCommand: ReturnType<typeof vi.fn>;
-  readonly show: ReturnType<typeof vi.fn>;
-}) {
-  nativeApi.current = {
-    contextMenu: { show: input.show },
-    server: {
-      verifyExecutionTarget: input.verifyExecutionTarget,
-      installRemoteAgent: input.installRemoteAgent ?? vi.fn(),
-    },
-    orchestration: {
-      getSnapshot: input.getSnapshot,
-      dispatchCommand: input.dispatchCommand,
-    },
-  } as never;
-}
+import {
+  mountHarness,
+  project,
+  resetApi,
+  setApi,
+  type CreateProject,
+} from "./SidebarRemoteProjectDialog.browser.support";
 
 describe("SidebarRemoteProjectDialog", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    nativeApi.current = null as never;
-  });
+  afterEach(resetApi);
 
   it("opens a prefilled edit dialog from the SSH project context menu", async () => {
     setApi({
@@ -216,6 +59,7 @@ describe("SidebarRemoteProjectDialog", () => {
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget: vi
         .fn()
+        .mockResolvedValueOnce({ message: "status verified" })
         .mockResolvedValueOnce({ message: "project verified" })
         .mockRejectedValueOnce(new Error("missing worktree")),
       getSnapshot: vi.fn().mockResolvedValue({
@@ -254,11 +98,9 @@ describe("SidebarRemoteProjectDialog", () => {
     await page.getByRole("button", { name: "Open project menu" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();
 
-    await expect.element(page.getByText("Install the bigbud remote agent?")).toBeInTheDocument();
-    await page.getByRole("button", { name: "No, cancel setup" }).click();
-    await expect
-      .element(page.getByText("Install the bigbud remote agent?"))
-      .not.toBeInTheDocument();
+    await expect.element(page.getByText("Download remote agent update")).toBeInTheDocument();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+    await expect.element(page.getByText("Download remote agent update")).not.toBeInTheDocument();
     expect(installRemoteAgent).not.toHaveBeenCalled();
     expect(dispatchCommand).not.toHaveBeenCalled();
   });
@@ -280,12 +122,12 @@ describe("SidebarRemoteProjectDialog", () => {
     await page.getByLabelText("Host or IP").fill("remote.example.com");
     await page.getByLabelText("Remote project path").fill("/srv/project");
     await page.getByRole("button", { name: "Add remote project" }).click();
-    await page.getByRole("button", { name: "No, cancel setup" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
 
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("installs after consent before updating the remote project", async () => {
+  it("stages without updating the project until an explicit fresh connection", async () => {
     const installRemoteAgent = vi.fn().mockResolvedValue({
       message: "bigbud remote agent 1.2.3 was installed successfully.",
       version: "1.2.3",
@@ -298,6 +140,12 @@ describe("SidebarRemoteProjectDialog", () => {
         remoteAgent: { status: "install-required" },
       }),
       installRemoteAgent,
+      connectRemoteAgent: vi.fn().mockResolvedValue({
+        connectionId: "fresh",
+        currentVersion: "1.2.3",
+        pendingVersion: null,
+        fallbackVersion: null,
+      }),
       getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
       dispatchCommand,
     });
@@ -305,69 +153,12 @@ describe("SidebarRemoteProjectDialog", () => {
 
     await page.getByRole("button", { name: "Open project menu" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();
-    await page.getByRole("button", { name: "Yes, install agent" }).click();
-
-    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
-    expect(installRemoteAgent).toHaveBeenCalledOnce();
-    expect(installRemoteAgent.mock.invocationCallOrder[0]).toBeLessThan(
-      dispatchCommand.mock.invocationCallOrder[0]!,
-    );
-  });
-
-  it("requires consent before upgrading an outdated remote agent", async () => {
-    const installRemoteAgent = vi.fn();
-    const dispatchCommand = vi.fn();
-    setApi({
-      show: vi.fn().mockResolvedValue("edit-ssh"),
-      verifyExecutionTarget: vi.fn().mockResolvedValue({
-        message: "SSH verified; agent upgrade required",
-        remoteAgent: {
-          status: "upgrade-required",
-          currentVersion: "0.1.0",
-          targetVersion: "0.2.0",
-        },
-      }),
-      installRemoteAgent,
-      getSnapshot: vi.fn(),
-      dispatchCommand,
-    });
-    await using _ = await mountHarness();
-
-    await page.getByRole("button", { name: "Open project menu" }).click();
-    await page.getByRole("button", { name: "Save changes" }).click();
-
-    await expect.element(page.getByText("Upgrade the bigbud remote agent?")).toBeInTheDocument();
-    await expect.element(page.getByText(/from 0.1.0 to 0.2.0/)).toBeInTheDocument();
-    await page.getByRole("button", { name: "No, cancel setup" }).click();
-    expect(installRemoteAgent).not.toHaveBeenCalled();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Download update" }).click();
     expect(dispatchCommand).not.toHaveBeenCalled();
-  });
-
-  it("upgrades after consent before updating the remote project", async () => {
-    const installRemoteAgent = vi.fn().mockResolvedValue({
-      message: "bigbud remote agent 0.2.0 was installed successfully.",
-      version: "0.2.0",
-    });
-    const dispatchCommand = vi.fn().mockResolvedValue(undefined);
-    setApi({
-      show: vi.fn().mockResolvedValue("edit-ssh"),
-      verifyExecutionTarget: vi.fn().mockResolvedValue({
-        message: "SSH verified; agent upgrade required",
-        remoteAgent: {
-          status: "upgrade-required",
-          currentVersion: "0.1.0",
-          targetVersion: "0.2.0",
-        },
-      }),
-      installRemoteAgent,
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
-      dispatchCommand,
-    });
-    await using _ = await mountHarness();
-
-    await page.getByRole("button", { name: "Open project menu" }).click();
-    await page.getByRole("button", { name: "Save changes" }).click();
-    await page.getByRole("button", { name: "Yes, upgrade agent" }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Connect new session" })
+      .click();
 
     await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
     expect(installRemoteAgent).toHaveBeenCalledOnce();

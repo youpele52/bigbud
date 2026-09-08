@@ -16,7 +16,7 @@ import {
   sanitizeRemoteName,
 } from "./GitCoreUtils.ts";
 import { makeListBranchesOp } from "./GitBranches.list.ts";
-import { type GitHelpers } from "./GitCoreExecutor.ts";
+import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
 import type { GitStatusOpsResult } from "./GitStatus.ts";
 
 export interface GitBranchOps {
@@ -136,6 +136,7 @@ export function makeGitBranchOps(
       yield* executeGit("GitCore.checkoutBranch.checkout", input.cwd, checkoutArgs, {
         timeoutMs: 10_000,
         fallbackErrorMessage: "git checkout failed",
+        operationId: input.operationId,
       });
 
       const branchResult = yield* executeGit(
@@ -162,6 +163,7 @@ export function makeGitBranchOps(
         {
           timeoutMs: 10_000,
           fallbackErrorMessage: "git branch rename failed",
+          operationId: input.operationId,
         },
       );
 
@@ -225,6 +227,7 @@ export function makeGitBranchOps(
     yield* executeGit("GitCore.deleteBranch", input.cwd, ["branch", "-d", "--", input.branch], {
       timeoutMs: 10_000,
       fallbackErrorMessage: "git branch delete failed",
+      operationId: input.operationId,
     });
   });
 
@@ -232,23 +235,28 @@ export function makeGitBranchOps(
     yield* executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
       timeoutMs: 10_000,
       fallbackErrorMessage: "git branch create failed",
+      operationId: input.checkout
+        ? gitMutationOperationId(input.operationId, "create")
+        : input.operationId,
     });
     if (input.checkout) {
       yield* executeGit("GitCore.createBranch.checkout", input.cwd, ["checkout", input.branch], {
         timeoutMs: 10_000,
         fallbackErrorMessage: "git checkout after branch create failed",
+        operationId: gitMutationOperationId(input.operationId, "checkout"),
       });
     }
     return { branch: input.branch };
   });
 
   const setBranchUpstream: GitCoreShape["setBranchUpstream"] = (input) =>
-    runGit("GitCore.setBranchUpstream", input.cwd, [
-      "branch",
-      "--set-upstream-to",
-      `${input.remoteName}/${input.remoteBranch}`,
-      input.branch,
-    ]);
+    runGit(
+      "GitCore.setBranchUpstream",
+      input.cwd,
+      ["branch", "--set-upstream-to", `${input.remoteName}/${input.remoteBranch}`, input.branch],
+      false,
+      { operationId: input.operationId },
+    );
 
   const listLocalBranchNames: GitCoreShape["listLocalBranchNames"] = (cwd) =>
     runGitStdout("GitCore.listLocalBranchNames", cwd, [
@@ -269,6 +277,7 @@ export function makeGitBranchOps(
     executeGit("GitCore.initRepo", input.cwd, ["init"], {
       timeoutMs: 10_000,
       fallbackErrorMessage: "git init failed",
+      operationId: input.operationId,
     }).pipe(Effect.asVoid);
 
   const ensureRemote: GitCoreShape["ensureRemote"] = Effect.fn("ensureRemote")(function* (input) {
@@ -292,7 +301,13 @@ export function makeGitBranchOps(
       suffix += 1;
     }
 
-    yield* runGit("GitCore.ensureRemote.add", input.cwd, ["remote", "add", remoteName, input.url]);
+    yield* runGit(
+      "GitCore.ensureRemote.add",
+      input.cwd,
+      ["remote", "add", remoteName, input.url],
+      false,
+      { operationId: input.operationId },
+    );
     return remoteName;
   });
 

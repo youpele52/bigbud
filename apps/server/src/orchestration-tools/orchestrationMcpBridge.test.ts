@@ -71,9 +71,10 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain('enum: ["auto", "queue"]');
     expect(source).toContain("maxLength: 200");
     expect(source).toContain("maxLength: 32000");
-    expect(source).toContain("invocationId: `mcp:${String(requestId)}`");
-    expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
-    expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
+    expect(source).toContain("MCP_INVOCATION_IDENTITY_REQUIRED");
+    expect(source).toContain("invocationId,");
+    expect(source).toContain("sourceMessageId: sourceMessageId(invocationId)");
+    expect(source).not.toContain("randomUUID");
     expect(source).not.toContain("workspacePath");
     expect(source).not.toContain('name: "invocationId"');
     expect(source).not.toContain('name: "sourceMessageId"');

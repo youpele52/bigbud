@@ -14,6 +14,10 @@ import { encodeWorkspaceFrame } from "./remoteAgentProtocol.codec.workspace.enco
 import { encodeProcessFrame } from "./remoteAgentProtocol.codec.process.encode.ts";
 import { encodePtyFrame } from "./remoteAgentProtocol.codec.pty.encode.ts";
 import { encodeResourceCleanupFrame } from "./remoteAgentProtocol.codec.resourceCleanup.ts";
+import {
+  encodeSupervisorShutdownRequest,
+  encodeSupervisorShutdownResponse,
+} from "./remoteAgentProtocol.codec.control.ts";
 
 function encodeClientHello(value: RemoteAgentClientHello): Uint8Array {
   const writer = new WireWriter();
@@ -144,6 +148,12 @@ export function encodeFramePayload(frame: RemoteAgentFrame): Uint8Array {
       break;
     case "protocolError":
       writer.fieldBytes(7, encodeProtocolError(frame.value));
+      break;
+    case "supervisorShutdownRequest":
+      writer.fieldBytes(33, encodeSupervisorShutdownRequest(frame.value));
+      break;
+    case "supervisorShutdownResponse":
+      writer.fieldBytes(34, encodeSupervisorShutdownResponse(frame.value));
       break;
   }
   return writer.finish();

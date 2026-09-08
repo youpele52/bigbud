@@ -7,7 +7,7 @@ use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, identity, protocol_error_frame,
     state::{AgentState, supervisor_socket_path},
-    supervisor::{SupervisorPreparation, prepare_supervisor, run_proxy},
+    supervisor::{SupervisorPreparation, prepare_supervisor, request_shutdown, run_proxy},
     workspace_watch_event_frame,
 };
 use bigbud_workspace_watch::WorkspaceWatchRegistry;
@@ -174,6 +174,17 @@ fn main() -> Result<()> {
                     );
                     std::process::exit(11)
                 }
+            }
+        }
+        Some("--shutdown-supervisor") => {
+            let root = state_root().context("HOME is required for supervisor shutdown")?;
+            if request_shutdown(&supervisor_socket_path(root))
+                .context("failed to request managed supervisor shutdown")?
+            {
+                println!("shutdown-accepted");
+                Ok(())
+            } else {
+                anyhow::bail!("managed supervisor refused shutdown")
             }
         }
         Some("--proxy") => {

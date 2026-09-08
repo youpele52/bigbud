@@ -25,14 +25,26 @@ export interface RemoteAgentLifecycleSnapshot {
 }
 
 export interface RemoteAgentConnectionFactory {
+  readonly validateHello?: (hello: RemoteAgentHello) => void;
   readonly create: () => Promise<RemoteAgentConnection>;
+  readonly expectedEpoch?: string;
 }
+
+export type RemoteAgentDispatchState =
+  | "unadmitted"
+  | "not-dispatched"
+  | "may-have-been-sent"
+  | "accepted"
+  | "terminal";
 
 export class RemoteAgentLifecycle {
   private snapshotValue: RemoteAgentLifecycleSnapshot = { state: "unavailable" };
   private connectionValue: RemoteAgentConnection | null = null;
 
-  constructor(private readonly factory: RemoteAgentConnectionFactory) {}
+  constructor(private readonly factory: RemoteAgentConnectionFactory) {
+    if (factory.expectedEpoch)
+      this.snapshotValue = { state: "unavailable", agentEpoch: factory.expectedEpoch };
+  }
 
   get snapshot(): RemoteAgentLifecycleSnapshot {
     return this.snapshotValue;
@@ -57,6 +69,7 @@ export class RemoteAgentLifecycle {
       let hello: RemoteAgentHello;
       try {
         hello = await connection.handshake();
+        this.factory.validateHello?.(hello);
       } catch (error) {
         connection.close();
         throw error;
@@ -67,7 +80,7 @@ export class RemoteAgentLifecycle {
         this.snapshotValue = {
           state: "degraded",
           detail: "Remote agent epoch changed; retained operation continuity is unknown.",
-          agentEpoch: hello.agentEpoch,
+          agentEpoch: previousEpoch,
         };
         throw new Error(this.snapshotValue.detail);
       }
@@ -126,8 +139,8 @@ export class RemoteAgentLifecycle {
     );
   }
 
-  canFallback(operationAccepted: boolean): boolean {
-    return !operationAccepted;
+  canFallback(state: RemoteAgentDispatchState): boolean {
+    return state === "unadmitted";
   }
 
   close(): void {

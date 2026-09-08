@@ -1,4 +1,5 @@
 import { Effect, Queue, Stream } from "effect";
+import { randomUUID } from "node:crypto";
 import {
   type GitActionProgressEvent,
   type GitManagerServiceError,
@@ -13,6 +14,10 @@ import {
 } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import {
+  connectRemoteAgentEffect,
+  getRemoteAgentUpdateStatusEffect,
+} from "./wsRemoteAgentAdmission.ts";
 import { makeRemoteGitStatusStream } from "../git/remoteGitStatusStream.ts";
 import {
   installRemoteAgentEffect,
@@ -21,14 +26,48 @@ import {
   verifyExecutionTargetEffect,
 } from "./wsExecutionTargetVerification.ts";
 
+function gitMutationOperationId(operationId: string | undefined, target?: string): string {
+  if (!operationId && !isLocalExecutionTarget(target))
+    throw new Error(
+      "Remote Git requires an originating operation identity. No work was dispatched.",
+    );
+  return operationId ?? `git-rpc-${randomUUID()}`;
+}
+
+function withGitMutationOperationId<
+  T extends {
+    readonly operationId?: string | undefined;
+    readonly executionTargetId?: string | undefined;
+  },
+>(input: T): T & { readonly operationId: string } {
+  return {
+    ...input,
+    operationId: gitMutationOperationId(input.operationId, input.executionTargetId),
+  };
+}
+
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.serverConnectRemoteAgent]: (
+      input: Parameters<typeof connectRemoteAgentEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverConnectRemoteAgent,
+        connectRemoteAgentEffect(input, context.remoteAgentUpdateCoordinator),
+        {
+          "rpc.aggregate": "server",
+        },
+      ),
     [WS_METHODS.serverVerifyExecutionTarget]: (
       input: Parameters<typeof verifyExecutionTargetEffect>[0],
     ) =>
       observeRpcEffect(
         WS_METHODS.serverVerifyExecutionTarget,
-        verifyExecutionTargetEffect(input, context.remoteAgentHealth),
+        verifyExecutionTargetEffect(
+          input,
+          context.remoteAgentHealth,
+          context.remoteAgentUpdateCoordinator,
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverInstallRemoteAgent]: (
@@ -43,6 +82,14 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(WS_METHODS.serverUnlockSshKey, unlockSshKeyEffect(input), {
         "rpc.aggregate": "server",
       }),
+    [WS_METHODS.serverGetRemoteAgentUpdateStatus]: (
+      input: Parameters<typeof getRemoteAgentUpdateStatusEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetRemoteAgentUpdateStatus,
+        getRemoteAgentUpdateStatusEffect(input, context.remoteAgentUpdateCoordinator),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverUnlockSshPassword]: (input: Parameters<typeof unlockSshPasswordEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverUnlockSshPassword, unlockSshPasswordEffect(input), {
         "rpc.aggregate": "server",
@@ -86,11 +133,16 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitPull]: (input: {
       readonly cwd: string;
       readonly executionTargetId?: string | undefined;
+      readonly operationId?: string | undefined;
     }) =>
       observeRpcEffect(
         WS_METHODS.gitPull,
         context.git
-          .pullCurrentBranch(input.cwd, input.executionTargetId)
+          .pullCurrentBranch(
+            input.cwd,
+            input.executionTargetId,
+            gitMutationOperationId(input.operationId, input.executionTargetId),
+          )
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -99,11 +151,16 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitFetch]: (input: {
       readonly cwd: string;
       readonly executionTargetId?: string | undefined;
+      readonly operationId?: string | undefined;
     }) =>
       observeRpcEffect(
         WS_METHODS.gitFetch,
         context.git
-          .fetch(input.cwd, input.executionTargetId)
+          .fetch(
+            input.cwd,
+            input.executionTargetId,
+            gitMutationOperationId(input.operationId, input.executionTargetId),
+          )
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -112,11 +169,16 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitDiscardChanges]: (input: {
       readonly cwd: string;
       readonly executionTargetId?: string | undefined;
+      readonly operationId?: string | undefined;
     }) =>
       observeRpcEffect(
         WS_METHODS.gitDiscardChanges,
         context.git
-          .discardChanges(input.cwd, input.executionTargetId)
+          .discardChanges(
+            input.cwd,
+            input.executionTargetId,
+            gitMutationOperationId(input.operationId, input.executionTargetId),
+          )
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -173,7 +235,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitCreateWorktree,
         context.git
-          .createWorktree(input)
+          .createWorktree(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -183,7 +245,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitRemoveWorktree,
         context.git
-          .removeWorktree(input)
+          .removeWorktree(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -193,7 +255,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitCreateBranch,
         context.git
-          .createBranch(input)
+          .createBranch(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -203,7 +265,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitCheckout,
         context.git
-          .checkoutBranch(input)
+          .checkoutBranch(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
@@ -213,7 +275,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitRenameBranch,
         context.git
-          .renameBranch(input)
+          .renameBranch(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
@@ -221,7 +283,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitDeleteBranch,
         context.git
-          .deleteBranch(input)
+          .deleteBranch(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
@@ -229,7 +291,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.gitInit,
         context.git
-          .initRepo(input)
+          .initRepo(withGitMutationOperationId(input))
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),

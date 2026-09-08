@@ -1,5 +1,8 @@
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
-import { renderCallOrchestrationToolSource } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import {
+  renderCallOrchestrationToolSource,
+  renderMcpInvocationIdentitySource,
+} from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import {
   MCP_SERVER_TEMPLATE_PRELUDE,
   MCP_SERVER_TOOL_DEFINITIONS,
@@ -9,6 +12,10 @@ import {
 export function renderRemoteWorkspaceMcpServerSource(input: ThreadOrchestrationHttpConfig): string {
   const config = renderConfig(input);
   return [
+    "import { AsyncLocalStorage } from 'node:async_hooks';",
+    "import { createHash } from 'node:crypto';",
+    "import { dirname } from 'node:path';",
+    "const invocation = new AsyncLocalStorage();",
     ...MCP_SERVER_TEMPLATE_PRELUDE,
     `const CONFIG = ${config};`,
     ...MCP_SERVER_TOOL_DEFINITIONS,
@@ -52,11 +59,14 @@ export function renderRemoteWorkspaceMcpServerSource(input: ThreadOrchestrationH
     "  writeMessage({ jsonrpc: JSONRPC_VERSION, id, error: { code, message } });",
     "}",
     "",
+    renderMcpInvocationIdentitySource("REMOTE_INVOCATION_IDENTITY_REQUIRED"),
+    "",
     renderCallOrchestrationToolSource(),
     "",
     "async function execRemote(command, args, options = {}) {",
     "  const response = await callOrchestrationTool({",
     "    action: 'remote_workspace_process',",
+    "    remoteInvocationId: `${invocation.getStore().id}:${invocation.getStore().step++}`,",
     "    remoteCommand: command,",
     "    remoteArgs: args,",
     "    ...(options.stdin !== undefined ? { remoteStdin: options.stdin } : {}),",
@@ -219,7 +229,8 @@ export function renderRemoteWorkspaceMcpServerSource(input: ThreadOrchestrationH
     "  if (request.method === 'tools/list') { writeResponse(request.id, { tools: TOOLS }); return; }",
     "  if (request.method === 'tools/call') {",
     "    try {",
-    "      const result = await callTool(String(request.params?.name ?? ''), request.params?.arguments ?? {});",
+    "      const id = await resolveMcpInvocationId(request);",
+    "      const result = await invocation.run({ id, step: 0 }, () => callTool(String(request.params?.name ?? ''), request.params?.arguments ?? {}));",
     "      writeResponse(request.id, result);",
     "    } catch (error) {",
     "      writeResponse(request.id, { content: textContent(error instanceof Error ? error.message : String(error)), isError: true });",

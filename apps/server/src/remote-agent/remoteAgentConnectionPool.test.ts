@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
@@ -6,6 +6,7 @@ import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
 function connection(
   epoch: string,
   capabilities: ReadonlyArray<string> = [],
+  close = vi.fn(),
 ): RemoteAgentConnection {
   return {
     handshake: async () => ({
@@ -22,7 +23,7 @@ function connection(
       maxOperationOutputBytes: 1024,
       maxJournalBytes: 1024,
     }),
-    close: () => undefined,
+    close,
   } as unknown as RemoteAgentConnection;
 }
 
@@ -81,5 +82,39 @@ describe("remote agent connection pool", () => {
     expect(pool.snapshot("ssh:one").state).toBe("reconnecting");
     await pool.get("ssh:one");
     expect(creates).toBe(2);
+  });
+
+  it("closes a connection that finishes after pool shutdown", async () => {
+    let release!: (value: RemoteAgentConnection) => void;
+    const pending = new Promise<RemoteAgentConnection>((resolve) => {
+      release = resolve;
+    });
+    const close = vi.fn();
+    const pool = new RemoteAgentConnectionPool({
+      create: async () => pending,
+    });
+    const connecting = pool.get("ssh:one");
+    await Promise.resolve();
+    pool.close("ssh:one");
+    release(connection("epoch-1", [], close));
+    await expect(connecting).rejects.toThrow("closed during connection setup");
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("closes a connection invalidated while it is connecting", async () => {
+    let release!: (value: RemoteAgentConnection) => void;
+    const pending = new Promise<RemoteAgentConnection>((resolve) => {
+      release = resolve;
+    });
+    const close = vi.fn();
+    const pool = new RemoteAgentConnectionPool({
+      create: async () => pending,
+    });
+    const connecting = pool.get("ssh:one");
+    await Promise.resolve();
+    pool.markTransportLoss("ssh:one");
+    release(connection("epoch-1", [], close));
+    await expect(connecting).rejects.toThrow("invalidated during connection setup");
+    expect(close).toHaveBeenCalledOnce();
   });
 });

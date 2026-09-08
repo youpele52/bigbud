@@ -24,6 +24,8 @@ mod process_handlers;
 mod protocol_helpers;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+#[path = "retirement.rs"]
+mod retirement;
 #[path = "workspace_handlers.rs"]
 mod workspace_handlers;
 #[path = "workspace_watch_handlers.rs"]
@@ -277,6 +279,7 @@ impl AgentSession {
                     ("process.run", 1),
                     ("process.attach", 1),
                     ("terminal.pty", 1),
+                    ("supervisor.shutdown", 1),
                 ]
                 .into_iter()
                 .map(|(name, major)| v1::Capability {

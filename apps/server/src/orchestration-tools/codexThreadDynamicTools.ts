@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import {
   BrowserAction,
@@ -59,7 +59,9 @@ function requireDispatcher(): ThreadOrchestrationToolDispatcherShape {
 
 export function createCodexThreadOrchestrationDynamicToolHandler(
   threadId: ThreadId,
-  sourceMessageId: MessageId = MessageId.makeUnsafe(randomUUID()),
+  sourceMessageId: MessageId = MessageId.makeUnsafe(
+    createHash("sha256").update(`codex:${threadId}`).digest("hex"),
+  ),
 ): CodexDynamicToolCallHandler {
   return async ({
     namespace,

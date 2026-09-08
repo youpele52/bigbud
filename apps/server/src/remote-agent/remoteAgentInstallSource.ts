@@ -28,6 +28,15 @@ interface InstallSourceLoadOptions {
   readonly logger?: RemoteAgentDownloadLogger;
 }
 
+export interface RemoteAgentInstallSourceLoader {
+  (signal?: AbortSignal): Promise<RemoteAgentInstallSource>;
+  /**
+   * Bypass the process cache for an intentional discovery tick. Callers that
+   * merely need the current source should use the callable form.
+   */
+  readonly refresh: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
+}
+
 function resolveInstallSourceUrl(environment: NodeJS.ProcessEnv): string {
   const configured = environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim();
   if (configured) return configured;
@@ -200,12 +209,12 @@ function waitForSharedLoad(
 export function makeRemoteAgentInstallSourceLoader(
   environment: NodeJS.ProcessEnv = process.env,
   options: Omit<InstallSourceLoadOptions, "signal"> = {},
-) {
+): RemoteAgentInstallSourceLoader {
   let cached: RemoteAgentInstallSource | undefined;
   let inFlight:
     | { promise: Promise<RemoteAgentInstallSource>; controller: AbortController; waiters: number }
     | undefined;
-  return (signal?: AbortSignal): Promise<RemoteAgentInstallSource> => {
+  const load = (signal?: AbortSignal): Promise<RemoteAgentInstallSource> => {
     if (signal?.aborted) {
       return Promise.reject(signal.reason ?? new DOMException("caller", "AbortError"));
     }
@@ -241,6 +250,13 @@ export function makeRemoteAgentInstallSourceLoader(
       }
     });
   };
+
+  load.refresh = (signal?: AbortSignal): Promise<RemoteAgentInstallSource> => {
+    cached = undefined;
+    return load(signal);
+  };
+
+  return load;
 }
 
 export const loadProcessScopedRemoteAgentInstallSource = makeRemoteAgentInstallSourceLoader();

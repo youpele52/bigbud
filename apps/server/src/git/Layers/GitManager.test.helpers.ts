@@ -9,6 +9,7 @@ import {
 } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
 import type { GitManagerShape } from "../Services/GitManager.ts";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
@@ -181,6 +182,7 @@ export function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
   setupScriptRunner?: ProjectSetupScriptRunnerShape;
+  gitCore?: GitCoreShape;
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
@@ -190,10 +192,12 @@ export function makeManager(input?: {
 
   const serverSettingsLayer = ServerSettingsService.layerTest();
 
-  const gitCoreLayer = GitCoreLive.pipe(
-    Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(ServerConfigLayer),
-  );
+  const gitCoreLayer = input?.gitCore
+    ? Layer.succeed(GitCore, input.gitCore)
+    : GitCoreLive.pipe(
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(ServerConfigLayer),
+      );
 
   const managerLayer = Layer.mergeAll(
     Layer.succeed(GitHubCli, gitHubCli),
@@ -206,7 +210,7 @@ export function makeManager(input?: {
     ),
     gitCoreLayer,
     serverSettingsLayer,
-  ).pipe(Layer.provideMerge(NodeServices.layer));
+  ).pipe(Layer.provideMerge(NodeServices.layer), Layer.provideMerge(ServerConfigLayer));
 
   return makeGitManager().pipe(
     Effect.provide(managerLayer),

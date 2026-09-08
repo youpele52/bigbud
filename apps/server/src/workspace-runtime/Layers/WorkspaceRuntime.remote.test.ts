@@ -102,7 +102,7 @@ describe("remote workspace runtime adapter", () => {
 
   it("reopens a read operation once after transport loss without rerunning writes", async () => {
     const replacement = fakeClient();
-    const lost = fakeClient();
+    const lost = Object.assign(fakeClient(), { reconnect: async () => replacement });
     const operationIds: Array<string> = [];
     lost.readFile = async (input) => {
       operationIds.push(input.operationId);
@@ -129,7 +129,7 @@ describe("remote workspace runtime adapter", () => {
     );
 
     expect(read.contents).toBe("remote contents");
-    expect(resolves).toBe(2);
+    expect(resolves).toBe(1);
     expect(operationIds).toHaveLength(2);
     expect(operationIds[0]).toBe(operationIds[1]);
   });
@@ -154,5 +154,33 @@ describe("remote workspace runtime adapter", () => {
 
     expect(operationIds).toHaveLength(2);
     expect(operationIds[0]).not.toBe(operationIds[1]);
+  });
+
+  it("reuses a stable write identity after transport loss without a second marker", async () => {
+    const client = fakeClient();
+    const operationIds: Array<string> = [];
+    const markedOperations = new Set<string>();
+    client.writeFile = async (input) => {
+      operationIds.push(input.operationId);
+      if (!markedOperations.has(input.operationId)) {
+        markedOperations.add(input.operationId);
+        throw new RemoteAgentConnectionError("transport lost after accepted write");
+      }
+      return fakeClient().writeFile(input);
+    };
+    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => client });
+    const input = {
+      executionTargetId: "ssh:example",
+      operationId: "workspace-write-retry-1",
+      cwd: "/remote/project",
+      relativePath: "README.md",
+      contents: "updated",
+    } as const;
+
+    await expect(Effect.runPromise(runtime.files.writeFile(input))).rejects.toBeDefined();
+    await Effect.runPromise(runtime.files.writeFile(input));
+
+    expect(operationIds).toEqual(["workspace-write-retry-1", "workspace-write-retry-1"]);
+    expect(markedOperations).toHaveLength(1);
   });
 });

@@ -19,6 +19,7 @@ export interface ThreadOrchestrationBridgeInput {
   readonly host: string | undefined;
   readonly port: number;
   readonly serverName?: string;
+  readonly providerSessionId?: string;
 }
 
 export interface ThreadOrchestrationBridge {
@@ -86,8 +87,12 @@ export async function createThreadOrchestrationBridge(
   });
   const httpConfig = resolveThreadOrchestrationHttpConfig(input, token);
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
+  const durableHttpConfig = {
+    ...httpConfig,
+    providerInvocationStatePath: path.join(bridgeDir, ".bigbud", "mcp-invocation-state.json"),
+  };
   const serverPath = path.join(bridgeDir, ".bigbud", "orchestration-mcp-server.mjs");
-  await writeFile(serverPath, renderOrchestrationMcpServerSource(httpConfig), "utf8");
+  await writeFile(serverPath, renderOrchestrationMcpServerSource(durableHttpConfig), "utf8");
   const serverName = input.serverName?.trim() || DEFAULT_ORCHESTRATION_MCP_SERVER_NAME;
 
   return {
@@ -95,7 +100,7 @@ export async function createThreadOrchestrationBridge(
     serverPath,
     bridgeDir,
     token,
-    httpConfig,
+    httpConfig: durableHttpConfig,
     cleanup: async () => {
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,

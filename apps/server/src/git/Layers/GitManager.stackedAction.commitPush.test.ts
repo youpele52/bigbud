@@ -3,8 +3,10 @@ import path from "node:path";
 
 import { Effect } from "effect";
 import { it } from "@effect/vitest";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
+import * as RemoteDefault from "../../remote-agent/remoteAgentDefault.ts";
 
+import type { GitCoreShape } from "../Services/GitCore.ts";
 import { GitManagerTestLayer, makeManager, runStackedAction } from "./GitManager.test.helpers.ts";
 import { createBareRemote, initRepo, makeTempDir, runGit } from "./GitManager.test.repo.ts";
 
@@ -279,6 +281,110 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           Effect.map((result) => result.stdout.trim()),
         ),
       ).toBe("origin/feature/stacked-flow");
+    }),
+  );
+
+  it.effect("uses distinct stable mutation identities for separate stacked actions", () =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          vi.spyOn(RemoteDefault, "getConfiguredRemoteAgentComposition").mockReturnValue(null),
+        ),
+        (spy) => Effect.sync(() => spy.mockRestore()),
+      );
+      const operationIds = {
+        prepare: [] as Array<string | undefined>,
+        commit: [] as Array<string | undefined>,
+        push: [] as Array<string | undefined>,
+        branch: [] as Array<string | undefined>,
+        checkout: [] as Array<string | undefined>,
+      };
+      const gitCore = {
+        statusDetails: () =>
+          Effect.succeed({
+            isRepo: true,
+            hasOriginRemote: true,
+            isDefaultBranch: true,
+            branch: "main",
+            hasWorkingTreeChanges: true,
+            workingTree: [],
+            hasUpstream: true,
+            aheadCount: 0,
+            behindCount: 0,
+            upstreamRef: "origin/main",
+          }),
+        prepareCommitContext: (
+          _cwd: string,
+          _filePaths: readonly string[] | undefined,
+          _executionTargetId: string | undefined,
+          operationId: string | undefined,
+        ) => {
+          operationIds.prepare.push(operationId);
+          return Effect.succeed({ stagedSummary: "M README.md", stagedPatch: "diff" });
+        },
+        commit: (
+          _cwd: string,
+          _subject: string,
+          _body: string,
+          options: { operationId?: string },
+        ) => {
+          operationIds.commit.push(options.operationId);
+          return Effect.succeed({ commitSha: "commit-sha" });
+        },
+        pushCurrentBranch: (
+          _cwd: string,
+          _fallbackBranch: string | null,
+          _executionTargetId: string | undefined,
+          operationId: string | undefined,
+        ) => {
+          operationIds.push.push(operationId);
+          return Effect.succeed({
+            status: "pushed" as const,
+            branch: "main",
+            upstreamBranch: "origin/main",
+            setUpstream: false,
+          });
+        },
+        listLocalBranchNames: () => Effect.succeed([]),
+        createBranch: (input: { operationId?: string }) => {
+          operationIds.branch.push(input.operationId);
+          return Effect.succeed({ branch: "feature/implement-stacked-git-actions" });
+        },
+        checkoutBranch: (input: { operationId?: string }) => {
+          operationIds.checkout.push(input.operationId);
+          return Effect.succeed({ branch: "feature/implement-stacked-git-actions" });
+        },
+      } as unknown as GitCoreShape;
+      const { manager } = yield* makeManager({ gitCore });
+
+      yield* runStackedAction(manager, {
+        cwd: "/remote/project",
+        action: "commit_push",
+        actionId: "git-action-1",
+        executionTargetId: "ssh:example",
+        featureBranch: true,
+      });
+      yield* runStackedAction(manager, {
+        cwd: "/remote/project",
+        action: "commit_push",
+        actionId: "git-action-2",
+        executionTargetId: "ssh:example",
+        featureBranch: true,
+      });
+
+      expect(operationIds.prepare).toEqual(["git-action-1:commit", "git-action-2:commit"]);
+      expect(operationIds.commit).toEqual(["git-action-1:commit", "git-action-2:commit"]);
+      expect(operationIds.push).toEqual(["git-action-1:push", "git-action-2:push"]);
+      expect(operationIds.branch).toEqual([
+        "git-action-1:branch.create",
+        "git-action-2:branch.create",
+      ]);
+      expect(operationIds.checkout).toEqual([
+        "git-action-1:branch.checkout",
+        "git-action-2:branch.checkout",
+      ]);
+      expect(new Set(operationIds.commit).size).toBe(2);
+      expect(new Set(operationIds.push).size).toBe(2);
     }),
   );
 });

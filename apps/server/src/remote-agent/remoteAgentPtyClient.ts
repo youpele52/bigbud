@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
-import type { RemoteAgentPtyCreateResponse, RemoteAgentPtyExited } from "./remoteAgentProtocol.ts";
+import type { RemoteAgentPtyExited } from "./remoteAgentProtocol.ts";
+import { remoteAgentPtyTerminalEvidence } from "./remoteAgentTerminalEvidence.ts";
+export { RemoteAgentPtyClient } from "./remoteAgentPtyClient.create.ts";
 
 export interface RemoteAgentPtyProcessLike {
   readonly pid: number;
@@ -45,6 +47,17 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   private reconnecting: Promise<void> | undefined;
   private reconnectAttempts = 0;
   private closing = false;
+  private inputUnknown = false;
+  private inputTail: Promise<void> = Promise.resolve();
+  private pendingInputBytes = 0;
+  private pendingInputCount = 0;
+  private durability:
+    | {
+        allocated: (sequence: number) => Promise<void>;
+        acknowledged: (sequence: number) => Promise<void>;
+        output: (sequence: number) => Promise<void>;
+      }
+    | undefined;
 
   constructor(
     connection: RemoteAgentConnection,
@@ -64,11 +77,61 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     this._pid = pid;
   }
 
+  detach(): void {
+    this.closing = true;
+    this.removeFrameListener?.();
+    this.removeFailureListener?.();
+  }
+
+  setDurability(durability: NonNullable<RemoteAgentPtyProcess["durability"]>): void {
+    this.durability = durability;
+  }
+
+  restoreSequences(output: number, nextInput: number, acknowledgedInput: number): void {
+    this.lastOutputSequence = output;
+    this.nextInputSequence = nextInput;
+    this.inputUnknown = nextInput !== acknowledgedInput + 1;
+  }
+
   write(data: string): void {
     if (this.didExit || this.closing) return;
+    if (this.inputUnknown) {
+      this.report(
+        new RemoteAgentPtyError(
+          "PTY_INPUT_OUTCOME_UNKNOWN",
+          "Unconfirmed input bytes were lost during restart. Input was not replayed or renumbered.",
+        ),
+      );
+      return;
+    }
+    const bytes = new TextEncoder().encode(data);
+    if (this.pendingInputBytes + bytes.length > 512 * 1024 || this.pendingInputCount >= 256) {
+      this.report(
+        new RemoteAgentPtyError(
+          "PTY_INPUT_BACKPRESSURE",
+          "Remote input queue is full; this input was not sent.",
+        ),
+      );
+      return;
+    }
+    this.pendingInputBytes += bytes.length;
+    this.pendingInputCount++;
     const sequence = this.nextInputSequence;
     this.nextInputSequence += 1;
-    void this.sendInput(sequence, new TextEncoder().encode(data));
+    this.inputTail = this.inputTail
+      .then(async () => {
+        if (this.inputUnknown) return;
+        await this.durability?.allocated(sequence);
+        await this.sendInput(sequence, bytes);
+      })
+      .catch((cause: unknown) => {
+        this.inputUnknown = true;
+        this.report(cause instanceof Error ? cause : new Error("Input durability is unavailable."));
+      })
+      .finally(() => {
+        this.pendingInputBytes -= bytes.length;
+        this.pendingInputCount--;
+      });
   }
 
   resize(cols: number, rows: number): void {
@@ -79,15 +142,11 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
         value: { requestId: randomUUID(), ptyId: this.ptyId, cols, rows },
       },
       (frame) => frame.type === "ptyResizeResponse" && frame.value.ptyId === this.ptyId,
-    );
+    ).catch((cause: unknown) => this.recover(cause));
   }
 
   kill(signal = "SIGTERM"): void {
     if (this.didExit) return;
-    if (signal === "SIGKILL") {
-      void this.sendSignal(signal);
-      return;
-    }
     void this.sendSignal(signal);
   }
 
@@ -114,6 +173,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
       },
       (frame) => frame.type === "ptyAttachResponse" && frame.value.ptyId === this.ptyId,
     );
+    if (response.type === "ptyAttachResponse") this._pid = response.value.pid;
     if (response.type === "ptyAttachResponse" && response.value.replayGap) {
       this.report(
         new RemoteAgentPtyError(
@@ -128,15 +188,17 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     if (this.didExit) return;
     this.closing = true;
     try {
-      await this.currentConnection.request(
+      await this.sendRequest(
         {
           type: "ptyCloseRequest",
           value: { requestId: randomUUID(), ptyId: this.ptyId, terminate },
         },
         (frame) => frame.type === "ptyCloseResponse" && frame.value.ptyId === this.ptyId,
       );
-    } finally {
-      this.finish({ exitCode: 0, signal: null });
+      // Close acknowledges control, not child death. Only ptyExited releases ownership.
+    } catch (cause) {
+      this.closing = false;
+      throw cause;
     }
   }
 
@@ -196,10 +258,20 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
         },
         (frame) => frame.type === "ptyOutputAckResponse" && frame.value.ptyId === this.ptyId,
       )
+      .then(() => this.durability?.output(sequence))
       .catch((cause: unknown) => this.recover(cause));
   }
 
   private handleExit(value: RemoteAgentPtyExited): void {
+    if (remoteAgentPtyTerminalEvidence(value) !== "verified-terminal") {
+      this.report(
+        new RemoteAgentPtyError(
+          "PTY_OUTCOME_UNKNOWN",
+          "PTY control ended without a verified child exit. Recovery ownership was retained.",
+        ),
+      );
+      return;
+    }
     this.finish({
       exitCode: value.hasExitCode ? value.exitCode : 0,
       signal: value.hasSignal ? value.signal : null,
@@ -220,10 +292,14 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
         },
         (frame) => frame.type === "ptyInputResponse" && frame.value.ptyId === this.ptyId,
       );
+      await this.durability?.acknowledged(sequence);
     } catch (cause) {
-      if (await this.recover(cause)) {
-        if (!this.didExit && !this.closing) await this.sendInput(sequence, bytes);
-      }
+      this.inputUnknown = true;
+      await this.recover(cause);
+      throw new RemoteAgentPtyError(
+        "PTY_INPUT_OUTCOME_UNKNOWN",
+        "Remote input may have been partially delivered. It was not replayed or renumbered.",
+      );
     }
   }
 
@@ -310,56 +386,5 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
       for (const listener of this.dataListeners) listener(remainder);
     }
     for (const listener of this.exitListeners) listener(event);
-  }
-}
-
-export class RemoteAgentPtyClient {
-  constructor(
-    readonly connection: RemoteAgentConnection,
-    private readonly reconnect?: Reconnect,
-  ) {}
-
-  async create(input: {
-    readonly ptyId?: string;
-    readonly requestDigest?: Uint8Array;
-    readonly workspaceHandle: string;
-    readonly cwd: string;
-    readonly shell: string;
-    readonly args?: ReadonlyArray<string>;
-    readonly cols: number;
-    readonly rows: number;
-    readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
-  }): Promise<RemoteAgentPtyProcess> {
-    const ptyId = input.ptyId ?? randomUUID();
-    const process = new RemoteAgentPtyProcess(this.connection, ptyId, this.reconnect);
-    try {
-      const response = (await this.connection.request(
-        {
-          type: "ptyCreateRequest",
-          value: {
-            requestId: randomUUID(),
-            ptyId,
-            requestDigest: input.requestDigest ?? new Uint8Array(),
-            workspaceHandle: input.workspaceHandle,
-            cwd: input.cwd,
-            shell: input.shell,
-            args: input.args ?? [],
-            cols: input.cols,
-            rows: input.rows,
-            ...(input.environment ? { environment: input.environment } : {}),
-          },
-        },
-        (frame) => frame.type === "ptyCreateResponse" && frame.value.ptyId === ptyId,
-      )) as { readonly type: "ptyCreateResponse"; readonly value: RemoteAgentPtyCreateResponse };
-      if (!response.value.accepted) {
-        throw new RemoteAgentPtyError(response.value.errorCode, response.value.errorMessage);
-      }
-      process.setPid(response.value.pid);
-      await process.attach(0);
-      return process;
-    } catch (cause) {
-      await process.close(false).catch(() => undefined);
-      throw cause;
-    }
   }
 }

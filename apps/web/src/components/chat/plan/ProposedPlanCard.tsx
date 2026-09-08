@@ -13,7 +13,7 @@ import { EllipsisIcon } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { Badge } from "../../ui/badge";
 import {
   Dialog,
@@ -105,6 +105,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
     void api.projects
       .writeFile({
         cwd: workspaceRoot,
+        operationId: `workspace-write-${randomUUID()}`,
         ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
         relativePath,
         contents: saveContents,

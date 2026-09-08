@@ -255,6 +255,8 @@ export function createWsNativeApi(): NativeApi {
       activateCliProxy: rpcClient.server.activateCliProxy,
       verifyExecutionTarget: rpcClient.server.verifyExecutionTarget,
       installRemoteAgent: rpcClient.server.installRemoteAgent,
+      connectRemoteAgent: rpcClient.server.connectRemoteAgent,
+      getRemoteAgentUpdateStatus: rpcClient.server.getRemoteAgentUpdateStatus,
       unlockSshKey: rpcClient.server.unlockSshKey,
       unlockSshPassword: rpcClient.server.unlockSshPassword,
       upsertKeybinding: rpcClient.server.upsertKeybinding,

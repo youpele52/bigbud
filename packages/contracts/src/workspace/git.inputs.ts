@@ -8,17 +8,20 @@ import {
 import {
   ExecutionTargetInputShape,
   GIT_LIST_BRANCHES_MAX_LIMIT,
+  GitMutationOperationInputShape,
   TrimmedNonEmptyStringSchema,
 } from "./git.shared";
 
 export const GitFetchInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitFetchInput = typeof GitFetchInput.Type;
 
 export const GitDiscardChangesInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitDiscardChangesInput = typeof GitDiscardChangesInput.Type;
@@ -33,6 +36,7 @@ export type GitStatusInput = typeof GitStatusInput.Type;
 
 export const GitPullInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitPullInput = typeof GitPullInput.Type;
@@ -85,6 +89,7 @@ export type GitReadWorkingTreeDiffInput = typeof GitReadWorkingTreeDiffInput.Typ
 
 export const GitCreateWorktreeInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
   newBranch: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -101,6 +106,7 @@ export type GitPullRequestRefInput = typeof GitPullRequestRefInput.Type;
 
 export const GitPreparePullRequestThreadInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   reference: GitPullRequestReference,
   mode: GitPreparePullRequestThreadMode,
@@ -110,6 +116,7 @@ export type GitPreparePullRequestThreadInput = typeof GitPreparePullRequestThrea
 
 export const GitRemoveWorktreeInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   path: TrimmedNonEmptyStringSchema,
   force: Schema.optional(Schema.Boolean),
@@ -118,6 +125,7 @@ export type GitRemoveWorktreeInput = typeof GitRemoveWorktreeInput.Type;
 
 export const GitCreateBranchInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
   checkout: Schema.optional(Schema.Boolean),
@@ -126,6 +134,7 @@ export type GitCreateBranchInput = typeof GitCreateBranchInput.Type;
 
 export const GitRenameBranchInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   oldBranch: TrimmedNonEmptyStringSchema,
   newBranch: TrimmedNonEmptyStringSchema,
@@ -134,6 +143,7 @@ export type GitRenameBranchInput = typeof GitRenameBranchInput.Type;
 
 export const GitDeleteBranchInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
 });
@@ -141,6 +151,7 @@ export type GitDeleteBranchInput = typeof GitDeleteBranchInput.Type;
 
 export const GitCheckoutInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
 });
@@ -148,6 +159,7 @@ export type GitCheckoutInput = typeof GitCheckoutInput.Type;
 
 export const GitInitInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitInitInput = typeof GitInitInput.Type;

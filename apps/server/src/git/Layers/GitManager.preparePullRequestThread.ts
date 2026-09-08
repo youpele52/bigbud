@@ -1,9 +1,11 @@
 import { Effect } from "effect";
+import { randomUUID } from "node:crypto";
 
 import type { GitManagerShape } from "../Services/GitManager.ts";
 import type { GitCoreShape } from "../Services/GitCore.ts";
 import type { GitHubCliShape } from "../Services/GitHubCli.ts";
 import type { ProjectSetupScriptRunnerShape } from "../../project/Services/ProjectSetupScriptRunner.ts";
+import { gitMutationOperationId } from "./GitCoreExecutor.helpers.ts";
 
 import {
   gitManagerError,
@@ -35,6 +37,7 @@ export function makePreparePullRequestThreadStep(input: {
   const preparePullRequestThread: GitManagerShape["preparePullRequestThread"] = Effect.fn(
     "preparePullRequestThread",
   )(function* (input) {
+    const operationId = input.operationId ?? `git-prepare-${randomUUID()}`;
     const maybeRunSetupScript = (worktreePath: string) => {
       if (!input.threadId) {
         return Effect.void;
@@ -80,6 +83,7 @@ export function makePreparePullRequestThreadStep(input: {
             ...toPullRequestHeadRemoteInfo(pullRequestSummary),
           },
           details.branch ?? pullRequest.headBranch,
+          gitMutationOperationId(operationId, "local.configureUpstream"),
         );
         return {
           pullRequest,
@@ -90,6 +94,7 @@ export function makePreparePullRequestThreadStep(input: {
 
       const ensureExistingWorktreeUpstream = Effect.fn("ensureExistingWorktreeUpstream")(function* (
         worktreePath: string,
+        operationId: string,
       ) {
         const details = yield* gitCore.statusDetails(worktreePath);
         yield* configurePullRequestHeadUpstream(
@@ -99,6 +104,7 @@ export function makePreparePullRequestThreadStep(input: {
             ...toPullRequestHeadRemoteInfo(pullRequestSummary),
           },
           details.branch ?? pullRequest.headBranch,
+          operationId,
         );
       });
 
@@ -141,7 +147,10 @@ export function makePreparePullRequestThreadStep(input: {
         existingBranchBeforeFetch?.worktreePath &&
         existingBranchBeforeFetchPath !== rootWorktreePath
       ) {
-        yield* ensureExistingWorktreeUpstream(existingBranchBeforeFetch.worktreePath);
+        yield* ensureExistingWorktreeUpstream(
+          existingBranchBeforeFetch.worktreePath,
+          gitMutationOperationId(operationId, "existingWorktree.configureUpstream"),
+        );
         return {
           pullRequest,
           branch: localPullRequestBranch,
@@ -159,6 +168,7 @@ export function makePreparePullRequestThreadStep(input: {
         input.cwd,
         pullRequestWithRemoteInfo,
         localPullRequestBranch,
+        gitMutationOperationId(operationId, "materializeHead"),
       );
 
       const existingBranchAfterFetch = yield* findLocalHeadBranch(input.cwd);
@@ -169,7 +179,10 @@ export function makePreparePullRequestThreadStep(input: {
         existingBranchAfterFetch?.worktreePath &&
         existingBranchAfterFetchPath !== rootWorktreePath
       ) {
-        yield* ensureExistingWorktreeUpstream(existingBranchAfterFetch.worktreePath);
+        yield* ensureExistingWorktreeUpstream(
+          existingBranchAfterFetch.worktreePath,
+          gitMutationOperationId(operationId, "fetchedWorktree.configureUpstream"),
+        );
         return {
           pullRequest,
           branch: localPullRequestBranch,
@@ -187,8 +200,12 @@ export function makePreparePullRequestThreadStep(input: {
         cwd: input.cwd,
         branch: localPullRequestBranch,
         path: null,
+        operationId: gitMutationOperationId(operationId, "createWorktree"),
       });
-      yield* ensureExistingWorktreeUpstream(worktree.worktree.path);
+      yield* ensureExistingWorktreeUpstream(
+        worktree.worktree.path,
+        gitMutationOperationId(operationId, "createdWorktree.configureUpstream"),
+      );
       yield* maybeRunSetupScript(worktree.worktree.path);
 
       return {

@@ -12,10 +12,15 @@ import {
 } from "../terminal/Services/PTY.ts";
 import type { RemoteAgentPtyClient, RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
 import type { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 
 export interface RemoteAgentPtyResolver {
+  readonly restoreOrCreate?: (input: PtySpawnInput) => Promise<PtyProcess>;
   readonly resolvePty: (executionTargetId: string) => Promise<RemoteAgentPtyClient>;
-  readonly resolveWorkspace: (executionTargetId: string) => Promise<RemoteAgentWorkspaceClient>;
+  readonly resolveWorkspace: (
+    executionTargetId: string,
+    connection: RemoteAgentConnection,
+  ) => Promise<RemoteAgentWorkspaceClient>;
 }
 
 export interface PreparedRemoteAgentWorkspacePty {
@@ -37,10 +42,10 @@ export async function prepareRemoteAgentWorkspacePty(
   },
   resolver: RemoteAgentPtyResolver,
 ): Promise<PreparedRemoteAgentWorkspacePty> {
-  const workspace = await resolver.resolveWorkspace(input.executionTargetId);
+  const client = await resolver.resolvePty(input.executionTargetId);
+  const workspace = await resolver.resolveWorkspace(input.executionTargetId, client.connection);
   const workspaceHandle = remoteAgentWorkspaceHandle(input.executionTargetId, input.workspaceRoot);
   await workspace.openWorkspace(workspaceHandle, input.workspaceRoot);
-  const client = await resolver.resolvePty(input.executionTargetId);
   return { client, workspaceHandle };
 }
 
@@ -99,6 +104,7 @@ async function spawnRemotePty(
   input: PtySpawnInput,
   resolver: RemoteAgentPtyResolver,
 ): Promise<PtyProcess> {
+  if (resolver.restoreOrCreate && input.ownerKey) return resolver.restoreOrCreate(input);
   const executionTargetId = input.executionTargetId;
   const root = input.remoteCwd;
   if (!executionTargetId || !root) {

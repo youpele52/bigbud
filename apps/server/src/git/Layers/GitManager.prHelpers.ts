@@ -13,6 +13,7 @@ import type { GitCoreShape } from "../Services/GitCore.ts";
 import type { GitHubCliShape } from "../Services/GitHubCli.ts";
 import { resolveHeadRepositoryNameWithOwner, shouldPreferSshRemote } from "./GitManager.prUtils.ts";
 import type { PullRequestHeadRemoteInfo, ResolvedPullRequest } from "./GitManager.types.ts";
+import { gitMutationOperationId } from "./GitCoreExecutor.helpers.ts";
 
 export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) {
   const configurePullRequestHeadUpstreamBase = Effect.fn("configurePullRequestHeadUpstream")(
@@ -20,6 +21,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
       cwd: string,
       pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
       localBranch = pullRequest.headBranch,
+      operationId?: string,
     ) {
       const repositoryNameWithOwner = resolveHeadRepositoryNameWithOwner(pullRequest) ?? "";
       if (repositoryNameWithOwner.length === 0) {
@@ -40,6 +42,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
         cwd,
         preferredName: preferredRemoteName,
         url: remoteUrl,
+        operationId: gitMutationOperationId(operationId, "ensureRemote"),
       });
 
       yield* gitCore.setBranchUpstream({
@@ -47,6 +50,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
         branch: localBranch,
         remoteName,
         remoteBranch: pullRequest.headBranch,
+        operationId: gitMutationOperationId(operationId, "setBranchUpstream"),
       });
     },
   );
@@ -55,8 +59,9 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
     cwd: string,
     pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
     localBranch = pullRequest.headBranch,
+    operationId?: string,
   ) =>
-    configurePullRequestHeadUpstreamBase(cwd, pullRequest, localBranch).pipe(
+    configurePullRequestHeadUpstreamBase(cwd, pullRequest, localBranch, operationId).pipe(
       Effect.catch((error) =>
         Effect.logWarning(
           `GitManager.configurePullRequestHeadUpstream: failed to configure upstream for ${localBranch} -> ${pullRequest.headBranch} in ${cwd}: ${error.message}`,
@@ -69,6 +74,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
       cwd: string,
       pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
       localBranch = pullRequest.headBranch,
+      operationId?: string,
     ) {
       const repositoryNameWithOwner = resolveHeadRepositoryNameWithOwner(pullRequest) ?? "";
 
@@ -77,6 +83,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
           cwd,
           prNumber: pullRequest.number,
           branch: localBranch,
+          operationId: gitMutationOperationId(operationId, "fetchPullRequestBranch"),
         });
         return;
       }
@@ -95,6 +102,7 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
         cwd,
         preferredName: preferredRemoteName,
         url: remoteUrl,
+        operationId: gitMutationOperationId(operationId, "ensureRemote"),
       });
 
       yield* gitCore.fetchRemoteBranch({
@@ -102,12 +110,14 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
         remoteName,
         remoteBranch: pullRequest.headBranch,
         localBranch,
+        operationId: gitMutationOperationId(operationId, "fetchRemoteBranch"),
       });
       yield* gitCore.setBranchUpstream({
         cwd,
         branch: localBranch,
         remoteName,
         remoteBranch: pullRequest.headBranch,
+        operationId: gitMutationOperationId(operationId, "setBranchUpstream"),
       });
     },
   );
@@ -116,13 +126,15 @@ export function makePrHelpers(gitCore: GitCoreShape, gitHubCli: GitHubCliShape) 
     cwd: string,
     pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
     localBranch = pullRequest.headBranch,
+    operationId?: string,
   ) =>
-    materializePullRequestHeadBranchBase(cwd, pullRequest, localBranch).pipe(
+    materializePullRequestHeadBranchBase(cwd, pullRequest, localBranch, operationId).pipe(
       Effect.catch(() =>
         gitCore.fetchPullRequestBranch({
           cwd,
           prNumber: pullRequest.number,
           branch: localBranch,
+          operationId: gitMutationOperationId(operationId, "fetchPullRequestBranch.fallback"),
         }),
       ),
     );

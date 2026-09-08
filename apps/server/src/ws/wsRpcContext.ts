@@ -60,6 +60,10 @@ import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
+import {
+  RemoteAgentUpdateCoordinator,
+  type RemoteAgentUpdateCoordinatorShape,
+} from "../remote-agent/remoteAgentUpdate.coordinator.ts";
 
 export { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 
@@ -87,6 +91,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const remoteAgentShellRunner = yield* Effect.serviceOption(RemoteAgentShellRunner);
     const remoteAgentHealth = yield* Effect.serviceOption(RemoteAgentHealthService);
     const remoteAgentInstaller = yield* Effect.serviceOption(RemoteAgentInstallerService);
+    const remoteAgentUpdateCoordinator = yield* Effect.serviceOption(RemoteAgentUpdateCoordinator);
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
@@ -332,6 +337,9 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       workspaceRuntime,
       remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
       remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
+      remoteAgentUpdateCoordinator: Option.getOrUndefined(remoteAgentUpdateCoordinator) as
+        | RemoteAgentUpdateCoordinatorShape
+        | undefined,
     };
   });
 

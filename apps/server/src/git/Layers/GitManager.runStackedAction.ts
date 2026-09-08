@@ -13,9 +13,17 @@ import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 import { isCommitAction, type CommitAndBranchSuggestion } from "./GitManager.types.ts";
 import { createProgressEmitter } from "./GitManager.progress.ts";
 import { gitManagerError } from "./GitManager.prUtils.ts";
+import { gitMutationOperationId } from "./GitCoreExecutor.helpers.ts";
 import type { makeCommitStep } from "./GitManager.commitStep.ts";
 import type { makePrLookup } from "./GitManager.prLookup.ts";
 import type { makePrStep } from "./GitManager.prStep.ts";
+import { getConfiguredRemoteAgentComposition } from "../../remote-agent/remoteAgentDefault.ts";
+import {
+  reserveRemoteAgentGitAction,
+  RemoteAgentGitActionBinding,
+  completeRemoteAgentGitAction,
+} from "../../remote-agent/remoteAgentGit.action.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
 export function makeRunStackedActionStep(input: {
   gitCore: GitCoreShape;
@@ -115,6 +123,7 @@ export function makeRunStackedActionStep(input: {
             input.commitMessage,
             input.filePaths,
             input.executionTargetId,
+            input.actionId,
           );
           branchStep = result.branchStep;
           commitMessageForStep = result.resolvedCommitMessage;
@@ -138,7 +147,7 @@ export function makeRunStackedActionStep(input: {
                   preResolvedCommitSuggestion,
                   input.filePaths,
                   options?.progressReporter,
-                  progress.actionId,
+                  input.actionId,
                   input.executionTargetId,
                 ),
               ),
@@ -155,7 +164,12 @@ export function makeRunStackedActionStep(input: {
               .pipe(
                 Effect.tap(() => Ref.set(currentPhase, Option.some("push"))),
                 Effect.flatMap(() =>
-                  gitCore.pushCurrentBranch(input.cwd, currentBranch, input.executionTargetId),
+                  gitCore.pushCurrentBranch(
+                    input.cwd,
+                    currentBranch,
+                    input.executionTargetId,
+                    gitMutationOperationId(input.actionId, "push"),
+                  ),
                 ),
               )
           : { status: "skipped_not_requested" as const };
@@ -202,7 +216,28 @@ export function makeRunStackedActionStep(input: {
         return result;
       });
 
-      return yield* runAction().pipe(
+      const target = input.executionTargetId;
+      const composition = getConfiguredRemoteAgentComposition();
+      const binding =
+        target && !isLocalExecutionTarget(target) && (composition?.managed ?? composition !== null)
+          ? yield* Effect.tryPromise({
+              try: () => reserveRemoteAgentGitAction(target, input.actionId, input),
+              catch: (cause) =>
+                gitManagerError(
+                  "runStackedAction",
+                  "Remote Git action continuity is unavailable.",
+                  cause,
+                ),
+            })
+          : undefined;
+      const action =
+        binding && target
+          ? runAction().pipe(
+              Effect.provideService(RemoteAgentGitActionBinding, binding),
+              Effect.tap(() => completeRemoteAgentGitAction(target, input.actionId)),
+            )
+          : runAction();
+      return yield* action.pipe(
         Effect.ensuring(invalidateStatus(input.cwd)),
         Effect.tapError((error) =>
           Effect.flatMap(Ref.get(currentPhase), (phase) =>

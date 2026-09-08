@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -44,6 +44,9 @@ function replaceOnce(script: string, boundary: string, replacement: string): str
 
 function makeLinuxHarness() {
   const home = mkdtempSync(join(tmpdir(), "bigbud-agent-activation-"));
+  // Retired activation compatibility requires a pre-existing legacy root.
+  // Candidate installation itself must not create this directory.
+  mkdirSync(join(home, ".bigbud/agent/state"), { recursive: true, mode: 0o700 });
   const run = (script: string, stdin?: string) =>
     execFileSync("sh", ["-lc", script], {
       env: { ...process.env, HOME: home },

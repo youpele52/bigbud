@@ -147,6 +147,14 @@ impl WorkspaceWatchRegistry {
         true
     }
 
+    /** Return true when any workspace watch still owns a live subscription. */
+    pub fn has_active_subscriptions(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| !state.subscriptions.is_empty())
+            .unwrap_or(true)
+    }
+
     #[cfg(test)]
     fn counts(&self) -> (usize, usize) {
         self.state

@@ -8,6 +8,8 @@ import {
 } from "../shell/Services/ThreadShellRunner.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import { remoteAgentRequestDigest } from "./remoteAgentRequestDigest.ts";
+import type { OwnedRemoteProcessRunner } from "./remoteAgentOwnedProcess.ts";
 
 export interface RemoteAgentShellRunnerResolver {
   readonly resolve: (executionTargetId: string) => ThreadShellRunnerShape;
@@ -30,10 +32,13 @@ function operationId(): string {
 }
 
 function requestDigest(input: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(input));
+  return remoteAgentRequestDigest(input);
 }
 
 export function makeRemoteAgentShellRunnerResolver(input: {
+  readonly runOwned?: OwnedRemoteProcessRunner;
+  readonly cancelOwned?: (ownerKey: string) => Promise<void>;
+  readonly isOwnedActive?: (ownerKey: string) => Promise<boolean>;
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentProcessClient>;
 }): RemoteAgentShellRunnerResolver {
   const runners = new Map<string, ThreadShellRunnerShape>();
@@ -50,25 +55,69 @@ export function makeRemoteAgentShellRunnerResolver(input: {
         { readonly client: RemoteAgentProcessClient; readonly operationId: string }
       >();
       const runner = {
-        isActive: (threadId) => Effect.succeed(active.has(threadId)),
+        isActive: (threadId) =>
+          input.isOwnedActive
+            ? Effect.tryPromise({
+                try: () => input.isOwnedActive!(`shell:${threadId}`),
+                catch: () => true,
+              }).pipe(Effect.catch(() => Effect.succeed(true)))
+            : Effect.succeed(active.has(threadId)),
         run: (runInput) => {
           const id = operationId();
+          let terminalVerified = false;
           return Effect.tryPromise({
             try: async () => {
+              if (input.runOwned) {
+                const result = await input.runOwned({
+                  ownerKey: `shell:${runInput.threadId}`,
+                  invocationId: runInput.invocationId ?? id,
+                  target: executionTargetId,
+                  cwd: runInput.cwd,
+                  newAfterTerminal: true,
+                  request: {
+                    workspaceHandle: workspaceHandle(executionTargetId, runInput.cwd),
+                    operationId: runInput.invocationId ?? id,
+                    requestDigest: requestDigest({
+                      target: executionTargetId,
+                      cwd: runInput.cwd,
+                      command: runInput.command,
+                      timeoutMs: runInput.timeoutMs ?? 30_000,
+                    }),
+                    command: "/bin/sh",
+                    args: ["-lc", runInput.command],
+                    timeoutMs: runInput.timeoutMs ?? 30_000,
+                  },
+                });
+                const output = `${new TextDecoder().decode(result.stdout)}${new TextDecoder().decode(result.stderr)}`;
+                if (output) runInput.onOutputChunk?.(output);
+                return {
+                  output,
+                  exitCode: result.completed.hasExitCode ? result.completed.exitCode : null,
+                };
+              }
+              if (active.has(runInput.threadId)) {
+                throw new Error(
+                  "Remote shell owner has unresolved work; resolve its outcome before a new invocation.",
+                );
+              }
               const client = await input.resolve(executionTargetId);
               const workspace = new RemoteAgentWorkspaceClient(client.connection);
               const handle = workspaceHandle(executionTargetId, runInput.cwd);
               await workspace.openWorkspace(handle, runInput.cwd);
+              if (active.has(runInput.threadId)) {
+                throw new Error("Remote shell owner already has unresolved work.");
+              }
               active.set(runInput.threadId, { client, operationId: id });
               const result = await client.run({
                 workspaceHandle: handle,
-                operationId: id,
+                operationId: runInput.invocationId ?? id,
                 requestDigest: requestDigest({ ...runInput, executionTargetId }),
                 command: "/bin/sh",
                 args: ["-lc", runInput.command],
                 timeoutMs: runInput.timeoutMs ?? 30_000,
               });
               const output = `${new TextDecoder().decode(result.stdout)}${new TextDecoder().decode(result.stderr)}`;
+              terminalVerified = true;
               if (output.length > 0) runInput.onOutputChunk?.(output);
               return {
                 output,
@@ -85,7 +134,8 @@ export function makeRemoteAgentShellRunnerResolver(input: {
             Effect.ensuring(
               Effect.sync(() => {
                 const current = active.get(runInput.threadId);
-                if (current?.operationId === id) active.delete(runInput.threadId);
+                if (terminalVerified && current?.operationId === id)
+                  active.delete(runInput.threadId);
               }),
             ),
           );
@@ -93,8 +143,12 @@ export function makeRemoteAgentShellRunnerResolver(input: {
         closeThread: (threadId) =>
           Effect.tryPromise({
             try: async () => {
+              if (input.cancelOwned) return input.cancelOwned(`shell:${threadId}`);
               const running = active.get(threadId);
-              if (running) await running.client.cancelAndWait({ operationId: running.operationId });
+              if (running) {
+                await running.client.cancelAndWait({ operationId: running.operationId });
+                if (active.get(threadId) === running) active.delete(threadId);
+              }
             },
             catch: (cause) =>
               new ThreadShellRunnerError({
@@ -102,10 +156,7 @@ export function makeRemoteAgentShellRunnerResolver(input: {
                   cause instanceof Error ? cause.message : "Failed to cancel remote shell command.",
                 cause,
               }),
-          }).pipe(
-            Effect.asVoid,
-            Effect.catch(() => Effect.void),
-          ),
+          }).pipe(Effect.asVoid),
       } satisfies ThreadShellRunnerShape;
       runners.set(executionTargetId, runner);
       return runner;

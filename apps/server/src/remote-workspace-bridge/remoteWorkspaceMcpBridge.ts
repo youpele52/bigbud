@@ -25,7 +25,14 @@ async function writeBridgeFiles(
   const serverPath = path.join(bridge.bridgeDir, "remote-workspace-mcp-server.mjs");
   await bridge.writeWorkspaceFile(
     ".bigbud/remote-workspace-mcp-server.mjs",
-    renderRemoteWorkspaceMcpServerSource(httpConfig),
+    renderRemoteWorkspaceMcpServerSource({
+      ...httpConfig,
+      providerInvocationStatePath: path.join(
+        bridge.bridgeDir,
+        ".bigbud",
+        "mcp-invocation-state.json",
+      ),
+    }),
   );
   return serverPath;
 }

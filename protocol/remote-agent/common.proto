@@ -67,3 +67,17 @@ message ProtocolError {
   string code = 2;
   string message = 3;
 }
+
+// Supported only by managed supervisors built with the retirement capability.
+message SupervisorShutdownRequest {
+  string request_id = 1;
+  string expected_agent_epoch = 2;
+  string expected_build_digest = 3;
+}
+
+message SupervisorShutdownResponse {
+  string request_id = 1;
+  bool accepted = 2;
+  bool terminal = 3;
+  string detail = 4;
+}

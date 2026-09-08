@@ -4,6 +4,8 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 
+import { randomUUID } from "~/lib/utils";
+
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
 import {
@@ -61,6 +63,10 @@ function runGitStackedAction(
     });
 }
 
+function withGitMutationOperationId<T extends { operationId?: string | undefined }>(input: T): T {
+  return input.operationId ? input : { ...input, operationId: `git-rpc-${randomUUID()}` };
+}
+
 export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
   return {
     dispose: () => transport.dispose(),
@@ -112,8 +118,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.projectsSearchFileContents](input)),
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
-      writeFile: (input) =>
-        transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+      writeFile: (input) => {
+        const operationInput = input.operationId
+          ? input
+          : { ...input, operationId: `workspace-write-${randomUUID()}` };
+        return transport.request((client) => client[WS_METHODS.projectsWriteFile](operationInput));
+      },
     },
     notes: {
       list: (input) => transport.request((client) => client[WS_METHODS.notesList](input)),
@@ -143,7 +153,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       openPath: (input) => transport.request((client) => client[WS_METHODS.shellOpenPath](input)),
     },
     git: {
-      pull: (input) => transport.request((client) => client[WS_METHODS.gitPull](input)),
+      pull: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitPull](operationInput));
+      },
       refreshStatus: (input) =>
         transport.request((client) => client[WS_METHODS.gitRefreshStatus](input)),
       listCommits: (input) =>
@@ -157,25 +170,50 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       runStackedAction: (input, options) => runGitStackedAction(transport, input, options),
       listBranches: (input) =>
         transport.request((client) => client[WS_METHODS.gitListBranches](input)),
-      createWorktree: (input) =>
-        transport.request((client) => client[WS_METHODS.gitCreateWorktree](input)),
-      removeWorktree: (input) =>
-        transport.request((client) => client[WS_METHODS.gitRemoveWorktree](input)),
-      createBranch: (input) =>
-        transport.request((client) => client[WS_METHODS.gitCreateBranch](input)),
-      renameBranch: (input) =>
-        transport.request((client) => client[WS_METHODS.gitRenameBranch](input)),
-      deleteBranch: (input) =>
-        transport.request((client) => client[WS_METHODS.gitDeleteBranch](input)),
-      checkout: (input) => transport.request((client) => client[WS_METHODS.gitCheckout](input)),
-      init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
-      fetch: (input) => transport.request((client) => client[WS_METHODS.gitFetch](input)),
-      discardChanges: (input) =>
-        transport.request((client) => client[WS_METHODS.gitDiscardChanges](input)),
+      createWorktree: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitCreateWorktree](operationInput));
+      },
+      removeWorktree: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitRemoveWorktree](operationInput));
+      },
+      createBranch: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitCreateBranch](operationInput));
+      },
+      renameBranch: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitRenameBranch](operationInput));
+      },
+      deleteBranch: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitDeleteBranch](operationInput));
+      },
+      checkout: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitCheckout](operationInput));
+      },
+      init: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitInit](operationInput));
+      },
+      fetch: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitFetch](operationInput));
+      },
+      discardChanges: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) => client[WS_METHODS.gitDiscardChanges](operationInput));
+      },
       resolvePullRequest: (input) =>
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
-      preparePullRequestThread: (input) =>
-        transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      preparePullRequestThread: (input) => {
+        const operationInput = withGitMutationOperationId(input);
+        return transport.request((client) =>
+          client[WS_METHODS.gitPreparePullRequestThread](operationInput),
+        );
+      },
     },
     server: {
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
@@ -188,6 +226,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
       installRemoteAgent: (input) =>
         transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
+      connectRemoteAgent: (input) =>
+        transport.request((client) => client[WS_METHODS.serverConnectRemoteAgent](input)),
+      getRemoteAgentUpdateStatus: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetRemoteAgentUpdateStatus](input)),
       unlockSshKey: (input) =>
         transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
       unlockSshPassword: (input) =>

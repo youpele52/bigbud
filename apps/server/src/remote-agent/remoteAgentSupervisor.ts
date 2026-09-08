@@ -5,6 +5,15 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+export function buildRemoteAgentSupervisorShutdownCommand(input: {
+  readonly binaryPath: string;
+  readonly statePath: string;
+}): string {
+  return `set -eu
+BIGBUD_AGENT_STATE_DIR=${shellQuote(input.statePath)} exec ${shellQuote(input.binaryPath)} --shutdown-supervisor
+`;
+}
+
 export function buildRemoteAgentSupervisorPreparationCommand(
   binaryPath: string,
   connectProxy = false,
@@ -38,9 +47,29 @@ export function buildRemoteAgentSupervisorPreparationCommand(
 
 export function buildOptionalRemoteAgentSupervisorPreparationCommand(binaryPath: string): string {
   const binary = shellQuote(binaryPath);
-  return `if test -x ${binary}; then\n${buildRemoteAgentSupervisorPreparationCommand(binaryPath)}\nfi`;
+  // Unknown flags in 0.2.205 enter stateful stdio and rotate the epoch, even with EOF.
+  // Never probe that binary with --prepare-supervisor against restored live state.
+  return [
+    `if test -x ${binary}; then`,
+    `  identity=$(${binary} --check) || exit $?`,
+    '  case "$identity" in',
+    "    'bigbud-remote-agent\t0.2.205\t'*)",
+    "      printf '%s\\n' 'Remote agent 0.2.205 does not support safe supervisor preparation; the binary was restored, but supervisor recovery requires manual verification. Existing work was not stopped by this recovery step.' >&2",
+    "      exit 1",
+    "      ;;",
+    "  esac",
+    buildRemoteAgentSupervisorPreparationCommand(binaryPath),
+    "fi",
+  ].join("\n");
 }
 
 export function buildRemoteAgentProxyCommand(binaryPath: string): string {
-  return buildRemoteAgentSupervisorPreparationCommand(binaryPath, true);
+  const binary = shellQuote(binaryPath);
+  return [
+    `identity=$(${binary} --check) || exit $?`,
+    'case "$identity" in',
+    `  'bigbud-remote-agent\t0.2.205\t'*) exec ${binary} --proxy ;;`,
+    "esac",
+    buildRemoteAgentSupervisorPreparationCommand(binaryPath, true),
+  ].join("\n");
 }

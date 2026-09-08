@@ -107,6 +107,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             threadId: input.threadId,
             host: serverConfig.host,
             port: serverConfig.port,
+            providerSessionId: `codex:${input.threadId}:${input.sessionEpoch ?? 0}`,
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({

@@ -219,6 +219,10 @@ export interface WsRpcClient {
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
+    readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
+    readonly getRemoteAgentUpdateStatus: RpcUnaryMethod<
+      typeof WS_METHODS.serverGetRemoteAgentUpdateStatus
+    >;
     readonly unlockSshKey: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshKey>;
     readonly unlockSshPassword: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshPassword>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
