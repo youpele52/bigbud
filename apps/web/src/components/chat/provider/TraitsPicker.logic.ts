@@ -1,15 +1,14 @@
 import {
   type ClaudeModelOptions,
-  type CopilotModelOptions,
-  type CodexModelOptions,
-  type OpencodeModelOptions,
   type PiModelOptions,
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
 } from "@bigbud/contracts";
 import {
+  buildNextProviderOptions,
   getDefaultContextWindow,
+  getRawProviderEffort,
   hasContextWindowOption,
   isClaudeUltrathinkPrompt,
   resolveEffort,
@@ -25,19 +24,7 @@ export function getRawEffort(
   provider: ProviderKind,
   modelOptions: ProviderOptions | null | undefined,
 ): string | null {
-  if (provider === "codex") {
-    return trimOrNull((modelOptions as CodexModelOptions | undefined)?.reasoningEffort);
-  }
-  if (provider === "copilot") {
-    return trimOrNull((modelOptions as CopilotModelOptions | undefined)?.reasoningEffort);
-  }
-  if (provider === "opencode") {
-    return trimOrNull((modelOptions as OpencodeModelOptions | undefined)?.reasoningEffort);
-  }
-  if (provider === "pi") {
-    return null;
-  }
-  return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.effort);
+  return getRawProviderEffort(provider, modelOptions);
 }
 
 export function getRawContextWindow(
@@ -61,25 +48,7 @@ export function buildNextOptions(
   modelOptions: ProviderOptions | null | undefined,
   patch: Record<string, unknown>,
 ): ProviderOptions {
-  if (provider === "codex") {
-    return { ...(modelOptions as CodexModelOptions | undefined), ...patch } as CodexModelOptions;
-  }
-  if (provider === "copilot") {
-    return {
-      ...(modelOptions as CopilotModelOptions | undefined),
-      ...patch,
-    } as CopilotModelOptions;
-  }
-  if (provider === "opencode") {
-    return {
-      ...(modelOptions as OpencodeModelOptions | undefined),
-      ...patch,
-    } as OpencodeModelOptions;
-  }
-  if (provider === "pi") {
-    return { ...(modelOptions as PiModelOptions | undefined), ...patch } as PiModelOptions;
-  }
-  return { ...(modelOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
+  return buildNextProviderOptions(provider, modelOptions, patch);
 }
 
 export function buildNextPiThinkingOptions(
@@ -102,8 +71,9 @@ export function getSelectedTraits(
   prompt: string,
   modelOptions: ProviderOptions | null | undefined,
   allowPromptInjectedEffort: boolean,
+  subProviderID?: string | null,
 ) {
-  const caps = getProviderModelCapabilities(models, model, provider);
+  const caps = getProviderModelCapabilities(models, model, provider, subProviderID);
   const effortLevels = allowPromptInjectedEffort
     ? [
         ...caps.reasoningEffortLevels,
@@ -118,7 +88,8 @@ export function getSelectedTraits(
         (option) => !caps.promptInjectedEffortLevels.includes(option.value),
       );
   const rawEffort = getRawEffort(provider, modelOptions);
-  const effort = resolveEffort(caps, rawEffort) ?? null;
+  const resolvedEffort = resolveEffort(caps, rawEffort) ?? null;
+  const effort = effortLevels.length > 0 ? resolvedEffort : null;
   const thinkingLevel = provider === "pi" ? getRawThinkingLevel(modelOptions) : null;
   const thinkingLevels = provider === "pi" ? caps.reasoningEffortLevels : [];
   const workflowModes = provider === "claudeAgent" ? (caps.workflowModes ?? []) : [];
@@ -160,7 +131,19 @@ export function getSelectedTraits(
     defaultContextWindow,
     ultrathinkPromptControlled,
     ultrathinkInBodyText,
+    hasEffortOptions: effortLevels.length > 0,
   };
+}
+
+export function hasConfigurableTraits(traits: ReturnType<typeof getSelectedTraits>): boolean {
+  return (
+    traits.hasEffortOptions ||
+    traits.thinkingLevels.length > 0 ||
+    traits.thinkingEnabled !== null ||
+    traits.workflowModes.length > 0 ||
+    traits.caps.supportsFastMode ||
+    traits.contextWindowOptions.length > 1
+  );
 }
 
 export type TraitsPickerProviderOptions = ProviderOptions;

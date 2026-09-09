@@ -64,6 +64,128 @@ describe("managed server catalog", () => {
     );
   });
 
+  it("maps live OpenCode variants without synthesizing High/Medium/Low", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: {
+                none: {},
+                xhigh: { default: true },
+                custom: { name: "Custom Deep" },
+              },
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(
+      result.models[0]?.capabilities?.reasoningEffortLevels.map(({ value, label, isDefault }) => ({
+        value,
+        label,
+        isDefault,
+      })),
+      [
+        { value: "none", label: "None", isDefault: undefined },
+        { value: "xhigh", label: "Extra High", isDefault: true },
+        { value: "custom", label: "Custom Deep", isDefault: undefined },
+      ],
+    );
+    assert.strictEqual(result.models[0]?.capabilities?.effortMetadataStatus, "verified-supported");
+  });
+
+  it("treats an explicit empty variant list as unsupported", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: {},
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(result.models[0]?.capabilities?.reasoningEffortLevels, []);
+    assert.strictEqual(
+      result.models[0]?.capabilities?.effortMetadataStatus,
+      "verified-unsupported",
+    );
+  });
+
+  it("treats an explicit reasoning denial as verified unsupported", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: false },
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.strictEqual(
+      result.models[0]?.capabilities?.effortMetadataStatus,
+      "verified-unsupported",
+    );
+  });
+
+  it("keeps malformed variant metadata unavailable", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: null,
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.strictEqual(result.models[0]?.capabilities?.effortMetadataStatus, "unknown");
+  });
+
   it.effect("keeps healthy readiness while representing a transient catalog failure", () =>
     Effect.gen(function* () {
       const published = yield* Ref.make<ServerProvider | null>(null);

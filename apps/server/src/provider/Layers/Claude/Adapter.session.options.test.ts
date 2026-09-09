@@ -174,7 +174,7 @@ describe("buildClaudeQueryOptions forwarded subagent rollout", () => {
         forwardSubagentText: false,
       }).queryOptions.effort;
 
-    expect(buildEffort("not-advertised")).toBe("high");
+    expect(buildEffort("not-advertised")).toBeUndefined();
     expect(buildEffort("not-advertised")).not.toBe("not-advertised");
     expect(buildEffort("ultrathink")).toBeUndefined();
   });

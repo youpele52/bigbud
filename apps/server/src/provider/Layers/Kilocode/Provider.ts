@@ -1,6 +1,6 @@
 import type { KilocodeSettings, ServerProvider, ServerProviderModel } from "@bigbud/contracts";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { Effect, Equal, Layer, Result, Stream } from "effect";
+import { Effect, Equal, FileSystem, Layer, Path, Result, Stream } from "effect";
 
 import {
   buildInstalledProviderAvailability,
@@ -24,9 +24,11 @@ import { withManagedServerProbe } from "../../managedServerProbe.ts";
 import { KilocodeProvider } from "../../Services/Kilocode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import { listOpencodeProviders } from "../Opencode/Provider.sdk";
 import { isVersionAtLeast } from "../Opencode/Provider.version";
 import { resolveKilocodeBinary } from "./Provider.binary";
+import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
 
 const PROVIDER = "kilocode" as const;
 const MINIMUM_KILOCODE_VERSION = "1.0.0";
@@ -282,12 +284,34 @@ export const KilocodeProviderLive = Layer.effect(
   KilocodeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const serverManager = yield* OpencodeServerManager;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const initialSettings = yield* serverSettings.getSettings.pipe(
       Effect.map((settings) => settings.providers.kilocode),
     );
     const fallback = yield* loadManagedServerFallbackModels(PROVIDER);
+    const withCache = (snapshot: ServerProvider, generation: number, persist: boolean) =>
+      serverSettings.getSettings.pipe(
+        Effect.orDie,
+        Effect.flatMap((settings) =>
+          applyManagedProviderEffortCache({
+            snapshot,
+            provider: PROVIDER,
+            binaryPath: settings.providers.kilocode.binaryPath,
+            customModels: settings.providers.kilocode.customModels,
+            workspace: serverConfig.cwd,
+            stateDir: serverConfig.stateDir,
+            generation,
+            persist,
+            scopeKey: PROVIDER,
+            fileSystem,
+            path,
+          }),
+        ),
+      );
     const checkProvider = checkKilocodeProviderStatus({
       availabilityOnly: true,
       fallbackModels: fallback.models,
@@ -296,6 +320,7 @@ export const KilocodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withCache(snapshot, 0, false)),
     );
     const catalogProviderCheck = checkKilocodeProviderStatus({
       invalidateOnRunFailure: false,
@@ -318,12 +343,14 @@ export const KilocodeProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
       checkProviderAtStartup: checkProvider,
-      enrichSnapshot: ({ snapshot, publishSnapshot }) =>
+      enrichSnapshot: ({ snapshot, generation, publishSnapshot }) =>
         snapshot.enabled && snapshot.status === "ready"
           ? enrichManagedServerCatalog({
               provider: PROVIDER,
               baseSnapshot: snapshot,
-              catalogSnapshot: catalogProviderCheck,
+              catalogSnapshot: catalogProviderCheck.pipe(
+                Effect.flatMap((catalog) => withCache(catalog, generation, true)),
+              ),
               publishSnapshot,
             })
           : Effect.void,

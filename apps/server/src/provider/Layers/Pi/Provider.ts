@@ -1,9 +1,10 @@
 import type { PiSettings, ServerProvider } from "@bigbud/contracts";
 import { ServerSettingsError } from "@bigbud/contracts";
-import { Effect, Equal, Layer, Option, Result, Stream } from "effect";
+import { Effect, Equal, FileSystem, Layer, Option, Path, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import {
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
@@ -18,6 +19,7 @@ import { PiProvider } from "../../Services/Pi/Provider";
 import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import {
   createPiRpcProcess,
   type PiRpcModel,
@@ -309,6 +311,9 @@ export const PiProviderLive = Layer.effect(
   PiProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const initialSettings = yield* serverSettings.getSettings.pipe(
       Effect.map((settings) => settings.providers.pi),
@@ -318,6 +323,15 @@ export const PiProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
+    const decorateSnapshot = makeProviderEffortCacheDecorator<PiSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) => JSON.stringify(settings),
+    });
 
     return yield* makeManagedServerProvider<PiSettings>({
       getSettings: serverSettings.getSettings.pipe(
@@ -329,6 +343,7 @@ export const PiProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      decorateSnapshot,
       initialSnapshot: makeInitialPiSnapshot(initialSettings),
     });
   }),

@@ -215,6 +215,7 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
     readonly providerID: string;
     readonly modelID: string;
   };
+  readonly variant?: string;
   readonly tools?: Record<string, boolean>;
   readonly noReply?: boolean;
   readonly turnStillActive: () => boolean;
@@ -235,6 +236,7 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
           ...(input.format ? { format: input.format } : {}),
           ...(input.model ? { model: input.model } : {}),
           ...(input.tools ? { tools: input.tools } : {}),
+          ...(input.variant ? { variant: input.variant } : {}),
           ...(input.noReply !== undefined ? { noReply: input.noReply } : {}),
         },
         { signal },

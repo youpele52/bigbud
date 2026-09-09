@@ -1,9 +1,9 @@
 import {
-  CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   PI_THINKING_LEVEL_OPTIONS,
   PROVIDER_KINDS,
   type CodexReasoningEffort,
+  type CopilotModelOptions,
   type ModelSelection,
   type PiThinkingLevel,
   type ProviderKind,
@@ -14,7 +14,9 @@ import { normalizeModelSlug, trimOrNull } from "@bigbud/shared/model";
 import { cloneModelSelection, createModelSelection } from "../../models/provider";
 import { type LegacyCodexFields } from "./types.store";
 
-type FixedCodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[number];
+function normalizeOpaqueEffort(value: unknown): string | undefined {
+  return typeof value === "string" ? (trimOrNull(value) ?? undefined) : undefined;
+}
 
 function normalizeCodexReasoningEffort(value: unknown): CodexReasoningEffort | undefined {
   return typeof value === "string" ? (trimOrNull(value) ?? undefined) : undefined;
@@ -107,7 +109,7 @@ export function normalizeProviderModelOptions(
       : undefined;
 
   const copilotCandidate = normalizeProviderOptionsCandidate(candidate?.copilot);
-  const copilotReasoningEffort: FixedCodexReasoningEffort | undefined =
+  const copilotReasoningEffort =
     copilotCandidate?.reasoningEffort === "low" ||
     copilotCandidate?.reasoningEffort === "medium" ||
     copilotCandidate?.reasoningEffort === "high" ||
@@ -115,29 +117,19 @@ export function normalizeProviderModelOptions(
       ? copilotCandidate.reasoningEffort
       : undefined;
   const copilot =
-    copilotReasoningEffort !== undefined ? { reasoningEffort: copilotReasoningEffort } : undefined;
+    copilotReasoningEffort !== undefined
+      ? { reasoningEffort: copilotReasoningEffort as CopilotModelOptions["reasoningEffort"] }
+      : undefined;
 
   const opencodeCandidate = normalizeProviderOptionsCandidate(candidate?.opencode);
-  const opencodeReasoningEffort: FixedCodexReasoningEffort | undefined =
-    opencodeCandidate?.reasoningEffort === "low" ||
-    opencodeCandidate?.reasoningEffort === "medium" ||
-    opencodeCandidate?.reasoningEffort === "high" ||
-    opencodeCandidate?.reasoningEffort === "xhigh"
-      ? opencodeCandidate.reasoningEffort
-      : undefined;
+  const opencodeReasoningEffort = normalizeOpaqueEffort(opencodeCandidate?.reasoningEffort);
   const opencode =
     opencodeReasoningEffort !== undefined
       ? { reasoningEffort: opencodeReasoningEffort }
       : undefined;
 
   const kilocodeCandidate = normalizeProviderOptionsCandidate(candidate?.kilocode);
-  const kilocodeReasoningEffort: FixedCodexReasoningEffort | undefined =
-    kilocodeCandidate?.reasoningEffort === "low" ||
-    kilocodeCandidate?.reasoningEffort === "medium" ||
-    kilocodeCandidate?.reasoningEffort === "high" ||
-    kilocodeCandidate?.reasoningEffort === "xhigh"
-      ? kilocodeCandidate.reasoningEffort
-      : undefined;
+  const kilocodeReasoningEffort = normalizeOpaqueEffort(kilocodeCandidate?.reasoningEffort);
   const kilocode =
     kilocodeReasoningEffort !== undefined
       ? { reasoningEffort: kilocodeReasoningEffort }
@@ -152,13 +144,9 @@ export function normalizeProviderModelOptions(
   const pi = piThinkingLevel !== undefined ? { thinkingLevel: piThinkingLevel } : undefined;
 
   const cursorCandidate = normalizeProviderOptionsCandidate(candidate?.cursor);
-  const cursorReasoning: FixedCodexReasoningEffort | undefined =
-    cursorCandidate?.reasoning === "low" ||
-    cursorCandidate?.reasoning === "medium" ||
-    cursorCandidate?.reasoning === "high" ||
-    cursorCandidate?.reasoning === "xhigh"
-      ? cursorCandidate.reasoning
-      : undefined;
+  const cursorReasoning =
+    normalizeOpaqueEffort(cursorCandidate?.reasoning) ??
+    normalizeOpaqueEffort(cursorCandidate?.reasoningEffort);
   const cursorContextWindow =
     typeof cursorCandidate?.contextWindow === "string" && cursorCandidate.contextWindow.length > 0
       ? cursorCandidate.contextWindow
@@ -188,7 +176,40 @@ export function normalizeProviderModelOptions(
         }
       : undefined;
 
-  if (!codex && !claude && !copilot && !opencode && !kilocode && !pi && !cursor) {
+  const devinCandidate = normalizeProviderOptionsCandidate(candidate?.devin);
+  const devinReasoning =
+    normalizeOpaqueEffort(devinCandidate?.reasoning) ??
+    normalizeOpaqueEffort(devinCandidate?.reasoningEffort);
+  const devinContextWindow =
+    typeof devinCandidate?.contextWindow === "string" && devinCandidate.contextWindow.length > 0
+      ? devinCandidate.contextWindow
+      : undefined;
+  const devinFastMode =
+    devinCandidate?.fastMode === true
+      ? true
+      : devinCandidate?.fastMode === false
+        ? false
+        : undefined;
+  const devinThinking =
+    devinCandidate?.thinking === true
+      ? true
+      : devinCandidate?.thinking === false
+        ? false
+        : undefined;
+  const devin =
+    devinReasoning !== undefined ||
+    devinContextWindow !== undefined ||
+    devinFastMode !== undefined ||
+    devinThinking !== undefined
+      ? {
+          ...(devinReasoning !== undefined ? { reasoning: devinReasoning } : {}),
+          ...(devinContextWindow !== undefined ? { contextWindow: devinContextWindow } : {}),
+          ...(devinFastMode !== undefined ? { fastMode: devinFastMode } : {}),
+          ...(devinThinking !== undefined ? { thinking: devinThinking } : {}),
+        }
+      : undefined;
+
+  if (!codex && !claude && !copilot && !opencode && !kilocode && !pi && !cursor && !devin) {
     return null;
   }
   return {
@@ -199,6 +220,7 @@ export function normalizeProviderModelOptions(
     ...(kilocode ? { kilocode } : {}),
     ...(pi ? { pi } : {}),
     ...(cursor ? { cursor } : {}),
+    ...(devin ? { devin } : {}),
   };
 }
 

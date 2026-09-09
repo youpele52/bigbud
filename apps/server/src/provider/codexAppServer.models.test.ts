@@ -96,6 +96,8 @@ describe("parseCodexModelsResult", () => {
           supportsThinkingToggle: false,
           contextWindowOptions: [],
           promptInjectedEffortLevels: [],
+          effortMetadataStatus: "verified-supported",
+          effortMetadataOrigin: "live",
         },
       },
       {
@@ -108,6 +110,8 @@ describe("parseCodexModelsResult", () => {
           supportsThinkingToggle: false,
           contextWindowOptions: [],
           promptInjectedEffortLevels: [],
+          effortMetadataStatus: "unknown",
+          effortMetadataOrigin: "unknown",
         },
       },
       {
@@ -120,6 +124,8 @@ describe("parseCodexModelsResult", () => {
           supportsThinkingToggle: false,
           contextWindowOptions: [],
           promptInjectedEffortLevels: [],
+          effortMetadataStatus: "unknown",
+          effortMetadataOrigin: "unknown",
         },
       },
     ]);

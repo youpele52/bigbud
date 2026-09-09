@@ -2,6 +2,12 @@ import type { DevinModelOptions, ModelCapabilities, ServerProviderModel } from "
 import type * as EffectAcpSchema from "effect-acp/schema";
 
 import {
+  buildAcpEffortLevels,
+  findAcpEffortConfigOption,
+  flattenAcpSessionConfigSelectOptions,
+  resolveAcpEffortChoice,
+} from "../../acp/acpSessionEffort.ts";
+import {
   type DevinAcpDiscoveredModel,
   type DevinSessionSelectOption,
   EMPTY_CAPABILITIES,
@@ -10,37 +16,7 @@ import {
 export function flattenSessionConfigSelectOptions(
   configOption: EffectAcpSchema.SessionConfigOption | undefined,
 ): ReadonlyArray<DevinSessionSelectOption> {
-  if (!configOption || configOption.type !== "select") {
-    return [];
-  }
-  return configOption.options.flatMap((entry) =>
-    "value" in entry
-      ? [{ value: entry.value.trim(), name: entry.name.trim() } satisfies DevinSessionSelectOption]
-      : entry.options.map(
-          (option) =>
-            ({
-              value: option.value.trim(),
-              name: option.name.trim(),
-            }) satisfies DevinSessionSelectOption,
-        ),
-  );
-}
-
-function normalizeDevinReasoningValue(value: string | null | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase();
-  switch (normalized) {
-    case "low":
-    case "medium":
-    case "high":
-    case "max":
-      return normalized;
-    case "xhigh":
-    case "extra-high":
-    case "extra high":
-      return "xhigh";
-    default:
-      return undefined;
-  }
+  return flattenAcpSessionConfigSelectOptions(configOption);
 }
 
 export function findDevinModelConfigOption(
@@ -49,35 +25,10 @@ export function findDevinModelConfigOption(
   return configOptions.find((option) => option.category === "model");
 }
 
-function getDevinConfigOptionCategory(option: EffectAcpSchema.SessionConfigOption): string {
-  return option.category?.trim().toLowerCase() ?? "";
-}
-
-function isDevinEffortConfigOption(option: EffectAcpSchema.SessionConfigOption): boolean {
-  const id = option.id.trim().toLowerCase();
-  const name = option.name.trim().toLowerCase();
-  return (
-    id === "effort" ||
-    id === "reasoning" ||
-    name === "effort" ||
-    name === "reasoning" ||
-    name.includes("effort") ||
-    name.includes("reasoning")
-  );
-}
-
 function findDevinEffortConfigOption(
   configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>,
 ): EffectAcpSchema.SessionConfigOption | undefined {
-  const candidates = configOptions.filter(
-    (option) => option.type === "select" && isDevinEffortConfigOption(option),
-  );
-  return (
-    candidates.find((option) => getDevinConfigOptionCategory(option) === "model_option") ??
-    candidates.find((option) => option.id.trim().toLowerCase() === "effort") ??
-    candidates.find((option) => getDevinConfigOptionCategory(option) === "thought_level") ??
-    candidates[0]
-  );
+  return findAcpEffortConfigOption(configOptions);
 }
 
 function isDevinContextConfigOption(option: EffectAcpSchema.SessionConfigOption): boolean {
@@ -118,25 +69,7 @@ export function buildDevinCapabilitiesFromConfigOptions(
     return EMPTY_CAPABILITIES;
   }
 
-  const reasoningConfig = findDevinEffortConfigOption(configOptions);
-  const reasoningEffortLevels =
-    reasoningConfig?.type === "select"
-      ? flattenSessionConfigSelectOptions(reasoningConfig).flatMap((entry) => {
-          const normalizedValue = normalizeDevinReasoningValue(entry.value);
-          if (!normalizedValue) {
-            return [];
-          }
-          return [
-            {
-              value: normalizedValue,
-              label: entry.name,
-              ...(normalizeDevinReasoningValue(reasoningConfig.currentValue) === normalizedValue
-                ? { isDefault: true }
-                : {}),
-            },
-          ];
-        })
-      : [];
+  const effortCapabilities = buildAcpEffortLevels(configOptions, EMPTY_CAPABILITIES);
 
   const contextOption = configOptions.find(
     (option) => option.category === "model_config" && isDevinContextConfigOption(option),
@@ -159,7 +92,7 @@ export function buildDevinCapabilitiesFromConfigOptions(
   );
 
   return {
-    reasoningEffortLevels,
+    ...effortCapabilities,
     supportsFastMode: fastOption ? isBooleanLikeConfigOption(fastOption) : false,
     supportsThinkingToggle: thinkingOption ? isBooleanLikeConfigOption(thinkingOption) : false,
     contextWindowOptions,
@@ -190,13 +123,7 @@ export function buildDevinDiscoveredModels(
 export function hasDevinModelCapabilities(
   model: Pick<ServerProviderModel, "capabilities">,
 ): boolean {
-  return (
-    (model.capabilities?.reasoningEffortLevels.length ?? 0) > 0 ||
-    model.capabilities?.supportsFastMode === true ||
-    model.capabilities?.supportsThinkingToggle === true ||
-    (model.capabilities?.contextWindowOptions.length ?? 0) > 0 ||
-    (model.capabilities?.promptInjectedEffortLevels.length ?? 0) > 0
-  );
+  return model.capabilities?.effortMetadataOrigin === "live";
 }
 
 export function buildDevinDiscoveredModelsFromConfigOptions(
@@ -277,13 +204,9 @@ export function resolveDevinAcpConfigUpdates(
   const updates: Array<{ readonly configId: string; readonly value: string | boolean }> = [];
 
   const reasoningOption = findDevinEffortConfigOption(configOptions);
-  const requestedReasoning = normalizeDevinReasoningValue(modelOptions?.reasoning);
+  const requestedReasoning = modelOptions?.reasoning?.trim();
   if (reasoningOption && requestedReasoning) {
-    const value = findDevinSelectOptionValue(reasoningOption, (option) => {
-      const normalizedValue = normalizeDevinReasoningValue(option.value);
-      const normalizedName = normalizeDevinReasoningValue(option.name);
-      return normalizedValue === requestedReasoning || normalizedName === requestedReasoning;
-    });
+    const value = resolveAcpEffortChoice(reasoningOption, requestedReasoning);
     if (value) {
       updates.push({ configId: reasoningOption.id, value });
     }

@@ -42,12 +42,12 @@ export const CopilotModelOptions = Schema.Struct({
 export type CopilotModelOptions = typeof CopilotModelOptions.Type;
 
 export const OpencodeModelOptions = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  reasoningEffort: Schema.optional(TrimmedNonEmptyString),
 });
 export type OpencodeModelOptions = typeof OpencodeModelOptions.Type;
 
 export const KilocodeModelOptions = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  reasoningEffort: Schema.optional(TrimmedNonEmptyString),
 });
 export type KilocodeModelOptions = typeof KilocodeModelOptions.Type;
 
@@ -67,7 +67,7 @@ export const PiModelOptions = Schema.Struct({
 export type PiModelOptions = typeof PiModelOptions.Type;
 
 export const CursorModelOptions = Schema.Struct({
-  reasoning: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  reasoning: Schema.optional(TrimmedNonEmptyString),
   contextWindow: Schema.optional(Schema.String),
   fastMode: Schema.optional(Schema.Boolean),
   thinking: Schema.optional(Schema.Boolean),
@@ -75,7 +75,7 @@ export const CursorModelOptions = Schema.Struct({
 export type CursorModelOptions = typeof CursorModelOptions.Type;
 
 export const DevinModelOptions = Schema.Struct({
-  reasoning: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  reasoning: Schema.optional(TrimmedNonEmptyString),
   contextWindow: Schema.optional(Schema.String),
   fastMode: Schema.optional(Schema.Boolean),
   thinking: Schema.optional(Schema.Boolean),
@@ -102,6 +102,17 @@ export const EffortOption = Schema.Struct({
 });
 export type EffortOption = typeof EffortOption.Type;
 
+export const EffortMetadataStatus = Schema.Literals([
+  "unknown",
+  "seed",
+  "verified-supported",
+  "verified-unsupported",
+]);
+export type EffortMetadataStatus = typeof EffortMetadataStatus.Type;
+
+export const EffortMetadataOrigin = Schema.Literals(["unknown", "seed", "live", "cache"]);
+export type EffortMetadataOrigin = typeof EffortMetadataOrigin.Type;
+
 export const ContextWindowOption = Schema.Struct({
   value: TrimmedNonEmptyString,
   label: TrimmedNonEmptyString,
@@ -116,6 +127,8 @@ export const ModelCapabilities = Schema.Struct({
   supportsThinkingToggle: Schema.Boolean,
   contextWindowOptions: Schema.Array(ContextWindowOption),
   promptInjectedEffortLevels: Schema.Array(TrimmedNonEmptyString),
+  effortMetadataStatus: Schema.optional(EffortMetadataStatus),
+  effortMetadataOrigin: Schema.optional(EffortMetadataOrigin),
 });
 export type ModelCapabilities = typeof ModelCapabilities.Type;
 

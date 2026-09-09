@@ -67,6 +67,8 @@ export interface ActiveOpencodeSession {
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;
+  /** Last explicitly selected provider variant, retained for omitted-input turns. */
+  variant?: string | undefined;
   updatedAt: string;
   lastError: string | undefined;
   activeTurnId: TurnId | undefined;

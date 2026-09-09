@@ -307,8 +307,14 @@ export function formatOutgoingPrompt(params: {
   models: ReadonlyArray<ServerProvider["models"][number]>;
   effort: string | null;
   text: string;
+  subProviderID?: string | null | undefined;
 }): string {
-  const caps = getProviderModelCapabilities(params.models, params.model, params.provider);
+  const caps = getProviderModelCapabilities(
+    params.models,
+    params.model,
+    params.provider,
+    params.subProviderID,
+  );
   if (params.effort && caps.promptInjectedEffortLevels.includes(params.effort)) {
     return applyClaudePromptEffortPrefix(params.text, params.effort);
   }

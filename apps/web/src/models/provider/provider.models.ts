@@ -74,9 +74,20 @@ export function getProviderModelCapabilities(
   models: ReadonlyArray<ServerProviderModel>,
   model: string | null | undefined,
   provider: ProviderKind,
+  subProviderID?: string | null | undefined,
 ): ModelCapabilities {
   const slug = normalizeModelSlug(model, provider);
-  return models.find((candidate) => candidate.slug === slug)?.capabilities ?? EMPTY_CAPABILITIES;
+  const matches = models.filter((candidate) => candidate.slug === slug);
+  if (subProviderID) {
+    return (
+      matches.find((candidate) => candidate.subProviderID === subProviderID)?.capabilities ??
+      EMPTY_CAPABILITIES
+    );
+  }
+  if (matches.length !== 1) {
+    return EMPTY_CAPABILITIES;
+  }
+  return matches[0]?.capabilities ?? EMPTY_CAPABILITIES;
 }
 
 export function getDefaultServerModel(

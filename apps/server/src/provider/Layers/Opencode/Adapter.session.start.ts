@@ -6,7 +6,6 @@ import {
 } from "@bigbud/contracts";
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Cause, Duration, Effect, type ServiceMap } from "effect";
-
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerManager.ts";
@@ -16,6 +15,7 @@ import type { SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import {
   buildOpenCodePermissionRules,
   isProviderModelSelection,
+  resolveProviderModelVariant,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
@@ -276,8 +276,10 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
 
       let modelID: string | undefined;
       let providerID: string | undefined;
+      let variant: string | undefined;
       if (isProviderModelSelection(input.modelSelection, deps.provider)) {
         modelID = input.modelSelection.model;
+        variant = resolveProviderModelVariant(input.modelSelection, deps.provider);
         const selectionProviderID =
           "subProviderID" in input.modelSelection
             ? (input.modelSelection as { subProviderID?: string }).subProviderID
@@ -339,6 +341,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         cwd: input.cwd,
         model: modelID,
         providerID,
+        variant,
         updatedAt: createdAt,
         lastError: undefined,
         activeTurnId: undefined,

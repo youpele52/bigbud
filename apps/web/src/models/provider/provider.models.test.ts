@@ -1,7 +1,11 @@
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { resolveSelectableProvider, resolveStartupSelectableProvider } from "./provider.models";
+import {
+  getProviderModelCapabilities,
+  resolveSelectableProvider,
+  resolveStartupSelectableProvider,
+} from "./provider.models";
 
 function provider(kind: ProviderKind, overrides: Partial<ServerProvider> = {}): ServerProvider {
   return {
@@ -72,5 +76,50 @@ describe("resolveStartupSelectableProvider", () => {
 
     expect(resolveSelectableProvider(providers, "codex")).toBe("codex");
     expect(resolveSelectableProvider(providers, "pi")).toBe("pi");
+  });
+});
+
+describe("getProviderModelCapabilities", () => {
+  it("does not borrow the first colliding slug when subprovider is omitted", () => {
+    const models = [
+      {
+        slug: "gpt-5.4",
+        name: "OpenAI GPT",
+        isCustom: false,
+        subProviderID: "openai",
+        capabilities: {
+          reasoningEffortLevels: [{ value: "xhigh", label: "Extra High" }],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+      {
+        slug: "gpt-5.4",
+        name: "Azure GPT",
+        isCustom: false,
+        subProviderID: "azure",
+        capabilities: {
+          reasoningEffortLevels: [{ value: "low", label: "Low" }],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+    ];
+
+    expect(
+      getProviderModelCapabilities(models, "gpt-5.4", "opencode").reasoningEffortLevels,
+    ).toEqual([]);
+    expect(
+      getProviderModelCapabilities(
+        models,
+        "gpt-5.4",
+        "opencode",
+        "azure",
+      ).reasoningEffortLevels.map((level) => level.value),
+    ).toEqual(["low"]);
   });
 });

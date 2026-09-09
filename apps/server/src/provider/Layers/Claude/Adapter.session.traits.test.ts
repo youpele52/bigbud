@@ -51,7 +51,6 @@ describe("applyClaudeRuntimeTraits effort validation", () => {
 
     expect(applyFlagSettings.mock.calls.map(([settings]) => settings)).toEqual([
       { effortLevel: "future-depth" },
-      { effortLevel: "high" },
       { effortLevel: null },
     ]);
     expect(applyFlagSettings.mock.calls.flat()).not.toContainEqual(

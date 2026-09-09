@@ -1,6 +1,6 @@
 import type { OpencodeSettings, ServerProvider, ServerProviderModel } from "@bigbud/contracts";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { Effect, Equal, Layer, Result, Stream } from "effect";
+import { Effect, Equal, FileSystem, Layer, Path, Result, Stream } from "effect";
 
 import {
   buildInstalledProviderAvailability,
@@ -24,8 +24,10 @@ import { withManagedServerProbe } from "../../managedServerProbe.ts";
 import { OpencodeProvider } from "../../Services/Opencode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import { listOpencodeProviders } from "./Provider.sdk";
 import { isVersionAtLeast } from "./Provider.version";
+import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
 
 const PROVIDER = "opencode" as const;
 const MINIMUM_OPENCODE_VERSION = "1.14.19";
@@ -281,12 +283,34 @@ export const OpencodeProviderLive = Layer.effect(
   OpencodeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const serverManager = yield* OpencodeServerManager;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const initialSettings = yield* serverSettings.getSettings.pipe(
       Effect.map((settings) => settings.providers.opencode),
     );
     const fallback = yield* loadManagedServerFallbackModels(PROVIDER);
+    const withCache = (snapshot: ServerProvider, generation: number, persist: boolean) =>
+      serverSettings.getSettings.pipe(
+        Effect.orDie,
+        Effect.flatMap((settings) =>
+          applyManagedProviderEffortCache({
+            snapshot,
+            provider: PROVIDER,
+            binaryPath: settings.providers.opencode.binaryPath,
+            customModels: settings.providers.opencode.customModels,
+            workspace: serverConfig.cwd,
+            stateDir: serverConfig.stateDir,
+            generation,
+            persist,
+            scopeKey: PROVIDER,
+            fileSystem,
+            path,
+          }),
+        ),
+      );
     const checkProvider = checkOpencodeProviderStatus({
       availabilityOnly: true,
       fallbackModels: fallback.models,
@@ -295,6 +319,7 @@ export const OpencodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withCache(snapshot, 0, false)),
     );
     const catalogProviderCheck = checkOpencodeProviderStatus({
       invalidateOnRunFailure: false,
@@ -317,12 +342,14 @@ export const OpencodeProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
       checkProviderAtStartup: checkProvider,
-      enrichSnapshot: ({ snapshot, publishSnapshot }) =>
+      enrichSnapshot: ({ snapshot, generation, publishSnapshot }) =>
         snapshot.enabled && snapshot.status === "ready"
           ? enrichManagedServerCatalog({
               provider: PROVIDER,
               baseSnapshot: snapshot,
-              catalogSnapshot: catalogProviderCheck,
+              catalogSnapshot: catalogProviderCheck.pipe(
+                Effect.flatMap((catalog) => withCache(catalog, generation, true)),
+              ),
               publishSnapshot,
             })
           : Effect.void,

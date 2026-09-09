@@ -33,6 +33,16 @@ export function isProviderModelSelection(
   );
 }
 
+export function resolveProviderModelVariant(value: unknown, provider: string): string | undefined {
+  if (!isProviderModelSelection(value, provider)) return undefined;
+  const options = value.options;
+  if (!options || typeof options !== "object") return undefined;
+  const reasoningEffort = (options as { readonly reasoningEffort?: unknown }).reasoningEffort;
+  if (typeof reasoningEffort !== "string") return undefined;
+  const trimmed = reasoningEffort.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 // ── Approval decision mapper ──────────────────────────────────────────
 
 export function approvalDecisionToOpencodeResponse(

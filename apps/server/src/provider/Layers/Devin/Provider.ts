@@ -1,5 +1,16 @@
 import type { DevinSettings, ServerProvider, ServerSettingsError } from "@bigbud/contracts";
-import { Cause, Effect, Equal, Exit, Layer, Option, Result, Stream } from "effect";
+import {
+  Cause,
+  Effect,
+  Equal,
+  Exit,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Result,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -10,8 +21,10 @@ import {
   type CommandResult,
 } from "../../providerSnapshot.ts";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import { DevinProvider } from "../../Services/Devin/Provider.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
+import { ServerConfig } from "../../../startup/config.ts";
 import {
   ABOUT_TIMEOUT_MS,
   buildDevinProviderSnapshot,
@@ -239,7 +252,19 @@ export const DevinProviderLive = Layer.effect(
   DevinProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const decorateSnapshot = makeProviderEffortCacheDecorator<DevinSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) => JSON.stringify(settings),
+    });
 
     const checkProvider = checkDevinProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
@@ -257,7 +282,7 @@ export const DevinProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialDevinProviderSnapshot,
       checkProvider,
-      enrichSnapshot: ({ settings, snapshot, publishSnapshot }) => {
+      enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {
         if (
           !settings.enabled ||
           snapshot.auth.status === "unauthenticated" ||
@@ -273,7 +298,7 @@ export const DevinProviderLive = Layer.effect(
               return Effect.void;
             }
 
-            return publishSnapshot({
+            const enrichedSnapshot = {
               ...snapshot,
               models: providerModelsFromSettings(
                 discoveredModels,
@@ -281,7 +306,10 @@ export const DevinProviderLive = Layer.effect(
                 settings.customModels,
                 EMPTY_CAPABILITIES,
               ),
-            });
+            };
+            return decorateSnapshot({ settings, snapshot: enrichedSnapshot, generation }).pipe(
+              Effect.flatMap(publishSnapshot),
+            );
           }),
           Effect.catchCause((cause) =>
             Effect.logWarning("Devin ACP background capability enrichment failed", {
@@ -291,6 +319,7 @@ export const DevinProviderLive = Layer.effect(
           ),
         );
       },
+      decorateSnapshot,
       refreshInterval: DEVIN_REFRESH_INTERVAL,
     });
   }),

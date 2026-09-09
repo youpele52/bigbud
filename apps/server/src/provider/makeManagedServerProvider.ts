@@ -6,18 +6,9 @@ import type { ServerProviderRecoveryOptions, ServerProviderShape } from "./Servi
 import { ServerSettingsError } from "@bigbud/contracts";
 import { areProviderSnapshotsEqual } from "./providerSnapshot.equal";
 import { runCoordinatedProviderProbe } from "./providerProbeCoordinator.ts";
-import { isProviderStartupRetryable } from "./providerRecovery";
-import {
-  BACKGROUND_RECOVERY_DELAYS,
-  DEFAULT_PERIODIC_HEALTH_INTERVAL,
-  logStartupSuperseded,
-  STARTUP_FOREGROUND_ATTEMPTS,
-  STARTUP_FOREGROUND_DELAYS,
-  STARTUP_RECOVERY_MAX_ATTEMPTS,
-  STARTUP_RECOVERY_OPERATION_ID,
-  withProviderRecovery,
-} from "./managedProviderRecovery";
+import { DEFAULT_PERIODIC_HEALTH_INTERVAL, withProviderRecovery } from "./managedProviderRecovery";
 import { preserveEnrichedProviderSnapshot } from "./managedProviderSnapshot";
+import { runManagedProviderStartupRecovery } from "./makeManagedServerProvider.startup.ts";
 export { PROVIDER_PROBE_CONCURRENCY } from "./providerProbeCoordinator.ts";
 
 export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(function* <
@@ -34,8 +25,14 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly enrichSnapshot?: (opts: {
     readonly settings: Settings;
     readonly snapshot: ServerProvider;
+    readonly generation: number;
     readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
   }) => Effect.Effect<void, ServerSettingsError>;
+  readonly decorateSnapshot?: (opts: {
+    readonly settings: Settings;
+    readonly snapshot: ServerProvider;
+    readonly generation: number;
+  }) => Effect.Effect<ServerProvider, ServerSettingsError>;
   readonly preserveEnrichedSnapshot?: boolean;
 }): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
   const refreshSemaphore = yield* Semaphore.make(1);
@@ -105,8 +102,20 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       });
       return yield* Ref.get(snapshotRef);
     }
+    const decoratedSnapshot = input.decorateSnapshot
+      ? yield* input
+          .decorateSnapshot({ settings: nextSettings, snapshot: probedSnapshot, generation })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("provider snapshot decoration failed", {
+                provider: initialSnapshot.provider,
+                cause,
+              }).pipe(Effect.as(probedSnapshot)),
+            ),
+          )
+      : probedSnapshot;
     const checkedSnapshot = preserveEnrichedProviderSnapshot(
-      probedSnapshot,
+      decoratedSnapshot,
       currentSnapshot,
       input.preserveEnrichedSnapshot === true,
     );
@@ -162,7 +171,12 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         );
       };
       const enrichment = input
-        .enrichSnapshot({ settings: nextSettings, snapshot: nextSnapshot, publishSnapshot })
+        .enrichSnapshot({
+          settings: nextSettings,
+          snapshot: nextSnapshot,
+          generation,
+          publishSnapshot,
+        })
         .pipe(Effect.ignoreCause({ log: true }));
       if (deferCorePublish) {
         yield* enrichment;
@@ -200,135 +214,16 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     return yield* applySnapshot(nextSettings, { forceRefresh: true, ...options });
   });
 
-  // Publish cheap placeholders, then verify optional binaries in the background.
   const startupGeneration = yield* Ref.updateAndGet(generationRef, (generation) => generation + 1);
-  const runStartupRecovery = Effect.fn("runStartupRecovery")(function* () {
-    if (!initialSnapshot.enabled) return;
-    yield* Effect.logInfo("provider recovery operation started", {
-      provider: initialSnapshot.provider,
-      trigger: "startup",
-      generation: startupGeneration,
-      operationId: STARTUP_RECOVERY_OPERATION_ID,
-      maxAttempts: STARTUP_RECOVERY_MAX_ATTEMPTS,
-    });
-    for (let attempt = 1; attempt <= STARTUP_FOREGROUND_ATTEMPTS; attempt += 1) {
-      const snapshot = yield* refreshSnapshot({
-        recovery: {
-          operationId: STARTUP_RECOVERY_OPERATION_ID,
-          attempt,
-          maxAttempts: STARTUP_RECOVERY_MAX_ATTEMPTS,
-          trigger: "startup",
-        },
-        generation: startupGeneration,
-        probeMode: "startup",
-      });
-      if (startupGeneration !== (yield* Ref.get(generationRef))) {
-        yield* logStartupSuperseded(initialSnapshot.provider, "startup", startupGeneration);
-        return;
-      }
-      if (!isProviderStartupRetryable(snapshot)) {
-        const settledSnapshot =
-          snapshot.status === "ready" &&
-          input.checkProviderAtStartup !== undefined &&
-          input.enrichSnapshot === undefined
-            ? yield* refreshSnapshot({
-                recovery: {
-                  operationId: STARTUP_RECOVERY_OPERATION_ID,
-                  attempt: STARTUP_FOREGROUND_ATTEMPTS,
-                  maxAttempts: STARTUP_RECOVERY_MAX_ATTEMPTS,
-                  trigger: "startup",
-                },
-                generation: startupGeneration,
-                probeMode: "full",
-              })
-            : snapshot;
-        if (isProviderStartupRetryable(settledSnapshot)) break;
-        yield* Effect.logInfo("provider recovery completed", {
-          provider: initialSnapshot.provider,
-          trigger: "startup",
-          generation: startupGeneration,
-          operationId: STARTUP_RECOVERY_OPERATION_ID,
-          outcome: settledSnapshot.status === "ready" ? "recovered" : "user-action-required",
-        });
-        return;
-      }
-      if (attempt === STARTUP_FOREGROUND_ATTEMPTS) break;
-      const delay = STARTUP_FOREGROUND_DELAYS[attempt - 1]!;
-      yield* Effect.logInfo("provider recovery retry scheduled", {
-        provider: initialSnapshot.provider,
-        trigger: "startup",
-        generation: startupGeneration,
-        operationId: STARTUP_RECOVERY_OPERATION_ID,
-        attempt,
-        delay,
-      });
-      yield* Effect.sleep(delay);
-      if (startupGeneration !== (yield* Ref.get(generationRef))) {
-        yield* logStartupSuperseded(initialSnapshot.provider, "startup", startupGeneration);
-        return;
-      }
-    }
-
-    yield* Effect.logInfo("provider recovery moved to background", {
-      provider: initialSnapshot.provider,
-      trigger: "background",
-      generation: startupGeneration,
-      operationId: STARTUP_RECOVERY_OPERATION_ID,
-    });
-    for (let index = 0; index < BACKGROUND_RECOVERY_DELAYS.length; index += 1) {
-      const attempt = STARTUP_FOREGROUND_ATTEMPTS + index + 1;
-      const delay = BACKGROUND_RECOVERY_DELAYS[index]!;
-      yield* Effect.logInfo("provider recovery retry scheduled", {
-        provider: initialSnapshot.provider,
-        trigger: "background",
-        generation: startupGeneration,
-        operationId: STARTUP_RECOVERY_OPERATION_ID,
-        attempt,
-        delay,
-      });
-      yield* Effect.sleep(delay);
-      if (startupGeneration !== (yield* Ref.get(generationRef))) {
-        yield* logStartupSuperseded(initialSnapshot.provider, "background", startupGeneration);
-        return;
-      }
-      const snapshot = yield* refreshSnapshot({
-        recovery: {
-          operationId: STARTUP_RECOVERY_OPERATION_ID,
-          attempt,
-          maxAttempts: STARTUP_RECOVERY_MAX_ATTEMPTS,
-          trigger: "background",
-        },
-        generation: startupGeneration,
-        probeMode: "full",
-      });
-      if (startupGeneration !== (yield* Ref.get(generationRef))) {
-        yield* logStartupSuperseded(initialSnapshot.provider, "background", startupGeneration);
-        return;
-      }
-      if (!isProviderStartupRetryable(snapshot)) {
-        yield* Effect.logInfo("provider recovery completed", {
-          provider: initialSnapshot.provider,
-          trigger: "background",
-          generation: startupGeneration,
-          operationId: STARTUP_RECOVERY_OPERATION_ID,
-          outcome: snapshot.status === "ready" ? "recovered" : "user-action-required",
-        });
-        return;
-      }
-      if (attempt === STARTUP_RECOVERY_MAX_ATTEMPTS) {
-        yield* Effect.logWarning("provider recovery exhausted", {
-          provider: initialSnapshot.provider,
-          trigger: "background",
-          generation: startupGeneration,
-          operationId: STARTUP_RECOVERY_OPERATION_ID,
-          classification: snapshot.failure?.classification ?? "none",
-          reason: snapshot.failure?.reason ?? "none",
-        });
-      }
-    }
-  });
-
-  yield* runStartupRecovery().pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
+  yield* runManagedProviderStartupRecovery({
+    enabled: initialSnapshot.enabled,
+    provider: initialSnapshot.provider,
+    startupGeneration,
+    generationRef,
+    hasStartupProbe: input.checkProviderAtStartup !== undefined,
+    hasEnrichment: input.enrichSnapshot !== undefined,
+    refreshSnapshot,
+  }).pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
   // Ignore the settings stream's initial replay when superseding launch recovery.
   yield* Stream.runForEach(input.streamSettings, (nextSettings) =>
@@ -343,7 +238,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         generationRef,
         (currentGeneration) => currentGeneration + 1,
       );
-      yield* applySnapshot(nextSettings, { generation });
+      yield* applySnapshot(nextSettings, { generation }).pipe(Effect.ignoreCause({ log: true }));
     }),
   ).pipe(Effect.forkScoped);
 

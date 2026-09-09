@@ -87,4 +87,43 @@ describe("sendPromptAsyncAndWaitForCompletion", () => {
       ],
     });
   });
+
+  it("forwards the selected OpenCode or KiloCode variant on promptAsync", async () => {
+    const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+    const client = {
+      session: {
+        promptAsync,
+        messages: vi.fn(async () => ({
+          data: [
+            {
+              info: {
+                id: "assistant-message-1",
+                role: "assistant",
+                time: { completed: Date.now() },
+              },
+              parts: [{ id: "text-part-1", type: "text", text: "ok" }],
+            },
+          ],
+          error: undefined,
+        })),
+      },
+    } as never;
+
+    await sendPromptAsyncAndWaitForCompletion({
+      client,
+      sessionID: "session-1",
+      parts: [{ type: "text", text: "think harder" }],
+      system: "system",
+      variant: "custom-xhigh",
+      turnStillActive: () => false,
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "session-1",
+        variant: "custom-xhigh",
+      }),
+      expect.anything(),
+    );
+  });
 });

@@ -6,6 +6,7 @@ import type {
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
 import { PI_THINKING_LEVEL_OPTIONS } from "@bigbud/contracts";
+import { withEffortProvenance } from "@bigbud/shared/model";
 
 import { providerModelsFromSettings } from "../../providerSnapshot";
 import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
@@ -13,13 +14,17 @@ import type { PiRpcModel, PiRpcSlashCommand } from "./RpcProcess.ts";
 
 const PROVIDER = "pi" as const;
 
-export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
+export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = withEffortProvenance(
+  {
+    reasoningEffortLevels: [],
+    supportsFastMode: false,
+    supportsThinkingToggle: false,
+    contextWindowOptions: [],
+    promptInjectedEffortLevels: [],
+  },
+  "unknown",
+  "unknown",
+);
 
 function getPiThinkingLevels(model: PiRpcModel): ReadonlyArray<PiThinkingLevel> {
   if (model.reasoning !== true) return ["off"];
@@ -32,13 +37,18 @@ function getPiThinkingLevels(model: PiRpcModel): ReadonlyArray<PiThinkingLevel> 
 }
 
 function getPiModelCapabilities(model: PiRpcModel): ModelCapabilities {
-  return {
-    ...EMPTY_MODEL_CAPABILITIES,
-    reasoningEffortLevels: getPiThinkingLevels(model).map((value) => ({
-      value,
-      label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
-    })),
-  };
+  const levels = getPiThinkingLevels(model);
+  return withEffortProvenance(
+    {
+      ...EMPTY_MODEL_CAPABILITIES,
+      reasoningEffortLevels: levels.map((value) => ({
+        value,
+        label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
+      })),
+    },
+    "verified-supported",
+    "live",
+  );
 }
 
 export function buildPiModels(

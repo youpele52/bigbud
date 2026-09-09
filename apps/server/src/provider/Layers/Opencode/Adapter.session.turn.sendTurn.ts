@@ -13,7 +13,11 @@ import {
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import { toMessage } from "./Adapter.stream.ts";
-import { isProviderModelSelection, resolveProviderIDForModel } from "./Adapter.session.helpers.ts";
+import {
+  isProviderModelSelection,
+  resolveProviderIDForModel,
+  resolveProviderModelVariant,
+} from "./Adapter.session.helpers.ts";
 import {
   isOpencodeTransportFailure,
   sendPromptAsyncAndWaitForCompletion,
@@ -36,6 +40,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
 
       if (isProviderModelSelection(input.modelSelection, provider)) {
         record.model = input.modelSelection.model;
+        record.variant = resolveProviderModelVariant(input.modelSelection, provider);
         const selectionProviderID =
           "subProviderID" in input.modelSelection
             ? (input.modelSelection as { subProviderID?: string }).subProviderID
@@ -154,6 +159,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                   }
                 : {}),
               tools: record.allowedTools,
+              ...(record.variant ? { variant: record.variant } : {}),
               turnStillActive: () => record.activeTurnId === turnId,
               onDelta: async (delta: StreamedPromptDelta) => {
                 const runtimeEvent = await runPromise(
