@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectId } from "@bigbud/contracts";
 import type {
   ServerRemoteRestartPhase,
@@ -17,6 +17,8 @@ import {
   saveReconnectRequest,
   type PersistedReconnectRequest,
 } from "./Sidebar.projectActions.reconnect.persistence";
+
+import { createReconnectPoller } from "./Sidebar.projectActions.reconnect.poller";
 
 type Confirmation = {
   readonly projectId: ProjectId;
@@ -56,6 +58,11 @@ function isAuthRequired(error: unknown) {
   return status.status === "auth_required" ? { message, status } : null;
 }
 
+function isMissingRestartRequest(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /remote restart request was not found/i.test(message);
+}
+
 export function useSidebarProjectReconnectActions(projects: Project[]) {
   const [pending, setPending] = useState<Confirmation | null>(null);
   const [activeRequestIds, setActiveRequestIds] = useState<Set<string>>(new Set());
@@ -81,10 +88,10 @@ export function useSidebarProjectReconnectActions(projects: Project[]) {
     [],
   );
 
-  const reconcile = useCallback(
+  const checkStatus = useCallback(
     async (request: PersistedReconnectRequest) => {
       const api = readNativeApi();
-      if (!api) return;
+      if (!api) throw new Error("Backend is unavailable");
       try {
         const result = await api.server.getRemoteAgentRestartStatus({
           requestId: request.requestId,
@@ -92,15 +99,41 @@ export function useSidebarProjectReconnectActions(projects: Project[]) {
           expectedWorkspaceExecutionTargetId: request.expectedWorkspaceExecutionTargetId,
         });
         finish(request, result);
-        if (ACTIVE_PHASES.has(result.phase)) {
-          window.setTimeout(() => void reconcile(request), 1_000);
+        return ACTIVE_PHASES.has(result.phase);
+      } catch (error) {
+        if (isMissingRestartRequest(error)) {
+          removeReconnectRequest(request.requestId);
+          setActiveRequestIds((ids) => {
+            const next = new Set(ids);
+            next.delete(request.requestId);
+            return next;
+          });
+          toastManager.add({
+            type: "warning",
+            title: `Reconnect request expired for "${request.projectName}"`,
+            description:
+              "The server no longer has a record of this request. You can reconnect again.",
+          });
+          return false;
         }
-      } catch {
-        // Keep the durable request. A later reload can query the same operation.
+        // Preserve the operation identity and retry status checks after transient failures.
+        throw error;
       }
     },
     [finish],
   );
+
+  const poller = useMemo(() => createReconnectPoller(checkStatus), [checkStatus]);
+  const reconcile = poller.reconcile;
+
+  useEffect(() => {
+    poller.resume();
+    const reconciledIds = reconciledRequestIds.current;
+    return () => {
+      poller.stop();
+      reconciledIds.clear();
+    };
+  }, [poller]);
 
   useEffect(() => {
     const knownProjects = new Map(projects.map((project) => [project.id, project]));
@@ -129,7 +162,7 @@ export function useSidebarProjectReconnectActions(projects: Project[]) {
         });
         finish(request, result);
         if (ACTIVE_PHASES.has(result.phase)) {
-          window.setTimeout(() => void reconcile(request), 1_000);
+          void reconcile(request);
         }
       } catch (error) {
         const auth = isAuthRequired(error);

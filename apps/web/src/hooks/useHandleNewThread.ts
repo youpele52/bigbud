@@ -31,6 +31,7 @@ import {
   activateNewThreadRoute,
   type NewThreadActivationOptions,
 } from "./useHandleNewThread.activation";
+import { preservePendingSendForNewThread } from "./useHandleNewThread.pendingSend";
 import { loadProjectForNewThread } from "./useHandleNewThread.project";
 
 export { loadProjectForNewThread } from "./useHandleNewThread.project";
@@ -149,8 +150,31 @@ export function useHandleNewThread() {
       const latestActiveDraftThread: DraftThreadState | null = routeThreadId
         ? getDraftThread(routeThreadId)
         : null;
-      const resolveDraftOwnership = (draft: DraftThreadState & { threadId: ThreadId }) =>
-        resolveProjectDraftOwnership({
+      const resolveDraftOwnership = async (draft: DraftThreadState & { threadId: ThreadId }) => {
+        try {
+          const freshThreadId = await preservePendingSendForNewThread(draft);
+          if (freshThreadId) {
+            if (shouldActivate()) {
+              toastManager.add({
+                type: "info",
+                title: "Opened a separate draft",
+                description: "Your earlier draft is saved while its send outcome is checked.",
+                actionProps: {
+                  children: "View saved draft",
+                  onClick: () =>
+                    void navigate({ to: "/$threadId", params: { threadId: draft.threadId } }),
+                },
+              });
+            }
+            return { status: "replaced" as const, threadId: freshThreadId };
+          }
+        } catch (error) {
+          return {
+            status: "unavailable" as const,
+            reason: error instanceof Error ? error.message : "Saved draft state is unavailable.",
+          };
+        }
+        return resolveProjectDraftOwnership({
           api: api ?? null,
           draft,
           projectId,
@@ -164,6 +188,7 @@ export function useHandleNewThread() {
             });
           },
         });
+      };
       const persistDraftOwnership = async (threadId: ThreadId) => {
         const draft = useComposerDraftStore.getState().getDraftThread(threadId);
         if (!draft) throw new Error("Draft ownership is unavailable.");

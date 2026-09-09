@@ -23,7 +23,6 @@ import {
   resultFor,
 } from "./remoteAgentRestart.store.ts";
 import {
-  type RemoteAgentRestartRecord,
   type RemoteAgentRestartServiceShape,
   type RemoteAgentRestartStore,
 } from "./remoteAgentRestart.types.ts";

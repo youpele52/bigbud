@@ -31,6 +31,14 @@ describe("project context menu", () => {
     ]);
   });
 
+  it("allows reconnect for an SSH project without requiring a disconnected state", () => {
+    const items = buildProjectContextMenuItems({
+      project: project("ssh:host=devbox&user=root&port=22&auth=ssh-key"),
+      reconnectDisabled: false,
+    });
+    expect(items[0]).toEqual({ id: "reconnect", label: "Reconnect", disabled: false });
+  });
+
   it("preserves the local project menu", () => {
     const items = buildProjectContextMenuItems({
       project: project("local"),
