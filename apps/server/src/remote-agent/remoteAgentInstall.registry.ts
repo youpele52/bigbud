@@ -91,6 +91,13 @@ const RetirementReservationSchema = Schema.Struct({
   controllerId: Schema.optional(Schema.String),
   failure: Schema.optional(Schema.String),
 });
+const RestartReservationSchema = Schema.Struct({
+  id: Schema.String,
+  buildId: Schema.String,
+  generation: Schema.String,
+  expectedEpoch: Schema.String,
+  phase: Schema.Literals(["reserved", "stopping", "stopped", "starting", "ready", "failed"]),
+});
 export const RemoteAgentRegistrySchema = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   revision: Schema.Number,
@@ -114,6 +121,7 @@ export const RemoteAgentRegistrySchema = Schema.Struct({
   slotReservations: Schema.Array(SlotReservationSchema),
   updates: Schema.Array(UpdateSchema),
   retirementReservations: Schema.Array(RetirementReservationSchema),
+  restartReservations: Schema.Array(RestartReservationSchema),
   pending: Schema.NullOr(Schema.String),
   current: Schema.NullOr(Schema.String),
   predecessor: Schema.NullOr(Schema.String),
@@ -124,6 +132,7 @@ export type RemoteAgentRegistryBuild = typeof BuildSchema.Type;
 export type RemoteAgentSlotReservation = typeof SlotReservationSchema.Type;
 export type RemoteAgentUpdate = typeof UpdateSchema.Type;
 export type RemoteAgentRetirementReservation = typeof RetirementReservationSchema.Type;
+export type RemoteAgentRestartReservation = typeof RestartReservationSchema.Type;
 export const MAX_REMOTE_AGENT_REGISTRY_BYTES = 1024 * 1024;
 export const MAX_REMOTE_AGENT_BUILDS = 32;
 export const MAX_REMOTE_AGENT_PINS = 128;
@@ -156,6 +165,7 @@ export function emptyRemoteAgentRegistry(): RemoteAgentRegistry {
     slotReservations: [],
     updates: [],
     retirementReservations: [],
+    restartReservations: [],
     pending: null,
     current: null,
     predecessor: null,
@@ -176,6 +186,7 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
           slotReservations: [],
           updates: [],
           retirementReservations: [],
+          restartReservations: [],
           predecessor: null,
         }
       : raw;
@@ -185,6 +196,7 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
     slotReservations: migrated.slotReservations ?? [],
     updates: migrated.updates ?? [],
     retirementReservations: migrated.retirementReservations ?? [],
+    restartReservations: migrated.restartReservations ?? [],
     predecessor: migrated.predecessor ?? null,
   });
   if (
@@ -204,7 +216,8 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
     (state.admissionRetirements?.length ?? 0) > MAX_REMOTE_AGENT_ADMISSION_RETIREMENTS ||
     state.slotReservations.length > MAX_REMOTE_AGENT_BUILDS ||
     state.updates.length > MAX_REMOTE_AGENT_ADMISSIONS ||
-    state.retirementReservations.length > MAX_REMOTE_AGENT_BUILDS
+    state.retirementReservations.length > MAX_REMOTE_AGENT_BUILDS ||
+    state.restartReservations.length > MAX_REMOTE_AGENT_ADMISSIONS
   )
     throw new Error("Remote agent registry record budget exceeded.");
   const ids = new Set<string>();

@@ -14,6 +14,15 @@ BIGBUD_AGENT_STATE_DIR=${shellQuote(input.statePath)} exec ${shellQuote(input.bi
 `;
 }
 
+export function buildRemoteAgentSupervisorRestartCommand(input: {
+  readonly binaryPath: string;
+  readonly statePath: string;
+}): string {
+  return `set -eu
+BIGBUD_AGENT_STATE_DIR=${shellQuote(input.statePath)} exec ${shellQuote(input.binaryPath)} --restart-supervisor
+`;
+}
+
 export function buildRemoteAgentSupervisorPreparationCommand(
   binaryPath: string,
   connectProxy = false,

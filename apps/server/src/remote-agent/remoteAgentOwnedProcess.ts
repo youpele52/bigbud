@@ -3,6 +3,7 @@ import type {
   RemoteAgentConnectionPool,
   RemoteAgentRuntimeBinding,
 } from "./remoteAgentConnectionPool.ts";
+import { isRemoteAgentRestartError } from "./remoteAgentConnectionPool.ts";
 import {
   RemoteAgentProcessClient,
   RemoteAgentProcessError,
@@ -163,7 +164,13 @@ export function makeOwnedRemoteAgentProcess(
         await store.update(input.ownerKey, (current) =>
           current.resourceId !== resourceId
             ? current
-            : { ...current, state: terminal ? "terminal" : "outcome-unknown" },
+            : {
+                ...current,
+                state: terminal ? "terminal" : "outcome-unknown",
+                ...(isRemoteAgentRestartError(cause)
+                  ? { interruptionReason: "restart" as const }
+                  : {}),
+              },
         );
       }
       if (terminal)

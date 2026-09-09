@@ -4,6 +4,7 @@ import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { isRemoteAgentControllerAlive } from "./remoteAgentController.ts";
 
 const OwnerSchema = Schema.Struct({
+  interruptionReason: Schema.optional(Schema.Literals(["restart"])),
   controllerId: Schema.optional(Schema.String),
   controllerPid: Schema.optional(Schema.Number),
   controllerStartedAt: Schema.optional(Schema.String),
@@ -22,6 +23,7 @@ const OwnerSchema = Schema.Struct({
   inputAcknowledged: Schema.Number,
 });
 export type RemoteAgentOwner = typeof OwnerSchema.Type;
+export type RemoteAgentInterruptionReason = "restart";
 
 function assertBoundedIdentity(value: string, label: string, max = 256): void {
   if (value.length === 0 || value.length > max || !/^[\x21-\x7e]+$/.test(value))
@@ -53,6 +55,8 @@ export interface RemoteAgentOwnerStore extends RemoteAgentConnectionBindings {
   readonly knownTargets?: () => Promise<ReadonlyArray<string>>;
   /** Remove only bounded, terminal history; active and uncertain routes are never eligible. */
   readonly pruneTerminal?: () => Promise<number>;
+  /** Mark every non-terminal resource on an old runtime as outcome-unknown. */
+  readonly reconcileRuntime?: (generation: string, epoch: string) => Promise<void>;
 }
 
 export function parseRemoteAgentBinding(text: string): RemoteAgentRuntimeBinding {

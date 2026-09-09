@@ -1,4 +1,14 @@
 import { RemoteAgentConnectionError, type RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import {
+  RemoteAgentCapabilityError,
+  REMOTE_SERVICE_RESTARTED,
+  isRemoteAgentRestartError,
+} from "./remoteAgentConnectionPool.errors.ts";
+export {
+  RemoteAgentCapabilityError,
+  REMOTE_SERVICE_RESTARTED,
+  isRemoteAgentRestartError,
+} from "./remoteAgentConnectionPool.errors.ts";
 import { RemoteAgentLifecycle, type RemoteAgentLifecycleSnapshot } from "./remoteAgentLifecycle.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
 import { RemoteAgentPtyClient } from "./remoteAgentPtyClient.ts";
@@ -7,6 +17,7 @@ import { remoteAgentRuntimeEqual, type RemoteAgentRuntime } from "./remoteAgentR
 import { makeRemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
 import { assertRemoteAgentRuntimeHello } from "./remoteAgentCompatibility.ts";
 import { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
+import type { Entry } from "./remoteAgentConnectionPool.entry.ts";
 
 export interface RemoteAgentRuntimeBinding {
   readonly connectionId?: string;
@@ -22,7 +33,6 @@ export interface RemoteAgentConnectionPoolFactory {
   readonly resolveBinding?: (
     executionTargetId: string,
   ) => Promise<RemoteAgentRuntimeBinding | undefined>;
-  /** Durable retirement reservations are a second-controller acquisition fence. */
   readonly isRetiring?: (
     executionTargetId: string,
     binding: RemoteAgentRuntimeBinding,
@@ -30,32 +40,13 @@ export interface RemoteAgentConnectionPoolFactory {
   readonly retirementFence?: RemoteAgentRetirementFence;
 }
 
-type Entry = {
-  readonly binding?: RemoteAgentRuntimeBinding;
-  readonly lifecycle: RemoteAgentLifecycle;
-  connecting: Promise<RemoteAgentConnection> | undefined;
-  readonly executionTargetId: string;
-  closed: boolean;
-  transportLost: boolean;
-};
-
-export class RemoteAgentCapabilityError extends Error {
-  readonly _tag = "RemoteAgentCapabilityError";
-
-  constructor(
-    readonly executionTargetId: string,
-    readonly capability: string,
-  ) {
-    super(`Remote agent '${executionTargetId}' does not advertise capability '${capability}'.`);
-    this.name = "RemoteAgentCapabilityError";
-  }
-}
-
 export class RemoteAgentConnectionPool {
   private readonly entries = new Map<string, Entry>();
   private readonly selectedEntries = new Map<string, Entry>();
   private readonly connectionEntries = new WeakMap<RemoteAgentConnection, Entry>();
   private readonly targetEpochs = new Map<string, number>();
+  private readonly invalidatedBindings = new Set<string>();
+  private readonly restartListeners = new Map<string, Set<() => void>>();
 
   private readonly retirementFence: RemoteAgentRetirementFence;
 
@@ -70,6 +61,8 @@ export class RemoteAgentConnectionPool {
       throw new RemoteAgentConnectionError(
         "Remote agent connection was invalidated before connection setup completed.",
       );
+    if (binding && this.invalidatedBindings.has(this.bindingKey(executionTargetId, binding)))
+      throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, binding);
     this.selectedEntries.set(executionTargetId, entry);
     return this.withAcquisitionFence(
@@ -79,12 +72,13 @@ export class RemoteAgentConnectionPool {
       this.needsConnection(entry),
     );
   }
-
   async getBound(
     executionTargetId: string,
     binding: RemoteAgentRuntimeBinding,
     capabilities: ReadonlyArray<string> = [],
   ): Promise<RemoteAgentConnection> {
+    if (this.invalidatedBindings.has(this.bindingKey(executionTargetId, binding)))
+      throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, binding);
     const connection = await this.withAcquisitionFence(
       executionTargetId,
@@ -98,7 +92,23 @@ export class RemoteAgentConnectionPool {
     if (missing) throw new RemoteAgentCapabilityError(executionTargetId, missing);
     return connection;
   }
-
+  /** Admit only a verified new epoch while the prior generation remains fenced. */
+  async admitReplacement(
+    executionTargetId: string,
+    replacement: RemoteAgentRuntimeBinding,
+    retired: RemoteAgentRuntimeBinding,
+  ): Promise<RemoteAgentConnection> {
+    if (
+      replacement.runtime.generation !== retired.runtime.generation ||
+      replacement.expectedEpoch === retired.expectedEpoch
+    )
+      throw new RemoteAgentConnectionError("Replacement runtime identity is not a new epoch.");
+    if (this.invalidatedBindings.has(this.bindingKey(executionTargetId, replacement)))
+      throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
+    const entry = this.entry(executionTargetId, replacement);
+    this.selectedEntries.set(executionTargetId, entry);
+    return this.getEntry(entry, true);
+  }
   async beginRetirement(executionTargetId: string, generation: string): Promise<() => void> {
     for (const entry of this.entries.values()) {
       if (
@@ -110,13 +120,19 @@ export class RemoteAgentConnectionPool {
     }
     return this.retirementFence.begin(generation);
   }
-
-  private async getEntry(entry: Entry): Promise<RemoteAgentConnection> {
+  private async getEntry(
+    entry: Entry,
+    replacementAdmission = false,
+  ): Promise<RemoteAgentConnection> {
     if (entry.closed) throw new RemoteAgentConnectionError("Remote agent pool entry is closed.");
     if (entry.lifecycle.connection && entry.lifecycle.snapshot.state === "ready") {
       return entry.lifecycle.connection;
     }
-    if (entry.binding && this.retirementFence.isRetiring(entry.binding.runtime.generation))
+    if (
+      !replacementAdmission &&
+      entry.binding &&
+      this.retirementFence.isRetiring(entry.binding.runtime.generation)
+    )
       throw new RemoteAgentConnectionError("Remote runtime retirement is fenced.");
     if (!entry.connecting) {
       entry.connecting = entry.lifecycle
@@ -150,7 +166,6 @@ export class RemoteAgentConnectionPool {
     }
     return entry.connecting;
   }
-
   async getWorkspaceClient(executionTargetId: string): Promise<RemoteAgentWorkspaceClient> {
     const connection = await this.getWithCapabilities(executionTargetId, [
       "workspace.files",
@@ -158,7 +173,6 @@ export class RemoteAgentConnectionPool {
     ]);
     return this.workspaceClient(this.connectionEntries.get(connection)!);
   }
-
   async getWorkspaceWatchClient(executionTargetId: string): Promise<RemoteAgentWorkspaceClient> {
     const connection = await this.getWithCapabilities(executionTargetId, [
       "workspace.files",
@@ -166,7 +180,6 @@ export class RemoteAgentConnectionPool {
     ]);
     return this.workspaceClient(this.connectionEntries.get(connection)!);
   }
-
   private async workspaceClient(entry: Entry): Promise<RemoteAgentWorkspaceClient> {
     return new RemoteAgentWorkspaceClient(
       await this.withAcquisitionFence(
@@ -239,12 +252,72 @@ export class RemoteAgentConnectionPool {
     this.selectedEntries.delete(executionTargetId);
   }
 
+  closeBound(executionTargetId: string, binding: RemoteAgentRuntimeBinding): void {
+    const bindingKey = this.bindingKey(executionTargetId, binding);
+    this.invalidatedBindings.add(bindingKey);
+    const runtimeKey = this.runtimeKey(binding);
+    for (const [key, listeners] of this.restartListeners) {
+      if (!key.endsWith(runtimeKey)) continue;
+      for (const listener of listeners) listener();
+      this.restartListeners.delete(key);
+    }
+    const affectedTargets = new Set<string>([executionTargetId]);
+    for (const [key, entry] of this.entries) {
+      if (
+        !entry.binding ||
+        entry.binding.runtime.generation !== binding.runtime.generation ||
+        entry.binding.expectedEpoch !== binding.expectedEpoch ||
+        !remoteAgentRuntimeEqual(entry.binding.runtime, binding.runtime)
+      )
+        continue;
+      affectedTargets.add(entry.executionTargetId);
+      this.invalidatedBindings.add(this.bindingKey(entry.executionTargetId, binding));
+      entry.closed = true;
+      entry.lifecycle.close();
+      this.entries.delete(key);
+    }
+    for (const target of affectedTargets) {
+      this.targetEpochs.set(target, (this.targetEpochs.get(target) ?? 0) + 1);
+      const selected = this.selectedEntries.get(target);
+      if (
+        selected?.binding &&
+        selected.binding.runtime.generation === binding.runtime.generation &&
+        selected.binding.expectedEpoch === binding.expectedEpoch &&
+        remoteAgentRuntimeEqual(selected.binding.runtime, binding.runtime)
+      )
+        this.selectedEntries.delete(target);
+    }
+  }
+  onRuntimeRestart(binding: RemoteAgentRuntimeBinding, listener: () => void): () => void {
+    const key = `runtime:${this.runtimeKey(binding)}`;
+    const listeners = this.restartListeners.get(key) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.restartListeners.set(key, listeners);
+    return () =>
+      void (
+        listeners.delete(listener) &&
+        listeners.size === 0 &&
+        this.restartListeners.delete(key)
+      );
+  }
+  reconcileRuntimeResources(executionTargetId: string, binding: RemoteAgentRuntimeBinding): void {
+    this.closeBound(executionTargetId, binding);
+  }
   closeAll(): void {
     for (const entry of this.entries.values()) this.close(entry.executionTargetId);
   }
-
   private entry(executionTargetId: string, binding?: RemoteAgentRuntimeBinding): Entry {
-    const key = JSON.stringify([executionTargetId, binding?.runtime.generation ?? "external"]);
+    const key = JSON.stringify([
+      executionTargetId,
+      binding
+        ? [
+            binding.runtime.generation,
+            binding.expectedEpoch,
+            binding.runtime.buildDigest,
+            binding.runtime.socketPath,
+          ]
+        : "external",
+    ]);
     const existing = this.entries.get(key);
     if (existing) {
       if (
@@ -253,7 +326,7 @@ export class RemoteAgentConnectionPool {
           : existing.binding !== binding) ||
         existing.binding?.expectedEpoch !== binding?.expectedEpoch
       )
-        throw new Error("Runtime binding identity changed for an existing generation.");
+        throw new Error("Runtime binding identity changed for an existing resource.");
       return existing;
     }
     const entry: Entry = {
@@ -277,6 +350,19 @@ export class RemoteAgentConnectionPool {
     return entry;
   }
 
+  private bindingKey(executionTargetId: string, binding: RemoteAgentRuntimeBinding): string {
+    return JSON.stringify([executionTargetId, this.runtimeKey(binding)]);
+  }
+
+  private runtimeKey(binding: RemoteAgentRuntimeBinding): string {
+    return JSON.stringify([
+      binding.runtime.generation,
+      binding.expectedEpoch,
+      binding.runtime.buildDigest,
+      binding.runtime.socketPath,
+    ]);
+  }
+
   private async getWithCapabilities(
     executionTargetId: string,
     capabilities: ReadonlyArray<string>,
@@ -297,7 +383,7 @@ export class RemoteAgentConnectionPool {
     if (!binding) return acquire();
     const release = this.retirementFence.acquire(binding.runtime.generation);
     try {
-      if (checkRetirement && this.factory.isRetiring?.(executionTargetId, binding))
+      if (checkRetirement && (await this.factory.isRetiring?.(executionTargetId, binding)))
         throw new RemoteAgentConnectionError("Remote runtime retirement is fenced.");
       return await acquire();
     } finally {
@@ -308,17 +394,4 @@ export class RemoteAgentConnectionPool {
   private needsConnection(entry: Entry): boolean {
     return !entry.lifecycle.connection || entry.lifecycle.snapshot.state !== "ready";
   }
-}
-
-export function makeRemoteWorkspaceClientResolver(pool: RemoteAgentConnectionPool) {
-  return {
-    resolve: (executionTargetId: string) => pool.getWorkspaceClient(executionTargetId),
-    resolveWatch: (executionTargetId: string) => pool.getWorkspaceWatchClient(executionTargetId),
-  };
-}
-
-export function makeRemoteProcessClientResolver(pool: RemoteAgentConnectionPool) {
-  return {
-    resolve: (executionTargetId: string) => pool.getProcessClient(executionTargetId),
-  };
 }

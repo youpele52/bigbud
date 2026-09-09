@@ -79,6 +79,8 @@ export const WS_METHODS = {
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
   serverInstallRemoteAgent: "server.installRemoteAgent",
   serverConnectRemoteAgent: "server.connectRemoteAgent",
+  serverRestartRemoteAgent: "server.restartRemoteAgent",
+  serverGetRemoteAgentRestartStatus: "server.getRemoteAgentRestartStatus",
   serverGetRemoteAgentUpdateStatus: "server.getRemoteAgentUpdateStatus",
   serverUnlockSshKey: "server.unlockSshKey",
   serverUnlockSshPassword: "server.unlockSshPassword",

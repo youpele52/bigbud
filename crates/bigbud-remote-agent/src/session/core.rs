@@ -97,10 +97,13 @@ pub enum SessionError {
     ClockBeforeUnixEpoch(#[source] std::time::SystemTimeError),
     #[error("unexpected message after handshake")]
     UnexpectedMessage,
+    #[error("supervisor is stopping and is not accepting new work")]
+    Restarting,
 }
 
 pub struct AgentSession {
     ready: bool,
+    accepting_work: bool,
     accepted_operations: HashMap<String, AcceptedOperation>,
     process_operations: OperationRegistry,
     process_journal: Option<OperationJournal>,
@@ -177,6 +180,7 @@ impl AgentSession {
     ) -> Self {
         Self {
             ready: false,
+            accepting_work: true,
             accepted_operations: HashMap::new(),
             process_operations: OperationRegistry::new(
                 MAX_PROCESS_OPERATIONS,
@@ -201,6 +205,7 @@ impl AgentSession {
             Some(v1::frame::Payload::CancelRequest(request)) if self.ready => {
                 self.handle_cancel_request(request)
             }
+            _ if self.ready && !self.accepting_work => Err(SessionError::Restarting),
             Some(v1::frame::Payload::WorkspaceOpenRequest(request)) if self.ready => {
                 Ok(self.handle_workspace_open(request))
             }
@@ -280,6 +285,7 @@ impl AgentSession {
                     ("process.attach", 1),
                     ("terminal.pty", 1),
                     ("supervisor.shutdown", 1),
+                    ("supervisor.restart", 1),
                 ]
                 .into_iter()
                 .map(|(name, major)| v1::Capability {

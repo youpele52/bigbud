@@ -71,6 +71,11 @@ import {
   type VisibleBrowserRendererId,
   WS_METHODS,
 } from "@bigbud/contracts";
+import type {
+  ServerRestartRemoteAgentInput,
+  ServerRestartRemoteAgentResult,
+  ServerGetRemoteAgentRestartStatusInput,
+} from "@bigbud/contracts/server/server.remoteRestart";
 import { Effect, Stream } from "effect";
 import type {
   ServerPreviewThreadRetentionInput,
@@ -220,6 +225,12 @@ export interface WsRpcClient {
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
+    readonly restartRemoteAgent: (
+      input: ServerRestartRemoteAgentInput,
+    ) => Promise<ServerRestartRemoteAgentResult>;
+    readonly getRemoteAgentRestartStatus: (
+      input: ServerGetRemoteAgentRestartStatusInput,
+    ) => Promise<ServerRestartRemoteAgentResult>;
     readonly getRemoteAgentUpdateStatus: RpcUnaryMethod<
       typeof WS_METHODS.serverGetRemoteAgentUpdateStatus
     >;

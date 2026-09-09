@@ -34,6 +34,9 @@ import {
   type RemoteAgentUpdateCoordinatorShape,
 } from "./remoteAgentUpdate.coordinator.ts";
 import type { RemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
+import { makeRemoteAgentRestart } from "./remoteAgentRestart.ts";
+import { RemoteAgentRestartService } from "./remoteAgentRestart.types.ts";
+import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 
 export type RemoteAgentHealthResult =
   | { readonly status: "install-required" }
@@ -204,6 +207,19 @@ interface RemoteAgentServerServicesDependencies {
   readonly runIdentityProbe: (executionTargetId: string, command: string) => Promise<string>;
   readonly pool: RemoteAgentHealthDependencies["pool"] & {
     readonly close: (executionTargetId: string) => void;
+    readonly admitReplacement?: (
+      executionTargetId: string,
+      replacement: import("./remoteAgentConnectionPool.ts").RemoteAgentRuntimeBinding,
+      retired: import("./remoteAgentConnectionPool.ts").RemoteAgentRuntimeBinding,
+    ) => Promise<unknown>;
+    readonly closeBound?: (
+      executionTargetId: string,
+      binding: import("./remoteAgentConnectionPool.ts").RemoteAgentRuntimeBinding,
+    ) => void;
+    readonly reconcileRuntimeResources?: (
+      executionTargetId: string,
+      binding: import("./remoteAgentConnectionPool.ts").RemoteAgentRuntimeBinding,
+    ) => void;
   };
 }
 
@@ -213,6 +229,7 @@ export function makeRemoteAgentServerServices(
   readonly health: RemoteAgentHealth;
   readonly installer: RemoteAgentInstaller;
   readonly updateCoordinator: RemoteAgentUpdateCoordinatorShape;
+  readonly restart: import("./remoteAgentRestart.ts").RemoteAgentRestartServiceShape;
 } {
   const installManager =
     dependencies.installManager ??
@@ -248,6 +265,39 @@ export function makeRemoteAgentServerServices(
       installManager,
       loadInstallSource,
     }),
+    restart: makeRemoteAgentRestart({
+      close: (target, binding) => {
+        if (binding && dependencies.pool.closeBound) {
+          dependencies.pool.closeBound(target, binding);
+          return;
+        }
+        dependencies.pool.close(target);
+      },
+      reconnect: async (target, replacement, retired) => {
+        if (replacement && retired && dependencies.pool.admitReplacement) {
+          await dependencies.pool.admitReplacement(target, replacement, retired);
+        } else {
+          await dependencies.pool.get(target);
+        }
+      },
+      verifyReadiness: (target, runtime) => remoteAgentAdmission.verify(target, runtime),
+      ...(dependencies.beginRetirement ? { beginRetirement: dependencies.beginRetirement } : {}),
+      reconcileRuntime: async (target, binding) => {
+        if (dependencies.pool.reconcileRuntimeResources) {
+          dependencies.pool.reconcileRuntimeResources(target, binding);
+        } else {
+          dependencies.pool.closeBound?.(target, binding);
+        }
+        try {
+          await remoteAgentOwners().reconcileRuntime?.(
+            binding.runtime.generation,
+            binding.expectedEpoch,
+          );
+        } catch (cause) {
+          if (!(cause instanceof Error) || !cause.message.includes("not initialized")) throw cause;
+        }
+      },
+    }),
   };
 }
 
@@ -271,7 +321,7 @@ export function makeConfiguredRemoteAgentLayers() {
     };
   }
 
-  const { health, installer, updateCoordinator } = makeRemoteAgentServerServices({
+  const { health, installer, updateCoordinator, restart } = makeRemoteAgentServerServices({
     binaryPath: configuration.binaryPath!,
     pool: composition.pool,
     beginRetirement: (executionTargetId, generation) =>
@@ -297,6 +347,7 @@ export function makeConfiguredRemoteAgentLayers() {
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
     Layer.succeed(RemoteAgentUpdateCoordinator, updateCoordinator),
+    Layer.succeed(RemoteAgentRestartService, restart),
   );
   return {
     services,
@@ -306,6 +357,7 @@ export function makeConfiguredRemoteAgentLayers() {
     ptyResolver: composition.ptyResolver,
     health,
     updateCoordinator,
+    restart,
     enabled: true,
   };
 }

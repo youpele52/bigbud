@@ -75,4 +75,24 @@ describe("remote PTY ownership release", () => {
     ).rejects.toThrow("workspace denied");
     expect(released).toBe(1);
   });
+
+  it("settles an active PTY with an explicit restart interruption", () => {
+    const connection = {
+      onFrame: () => () => undefined,
+      onFailure: () => () => undefined,
+    } as unknown as RemoteAgentConnection;
+    const process = new RemoteAgentPtyProcess(connection, "pty", undefined);
+    const errors: Error[] = [];
+    let exitCode: number | undefined;
+    process.onError((error) => errors.push(error));
+    process.onExit((event) => {
+      exitCode = event.exitCode;
+    });
+
+    process.interrupt("remote-service-restarted");
+
+    expect(exitCode).toBe(1);
+    expect(process.interruptionReason).toBe("remote-service-restarted");
+    expect(errors[0]?.message).toContain("Remote service restarted");
+  });
 });

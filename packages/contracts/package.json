@@ -43,6 +43,7 @@
     },
     "./server/rpc.retention": "./src/server/rpc.retention.ts",
     "./server/server": "./src/server/server.ts",
+    "./server/server.remoteRestart": "./src/server/server.remoteRestart.ts",
     "./server/threadRetention": "./src/server/threadRetention.ts",
     "./workspace/project": "./src/workspace/project.ts",
     "./workspace/*": "./src/workspace/*",

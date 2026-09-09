@@ -190,7 +190,11 @@ export function makeOwnedRemoteAgentPty(
         })).then(() => undefined),
     });
     process.onExit(() => {
-      void update((current) => ({ ...current, state: "terminal" }))
+      void update((current) => ({
+        ...current,
+        state: process.interruptionReason ? "outcome-unknown" : "terminal",
+        ...(process.interruptionReason ? { interruptionReason: "restart" as const } : {}),
+      }))
         .then(() =>
           control.registry.update((state) => ({
             ...state,
@@ -202,6 +206,10 @@ export function makeOwnedRemoteAgentPty(
           /* Failure retains the remote pin; never discard recovery evidence. */
         });
     });
+    const removeRestartListener = pool.onRuntimeRestart(binding, () =>
+      process.interrupt("remote-service-restarted"),
+    );
+    process.onExit(removeRestartListener);
     return {
       detach: () => process.detach(),
       get pid() {

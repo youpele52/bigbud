@@ -102,6 +102,7 @@ pub fn protocol_error_frame(error: &SessionError) -> v1::Frame {
         SessionError::Pty(_) => "PTY_ERROR",
         SessionError::ClockBeforeUnixEpoch(_) => "CLOCK_BEFORE_UNIX_EPOCH",
         SessionError::UnexpectedMessage => "UNEXPECTED_MESSAGE",
+        SessionError::Restarting => "SUPERVISOR_RESTARTING",
     };
     v1::Frame {
         payload: Some(v1::frame::Payload::ProtocolError(v1::ProtocolError {

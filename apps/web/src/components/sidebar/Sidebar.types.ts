@@ -254,6 +254,9 @@ export interface SidebarState {
   dismissPendingProjectDeleteConfirmation: () => void;
   confirmPendingProjectDelete: () => Promise<void>;
   requestProjectDelete: (projectId: ProjectId) => void;
+  pendingReconnect: { projectId: ProjectId; projectName: string } | null;
+  dismissReconnect: () => void;
+  confirmReconnect: () => Promise<void>;
   // Thread selection
   selectedThreadIds: ReadonlySet<ThreadId>;
   clearSelection: () => void;

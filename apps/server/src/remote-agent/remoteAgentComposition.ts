@@ -1,9 +1,9 @@
 import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
 import {
-  RemoteAgentConnectionPool,
   makeRemoteProcessClientResolver,
   makeRemoteWorkspaceClientResolver,
-} from "./remoteAgentConnectionPool.ts";
+} from "./remoteAgentConnectionPool.resolvers.ts";
 import { makeRemoteAgentGitCoreExecutor } from "./remoteAgentGit.ts";
 import { makeRemoteAgentShellRunnerResolver } from "./remoteAgentShell.ts";
 import { makeRemoteWorkspaceRuntime } from "../workspace-runtime/Layers/WorkspaceRuntime.remote.ts";

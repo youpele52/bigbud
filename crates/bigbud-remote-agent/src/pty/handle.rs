@@ -222,6 +222,12 @@ impl PtyHandle {
         }
     }
 
+    /// Force termination is reserved for the restart fence after graceful
+    /// termination has exceeded its bounded wait.
+    pub fn force_kill(&self) -> Result<(), PtyError> {
+        self.signal("SIGKILL")
+    }
+
     #[cfg(unix)]
     pub fn append_output(&self, bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;

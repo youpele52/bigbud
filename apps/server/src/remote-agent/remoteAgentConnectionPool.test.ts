@@ -28,6 +28,97 @@ function connection(
 }
 
 describe("remote agent connection pool", () => {
+  it("invalidates every alias bound to the retired runtime", async () => {
+    const hash = "a".repeat(64);
+    const runtime = {
+      generation: "gen-1",
+      version: "0.1.0",
+      sha256: hash,
+      buildDigest: "development",
+      targetTriple: "x86_64-unknown-linux-gnu" as const,
+      origin: "managed" as const,
+      binaryPath: `/root/bin/0.1.0/${hash}/bigbud-remote-agent`,
+      statePath: "/root/runtimes/gen-1",
+      socketPath: "/root/runtimes/gen-1/supervisor.sock",
+      logPath: "/root/runtimes/gen-1/supervisor.log",
+    };
+    const binding = { runtime, expectedEpoch: "epoch-1" };
+    let creates = 0;
+    const pool = new RemoteAgentConnectionPool({
+      resolveBinding: async () => binding,
+      create: async () => {
+        creates += 1;
+        return connection("epoch-1");
+      },
+    });
+    await pool.get("ssh:alias-a");
+    await pool.get("ssh:alias-b");
+    pool.closeBound("ssh:alias-a", binding);
+    await expect(pool.get("ssh:alias-a")).rejects.toThrow("remote-service-restarted");
+    await expect(pool.get("ssh:alias-b")).rejects.toThrow("remote-service-restarted");
+    expect(creates).toBe(2);
+  });
+
+  it("keeps replacement epochs in separate pool entries", async () => {
+    const hash = "b".repeat(64);
+    const runtime = {
+      generation: "gen-epoch",
+      version: "0.1.0",
+      sha256: hash,
+      buildDigest: "development",
+      targetTriple: "x86_64-unknown-linux-gnu" as const,
+      origin: "managed" as const,
+      binaryPath: `/root/bin/0.1.0/${hash}/bigbud-remote-agent`,
+      statePath: "/root/runtimes/gen-epoch",
+      socketPath: "/root/runtimes/gen-epoch/supervisor.sock",
+      logPath: "/root/runtimes/gen-epoch/supervisor.log",
+    };
+    let epoch = "epoch-1";
+    let creates = 0;
+    const pool = new RemoteAgentConnectionPool({
+      resolveBinding: async () => ({ runtime, expectedEpoch: epoch }),
+      create: async (_target, binding) => {
+        creates += 1;
+        return connection(binding?.expectedEpoch ?? "external");
+      },
+    });
+    await pool.get("ssh:epoch");
+    epoch = "epoch-2";
+    await pool.get("ssh:epoch");
+    expect(creates).toBe(2);
+  });
+
+  it("notifies shared-runtime consumers while leaving unrelated runtimes usable", async () => {
+    const runtime = {
+      generation: "shared",
+      version: "0.1.0",
+      sha256: "d".repeat(64),
+      buildDigest: "development",
+      targetTriple: "x86_64-unknown-linux-gnu" as const,
+      origin: "managed" as const,
+      binaryPath: "/root/runtimes/shared/agent",
+      statePath: "/root/runtimes/shared",
+      socketPath: "/root/runtimes/shared/supervisor.sock",
+      logPath: "/root/runtimes/shared/supervisor.log",
+    };
+    const binding = { runtime, expectedEpoch: "old" };
+    const other = { ...binding, runtime: { ...runtime, generation: "other" } };
+    const pool = new RemoteAgentConnectionPool({
+      resolveBinding: async (target) => (target === "shared" ? binding : other),
+      create: async (_target, selected) => connection(selected?.expectedEpoch ?? "external"),
+    });
+    await pool.get("shared");
+    await pool.get("unrelated");
+    let interruptions = 0;
+    pool.onRuntimeRestart(binding, () => {
+      interruptions += 1;
+    });
+    pool.closeBound("shared", binding);
+    expect(interruptions).toBe(1);
+    await expect(pool.get("shared")).rejects.toThrow("remote-service-restarted");
+    await expect(pool.get("unrelated")).resolves.toBeDefined();
+  });
+
   it("requires the dedicated workspace watch capability", async () => {
     const pool = new RemoteAgentConnectionPool({
       create: async () => connection("epoch-1", ["workspace.files", "workspace.search"]),
@@ -58,6 +149,64 @@ describe("remote agent connection pool", () => {
     pool.markTransportLoss("ssh:one");
     await expect(pool.get("ssh:one")).rejects.toThrow("epoch changed");
     expect(pool.snapshot("ssh:one").state).toBe("degraded");
+  });
+
+  it("fences a managed reconnect when the durable retirement check resolves asynchronously", async () => {
+    const runtime = {
+      generation: "gen-restart",
+      version: "0.1.0",
+      sha256: "c".repeat(64),
+      buildDigest: "development",
+      targetTriple: "x86_64-unknown-linux-gnu" as const,
+      origin: "managed" as const,
+      binaryPath: "/root/bin/agent",
+      statePath: "/root/runtimes/gen-restart",
+      socketPath: "/root/runtimes/gen-restart/supervisor.sock",
+      logPath: "/root/runtimes/gen-restart/supervisor.log",
+    };
+    let retiring = false;
+    const create = vi.fn(async () => connection("epoch-1"));
+    const pool = new RemoteAgentConnectionPool({
+      resolveBinding: async () => ({ runtime, expectedEpoch: "epoch-1" }),
+      isRetiring: async () => {
+        await Promise.resolve();
+        return retiring;
+      },
+      create,
+    });
+
+    await pool.get("ssh:managed");
+    pool.markTransportLoss("ssh:managed");
+    retiring = true;
+
+    await expect(pool.get("ssh:managed")).rejects.toThrow("retirement is fenced");
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("admits a verified replacement epoch without un-fencing the old epoch", async () => {
+    const runtime = {
+      generation: "gen-replace",
+      version: "0.1.0",
+      sha256: "e".repeat(64),
+      buildDigest: "development",
+      targetTriple: "x86_64-unknown-linux-gnu" as const,
+      origin: "managed" as const,
+      binaryPath: "/root/runtimes/replace/agent",
+      statePath: "/root/runtimes/replace",
+      socketPath: "/root/runtimes/replace/supervisor.sock",
+      logPath: "/root/runtimes/replace/supervisor.log",
+    };
+    const old = { runtime, expectedEpoch: "old" };
+    const replacement = { runtime, expectedEpoch: "new" };
+    const pool = new RemoteAgentConnectionPool({
+      resolveBinding: async () => old,
+      create: async (_target, binding) => connection(binding?.expectedEpoch ?? "external"),
+    });
+    await pool.get("ssh:replace");
+    const release = await pool.beginRetirement("ssh:replace", runtime.generation);
+    await expect(pool.get("ssh:replace")).rejects.toThrow("retirement is fenced");
+    await expect(pool.admitReplacement("ssh:replace", replacement, old)).resolves.toBeDefined();
+    release();
   });
 
   it("invalidates a ready connection when its transport fails", async () => {

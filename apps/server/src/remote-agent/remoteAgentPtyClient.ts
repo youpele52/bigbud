@@ -51,6 +51,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   private inputTail: Promise<void> = Promise.resolve();
   private pendingInputBytes = 0;
   private pendingInputCount = 0;
+  private _interruptionReason: "remote-service-restarted" | undefined;
   private durability:
     | {
         allocated: (sequence: number) => Promise<void>;
@@ -68,21 +69,31 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     this.currentConnection = connection;
     this.listen(connection);
   }
-
   get pid(): number {
     return this._pid;
   }
-
+  get interruptionReason(): "remote-service-restarted" | undefined {
+    return this._interruptionReason;
+  }
+  interrupt(reason: "remote-service-restarted"): void {
+    if (this.didExit) return;
+    this._interruptionReason = reason;
+    this.report(
+      new RemoteAgentPtyError(
+        "REMOTE_SERVICE_RESTARTED",
+        "Remote service restarted; terminal ownership was interrupted and was not replayed.",
+      ),
+    );
+    this.finish({ exitCode: 1, signal: null });
+  }
   setPid(pid: number): void {
     this._pid = pid;
   }
-
   detach(): void {
     this.closing = true;
     this.removeFrameListener?.();
     this.removeFailureListener?.();
   }
-
   setDurability(durability: NonNullable<RemoteAgentPtyProcess["durability"]>): void {
     this.durability = durability;
   }
@@ -195,7 +206,6 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
         },
         (frame) => frame.type === "ptyCloseResponse" && frame.value.ptyId === this.ptyId,
       );
-      // Close acknowledges control, not child death. Only ptyExited releases ownership.
     } catch (cause) {
       this.closing = false;
       throw cause;

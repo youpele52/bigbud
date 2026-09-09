@@ -10,8 +10,15 @@ import {
 import { MAX_REMOTE_AGENT_TERMINAL_OWNERS } from "../../remote-agent/remoteAgentInstall.registry.ts";
 import { remoteAgentReplayFence } from "./RemoteAgentRuntimeBindings.replay.ts";
 import { isRemoteAgentControllerAlive } from "../../remote-agent/remoteAgentController.ts";
+import { configureRemoteAgentRestartStore } from "../../remote-agent/remoteAgentRestart.store.ts";
+import type {
+  RemoteAgentRestartRecord,
+  RemoteAgentRestartStore,
+} from "../../remote-agent/remoteAgentRestart.types.ts";
+import { validateRemoteAgentRuntime } from "../../remote-agent/remoteAgentRuntime.ts";
 
 const MAX_INACTIVE_BINDINGS = 16;
+const MAX_RESTART_REQUESTS = 64;
 
 export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -212,13 +219,144 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
       `);
       return targets.map((target) => target.target_id);
     },
+    reconcileRuntime: async (generation, epoch) => {
+      await run(
+        sql`UPDATE remote_agent_runtime_owners
+            SET route_json = json_set(route_json, '$.state', 'outcome-unknown', '$.interruptionReason', 'restart') , revision = revision + 1
+            WHERE json_extract(route_json, '$.runtime.generation') = ${generation}
+              AND json_extract(route_json, '$.epoch') = ${epoch}
+              AND json_extract(route_json, '$.state') <> 'terminal'`,
+      );
+    },
     pruneTerminal,
   } satisfies RemoteAgentOwnerStore;
+});
+
+export const makeRemoteAgentRestartStore = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const run = Effect.runPromiseWith(yield* Effect.services<SqlClient.SqlClient>());
+  const decode = (row: {
+    request_id: string;
+    project_id: string;
+    target_id: string;
+    route_json: string;
+    phase: RemoteAgentRestartRecord["phase"];
+    revision: number;
+  }): RemoteAgentRestartRecord => {
+    const route = JSON.parse(row.route_json) as Omit<
+      RemoteAgentRestartRecord,
+      "requestId" | "projectId" | "target" | "phase"
+    >;
+    return {
+      requestId: row.request_id,
+      ...(route.canonicalRequestId ? { canonicalRequestId: route.canonicalRequestId } : {}),
+      projectId: row.project_id,
+      target: row.target_id,
+      phase: row.phase,
+      runtime: validateRemoteAgentRuntime(route.runtime),
+      oldEpoch: route.oldEpoch,
+      ...(route.replacementEpoch ? { replacementEpoch: route.replacementEpoch } : {}),
+      message: route.message,
+      revision: row.revision,
+    };
+  };
+  const getDirect = async (requestId: string): Promise<RemoteAgentRestartRecord | undefined> => {
+    const rows = await run(
+      sql<{
+        request_id: string;
+        project_id: string;
+        target_id: string;
+        route_json: string;
+        phase: RemoteAgentRestartRecord["phase"];
+        revision: number;
+      }>`SELECT request_id, project_id, target_id, route_json, phase, revision FROM remote_agent_restart_requests WHERE request_id = ${requestId}`,
+    );
+    return rows[0] ? decode(rows[0]) : undefined;
+  };
+  const store: RemoteAgentRestartStore = {
+    get: async (requestId) => {
+      let record = await getDirect(requestId);
+      const visited = new Set<string>();
+      while (record?.canonicalRequestId && !visited.has(record.requestId)) {
+        visited.add(record.requestId);
+        record = await getDirect(record.canonicalRequestId);
+      }
+      return record;
+    },
+    put: async (record) => {
+      const route = JSON.stringify({ ...record, revision: 0 });
+      const inserted = await run(
+        sql<{
+          request_id: string;
+        }>`INSERT INTO remote_agent_restart_requests (request_id, project_id, target_id, route_json, phase, revision, updated_at)
+          SELECT ${record.requestId}, ${record.projectId}, ${record.target}, ${route}, ${record.phase}, 0, ${Date.now()}
+          WHERE (SELECT COUNT(*) FROM remote_agent_restart_requests) < ${MAX_RESTART_REQUESTS}
+          ON CONFLICT(request_id) DO NOTHING RETURNING request_id`,
+      );
+      if (inserted.length || (await store.get(record.requestId))) return;
+      const evictable = await run(
+        sql<{ request_id: string }>`SELECT request_id FROM remote_agent_restart_requests
+            WHERE phase IN ('ready', 'failed', 'unknown')
+            ORDER BY updated_at ASC LIMIT 1`,
+      );
+      if (!evictable.length)
+        throw new Error("Remote restart request capacity is exhausted by active operations.");
+      await run(
+        sql`DELETE FROM remote_agent_restart_requests WHERE request_id = ${evictable[0]!.request_id}`,
+      );
+      const retry = await run(
+        sql<{
+          request_id: string;
+        }>`INSERT INTO remote_agent_restart_requests (request_id, project_id, target_id, route_json, phase, revision, updated_at)
+          SELECT ${record.requestId}, ${record.projectId}, ${record.target}, ${route}, ${record.phase}, 0, ${Date.now()}
+          WHERE (SELECT COUNT(*) FROM remote_agent_restart_requests) < ${MAX_RESTART_REQUESTS}
+          ON CONFLICT(request_id) DO NOTHING RETURNING request_id`,
+      );
+      if (!retry.length && !(await store.get(record.requestId)))
+        throw new Error("Remote restart request capacity changed during reservation.");
+    },
+    update: async (requestId, transition) => {
+      // A restart can be observed by the request handler and the reload/status
+      // path at the same time. Retry the bounded CAS rather than turning a
+      // harmless observer race into an uncertain destructive operation.
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const current = await store.get(requestId);
+        if (!current) throw new Error("Remote restart request is missing.");
+        const next = { ...transition(current), revision: (current.revision ?? 0) + 1 };
+        const result = await run(
+          sql`UPDATE remote_agent_restart_requests SET route_json = ${JSON.stringify(next)}, phase = ${next.phase}, revision = ${next.revision}, updated_at = ${Date.now()} WHERE request_id = ${requestId} AND revision = ${current.revision ?? 0} RETURNING request_id`,
+        );
+        if (result.length) return next;
+      }
+      throw new Error("Remote restart transition lost repeated compare-and-set races.");
+    },
+    findActive: async (runtime, projectId) => {
+      const rows = await run(
+        sql<{
+          request_id: string;
+          project_id: string;
+          target_id: string;
+          route_json: string;
+          phase: RemoteAgentRestartRecord["phase"];
+          revision: number;
+        }>`SELECT request_id, project_id, target_id, route_json, phase, revision
+           FROM remote_agent_restart_requests
+           WHERE json_extract(route_json, '$.runtime.generation') = ${runtime.generation}
+             AND project_id = ${projectId}
+             AND phase NOT IN ('ready', 'failed', 'unknown')
+           ORDER BY updated_at DESC LIMIT 1`,
+      );
+      return rows[0] ? decode(rows[0]) : undefined;
+    },
+  };
+  configureRemoteAgentRestartStore(store);
+  return store;
 });
 
 export const RemoteAgentRuntimeBindingsLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const store = yield* makeRemoteAgentRuntimeBindings;
+    yield* makeRemoteAgentRestartStore;
     const sql = yield* SqlClient.SqlClient;
     const checks = [
       {

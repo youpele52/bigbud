@@ -73,6 +73,7 @@ message SupervisorShutdownRequest {
   string request_id = 1;
   string expected_agent_epoch = 2;
   string expected_build_digest = 3;
+  bool interrupt_owned_work = 4;
 }
 
 message SupervisorShutdownResponse {

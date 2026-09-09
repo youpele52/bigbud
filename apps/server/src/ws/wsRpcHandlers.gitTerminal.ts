@@ -25,6 +25,10 @@ import {
   unlockSshPasswordEffect,
   verifyExecutionTargetEffect,
 } from "./wsExecutionTargetVerification.ts";
+import {
+  getRemoteAgentRestartStatusEffect,
+  restartRemoteAgentEffect,
+} from "./wsRemoteAgentRestart.ts";
 
 function gitMutationOperationId(operationId: string | undefined, target?: string): string {
   if (!operationId && !isLocalExecutionTarget(target))
@@ -88,6 +92,26 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverGetRemoteAgentUpdateStatus,
         getRemoteAgentUpdateStatusEffect(input, context.remoteAgentUpdateCoordinator),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverRestartRemoteAgent]: (
+      input: Parameters<typeof restartRemoteAgentEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverRestartRemoteAgent,
+        restartRemoteAgentEffect(input, context.remoteAgentRestart, context.orchestrationEngine),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverGetRemoteAgentRestartStatus]: (
+      input: Parameters<typeof getRemoteAgentRestartStatusEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetRemoteAgentRestartStatus,
+        getRemoteAgentRestartStatusEffect(
+          input,
+          context.remoteAgentRestart,
+          context.orchestrationEngine,
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUnlockSshPassword]: (input: Parameters<typeof unlockSshPasswordEffect>[0]) =>

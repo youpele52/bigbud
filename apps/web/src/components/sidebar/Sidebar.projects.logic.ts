@@ -44,7 +44,7 @@ export function createDefaultRemoteProjectDraft(): RemoteProjectDraft {
   };
 }
 
-function parseRemoteExecutionTarget(executionTargetId: string | null | undefined): {
+export function parseRemoteExecutionTarget(executionTargetId: string | null | undefined): {
   host: string;
   username: string | null;
   port: string | null;

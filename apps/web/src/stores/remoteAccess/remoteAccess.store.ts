@@ -7,6 +7,8 @@ interface PendingRemoteAccessAction {
   readonly cwd?: string;
   readonly onVerified: () => Promise<void> | void;
   readonly unavailableTitle?: string;
+  readonly skipAgentVerification?: boolean;
+  readonly onCancel?: () => void;
 }
 
 export type RemoteExecutionAuthMode = "ssh-key-passphrase" | "password";
@@ -42,8 +44,10 @@ interface RemoteAccessState {
     pendingAction: PendingRemoteAccessAction;
     authMode: RemoteExecutionAuthMode;
     promptLabel: string;
-  }) => void;
+    skipAgentVerification?: boolean;
+  }) => boolean;
   closeAuthDialog: () => void;
+  clearAuthDialog: () => void;
   setAuthSecret: (secret: string) => void;
   setAuthError: (error: string | null) => void;
   setIsAuthenticating: (authenticating: boolean) => void;
@@ -125,7 +129,9 @@ export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
         },
       };
     }),
-  openAuthDialog: ({ pendingAction, authMode, promptLabel }) =>
+  openAuthDialog: ({ pendingAction, authMode, promptLabel }) => {
+    const current = useRemoteAccessStore.getState().pendingAction;
+    if (current) return false;
     set({
       pendingAction,
       isAuthDialogOpen: true,
@@ -134,8 +140,14 @@ export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
       authSecret: "",
       authError: null,
       isAuthenticating: false,
-    }),
-  closeAuthDialog: () =>
+    });
+    return true;
+  },
+  closeAuthDialog: () => {
+    useRemoteAccessStore.getState().pendingAction?.onCancel?.();
+    useRemoteAccessStore.getState().clearAuthDialog();
+  },
+  clearAuthDialog: () =>
     set({
       pendingAction: null,
       isAuthDialogOpen: false,

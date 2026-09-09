@@ -37,6 +37,7 @@ import type * as Mobile from "./mobile";
 import type * as Notes from "./notes";
 import type * as PinnedThreads from "./pinnedThreads";
 import type * as Server from "./server";
+import type * as RemoteRestart from "./server.remoteRestart";
 import type * as Handoff from "./server.handoff";
 import type * as Retention from "./threadRetention";
 import type * as Teach from "./teach";
@@ -164,6 +165,12 @@ export interface NativeApi {
     connectRemoteAgent: (
       input: Server.ServerConnectRemoteAgentInput,
     ) => Promise<Server.ServerConnectRemoteAgentResult>;
+    restartRemoteAgent: (
+      input: RemoteRestart.ServerRestartRemoteAgentInput,
+    ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
+    getRemoteAgentRestartStatus: (
+      input: RemoteRestart.ServerGetRemoteAgentRestartStatusInput,
+    ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
     getRemoteAgentUpdateStatus: (
       input: Server.ServerGetRemoteAgentUpdateStatusInput,
     ) => Promise<Server.ServerRemoteAgentUpdateStatus>;

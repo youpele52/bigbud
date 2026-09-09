@@ -378,6 +378,7 @@ export function makeRemoteAgentAdmission(
   return {
     status: api.status,
     resolveBinding: api.resolveBinding,
+    verify,
     fresh: (target: string, requestId: string) => {
       if (requestId.length > 64)
         throw new RemoteAgentAdmissionRateLimitError("Invalid fresh connection identity.");

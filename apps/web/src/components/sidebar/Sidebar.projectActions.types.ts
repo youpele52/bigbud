@@ -21,6 +21,9 @@ export interface SidebarProjectActionsInput {
 }
 
 export interface SidebarProjectActionsOutput {
+  pendingReconnect: { projectId: ProjectId; projectName: string } | null;
+  dismissReconnect: () => void;
+  confirmReconnect: () => Promise<void>;
   renamingProjectId: ProjectId | null;
   renamingProjectTitle: string;
   setRenamingProjectTitle: (title: string) => void;

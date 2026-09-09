@@ -40,6 +40,7 @@ import {
   RemoteAgentHealthService,
   RemoteAgentInstallerService,
 } from "../remote-agent/remoteAgentServerLayer.ts";
+import { RemoteAgentRestartService } from "../remote-agent/remoteAgentRestart.ts";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner";
 import { makeBootstrapWorktreeIdentityResolver } from "./wsBootstrap.identity.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
@@ -91,6 +92,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const remoteAgentShellRunner = yield* Effect.serviceOption(RemoteAgentShellRunner);
     const remoteAgentHealth = yield* Effect.serviceOption(RemoteAgentHealthService);
     const remoteAgentInstaller = yield* Effect.serviceOption(RemoteAgentInstallerService);
+    const remoteAgentRestart = yield* Effect.serviceOption(RemoteAgentRestartService);
     const remoteAgentUpdateCoordinator = yield* Effect.serviceOption(RemoteAgentUpdateCoordinator);
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
@@ -337,6 +339,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       workspaceRuntime,
       remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
       remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
+      remoteAgentRestart: Option.getOrUndefined(remoteAgentRestart),
       remoteAgentUpdateCoordinator: Option.getOrUndefined(remoteAgentUpdateCoordinator) as
         | RemoteAgentUpdateCoordinatorShape
         | undefined,

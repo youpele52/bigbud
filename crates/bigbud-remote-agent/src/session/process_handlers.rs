@@ -33,6 +33,9 @@ impl AgentSession {
         if !self.ready {
             return Err(SessionError::HelloRequired);
         }
+        if !self.is_accepting_work() {
+            return Err(SessionError::Restarting);
+        }
         let workspace_root = self
             .workspace(&request.workspace_handle)?
             .root()
