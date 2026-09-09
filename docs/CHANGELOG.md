@@ -10,6 +10,46 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
+## v0.2.208 (12 September, 2026)
+
+### More Reliable Orchestration
+
+- Hardened command processing, command receipts, thread identity, deletion fences, projection failures, storage failures, and queued-prompt recovery so retries and restarts do not duplicate work or lose ownership.
+- Added safer orchestration startup and WebSocket recovery, including bounded replay, clearer dispatch errors, mobile delivery improvements, server health handling, and protection against stale or conflicting thread state.
+- Protected draft threads from server-owned, archived, deleted, or concurrently materialized thread IDs, and repaired ownership across reconnects, retries, project switches, and concurrent actions.
+- Chat and shell sends now distinguish accepted, rejected, and unknown outcomes, preserving user input when delivery cannot be confirmed.
+
+### Desktop Event Delivery
+
+- Added a packaged Rust Desktop Delivery Supervisor for ordered, bounded event batches, application acknowledgements, consumer generations, restart recovery, and reconnect reattachment.
+- Added lifecycle diagnostics for degraded or incompatible supervisor states and a fenced TypeScript fallback that cannot deliver concurrently with the supervisor.
+- Added supervisor protocol fixtures, packaging, signing, SBOM, artifact verification, and CI smoke-test coverage.
+
+### Remote Workspace and Agent Reliability
+
+- Hardened remote-agent startup, reconnects, PTY handling, workspace watches, journal recovery, path resolution, and backend readiness across local and remote execution targets.
+- Added explicit execution-target capability checks and safer routing for supported local provider runtimes using remote workspaces.
+- Added remote-workspace ACP bridges for Cursor and Devin, while keeping provider availability bounded by each provider's declared capabilities.
+- Improved remote workspace protocol framing, release packaging, native binaries, and artifact verification for supported platforms.
+
+### Provider Discovery and Session Improvements
+
+- Made provider effort capabilities authoritative and validated provider-specific model, reasoning-effort, and execution-target selections before starting work.
+- Improved provider availability checks, model catalog loading, deferred model-picker rendering, and remote-workspace messaging without treating unavailable discovery data as a healthy runtime.
+- Hardened Claude MCP/session handling and ACP integrations, including safer startup behavior and more predictable provider routing and lifecycle failures.
+
+### Desktop and Release Reliability
+
+- Hardened desktop backend startup and shutdown, native path resolution, and packaged Rust sidecars. Release builds now verify macOS signatures and notarization, optional Windows signing, and Linux artifact contents.
+- Added clearer runtime readiness and connection state handling for desktop, mobile, and WebSocket clients, with safer recovery when services restart or become temporarily unavailable.
+- Updated CI and release workflows, Rust protocol support, and packaging checks for the expanded runtime and remote-agent surface.
+
+### Chat and Workspace UX
+
+- Improved send-turn handling for chat, shell, automation, orchestra, side chat, and compact chat flows, including safer pending-input and failure recovery.
+- Refined provider model selection, sidebar project and thread actions, archived-thread collision navigation and highlighting, Git controls, and mascot state feedback.
+- Improved state transitions for new threads, persisted drafts, startup restoration, project ordering, and archived-thread collisions, including ownership checks before reusing a thread ID.
+
 ## v0.2.207 (7 September, 2026)
 
 ### More Reliable Remote-Agent Setup
