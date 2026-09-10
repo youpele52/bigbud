@@ -10,6 +10,12 @@ import {
   type ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
+import {
+  MOBILE_RECOVERY_WS_METHODS,
+  MobileRecoveryBaselineError,
+  type MobileRecoveryBaselineInput,
+  type MobileRecoverySubscriptionInput,
+} from "@bigbud/contracts/server/mobile.recovery";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
 import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -24,6 +30,7 @@ import {
   makeServerConfigUpdateStream,
   makeThinkingActivityDeltaStream,
 } from "./wsStreams";
+import { makeMobileRecoveryFrameStream } from "./wsMobileRecovery.ts";
 import { makeWsRpcContext } from "./wsRpcContext";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 
@@ -35,12 +42,75 @@ const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.archive",
 ]);
 
+const MOBILE_RECOVERY_BASELINE_UNIMPLEMENTED_MESSAGE =
+  't3/orchestration/Services/ProjectionSnapshotQuery: Unimplemented method "getMobileRecoveryBaseline"';
+
+const isMissingMobileRecoveryBaseline = (cause: unknown): boolean =>
+  cause instanceof Error &&
+  cause.name === "UnimplementedError" &&
+  cause.message === MOBILE_RECOVERY_BASELINE_UNIMPLEMENTED_MESSAGE;
+
 const makeMobileWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
   MobileWsRpcGroup.toLayer(
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock);
 
       return MobileWsRpcGroup.of({
+        [MOBILE_RECOVERY_WS_METHODS.getBaseline]: (input: MobileRecoveryBaselineInput) =>
+          observeRpcEffect(
+            MOBILE_RECOVERY_WS_METHODS.getBaseline,
+            Effect.gen(function* () {
+              const selectedThreadId = input.selectedThreadId ?? null;
+              const getMobileRecoveryBaseline =
+                context.projectionSnapshotQuery.getMobileRecoveryBaseline;
+              if (getMobileRecoveryBaseline === undefined) {
+                return yield* new MobileRecoveryBaselineError({
+                  message: "Mobile recovery baseline is unavailable on this server",
+                });
+              }
+              const baseline = yield* getMobileRecoveryBaseline(selectedThreadId).pipe(
+                Effect.catchDefect((cause) =>
+                  isMissingMobileRecoveryBaseline(cause)
+                    ? Effect.fail(
+                        new MobileRecoveryBaselineError({
+                          message: "Mobile recovery baseline is unavailable on this server",
+                        }),
+                      )
+                    : Effect.die(cause),
+                ),
+              );
+              return {
+                version: 1 as const,
+                recoveryAttemptId: input.recoveryAttemptId,
+                serverEpoch: context.orchestrationEngine.serverEpoch ?? "unavailable",
+                snapshotSequence: baseline.snapshotSequence,
+                snapshot: baseline.snapshot,
+                selectedThread: baseline.selectedThread,
+              };
+            }).pipe(
+              Effect.mapError((cause) =>
+                Schema.is(MobileRecoveryBaselineError)(cause)
+                  ? cause
+                  : new MobileRecoveryBaselineError({
+                      message: "Failed to load mobile recovery baseline",
+                      cause,
+                    }),
+              ),
+            ),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
+        [MOBILE_RECOVERY_WS_METHODS.subscribe]: (input: MobileRecoverySubscriptionInput) =>
+          observeRpcStreamEffect(
+            MOBILE_RECOVERY_WS_METHODS.subscribe,
+            makeMobileRecoveryFrameStream({
+              recoveryAttemptId: input.recoveryAttemptId,
+              baselineSequence: input.baselineSequence,
+              clientServerEpoch: input.serverEpoch,
+              orchestrationEngine: context.orchestrationEngine,
+              serverEpoch: context.orchestrationEngine.serverEpoch ?? "unavailable",
+            }),
+            { "rpc.aggregate": "mobile-orchestration" },
+          ),
         [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getSnapshot,
@@ -168,7 +238,7 @@ const makeMobileWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
                     route: "direct-unmanaged" as const,
                     consumerId,
                     consumerGeneration: 0,
-                    serverEpoch: "mobile-direct",
+                    serverEpoch: context.orchestrationEngine.serverEpoch ?? "unavailable",
                     subscriptionGeneration: 0,
                     batchId: `mobile-${event.eventId}`,
                     events: [event],

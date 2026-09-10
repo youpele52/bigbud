@@ -14,6 +14,7 @@ import type {
   ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
+import type { MobileRecoverySelectedThread } from "@bigbud/contracts/server/mobile.recovery";
 import { ServiceMap } from "effect";
 import type { Option } from "effect";
 import type { Effect } from "effect";
@@ -51,6 +52,12 @@ export interface ProjectionThreadCheckpointContext {
   readonly checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>;
 }
 
+export interface ProjectionMobileRecoveryBaseline {
+  readonly snapshot: OrchestrationReadModel;
+  readonly snapshotSequence: number;
+  readonly selectedThread: MobileRecoverySelectedThread | null;
+}
+
 /**
  * ProjectionSnapshotQueryShape - Service API for read-model snapshots.
  */
@@ -62,6 +69,11 @@ export interface ProjectionSnapshotQueryShape {
    * projector cursor state.
    */
   readonly getSnapshot: () => Effect.Effect<OrchestrationReadModel, ProjectionRepositoryError>;
+
+  /** Read mobile summaries and, when requested, one full selected thread. */
+  readonly getMobileRecoveryBaseline?: (
+    selectedThreadId: ThreadId | null,
+  ) => Effect.Effect<ProjectionMobileRecoveryBaseline, ProjectionRepositoryError>;
 
   /**
    * Read aggregate projection counts without hydrating the full read model.

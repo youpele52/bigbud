@@ -2,7 +2,9 @@ import type { OrchestrationReadModel } from "@bigbud/contracts";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+import { useMobileRpcClient } from "../../context/MobileRpcContext";
 import { Button } from "../ui/button";
+import { MobileRecoveryStatus } from "./MobileRecoveryStatus";
 import { MobileStartupSplash } from "./MobileStartupSplash";
 import { clearMobileSession } from "../../lib/mobileSession";
 
@@ -17,6 +19,8 @@ export function MobileSessionGate({
   connectionError: string | null;
   children: (snapshot: OrchestrationReadModel) => ReactNode;
 }) {
+  const { recoveryState } = useMobileRpcClient();
+
   if (!session) {
     return (
       <div className="px-1 py-8 text-sm text-muted-foreground">
@@ -25,11 +29,18 @@ export function MobileSessionGate({
     );
   }
 
-  if (snapshotQuery.isLoading) {
+  const snapshot = snapshotQuery.data;
+  const recoveryWaiting =
+    recoveryState.freshness === "refreshing" ||
+    (recoveryState.freshness === "unavailable" &&
+      recoveryState.reason === null &&
+      snapshotQuery.isPending);
+
+  if (!snapshot && recoveryWaiting) {
     return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
   }
 
-  if (snapshotQuery.isError || !snapshotQuery.data) {
+  if (!snapshot) {
     return (
       <div className="grid gap-3 px-1 py-8">
         <p className="text-sm font-medium text-foreground">Unable to connect</p>
@@ -55,5 +66,13 @@ export function MobileSessionGate({
     );
   }
 
-  return children(snapshotQuery.data);
+  const content = children(snapshot);
+  if (recoveryState.freshness !== "stale" && recoveryState.freshness !== "legacy") return content;
+
+  return (
+    <div className="grid gap-2">
+      <MobileRecoveryStatus state={recoveryState} onRetry={() => void snapshotQuery.refetch()} />
+      {content}
+    </div>
+  );
 }

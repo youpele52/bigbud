@@ -24,6 +24,7 @@ export * from "./server/kanban";
 export * from "./server/notes";
 export * from "./server/teach";
 export * from "./server/mobile";
+export * from "./server/mobile.recovery";
 export * from "./server/server";
 export * from "./server/server.handoff";
 export * from "./server/server.storage";

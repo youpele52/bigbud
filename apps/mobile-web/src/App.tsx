@@ -49,7 +49,7 @@ function AppFrameContent({
   readonly setSession: Dispatch<SetStateAction<StoredMobileSession | null>>;
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { snapshotQuery, connectionError } = useMobileSnapshot(session);
+  const { recoveryState, snapshotQuery, connectionError } = useMobileSnapshot(session);
   const threadId = extractMobileThreadId(pathname);
   const draftThread = threadId ? getMobileDraftThread(threadId) : null;
   const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
@@ -57,8 +57,13 @@ function AppFrameContent({
   const showLaunchSplash =
     isMobileLaunchRoute(pathname) &&
     session !== null &&
-    snapshotQuery.isLoading &&
-    !snapshotQuery.isError;
+    !snapshotQuery.data &&
+    (recoveryState.freshness === "refreshing" ||
+      (recoveryState.freshness === "unavailable" &&
+        recoveryState.reason === null &&
+        snapshotQuery.isPending));
+  const showLaunchRecoveryError =
+    isMobileLaunchRoute(pathname) && session !== null && !snapshotQuery.data && !showLaunchSplash;
 
   function handleSignOut() {
     setSession(null);
@@ -69,7 +74,7 @@ function AppFrameContent({
     <>
       {showLaunchSplash ? (
         <MobileStartupSplash />
-      ) : isMobileLaunchRoute(pathname) && session !== null && snapshotQuery.isError ? (
+      ) : showLaunchRecoveryError ? (
         <div className="grid gap-3 px-4 py-8">
           <p className="text-sm font-medium text-foreground">Unable to connect</p>
           <p className="text-sm text-muted-foreground">

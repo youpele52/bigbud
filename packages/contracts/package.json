@@ -36,6 +36,11 @@
       "import": "./src/server/mobile.ts",
       "require": "./src/server/mobile.ts"
     },
+    "./server/mobile.recovery": {
+      "types": "./src/server/mobile.recovery.ts",
+      "import": "./src/server/mobile.recovery.ts",
+      "require": "./src/server/mobile.recovery.ts"
+    },
     "./server/rpc.mobile": {
       "types": "./src/server/rpc.mobile.ts",
       "import": "./src/server/rpc.mobile.ts",

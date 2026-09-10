@@ -245,6 +245,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       });
     });
   const engine: OrchestrationEngineShape = {
+    serverEpoch,
     threadDeletion,
     getCommandOutcome,
     getReadModel,

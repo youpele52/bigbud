@@ -1,5 +1,6 @@
 import type { OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { useMobileRpcClient } from "../context/MobileRpcContext";
 
@@ -11,20 +12,39 @@ function formatQueryError(error: unknown): string {
 }
 
 export function useMobileThread(session: { sessionId: string } | null, threadId: ThreadId) {
-  const { client } = useMobileRpcClient();
+  const { client, recovery } = useMobileRpcClient();
+  const sessionId = session?.sessionId;
 
   const threadQuery = useQuery<OrchestrationThread>({
-    enabled: client !== null && session !== null,
-    queryKey: ["mobile-thread", session?.sessionId ?? "anonymous", threadId],
+    enabled: false,
+    queryKey: ["mobile-thread", sessionId ?? "anonymous", threadId],
     queryFn: () => client!.getMobileThread(threadId),
-    retry: 1,
+    retry: recovery === null ? 1 : false,
     retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 8_000),
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
 
+  useEffect(() => {
+    if (!client || !sessionId || !recovery) return;
+    void recovery.selectThread(threadId).catch(() => undefined);
+    return () => {
+      if (recovery.getState().selectedThreadId === threadId) {
+        void recovery.refresh(null).catch(() => undefined);
+      }
+    };
+  }, [client, recovery, sessionId, threadId]);
+
   return {
-    threadQuery,
+    threadQuery: recovery
+      ? {
+          ...threadQuery,
+          refetch: async () => {
+            await recovery.selectThread(threadId);
+            return threadQuery;
+          },
+        }
+      : threadQuery,
     threadError: threadQuery.isError ? formatQueryError(threadQuery.error) : null,
   };
 }

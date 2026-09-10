@@ -33,6 +33,9 @@ import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion
  * OrchestrationEngineShape - Service API for orchestration command and event flow.
  */
 export interface OrchestrationEngineShape {
+  /** Stable identity for this server process, used to fence recovery frames. */
+  readonly serverEpoch?: string;
+
   /** Shared deletion fence and subtree operation for orchestration reactors. */
   readonly threadDeletion?: ThreadDeletionShape;
 
@@ -69,10 +72,11 @@ export interface OrchestrationEngineShape {
     limit?: number,
   ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
 
-  /** Opens an engine-owned bounded live capture for one delivery consumer. */
+  /** A bounded live handoff plus an eager overflow probe for replay markers. */
   readonly openDeliveryLiveCapture?: (
     capacity?: number,
-  ) => Effect.Effect<Stream.Stream<OrchestrationEvent>, never, Scope.Scope>;
+    maxBytes?: number,
+  ) => Effect.Effect<OrchestrationDeliveryLiveCapture, never, Scope.Scope>;
 
   /** Internal keyed lookup for the event set committed by one command. */
   readonly readEventsByCommandId?: (
@@ -98,6 +102,14 @@ export interface OrchestrationEngineShape {
    * This is a hot runtime stream (new events only), not a historical replay.
    */
   readonly streamDomainEvents: Stream.Stream<OrchestrationEvent>;
+}
+
+export interface OrchestrationDeliveryLiveCapture {
+  readonly stream: Stream.Stream<OrchestrationEvent>;
+  /** Reads capture state without waiting for the live stream to be consumed. */
+  readonly isOverflowed: Effect.Effect<boolean>;
+  /** Closes the capture before its owning stream scope is finalized. */
+  readonly close: Effect.Effect<void>;
 }
 
 export function ensureOrchestrationThreadState(

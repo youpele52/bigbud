@@ -154,6 +154,35 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-empty-")))(
+  "OrchestrationProjectionPipeline empty bootstrap",
+  (it) => {
+    it.effect("publishes required zero cursors for a verified empty event stream", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const sql = yield* SqlClient.SqlClient;
+
+        yield* projectionPipeline.bootstrap;
+
+        const rows = yield* sql<{
+          readonly projector: string;
+          readonly lastAppliedSequence: number;
+        }>`
+          SELECT projector, last_applied_sequence AS "lastAppliedSequence"
+          FROM projection_state
+          ORDER BY projector ASC
+        `;
+        assert.equal(rows.length, Object.keys(ORCHESTRATION_PROJECTOR_NAMES).length);
+        assert.ok(rows.every((row) => row.lastAppliedSequence === 0));
+        assert.deepEqual(
+          new Set(rows.map((row) => row.projector)),
+          new Set(Object.values(ORCHESTRATION_PROJECTOR_NAMES)),
+        );
+      }),
+    );
+  },
+);
+
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-replies-")))(
   "OrchestrationProjectionPipeline",
   (it) => {

@@ -30,6 +30,7 @@ interface MobileComposerProps {
   onChange: (value: string) => void;
   onSend: () => void;
   disabled?: boolean | undefined;
+  stateDependentActionsDisabled?: boolean | undefined;
   placeholder?: string | undefined;
   projectTitle?: string | undefined;
   isGitRepo?: boolean | undefined;
@@ -65,6 +66,7 @@ export function MobileComposer({
   onChange,
   onSend,
   disabled = false,
+  stateDependentActionsDisabled = false,
   placeholder = "Ask anything, @tag files/folders, or use / to show available commands",
   projectTitle,
   isGitRepo = false,
@@ -111,14 +113,21 @@ export function MobileComposer({
     userInputUsesComposer &&
     value.trim().length > 0 &&
     !disabled &&
+    !stateDependentActionsDisabled &&
     !isRespondingToUserInput;
   const canSendPrompt =
-    !isApprovalMode && !isUserInputMode && value.trim().length > 0 && !disabled && !isRunning;
+    !isApprovalMode &&
+    !isUserInputMode &&
+    value.trim().length > 0 &&
+    !disabled &&
+    !stateDependentActionsDisabled &&
+    !isRunning;
   const canAdvanceUserInput =
     isUserInputMode &&
     (activeQuestion?.options.length ?? 0) > 0 &&
     !userInputUsesComposer &&
     Boolean(userInputProgress?.canAdvance) &&
+    !stateDependentActionsDisabled &&
     !isRespondingToUserInput;
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -183,6 +192,7 @@ export function MobileComposer({
           {pendingUserInput && onToggleUserInputOption && onAdvanceUserInput ? (
             <MobileComposerPendingUserInput
               answers={userInputAnswers}
+              disabled={stateDependentActionsDisabled}
               isResponding={isRespondingToUserInput}
               onAdvance={onAdvanceUserInput}
               onToggleOption={onToggleUserInputOption}
@@ -232,7 +242,7 @@ export function MobileComposer({
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                 <Button
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  disabled={disabled}
+                  disabled={disabled || stateDependentActionsDisabled}
                   onClick={() => onRespondToApproval(pendingApproval.requestId, "decline")}
                   size="sm"
                   variant="outline"
@@ -240,7 +250,7 @@ export function MobileComposer({
                   {isLearningSkillProposal ? "Reject patch" : "Deny"}
                 </Button>
                 <Button
-                  disabled={disabled}
+                  disabled={disabled || stateDependentActionsDisabled}
                   onClick={() => onRespondToApproval(pendingApproval.requestId, "accept")}
                   size="sm"
                 >

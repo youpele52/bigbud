@@ -11,6 +11,7 @@ import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { isPersistenceError, toPersistenceSqlError } from "../../persistence/Errors.ts";
+import { orchestrationSequenceFrontierSql } from "../../persistence/OrchestrationSequenceFrontier.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionBaselineRepository } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
@@ -221,13 +222,41 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       );
     });
 
+    const publishEmptyProjectionCursors = Effect.gen(function* () {
+      const frontierRows = yield* sql<{ readonly frontier: number }>`
+        SELECT ${orchestrationSequenceFrontierSql(sql)} AS frontier
+      `;
+      if (frontierRows[0]?.frontier !== 0) return;
+      const updatedAt = new Date(0).toISOString();
+      yield* Effect.forEach(
+        projectors,
+        (projector) => sql`
+          INSERT INTO projection_state (projector, last_applied_sequence, updated_at)
+          VALUES (${projector.name}, 0, ${updatedAt})
+          ON CONFLICT (projector) DO NOTHING
+        `,
+        { concurrency: 1, discard: true },
+      );
+    });
+
     const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.andThen(
       restoreBaselineForRetainedGap,
       Effect.gen(function* () {
-        const cursor = yield* projectionStateRepository.minLastAppliedSequence();
+        const stateRows = yield* projectionStateRepository.listAll();
+        const cursor =
+          stateRows.length === 0
+            ? null
+            : Math.min(...stateRows.map((state) => state.lastAppliedSequence));
         const replay = yield* eventStore.readReplay(cursor ?? 0, 1);
         if (replay.events.length > 0) {
           yield* Effect.sync(() => writeStartupStatus("upgrading"));
+        }
+        if (
+          replay.availability === "available" &&
+          replay.latestSequence === 0 &&
+          stateRows.every((state) => state.lastAppliedSequence === 0)
+        ) {
+          yield* sql.withTransaction(publishEmptyProjectionCursors);
         }
         yield* Effect.forEach(projectors, bootstrapProjector, { concurrency: 1 });
         yield* Effect.sync(() => writeStartupStatus("starting"));

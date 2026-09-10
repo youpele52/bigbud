@@ -12,6 +12,7 @@ import {
   WsSubscribeServerConfigRpc,
   WsSubscribeThinkingActivityDeltasRpc,
 } from "./rpc";
+import { WsMobileRecoveryBaselineRpc, WsSubscribeMobileRecoveryRpc } from "./rpc.mobile.recovery";
 
 export const MobileWsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSnapshotRpc,
@@ -24,4 +25,6 @@ export const MobileWsRpcGroup = RpcGroup.make(
   WsSubscribeOrchestrationDomainEventsRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeThinkingActivityDeltasRpc,
+  WsMobileRecoveryBaselineRpc,
+  WsSubscribeMobileRecoveryRpc,
 );

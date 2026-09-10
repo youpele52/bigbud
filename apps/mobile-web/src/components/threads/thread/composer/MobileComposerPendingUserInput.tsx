@@ -18,6 +18,7 @@ interface MobileComposerPendingUserInputProps {
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
   isResponding: boolean;
+  disabled?: boolean;
   onToggleOption: (
     questionId: string,
     option: UserInputQuestion["options"][number],
@@ -31,6 +32,7 @@ export function MobileComposerPendingUserInput({
   answers,
   questionIndex,
   isResponding,
+  disabled = false,
   onToggleOption,
   onAdvance,
 }: MobileComposerPendingUserInputProps) {
@@ -52,6 +54,7 @@ export function MobileComposerPendingUserInput({
 
   const handleOptionSelection = useCallback(
     (questionId: string, option: UserInputQuestion["options"][number], optionIndex: number) => {
+      if (disabled) return;
       onToggleOption(questionId, option, optionIndex);
       if (activeQuestion?.multiSelect) {
         return;
@@ -64,7 +67,7 @@ export function MobileComposerPendingUserInput({
         onAdvance();
       }, 200);
     },
-    [activeQuestion?.multiSelect, onAdvance, onToggleOption],
+    [activeQuestion?.multiSelect, disabled, onAdvance, onToggleOption],
   );
 
   if (!activeQuestion) {
@@ -101,6 +104,7 @@ export function MobileComposerPendingUserInput({
       ) : null}
       <OptionList
         activeQuestion={activeQuestion}
+        disabled={disabled}
         isResponding={isResponding}
         progress={progress}
         onSelect={handleOptionSelection}
@@ -111,11 +115,13 @@ export function MobileComposerPendingUserInput({
 
 function OptionList({
   activeQuestion,
+  disabled,
   isResponding,
   progress,
   onSelect,
 }: {
   activeQuestion: UserInputQuestion;
+  disabled: boolean;
   isResponding: boolean;
   progress: ReturnType<typeof derivePendingUserInputProgress>;
   onSelect: (
@@ -144,7 +150,7 @@ function OptionList({
                 : "border-transparent bg-muted/20 text-foreground/80 hover:border-border/40 hover:bg-muted/40",
               isResponding && "cursor-not-allowed opacity-50",
             )}
-            disabled={isResponding}
+            disabled={disabled || isResponding}
             onClick={() => onSelect(activeQuestion.id, option, index)}
             type="button"
           >
