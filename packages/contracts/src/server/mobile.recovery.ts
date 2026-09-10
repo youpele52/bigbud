@@ -1,11 +1,13 @@
 import { Schema } from "effect";
 
-import { NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { CommandId, NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { OrchestrationEvent } from "../orchestration/orchestration.events";
+import { OrchestrationCommandRejectionReason } from "../orchestration/orchestration.rpc";
 import { OrchestrationReadModel, OrchestrationThread } from "../orchestration/orchestration.thread";
 
 export const MOBILE_RECOVERY_WS_METHODS = {
   getBaseline: "mobile.recovery.getBaseline",
+  getCommandOutcome: "mobile.recovery.getCommandOutcome",
   subscribe: "mobile.recovery.subscribe",
 } as const;
 
@@ -56,6 +58,37 @@ export const MobileRecoverySubscriptionInput = Schema.Struct({
 });
 export type MobileRecoverySubscriptionInput = typeof MobileRecoverySubscriptionInput.Type;
 
+export const MobileRecoveryCommandOutcomeInput = Schema.Struct({
+  threadId: ThreadId,
+  commandId: CommandId,
+});
+export type MobileRecoveryCommandOutcomeInput = typeof MobileRecoveryCommandOutcomeInput.Type;
+
+export const MobileRecoveryCommandOutcome = Schema.Union([
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("unknown"),
+    serverEpoch: MobileRecoveryIdentity,
+    canonicalRevision: NonNegativeInt,
+  }),
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("accepted"),
+    resultSequence: NonNegativeInt,
+    serverEpoch: MobileRecoveryIdentity,
+    canonicalRevision: NonNegativeInt,
+  }),
+  Schema.Struct({
+    commandId: CommandId,
+    status: Schema.Literal("rejected"),
+    resultSequence: NonNegativeInt,
+    reason: OrchestrationCommandRejectionReason,
+    serverEpoch: MobileRecoveryIdentity,
+    canonicalRevision: NonNegativeInt,
+  }),
+]);
+export type MobileRecoveryCommandOutcome = typeof MobileRecoveryCommandOutcome.Type;
+
 const MobileRecoveryFrameBase = {
   version: Schema.Literal(1),
   route: Schema.Literal("direct-unmanaged"),
@@ -105,6 +138,14 @@ export type MobileRecoveryFrame = typeof MobileRecoveryFrame.Type;
 
 export class MobileRecoveryBaselineError extends Schema.TaggedErrorClass<MobileRecoveryBaselineError>()(
   "MobileRecoveryBaselineError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class MobileRecoveryCommandOutcomeError extends Schema.TaggedErrorClass<MobileRecoveryCommandOutcomeError>()(
+  "MobileRecoveryCommandOutcomeError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

@@ -93,7 +93,7 @@ try {
   );
   mode = "suspended";
   socket.close({ code: 1012, reason: "browser suspension fixture" });
-  await page.getByText(/Showing last-known data/).waitFor();
+  await page.getByRole("status").getByText("Showing last-known data", { exact: true }).waitFor();
   assert.equal(await send.isDisabled(), true);
   const preserve = async () => {
     assert.equal(await textarea.inputValue(), draft);
@@ -121,7 +121,7 @@ try {
   await preserve();
   mode = "legacy";
   socket.close({ code: 1012, reason: "legacy server replacement fixture" });
-  await page.getByText(/Showing last-known data/).waitFor();
+  await page.getByRole("status").getByText("Showing last-known data", { exact: true }).waitFor();
   await page.waitForTimeout(4_000);
   // A second rapid replacement may exhaust the deliberately shared automatic budget.
   if ((await page.getByText(/Live recovery markers are unavailable/).count()) === 0) {
@@ -129,7 +129,10 @@ try {
       .getByRole("button", { name: "Retry", exact: true })
       .evaluate((button) => button.click());
   }
-  await page.getByText(/Live recovery markers are unavailable/).waitFor({ timeout: 15_000 });
+  await page
+    .getByRole("status")
+    .getByText("Live recovery markers unavailable", { exact: true })
+    .waitFor({ timeout: 15_000 });
   assert.match(await page.getByRole("status").innerText(), /Last refreshed at/);
   assert.equal(await send.isEnabled(), true);
   await preserve();
@@ -161,7 +164,7 @@ try {
     type: "resync-required",
     reason: "gap",
   });
-  await page.getByText("Showing last-known data.", { exact: true }).waitFor();
+  await page.getByRole("status").getByText("Showing last-known data", { exact: true }).waitFor();
   assert.equal(await stop.isEnabled(), true);
   await stop.click();
   for (

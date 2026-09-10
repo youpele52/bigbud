@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
 
 import { useMobileRpcClient } from "../../context/MobileRpcContext";
 import { Button } from "../ui/button";
-import { MobileRecoveryStatus } from "./MobileRecoveryStatus";
+import { MobileConnectionNotice } from "./MobileConnectionNotice";
 import { MobileStartupSplash } from "./MobileStartupSplash";
 import { clearMobileSession } from "../../lib/mobileSession";
+import { redactMobileText } from "../../lib/mobileRedaction";
 
 export function MobileSessionGate({
   session,
@@ -19,7 +20,7 @@ export function MobileSessionGate({
   connectionError: string | null;
   children: (snapshot: OrchestrationReadModel) => ReactNode;
 }) {
-  const { recoveryState } = useMobileRpcClient();
+  const { connection, recoveryState, restart } = useMobileRpcClient();
 
   if (!session) {
     return (
@@ -41,25 +42,32 @@ export function MobileSessionGate({
   }
 
   if (!snapshot) {
+    const needsPairing = connection.expired || connection.authorization === "explicitly-rejected";
+    const pairAgain = () => {
+      clearMobileSession();
+      window.location.assign("/mobile");
+    };
     return (
       <div className="grid gap-3 px-1 py-8">
-        <p className="text-sm font-medium text-foreground">Unable to connect</p>
+        <p className="text-sm font-medium text-foreground">
+          {needsPairing ? "Pairing required" : "Unable to connect"}
+        </p>
         <p className="text-sm text-muted-foreground">
-          {connectionError ?? "Refresh the page or pair again if the session expired."}
+          {connectionError
+            ? redactMobileText(connectionError)
+            : "Retry or pair again if the session expired."}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => snapshotQuery.refetch()}>
-            Retry
-          </Button>
           <Button
+            className="min-h-11"
             size="sm"
-            variant="secondary"
-            onClick={() => {
-              clearMobileSession();
-              window.location.reload();
-            }}
+            variant="outline"
+            onClick={needsPairing ? pairAgain : restart}
           >
-            Clear session
+            {needsPairing ? "Pair again" : "Retry"}
+          </Button>
+          <Button className="min-h-11" size="sm" variant="secondary" onClick={pairAgain}>
+            Forget connection
           </Button>
         </div>
       </div>
@@ -67,11 +75,33 @@ export function MobileSessionGate({
   }
 
   const content = children(snapshot);
-  if (recoveryState.freshness !== "stale" && recoveryState.freshness !== "legacy") return content;
+  const authorizationMessage =
+    connection.authorization === "locally-expired"
+      ? "This session expired. Pair again before sending commands."
+      : connection.authorization === "explicitly-rejected"
+        ? "The desktop server rejected this connection. Pair this phone again before sending commands."
+        : null;
+  if (
+    authorizationMessage === null &&
+    recoveryState.freshness !== "stale" &&
+    recoveryState.freshness !== "legacy"
+  ) {
+    return content;
+  }
 
   return (
     <div className="grid gap-2">
-      <MobileRecoveryStatus state={recoveryState} onRetry={() => void snapshotQuery.refetch()} />
+      {authorizationMessage ? (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          {authorizationMessage}
+        </div>
+      ) : null}
+      {recoveryState.freshness === "stale" || recoveryState.freshness === "legacy" ? (
+        <MobileConnectionNotice state={recoveryState} onRetry={restart} />
+      ) : null}
       {content}
     </div>
   );

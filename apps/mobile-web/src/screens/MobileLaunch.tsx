@@ -5,7 +5,6 @@ import {
   MobileListLink,
   MobileListSection,
 } from "../components/shell/MobileAppHeader";
-import { MobileNewChatFab } from "../components/threads/MobileNewChatFab";
 import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
 import { MobileSessionGate } from "../components/shell/MobileSessionGate";
 import { MobileThreadList } from "../components/threads/MobileThreadList";
@@ -65,7 +64,6 @@ export function MobileLaunch() {
                 </MobileListSection>
               ) : null}
             </div>
-            <MobileNewChatFab ariaLabel="New chat" onClick={startNewChat} />
           </>
         );
       }}

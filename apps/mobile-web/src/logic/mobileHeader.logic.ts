@@ -72,6 +72,16 @@ export function resolveMobileHeaderState(
     return { showLogo: false, showBack: true, title: "Recents", backTo: "/mobile" };
   }
 
+  if (pathname.endsWith("/diff")) {
+    const threadId = extractMobileThreadId(pathname);
+    return {
+      showLogo: false,
+      showBack: true,
+      title: "Diff",
+      backTo: threadId ? `/mobile/thread/${threadId}` : "/mobile/chats",
+    };
+  }
+
   const threadId = extractMobileThreadId(pathname);
   if (threadId && !pathname.endsWith("/diff")) {
     const thread = snapshot?.threads.find((candidate) => candidate.id === threadId) ?? null;

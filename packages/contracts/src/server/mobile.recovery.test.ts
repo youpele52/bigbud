@@ -1,4 +1,4 @@
-import { EventId, ThreadId } from "../core/baseSchemas";
+import { CommandId, EventId, ThreadId } from "../core/baseSchemas";
 import { OrchestrationEvent } from "../orchestration/orchestration.events";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,8 @@ import {
   MOBILE_RECOVERY_ID_MAX_LENGTH,
   MOBILE_RECOVERY_MAX_EVENTS_PER_BATCH,
   MobileRecoveryBaselineInput,
+  MobileRecoveryCommandOutcome,
+  MobileRecoveryCommandOutcomeInput,
   MobileRecoveryFrame,
   MobileRecoverySubscriptionInput,
 } from "./mobile.recovery";
@@ -99,5 +101,33 @@ describe("mobile recovery contracts", () => {
         throughSequence: 0,
       }),
     ).toMatchObject({ type: "caught-up", throughSequence: 0 });
+  });
+
+  it("bounds command outcome reads to a thread and small result", () => {
+    const input = Schema.decodeUnknownSync(MobileRecoveryCommandOutcomeInput)({
+      commandId: CommandId.makeUnsafe("command-1"),
+      threadId,
+    });
+    expect(input.threadId).toBe(threadId);
+    expect(
+      Schema.decodeUnknownSync(MobileRecoveryCommandOutcome)({
+        commandId: input.commandId,
+        status: "rejected",
+        resultSequence: 4,
+        reason: "other",
+        serverEpoch: "server-1",
+        canonicalRevision: 4,
+      }),
+    ).toMatchObject({ status: "rejected", reason: "other" });
+    const decoded = Schema.decodeUnknownSync(MobileRecoveryCommandOutcome)({
+      commandId: input.commandId,
+      status: "rejected",
+      resultSequence: 4,
+      reason: "other",
+      serverEpoch: "server-1",
+      canonicalRevision: 4,
+      error: "raw provider error",
+    });
+    expect(decoded).not.toHaveProperty("error");
   });
 });

@@ -9,7 +9,8 @@
     "build:desktop": "VITE_MOBILE_BASE=/mobile/ vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:browser": "node tests/browser/shell.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

@@ -33,6 +33,7 @@ import {
 import { makeMobileRecoveryFrameStream } from "./wsMobileRecovery.ts";
 import { makeWsRpcContext } from "./wsRpcContext";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
+import { makeMobileRecoveryOutcomeHandler } from "./ws.mobile.recovery.ts";
 
 const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.turn.start",
@@ -50,12 +51,16 @@ const isMissingMobileRecoveryBaseline = (cause: unknown): boolean =>
   cause.name === "UnimplementedError" &&
   cause.message === MOBILE_RECOVERY_BASELINE_UNIMPLEMENTED_MESSAGE;
 
-const makeMobileWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+const makeMobileWsRpcLayer = (
+  withBootstrapCommandLock: BootstrapCommandLock,
+  request: HttpServerRequest.HttpServerRequest,
+) =>
   MobileWsRpcGroup.toLayer(
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock);
 
       return MobileWsRpcGroup.of({
+        ...makeMobileRecoveryOutcomeHandler(context),
         [MOBILE_RECOVERY_WS_METHODS.getBaseline]: (input: MobileRecoveryBaselineInput) =>
           observeRpcEffect(
             MOBILE_RECOVERY_WS_METHODS.getBaseline,
@@ -275,23 +280,12 @@ const makeMobileWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
           }),
       });
     }),
-  );
+  ).pipe(Layer.provide(Layer.succeed(HttpServerRequest.HttpServerRequest, request)));
 
 export const makeMobileWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
   Layer.unwrap(
-    Effect.gen(function* () {
-      const mobileWsRpcRuntimeLayer = makeMobileWsRpcLayer(withBootstrapCommandLock).pipe(
-        Layer.provideMerge(RpcSerialization.layerJson),
-      );
-      const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(MobileWsRpcGroup, {
-        spanPrefix: "mobile.ws.rpc",
-        spanAttributes: {
-          "rpc.transport": "websocket",
-          "rpc.system": "effect-rpc",
-        },
-      }).pipe(Effect.provide(mobileWsRpcRuntimeLayer));
-
-      return HttpRouter.add(
+    Effect.succeed(
+      HttpRouter.add(
         "GET",
         "/mobile-ws",
         Effect.gen(function* () {
@@ -309,8 +303,19 @@ export const makeMobileWebsocketRpcRouteLayer = (withBootstrapCommandLock: Boots
           if (session === null) {
             return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
           }
+          const mobileWsRpcRuntimeLayer = makeMobileWsRpcLayer(
+            withBootstrapCommandLock,
+            request,
+          ).pipe(Layer.provideMerge(RpcSerialization.layerJson));
+          const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(MobileWsRpcGroup, {
+            spanPrefix: "mobile.ws.rpc",
+            spanAttributes: {
+              "rpc.transport": "websocket",
+              "rpc.system": "effect-rpc",
+            },
+          }).pipe(Effect.provide(mobileWsRpcRuntimeLayer));
           return yield* rpcWebSocketHttpEffect;
         }),
-      );
-    }),
+      ),
+    ),
   );

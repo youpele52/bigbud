@@ -1,11 +1,9 @@
 import { MessageSquareTextIcon } from "lucide-react";
 
 import { MobileListSection } from "../components/shell/MobileAppHeader";
-import { MobileNewChatFab } from "../components/threads/MobileNewChatFab";
 import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
 import { MobileSessionGate } from "../components/shell/MobileSessionGate";
 import { MobileThreadList } from "../components/threads/MobileThreadList";
-import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { chatThreadsForMobile } from "../lib/mobileModels";
 import { useMobileSessionState } from "../context/MobileSessionContext";
@@ -13,7 +11,6 @@ import { useMobileSessionState } from "../context/MobileSessionContext";
 export function MobileChats() {
   const { session } = useMobileSessionState();
   const { snapshotQuery, connectionError } = useMobileSnapshot(session);
-  const { startNewChat } = useMobileNewThread();
 
   return (
     <MobileSessionGate
@@ -41,7 +38,6 @@ export function MobileChats() {
                 </MobileListSection>
               )}
             </div>
-            <MobileNewChatFab ariaLabel="New chat" onClick={startNewChat} />
           </>
         );
       }}

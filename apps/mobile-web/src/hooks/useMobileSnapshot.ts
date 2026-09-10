@@ -2,6 +2,7 @@ import type { OrchestrationReadModel } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
 
 import { useMobileRpcClient } from "../context/MobileRpcContext";
+import type { MobileConnectionState } from "../logic/mobileConnection.logic";
 import { describeRecoveryReason } from "../logic/mobileRecovery.types";
 
 function formatQueryError(error: unknown): string {
@@ -12,7 +13,7 @@ function formatQueryError(error: unknown): string {
 }
 
 export function useMobileSnapshot(session: { sessionId: string } | null) {
-  const { client, recovery, recoveryState } = useMobileRpcClient();
+  const { client, connection, recovery, recoveryState, restart } = useMobileRpcClient();
 
   const snapshotQuery = useQuery<OrchestrationReadModel>({
     enabled: false,
@@ -23,9 +24,16 @@ export function useMobileSnapshot(session: { sessionId: string } | null) {
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
+  const connectionError = describeConnectionError(
+    connection,
+    snapshotQuery.error,
+    snapshotQuery.isError,
+  );
 
   return {
     client,
+    connection,
+    restart,
     recovery,
     recoveryState,
     snapshotQuery: recovery
@@ -37,10 +45,28 @@ export function useMobileSnapshot(session: { sessionId: string } | null) {
           },
         }
       : snapshotQuery,
-    connectionError: snapshotQuery.isError
-      ? formatQueryError(snapshotQuery.error)
-      : recoveryState.reason !== null && recoveryState.freshness !== "legacy"
+    connectionError:
+      connectionError ??
+      (recoveryState.reason !== null && recoveryState.freshness !== "legacy"
         ? describeRecoveryReason(recoveryState.reason)
-        : null,
+        : null),
   };
+}
+
+function describeConnectionError(
+  connection: MobileConnectionState,
+  error: unknown,
+  hasQueryError: boolean,
+): string | null {
+  if (connection.authorization === "locally-expired") {
+    return "This mobile session has expired. Open a new pairing link from the desktop app.";
+  }
+  if (connection.authorization === "explicitly-rejected") {
+    return "The desktop server rejected this connection. Pair this phone again.";
+  }
+  if (hasQueryError) return formatQueryError(error);
+  if (connection.transport === "exhausted" || connection.transport === "closed") {
+    return "Unable to connect to the desktop server.";
+  }
+  return null;
 }

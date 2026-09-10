@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@bigbud/contracts";
+import { isBuiltInChatsProject, ProjectId, ThreadId } from "@bigbud/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -10,12 +10,13 @@ import {
 } from "@tanstack/react-router";
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
-import { MobileAppHeader } from "./components/shell/MobileAppHeader";
+import { MobileAppFrame } from "./components/shell/MobileAppFrame";
 import { MobileStartupSplash } from "./components/shell/MobileStartupSplash";
 import { useMobileSnapshot } from "./hooks/useMobileSnapshot";
 import { useTheme } from "./theme/useTheme";
 
-import { getMobileDraftThread } from "./lib/mobileDraftThread";
+import { getMobileDraftThread, makeMobileComposerDraftIdentity } from "./lib/mobileDraftThread";
+import { redactMobileText } from "./lib/mobileRedaction";
 import {
   extractMobileThreadId,
   isMobileLaunchRoute,
@@ -30,16 +31,13 @@ import { MobilePair } from "./screens/MobilePair";
 import { MobileProjects } from "./screens/MobileProjects";
 import { MobileProjectThreads } from "./screens/MobileProjectThreads";
 import { MobileThread } from "./screens/MobileThread";
+import { useMobileNewThread } from "./hooks/useMobileNewThread";
 import {
   clearMobileSession,
   isMobileSessionExpired,
   readMobileSession,
   type StoredMobileSession,
 } from "./lib/mobileSession";
-
-function handleReconnect() {
-  window.location.reload();
-}
 
 function AppFrameContent({
   session,
@@ -49,9 +47,19 @@ function AppFrameContent({
   readonly setSession: Dispatch<SetStateAction<StoredMobileSession | null>>;
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { recoveryState, snapshotQuery, connectionError } = useMobileSnapshot(session);
+  const { recoveryState, restart, snapshotQuery, connectionError } = useMobileSnapshot(session);
+  const { startNewChat, startNewThread } = useMobileNewThread();
   const threadId = extractMobileThreadId(pathname);
-  const draftThread = threadId ? getMobileDraftThread(threadId) : null;
+  const draftThread =
+    threadId && session
+      ? getMobileDraftThread(
+          makeMobileComposerDraftIdentity({
+            backendBaseUrl: session.backendBaseUrl,
+            sessionId: session.sessionId,
+            threadId,
+          }),
+        )
+      : null;
   const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
   const isThreadView = pathname.startsWith("/mobile/thread/") && !pathname.endsWith("/diff");
   const showLaunchSplash =
@@ -65,9 +73,16 @@ function AppFrameContent({
   const showLaunchRecoveryError =
     isMobileLaunchRoute(pathname) && session !== null && !snapshotQuery.data && !showLaunchSplash;
 
-  function handleSignOut() {
-    setSession(null);
-    window.location.assign("/mobile");
+  function startContextualNewThread() {
+    const currentThread = threadId
+      ? snapshotQuery.data?.threads.find((thread) => thread.id === threadId)
+      : null;
+    const projectId = draftThread?.projectId ?? currentThread?.projectId;
+    if (projectId && !isBuiltInChatsProject(projectId)) {
+      startNewThread(projectId);
+      return;
+    }
+    startNewChat();
   }
 
   return (
@@ -78,18 +93,20 @@ function AppFrameContent({
         <div className="grid gap-3 px-4 py-8">
           <p className="text-sm font-medium text-foreground">Unable to connect</p>
           <p className="text-sm text-muted-foreground">
-            {connectionError ?? "Refresh the page or pair again if the session expired."}
+            {connectionError
+              ? redactMobileText(connectionError)
+              : "Retry or pair again if the session expired."}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
-              className="rounded-md border border-border px-3 py-2 text-sm"
-              onClick={() => window.location.reload()}
+              className="min-h-11 rounded-md border border-border px-3 text-sm"
+              onClick={restart}
               type="button"
             >
               Retry
             </button>
             <button
-              className="rounded-md bg-secondary px-3 py-2 text-sm"
+              className="min-h-11 rounded-md bg-secondary px-3 text-sm"
               onClick={() => {
                 clearMobileSession();
                 setSession(null);
@@ -102,34 +119,20 @@ function AppFrameContent({
           </div>
         </div>
       ) : (
-        <div
-          className={
-            isThreadView
-              ? "h-dvh overflow-hidden bg-background text-foreground"
-              : "min-h-dvh bg-background text-foreground"
-          }
+        <MobileAppFrame
+          backTo={header.backTo}
+          breadcrumb={header.breadcrumb}
+          isThreadView={isThreadView}
+          onNew={startContextualNewThread}
+          recoveryState={recoveryState}
+          session={session}
+          setSession={setSession}
+          showBack={header.showBack}
+          showLogo={header.showLogo}
+          title={header.title}
         >
-          <div
-            className={
-              isThreadView
-                ? "mx-auto flex h-dvh max-w-3xl flex-col overflow-hidden px-4 pt-2"
-                : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
-            }
-          >
-            <MobileAppHeader
-              backTo={header.backTo}
-              breadcrumb={header.breadcrumb}
-              onReconnect={handleReconnect}
-              onSignOut={handleSignOut}
-              showBack={header.showBack}
-              showLogo={header.showLogo}
-              title={header.title}
-            />
-            <main className={isThreadView ? "min-h-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
-              <Outlet />
-            </main>
-          </div>
-        </div>
+          <Outlet />
+        </MobileAppFrame>
       )}
     </>
   );

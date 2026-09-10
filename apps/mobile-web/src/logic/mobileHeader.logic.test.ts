@@ -114,11 +114,12 @@ describe("mobileHeader.logic", () => {
     expect(header.backTo).toBe("/mobile/chats");
   });
 
-  it("falls back to the launch header on diff routes", () => {
+  it("keeps an explicit return to the thread on diff routes", () => {
     const threadId = ThreadId.makeUnsafe("thread-1");
     const header = resolveMobileHeaderState(`/mobile/thread/${threadId}/diff`, undefined, null);
 
-    expect(header.showBack).toBe(false);
-    expect(header.backTo).toBe("/mobile");
+    expect(header.showBack).toBe(true);
+    expect(header.title).toBe("Diff");
+    expect(header.backTo).toBe(`/mobile/thread/${threadId}`);
   });
 });

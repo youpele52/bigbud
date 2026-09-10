@@ -1,11 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronLeftIcon } from "lucide-react";
+import { ChevronLeftIcon, PanelLeftIcon, PlusIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { MobileHeaderBreadcrumbSegment } from "../../logic/mobileHeader.logic";
+import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
 import { BigbudLogo } from "./BigbudLogo";
-import { MobileHamburgerMenu } from "./MobileHamburgerMenu";
+import { MobileConnectionIndicator } from "./MobileConnectionIndicator";
 import { cn } from "../../lib/cn";
+import { describeMobileConnection } from "./MobileNavigationSheet.logic";
 
 interface MobileAppHeaderProps {
   title?: string | undefined;
@@ -13,9 +15,11 @@ interface MobileAppHeaderProps {
   showLogo?: boolean | undefined;
   showBack?: boolean | undefined;
   backTo?: string | undefined;
-  onReconnect: () => void;
-  onSignOut: () => void;
   trailing?: ReactNode | undefined;
+  conversation?: boolean | undefined;
+  onOpenNavigation?: (() => void) | undefined;
+  onNew?: (() => void) | undefined;
+  connectionState?: MobileRecoveryState | undefined;
 }
 
 function MobileHeaderBreadcrumb({
@@ -53,9 +57,11 @@ export function MobileAppHeader({
   showLogo = false,
   showBack = false,
   backTo = "/mobile",
-  onReconnect,
-  onSignOut,
   trailing,
+  conversation = false,
+  onOpenNavigation,
+  onNew,
+  connectionState,
 }: MobileAppHeaderProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isPairing = pathname.includes("/pair");
@@ -64,24 +70,40 @@ export function MobileAppHeader({
     return null;
   }
 
+  const chatsLabel = connectionState
+    ? `Open Chats. ${describeMobileConnection(connectionState)}`
+    : "Open Chats";
+
   return (
     <header className="sticky top-0 z-40 -mx-4 mb-4 border-b border-border/60 bg-background px-4 py-3">
-      <div className="flex items-center gap-3">
+      <div className="flex min-h-9 items-center gap-3">
+        {conversation ? (
+          <button
+            aria-label={chatsLabel}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-1.5 text-sm font-medium text-foreground active:bg-accent"
+            onClick={onOpenNavigation}
+            type="button"
+          >
+            <PanelLeftIcon className="size-4" />
+            <span>Chats</span>
+            {connectionState ? <MobileConnectionIndicator state={connectionState} /> : null}
+          </button>
+        ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {showBack ? (
+          {!conversation && showBack ? (
             <Link
               aria-label="Go back"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-foreground transition-colors active:bg-accent"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors active:bg-accent"
               to={backTo}
             >
               <ChevronLeftIcon className="size-5" />
             </Link>
           ) : null}
-          {showLogo ? (
+          {!conversation && showLogo ? (
             <Link className="inline-flex items-center text-foreground" to="/mobile">
               <BigbudLogo className="h-7" />
             </Link>
-          ) : breadcrumb && breadcrumb.length > 0 ? (
+          ) : !conversation && breadcrumb && breadcrumb.length > 0 ? (
             <MobileHeaderBreadcrumb segments={breadcrumb} />
           ) : title ? (
             <h1 className="truncate text-sm font-semibold text-foreground">{title}</h1>
@@ -89,7 +111,26 @@ export function MobileAppHeader({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {trailing}
-          <MobileHamburgerMenu onReconnect={onReconnect} onSignOut={onSignOut} />
+          {!conversation && onOpenNavigation ? (
+            <button
+              aria-label={chatsLabel}
+              className="inline-flex size-11 items-center justify-center rounded-full text-foreground active:bg-accent"
+              onClick={onOpenNavigation}
+              type="button"
+            >
+              <PanelLeftIcon className="size-4" />
+            </button>
+          ) : null}
+          {onNew ? (
+            <button
+              className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-foreground active:bg-accent"
+              onClick={onNew}
+              type="button"
+            >
+              <PlusIcon className="size-4" />
+              <span>New</span>
+            </button>
+          ) : null}
         </div>
       </div>
     </header>
@@ -121,7 +162,7 @@ export function MobileListSection({
 }
 
 const mobileListItemClassName =
-  "mx-1 flex min-h-9 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground transition-colors active:bg-accent/50";
+  "mx-1 flex min-h-11 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground transition-colors active:bg-accent/50";
 
 export function MobileListLink({
   to,

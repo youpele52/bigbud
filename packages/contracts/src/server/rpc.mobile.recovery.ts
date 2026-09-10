@@ -4,6 +4,9 @@ import {
   MobileRecoveryBaseline,
   MobileRecoveryBaselineError,
   MobileRecoveryBaselineInput,
+  MobileRecoveryCommandOutcome,
+  MobileRecoveryCommandOutcomeError,
+  MobileRecoveryCommandOutcomeInput,
   MOBILE_RECOVERY_WS_METHODS,
   MobileRecoveryFrame,
   MobileRecoverySubscriptionInput,
@@ -14,6 +17,15 @@ export const WsMobileRecoveryBaselineRpc = Rpc.make(MOBILE_RECOVERY_WS_METHODS.g
   success: MobileRecoveryBaseline,
   error: MobileRecoveryBaselineError,
 });
+
+export const WsMobileRecoveryCommandOutcomeRpc = Rpc.make(
+  MOBILE_RECOVERY_WS_METHODS.getCommandOutcome,
+  {
+    payload: MobileRecoveryCommandOutcomeInput,
+    success: MobileRecoveryCommandOutcome,
+    error: MobileRecoveryCommandOutcomeError,
+  },
+);
 
 export const WsSubscribeMobileRecoveryRpc = Rpc.make(MOBILE_RECOVERY_WS_METHODS.subscribe, {
   payload: MobileRecoverySubscriptionInput,

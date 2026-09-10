@@ -8,6 +8,7 @@ import type {
   UserInputQuestion,
 } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts";
+import { redactMobileText } from "./mobileRedaction";
 
 import {
   sortProjectsForSidebar,
@@ -21,6 +22,7 @@ export interface MobilePendingApproval {
   readonly requestId: ApprovalRequestId;
   readonly requestKind: "command" | "file-read" | "file-change" | "tool";
   readonly createdAt: string;
+  readonly detail?: string;
 }
 
 export interface MobilePendingUserInput {
@@ -62,6 +64,15 @@ function requestKindFromRequestType(
   }
 }
 
+function approvalDetailFromPayload(payload: Record<string, unknown> | null): string | undefined {
+  if (!payload) return undefined;
+  const detail = ["detail", "description", "command", "path", "toolName"].find(
+    (key) => typeof payload[key] === "string" && payload[key].trim().length > 0,
+  );
+  if (!detail) return undefined;
+  return redactMobileText(String(payload[detail])).slice(0, 4_000);
+}
+
 export function derivePendingApprovals(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): ReadonlyArray<MobilePendingApproval> {
@@ -75,6 +86,7 @@ export function derivePendingApprovals(
     const requestId =
       typeof payload?.requestId === "string" ? (payload.requestId as ApprovalRequestId) : null;
     if (activity.kind === "approval.requested" && requestId) {
+      const detail = approvalDetailFromPayload(payload);
       openByRequestId.set(requestId, {
         requestId,
         requestKind:
@@ -82,6 +94,7 @@ export function derivePendingApprovals(
           requestKindFromRequestType(payload?.requestType) ??
           "tool",
         createdAt: activity.createdAt,
+        ...(detail ? { detail } : {}),
       });
     }
     if (

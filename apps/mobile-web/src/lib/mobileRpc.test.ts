@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Effect, Stream } from "effect";
+import { Effect, Exit, Stream } from "effect";
 
 import { MOBILE_RECOVERY_WS_METHODS } from "@bigbud/contracts/server/mobile.recovery";
 import { MobileRpcClient } from "./mobileRpc";
@@ -52,10 +52,46 @@ function createDomainEventStreamHarness() {
   };
 }
 
+function createServerConfigStreamHarness() {
+  const runs: Array<{
+    readonly dispatchEvent: (event: unknown) => void;
+    readonly exitUnexpectedly: () => void;
+  }> = [];
+  return {
+    startServerConfigStream: ({
+      dispatchEvent,
+      onExit,
+    }: {
+      readonly dispatchEvent: (event: unknown) => void;
+      readonly onExit: () => void;
+    }) => {
+      let active = true;
+      const run = {
+        dispatchEvent: (event: unknown) => {
+          if (active) dispatchEvent(event);
+        },
+        exitUnexpectedly: () => {
+          if (!active) return;
+          active = false;
+          onExit();
+        },
+      };
+      runs.push(run);
+      return () => {
+        active = false;
+      };
+    },
+    runs,
+  };
+}
+
 function createTestRuntime() {
   return {
     dispose: vi.fn(),
-    runCallback: vi.fn(() => () => undefined),
+    runCallback: vi.fn(
+      (_effect?: unknown, _options?: { readonly onExit?: (exit: unknown) => void }) => () =>
+        undefined,
+    ),
     runPromise: vi.fn(async <T>() => undefined as T),
     runSync: vi.fn(<T>() => ({}) as T),
   };
@@ -76,7 +112,48 @@ describe("MobileRpcClient domain event lifecycle", () => {
     await client.dispose();
   });
 
+  it("cancels pending client initialization and fences late completion after disposal", async () => {
+    const runtime = createTestRuntime();
+    const cancelInitialization = vi.fn();
+    let completeInitialization: ((exit: Exit.Exit<unknown, unknown>) => void) | undefined;
+    runtime.runCallback.mockImplementation((_effect, options) => {
+      completeInitialization = options?.onExit as typeof completeInitialization;
+      return cancelInitialization;
+    });
+    const client = new MobileRpcClient("ws://localhost/mobile-ws", undefined, {
+      clientScope: {} as never,
+      runtime: runtime as never,
+    });
+
+    const pendingCommand = client.dispatchCommand({} as never);
+    await client.dispose();
+
+    await expect(pendingCommand).rejects.toThrow("Mobile RPC client is disposed.");
+    expect(cancelInitialization).toHaveBeenCalledOnce();
+
+    completeInitialization?.(Exit.succeed({}));
+    await expect(client.dispatchCommand({} as never)).rejects.toThrow(
+      "Mobile RPC client is disposed.",
+    );
+  });
+
+  it("makes client disposal idempotent during generation replacement and expiry", async () => {
+    const runtime = createTestRuntime();
+    const client = new MobileRpcClient("ws://localhost/mobile-ws", undefined, {
+      clientPromise: Promise.resolve({} as never),
+      runtime: runtime as never,
+    });
+
+    const first = client.dispose();
+    const second = client.dispose();
+    expect(second).toBe(first);
+    await Promise.all([first, second]);
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(runtime.runPromise).toHaveBeenCalledOnce();
+  });
+
   it("restarts the mobile domain event stream after an unexpected exit and continues delivery", async () => {
+    vi.useFakeTimers();
     const harness = createDomainEventStreamHarness();
     const runtime = createTestRuntime();
     const client = new MobileRpcClient("ws://localhost/mobile-ws", undefined, {
@@ -95,7 +172,7 @@ describe("MobileRpcClient domain event lifecycle", () => {
     harness.runs[0]?.dispatchEvent({ type: "first" });
     harness.runs[0]?.exitUnexpectedly();
 
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(500);
 
     expect(harness.runs).toHaveLength(2);
 
@@ -105,6 +182,7 @@ describe("MobileRpcClient domain event lifecycle", () => {
 
     unsubscribe();
     await client.dispose();
+    vi.useRealTimers();
   });
 
   it("does not restart the stream after the last listener unsubscribes", async () => {
@@ -127,6 +205,33 @@ describe("MobileRpcClient domain event lifecycle", () => {
     expect(harness.cancellations).toHaveBeenCalledOnce();
 
     await client.dispose();
+  });
+
+  it("self-heals the shared server-config subscription and stops without listeners", async () => {
+    vi.useFakeTimers();
+    const harness = createServerConfigStreamHarness();
+    const runtime = createTestRuntime();
+    const client = new MobileRpcClient("ws://localhost/mobile-ws", undefined, {
+      clientPromise: Promise.resolve({} as never),
+      runtime: runtime as never,
+      startServerConfigStream: harness.startServerConfigStream,
+    });
+    const received: unknown[] = [];
+    const unsubscribe = client.onServerConfigEvent((event) => received.push(event));
+
+    harness.runs[0]?.dispatchEvent({ type: "snapshot" });
+    harness.runs[0]?.exitUnexpectedly();
+    await vi.advanceTimersByTimeAsync(500);
+    harness.runs[1]?.dispatchEvent({ type: "providerStatuses" });
+
+    expect(harness.runs).toHaveLength(2);
+    expect(received).toEqual([{ type: "snapshot" }, { type: "providerStatuses" }]);
+    unsubscribe();
+    harness.runs[1]?.exitUnexpectedly();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(harness.runs).toHaveLength(2);
+    await client.dispose();
+    vi.useRealTimers();
   });
 
   it("sends the baseline server epoch when opening recovery", async () => {

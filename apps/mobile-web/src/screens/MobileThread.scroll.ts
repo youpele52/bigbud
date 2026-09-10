@@ -6,9 +6,9 @@ import {
   readerPositionEquals,
   type ChatReaderPosition,
 } from "../logic/mobileReaderPosition.logic";
+import { shouldFollowMobileThreadContent } from "../logic/mobileThreadFollowing.logic";
 
 export function useMobileThreadScroll(input: {
-  readonly isRunning: boolean;
   readonly messages: ReadonlyArray<OrchestrationMessage>;
   readonly threadId: ThreadId;
   readonly threadLoaded: boolean;
@@ -17,6 +17,8 @@ export function useMobileThreadScroll(input: {
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
   const lastMessageFingerprintRef = useRef<string | null>(null);
+  const isFollowingRef = useRef(true);
+  const [isFollowing, setIsFollowing] = useState(true);
   const [readerPosition, setReaderPosition] = useState<ChatReaderPosition>({
     currentAnchorMessageId: null,
     visibleMessageIds: [],
@@ -27,6 +29,8 @@ export function useMobileThreadScroll(input: {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
     scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    isFollowingRef.current = true;
+    setIsFollowing(true);
     lastScrolledThreadIdRef.current = input.threadId;
     const timeoutId = window.setTimeout(() => {
       const container = messagesScrollRef.current;
@@ -46,12 +50,38 @@ export function useMobileThreadScroll(input: {
 
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
-    const distanceFromBottom =
-      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-    if (input.isRunning || distanceFromBottom < 120) {
+    if (isFollowingRef.current) {
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
-  }, [input.isRunning, input.messages, input.threadLoaded]);
+  }, [input.messages, input.threadLoaded]);
+
+  useLayoutEffect(() => {
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) return;
+    const publishFollowing = () => {
+      const distanceFromBottom =
+        scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+      const next = shouldFollowMobileThreadContent(distanceFromBottom);
+      isFollowingRef.current = next;
+      setIsFollowing((current) => (current === next ? current : next));
+    };
+    publishFollowing();
+    scrollContainer.addEventListener("scroll", publishFollowing, { passive: true });
+    return () => scrollContainer.removeEventListener("scroll", publishFollowing);
+  }, [input.threadId]);
+
+  useLayoutEffect(() => {
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer || typeof ResizeObserver === "undefined") return;
+    const transcriptContent = scrollContainer.querySelector<HTMLElement>(
+      '[data-mobile-transcript-content="true"]',
+    );
+    const observer = new ResizeObserver(() => {
+      if (isFollowingRef.current) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    });
+    observer.observe(transcriptContent ?? scrollContainer);
+    return () => observer.disconnect();
+  }, [input.threadId]);
 
   useLayoutEffect(() => {
     const scrollContainer = messagesScrollRef.current;
@@ -84,8 +114,27 @@ export function useMobileThreadScroll(input: {
     const element = scrollContainer.querySelector<HTMLElement>(
       `[data-message-id="${CSS.escape(messageId)}"]`,
     );
-    element?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    element?.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
   }, []);
 
-  return { messagesScrollRef, readerPosition, scrollToMessage } as const;
+  const scrollToLatest = useCallback(() => {
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) return;
+    isFollowingRef.current = true;
+    setIsFollowing(true);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollContainer.scrollTo({
+      top: scrollContainer.scrollHeight,
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  }, []);
+
+  return {
+    isFollowing,
+    messagesScrollRef,
+    readerPosition,
+    scrollToLatest,
+    scrollToMessage,
+  } as const;
 }
