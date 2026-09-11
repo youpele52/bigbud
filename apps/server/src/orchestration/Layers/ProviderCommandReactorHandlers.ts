@@ -278,6 +278,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
         : {}),
+      runtimeMode: event.payload.runtimeMode,
       interactionMode: event.payload.interactionMode,
       ...(event.payload.bootstrapSourceThreadId !== undefined
         ? { bootstrapSourceThreadId: event.payload.bootstrapSourceThreadId }

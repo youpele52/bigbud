@@ -7,7 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { createHash } from "node:crypto";
 
-import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
+import { compatibleQueuedPrefix, consumableQueuedPrefix } from "./QueuedPromptPolicy.logic.ts";
 
 export function makeLifecycleQueuedPromptFlushCommand(input: {
   readonly trigger: OrchestrationCommand;
@@ -44,26 +44,10 @@ export function makeQueuedPromptFlushCommand(input: {
   ) {
     return null;
   }
-  if (
-    thread.queueHold ||
-    (thread.pendingTurnControlOperation?.reservedPromptIds.length &&
-      !["completed", "failed", "superseded", "cancelled"].includes(
-        thread.pendingTurnControlOperation.state,
-      ))
-  )
-    return null;
-  if (!isThreadConfirmedIdleForDispatch(thread)) return null;
-
   const messageIds =
-    thread.pendingInterruptFlushIntent?.queuedPromptIds ?? prompts.map((prompt) => prompt.id);
-  const prefix = prompts.slice(0, messageIds.length);
-  if (
-    messageIds.length === 0 ||
-    prefix.length !== messageIds.length ||
-    prefix.some((prompt, index) => prompt.id !== messageIds[index])
-  ) {
-    return null;
-  }
+    thread.pendingInterruptFlushIntent?.queuedPromptIds ??
+    compatibleQueuedPrefix(prompts).map((prompt) => prompt.id);
+  if (consumableQueuedPrefix({ thread, messageIds }).length === 0) return null;
   const digest = createHash("sha256")
     .update(`${thread.id}\n${messageIds.join("\n")}`)
     .digest("hex");

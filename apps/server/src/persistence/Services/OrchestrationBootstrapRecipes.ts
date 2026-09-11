@@ -4,20 +4,44 @@ import type { Effect } from "effect";
 
 import type { OrchestrationCommandReceiptRepositoryError } from "../Errors.ts";
 
-export const BootstrapRecipeVersion = Schema.Literal("bootstrap-worktree/v1");
+export const BootstrapRecipeVersion = Schema.Literals([
+  "bootstrap-worktree/v1",
+  "bootstrap-submission/v1",
+]);
 export type BootstrapRecipeVersion = typeof BootstrapRecipeVersion.Type;
 
-export const OrchestrationBootstrapRecipe = Schema.Struct({
+const bootstrapRecipeFields = {
   parentCommandId: CommandId,
-  recipeVersion: BootstrapRecipeVersion,
   executionTargetId: Schema.NullOr(Schema.String),
   projectId: Schema.NullOr(ProjectId),
-  projectCwd: Schema.String,
-  baseBranch: Schema.String,
   requestedBranch: Schema.NullOr(Schema.String),
   deterministicWorktreePath: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
+};
+
+export const OrchestrationBootstrapWorktreeRecipe = Schema.Struct({
+  ...bootstrapRecipeFields,
+  recipeVersion: Schema.Literal("bootstrap-worktree/v1"),
+  projectCwd: Schema.String,
+  baseBranch: Schema.String,
 });
+export type OrchestrationBootstrapWorktreeRecipe = typeof OrchestrationBootstrapWorktreeRecipe.Type;
+
+export const OrchestrationBootstrapSubmissionRecipe = Schema.Struct({
+  ...bootstrapRecipeFields,
+  recipeVersion: Schema.Literal("bootstrap-submission/v1"),
+  originalPayloadDigestVersion: Schema.String,
+  originalPayloadDigest: Schema.String,
+  projectCwd: Schema.NullOr(Schema.String),
+  baseBranch: Schema.NullOr(Schema.String),
+});
+export type OrchestrationBootstrapSubmissionRecipe =
+  typeof OrchestrationBootstrapSubmissionRecipe.Type;
+
+export const OrchestrationBootstrapRecipe = Schema.Union([
+  OrchestrationBootstrapWorktreeRecipe,
+  OrchestrationBootstrapSubmissionRecipe,
+]);
 export type OrchestrationBootstrapRecipe = typeof OrchestrationBootstrapRecipe.Type;
 
 export type BootstrapRecipeClaimResult =

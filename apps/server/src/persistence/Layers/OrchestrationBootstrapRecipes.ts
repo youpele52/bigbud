@@ -14,6 +14,10 @@ import {
 function sameRecipe(a: OrchestrationBootstrapRecipe, b: OrchestrationBootstrapRecipe) {
   return (
     a.recipeVersion === b.recipeVersion &&
+    (a.recipeVersion === "bootstrap-worktree/v1" ||
+      (b.recipeVersion === "bootstrap-submission/v1" &&
+        a.originalPayloadDigestVersion === b.originalPayloadDigestVersion &&
+        a.originalPayloadDigest === b.originalPayloadDigest)) &&
     a.executionTargetId === b.executionTargetId &&
     a.projectId === b.projectId &&
     a.projectCwd === b.projectCwd &&
@@ -34,6 +38,8 @@ const makeOrchestrationBootstrapRecipeRepository = Effect.gen(function* () {
         SELECT
           parent_command_id AS "parentCommandId",
           recipe_version AS "recipeVersion",
+          original_payload_digest_version AS "originalPayloadDigestVersion",
+          original_payload_digest AS "originalPayloadDigest",
           execution_target_id AS "executionTargetId",
           project_id AS "projectId",
           project_cwd AS "projectCwd",
@@ -53,6 +59,8 @@ const makeOrchestrationBootstrapRecipeRepository = Effect.gen(function* () {
         INSERT INTO orchestration_bootstrap_recipes (
           parent_command_id,
           recipe_version,
+          original_payload_digest_version,
+          original_payload_digest,
           execution_target_id,
           project_id,
           project_cwd,
@@ -64,6 +72,8 @@ const makeOrchestrationBootstrapRecipeRepository = Effect.gen(function* () {
         VALUES (
           ${recipe.parentCommandId},
           ${recipe.recipeVersion},
+          ${recipe.recipeVersion === "bootstrap-submission/v1" ? recipe.originalPayloadDigestVersion : null},
+          ${recipe.recipeVersion === "bootstrap-submission/v1" ? recipe.originalPayloadDigest : null},
           ${recipe.executionTargetId},
           ${recipe.projectId},
           ${recipe.projectCwd},

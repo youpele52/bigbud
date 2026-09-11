@@ -1,9 +1,15 @@
-import { MessageId, type OrchestrationTurnControlOperation } from "@bigbud/contracts";
-import { Effect, Exit } from "effect";
+import { MessageId, ProviderKind, type OrchestrationTurnControlOperation } from "@bigbud/contracts";
+import { Effect, Exit, Schema } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import {
+  canNativelySteerQueuedPrefix,
+  compatibleQueuedPrefix,
+  exactQueuedPrefix,
+  samePromptIds,
+} from "../QueuedPromptPolicy.logic.ts";
 import {
   formatProviderServiceCauseDetail,
   serverCommandId,
@@ -43,6 +49,29 @@ export function setTurnControlOperation(input: {
   });
 }
 
+export const completeTurnControlIfConsumed = Effect.fn("completeTurnControlIfConsumed")(
+  function* (input: {
+    readonly orchestrationEngine: OrchestrationEngineShape;
+    readonly threadId: import("@bigbud/contracts").ThreadId;
+    readonly operation: OrchestrationTurnControlOperation;
+    readonly createdAt: string;
+  }) {
+    const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
+      (t) => t.id === input.threadId,
+    );
+    const current = thread?.pendingTurnControlOperation;
+    if (
+      !thread ||
+      current?.operationId !== input.operation.operationId ||
+      (thread.queuedPrompts ?? []).some((prompt) =>
+        input.operation.reservedPromptIds.includes(prompt.id),
+      )
+    )
+      return;
+    yield* setTurnControlOperation({ ...input, operation: current, state: "completed" });
+  },
+);
+
 export function makeProcessTurnSteerRequested(input: {
   readonly providerService: ProviderServiceShape;
   readonly orchestrationEngine: OrchestrationEngineShape;
@@ -67,20 +96,35 @@ export function makeProcessTurnSteerRequested(input: {
     const thread = (yield* input.resolveThread()).threads.find(
       (candidate) => candidate.id === event.payload.threadId,
     );
-    const prefix = (thread?.queuedPrompts ?? []).slice(0, operation.reservedPromptIds.length);
     if (
       !thread ||
-      thread.pendingTurnControlOperation?.operationId !== operation.operationId ||
+      thread.archivedAt != null ||
+      thread.deletingAt != null ||
+      thread.deletedAt != null
+    )
+      return;
+    const current = thread.pendingTurnControlOperation;
+    const prefix = compatibleQueuedPrefix(exactQueuedPrefix(thread, operation.reservedPromptIds));
+    if (
+      current?.operationId !== operation.operationId ||
+      current.state !== "requested" ||
+      current.strategy !== "pending-selection" ||
+      !samePromptIds(current.reservedPromptIds, operation.reservedPromptIds) ||
       (thread.session?.sessionEpoch ?? 0) !== operation.sessionEpoch ||
       thread.session?.activeTurnId !== operation.expectedTurnId ||
-      prefix.some((prompt, index) => prompt.id !== operation.reservedPromptIds[index])
+      prefix.length === 0 ||
+      prefix.length !== operation.reservedPromptIds.length
     ) {
       return;
     }
-    const provider = thread.modelSelection.provider;
+    const provider = thread.session?.providerName ?? thread.modelSelection.provider;
+    if (!Schema.is(ProviderKind)(provider)) return;
     const capabilities = yield* input.providerService.getCapabilities(provider);
     const steerTurn = input.providerService.steerTurn;
-    const native = capabilities.turnControl?.nativeSteer === true && steerTurn !== undefined;
+    const native =
+      capabilities.turnControl?.nativeSteer === true &&
+      steerTurn !== undefined &&
+      canNativelySteerQueuedPrefix(prefix);
     const strategy = native ? "native-steer" : "interrupt-continue";
     yield* setTurnControlOperation({
       ...input,
@@ -146,11 +190,10 @@ export function makeProcessTurnSteerRequested(input: {
       controlOperationId: operation.operationId,
       createdAt: event.payload.createdAt,
     });
-    yield* setTurnControlOperation({
+    yield* completeTurnControlIfConsumed({
       ...input,
       threadId: thread.id,
       operation: { ...operation, strategy },
-      state: "completed",
       createdAt: event.payload.createdAt,
     });
   });

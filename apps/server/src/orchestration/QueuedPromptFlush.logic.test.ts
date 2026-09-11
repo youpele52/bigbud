@@ -161,6 +161,53 @@ describe("makeLifecycleQueuedPromptFlushCommand", () => {
     }
   });
 
+  it("selects only compatible FIFO settings, including explicitness", () => {
+    const prompts = [
+      {
+        id: MessageId.makeUnsafe("one"),
+        text: "one",
+        createdAt: trigger.createdAt,
+        modelSelection: {
+          provider: "codex",
+          model: "model",
+          options: { reasoningEffort: "high", fastMode: true },
+        },
+      },
+      {
+        id: MessageId.makeUnsafe("two"),
+        text: "two",
+        createdAt: trigger.createdAt,
+        modelSelection: {
+          options: { fastMode: true, reasoningEffort: "high" },
+          model: "model",
+          provider: "codex",
+        },
+      },
+      { id: MessageId.makeUnsafe("three"), text: "three", createdAt: trigger.createdAt },
+    ];
+    expect(
+      makeQueuedPromptFlushCommand({
+        threadId,
+        readModel: model({ queuedPrompts: prompts }),
+        createdAt: trigger.createdAt,
+      }),
+    ).toMatchObject({ messageIds: ["one", "two"] });
+    expect(
+      makeQueuedPromptFlushCommand({
+        threadId,
+        readModel: model({
+          queuedPrompts: prompts,
+          pendingInterruptFlushIntent: {
+            intentId: "intent",
+            queuedPromptIds: ["one", "two", "three"],
+            requestedAt: trigger.createdAt,
+          },
+        }),
+        createdAt: trigger.createdAt,
+      }),
+    ).toBeNull();
+  });
+
   it("blocks startup recovery for unavailable, running, approval, and user-input threads", () => {
     for (const overrides of [
       { archivedAt: trigger.createdAt },

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { OrchestrationThread } from "@bigbud/contracts";
+import type { OrchestrationThread, RuntimeMode } from "@bigbud/contracts";
 import type { AgentBrowserPreference } from "@bigbud/contracts/settings";
 
 import type { CapabilityCatalog } from "../../capabilities/CapabilityCatalog.ts";
@@ -58,6 +58,7 @@ export function buildCapabilityAwareProviderInput(input: {
   readonly thread: OrchestrationThread;
   readonly provider?: string;
   readonly model?: string;
+  readonly runtimeMode?: RuntimeMode;
   readonly memoryContext: string;
   readonly agentBrowserPreference: AgentBrowserPreference;
   readonly contextRole: "main" | "branch" | "delegated-child";
@@ -114,7 +115,7 @@ export function buildCapabilityAwareProviderInput(input: {
           threadTitle: input.thread.title,
           provider: input.provider ?? input.thread.modelSelection.provider,
           model: input.model ?? input.thread.modelSelection.model,
-          runtimeMode: input.thread.runtimeMode,
+          runtimeMode: input.runtimeMode ?? input.thread.runtimeMode,
           role: input.contextRole,
         },
       }),
@@ -143,6 +144,7 @@ export function prependCapabilityContextToProviderInput(input: {
   readonly thread: OrchestrationThread;
   readonly provider?: string;
   readonly model?: string;
+  readonly runtimeMode?: RuntimeMode;
   readonly memoryContext: string;
   readonly agentBrowserPreference: AgentBrowserPreference;
   readonly contextRole: "main" | "branch" | "delegated-child";
@@ -156,6 +158,7 @@ export function prependCapabilityContextToProviderInput(input: {
     thread: input.thread,
     ...(input.provider ? { provider: input.provider } : {}),
     ...(input.model ? { model: input.model } : {}),
+    ...(input.runtimeMode !== undefined ? { runtimeMode: input.runtimeMode } : {}),
     memoryContext: input.memoryContext,
     agentBrowserPreference: input.agentBrowserPreference,
     contextRole: input.contextRole,

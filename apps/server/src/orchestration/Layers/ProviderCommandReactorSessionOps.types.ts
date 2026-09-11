@@ -3,6 +3,7 @@ import type {
   ModelSelection,
   OrchestrationSession,
   OrchestrationThread,
+  RuntimeMode,
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
@@ -49,6 +50,7 @@ export type SendTurnForThreadInput = {
   readonly memoryContext?: string;
   readonly attachments?: ReadonlyArray<ChatAttachment>;
   readonly modelSelection?: ModelSelection;
+  readonly runtimeMode?: RuntimeMode;
   readonly interactionMode?: "default" | "plan";
   readonly bootstrapSourceThreadId?: ThreadId;
   readonly createdAt: string;

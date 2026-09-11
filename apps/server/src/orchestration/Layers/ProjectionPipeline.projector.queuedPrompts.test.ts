@@ -1,5 +1,7 @@
-import { MessageId, ProjectId, ThreadId, type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { MessageId, ProjectId, ThreadId, OrchestrationEvent } from "@bigbud/contracts";
+import { Effect, Option, Schema } from "effect";
+import { projectEvent } from "../projector.ts";
+import { model, thread } from "../QueuedPromptPolicy.test.helpers.ts";
 import { describe, expect, it } from "vitest";
 
 import type { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
@@ -64,6 +66,43 @@ function event(
 }
 
 describe("durable queued prompt projector", () => {
+  it.each([
+    {},
+    {
+      modelSelection: {
+        provider: "codex" as const,
+        model: "captured",
+        options: { reasoningEffort: "high" as const, fastMode: true },
+      },
+      runtimeMode: "approval-required" as const,
+      interactionMode: "plan" as const,
+    },
+  ])(
+    "replays legacy/enriched event metadata identically in both projections %#",
+    async (settings) => {
+      const prompt = {
+        id: MessageId.makeUnsafe("replay"),
+        text: "replay",
+        createdAt: now,
+        ...settings,
+      };
+      const original = event(1, "thread.prompt-queued", { threadId, prompt, queuePosition: 1 });
+      const codec = Schema.fromJsonString(OrchestrationEvent);
+      const replayed = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(original));
+      expect(replayed.payload).toMatchObject({ prompt });
+      const memory = await Effect.runPromise(
+        projectEvent(model(thread({ id: threadId, queuedPrompts: [] })), replayed),
+      );
+      expect(memory.threads[0]?.queuedPrompts).toEqual([prompt]);
+      const store = repository();
+      await Effect.runPromise(
+        makeThreadsProjector({ projectionThreadRepository: store }).apply(replayed, {
+          prunedThreadRelativePaths: new Map(),
+        }),
+      );
+      expect(store.get().queuedPrompts).toEqual([prompt]);
+    },
+  );
   it("queues idempotently, removes one, and flushes only the observed prefix", async () => {
     const store = repository();
     const projector = makeThreadsProjector({ projectionThreadRepository: store });

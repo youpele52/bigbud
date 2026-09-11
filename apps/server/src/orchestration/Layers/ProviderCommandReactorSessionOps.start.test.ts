@@ -33,6 +33,7 @@ describe("startProviderSession", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       provider: "codex",
       modelSelection: { provider: "codex", model: "gpt-5-codex" },
+      runtimeMode: "full-access",
       cwd: undefined,
       preserveExistingBinding: true,
     });

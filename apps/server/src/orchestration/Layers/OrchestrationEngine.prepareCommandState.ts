@@ -28,17 +28,25 @@ export function makePrepareCommandState<HydrationError>(input: {
     }
     const aggregate = commandToAggregateRef(command);
     if (aggregate.aggregateKind !== "thread") return Effect.void;
+    const targetThreadId = aggregate.aggregateId as ThreadId;
+    const sourceThreadId =
+      command.type === "thread.turn.start" || command.type === "thread.message.submit"
+        ? command.sourceProposedPlan?.threadId
+        : undefined;
     const historyRequired =
       command.type === "thread.turn.start" ||
+      (command.type === "thread.message.submit" &&
+        command.message.replyToMessageId !== undefined) ||
+      sourceThreadId === targetThreadId ||
       command.type === "thread.checkpoint.revert" ||
       command.type === "thread.revert.complete";
     return Effect.gen(function* () {
       yield* input.threadStateHydrator!.load(
-        aggregate.aggregateId as ThreadId,
+        targetThreadId,
         historyRequired ? "history" : "operational",
       );
-      if (command.type === "thread.turn.start" && command.sourceProposedPlan) {
-        yield* input.threadStateHydrator!.load(command.sourceProposedPlan.threadId, "history");
+      if (sourceThreadId !== undefined && sourceThreadId !== targetThreadId) {
+        yield* input.threadStateHydrator!.load(sourceThreadId, "history");
       }
     });
   };

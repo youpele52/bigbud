@@ -3,8 +3,10 @@ import {
   ClientOrchestrationCommand as ClientOrchestrationCommandSchema,
   DispatchableClientOrchestrationCommand as DispatchableClientOrchestrationCommandSchema,
   ProjectCreateCommand,
+  ClientThreadMessageSubmitCommand,
   ThreadPinCommand,
   ThreadShellRunCommand,
+  ThreadMessageSubmitCommand,
   ThreadTurnStartBootstrap as ThreadTurnStartBootstrapSchema,
   ThreadTurnStartCommand,
   ThreadUnpinCommand,
@@ -17,9 +19,11 @@ export const DispatchableClientOrchestrationCommand = DispatchableClientOrchestr
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommandSchema.Type;
 export {
+  ClientThreadMessageSubmitCommand,
   ProjectCreateCommand,
   ThreadPinCommand,
   ThreadShellRunCommand,
+  ThreadMessageSubmitCommand,
   ThreadTurnStartCommand,
   ThreadUnpinCommand,
 };

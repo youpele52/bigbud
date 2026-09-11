@@ -7,9 +7,11 @@ import {
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
-import { setTurnControlOperation } from "./ProviderCommandReactorHandlers.steer.ts";
-
-const terminalStates = new Set(["completed", "failed", "superseded", "cancelled"]);
+import {
+  completeTurnControlIfConsumed,
+  setTurnControlOperation,
+} from "./ProviderCommandReactorHandlers.steer.ts";
+import { consumableQueuedPrefix, terminalTurnControlStates } from "../QueuedPromptPolicy.logic.ts";
 
 /** Recovers incomplete operations without retrying ambiguous provider delivery. */
 export function recoverTurnControlOperations(input: {
@@ -23,7 +25,14 @@ export function recoverTurnControlOperations(input: {
     input.readModel.threads,
     (thread) => {
       const operation = thread.pendingTurnControlOperation;
-      if (!operation || terminalStates.has(operation.state)) return Effect.void;
+      if (
+        !operation ||
+        terminalTurnControlStates.has(operation.state) ||
+        thread.archivedAt != null ||
+        thread.deletingAt != null ||
+        thread.deletedAt != null
+      )
+        return Effect.void;
       if (operation.sessionEpoch !== (thread.session?.sessionEpoch ?? 0)) {
         return setTurnControlOperation({
           ...input,
@@ -32,6 +41,19 @@ export function recoverTurnControlOperations(input: {
           state: "superseded",
           createdAt: input.occurredAt,
         }).pipe(Effect.asVoid);
+      }
+      // A crash can land between the durable owned flush and its completion event.
+      // No reserved ID can otherwise be removed while this operation owns it.
+      if (
+        (operation.state === "provider-acknowledged" ||
+          operation.state === "waiting-for-settlement" ||
+          (operation.strategy === "interrupt-continue" && operation.state === "requested")) &&
+        operation.reservedPromptIds.length > 0 &&
+        !(thread.queuedPrompts ?? []).some((prompt) =>
+          operation.reservedPromptIds.includes(prompt.id),
+        )
+      ) {
+        return completeOperation(input, thread.id, operation);
       }
       if (operation.state === "requested" && operation.strategy === "native-steer") {
         return setTurnControlOperation({
@@ -45,7 +67,7 @@ export function recoverTurnControlOperations(input: {
         }).pipe(Effect.asVoid);
       }
       if (operation.strategy === "native-steer" && operation.state === "provider-acknowledged") {
-        return flushReservedPrefix(input, thread.id, operation, true);
+        return flushReservedPrefix(input, thread, operation, true);
       }
       if (operation.strategy !== "interrupt-continue") return Effect.void;
       const live = liveByThread.get(thread.id);
@@ -64,10 +86,16 @@ export function recoverTurnControlOperations(input: {
             }).pipe(Effect.asVoid)
           : Effect.void;
       }
-      if (thread.session?.activeTurnId != null) return Effect.void;
+      if (
+        thread.session?.activeTurnId != null ||
+        live?.activeTurnId != null ||
+        live?.status === "connecting" ||
+        live?.status === "running"
+      )
+        return Effect.void;
       return operation.reservedPromptIds.length === 0
         ? completeOperation(input, thread.id, operation)
-        : flushReservedPrefix(input, thread.id, operation, false);
+        : flushReservedPrefix(input, thread, operation, false);
     },
     { concurrency: 1, discard: true },
   );
@@ -78,10 +106,20 @@ function flushReservedPrefix(
     Parameters<typeof recoverTurnControlOperations>[0],
     "orchestrationEngine" | "occurredAt"
   >,
-  threadId: import("@bigbud/contracts").ThreadId,
+  thread: import("@bigbud/contracts").OrchestrationThread,
   operation: import("@bigbud/contracts").OrchestrationTurnControlOperation,
   consumeOnly: boolean,
 ) {
+  if (
+    consumableQueuedPrefix({
+      thread,
+      messageIds: operation.reservedPromptIds,
+      controlOperationId: operation.operationId,
+      consumeOnly,
+    }).length === 0
+  )
+    return Effect.void;
+  const threadId = thread.id;
   return input.orchestrationEngine
     .dispatch({
       type: "thread.queued-prompt.flush",
@@ -105,11 +143,10 @@ function completeOperation(
   threadId: import("@bigbud/contracts").ThreadId,
   operation: import("@bigbud/contracts").OrchestrationTurnControlOperation,
 ) {
-  return setTurnControlOperation({
+  return completeTurnControlIfConsumed({
     orchestrationEngine: input.orchestrationEngine,
     threadId,
     operation,
-    state: "completed",
     createdAt: input.occurredAt,
   });
 }

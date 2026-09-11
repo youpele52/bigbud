@@ -3,12 +3,15 @@ import {
   isLocalExecutionTargetId,
   type ClientOrchestrationCommand,
   type OrchestrationCommand,
+  type UploadChatAttachment,
   OrchestrationDispatchCommandError,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
 } from "@bigbud/contracts";
 
-import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore";
+import { resolveAttachmentPath } from "../attachments/attachmentStore";
+import { createNormalizedAttachmentId } from "./Normalizer.attachmentIdentity.ts";
+import { persistSubmissionAttachment } from "./Normalizer.attachmentStorage.ts";
 import { ServerConfig } from "../startup/config";
 import { parseBase64DataUrl } from "../attachments/imageMime";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
@@ -89,24 +92,34 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       } satisfies OrchestrationCommand;
     }
 
-    if (command.type !== "thread.turn.start" && command.type !== "thread.shell.run") {
+    if (
+      command.type !== "thread.turn.start" &&
+      command.type !== "thread.shell.run" &&
+      command.type !== "thread.message.submit"
+    ) {
       return command as OrchestrationCommand;
     }
 
+    const writeAttachment = (destination: string, bytes: Uint8Array) =>
+      command.type === "thread.message.submit"
+        ? persistSubmissionAttachment(destination, bytes)
+        : fileSystem.writeFile(destination, bytes);
+
     const persistFileAttachment = (
-      name: string,
-      mimeType: string,
+      attachment: UploadChatAttachment,
+      index: number,
       bytes: Uint8Array,
       sourcePath?: string,
     ) =>
       Effect.gen(function* () {
+        const { name, mimeType } = attachment;
         if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
           return yield* new OrchestrationDispatchCommandError({
             message: `File attachment '${name}' is empty or too large.`,
           });
         }
 
-        const attachmentId = createAttachmentId(command.threadId);
+        const attachmentId = createNormalizedAttachmentId(command, index, attachment, bytes);
         if (!attachmentId) {
           return yield* new OrchestrationDispatchCommandError({
             message: "Failed to create a safe attachment id.",
@@ -140,7 +153,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               }),
           ),
         );
-        yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
+        yield* writeAttachment(attachmentPath, bytes).pipe(
           Effect.mapError(
             () =>
               new OrchestrationDispatchCommandError({
@@ -152,12 +165,13 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
         return { persistedAttachment, attachmentPath };
       });
 
+    const uploadedAttachments = command.message.attachments ?? [];
     const normalizedAttachments = yield* Effect.forEach(
-      command.message.attachments,
-      (attachment) =>
+      uploadedAttachments,
+      (attachment, index) =>
         Effect.gen(function* () {
           // ── Image (base64 data-url) ──────────────────────────────────────────
-          if (attachment.type === "image") {
+          if (attachment.type === "image" && "dataUrl" in attachment) {
             const parsed = parseBase64DataUrl(attachment.dataUrl);
             if (!parsed || !parsed.mimeType.startsWith("image/")) {
               return yield* new OrchestrationDispatchCommandError({
@@ -172,7 +186,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               });
             }
 
-            const attachmentId = createAttachmentId(command.threadId);
+            const attachmentId = createNormalizedAttachmentId(command, index, attachment, bytes);
             if (!attachmentId) {
               return yield* new OrchestrationDispatchCommandError({
                 message: "Failed to create a safe attachment id.",
@@ -205,7 +219,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
                   }),
               ),
             );
-            yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
+            yield* writeAttachment(attachmentPath, bytes).pipe(
               Effect.mapError(
                 () =>
                   new OrchestrationDispatchCommandError({
@@ -218,7 +232,11 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           }
 
           // ── File (path transport) ────────────────────────────────────────────
-          if (attachment.type === "file" && attachment.transport === "path") {
+          if (
+            attachment.type === "file" &&
+            "transport" in attachment &&
+            attachment.transport === "path"
+          ) {
             const sourceFilePath = attachment.filePath;
 
             // Basic path safety check — must be absolute, no traversal
@@ -238,8 +256,8 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             );
 
             const { persistedAttachment } = yield* persistFileAttachment(
-              attachment.name,
-              attachment.mimeType,
+              attachment,
+              index,
               bytes,
               sourceFilePath,
             );
@@ -266,8 +284,8 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
                   bytes.byteLength <= PROVIDER_SEND_TURN_MAX_FILE_BYTES
                 ) {
                   const { persistedAttachment } = yield* persistFileAttachment(
-                    attachment.name,
-                    attachment.mimeType,
+                    attachment,
+                    index,
                     bytes,
                     attachment.path,
                   );
@@ -276,7 +294,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               }
             }
 
-            const attachmentId = createAttachmentId(command.threadId);
+            const attachmentId = createNormalizedAttachmentId(command, index, attachment);
             if (!attachmentId) {
               return yield* new OrchestrationDispatchCommandError({
                 message: "Failed to create a safe attachment id.",
@@ -295,7 +313,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           }
 
           if (attachment.type === "thread") {
-            const attachmentId = createAttachmentId(command.threadId);
+            const attachmentId = createNormalizedAttachmentId(command, index, attachment);
             if (!attachmentId) {
               return yield* new OrchestrationDispatchCommandError({
                 message: "Failed to create a safe attachment id.",
@@ -310,6 +328,10 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               sizeBytes: attachment.sizeBytes,
               threadId: attachment.threadId,
               title: attachment.title,
+              ...(command.type === "thread.message.submit" &&
+              attachment.watchForCompletion !== undefined
+                ? { watchForCompletion: attachment.watchForCompletion }
+                : {}),
             };
           }
 
@@ -323,8 +345,8 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
 
           const bytes = Buffer.from(parsed.base64, "base64");
           const { persistedAttachment, attachmentPath } = yield* persistFileAttachment(
-            attachment.name,
-            attachment.mimeType,
+            attachment,
+            index,
             bytes,
           );
 
@@ -334,6 +356,16 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       { concurrency: 1 },
     );
 
+    if (command.type === "thread.message.submit") {
+      const { attachments: _attachments, ...content } = command.message;
+      const message: Extract<OrchestrationCommand, { type: "thread.message.submit" }>["message"] = {
+        ...content,
+        ...(command.message.attachments !== undefined
+          ? { attachments: normalizedAttachments }
+          : {}),
+      };
+      return { ...command, message } satisfies OrchestrationCommand;
+    }
     return {
       ...command,
       message: {

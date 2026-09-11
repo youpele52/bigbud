@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { ClientOrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.client.ts";
 import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 
 export const ORCHESTRATION_COMMAND_PAYLOAD_DIGEST_VERSION = "orchestration-command-payload/v1";
@@ -26,7 +27,9 @@ function sortValue(value: unknown): unknown {
   return sorted;
 }
 
-export function canonicalizeCommandPayload(command: OrchestrationCommand): string {
+export function canonicalizeCommandPayload(
+  command: OrchestrationCommand | ClientOrchestrationCommand,
+): string {
   const { commandId: _commandId, ...semanticCommand } = command;
   return JSON.stringify({
     version: ORCHESTRATION_COMMAND_PAYLOAD_DIGEST_VERSION,
@@ -35,7 +38,7 @@ export function canonicalizeCommandPayload(command: OrchestrationCommand): strin
 }
 
 export function calculateCommandPayloadDigest(
-  command: OrchestrationCommand,
+  command: OrchestrationCommand | ClientOrchestrationCommand,
 ): OrchestrationCommandPayloadDigest {
   return {
     version: ORCHESTRATION_COMMAND_PAYLOAD_DIGEST_VERSION,
@@ -44,7 +47,7 @@ export function calculateCommandPayloadDigest(
 }
 
 export function commandPayloadDigestMatches(
-  command: OrchestrationCommand,
+  command: OrchestrationCommand | ClientOrchestrationCommand,
   expected: { readonly version: string; readonly digest: string },
 ): boolean {
   const actual = calculateCommandPayloadDigest(command);

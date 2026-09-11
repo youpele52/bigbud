@@ -257,6 +257,9 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   id: MessageId,
   text: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
+  modelSelection: Schema.optional(ModelSelection),
+  runtimeMode: Schema.optional(RuntimeMode),
+  interactionMode: Schema.optional(ProviderInteractionMode),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 

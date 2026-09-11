@@ -10,6 +10,11 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
 import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
+import {
+  compatibleQueuedPrefix,
+  exactQueuedPrefix,
+  terminalTurnControlStates,
+} from "./QueuedPromptPolicy.logic.ts";
 
 type ThreadSessionCommand = Extract<
   OrchestrationCommand,
@@ -22,8 +27,6 @@ type ThreadSessionCommand = Extract<
   | { type: "thread.turn.start.failed" }
   | { type: "thread.turn-control.set" }
 >;
-
-const terminalControlStates = new Set(["completed", "failed", "superseded", "cancelled"]);
 
 /**
  * Session `updatedAt` is operational metadata. Provider lifecycle polling can
@@ -66,23 +69,20 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           return [];
         }
         if (
-          thread.pendingTurnControlOperation &&
-          !terminalControlStates.has(thread.pendingTurnControlOperation.state)
+          thread.pendingInterruptFlushIntent ||
+          (thread.pendingTurnControlOperation &&
+            !terminalTurnControlStates.has(thread.pendingTurnControlOperation.state))
         ) {
           return [];
         }
-        if (command.queuedPromptIdsAfterSettlement !== undefined) {
-          const prefix = (thread.queuedPrompts ?? []).slice(
-            0,
-            command.queuedPromptIdsAfterSettlement.length,
-          );
-          if (
-            command.queuedPromptIdsAfterSettlement.length === 0 ||
-            prefix.length !== command.queuedPromptIdsAfterSettlement.length ||
-            prefix.some(
-              (prompt, index) => prompt.id !== command.queuedPromptIdsAfterSettlement![index],
-            )
-          ) {
+        const interruptPrefix =
+          command.queuedPromptIdsAfterSettlement === undefined
+            ? undefined
+            : compatibleQueuedPrefix(
+                exactQueuedPrefix(thread, command.queuedPromptIdsAfterSettlement),
+              );
+        if (interruptPrefix !== undefined) {
+          if (interruptPrefix.length === 0) {
             return yield* new OrchestrationCommandInvariantError({
               commandType: command.type,
               detail: "Queued prompts changed before Send now could be applied.",
@@ -105,7 +105,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
                   pendingFlushIntent: {
                     intentId: command.commandId,
                     ...(command.turnId !== undefined ? { requestedTurnId: command.turnId } : {}),
-                    queuedPromptIds: command.queuedPromptIdsAfterSettlement,
+                    queuedPromptIds: interruptPrefix!.map((prompt) => prompt.id),
                     requestedAt: command.createdAt,
                   },
                 }
@@ -115,7 +115,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
                   operation: {
                     operationId: command.commandId,
                     action: "interrupt-and-continue" as const,
-                    reservedPromptIds: command.queuedPromptIdsAfterSettlement,
+                    reservedPromptIds: interruptPrefix!.map((prompt) => prompt.id),
                     sessionEpoch: thread.session?.sessionEpoch ?? 0,
                     expectedTurnId: command.turnId ?? thread.session?.activeTurnId ?? null,
                     strategy: "interrupt-continue" as const,
@@ -137,19 +137,19 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           return [];
         }
         if (
-          thread.pendingTurnControlOperation &&
-          !terminalControlStates.has(thread.pendingTurnControlOperation.state)
+          thread.pendingInterruptFlushIntent ||
+          (thread.pendingTurnControlOperation &&
+            !terminalTurnControlStates.has(thread.pendingTurnControlOperation.state))
         ) {
           return [];
         }
         if (!thread.session?.activeTurnId || thread.session.activeTurnId !== command.turnId) {
           return [];
         }
-        const steerPrefix = (thread.queuedPrompts ?? []).slice(0, command.queuedPromptIds.length);
-        if (
-          steerPrefix.length !== command.queuedPromptIds.length ||
-          steerPrefix.some((prompt, index) => prompt.id !== command.queuedPromptIds[index])
-        ) {
+        const steerPrefix = compatibleQueuedPrefix(
+          exactQueuedPrefix(thread, command.queuedPromptIds),
+        );
+        if (steerPrefix.length === 0) {
           return [];
         }
         return {
@@ -163,11 +163,11 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           payload: {
             threadId: command.threadId,
             turnId: command.turnId,
-            queuedPromptIds: command.queuedPromptIds,
+            queuedPromptIds: steerPrefix.map((prompt) => prompt.id),
             operation: {
               operationId: command.commandId,
               action: "steer",
-              reservedPromptIds: command.queuedPromptIds,
+              reservedPromptIds: steerPrefix.map((prompt) => prompt.id),
               sessionEpoch: thread.session?.sessionEpoch ?? 0,
               expectedTurnId: command.turnId ?? null,
               strategy: "pending-selection",

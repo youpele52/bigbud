@@ -16,7 +16,15 @@ import { makeProcessSessionResponseHandlers } from "./ProviderCommandReactorHand
 import { settleInterruptAfterAcknowledgement } from "./ProviderCommandReactorHandlers.session.settle.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
-import { setTurnControlOperation } from "./ProviderCommandReactorHandlers.steer.ts";
+import {
+  completeTurnControlIfConsumed,
+  setTurnControlOperation,
+} from "./ProviderCommandReactorHandlers.steer.ts";
+import {
+  consumableQueuedPrefix,
+  exactQueuedPrefix,
+  samePromptIds,
+} from "../QueuedPromptPolicy.logic.ts";
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -85,6 +93,16 @@ export const makeProcessSessionHandlers = ({
     const operation = event.payload.operation;
     if (!operation) return;
     if (operation.reservedPromptIds.length > 0) {
+      const current = yield* resolveThread(event.payload.threadId);
+      if (
+        !current ||
+        consumableQueuedPrefix({
+          thread: current,
+          messageIds: operation.reservedPromptIds,
+          controlOperationId: operation.operationId,
+        }).length === 0
+      )
+        return;
       yield* orchestrationEngine.dispatch({
         type: "thread.queued-prompt.flush",
         commandId: serverCommandId("interrupt-continue-flush"),
@@ -96,11 +114,10 @@ export const makeProcessSessionHandlers = ({
         createdAt: event.payload.createdAt,
       });
     }
-    yield* setTurnControlOperation({
+    yield* completeTurnControlIfConsumed({
       orchestrationEngine,
       threadId: event.payload.threadId,
       operation,
-      state: "completed",
       createdAt: event.payload.createdAt,
     });
   });
@@ -113,6 +130,20 @@ export const makeProcessSessionHandlers = ({
       yield* cancelPendingFlush(event);
       return;
     }
+    const operation = event.payload.operation;
+    if (
+      operation &&
+      (thread.pendingTurnControlOperation?.operationId !== operation.operationId ||
+        thread.pendingTurnControlOperation.state !== "requested" ||
+        (thread.session?.sessionEpoch ?? 0) !== operation.sessionEpoch ||
+        !samePromptIds(
+          thread.pendingTurnControlOperation.reservedPromptIds,
+          operation.reservedPromptIds,
+        ) ||
+        (operation.reservedPromptIds.length > 0 &&
+          exactQueuedPrefix(thread, operation.reservedPromptIds).length === 0))
+    )
+      return;
     let runtimeSession = yield* providerService
       .listSessions()
       .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === thread.id)));
