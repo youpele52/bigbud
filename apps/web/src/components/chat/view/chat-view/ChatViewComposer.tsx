@@ -15,6 +15,7 @@ import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
+import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
@@ -106,14 +107,17 @@ export function ChatViewComposer({
     >
       <div
         className={cn(
-          "group rounded-[22px] p-px transition-colors duration-200",
+          composerSurfaceStyles.frame,
           composer.composerProviderState.composerFrameClassName,
         )}
       >
         <div
           className={cn(
-            "rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
-            base.isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
+            composerSurfaceStyles.surface,
+            composerSurfaceStyles.surfaceFocus,
+            base.isDragOverComposer
+              ? composerSurfaceStyles.surfaceDragOver
+              : composerSurfaceStyles.surfaceDefaultBorder,
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
@@ -121,12 +125,12 @@ export function ChatViewComposer({
 
           <div
             className={cn(
-              "relative px-3 pb-2 sm:px-4",
+              composerSurfaceStyles.input.shell,
               compact
-                ? "pt-2 pb-1.5"
+                ? composerSurfaceStyles.input.compact
                 : thread.hasComposerHeader
-                  ? "pt-2.5 sm:pt-3"
-                  : "pt-3.5 sm:pt-4",
+                  ? composerSurfaceStyles.input.withHeader
+                  : composerSurfaceStyles.input.withoutHeader,
             )}
           >
             <ChatViewComposerMenuLayer
@@ -236,10 +240,10 @@ export function ChatViewComposer({
                 runtime.scrollBehavior.isComposerFooterCompact ? "true" : "false"
               }
               className={cn(
-                compact
-                  ? "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2"
-                  : "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
-                runtime.scrollBehavior.isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
+                compact ? composerSurfaceStyles.footer.compact : composerSurfaceStyles.footer.shell,
+                runtime.scrollBehavior.isComposerFooterCompact
+                  ? composerSurfaceStyles.footer.compactGap
+                  : composerSurfaceStyles.footer.defaultGap,
               )}
             >
               <ComposerFooterLeading

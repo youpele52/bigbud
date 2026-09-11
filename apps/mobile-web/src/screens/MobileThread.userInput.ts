@@ -19,7 +19,6 @@ export function createMobileUserInputHandlers(input: {
   readonly activeQuestionIndex: number;
   readonly sendPrompt: () => Promise<void>;
   readonly setAnswersByRequestId: Dispatch<SetStateAction<AnswersByRequestId>>;
-  readonly setPrompt: Dispatch<SetStateAction<string>>;
   readonly setQuestionIndexByRequestId: Dispatch<SetStateAction<QuestionIndexByRequestId>>;
 }) {
   const toggleOption = (
@@ -43,7 +42,6 @@ export function createMobileUserInputHandlers(input: {
         ),
       },
     }));
-    input.setPrompt("");
   };
 
   const changeCustomAnswer = (questionId: string, value: string) => {
@@ -76,7 +74,6 @@ export function createMobileUserInputHandlers(input: {
         ...existing,
         [request.requestId]: input.activeQuestionIndex + 1,
       }));
-      input.setPrompt("");
     }
   };
 

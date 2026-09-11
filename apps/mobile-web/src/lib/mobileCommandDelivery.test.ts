@@ -102,4 +102,53 @@ describe("mobile command delivery", () => {
     expect(retried.operation?.submittedRevision).toBe(1);
     expect(retriedCommands[0]).toEqual(makeCommand("command-same-id"));
   });
+
+  it("turns a synchronous dispatch throw into uncertainty and releases the lock", async () => {
+    const controller = createMobileCommandDeliveryController();
+    await expect(
+      controller.submit({
+        command: makeCommand("command-sync-throw"),
+        dispatch: () => {
+          throw new Error("socket is closed");
+        },
+        submittedRevision: 1,
+      }),
+    ).resolves.toMatchObject({ status: "uncertain" });
+    expect(controller.getState().status).toBe("uncertain");
+  });
+
+  it("gives an explicit same-id retry a fresh bounded deadline", async () => {
+    vi.useFakeTimers();
+    const controller = createMobileCommandDeliveryController({ deadlineMs: 100 });
+    await expect(
+      controller.submit({
+        command: makeCommand("command-fresh-deadline"),
+        dispatch: () => Promise.reject(new Error("lost")),
+        submittedRevision: 1,
+      }),
+    ).resolves.toMatchObject({ status: "uncertain" });
+    await vi.advanceTimersByTimeAsync(50);
+    const retry = controller.retrySameOperation(() => new Promise(() => undefined));
+    await vi.advanceTimersByTimeAsync(99);
+    expect(controller.getState().status).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(retry).resolves.toMatchObject({ status: "uncertain" });
+  });
+
+  it("settles a pending operation when its owner is disposed", async () => {
+    let resolveDispatch: (() => void) | undefined;
+    const controller = createMobileCommandDeliveryController();
+    const pending = controller.submit({
+      command: makeCommand("command-dispose"),
+      dispatch: () =>
+        new Promise<void>((resolve) => {
+          resolveDispatch = resolve;
+        }),
+      submittedRevision: 1,
+    });
+    controller.dispose();
+    await expect(pending).resolves.toMatchObject({ status: "uncertain" });
+    expect(controller.getState().status).toBe("uncertain");
+    resolveDispatch?.();
+  });
 });

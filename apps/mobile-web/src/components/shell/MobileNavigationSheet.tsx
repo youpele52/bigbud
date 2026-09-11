@@ -1,18 +1,17 @@
 import { isBuiltInChatsProject, ProjectId } from "@bigbud/contracts";
+import { Chatting01Icon, Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   FolderIcon,
-  MessageSquareTextIcon,
-  RefreshCwIcon,
+  LaptopMinimalIcon,
   SettingsIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { Dialog } from "@base-ui/react/dialog";
-
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
+import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
 import type { StoredMobileSession } from "../../lib/mobileSession";
 import { useMobileNewThread } from "../../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../../hooks/useMobileSnapshot";
@@ -22,11 +21,22 @@ import {
   chatThreadsForMobile,
 } from "../../lib/mobileModels";
 import { cn } from "../../lib/cn";
-import { useTheme } from "../../theme/useTheme";
-import { Button } from "../ui/button";
-import { MobileThreadList } from "../threads/MobileThreadList";
 import {
-  sanitizeMobileBackendOrigin,
+  Drawer,
+  DrawerBackdrop,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHandle,
+  DrawerPopup,
+  DrawerPortal,
+  DrawerTitle,
+  DrawerViewport,
+} from "../ui/drawer";
+import { MobileThreadList } from "../threads/MobileThreadList";
+import { MobileNavigationSettings } from "./MobileNavigationSettings";
+import {
+  MOBILE_NAVIGATION_TRIGGER_ID,
   withoutMobileNavigationView,
   type MobileNavigationView,
 } from "./MobileNavigationSheet.logic";
@@ -37,7 +47,9 @@ interface MobileNavigationSheetProps {
   readonly view: MobileNavigationView;
   readonly session: StoredMobileSession | null;
   readonly recoveryState: MobileRecoveryState;
+  readonly connection: MobileConnectionState;
   readonly onClose: () => void;
+  readonly onOpenChangeComplete?: ((open: boolean) => void) | undefined;
   readonly onViewChange: (view: MobileNavigationView) => void;
   readonly onRetry: () => void;
   readonly onForget: () => void;
@@ -70,14 +82,26 @@ export function MobileNavigationSheet(props: MobileNavigationSheetProps) {
   }
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={(nextOpen) => !nextOpen && props.onClose()}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/28 transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" />
-        <Dialog.Viewport className="fixed inset-0 z-50 flex items-end justify-center px-2 pt-8">
-          <Dialog.Popup className="flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-border bg-popover pb-[env(safe-area-inset-bottom)] text-popover-foreground shadow-2xl outline-none transition-transform data-ending-style:translate-y-4 data-starting-style:translate-y-4">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+    <Drawer
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) props.onClose();
+      }}
+      onOpenChangeComplete={props.onOpenChangeComplete}
+      open={props.open}
+      swipeDirection="down"
+      triggerId={MOBILE_NAVIGATION_TRIGGER_ID}
+    >
+      <DrawerPortal>
+        <DrawerBackdrop />
+        <DrawerViewport>
+          <DrawerPopup finalFocus>
+            <DrawerHandle className="h-5" />
+            <div
+              className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 py-2"
+              data-base-ui-swipe-ignore=""
+            >
               {props.view.kind === "chats" ? (
-                <span className="size-9" aria-hidden="true" />
+                <span className="size-11" aria-hidden="true" />
               ) : (
                 <button
                   aria-label="Back to Chats"
@@ -88,22 +112,37 @@ export function MobileNavigationSheet(props: MobileNavigationSheetProps) {
                   <ArrowLeftIcon className="size-4" />
                 </button>
               )}
-              <Dialog.Title className="min-w-0 flex-1 truncate text-center text-sm font-semibold">
-                {title}
-              </Dialog.Title>
-              <Dialog.Close
+              <DrawerTitle className="flex min-w-0 flex-1 items-center justify-center gap-2 truncate text-center">
+                {props.view.kind === "chats" ? (
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted-foreground"
+                    icon={Chatting01Icon}
+                    size={16}
+                    strokeWidth={1.5}
+                  />
+                ) : null}
+                <span className="truncate">{title}</span>
+              </DrawerTitle>
+              <DrawerClose
                 aria-label="Close navigation"
-                className="inline-flex size-11 items-center justify-center rounded-full text-foreground active:bg-accent"
+                className="inline-flex size-11 items-center justify-center rounded-lg text-foreground transition-colors active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               >
                 <XIcon className="size-4" />
-              </Dialog.Close>
+              </DrawerClose>
             </div>
-            <Dialog.Description className="sr-only">
+            <DrawerDescription className="sr-only">
               Switch chats and projects, or manage this mobile connection.
-            </Dialog.Description>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+            </DrawerDescription>
+            <DrawerContent className="px-3 py-3">
               {props.view.kind === "settings" ? (
-                <MobileNavigationSettings {...props} />
+                <MobileNavigationSettings
+                  connection={props.connection}
+                  onForget={props.onForget}
+                  onRetry={props.onRetry}
+                  recoveryState={props.recoveryState}
+                  session={props.session}
+                />
               ) : projectView ? (
                 <MobileProjectView
                   projectId={ProjectId.makeUnsafe(projectView.projectId)}
@@ -123,16 +162,19 @@ export function MobileNavigationSheet(props: MobileNavigationSheetProps) {
                   onSettings={() => props.onViewChange({ kind: "settings" })}
                 />
               )}
-            </div>
-            <div className="flex shrink-0 items-center justify-end border-t border-border/70 px-4 py-3">
-              <Dialog.Close className={cn(rowClassName, "w-auto px-3 text-muted-foreground")}>
+            </DrawerContent>
+            <div
+              className="flex shrink-0 items-center justify-end border-t border-border/70 px-4 py-3"
+              data-base-ui-swipe-ignore=""
+            >
+              <DrawerClose className={cn(rowClassName, "w-auto px-3 text-muted-foreground")}>
                 Close
-              </Dialog.Close>
+              </DrawerClose>
             </div>
-          </Dialog.Popup>
-        </Dialog.Viewport>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </DrawerPopup>
+        </DrawerViewport>
+      </DrawerPortal>
+    </Drawer>
   );
 }
 
@@ -163,14 +205,25 @@ function MobileChatsView({
           <span>Settings</span>
         </button>
       </div>
-      <MobileSheetSection icon={<MessageSquareTextIcon className="size-4" />} title="Recents">
+      <MobileSheetSection
+        icon={
+          <HugeiconsIcon
+            aria-hidden="true"
+            className="size-4"
+            icon={Comment03Icon}
+            size={16}
+            strokeWidth={1.5}
+          />
+        }
+        title="Recents"
+      >
         {threads.length > 0 ? (
           <MobileThreadList threads={threads} onSelectThread={onSelectThread} />
         ) : (
           <p className="px-3 py-2 text-xs text-muted-foreground">No chats yet.</p>
         )}
       </MobileSheetSection>
-      <MobileSheetSection icon={<FolderIcon className="size-4" />} title="Projects">
+      <MobileSheetSection icon={<LaptopMinimalIcon className="size-4" />} title="Projects">
         {projects.length > 0 ? (
           projects.map((project) => (
             <button
@@ -239,106 +292,5 @@ function MobileSheetSection({
       </h2>
       <div className="grid gap-0.5">{children}</div>
     </section>
-  );
-}
-
-function MobileNavigationSettings({
-  session,
-  recoveryState,
-  onRetry,
-  onForget,
-}: MobileNavigationSheetProps) {
-  const { theme, setTheme } = useTheme();
-  const [confirmForget, setConfirmForget] = useState(false);
-  const origin = session ? sanitizeMobileBackendOrigin(session.backendBaseUrl) : null;
-  const expiresAt = session ? new Date(session.expiresAt).toLocaleString() : "Not paired";
-
-  if (confirmForget) {
-    return (
-      <div className="grid gap-4 px-3 py-2">
-        <div className="grid gap-1">
-          <h2 className="text-sm font-semibold">Forget this connection?</h2>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Removes this connection and its drafts from this browser. It does not revoke the desktop
-            authorization.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            className="min-h-11"
-            onClick={() => setConfirmForget(false)}
-            size="sm"
-            variant="outline"
-          >
-            Keep connection
-          </Button>
-          <button
-            className="inline-flex min-h-11 items-center justify-center rounded-md bg-destructive px-3 text-sm text-destructive-foreground"
-            onClick={onForget}
-            type="button"
-          >
-            Forget connection
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-5 px-3 py-2">
-      <section className="grid gap-2">
-        <h2 className="text-sm font-semibold">Appearance</h2>
-        <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="mobile-theme">
-          Theme
-          <select
-            className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            id="mobile-theme"
-            onChange={(event) => setTheme(event.target.value as "system" | "light" | "dark")}
-            value={theme}
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-      </section>
-      <section className="grid gap-2">
-        <h2 className="text-sm font-semibold">Connection</h2>
-        <dl className="grid gap-2 text-xs">
-          <div>
-            <dt className="text-muted-foreground">Backend</dt>
-            <dd className="truncate text-foreground">{origin ?? "Unavailable"}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Status</dt>
-            <dd className="text-foreground">{recoveryState.freshness}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Stored expiry</dt>
-            <dd className="text-foreground">{expiresAt}</dd>
-          </div>
-        </dl>
-        <Button className="min-h-11 w-fit" onClick={onRetry} size="sm" variant="outline">
-          <RefreshCwIcon className="size-3.5" /> Retry connection
-        </Button>
-      </section>
-      <section className="grid gap-2">
-        <h2 className="text-sm font-semibold">Pairing help</h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Open a new pairing link from the desktop app if this connection expires or cannot
-          reconnect.
-        </p>
-      </section>
-      <section className="grid gap-2 border-t border-border/70 pt-4">
-        <Button
-          className="min-h-11 w-fit"
-          onClick={() => setConfirmForget(true)}
-          size="sm"
-          variant="outline"
-        >
-          Forget this connection
-        </Button>
-      </section>
-    </div>
   );
 }

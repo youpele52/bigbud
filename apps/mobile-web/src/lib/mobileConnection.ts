@@ -45,6 +45,9 @@ export function useMobileConnection(
   }, [lifecycle]);
 
   useEffect(() => {
+    const setBrowserOffline = () =>
+      lifecycle.setBrowserOffline(typeof navigator !== "undefined" && navigator.onLine === false);
+    setBrowserOffline();
     if (!session || !wsUrl) {
       lifecycle.reset();
       setClient(null);
@@ -87,7 +90,13 @@ export function useMobileConnection(
       expiresAt: session.expiresAt,
       onExpired: expire,
     });
+    const onOnline = () => {
+      lifecycle.setBrowserOffline(false);
+      onResume();
+    };
+    const onOffline = () => lifecycle.setBrowserOffline(true);
     const onResume = () => {
+      lifecycle.setBrowserOffline(typeof navigator !== "undefined" && navigator.onLine === false);
       if (isMobileSessionExpired(session)) {
         expire();
         return;
@@ -95,14 +104,16 @@ export function useMobileConnection(
       const transport = lifecycle.getState().transport;
       if (transport === "closed" || transport === "exhausted") restart();
     };
-    window.addEventListener("online", onResume);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     window.addEventListener("focus", onResume);
     document.addEventListener("visibilitychange", onResume);
 
     return () => {
       disposed = true;
       cancelExpiry();
-      window.removeEventListener("online", onResume);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
       window.removeEventListener("focus", onResume);
       document.removeEventListener("visibilitychange", onResume);
       lease.dispose();

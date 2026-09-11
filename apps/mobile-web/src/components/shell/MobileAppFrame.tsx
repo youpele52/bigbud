@@ -1,6 +1,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { DEFAULT_THREAD_TITLE } from "@bigbud/shared/String";
 
 import type { MobileHeaderBreadcrumbSegment } from "../../logic/mobileHeader.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
@@ -11,6 +12,7 @@ import { MobileNavigationSheet } from "./MobileNavigationSheet";
 import { MobileAppHeader } from "./MobileAppHeader";
 import {
   parseMobileNavigationView,
+  areMobileNavigationViewsEqual,
   withoutMobileNavigationView,
   withMobileNavigationView,
   type MobileNavigationView,
@@ -22,6 +24,7 @@ interface MobileAppFrameProps {
   readonly setSession: (session: StoredMobileSession | null) => void;
   readonly title?: string | undefined;
   readonly breadcrumb?: ReadonlyArray<MobileHeaderBreadcrumbSegment> | undefined;
+  readonly conversationProviderIcon?: ReactNode | undefined;
   readonly showLogo?: boolean | undefined;
   readonly showBack?: boolean | undefined;
   readonly backTo?: string | undefined;
@@ -36,6 +39,7 @@ export function MobileAppFrame({
   setSession,
   title,
   breadcrumb,
+  conversationProviderIcon,
   showLogo,
   showBack,
   backTo,
@@ -47,9 +51,24 @@ export function MobileAppFrame({
   const historyState = useRouterState({ select: (state) => state.location.state });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { client, recovery, restart } = useMobileRpcClient();
+  const { client, connection, recovery, restart } = useMobileRpcClient();
   const view = parseMobileNavigationView(historyState);
   const isPairing = pathname.includes("/pair");
+  const [retainedView, setRetainedView] = useState<MobileNavigationView | null>(() => view);
+  const navigationView = view ?? retainedView;
+  const navigationOpen = view !== null;
+
+  useEffect(() => {
+    if (!session || isPairing) {
+      if (retainedView !== null) {
+        setRetainedView(null);
+      }
+      return;
+    }
+    if (view && !areMobileNavigationViewsEqual(view, retainedView)) {
+      setRetainedView(view);
+    }
+  }, [isPairing, retainedView, session, view]);
 
   function updateView(nextView: MobileNavigationView | null, replace: boolean) {
     void navigate({
@@ -64,6 +83,7 @@ export function MobileAppFrame({
 
   function forgetConnection() {
     const sessionId = session?.sessionId;
+    setRetainedView(null);
     recovery?.dispose();
     void client?.dispose();
     if (sessionId) {
@@ -82,20 +102,20 @@ export function MobileAppFrame({
     void navigate({ to: "/mobile", replace: true, state: {} });
   }
 
-  const conversationTitle = breadcrumb?.at(-1)?.label ?? title ?? "New chat";
+  const conversationTitle = breadcrumb?.at(-1)?.label ?? title ?? DEFAULT_THREAD_TITLE;
 
   return (
     <div
       className={
         isThreadView
-          ? "mobile-shell h-dvh overflow-hidden bg-background text-foreground"
+          ? "mobile-shell h-dvh min-h-0 overflow-hidden bg-background text-foreground"
           : "mobile-shell max-h-dvh min-h-dvh overflow-y-auto bg-background text-foreground"
       }
     >
       <div
         className={
           isThreadView
-            ? "mx-auto flex h-dvh max-w-3xl flex-col overflow-hidden px-4 pt-2"
+            ? "mx-auto flex h-full min-h-0 max-w-3xl flex-col overflow-hidden px-4 pt-2"
             : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
         }
       >
@@ -104,9 +124,12 @@ export function MobileAppFrame({
             backTo={backTo}
             breadcrumb={breadcrumb}
             connectionState={recoveryState}
+            connection={connection}
             conversation={isThreadView}
+            conversationProviderIcon={conversationProviderIcon}
             onNew={onNew}
             onOpenNavigation={() => updateView({ kind: "chats" }, false)}
+            navigationOpen={navigationOpen}
             showBack={showBack}
             showLogo={showLogo}
             title={conversationTitle}
@@ -116,16 +139,26 @@ export function MobileAppFrame({
           {children}
         </main>
       </div>
-      {!isPairing && session && view ? (
+      {!isPairing && session && navigationView ? (
         <MobileNavigationSheet
-          onClose={() => updateView(null, true)}
+          onClose={() => {
+            if (view) {
+              updateView(null, true);
+            }
+          }}
+          onOpenChangeComplete={(open) => {
+            if (!open && view === null) {
+              setRetainedView(null);
+            }
+          }}
           onForget={forgetConnection}
           onRetry={restart}
           onViewChange={(nextView) => updateView(nextView, true)}
-          open
+          open={navigationOpen}
           recoveryState={recoveryState}
+          connection={connection}
           session={session}
-          view={view}
+          view={navigationView}
         />
       ) : null}
     </div>

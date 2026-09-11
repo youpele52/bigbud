@@ -23,6 +23,9 @@ const errors = [];
 const requests = [];
 let heldDispatch = null;
 page.on("pageerror", (error) => errors.push(error.message));
+page.on("console", (message) => {
+  if (message.type() === "error") errors.push(`console.error: ${message.text()}`);
+});
 
 function sendExit(ws, request, value) {
   ws.send(

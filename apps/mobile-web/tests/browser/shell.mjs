@@ -21,6 +21,9 @@ const page = await browser.newPage({
 });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
+page.on("console", (message) => {
+  if (message.type() === "error") errors.push(`console.error: ${message.text()}`);
+});
 
 function sendExit(ws, request, value) {
   ws.send(
@@ -77,6 +80,17 @@ try {
   const openChats = page.getByRole("button", { name: /Open Chats/ });
   const transcript = page.locator('[data-mobile-transcript="true"]');
   const composer = page.locator('[data-mobile-composer="true"]');
+  const providerIcon = page.locator('[data-mobile-conversation-provider-icon="true"]');
+  await providerIcon.waitFor();
+  assert.equal(await providerIcon.locator("svg").count(), 1);
+  assert.equal(
+    await openChats.evaluate((element) =>
+      Array.from(element.querySelectorAll("*")).some((child) =>
+        typeof child.className === "string" && child.className.includes("size-1.5"),
+      ),
+    ),
+    false,
+  );
   assert.equal(await composer.evaluate((element) => getComputedStyle(element).position), "static");
   assert.equal(await transcript.evaluate((element) => getComputedStyle(element).minHeight), "0px");
   await page.setViewportSize({ width: 390, height: 520 });

@@ -17,6 +17,7 @@ import { ComposerCommandMenu } from "../composer/ComposerCommandMenu";
 import { ComposerListeningBar } from "../composer/ComposerListeningBar";
 import { ComposerMicButton } from "../composer/ComposerMicButton";
 import { ComposerPromptEditor } from "../composer/ComposerPromptEditor";
+import { composerSurfaceStyles } from "../composer/ComposerSurface.styles";
 import { ProviderModelPicker } from "../provider/ProviderModelPicker";
 import { useOrchestraPlayerComposer } from "./OrchestraPlayerComposer.logic";
 import { createOrchestraModelSelection } from "./OrchestraPlayerComposer.menu";
@@ -52,15 +53,11 @@ export function OrchestraPlayerComposer(props: {
   });
 
   return (
-    <div
-      className={cn(
-        "group rounded-[22px] p-px transition-colors duration-200",
-        composer.providerState.composerFrameClassName,
-      )}
-    >
+    <div className={cn(composerSurfaceStyles.frame, composer.providerState.composerFrameClassName)}>
       <div
         className={cn(
-          "relative rounded-[20px] border bg-card transition-colors duration-200",
+          "relative",
+          composerSurfaceStyles.surface,
           composer.providerState.composerSurfaceClassName,
         )}
       >
@@ -135,8 +132,8 @@ export function OrchestraPlayerComposer(props: {
           />
         </div>
 
-        <div className="flex min-w-0 items-center justify-between gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
-          <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={composerSurfaceStyles.footer.shell}>
+          <div className={composerSurfaceStyles.footerLeading}>
             <ProviderModelPicker
               compact
               provider={composer.selectedProvider}

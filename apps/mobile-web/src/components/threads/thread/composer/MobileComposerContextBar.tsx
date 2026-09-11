@@ -27,7 +27,7 @@ export function MobileComposerContextBar({
   });
 
   return (
-    <div className="flex items-center justify-between gap-3 px-1 pt-2">
+    <div className="flex min-w-0 items-center justify-between gap-3 px-1 pt-1.5">
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <MobileFolderIcon className="size-3" />
         <span className="truncate">{projectTitle}</span>

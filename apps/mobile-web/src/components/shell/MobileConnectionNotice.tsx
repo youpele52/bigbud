@@ -1,16 +1,19 @@
 import { Button } from "../ui/button";
+import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
 import { cn } from "../../lib/cn";
 import { resolveMobileConnectionNotice } from "./MobileConnectionNotice.logic";
 
 export function MobileConnectionNotice({
   state,
+  connection,
   onRetry,
 }: {
   readonly state: MobileRecoveryState;
+  readonly connection?: MobileConnectionState | undefined;
   readonly onRetry?: (() => void) | undefined;
 }) {
-  const notice = resolveMobileConnectionNotice(state);
+  const notice = resolveMobileConnectionNotice(state, connection);
   if (!notice) return null;
   const tone =
     notice.tone === "info"
@@ -41,7 +44,7 @@ export function MobileConnectionNotice({
           <p className="mt-0.5 text-[11px] text-muted-foreground/70">{evidence}</p>
         ) : null}
       </div>
-      {onRetry ? (
+      {onRetry && notice.showRetry ? (
         <Button className="shrink-0" onClick={onRetry} size="sm" variant="outline">
           Retry
         </Button>

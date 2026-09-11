@@ -1,4 +1,6 @@
-import { FolderOpenIcon, MessageSquareTextIcon, SquarePenIcon } from "lucide-react";
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { LaptopMinimalIcon, SquarePenIcon } from "lucide-react";
 
 import {
   MobileListAction,
@@ -42,7 +44,7 @@ export function MobileLaunch() {
               </MobileListAction>
               <MobileListLink
                 icon={
-                  <FolderOpenIcon
+                  <LaptopMinimalIcon
                     className={cn(SIDEBAR_ICON_SIZE_CLASS, "shrink-0 text-muted-foreground/70")}
                   />
                 }
@@ -54,8 +56,12 @@ export function MobileLaunch() {
                 <MobileListSection
                   className="mt-2"
                   icon={
-                    <MessageSquareTextIcon
+                    <HugeiconsIcon
+                      aria-hidden="true"
                       className={cn(SIDEBAR_ICON_SIZE_CLASS, "shrink-0 text-muted-foreground/70")}
+                      icon={Comment03Icon}
+                      size={14}
+                      strokeWidth={1.5}
                     />
                   }
                   title="Recents"

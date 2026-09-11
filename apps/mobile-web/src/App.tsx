@@ -15,7 +15,11 @@ import { MobileStartupSplash } from "./components/shell/MobileStartupSplash";
 import { useMobileSnapshot } from "./hooks/useMobileSnapshot";
 import { useTheme } from "./theme/useTheme";
 
-import { getMobileDraftThread, makeMobileComposerDraftIdentity } from "./lib/mobileDraftThread";
+import {
+  clearMobileDraftThreads,
+  getMobileDraftThread,
+  makeMobileComposerDraftIdentity,
+} from "./lib/mobileDraftThread";
 import { redactMobileText } from "./lib/mobileRedaction";
 import {
   extractMobileThreadId,
@@ -31,6 +35,7 @@ import { MobilePair } from "./screens/MobilePair";
 import { MobileProjects } from "./screens/MobileProjects";
 import { MobileProjectThreads } from "./screens/MobileProjectThreads";
 import { MobileThread } from "./screens/MobileThread";
+import { MobileThreadProviderIcon } from "./components/threads/MobileThreadProviderIcon";
 import { useMobileNewThread } from "./hooks/useMobileNewThread";
 import {
   clearMobileSession,
@@ -62,6 +67,9 @@ function AppFrameContent({
       : null;
   const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
   const isThreadView = pathname.startsWith("/mobile/thread/") && !pathname.endsWith("/diff");
+  const conversationThread = threadId
+    ? (snapshotQuery.data?.threads.find((candidate) => candidate.id === threadId) ?? null)
+    : null;
   const showLaunchSplash =
     isMobileLaunchRoute(pathname) &&
     session !== null &&
@@ -108,6 +116,12 @@ function AppFrameContent({
             <button
               className="min-h-11 rounded-md bg-secondary px-3 text-sm"
               onClick={() => {
+                if (session) {
+                  clearMobileDraftThreads({
+                    backendBaseUrl: session.backendBaseUrl,
+                    sessionId: session.sessionId,
+                  });
+                }
                 clearMobileSession();
                 setSession(null);
                 window.location.assign("/mobile");
@@ -122,6 +136,11 @@ function AppFrameContent({
         <MobileAppFrame
           backTo={header.backTo}
           breadcrumb={header.breadcrumb}
+          conversationProviderIcon={
+            isThreadView && conversationThread ? (
+              <MobileThreadProviderIcon thread={conversationThread} />
+            ) : undefined
+          }
           isThreadView={isThreadView}
           onNew={startContextualNewThread}
           recoveryState={recoveryState}

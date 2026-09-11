@@ -8,6 +8,8 @@ export type MobileTransportEvidence =
   | "exhausted"
   | "closed";
 
+export type MobileIncidentLevel = "none" | "short" | "reconnecting" | "escalated";
+
 export type MobileAuthorizationEvidence = "unknown" | "locally-expired" | "explicitly-rejected";
 
 export interface MobileConnectionState {
@@ -20,6 +22,9 @@ export interface MobileConnectionState {
   readonly lastError: string | null;
   readonly expiresAt: string | null;
   readonly expired: boolean;
+  readonly browserOffline: boolean;
+  readonly incidentStartedAt: number | null;
+  readonly incidentLevel: MobileIncidentLevel;
 }
 
 export interface MobileConnectionLease {
@@ -33,6 +38,7 @@ export interface MobileConnectionLease {
 export interface MobileConnectionLifecycle {
   readonly begin: (expiresAt: string) => MobileConnectionLease;
   readonly reset: () => void;
+  readonly setBrowserOffline: (offline: boolean) => void;
   readonly subscribe: (listener: () => void) => () => void;
   readonly getState: () => MobileConnectionState;
 }
@@ -55,6 +61,9 @@ export function initialMobileConnectionState(): MobileConnectionState {
     lastError: null,
     expiresAt: null,
     expired: false,
+    browserOffline: false,
+    incidentStartedAt: null,
+    incidentLevel: "none",
   };
 }
 
@@ -92,10 +101,28 @@ function formatError(message: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
+export function createMobileConnectionLifecycle(options?: {
+  readonly now?: () => number;
+  readonly scheduler?: MobileConnectionScheduler;
+}): MobileConnectionLifecycle {
   const listeners = new Set<() => void>();
   let state = initialMobileConnectionState();
   let generation = 0;
+  let browserOffline = false;
+  let incidentTimer: MobileConnectionTimer | null = null;
+  const now = options?.now ?? Date.now;
+  const scheduler =
+    options?.scheduler ??
+    ({
+      setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+      clearTimeout: (timerId) => globalThis.clearTimeout(timerId),
+    } satisfies MobileConnectionScheduler);
+
+  const clearIncidentTimer = () => {
+    if (incidentTimer === null) return;
+    scheduler.clearTimeout(incidentTimer);
+    incidentTimer = null;
+  };
 
   const publish = (next: Partial<MobileConnectionState>) => {
     state = { ...state, ...next };
@@ -103,28 +130,69 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
   };
 
   const reset = () => {
+    clearIncidentTimer();
     generation += 1;
-    publish({ ...initialMobileConnectionState(), generation });
+    publish({ ...initialMobileConnectionState(), browserOffline, generation });
+  };
+
+  const setBrowserOffline = (offline: boolean) => {
+    browserOffline = offline;
+    publish({ browserOffline: offline });
   };
 
   const begin = (expiresAt: string): MobileConnectionLease => {
+    clearIncidentTimer();
     generation += 1;
     const leaseGeneration = generation;
     let disposed = false;
+    const incidentStartedAt = now();
+    let activeIncidentStartedAt: number | null = incidentStartedAt;
     publish({
       ...initialMobileConnectionState(),
+      browserOffline,
       generation: leaseGeneration,
       transport: "connecting",
       expiresAt,
+      incidentStartedAt,
+      incidentLevel: "short",
     });
 
+    const scheduleIncidentThreshold = (level: Exclude<MobileIncidentLevel, "none" | "short">) => {
+      clearIncidentTimer();
+      const thresholdMs = level === "reconnecting" ? 2_000 : 10_000;
+      const elapsedMs = Math.max(0, now() - (activeIncidentStartedAt ?? now()));
+      incidentTimer = scheduler.setTimeout(
+        () => {
+          incidentTimer = null;
+          if (!isCurrent()) return;
+          publish({ incidentLevel: level });
+          if (level === "reconnecting") scheduleIncidentThreshold("escalated");
+        },
+        Math.max(0, thresholdMs - elapsedMs),
+      );
+    };
+
+    const startIncident = () => {
+      if (!isCurrent()) return;
+      if (activeIncidentStartedAt === null) activeIncidentStartedAt = now();
+      if (state.incidentStartedAt !== activeIncidentStartedAt)
+        publish({ incidentStartedAt: activeIncidentStartedAt, incidentLevel: "short" });
+      if (state.incidentLevel === "none") {
+        publish({ incidentLevel: "short" });
+      }
+      scheduleIncidentThreshold("reconnecting");
+    };
+
     const isCurrent = () => !disposed && state.generation === leaseGeneration;
+    scheduleIncidentThreshold("reconnecting");
+
     const update = (next: Partial<MobileConnectionState>) => {
       if (isCurrent()) publish(next);
     };
     const expire = () => {
       if (!isCurrent()) return;
       disposed = true;
+      clearIncidentTimer();
       publish({
         transport: "closed",
         authorization: "locally-expired",
@@ -132,10 +200,12 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
         lastError: null,
         retryCount: null,
         retryDelayMs: null,
+        incidentLevel: "none",
       });
     };
     const handlers: MobileWsProtocolLifecycleHandlers = {
       onAttempt: () => {
+        startIncident();
         update({
           transport: "connecting",
           attempt: state.attempt + 1,
@@ -144,24 +214,31 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
         });
       },
       onRetry: ({ retryCount, delayMs }) => {
+        startIncident();
         update({ transport: "retrying", retryCount, retryDelayMs: delayMs });
       },
       onOpen: () => {
+        clearIncidentTimer();
         update({
           transport: "open",
           attempt: 0,
           retryCount: null,
           retryDelayMs: null,
           lastError: null,
+          incidentStartedAt: null,
+          incidentLevel: "none",
         });
+        activeIncidentStartedAt = null;
       },
       onError: (message) => {
+        if (state.transport === "open") startIncident();
         update({
           transport: state.transport === "open" ? "closed" : state.transport,
           lastError: formatError(message),
         });
       },
       onClose: (details) => {
+        startIncident();
         update({
           transport: "closed",
           authorization: isExplicitMobileAuthorizationClose(details)
@@ -171,7 +248,13 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
         });
       },
       onExhausted: () => {
-        update({ transport: "exhausted", retryCount: null, retryDelayMs: null });
+        clearIncidentTimer();
+        update({
+          transport: "exhausted",
+          retryCount: null,
+          retryDelayMs: null,
+          incidentLevel: "escalated",
+        });
       },
     };
 
@@ -182,6 +265,7 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
       expire,
       dispose: () => {
         disposed = true;
+        clearIncidentTimer();
       },
     };
   };
@@ -189,6 +273,7 @@ export function createMobileConnectionLifecycle(): MobileConnectionLifecycle {
   return {
     begin,
     reset,
+    setBrowserOffline,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

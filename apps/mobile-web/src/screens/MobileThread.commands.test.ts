@@ -83,7 +83,6 @@ describe("mobile existing-thread command builder", () => {
       selectedModelSelection: { provider: "claudeAgent", model: "sonnet" },
       setIsRespondingToUserInput: () => undefined,
       setPendingModelSelection: () => undefined,
-      setPrompt: () => undefined,
       setUserInputAnswersByRequestId: () => undefined,
       setUserInputQuestionIndexByRequestId: () => undefined,
       thread: makeThread(),

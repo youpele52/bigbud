@@ -13,10 +13,12 @@ import type { PendingUserInputDraftAnswer } from "~/logic/user-input";
 
 import {
   advanceMobileComposerDraft,
+  beginMobileComposerDraftLease,
   createMobileComposerDraft,
   clearSubmittedMobileComposerDraftIfRevision,
+  invalidateMobileComposerDraftLease,
   readMobileComposerDraft,
-  writeMobileComposerDraft,
+  writeMobileComposerDraftWithLease,
   type MobileCommandDeliveryStatus,
   type MobileComposerDraft,
   type MobileComposerDraftIdentity,
@@ -73,6 +75,15 @@ export function useMobileThreadState(input: {
   const identityKey = input.identity
     ? `${input.identity.backendOrigin}:${input.identity.sessionId}:${input.identity.threadId}`
     : input.threadId;
+  const draftLease = useMemo(
+    () => (input.identity ? beginMobileComposerDraftLease(input.identity) : null),
+    [
+      identityKey,
+      input.identity?.backendOrigin,
+      input.identity?.sessionId,
+      input.identity?.threadId,
+    ],
+  );
   const initial = useMemo(() => {
     if (input.identity) {
       const stored = readMobileComposerDraft(input.identity);
@@ -112,12 +123,22 @@ export function useMobileThreadState(input: {
 
   const persist = useCallback(
     (next: MobileComposerDraft) => {
-      if (!input.identity) return;
-      const result = writeMobileComposerDraft(input.identity, next);
+      if (!draftLease) return;
+      const result = writeMobileComposerDraftWithLease(draftLease, next);
       setStorageWarning(result.ok ? null : describeStorageIssue(result.issue ?? "unavailable"));
     },
-    [input.identity],
+    [draftLease],
   );
+
+  useEffect(() => {
+    return () => {
+      if (!draftLease) return;
+      // The lease is invalidated by the next identity/route owner or Forget.
+      // This cleanup only prevents callbacks from the unmounted owner from
+      // writing after navigation; it does not remove the persisted draft.
+      invalidateMobileComposerDraftLease(draftLease.identity);
+    };
+  }, [draftLease]);
 
   const update = useCallback(
     (change: (current: MobileComposerDraft) => MobileComposerDraft) => {

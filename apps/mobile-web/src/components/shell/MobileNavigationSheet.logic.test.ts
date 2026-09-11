@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  areMobileNavigationViewsEqual,
   parseMobileNavigationView,
   sanitizeMobileBackendOrigin,
   withoutMobileNavigationView,
@@ -24,6 +25,17 @@ describe("mobile navigation sheet history", () => {
   it("rejects invalid overlay metadata", () => {
     expect(parseMobileNavigationView({ mobileOverlay: { kind: "unknown" } })).toBeNull();
     expect(parseMobileNavigationView({ mobileOverlay: { kind: "project" } })).toBeNull();
+  });
+
+  it("compares route views by value for retained drawer state", () => {
+    expect(areMobileNavigationViewsEqual({ kind: "chats" }, { kind: "chats" })).toBe(true);
+    expect(
+      areMobileNavigationViewsEqual(
+        { kind: "project", projectId: "one" },
+        { kind: "project", projectId: "two" },
+      ),
+    ).toBe(false);
+    expect(areMobileNavigationViewsEqual({ kind: "settings" }, null)).toBe(false);
   });
 
   it("only exposes a redacted HTTP origin in settings", () => {

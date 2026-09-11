@@ -16,10 +16,7 @@ import {
   type PendingUserInputDraftAnswer,
 } from "~/logic/user-input";
 
-import {
-  applyMobileUserInputCustomAnswer,
-  resolveMobileUserInputAnswers,
-} from "../components/threads/thread/composer/MobileComposer";
+import { resolveMobileUserInputAnswers } from "../components/threads/thread/composer/MobileComposer";
 import type { MobilePendingUserInput } from "../lib/mobileModels";
 import type { MobileDraftThread } from "../lib/mobileDraftThread";
 import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
@@ -52,7 +49,6 @@ interface MobileThreadCommandInput {
   readonly activePendingUserInput: MobilePendingUserInput | null;
   readonly activeUserInputAnswers: Record<string, PendingUserInputDraftAnswer>;
   readonly activeUserInputQuestionIndex: number;
-  readonly setPrompt: Dispatch<SetStateAction<string>>;
   readonly setPendingModelSelection: Dispatch<SetStateAction<ModelSelection | null>>;
   readonly setUserInputAnswersByRequestId: Dispatch<SetStateAction<AnswersByRequestId>>;
   readonly setUserInputQuestionIndexByRequestId: Dispatch<SetStateAction<QuestionIndexByRequestId>>;
@@ -60,6 +56,7 @@ interface MobileThreadCommandInput {
   readonly refetchSnapshot: () => Promise<unknown>;
   readonly refetchThread: () => Promise<unknown>;
   readonly delivery: MobileCommandDeliveryController;
+  readonly decisionDelivery?: MobileCommandDeliveryController;
   readonly revision: number;
   readonly clearSubmittedIfRevision: (submittedRevision: number) => void;
   readonly clearNewThread: () => void;
@@ -100,9 +97,12 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
     await Promise.all([input.refetchSnapshot(), input.refetchThread()]);
   };
 
-  const reconcileOutcome = async (commandId: ClientOrchestrationCommand["commandId"]) => {
-    if (!input.client) return input.delivery.getState();
-    return input.delivery.reconcile(async () => {
+  const reconcileOutcome = async (
+    commandId: ClientOrchestrationCommand["commandId"],
+    delivery = input.delivery,
+  ) => {
+    if (!input.client) return delivery.getState();
+    return delivery.reconcile(async () => {
       const outcome = await input.client!.getMobileCommandOutcome({
         commandId,
         threadId: input.threadId,
@@ -118,21 +118,45 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
   const dispatchWithDelivery = async (
     command: ClientOrchestrationCommand,
     submittedRevision: number,
+    delivery = input.delivery,
   ) => {
     if (!input.client) return null;
-    let state = await input.delivery.submit({
+    let state = await delivery.submit({
       command,
       dispatch: (submittedCommand) => input.client!.dispatchCommand(submittedCommand),
       submittedRevision,
     });
-    if (state.status === "uncertain") {
-      state = await reconcileOutcome(command.commandId);
-    }
+    if (state.status === "uncertain") state = await reconcileOutcome(command.commandId, delivery);
     if (state.status === "accepted") {
       const operationRevision = state.operation?.submittedRevision;
-      if (operationRevision !== undefined) {
+      if (delivery === input.delivery && operationRevision !== undefined) {
         input.clearSubmittedIfRevision(operationRevision);
       }
+      await refreshAfterCommand();
+    } else if (state.status === "rejected") {
+      await refreshAfterCommand();
+    }
+    return state;
+  };
+
+  const checkDelivery = async () => {
+    const commandId = input.delivery.getState().operation?.command.commandId;
+    if (!commandId) return input.delivery.getState();
+    const state = await reconcileOutcome(commandId);
+    if (state.status === "accepted" || state.status === "rejected") {
+      await refreshAfterCommand();
+    }
+    return state;
+  };
+
+  const retryDelivery = async () => {
+    if (!input.client) return input.delivery.getState();
+    const state = await input.delivery.retrySameOperation((command) =>
+      input.client!.dispatchCommand(command),
+    );
+    if (state.status === "accepted") {
+      const operationRevision = state.operation?.submittedRevision;
+      if (operationRevision !== undefined) input.clearSubmittedIfRevision(operationRevision);
       await refreshAfterCommand();
     } else if (state.status === "rejected") {
       await refreshAfterCommand();
@@ -148,7 +172,7 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
       threadId: input.threadId,
       createdAt: new Date().toISOString(),
     } satisfies ClientOrchestrationCommand;
-    await dispatchWithDelivery(command, input.revision);
+    await dispatchWithDelivery(command, input.revision, input.decisionDelivery ?? input.delivery);
   };
 
   const sendPrompt = async () => {
@@ -161,12 +185,6 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
         input.activeUserInputQuestionIndex,
       );
       const draftAnswers = { ...input.activeUserInputAnswers };
-      if (progress.activeQuestion && input.prompt.trim().length > 0) {
-        draftAnswers[progress.activeQuestion.id] = applyMobileUserInputCustomAnswer(
-          draftAnswers[progress.activeQuestion.id],
-          input.prompt,
-        );
-      }
 
       if (progress.isLastQuestion) {
         const answers = resolveMobileUserInputAnswers(input.activePendingUserInput, draftAnswers);
@@ -181,9 +199,12 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
             answers,
             createdAt: new Date().toISOString(),
           } satisfies ClientOrchestrationCommand;
-          const state = await dispatchWithDelivery(command, input.revision);
+          const state = await dispatchWithDelivery(
+            command,
+            input.revision,
+            input.decisionDelivery ?? input.delivery,
+          );
           if (state?.status === "accepted") {
-            input.setPrompt("");
             input.setUserInputAnswersByRequestId((existing) => {
               const next = { ...existing };
               delete next[input.activePendingUserInput!.requestId];
@@ -203,7 +224,6 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
           ...existing,
           [input.activePendingUserInput!.requestId]: input.activeUserInputQuestionIndex + 1,
         }));
-        input.setPrompt("");
       }
       return;
     }
@@ -274,8 +294,8 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
       decision,
       createdAt: new Date().toISOString(),
     } satisfies ClientOrchestrationCommand;
-    await dispatchWithDelivery(command, input.revision);
+    await dispatchWithDelivery(command, input.revision, input.decisionDelivery ?? input.delivery);
   };
 
-  return { interruptTurn, respondToApproval, sendPrompt } as const;
+  return { checkDelivery, interruptTurn, respondToApproval, retryDelivery, sendPrompt } as const;
 }

@@ -21,6 +21,12 @@ export interface MobileComposerDraftIdentity {
   readonly threadId: string;
 }
 
+export interface MobileComposerDraftLease {
+  readonly key: string;
+  readonly epoch: number;
+  readonly identity: MobileComposerDraftIdentity;
+}
+
 export interface MobileDraftThread {
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
@@ -106,6 +112,8 @@ const MobileComposerDraftSchema = Schema.Struct({
 
 const STORAGE_PREFIX = "bigbud:mobile-composition:v1";
 const inMemoryDrafts = new Map<string, MobileComposerDraft>();
+const draftEpochs = new Map<string, number>();
+const invalidatedDraftKeys = new Set<string>();
 
 export type MobileDraftStorageIssue = "unavailable" | "malformed" | "quota";
 
@@ -143,6 +151,35 @@ function storageKey(identity: MobileComposerDraftIdentity): string {
   return [STORAGE_PREFIX, identity.backendOrigin, identity.sessionId, identity.threadId]
     .map((part) => encodeURIComponent(part))
     .join(":");
+}
+
+function nextDraftEpoch(key: string): number {
+  const epoch = (draftEpochs.get(key) ?? 0) + 1;
+  draftEpochs.set(key, epoch);
+  return epoch;
+}
+
+function leaseIsCurrent(lease: MobileComposerDraftLease): boolean {
+  return !invalidatedDraftKeys.has(lease.key) && draftEpochs.get(lease.key) === lease.epoch;
+}
+
+/** Prevent late route/session callbacks from recreating forgotten composition. */
+export function beginMobileComposerDraftLease(
+  identity: MobileComposerDraftIdentity,
+): MobileComposerDraftLease {
+  const key = storageKey(identity);
+  invalidatedDraftKeys.delete(key);
+  return { key, epoch: nextDraftEpoch(key), identity };
+}
+
+export function invalidateMobileComposerDraftLease(identity: MobileComposerDraftIdentity): void {
+  const key = storageKey(identity);
+  invalidatedDraftKeys.add(key);
+  nextDraftEpoch(key);
+}
+
+export function isMobileComposerDraftLeaseCurrent(lease: MobileComposerDraftLease): boolean {
+  return leaseIsCurrent(lease);
 }
 
 function getStorage(): Storage | null {
@@ -184,6 +221,7 @@ export function readMobileComposerDraft(
   identity: MobileComposerDraftIdentity,
 ): MobileDraftReadResult {
   const key = storageKey(identity);
+  if (invalidatedDraftKeys.has(key)) return { draft: null };
   const memoryDraft = inMemoryDrafts.get(key);
   if (memoryDraft) return { draft: memoryDraft };
   const storage = getStorage();
@@ -213,6 +251,7 @@ export function writeMobileComposerDraft(
   draft: MobileComposerDraft,
 ): MobileDraftWriteResult {
   const key = storageKey(identity);
+  if (invalidatedDraftKeys.has(key)) return { ok: false, issue: "unavailable" };
   const storage = getStorage();
   if (!storage) {
     inMemoryDrafts.set(key, draft);
@@ -228,12 +267,22 @@ export function writeMobileComposerDraft(
   }
 }
 
+export function writeMobileComposerDraftWithLease(
+  lease: MobileComposerDraftLease,
+  draft: MobileComposerDraft,
+): MobileDraftWriteResult {
+  if (!leaseIsCurrent(lease)) return { ok: false, issue: "unavailable" };
+  return writeMobileComposerDraft(lease.identity, draft);
+}
+
 export function forgetMobileComposerDraft(identity: MobileComposerDraftIdentity): boolean {
-  inMemoryDrafts.delete(storageKey(identity));
+  const key = storageKey(identity);
+  invalidateMobileComposerDraftLease(identity);
+  inMemoryDrafts.delete(key);
   const storage = getStorage();
   if (!storage) return false;
   try {
-    storage.removeItem(storageKey(identity));
+    storage.removeItem(key);
     return true;
   } catch {
     return false;
@@ -252,7 +301,11 @@ export function forgetMobileComposerDraftsForSession(input: {
     .map((part) => encodeURIComponent(part))
     .join(":");
   for (const key of inMemoryDrafts.keys()) {
-    if (key.startsWith(`${prefix}:`)) inMemoryDrafts.delete(key);
+    if (key.startsWith(`${prefix}:`)) {
+      inMemoryDrafts.delete(key);
+      invalidatedDraftKeys.add(key);
+      nextDraftEpoch(key);
+    }
   }
   const storage = getStorage();
   if (!storage) return false;
@@ -263,6 +316,8 @@ export function forgetMobileComposerDraftsForSession(input: {
     for (const key of keys) {
       storage.removeItem(key);
       inMemoryDrafts.delete(key);
+      invalidatedDraftKeys.add(key);
+      nextDraftEpoch(key);
     }
     return true;
   } catch {
@@ -286,10 +341,14 @@ export function clearSubmittedMobileComposerDraftIfRevision(
   draft: MobileComposerDraft,
   submittedRevision: number,
 ): MobileComposerDraft {
-  return draft.revision === submittedRevision &&
-    draft.submitted?.submittedRevision === submittedRevision
-    ? advanceMobileComposerDraft(draft, { prompt: "", submitted: null })
-    : draft;
+  const submitted = draft.submitted;
+  if (!submitted || submitted.submittedRevision !== submittedRevision) return draft;
+  const clearPrompt =
+    draft.revision === submittedRevision && submitted.command.type === "thread.turn.start";
+  return advanceMobileComposerDraft(draft, {
+    ...(clearPrompt ? { prompt: "" } : {}),
+    submitted: null,
+  });
 }
 
 export const MOBILE_COMPOSER_DEFAULTS = {

@@ -1,10 +1,24 @@
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
+import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
+import { resolveMobileConnectionPresentation } from "./MobileConnectionNotice.logic";
 import type { HistoryState } from "@tanstack/react-router";
 
 export type MobileNavigationView =
   | { readonly kind: "chats" }
   | { readonly kind: "project"; readonly projectId: string }
   | { readonly kind: "settings" };
+
+export const MOBILE_NAVIGATION_TRIGGER_ID = "mobile-navigation-trigger";
+
+export function areMobileNavigationViewsEqual(
+  left: MobileNavigationView | null,
+  right: MobileNavigationView | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.kind !== right.kind) return false;
+  if (left.kind !== "project" || right.kind !== "project") return true;
+  return left.projectId === right.projectId;
+}
 
 export interface MobileNavigationHistoryState extends HistoryState {
   readonly mobileOverlay?: unknown;
@@ -48,7 +62,16 @@ export function sanitizeMobileBackendOrigin(value: string): string | null {
   }
 }
 
-export function describeMobileConnection(state: MobileRecoveryState): string {
+export function describeMobileConnection(
+  state: MobileRecoveryState,
+  connection?: MobileConnectionState,
+): string {
+  if (connection) {
+    return (
+      resolveMobileConnectionPresentation({ connection, recoveryState: state })?.title ??
+      "Connection current"
+    );
+  }
   if (state.freshness === "current") return "Connection current";
   if (state.freshness === "refreshing") return "Refreshing chats";
   if (state.freshness === "stale") return "Connection stale; showing last-known data";
