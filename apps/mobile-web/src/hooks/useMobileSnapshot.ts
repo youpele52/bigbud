@@ -16,7 +16,7 @@ export function useMobileSnapshot(session: { sessionId: string } | null) {
   const { client, connection, recovery, recoveryState, restart } = useMobileRpcClient();
 
   const snapshotQuery = useQuery<OrchestrationReadModel>({
-    enabled: false,
+    enabled: recoveryState.freshness === "legacy",
     queryKey: ["mobile-snapshot", session?.sessionId ?? "anonymous"],
     queryFn: () => client!.getSnapshot(),
     retry: recovery === null ? 1 : false,
