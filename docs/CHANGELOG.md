@@ -50,6 +50,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Preserved pending sends when remote recovery creates a replacement thread, preventing confirmed user input from being stranded during reconnects.
 - Refined provider model selection, sidebar project and thread actions, archived-thread collision navigation and highlighting, Git controls, and mascot state feedback.
 - Improved state transitions for new threads, persisted drafts, startup restoration, project ordering, and archived-thread collisions, including ownership checks before reusing a thread ID.
+- Unified the chat activity area for provider states: reconnecting now takes priority, compaction appears as an amber `Compacting...` status, and the duplicate compaction label was removed from the composer.
 
 ### Mobile Web Redesign
 

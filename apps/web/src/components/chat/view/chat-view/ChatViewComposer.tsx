@@ -16,7 +16,6 @@ import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
-import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
@@ -298,14 +297,6 @@ export function ChatViewComposer({
                     {thread.isPreparingWorktree ? (
                       <span className="text-muted-foreground/70 text-xs">
                         Preparing worktree...
-                      </span>
-                    ) : null}
-                    {thread.isCompacting ? (
-                      <span className="inline-flex items-center gap-1.5 text-warning text-xs">
-                        <span>Compacting context</span>
-                        <span aria-hidden="true" className="inline-flex items-center gap-[3px]">
-                          <ThreadActivityDots tone="compacting" dotClassName="h-1 w-1" />
-                        </span>
                       </span>
                     ) : null}
                     <input

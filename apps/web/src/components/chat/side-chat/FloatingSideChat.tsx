@@ -9,7 +9,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
 import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
 import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
-import { WorkingIndicator } from "~/components/chat/common/WorkingIndicator";
+import { ActivityStatusIndicator } from "~/components/chat/common/ActivityStatusIndicator";
 import {
   ThreadActivityDots,
   threadActivityLabel,
@@ -136,9 +136,10 @@ export function CompactThreadConversation({
             />
           </div>
         </div>
-        {context.thread.isWorking ? (
-          <WorkingIndicator
+        {context.thread.isWorking || context.thread.isCompacting ? (
+          <ActivityStatusIndicator
             verb={context.thread.workingVerb}
+            isCompacting={context.thread.isCompacting}
             activeWorkStartedAt={context.thread.activeWorkStartedAt}
             nowIso={context.thread.nowIso}
           />

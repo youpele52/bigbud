@@ -1,9 +1,6 @@
 import { Wifi } from "lucide-react";
-import {
-  formatWsReconnectAttempt,
-  isWsReconnecting,
-  useWsConnectionStatus,
-} from "~/rpc/wsConnectionState";
+import { useWsConnectionStatus } from "~/rpc/wsConnectionState";
+import { resolveActivityStatus } from "./ActivityStatusIndicator.logic";
 import { formatWorkingTimer } from "../messages/MessagesTimeline.assistantMessage.meta";
 
 import { SpinnerVerbShimmer } from "./SpinnerVerbShimmer";
@@ -18,15 +15,21 @@ function WorkingDots() {
   );
 }
 
-interface WorkingIndicatorProps {
+interface ActivityStatusIndicatorProps {
   verb: string;
+  isCompacting: boolean;
   activeWorkStartedAt: string | null;
   nowIso: string;
 }
 
-export function WorkingIndicator({ verb, activeWorkStartedAt, nowIso }: WorkingIndicatorProps) {
+export function ActivityStatusIndicator({
+  verb,
+  isCompacting,
+  activeWorkStartedAt,
+  nowIso,
+}: ActivityStatusIndicatorProps) {
   const connection = useWsConnectionStatus();
-  const reconnecting = isWsReconnecting(connection);
+  const status = resolveActivityStatus({ connection, isCompacting, verb });
   return (
     <div className="pointer-events-none absolute bottom-1 left-0 right-0 flex justify-center px-5">
       <div className="mx-auto w-full max-w-3xl px-1 py-0.5">
@@ -34,18 +37,18 @@ export function WorkingIndicator({ verb, activeWorkStartedAt, nowIso }: WorkingI
           className="flex items-center gap-2 rounded-md bg-transparent px-7 pt-1 pb-1 text-[11px] text-muted-foreground/70"
           role="status"
         >
-          {reconnecting ? (
+          {status.kind === "working" ? (
             <>
-              <Wifi className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
-              <span className="leading-none">
-                Reconnecting {formatWsReconnectAttempt(connection)}
-              </span>
-            </>
-          ) : (
-            <>
-              <SpinnerVerbShimmer verb={verb} />
+              <SpinnerVerbShimmer verb={status.label} />
               <WorkingDots />
             </>
+          ) : (
+            <span className="inline-flex items-center gap-2 leading-none text-warning">
+              {status.kind === "reconnecting" ? (
+                <Wifi className="size-3.5 shrink-0" aria-hidden="true" />
+              ) : null}
+              {status.label}
+            </span>
           )}
           <span className="flex-1" />
           {activeWorkStartedAt ? (

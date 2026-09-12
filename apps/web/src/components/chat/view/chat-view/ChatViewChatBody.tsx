@@ -12,7 +12,7 @@ import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
-import { WorkingIndicator } from "../../common/WorkingIndicator";
+import { ActivityStatusIndicator } from "../../common/ActivityStatusIndicator";
 import { ChatViewMainComposer } from "./ChatViewMainComposer";
 import { useChatViewContentHandlers } from "./ChatViewContent.handlers";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -211,9 +211,10 @@ export function ChatViewChatBody({
                 onScrollToBottom={() => runtime.scrollBehavior.scrollMessagesToBottom("auto")}
               />
             ) : null}
-            {thread.isWorking ? (
-              <WorkingIndicator
+            {thread.isWorking || thread.isCompacting ? (
+              <ActivityStatusIndicator
                 verb={thread.workingVerb}
+                isCompacting={thread.isCompacting}
                 activeWorkStartedAt={thread.activeWorkStartedAt}
                 nowIso={thread.nowIso}
               />
