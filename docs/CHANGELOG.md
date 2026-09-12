@@ -10,11 +10,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
 - Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
 
-## v0.2.208 (12 September, 2026)
+## v0.2.208 (13 September, 2026)
 
 ### More Reliable Orchestration
 
-- Hardened command processing, command receipts, thread identity, deletion fences, projection failures, storage failures, and queued-prompt recovery so retries and restarts do not duplicate work or lose ownership.
+- Hardened command processing, command receipts, thread identity, deletion fences, project-deletion ownership, projection failures, storage failures, and queued-prompt recovery so retries and restarts do not duplicate work or lose ownership.
 - Added safer orchestration startup and WebSocket recovery, including bounded replay, clearer dispatch errors, mobile delivery improvements, server health handling, and protection against stale or conflicting thread state.
 - Protected draft threads from server-owned, archived, deleted, or concurrently materialized thread IDs, and repaired ownership across reconnects, retries, project switches, and concurrent actions.
 - Chat and shell sends now distinguish accepted, rejected, and unknown outcomes, preserving user input when delivery cannot be confirmed.
@@ -27,16 +27,16 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Remote Workspace and Agent Reliability
 
-- Hardened remote-agent startup, reconnects, PTY handling, workspace watches, journal recovery, path resolution, and backend readiness across local and remote execution targets.
+- Hardened remote-agent startup, reconnects, PTY handling, workspace watches, journal recovery, path resolution, and backend readiness across local and remote execution targets, including durable remote-project restart requests and authentication continuation.
 - Added explicit execution-target capability checks and safer routing for supported local provider runtimes using remote workspaces.
 - Added remote-workspace ACP bridges for Cursor and Devin, while keeping provider availability bounded by each provider's declared capabilities.
 - Improved remote workspace protocol framing, release packaging, native binaries, and artifact verification for supported platforms.
 
 ### Provider Discovery and Session Improvements
 
-- Made provider effort capabilities authoritative and validated provider-specific model, reasoning-effort, and execution-target selections before starting work.
+- Made provider effort capabilities authoritative, persistently cached verified effort metadata, and validated provider-specific model, reasoning-effort, and execution-target selections before starting work.
 - Improved provider availability checks, model catalog loading, deferred model-picker rendering, and remote-workspace messaging without treating unavailable discovery data as a healthy runtime.
-- Hardened Claude MCP/session handling and ACP integrations, including safer startup behavior and more predictable provider routing and lifecycle failures.
+- Hardened Claude MCP/session handling and ACP integrations, including safer startup behavior, more predictable provider routing and lifecycle failures, and recovery that avoids unnecessary session restarts when no model is explicitly selected.
 
 ### Desktop and Release Reliability
 
@@ -47,8 +47,16 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Chat and Workspace UX
 
 - Improved send-turn handling for chat, shell, automation, orchestra, side chat, and compact chat flows, including safer pending-input and failure recovery.
+- Preserved pending sends when remote recovery creates a replacement thread, preventing confirmed user input from being stranded during reconnects.
 - Refined provider model selection, sidebar project and thread actions, archived-thread collision navigation and highlighting, Git controls, and mascot state feedback.
 - Improved state transitions for new threads, persisted drafts, startup restoration, project ordering, and archived-thread collisions, including ownership checks before reusing a thread ID.
+
+### Mobile Web Redesign
+
+- Redesigned the mobile web experience around a conversation-first workspace with clearer navigation between chats, projects, files, and settings.
+- Added mobile-friendly composer, drawer, thread, and recovery interactions for reconnects, retries, and pending sends.
+- Preserved drafts and in-progress user input across navigation, reconnects, and delivery failures so work is not unexpectedly lost.
+- Added mobile browser lifecycle and visual-parity coverage for the redesigned experience.
 
 ## v0.2.207 (7 September, 2026)
 
