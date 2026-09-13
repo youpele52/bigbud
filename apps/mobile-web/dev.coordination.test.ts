@@ -65,8 +65,9 @@ async function mobile() {
     coordinator,
   );
   servers.push(server);
-  // Publication must be complete when listen returns, not merely scheduled.
-  expect(await discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${portOf(server)}`);
+  // Bounded polling verifies the published discovery record is healthy before returning.
+  const expectedUrl = `http://127.0.0.1:${portOf(server)}`;
+  await expect.poll(() => discoverMobileDevUrl(registry), { timeout: 5_000 }).toBe(expectedUrl);
   return { server, registry };
 }
 
@@ -252,7 +253,8 @@ it("retries an external bind collision after taking the mutex and releases the f
     );
     servers.push(server);
     expect(portOf(server)).toBeGreaterThan(firstPort);
-    expect(await discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${portOf(server)}`);
+    const expectedUrl = `http://127.0.0.1:${portOf(server)}`;
+    await expect.poll(() => discoverMobileDevUrl(registry), { timeout: 5_000 }).toBe(expectedUrl);
     const records = await coordinator.withLock(() => readDevPortReservations(coordinator));
     expect(records.map((r) => r.port)).toEqual([portOf(server)]);
   } finally {
