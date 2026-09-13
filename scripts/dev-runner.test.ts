@@ -331,7 +331,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
         });
 
-        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
+        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1, mobileWebOffset: 1 });
       }),
     );
 
@@ -346,7 +346,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
         });
 
-        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1 });
+        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1, mobileWebOffset: 0 });
       }),
     );
 
@@ -361,7 +361,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
         });
 
-        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
+        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1, mobileWebOffset: 0 });
       }),
     );
 
@@ -375,7 +375,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           checkPortAvailability: () => Effect.succeed(false),
         });
 
-        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 0 });
+        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 0, mobileWebOffset: 0 });
       }),
     );
 
@@ -389,7 +389,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           checkPortAvailability: () => Effect.succeed(false),
         });
 
-        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 0 });
+        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 0, mobileWebOffset: 0 });
       }),
     );
   });

@@ -28,11 +28,18 @@ export const MODE_ARGS = {
     "--filter=@bigbud/contracts",
     "--filter=@bigbud/web",
     "--filter=@bigbud/server",
+    "--filter=@bigbud/mobile-web",
   ],
   "dev:server": ["run", "dev", "--filter=@bigbud/server"],
   "dev:web": ["run", "dev", "--filter=@bigbud/web"],
   "dev:mobile-web": ["run", "dev", "--filter=@bigbud/mobile-web"],
-  "dev:desktop": ["run", "dev", "--filter=@bigbud/desktop", "--filter=@bigbud/web"],
+  "dev:desktop": [
+    "run",
+    "dev",
+    "--filter=@bigbud/desktop",
+    "--filter=@bigbud/web",
+    "--filter=@bigbud/mobile-web",
+  ],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 export type DevMode = keyof typeof MODE_ARGS;
@@ -217,7 +224,11 @@ export function resolveModePortOffsets<R = NetService>({
   hasExplicitDevUrl,
   checkPortAvailability,
 }: ResolveModePortOffsetsInput<R>): Effect.Effect<
-  { readonly serverOffset: number; readonly webOffset: number },
+  {
+    readonly serverOffset: number;
+    readonly webOffset: number;
+    readonly mobileWebOffset: number;
+  },
   DevRunnerError,
   R
 > {
@@ -227,7 +238,11 @@ export function resolveModePortOffsets<R = NetService>({
 
     if (mode === "dev:web") {
       if (hasExplicitDevUrl) {
-        return { serverOffset: startOffset, webOffset: startOffset };
+        return {
+          serverOffset: startOffset,
+          webOffset: startOffset,
+          mobileWebOffset: startOffset,
+        };
       }
 
       const webOffset = yield* findFirstAvailableOffset({
@@ -237,12 +252,16 @@ export function resolveModePortOffsets<R = NetService>({
         requireMobileWebPort: false,
         checkPortAvailability: checkPort,
       });
-      return { serverOffset: startOffset, webOffset };
+      return { serverOffset: startOffset, webOffset, mobileWebOffset: startOffset };
     }
 
     if (mode === "dev:server") {
       if (hasExplicitServerPort) {
-        return { serverOffset: startOffset, webOffset: startOffset };
+        return {
+          serverOffset: startOffset,
+          webOffset: startOffset,
+          mobileWebOffset: startOffset,
+        };
       }
 
       const serverOffset = yield* findFirstAvailableOffset({
@@ -252,7 +271,11 @@ export function resolveModePortOffsets<R = NetService>({
         requireMobileWebPort: false,
         checkPortAvailability: checkPort,
       });
-      return { serverOffset, webOffset: serverOffset };
+      return {
+        serverOffset,
+        webOffset: serverOffset,
+        mobileWebOffset: startOffset,
+      };
     }
 
     if (mode === "dev:mobile-web") {
@@ -263,17 +286,32 @@ export function resolveModePortOffsets<R = NetService>({
         requireMobileWebPort: true,
         checkPortAvailability: checkPort,
       });
-      return { serverOffset: mobileOffset, webOffset: mobileOffset };
+      return {
+        serverOffset: mobileOffset,
+        webOffset: mobileOffset,
+        mobileWebOffset: mobileOffset,
+      };
     }
 
     const sharedOffset = yield* findFirstAvailableOffset({
       startOffset,
       requireServerPort: !hasExplicitServerPort,
       requireWebPort: !hasExplicitDevUrl,
+      requireMobileWebPort: false,
+      checkPortAvailability: checkPort,
+    });
+    const mobileWebOffset = yield* findFirstAvailableOffset({
+      startOffset,
+      requireServerPort: false,
+      requireWebPort: false,
       requireMobileWebPort: true,
       checkPortAvailability: checkPort,
     });
 
-    return { serverOffset: sharedOffset, webOffset: sharedOffset };
+    return {
+      serverOffset: sharedOffset,
+      webOffset: sharedOffset,
+      mobileWebOffset,
+    };
   });
 }

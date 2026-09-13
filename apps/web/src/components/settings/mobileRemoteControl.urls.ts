@@ -16,6 +16,18 @@ function isTailnetHostname(hostname: string): boolean {
   return hostname.endsWith(".ts.net");
 }
 
+function isLocalhostOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function resolveHostedMobileWebBaseUrl(): string {
   return HOSTED_MOBILE_WEB_BASE_URL;
 }
@@ -114,6 +126,10 @@ export function resolveStoredMobileWebBaseUrl(
   }
   if (shouldResetMobileAppUrlToHosted(storedValue, backendBaseUrl)) {
     return fallback;
+  }
+  const injectedDevUrl = resolveLocalMobileWebBaseUrl();
+  if (injectedDevUrl && isLocalhostOrigin(storedValue) && isLocalhostOrigin(injectedDevUrl)) {
+    return injectedDevUrl;
   }
   return stripTrailingSlash(storedValue);
 }

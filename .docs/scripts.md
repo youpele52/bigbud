@@ -1,6 +1,6 @@
 # Scripts
 
-- `bun run dev` — Starts contracts, server, and web in `turbo watch` mode.
+- `bun run dev` — Starts contracts, server, web, and mobile companion in `turbo watch` mode.
 - `bun run dev:server` — Starts just the WebSocket server (uses Bun TypeScript execution).
 - `bun run dev:web` — Starts just the Vite dev server for the web app.
 - `bun run dev:mobile-web` — Starts just the mobile companion Vite dev server.
@@ -42,7 +42,7 @@ Base ports (offset `0`):
 - Web: `5733` (`PORT`)
 - Mobile web: `5740` (`MOBILE_WEB_PORT`)
 
-Shifted ports use the same offset for all three: `base + offset`. The offset is hashed from `BIGBUD_DEV_INSTANCE` unless you provide a numeric instance value.
+The instance offset is used as the starting point for all three ports. Each development mode only shifts the ports it launches; server/web and mobile companion ports are allocated independently, each starting at its instance port and advancing until free. The offset is hashed from `BIGBUD_DEV_INSTANCE` unless you provide a numeric instance value.
 
 Examples:
 

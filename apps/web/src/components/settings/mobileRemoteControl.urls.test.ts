@@ -57,6 +57,14 @@ describe("mobileRemoteControl.urls", () => {
     expect(resolveHostedMobileWebBaseUrl()).toBe(HOSTED_MOBILE_WEB_BASE_URL);
   });
 
+  it("migrates a stale localhost dev URL to the current injected companion port", () => {
+    vi.stubEnv("VITE_MOBILE_WEB_URL", "http://localhost:5740");
+
+    expect(resolveStoredMobileWebBaseUrl("http://localhost:5741", "http://localhost:3773")).toBe(
+      "http://localhost:5740",
+    );
+  });
+
   it("keeps the production companion separate from the dev mobile web override", () => {
     vi.stubGlobal("window", {
       location: {

@@ -21,6 +21,7 @@ export interface CreateDevRunnerEnvInput {
   readonly baseEnv: NodeJS.ProcessEnv;
   readonly serverOffset: number;
   readonly webOffset: number;
+  readonly mobileWebOffset?: number;
   readonly t3Home: string | undefined;
   readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
@@ -36,6 +37,7 @@ export function createDevRunnerEnv({
   baseEnv,
   serverOffset,
   webOffset,
+  mobileWebOffset = webOffset,
   t3Home,
   authToken,
   noBrowser,
@@ -48,7 +50,7 @@ export function createDevRunnerEnv({
   return Effect.gen(function* () {
     const resolvedServerPort = port ?? devPortsForOffset(serverOffset).serverPort;
     const resolvedWebPort = devPortsForOffset(webOffset).webPort;
-    const resolvedMobileWebPort = devPortsForOffset(webOffset).mobileWebPort;
+    const resolvedMobileWebPort = devPortsForOffset(mobileWebOffset).mobileWebPort;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
     const isDesktopMode = mode === "dev:desktop";
     const isMobileWebMode = mode === "dev:mobile-web";

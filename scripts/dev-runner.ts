@@ -136,7 +136,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
     };
 
-    const { serverOffset, webOffset } = yield* resolveModePortOffsets({
+    const { serverOffset, webOffset, mobileWebOffset } = yield* resolveModePortOffsets({
       mode: input.mode,
       startOffset: offset,
       hasExplicitServerPort: input.port !== undefined,
@@ -148,6 +148,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       baseEnv: process.env,
       serverOffset,
       webOffset,
+      mobileWebOffset,
       t3Home: input.t3Home,
       authToken: input.authToken,
       noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
@@ -165,8 +166,8 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     });
 
     const selectionSuffix =
-      serverOffset !== offset || webOffset !== offset
-        ? ` selectedOffset(server=${serverOffset},web=${webOffset})`
+      serverOffset !== offset || webOffset !== offset || mobileWebOffset !== offset
+        ? ` selectedOffset(server=${serverOffset},web=${webOffset},mobile=${mobileWebOffset})`
         : "";
 
     yield* Effect.logInfo(
