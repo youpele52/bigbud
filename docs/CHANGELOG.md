@@ -58,6 +58,26 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added mobile-friendly composer, drawer, thread, and recovery interactions for reconnects, retries, and pending sends.
 - Preserved drafts and in-progress user input across navigation, reconnects, and delivery failures so work is not unexpectedly lost.
 - Added mobile browser lifecycle and visual-parity coverage for the redesigned experience.
+- Filtered deleted projects and threads from mobile recents and project lists, placed Recents before Projects, and fixed the launch-page New chat action so it opens a valid draft like the header shortcut.
+
+### Mobile Remote Pairing
+
+- Simplified mobile pairing around one discovered backend, with hosted, local, and custom mobile URL choices that preserve existing preferences while adapting to development and remote environments.
+- Added live mobile-web discovery and pairing-state handling so generated links remain usable when the backend or development listener changes.
+
+### Retention Recovery
+
+- Repaired retention-policy migrations across older database schemas and made table rebuilding preserve dependent indexes, triggers, and child data during upgrades.
+- Hardened interrupted retention runs so preparing or purging work is safely deferred and resumed, terminal item outcomes are preserved, and execution failures are visible in server diagnostics and user feedback.
+
+### Clearer Activity Status
+
+- Added animated status shimmer treatment for working, reconnecting, and compacting states, with warning colors, reduced-motion support, and a concise `Compacting` label.
+
+### Development Workflow
+
+- Coordinated desktop, web, server, and mobile development instances through shared discovery and reservations, letting the mobile listener claim an available port atomically instead of relying on stale preflight checks.
+- Added lifecycle, collision, routing, and publication coverage for the development registries and listeners.
 
 ## v0.2.207 (7 September, 2026)
 

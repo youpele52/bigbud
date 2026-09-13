@@ -116,6 +116,8 @@ import Migration0112 from "./Migrations/112_RemoteAgentReplayFence.ts";
 import Migration0113 from "./Migrations/113_RemoteAgentRestartRequests.ts";
 import Migration0114 from "./Migrations/114_OrchestrationBootstrapSubmissionRecipes.ts";
 import Migration0115 from "./Migrations/115_ProjectDeletionOwnership.ts";
+import Migration0116 from "./Migrations/116_RepairThreadRetentionFinitePolicies.ts";
+import Migration0117 from "./Migrations/117_RepairThreadRetentionItemIndependence.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -232,6 +234,8 @@ export const migrationEntries = [
   [113, "RemoteAgentRestartRequests", Migration0113],
   [114, "OrchestrationBootstrapSubmissionRecipes", Migration0114],
   [115, "ProjectDeletionOwnership", Migration0115],
+  [116, "RepairThreadRetentionFinitePolicies", Migration0116],
+  [117, "RepairThreadRetentionItemIndependence", Migration0117],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

@@ -4,6 +4,22 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./DevPortAvailability": {
+      "types": "./src/DevPortAvailability.ts",
+      "import": "./src/DevPortAvailability.ts"
+    },
+    "./DevPortCoordinator": {
+      "types": "./src/DevPortCoordinator.ts",
+      "import": "./src/DevPortCoordinator.ts"
+    },
+    "./DevMobileRegistry": {
+      "types": "./src/DevMobileRegistry.ts",
+      "import": "./src/DevMobileRegistry.ts"
+    },
+    "./DevMobileRegistry.http": {
+      "types": "./src/DevMobileRegistry.http.ts",
+      "import": "./src/DevMobileRegistry.http.ts"
+    },
     "./model": {
       "types": "./src/model.ts",
       "import": "./src/model.ts"

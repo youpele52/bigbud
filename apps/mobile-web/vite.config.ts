@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import pkg from "./package.json" with { type: "json" };
 
-// Dev server only — keep in sync with @bigbud/shared/DevPorts DEFAULT_MOBILE_WEB_PORT.
+// The development launcher supplies the requested port and retries actual bind failures.
 const port = Number(process.env.MOBILE_WEB_PORT ?? process.env.PORT ?? 5740);
 const mobileBase = process.env.VITE_MOBILE_BASE ?? "/";
 const webSrcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/src");

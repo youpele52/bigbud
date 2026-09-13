@@ -19,9 +19,9 @@ import {
   optionalPortConfig,
   optionalStringConfig,
   optionalUrlConfig,
-  resolveModePortOffsets,
   resolveOffset,
 } from "./dev-runner.lib.ts";
+import { reserveRunnerPorts } from "./dev-runner.coordination.ts";
 
 export {
   DEFAULT_BIGBUD_HOME,
@@ -136,49 +136,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
     };
 
-    const { serverOffset, webOffset, mobileWebOffset } = yield* resolveModePortOffsets({
-      mode: input.mode,
-      startOffset: offset,
-      hasExplicitServerPort: input.port !== undefined,
-      hasExplicitDevUrl: input.devUrl !== undefined,
-    });
-
-    const env = yield* createDevRunnerEnv({
-      mode: input.mode,
-      baseEnv: process.env,
-      serverOffset,
-      webOffset,
-      mobileWebOffset,
-      t3Home: input.t3Home,
-      authToken: input.authToken,
-      noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
-      autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
-        input.autoBootstrapProjectFromCwd,
-        envOverrides.autoBootstrapProjectFromCwd,
-      ),
-      logWebSocketEvents: resolveOptionalBooleanOverride(
-        input.logWebSocketEvents,
-        envOverrides.logWebSocketEvents,
-      ),
-      host: input.host,
-      port: input.port,
-      devUrl: input.devUrl,
-    });
-
-    const selectionSuffix =
-      serverOffset !== offset || webOffset !== offset || mobileWebOffset !== offset
-        ? ` selectedOffset(server=${serverOffset},web=${webOffset},mobile=${mobileWebOffset})`
-        : "";
-
-    yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.BIGBUD_PORT)} webPort=${String(env.PORT)} mobileWebPort=${String(env.MOBILE_WEB_PORT)} baseDir=${String(env.BIGBUD_HOME)}`,
-    );
-
-    if (input.dryRun) {
-      return;
-    }
-
-    if (devModeRequiresWorkspaceAgent(input.mode)) {
+    if (!input.dryRun && devModeRequiresWorkspaceAgent(input.mode)) {
       yield* Effect.logInfo("[dev-runner] Building the local workspace watcher agent...");
       const agentBuild = yield* ChildProcess.make(
         "cargo",
@@ -197,6 +155,51 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
           message: `workspace agent build exited with code ${agentBuildExitCode}`,
         });
       }
+    }
+
+    const { serverOffset, webOffset, repoRoot, webReservation } = yield* reserveRunnerPorts({
+      mode: input.mode,
+      startOffset: offset,
+      hasExplicitServerPort: input.port !== undefined,
+      hasExplicitDevUrl: input.devUrl !== undefined,
+      dryRun: input.dryRun,
+    });
+
+    const env = yield* createDevRunnerEnv({
+      mode: input.mode,
+      baseEnv: process.env,
+      serverOffset,
+      webOffset,
+      instanceOffset: offset,
+      repoRoot,
+      ...(webReservation === undefined ? {} : { webReservation }),
+      t3Home: input.t3Home,
+      authToken: input.authToken,
+      noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
+      autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
+        input.autoBootstrapProjectFromCwd,
+        envOverrides.autoBootstrapProjectFromCwd,
+      ),
+      logWebSocketEvents: resolveOptionalBooleanOverride(
+        input.logWebSocketEvents,
+        envOverrides.logWebSocketEvents,
+      ),
+      host: input.host,
+      port: input.port,
+      devUrl: input.devUrl,
+    });
+
+    const selectionSuffix =
+      serverOffset !== offset || webOffset !== offset
+        ? ` selectedOffset(server=${serverOffset},web=${webOffset})`
+        : "";
+
+    yield* Effect.logInfo(
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.BIGBUD_PORT)} webPort=${String(env.PORT)} mobileStartPort=${String(env.MOBILE_WEB_PORT)} baseDir=${String(env.BIGBUD_HOME)}`,
+    );
+
+    if (input.dryRun) {
+      return;
     }
 
     const modeArgs = [...MODE_ARGS[input.mode]];

@@ -140,17 +140,27 @@ export function ThreadRetentionSettingsSection() {
         toastManager.add({ type: "success", ...getRetentionPolicyUpdatedToast() });
         return;
       }
-      const runPromise = ensureNativeApi().server.startThreadRetention({ challengeToken });
-      toastManager.promise(runPromise, {
-        loading: getRetentionCleanupLoadingToast(),
-        success: (run) => getRetentionCleanupSuccessToast(run),
-        error: (error) => ({
+      const toastId = toastManager.add({
+        type: "loading",
+        timeout: 0,
+        ...getRetentionCleanupLoadingToast(),
+      });
+      try {
+        const run = await ensureNativeApi().server.startThreadRetention({ challengeToken });
+        toastManager.update(toastId, {
+          type: run.pendingCount > 0 ? "warning" : "success",
+          timeout: 5_000,
+          ...getRetentionCleanupSuccessToast(run),
+        });
+        if (mountedRef.current) setResult(run);
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          timeout: 5_000,
           title: "Unable to confirm thread cleanup",
           description: error instanceof Error ? error.message : "An error occurred.",
-        }),
-      });
-      const run = await runPromise;
-      if (mountedRef.current) setResult(run);
+        });
+      }
     } catch (error) {
       if (trigger === "policy-change") showError("Unable to confirm thread cleanup", error);
     } finally {

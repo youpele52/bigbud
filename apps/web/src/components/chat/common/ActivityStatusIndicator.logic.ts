@@ -20,10 +20,13 @@ export function resolveActivityStatus({
   verb: string;
 }): ActivityStatus {
   if (isWsReconnecting(connection)) {
-    return { kind: "reconnecting", label: `Reconnecting ${formatWsReconnectAttempt(connection)}` };
+    return {
+      kind: "reconnecting",
+      label: `Reconnecting ${formatWsReconnectAttempt(connection)}`,
+    };
   }
   if (isCompacting) {
-    return { kind: "compacting", label: "Compacting..." };
+    return { kind: "compacting", label: "Compacting" };
   }
   return { kind: "working", label: verb };
 }

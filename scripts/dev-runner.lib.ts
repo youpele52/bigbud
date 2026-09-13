@@ -227,7 +227,6 @@ export function resolveModePortOffsets<R = NetService>({
   {
     readonly serverOffset: number;
     readonly webOffset: number;
-    readonly mobileWebOffset: number;
   },
   DevRunnerError,
   R
@@ -241,7 +240,6 @@ export function resolveModePortOffsets<R = NetService>({
         return {
           serverOffset: startOffset,
           webOffset: startOffset,
-          mobileWebOffset: startOffset,
         };
       }
 
@@ -252,7 +250,7 @@ export function resolveModePortOffsets<R = NetService>({
         requireMobileWebPort: false,
         checkPortAvailability: checkPort,
       });
-      return { serverOffset: startOffset, webOffset, mobileWebOffset: startOffset };
+      return { serverOffset: startOffset, webOffset };
     }
 
     if (mode === "dev:server") {
@@ -260,7 +258,6 @@ export function resolveModePortOffsets<R = NetService>({
         return {
           serverOffset: startOffset,
           webOffset: startOffset,
-          mobileWebOffset: startOffset,
         };
       }
 
@@ -274,23 +271,12 @@ export function resolveModePortOffsets<R = NetService>({
       return {
         serverOffset,
         webOffset: serverOffset,
-        mobileWebOffset: startOffset,
       };
     }
 
     if (mode === "dev:mobile-web") {
-      const mobileOffset = yield* findFirstAvailableOffset({
-        startOffset,
-        requireServerPort: false,
-        requireWebPort: false,
-        requireMobileWebPort: true,
-        checkPortAvailability: checkPort,
-      });
-      return {
-        serverOffset: mobileOffset,
-        webOffset: mobileOffset,
-        mobileWebOffset: mobileOffset,
-      };
+      // Only the mobile listener can select its port atomically with binding.
+      return { serverOffset: startOffset, webOffset: startOffset };
     }
 
     const sharedOffset = yield* findFirstAvailableOffset({
@@ -300,18 +286,9 @@ export function resolveModePortOffsets<R = NetService>({
       requireMobileWebPort: false,
       checkPortAvailability: checkPort,
     });
-    const mobileWebOffset = yield* findFirstAvailableOffset({
-      startOffset,
-      requireServerPort: false,
-      requireWebPort: false,
-      requireMobileWebPort: true,
-      checkPortAvailability: checkPort,
-    });
-
     return {
       serverOffset: sharedOffset,
       webOffset: sharedOffset,
-      mobileWebOffset,
     };
   });
 }

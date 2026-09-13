@@ -188,8 +188,15 @@ function toSidebarThreadSortInput(thread: OrchestrationThread) {
 }
 
 function activeThreads(snapshot: OrchestrationReadModel): ReadonlyArray<OrchestrationThread> {
+  const activeProjectIds = new Set(
+    snapshot.projects.filter((project) => project.deletedAt === null).map((project) => project.id),
+  );
   return snapshot.threads.filter(
-    (thread) => thread.archivedAt === null && thread.purpose !== "side-chat",
+    (thread) =>
+      thread.archivedAt === null &&
+      thread.deletedAt === null &&
+      thread.purpose !== "side-chat" &&
+      (isBuiltInChatsProject(thread.projectId) || activeProjectIds.has(thread.projectId)),
   );
 }
 
@@ -215,7 +222,9 @@ export function chatThreadsForMobile(
 export function sortProjectsForMobile(
   snapshot: OrchestrationReadModel,
 ): ReadonlyArray<OrchestrationProject> {
-  const projects = snapshot.projects.filter((project) => !isBuiltInChatsProject(project.id));
+  const projects = snapshot.projects.filter(
+    (project) => project.deletedAt === null && !isBuiltInChatsProject(project.id),
+  );
   const threads = activeThreads(snapshot).map((thread) => toSidebarThreadSortInput(thread));
   const sortedProjects = sortProjectsForSidebar(
     projects.map((project) => ({

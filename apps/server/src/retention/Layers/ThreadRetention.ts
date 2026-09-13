@@ -57,6 +57,9 @@ const makeThreadRetention = Effect.gen(function* () {
       }
       return yield* coordinator.execute(accepted.run.runId);
     }).pipe(
+      Effect.tapError((error) =>
+        Effect.logWarning("thread retention execution failed", { detail: String(error) }),
+      ),
       Effect.mapError((error) =>
         Schema.is(ServerThreadRetentionError)(error)
           ? error

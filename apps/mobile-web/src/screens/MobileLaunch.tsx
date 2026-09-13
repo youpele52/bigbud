@@ -38,20 +38,10 @@ export function MobileLaunch() {
                     className={cn(SIDEBAR_ICON_SIZE_CLASS, "shrink-0 text-muted-foreground/70")}
                   />
                 }
-                onClick={startNewChat}
+                onClick={() => startNewChat()}
               >
                 New chat
               </MobileListAction>
-              <MobileListLink
-                icon={
-                  <LaptopMinimalIcon
-                    className={cn(SIDEBAR_ICON_SIZE_CLASS, "shrink-0 text-muted-foreground/70")}
-                  />
-                }
-                to="/mobile/projects"
-              >
-                Projects
-              </MobileListLink>
               {threads.length > 0 ? (
                 <MobileListSection
                   className="mt-2"
@@ -69,6 +59,16 @@ export function MobileLaunch() {
                   <MobileThreadList threads={threads} />
                 </MobileListSection>
               ) : null}
+              <MobileListLink
+                icon={
+                  <LaptopMinimalIcon
+                    className={cn(SIDEBAR_ICON_SIZE_CLASS, "shrink-0 text-muted-foreground/70")}
+                  />
+                }
+                to="/mobile/projects"
+              >
+                Projects
+              </MobileListLink>
             </div>
           </>
         );

@@ -42,7 +42,11 @@ await page.routeWebSocket("**/mobile-ws?*", (ws) => {
         serverEpoch: "shell-epoch",
         snapshotSequence: 0,
         snapshot,
-        selectedThread: { status: "present", thread },
+        selectedThread: request.payload.selectedThreadId
+          ? request.payload.selectedThreadId === thread.id
+            ? { status: "present", thread }
+            : { status: "missing" }
+          : null,
       });
     } else if (request.tag === "mobile.recovery.subscribe") {
       ws.send(
@@ -85,8 +89,8 @@ try {
   assert.equal(await providerIcon.locator("svg").count(), 1);
   assert.equal(
     await openChats.evaluate((element) =>
-      Array.from(element.querySelectorAll("*")).some((child) =>
-        typeof child.className === "string" && child.className.includes("size-1.5"),
+      Array.from(element.querySelectorAll("*")).some(
+        (child) => typeof child.className === "string" && child.className.includes("size-1.5"),
       ),
     ),
     false,
@@ -135,6 +139,17 @@ try {
   await page.goForward();
   await page.getByRole("dialog").waitFor();
   assert.equal(await page.getByRole("heading", { name: "Chats", exact: true }).count(), 1);
+
+  for (const entryPoint of ["header", "launch"]) {
+    await page.goto("http://127.0.0.1:15744/mobile");
+    const newChat = page.getByRole("button", { name: "New chat", exact: true });
+    await newChat.nth(1).waitFor();
+    await newChat.nth(entryPoint === "header" ? 0 : 1).click();
+    await page.waitForURL(/\/mobile\/thread\//);
+    await page.locator("textarea").waitFor();
+    assert.equal(await page.getByText("Something went wrong!", { exact: true }).count(), 0);
+    assert.deepEqual(errors, [], `${entryPoint} New chat must open without errors`);
+  }
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({ mountedConversationPreserved: true, overlayBackDismissed: true, errors }),

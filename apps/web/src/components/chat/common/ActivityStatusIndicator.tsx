@@ -37,19 +37,19 @@ export function ActivityStatusIndicator({
           className="flex items-center gap-2 rounded-md bg-transparent px-7 pt-1 pb-1 text-[11px] text-muted-foreground/70"
           role="status"
         >
-          {status.kind === "working" ? (
-            <>
-              <SpinnerVerbShimmer verb={status.label} />
-              <WorkingDots />
-            </>
-          ) : (
-            <span className="inline-flex items-center gap-2 leading-none text-warning">
-              {status.kind === "reconnecting" ? (
-                <Wifi className="size-3.5 shrink-0" aria-hidden="true" />
-              ) : null}
-              {status.label}
-            </span>
-          )}
+          <SpinnerVerbShimmer
+            verb={status.label}
+            warningColor={status.kind !== "working"}
+            leading={
+              status.kind === "reconnecting" ? (
+                <Wifi
+                  aria-hidden="true"
+                  className="mr-2 inline-block size-3.5 shrink-0 align-[-0.15em]"
+                />
+              ) : undefined
+            }
+          />
+          <WorkingDots />
           <span className="flex-1" />
           {activeWorkStartedAt ? (
             <span className="leading-none">

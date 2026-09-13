@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node dev.ts",
     "build": "vite build",
     "build:desktop": "VITE_MOBILE_BASE=/mobile/ vite build",
     "preview": "vite preview",

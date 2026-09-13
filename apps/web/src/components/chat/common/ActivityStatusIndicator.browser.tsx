@@ -37,8 +37,12 @@ describe("ActivityStatusIndicator reconnect status", () => {
     const screen = await render(indicator());
     await expect.element(screen.getByRole("status")).toHaveTextContent("Reconnecting 4/8");
     expect(document.querySelector(".text-warning .lucide-wifi")).not.toBeNull();
-    expect(document.querySelector(".shimmer")).toBeNull();
-    expect(document.querySelector(".animate-pulse")).toBeNull();
+    const reconnectingShimmer = document.querySelector<HTMLElement>(".shimmer");
+    expect(reconnectingShimmer).not.toBeNull();
+    expect(reconnectingShimmer && getComputedStyle(reconnectingShimmer).animationName).toBe(
+      "web-shimmer",
+    );
+    expect(document.querySelector(".animate-pulse")).not.toBeNull();
     mocks.status = { ...mocks.status, reconnectPhase: "attempting", reconnectAttemptCount: 5 };
     await screen.rerender(indicator());
     await expect.element(screen.getByRole("status")).toHaveTextContent("Reconnecting 5/8");
@@ -73,9 +77,13 @@ describe("ActivityStatusIndicator reconnect status", () => {
 it("prioritizes reconnecting over compaction and restores the provider activity after recovery", async () => {
   mocks.status = { ...getWsConnectionStatus(), hasConnected: true, phase: "connected" };
   const screen = await render(indicator(true));
-  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting...");
-  expect(document.querySelector(".text-warning")?.textContent).toBe("Compacting...");
-  expect(document.querySelector(".shimmer")).toBeNull();
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting");
+  expect(document.querySelector(".text-warning")?.textContent).toBe("Compacting");
+  const compactingShimmer = document.querySelector<HTMLElement>(".shimmer");
+  expect(compactingShimmer).not.toBeNull();
+  expect(compactingShimmer && getComputedStyle(compactingShimmer).animationName).toBe(
+    "web-shimmer",
+  );
 
   mocks.status = {
     ...mocks.status,
@@ -89,7 +97,7 @@ it("prioritizes reconnecting over compaction and restores the provider activity 
 
   mocks.status = { ...mocks.status, phase: "connected", reconnectPhase: "idle" };
   await screen.rerender(indicator(true));
-  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting...");
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting");
   await screen.rerender(indicator(false));
   await expect.element(screen.getByRole("status")).toHaveTextContent("Thinking");
   expect(document.querySelector(".text-warning")).toBeNull();
@@ -105,7 +113,7 @@ it("keeps elapsed time alongside compaction status", async () => {
       nowIso="2026-09-12T12:01:00Z"
     />,
   );
-  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting...");
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting");
   await expect.element(screen.getByRole("status")).toHaveTextContent("1m");
 });
 
@@ -122,7 +130,7 @@ it.each([
       isSessionCompacting({ orchestrationStatus: "running", reason: "context.compacting" }),
     ),
   );
-  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting...");
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Compacting");
   await screen.rerender(indicator(isSessionCompacting(session)));
   await expect.element(screen.getByRole("status")).toHaveTextContent("Thinking");
 });
