@@ -4,11 +4,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Use bigbud from your phone with a conversation-first mobile workspace: move between chats, projects, files, and settings; keep drafts and pending input across reconnects; and recover safely when a connection or send is interrupted.
-- Work remotely with a more dependable managed agent: installation and upgrades recover from network failures, verify downloads before changing the remote computer, reconnect safely, preserve workspace state, and support files, Git, terminals, PTY sessions, and provider tools.
-- Recover conversations safely when something goes wrong: chat and shell sends now distinguish accepted, rejected, and uncertain outcomes, while reconnect recovery preserves drafts, pending prompts, and confirmed input instead of duplicating or losing work.
-- Choose models and reasoning settings with accurate provider guidance: live model catalogs, verified effort capabilities, custom-model support, and validation before a session or turn prevent unsupported selections from being presented as available.
-- Move through your workspace faster: `Cmd/Ctrl+L` focuses the active composer or browser URL, terminal links safely open local and remote files and previews, `Shift+Enter` inserts a clean terminal line, and terminal layout controls make split, terminal-only, and chat-only views easier to use.
+- **Conversation-first mobile redesign:** A new mobile shell puts chats at the center, with clearer navigation, persistent drafts, and recovery for interrupted work.
+- **Stronger remote work:** Remote-agent installation, reconnects, workspace watching, terminals, and provider sessions are more resilient when the remote computer or connection changes.
+- **Safer delivery and recovery:** Sends now report whether they were accepted, rejected, or uncertain, while drafts and confirmed prompts survive retries, reconnects, and replacement threads.
+- **Truthful provider capabilities:** Model catalogs, reasoning options, and execution targets now reflect what each provider actually supports, including dynamic and custom configurations.
+- **Clearer work-in-progress feedback:** Reconnecting, compacting, provider failures, and other runtime states now surface with more consistent status and recovery guidance.
 
 ## v0.2.208 (13 September, 2026)
 
