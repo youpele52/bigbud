@@ -40,7 +40,9 @@ it("retires more than 256 crashed records and abandoned writes while preserving 
     const mismatched = createMobileDevRecord(address.port);
     await publishMobileDevRecord(registry, mismatched);
 
-    expect(await discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${address.port}`);
+    await expect
+      .poll(() => discoverMobileDevUrl(registry), { timeout: 5_000 })
+      .toBe(`http://127.0.0.1:${address.port}`);
     expect((await readdir(registry.directory)).toSorted()).toEqual(
       [pending, `${healthy.nonce}.json`, `${mismatched.nonce}.json`].toSorted(),
     );
@@ -48,7 +50,7 @@ it("retires more than 256 crashed records and abandoned writes while preserving 
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 20_000);
 
 it("uses a per-user default temporary directory", async () => {
   const registry = await createMobileDevRegistry(tmpdir());

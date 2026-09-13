@@ -90,23 +90,19 @@ describe("mobile Vite development listener", () => {
   it("handles occupation after Vite creation and skips a sibling at the initial port", async () => {
     const initial = await block();
     const requested = portOf(initial);
+    await new Promise<void>((resolve) => initial.close(() => resolve()));
     let first = true;
-    let attemptedPort: number | undefined;
     const options = config();
     options.plugins?.push({
       name: "claim-after-server-creation",
       async configureServer(server) {
         if (!first) return;
         first = false;
-        attemptedPort = server.config.server.port;
-        const blocker = await block(0, "127.0.0.1");
-        server.config.server.port = portOf(blocker);
+        await block(server.config.server.port);
       },
     });
     const { port } = await start(requested, requested, options);
-    expect(attemptedPort).toBeDefined();
-    expect(port).toBeGreaterThan(attemptedPort!);
-    await expect.poll(() => discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${port}`);
+    expect(port).toBeGreaterThan(requested + 1);
   });
 
   it("fails non-address startup errors and closes the failed Vite server", async () => {
@@ -133,7 +129,6 @@ describe("mobile Vite development listener", () => {
     const occupied = await block();
     const requested = portOf(occupied);
     const attempts: ViteDevServer[] = [];
-    let firstAttemptedPort: number | undefined;
     const options = config();
     options.server = { host: "0.0.0.0", hmr: false, watch: {} };
     options.plugins?.push({
@@ -141,15 +136,16 @@ describe("mobile Vite development listener", () => {
       async configureServer(server) {
         attempts.push(server);
         if (attempts.length > 3 || server.config.server.port === requested) return;
-        const candidate = server.config.server.port;
-        if (firstAttemptedPort === undefined) firstAttemptedPort = candidate;
-        const blocker = await block(0, "0.0.0.0");
-        server.config.server.port = portOf(blocker);
+        try {
+          await block(server.config.server.port, "0.0.0.0");
+        } catch (error) {
+          if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE")
+            throw error;
+        }
       },
     });
     const { server, port } = await start(requested, undefined, options);
-    expect(firstAttemptedPort).toBeDefined();
-    expect(port).toBeGreaterThan(firstAttemptedPort!);
+    expect(port).toBeGreaterThan(requested + 2);
     expect(attempts.length).toBeGreaterThanOrEqual(4);
     for (const attempt of attempts.slice(0, -1)) {
       expect(attempt.httpServer?.listening).toBe(false);

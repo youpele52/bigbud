@@ -13,7 +13,6 @@ import { Effect } from "effect";
 import { createServer, type InlineConfig, type ViteDevServer } from "vite";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
-import { MobileDevPortUnavailable } from "./dev.coordination.ts";
 import { listenMobileDevServer } from "./dev.listener.ts";
 import { mobileDevRegistryPlugin } from "./dev.registry.ts";
 import { reserveWebDevPort } from "../web/dev.ports.ts";
@@ -53,11 +52,11 @@ function portOf(server: ViteDevServer): number {
   return address.port;
 }
 
-async function mobile(startPort = firstPort) {
+async function mobile() {
   const coordinator = await createDevPortCoordinator(root, storageRoot);
   const registry = await createMobileDevRegistry(root, "0", path.join(root, "registry"));
   const server = await listenMobileDevServer(
-    startPort,
+    firstPort,
     undefined,
     {
       ...config(),
@@ -87,33 +86,32 @@ for (const mode of ["dev:web", "dev:desktop", "dev"] as const) {
             storageRoot,
           });
           yield* Effect.promise(async () => {
-            const selectedWebPort = DEFAULT_WEB_PORT + ports.webOffset;
-            expect(selectedWebPort).toBeGreaterThanOrEqual(firstPort);
+            expect(DEFAULT_WEB_PORT + ports.webOffset).toBe(firstPort);
             // This is the previously unprotected gap: selected web is NOT listening.
             // A separately initialized companion has no sibling env to rely on.
-            const companion = await mobile(selectedWebPort);
-            expect(portOf(companion.server)).toBeGreaterThan(selectedWebPort);
+            const companion = await mobile();
+            expect(portOf(companion.server)).toBeGreaterThan(firstPort);
             const childLease = await reserveWebDevPort(
               coordinator,
-              selectedWebPort,
+              firstPort,
               ports.webReservation,
             );
             try {
               const web = await createServer({
                 ...config(),
-                server: { ...config().server, port: selectedWebPort },
+                server: { ...config().server, port: firstPort },
                 plugins: [mobileDiscoveryPlugin(root, companion.registry)],
               });
               servers.push(web);
               await web.listen();
-              expect(portOf(web)).toBe(selectedWebPort);
+              expect(portOf(web)).toBe(firstPort);
               expect(
-                await fetch(`http://127.0.0.1:${selectedWebPort}/__bigbud/mobile-dev`).then((r) =>
+                await fetch(`http://127.0.0.1:${firstPort}/__bigbud/mobile-dev`).then((r) =>
                   r.json(),
                 ),
               ).toEqual({ url: `http://127.0.0.1:${portOf(companion.server)}` });
               await web.restart();
-              expect(portOf(web)).toBe(selectedWebPort);
+              expect(portOf(web)).toBe(firstPort);
               await web.close();
             } finally {
               await childLease.release();
@@ -128,26 +126,24 @@ for (const mode of ["dev:web", "dev:desktop", "dev"] as const) {
 
   it(`${mode} selects another web port when standalone mobile binds first`, async () => {
     const companion = await mobile();
-    const companionPort = portOf(companion.server);
-    expect(companionPort).toBeGreaterThanOrEqual(firstPort);
+    expect(portOf(companion.server)).toBe(firstPort);
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const ports = yield* reserveRunnerPorts({
             mode,
-            startOffset: companionPort - DEFAULT_WEB_PORT,
+            startOffset: firstPort - DEFAULT_WEB_PORT,
             hasExplicitServerPort: true,
             hasExplicitDevUrl: false,
             dryRun: false,
             repoRoot: root,
             storageRoot,
           });
-          const selectedWebPort = DEFAULT_WEB_PORT + ports.webOffset;
-          expect(selectedWebPort).toBeGreaterThan(companionPort);
+          expect(DEFAULT_WEB_PORT + ports.webOffset).toBeGreaterThan(firstPort);
           yield* Effect.promise(async () => {
             const web = await createServer({
               ...config(),
-              server: { ...config().server, port: selectedWebPort },
+              server: { ...config().server, port: DEFAULT_WEB_PORT + ports.webOffset },
             });
             servers.push(web);
             await web.listen();
@@ -192,9 +188,8 @@ it("keeps the mobile port reserved across Vite generations and releases it on fi
   const companion = await mobile();
   const coordinator = await createDevPortCoordinator(root, storageRoot);
   const reservationBefore = await coordinator.withLock(() => readDevPortReservations(coordinator));
-  const initialPort = portOf(companion.server);
   await companion.server.restart();
-  expect(portOf(companion.server)).toBe(initialPort);
+  expect(portOf(companion.server)).toBe(firstPort);
   expect(await coordinator.withLock(() => readDevPortReservations(coordinator))).toEqual(
     reservationBefore,
   );
@@ -224,11 +219,7 @@ it("releases both the mobile lease and mutex after a fatal listen failure", asyn
   ).rejects.toThrow("denied fixture startup");
   expect(await coordinator.withLock(() => readDevPortReservations(coordinator))).toEqual([]);
   const companion = await mobile();
-  const companionPort = portOf(companion.server);
-  expect(companionPort).toBeGreaterThanOrEqual(firstPort);
-  expect(
-    (await coordinator.withLock(() => readDevPortReservations(coordinator))).map((r) => r.port),
-  ).toContain(companionPort);
+  expect(portOf(companion.server)).toBe(firstPort);
 });
 
 it("retries an external bind collision after taking the mutex and releases the failed lease", async () => {
@@ -236,8 +227,6 @@ it("retries an external bind collision after taking the mutex and releases the f
   const registry = await createMobileDevRegistry(root, "0", path.join(root, "registry"));
   const blocker = createHttpServer();
   let first = true;
-  let configuredPort: number | undefined;
-  let attemptedPort: number | undefined;
   try {
     const server = await listenMobileDevServer(
       firstPort,
@@ -248,32 +237,13 @@ it("retries an external bind collision after taking the mutex and releases the f
           mobileDevRegistryPlugin(registry),
           {
             name: "external-bind-after-coordinated-probe",
-            configureServer(server) {
-              configuredPort = server.config.server.port;
-            },
             async buildStart() {
               if (!first) return;
               first = false;
-              const candidate = configuredPort;
-              if (candidate === undefined) throw new Error("Missing configured candidate");
-              attemptedPort = candidate;
-              try {
-                await new Promise<void>((resolve, reject) => {
-                  blocker.once("error", reject);
-                  blocker.listen(candidate, "127.0.0.1", resolve);
-                });
-              } catch (error) {
-                if (
-                  !(error instanceof Error) ||
-                  !("code" in error) ||
-                  error.code !== "EADDRINUSE"
-                ) {
-                  throw error;
-                }
-                throw new MobileDevPortUnavailable(
-                  `Mobile development port ${candidate} became unavailable`,
-                );
-              }
+              await new Promise<void>((resolve, reject) => {
+                blocker.once("error", reject);
+                blocker.listen(firstPort, "127.0.0.1", resolve);
+              });
             },
           },
         ],
@@ -281,8 +251,7 @@ it("retries an external bind collision after taking the mutex and releases the f
       coordinator,
     );
     servers.push(server);
-    expect(attemptedPort).toBeDefined();
-    expect(portOf(server)).toBeGreaterThan(attemptedPort!);
+    expect(portOf(server)).toBeGreaterThan(firstPort);
     expect(await discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${portOf(server)}`);
     const records = await coordinator.withLock(() => readDevPortReservations(coordinator));
     expect(records.map((r) => r.port)).toEqual([portOf(server)]);

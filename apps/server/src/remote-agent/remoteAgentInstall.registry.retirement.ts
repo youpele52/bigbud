@@ -192,6 +192,12 @@ export function confirmRemoteAgentRetirementDeletion(
   const prior = reservation(state, id);
   if (!prior || prior.phase !== "tombstoned")
     throw new Error("Retirement deletion tombstone is missing.");
+  const build = state.builds.find((entry) => entry.id === prior.buildId);
+  if (!build) throw new Error("Retirement deletion build is missing.");
+  if (build.runtime.generation !== prior.generation)
+    throw new Error("Retirement deletion identity changed.");
+  if (build.binary === "absent") return state;
+  if (build.binary !== "deleting") throw new Error("Retirement deletion is not in progress.");
   return changed(state, {
     builds: state.builds.map((entry) =>
       entry.id === prior.buildId ? { ...entry, binary: "absent" as const } : entry,

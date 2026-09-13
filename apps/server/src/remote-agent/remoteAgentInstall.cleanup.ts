@@ -8,6 +8,10 @@ import {
   reconcileRemoteAgentStages as reconcileRemoteAgentStageOwners,
 } from "./remoteAgentInstall.reconcile.ts";
 import { retireManagedRemoteAgentBuild } from "./remoteAgentInstall.retirement.ts";
+import {
+  MAX_RETIREMENT_RECONCILIATIONS,
+  reconcileRemoteAgentRetirementTombstones,
+} from "./remoteAgentInstall.retirement.reconcile.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 import { reconcileSupersededRemoteAgentConnections } from "./remoteAgentAdmission.references.ts";
 
@@ -31,6 +35,21 @@ export async function cleanupRemoteAgentBuilds(
   await reconcileRemoteAgentLaunchExits(control);
   await reconcileRemoteAgentStageOwners(control);
   await control.registry.update(reconcileRemoteAgentStages);
+  const beforeRetirementReconciliation = await control.registry.read();
+  const tombstoneAttempts = beforeRetirementReconciliation.retirementReservations
+    .filter(
+      (entry) =>
+        entry.phase === "tombstoned" &&
+        beforeRetirementReconciliation.builds.some(
+          (build) =>
+            build.id === entry.buildId &&
+            build.runtime.origin === "managed" &&
+            build.binary === "deleting" &&
+            build.runtime.generation === entry.generation,
+        ),
+    )
+    .slice(0, MAX_RETIREMENT_RECONCILIATIONS).length;
+  const reconciled = await reconcileRemoteAgentRetirementTombstones(control, referencedBuildIds);
   const snapshot = await control.registry.read();
   const retained = retainedRemoteAgentBuilds(snapshot);
   const durableReferences = referencedBuildIds ? await referencedBuildIds() : new Set<string>();
@@ -45,8 +64,8 @@ export async function cleanupRemoteAgentBuilds(
             (launch) => launch.buildId === build.id && launch.phase === "proven-dead",
           )),
     )
-    .slice(0, 8);
-  let deleted = 0;
+    .slice(0, Math.max(0, MAX_RETIREMENT_RECONCILIATIONS - tombstoneAttempts));
+  let deleted = reconciled;
   for (const candidate of candidates) {
     const result = await retireManagedRemoteAgentBuild({
       control,

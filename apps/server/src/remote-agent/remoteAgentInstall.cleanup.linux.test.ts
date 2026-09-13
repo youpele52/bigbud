@@ -39,7 +39,7 @@ describe.runIf(linuxControlAvailable)("install-manager Linux binary retention", 
         logPath: `${statePath}/supervisor.log`,
       };
       await fixture.run(
-        `umask 077; mkdir -p '${fixture.root}/bin/0.2.${number}/${sha256}' '${statePath}'; printf '%s' '${bytes}' > '${runtime.binaryPath}'; chmod 700 '${runtime.binaryPath}'; printf retained-log > '${runtime.logPath}'`,
+        `umask 077; mkdir -p '${fixture.root}/bin/0.2.${number}/${sha256}' '${statePath}'; printf '%s' '${bytes}' > '${runtime.binaryPath}'; chmod 700 '${runtime.binaryPath}'; printf retained-log > '${runtime.logPath}'; : > '${statePath}/launch.lock'; printf '0' > '${statePath}/launch.exit'; chmod 600 '${statePath}/launch.lock' '${statePath}/launch.exit'`,
       );
       builds.push({
         id: remoteAgentBuildId(runtime),
@@ -109,7 +109,7 @@ describe.runIf(linuxControlAvailable)("install-manager Linux binary retention", 
       ...control,
       run: async (command: string) => {
         const result = await control.run(command);
-        if (!lost) {
+        if (!lost && command.includes('rm -- "$binary"')) {
           lost = true;
           throw new Error("lost deletion acknowledgement");
         }

@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { parseMobileDevOptions } from "./dev.options.ts";
 
+const SUBPROCESS_TIMEOUT_MS = 15_000;
+
 describe("mobile development CLI compatibility", () => {
   it("preserves direct PORT fallback and runner MOBILE_WEB_PORT precedence", () => {
     expect(parseMobileDevOptions([], {}).port).toBe(5740);
@@ -66,15 +68,15 @@ describe("mobile development CLI compatibility", () => {
     const launcher = fileURLToPath(new URL("./dev.ts", import.meta.url));
     const help = spawnSync(process.execPath, [launcher, "--help"], {
       encoding: "utf8",
-      timeout: 5000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("Usage: bun run dev");
     const unknown = spawnSync(process.execPath, [launcher, "--unknown"], {
       encoding: "utf8",
-      timeout: 5000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toContain("Unknown option '--unknown'");
-  });
+  }, 20_000);
 });

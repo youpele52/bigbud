@@ -12,6 +12,7 @@ import { withdrawRemoteAgentPredecessor } from "./remoteAgentUpdate.state.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
+import { buildRemoteAgentRetirementDeletionCommand } from "./remoteAgentInstall.retirement.deletion.ts";
 import type { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
 
 function quote(value: string): string {
@@ -85,7 +86,7 @@ async function retirementStillSafe(input: {
   return true;
 }
 
-async function supervisorState(
+export async function probeRemoteAgentSupervisorState(
   control: RemoteAgentControl,
   runtime: ReturnType<typeof validateRemoteAgentRuntime>,
 ): Promise<"live" | "dead" | "uncertain" | "absent"> {
@@ -158,7 +159,7 @@ export async function retireManagedRemoteAgentBuild(input: {
     await input.control.registry.update((state) =>
       advanceRemoteAgentRetirement(state, input.reservationId, "fenced"),
     );
-    const observed = await supervisorState(input.control, runtime);
+    const observed = await probeRemoteAgentSupervisorState(input.control, runtime);
     if (observed === "live") {
       if (input.allowLiveShutdown === false) {
         await markRetirementDeferred(input.control, input.reservationId, input.buildId);
@@ -203,28 +204,7 @@ export async function retireManagedRemoteAgentBuild(input: {
       tombstoneRemoteAgentRetirement(state, input.reservationId),
     );
     deletionStarted = true;
-    const deletion = await input.control.run(
-      [
-        "set -eu",
-        `binary=${quote(runtime.binaryPath)}`,
-        'directory=$(dirname -- "$binary")',
-        'test "$(readlink -m -- "$binary")" = "$binary"',
-        'if test -e "$binary" || test -L "$binary"; then',
-        '  test ! -L "$binary"',
-        '  test -f "$binary"',
-        '  test "$(stat -c \'%u\' -- "$binary")" = "$(id -u)"',
-        '  test "$(stat -c \'%a\' -- "$binary")" = 700',
-        `  test "$(sha256sum -- "$binary" | cut -d ' ' -f1)" = '${runtime.sha256}'`,
-        '  sync -f "$directory"',
-        '  rm -- "$binary"',
-        '  sync -f "$directory"',
-        "fi",
-        'test ! -e "$binary"',
-        'test ! -L "$binary"',
-        'sync -f "$directory"',
-        "printf deleted",
-      ].join("\n"),
-    );
+    const deletion = await input.control.run(buildRemoteAgentRetirementDeletionCommand(runtime));
     if (deletion.trim() !== "deleted") {
       // Tombstones remain active until the exact unlink is reconciled.
       return "deferred";

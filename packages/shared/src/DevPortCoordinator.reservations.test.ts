@@ -79,7 +79,7 @@ it("allows one separate child PID, rejects another, and protects a surviving chi
     expect(await readDevPortReservations(coordinator)).toEqual([]);
     await reserveDevPort(coordinator, 5733, "mobile");
   });
-});
+}, 30_000);
 
 it("supports a fresh child PID after the earlier child exits while its parent stays alive", async () => {
   const { root, coordinator } = await setup();

@@ -26,20 +26,31 @@ async function fixture() {
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const config = path.join(directory, "vite.config.mjs");
   const state = path.join(directory, "listener.json");
+  const watcherReady = path.join(directory, "watcher-ready");
   const source = `
-    import { writeFileSync } from 'node:fs';
+    import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+    const stateFile = ${JSON.stringify(state)};
+    const watcherReadyFile = ${JSON.stringify(watcherReady)};
     export default {
       server: { host: '127.0.0.1', port: 1, strictPort: false },
       plugins: [{ name: 'test-listener', configureServer(server) {
-        server.httpServer.once('listening', () => writeFileSync(${JSON.stringify(state)},
+        const markWatcherReady = () => writeFileSync(watcherReadyFile, 'ready');
+        if (server.watcher._readyEmitted) markWatcherReady();
+        else server.watcher.once('ready', markWatcherReady);
+        server.httpServer.once('listening', () => {
+          const previous = existsSync(stateFile)
+            ? JSON.parse(readFileSync(stateFile, 'utf8')).generation
+            : 0;
+          writeFileSync(stateFile,
           JSON.stringify({ pid: process.pid, port: server.httpServer.address().port,
             root: process.env.BIGBUD_DEV_REPO_ROOT, mode: server.config.mode,
-            base: server.config.base, envPort: process.env.PORT, generation: Date.now() })));
+            base: server.config.base, envPort: process.env.PORT, generation: Number(previous) + 1 }));
+        });
       }}]
     };
   `;
   await writeFile(config, source);
-  return { directory, config, state, source };
+  return { directory, config, state, source, watcherReady };
 }
 
 function start(directory: string, args: string[], env: NodeJS.ProcessEnv = {}) {
@@ -132,6 +143,9 @@ it("coordinates alternate configs and preserves Vite options and the lease acros
   expect(before).toHaveLength(1);
   expect(before[0]?.port).toBe(first.port);
   // The mutex must be available while Vite is running.
+  await vi.waitFor(async () => expect(await readFile(files.watcherReady, "utf8")).toBe("ready"), {
+    timeout: 15_000,
+  });
   await writeFile(files.config, `${files.source}\n// restart\n`);
   await vi.waitFor(
     async () => {
