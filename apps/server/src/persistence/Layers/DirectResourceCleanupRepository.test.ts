@@ -109,6 +109,15 @@ layer("DirectResourceCleanupRepository", (it) => {
         eventPayloadJson: deletedPayload,
         provenAt: now,
       });
+      assert.isFalse(
+        yield* repository.claimOperation({
+          operationId: "operation",
+          leaseId: "before-pruning-operation",
+          claimedAt: now,
+          expiresAt: "2026-08-29T00:01:00.000Z",
+          expectedPlatform: "darwin/arm64",
+        }),
+      );
       assert.equal(
         yield* repository.claimReady({
           leaseId: "before-pruning",
@@ -250,6 +259,18 @@ layer("DirectResourceCleanupRepository", (it) => {
         WHERE command_id = 'recovery-finalize'
       `;
       assert.equal(yield* repository.reconcilePrepared(now, "darwin/arm64"), 1);
+      const [pending] = yield* repository.listCanonicalPruning(10);
+      assert.equal(pending?.operationId, "recovery-operation");
+      assert.equal(
+        yield* repository.claimReady({
+          leaseId: "before-project-prune",
+          claimedAt: now,
+          expiresAt: "2026-08-29T00:01:00.000Z",
+          expectedPlatform: "darwin/arm64",
+        }),
+        undefined,
+      );
+      yield* repository.markCanonicalPruned("recovery-operation", now, "project");
       const claimed = yield* repository.claimReady({
         leaseId: "recovery-lease",
         claimedAt: now,

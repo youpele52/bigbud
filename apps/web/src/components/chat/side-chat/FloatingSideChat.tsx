@@ -9,7 +9,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
 import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
 import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
-import { WorkingIndicator } from "~/components/chat/common/WorkingIndicator";
+import { ActivityStatusIndicator } from "~/components/chat/common/ActivityStatusIndicator";
 import {
   ThreadActivityDots,
   threadActivityLabel,
@@ -136,10 +136,21 @@ export function CompactThreadConversation({
             />
           </div>
         </div>
-        {context.thread.isWorking ? (
-          <WorkingIndicator
-            verb={context.thread.workingVerb}
-            activeWorkStartedAt={context.thread.activeWorkStartedAt}
+        {context.thread.isWorking ||
+        context.thread.isCompacting ||
+        context.thread.showMemoryReviewStatus ? (
+          <ActivityStatusIndicator
+            verb={
+              context.thread.showMemoryReviewStatus
+                ? "Reviewing memory"
+                : context.thread.workingVerb
+            }
+            isCompacting={
+              context.thread.showMemoryReviewStatus ? false : context.thread.isCompacting
+            }
+            activeWorkStartedAt={
+              context.thread.showMemoryReviewStatus ? null : context.thread.activeWorkStartedAt
+            }
             nowIso={context.thread.nowIso}
           />
         ) : null}

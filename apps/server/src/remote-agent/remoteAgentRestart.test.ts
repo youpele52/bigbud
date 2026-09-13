@@ -40,6 +40,21 @@ function store(): RemoteAgentRestartStore {
   };
 }
 
+function restartRecord(
+  overrides: Partial<RemoteAgentRestartRecord> = {},
+): RemoteAgentRestartRecord {
+  return {
+    requestId: "restart-status",
+    projectId: "project-status",
+    target: "ssh:fixture",
+    runtime: runtime("g1"),
+    oldEpoch: "g1",
+    phase: "stopping",
+    message: "Stopping",
+    ...overrides,
+  };
+}
+
 describe("remote agent restart coordinator", () => {
   it("performs one replacement and returns the durable result on retry", async () => {
     let bindingReads = 0;
@@ -144,5 +159,109 @@ describe("remote agent restart coordinator", () => {
     await durable.update(canonical.requestId, (record) => ({ ...record, phase: "ready" }));
 
     expect((await durable.get("restart-alias"))?.phase).toBe("ready");
+  });
+
+  it("returns a terminal durable status without resolving the live binding", async () => {
+    const durable = store();
+    await durable.put(restartRecord({ phase: "ready", message: "Ready" }));
+    const resolveBinding = vi.fn(async () => {
+      throw new Error("remote binding unavailable");
+    });
+    const restart = makeRemoteAgentRestart({
+      close: vi.fn(),
+      reconnect: async () => undefined,
+      resolveBinding,
+      store: durable,
+    });
+
+    await expect(
+      restart.status({
+        requestId: "restart-status",
+        projectId: "project-status" as never,
+        expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
+      }),
+    ).resolves.toMatchObject({ phase: "ready", message: "Ready" });
+    expect(resolveBinding).not.toHaveBeenCalled();
+  });
+
+  it("returns an active durable status when live binding resolution fails", async () => {
+    const durable = store();
+    await durable.put(restartRecord());
+    const resolveBinding = vi.fn(async () => {
+      throw new Error("remote binding unavailable");
+    });
+    const restart = makeRemoteAgentRestart({
+      close: vi.fn(),
+      reconnect: async () => undefined,
+      resolveBinding,
+      store: durable,
+    });
+
+    await expect(
+      restart.status({
+        requestId: "restart-status",
+        projectId: "project-status" as never,
+        expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
+      }),
+    ).resolves.toMatchObject({ phase: "stopping", message: "Stopping" });
+    expect(resolveBinding).toHaveBeenCalledOnce();
+  });
+
+  it("reconciles an active status with the current durable operation", async () => {
+    const requested = restartRecord();
+    const current = restartRecord({
+      requestId: "restart-current",
+      phase: "starting",
+      message: "Starting",
+    });
+    const durable: RemoteAgentRestartStore = {
+      ...store(),
+      findActive: vi.fn(async () => current),
+    };
+    await durable.put(requested);
+    const binding = { runtime: runtime("g1"), expectedEpoch: "g1" };
+    const resolveBinding = vi.fn(async () => binding);
+    const restart = makeRemoteAgentRestart({
+      close: vi.fn(),
+      reconnect: async () => undefined,
+      resolveBinding,
+      store: durable,
+    });
+
+    await expect(
+      restart.status({
+        requestId: requested.requestId,
+        projectId: requested.projectId as never,
+        expectedWorkspaceExecutionTargetId: requested.target as never,
+      }),
+    ).resolves.toMatchObject({
+      requestId: requested.requestId,
+      phase: "starting",
+      message: "Starting",
+    });
+    expect(durable.findActive).toHaveBeenCalledWith(binding.runtime, requested.projectId);
+  });
+
+  it("rejects a project mismatch before attempting live binding resolution", async () => {
+    const durable = store();
+    await durable.put(restartRecord());
+    const resolveBinding = vi.fn(async () => {
+      throw new Error("should not resolve");
+    });
+    const restart = makeRemoteAgentRestart({
+      close: vi.fn(),
+      reconnect: async () => undefined,
+      resolveBinding,
+      store: durable,
+    });
+
+    await expect(
+      restart.status({
+        requestId: "restart-status",
+        projectId: "other-project" as never,
+        expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
+      }),
+    ).rejects.toThrow("not found for this project and target");
+    expect(resolveBinding).not.toHaveBeenCalled();
   });
 });

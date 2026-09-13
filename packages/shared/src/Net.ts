@@ -167,10 +167,13 @@ export class NetService extends ServiceMap.Service<NetService, NetServiceShape>(
     return {
       canListenOnHost,
       isPortAvailableOnLoopback: (port) =>
-        Effect.zipWith(
-          canListenOnHost(port, "127.0.0.1"),
-          canListenOnHost(port, "::1"),
-          (ipv4, ipv6) => ipv4 && ipv6,
+        Effect.map(
+          Effect.all([
+            canListenOnHost(port, "127.0.0.1"),
+            canListenOnHost(port, "::1"),
+            canListenOnHost(port, "0.0.0.0"),
+          ]),
+          ([ipv4, ipv6, wildcard]) => ipv4 && ipv6 && wildcard,
         ),
       reserveLoopbackPort,
       findAvailablePort: (preferred) =>

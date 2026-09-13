@@ -18,6 +18,7 @@ import { resolveAttachmentPath } from "../attachments/attachmentStore.ts";
 import { ServerConfig } from "../startup/config.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { normalizeDispatchCommand } from "./Normalizer.ts";
+import { calculateCommandPayloadDigest } from "./commandDigest.ts";
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspacePathsLive),
@@ -54,7 +55,47 @@ function makeTurnStartCommand(attachments: UploadChatAttachment[]): ClientOrches
   };
 }
 
+function makeMessageSubmitCommand(attachments: UploadChatAttachment[]): ClientOrchestrationCommand {
+  return {
+    type: "thread.message.submit",
+    commandId: CommandId.makeUnsafe("cmd-message-submit"),
+    threadId: ThreadId.makeUnsafe("thread-1"),
+    message: {
+      messageId: MessageId.makeUnsafe("msg-submit"),
+      text: "follow up",
+      attachments,
+    },
+    delivery: "auto",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
 describe("normalizeDispatchCommand", () => {
+  it("keeps attachment submission retries identical for durable receipts", async () => {
+    const command = makeMessageSubmitCommand([
+      {
+        type: "image",
+        name: "reference.png",
+        mimeType: "image/png",
+        sizeBytes: 1,
+        dataUrl: "data:image/png;base64,AA==",
+      },
+    ]);
+    const first = await runNormalize(command);
+    const second = await runNormalize(command);
+    expect(calculateCommandPayloadDigest(second)).toEqual(calculateCommandPayloadDigest(first));
+  });
+
+  it("preserves the payload digest of legacy submissions without attachments", async () => {
+    const command = {
+      ...makeMessageSubmitCommand([]),
+      message: { messageId: MessageId.makeUnsafe("legacy"), text: "continue" },
+    } as Extract<ClientOrchestrationCommand, { type: "thread.message.submit" }>;
+    expect(calculateCommandPayloadDigest(await runNormalize(command))).toEqual(
+      calculateCommandPayloadDigest(command),
+    );
+  });
+
   it("normalizes local project workspace roots through WorkspacePaths", async () => {
     const normalized = await runNormalize({
       type: "project.create",
@@ -71,6 +112,34 @@ describe("normalizeDispatchCommand", () => {
       throw new Error(`Unexpected command type: ${normalized.type}`);
     }
     expect(normalized.workspaceRoot).toBe(OS.homedir());
+  });
+
+  it("normalizes attachments on server-owned message submissions", async () => {
+    const normalized = await runNormalize(
+      makeMessageSubmitCommand([
+        {
+          type: "image",
+          name: "reference.png",
+          mimeType: "image/png",
+          sizeBytes: 1,
+          dataUrl: "data:image/png;base64,AA==",
+        },
+      ]),
+    );
+
+    expect(normalized.type).toBe("thread.message.submit");
+    if (normalized.type !== "thread.message.submit") {
+      throw new Error(`Unexpected command type: ${normalized.type}`);
+    }
+    expect(normalized.message.attachments).toHaveLength(1);
+    const attachment = normalized.message.attachments?.[0];
+    expect(attachment).toMatchObject({
+      type: "image",
+      name: "reference.png",
+      mimeType: "image/png",
+      sizeBytes: 1,
+    });
+    expect(attachment && "id" in attachment).toBe(true);
   });
 
   it("preserves remote project workspace roots without local filesystem normalization", async () => {

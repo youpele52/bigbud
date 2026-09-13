@@ -5,17 +5,12 @@ import type { AppCheckStatus } from "../../lib/checkStatus";
 import {
   normalizeBackendBaseUrl,
   resolveDefaultBackendBaseUrl,
-  resolveDefaultMobileWebBaseUrl,
   resolveStoredBackendBaseUrl,
-  resolveStoredMobileWebBaseUrl,
+  shouldPreferLiveBackendBaseUrl,
 } from "./mobileRemoteControl.urls";
 
 export const MOBILE_WEB_BASE_URL_STORAGE_KEY = "bigbud:mobile-web:base-url:v1";
 export const MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY = "bigbud:mobile-remote:backend-url:v1";
-
-export function stripTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
 
 export function readStoredBackendBaseUrl(): string {
   if (typeof window === "undefined") {
@@ -26,67 +21,21 @@ export function readStoredBackendBaseUrl(): string {
   );
 }
 
-export function readStoredMobileWebBaseUrl(): string {
-  if (typeof window === "undefined") {
-    return resolveDefaultMobileWebBaseUrl();
-  }
-  const backendBaseUrl = readStoredBackendBaseUrl();
-  return resolveStoredMobileWebBaseUrl(
-    window.localStorage.getItem(MOBILE_WEB_BASE_URL_STORAGE_KEY),
-    backendBaseUrl,
-  );
-}
-
 export function syncTailscaleDerivedUrls(input: {
   readonly status: DesktopTailscaleRemoteAccessStatus;
   readonly setBackendBaseUrl: Dispatch<SetStateAction<string>>;
-  readonly setMobileBaseUrl: Dispatch<SetStateAction<string>>;
-  readonly shouldPreferLiveBackendBaseUrl: (currentBaseUrl: string, nextBaseUrl: string) => boolean;
-  readonly shouldResetMobileAppUrlToHosted: (
-    currentMobileBaseUrl: string,
-    nextBackendBaseUrl: string,
-  ) => boolean;
-  readonly resolveHostedMobileWebBaseUrl: () => string;
-  readonly resolveDefaultBackendBaseUrl: () => string;
-  readonly resolveDefaultMobileWebBaseUrl: () => string;
 }) {
-  if (input.status.serving && input.status.remoteBaseUrl) {
-    const nextRemoteBaseUrl = normalizeBackendBaseUrl(input.status.remoteBaseUrl);
-    input.setBackendBaseUrl((current) => {
-      const normalizedCurrent = normalizeBackendBaseUrl(current);
-      if (!input.shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextRemoteBaseUrl)) {
-        return current;
-      }
-      window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
-      return nextRemoteBaseUrl;
-    });
-    input.setMobileBaseUrl((current) => {
-      if (!input.shouldResetMobileAppUrlToHosted(current, nextRemoteBaseUrl)) {
-        return current;
-      }
-      const nextMobileBaseUrl = stripTrailingSlash(input.resolveHostedMobileWebBaseUrl());
-      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
-      return nextMobileBaseUrl;
-    });
-    return;
-  }
-
-  const nextLocalBackend = normalizeBackendBaseUrl(input.resolveDefaultBackendBaseUrl());
-  const nextLocalMobile = stripTrailingSlash(input.resolveDefaultMobileWebBaseUrl());
+  const nextBackend = normalizeBackendBaseUrl(
+    input.status.serving && input.status.remoteBaseUrl
+      ? input.status.remoteBaseUrl
+      : resolveDefaultBackendBaseUrl(),
+  );
   input.setBackendBaseUrl((current) => {
-    const normalizedCurrent = normalizeBackendBaseUrl(current);
-    if (!input.shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextLocalBackend)) {
+    if (!shouldPreferLiveBackendBaseUrl(normalizeBackendBaseUrl(current), nextBackend)) {
       return current;
     }
-    window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextLocalBackend);
-    return nextLocalBackend;
-  });
-  input.setMobileBaseUrl((current) => {
-    if (!input.shouldResetMobileAppUrlToHosted(current, nextLocalBackend)) {
-      return current;
-    }
-    window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextLocalMobile);
-    return nextLocalMobile;
+    window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextBackend);
+    return nextBackend;
   });
 }
 

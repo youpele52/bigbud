@@ -16,6 +16,16 @@ import {
   parseBaselinePayload,
   sanitizeLegacyThreadOwnedRows,
 } from "./ProjectionBaselines.payload.ts";
+import {
+  defaultExpression,
+  deleteMissingRows,
+  hasDuplicatePrimaryKeys,
+  quoteIdentifier,
+  restoreActiveWatches,
+  type ActiveWatch,
+  type TableColumn,
+} from "./ProjectionBaselines.restore.ts";
+import { compareNormalizedRows, normalizeRow } from "./ProjectionBaselines.capture.ts";
 
 export const PROJECTION_BASELINE_FORMAT_VERSION = 1;
 
@@ -39,23 +49,6 @@ const selectBaseline = `
     verified_at AS verifiedAt
   FROM projection_baselines
 `;
-
-function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.keys(row)
-      .toSorted()
-      .map((key) => [key, row[key]]),
-  );
-}
-
-function compareNormalizedRows(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): number {
-  const leftJson = JSON.stringify(left);
-  const rightJson = JSON.stringify(right);
-  return leftJson < rightJson ? -1 : leftJson > rightJson ? 1 : 0;
-}
 
 function validateBaseline(row: BaselineRow): ProjectionBaseline {
   if (row.formatVersion !== PROJECTION_BASELINE_FORMAT_VERSION) {
@@ -173,16 +166,7 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
               const restoredThreadIds = new Set(
                 (payload.tables.projection_threads ?? []).map((row) => row.thread_id),
               );
-              const activeWatches = yield* sql<{
-                readonly watchId: string;
-                readonly watcherThreadId: string;
-                readonly watchedThreadId: string;
-                readonly watchedThreadTitle: string;
-                readonly sourceMessageId: string;
-                readonly status: string;
-                readonly createdAt: string;
-                readonly triggeredAt: string | null;
-              }>`
+              const activeWatches = yield* sql<ActiveWatch>`
               SELECT watch_id AS "watchId", watcher_thread_id AS "watcherThreadId",
                 watched_thread_id AS "watchedThreadId", watched_thread_title AS "watchedThreadTitle",
                 source_message_id AS "sourceMessageId", status, created_at AS "createdAt",
@@ -190,19 +174,35 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
               FROM projection_thread_watches
               WHERE status = 'active'
             `;
-              for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
-                yield* sql.unsafe(
-                  table === "projection_projects"
-                    ? `DELETE FROM ${table} WHERE project_id <> '__chats__'`
-                    : `DELETE FROM ${table}`,
+              const tableColumns = new Map<string, ReadonlyArray<TableColumn>>();
+              for (const table of PROJECTION_BASELINE_TABLES) {
+                const columns = yield* sql.unsafe<{
+                  readonly name: string;
+                  readonly pk: number;
+                  readonly dflt_value: string | null;
+                }>(`PRAGMA table_info(${table})`);
+                tableColumns.set(
+                  table,
+                  columns.map((column) => ({
+                    name: column.name,
+                    primaryKeyPosition: column.pk,
+                    defaultValue: column.dflt_value,
+                  })),
                 );
               }
+              for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
+                const schemaColumns = tableColumns.get(table)!;
+                if (hasDuplicatePrimaryKeys(payload.tables[table]!, schemaColumns)) {
+                  return yield* toPersistenceDecodeCauseError(
+                    "ProjectionBaselineRepository.restorePayload:duplicate",
+                  )(new Error(`duplicate primary key in baseline ${table}`));
+                }
+                const deletion = deleteMissingRows(table, schemaColumns, payload.tables[table]!);
+                yield* sql.unsafe(deletion.statement, deletion.params);
+              }
               for (const table of PROJECTION_BASELINE_TABLES) {
-                const allowedColumns = new Set(
-                  (yield* sql.unsafe<{ name: string }>(`PRAGMA table_info(${table})`)).map(
-                    (column) => column.name,
-                  ),
-                );
+                const schemaColumns = tableColumns.get(table)!;
+                const allowedColumns = new Set(schemaColumns.map((column) => column.name));
                 for (const payloadRow of payload.tables[table] ?? []) {
                   const row =
                     table === "projection_threads" &&
@@ -214,20 +214,37 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
                           parent_thread_project_id: null,
                         })
                       : payloadRow;
-                  const columns = Object.keys(row);
+                  const columns = schemaColumns.map((column) => column.name);
                   if (
                     columns.length === 0 ||
-                    columns.some((column) => !allowedColumns.has(column))
+                    Object.keys(row).some((column) => !allowedColumns.has(column))
                   ) {
                     return yield* toPersistenceDecodeCauseError(
                       "ProjectionBaselineRepository.restorePayload:columns",
                     )(new Error(`invalid columns for ${table}`));
                   }
-                  const quoted = columns.map((column) => `"${column}"`).join(", ");
-                  const placeholders = columns.map(() => "?").join(", ");
+                  const quoted = columns.map(quoteIdentifier).join(", ");
+                  const valueExpressions = columns.map((column) =>
+                    Object.hasOwn(row, column)
+                      ? "?"
+                      : defaultExpression(schemaColumns.find((item) => item.name === column)!),
+                  );
+                  const values = columns
+                    .filter((column) => Object.hasOwn(row, column))
+                    .map((column) => row[column]);
+                  const updates = schemaColumns
+                    .filter((column) => column.primaryKeyPosition === 0)
+                    .map(
+                      (column) =>
+                        `${quoteIdentifier(column.name)} = excluded.${quoteIdentifier(column.name)}`,
+                    )
+                    .join(", ");
                   yield* sql.unsafe(
-                    `INSERT INTO ${table} (${quoted}) VALUES (${placeholders})`,
-                    columns.map((column) => row[column]),
+                    `INSERT INTO ${table} (${quoted}) VALUES (${valueExpressions.join(", ")})` +
+                      (updates.length > 0
+                        ? ` ON CONFLICT DO UPDATE SET ${updates}`
+                        : " ON CONFLICT DO NOTHING"),
+                    values,
                   );
                 }
               }
@@ -248,22 +265,7 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
                 VALUES (${projector}, ${sequence}, ${updatedAt})
               `;
               }
-              for (const watch of activeWatches) {
-                yield* sql`
-                INSERT INTO projection_thread_watches (
-                  watch_id, watcher_thread_id, watched_thread_id, watched_thread_title,
-                  source_message_id, status, created_at, triggered_at
-                )
-                SELECT ${watch.watchId}, ${watch.watcherThreadId}, ${watch.watchedThreadId},
-                  ${watch.watchedThreadTitle}, ${watch.sourceMessageId}, ${watch.status},
-                  ${watch.createdAt}, ${watch.triggeredAt}
-                WHERE EXISTS (
-                  SELECT 1 FROM projection_threads WHERE thread_id = ${watch.watcherThreadId}
-                ) AND EXISTS (
-                  SELECT 1 FROM projection_threads WHERE thread_id = ${watch.watchedThreadId}
-                )
-              `;
-              }
+              yield* restoreActiveWatches(sql, activeWatches);
             }),
           );
         }),

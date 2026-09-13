@@ -21,6 +21,9 @@ export interface CreateDevRunnerEnvInput {
   readonly baseEnv: NodeJS.ProcessEnv;
   readonly serverOffset: number;
   readonly webOffset: number;
+  readonly instanceOffset?: number;
+  readonly repoRoot?: string;
+  readonly webReservation?: string;
   readonly t3Home: string | undefined;
   readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
@@ -36,6 +39,9 @@ export function createDevRunnerEnv({
   baseEnv,
   serverOffset,
   webOffset,
+  instanceOffset = 0,
+  repoRoot,
+  webReservation,
   t3Home,
   authToken,
   noBrowser,
@@ -48,7 +54,9 @@ export function createDevRunnerEnv({
   return Effect.gen(function* () {
     const resolvedServerPort = port ?? devPortsForOffset(serverOffset).serverPort;
     const resolvedWebPort = devPortsForOffset(webOffset).webPort;
-    const resolvedMobileWebPort = devPortsForOffset(webOffset).mobileWebPort;
+    // The mobile listener starts at the requested instance port and retries
+    // actual bind collisions itself; preflight cannot select its final port.
+    const resolvedMobileWebPort = devPortsForOffset(instanceOffset).mobileWebPort;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
     const isDesktopMode = mode === "dev:desktop";
     const isMobileWebMode = mode === "dev:mobile-web";
@@ -59,10 +67,19 @@ export function createDevRunnerEnv({
       ELECTRON_RENDERER_PORT: String(resolvedWebPort),
       VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${resolvedWebPort}`,
       MOBILE_WEB_PORT: String(resolvedMobileWebPort),
-      VITE_MOBILE_WEB_URL: `http://localhost:${resolvedMobileWebPort}`,
+      BIGBUD_DEV_INSTANCE_OFFSET: String(instanceOffset),
       BIGBUD_HOME: resolvedBaseDir,
       T3CODE_HOME: resolvedBaseDir,
     };
+    delete output.VITE_MOBILE_WEB_URL;
+    delete output.BIGBUD_DEV_WEB_PORT;
+    delete output.BIGBUD_DEV_REPO_ROOT;
+    delete output.BIGBUD_DEV_WEB_RESERVATION;
+    if (repoRoot !== undefined) output.BIGBUD_DEV_REPO_ROOT = repoRoot;
+    if (webReservation !== undefined) output.BIGBUD_DEV_WEB_RESERVATION = webReservation;
+    if (mode === "dev" || mode === "dev:desktop" || mode === "dev:web") {
+      output.BIGBUD_DEV_WEB_PORT = String(resolvedWebPort);
+    }
 
     if (!isDesktopMode && !isMobileWebMode) {
       output.BIGBUD_PORT = String(resolvedServerPort);

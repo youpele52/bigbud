@@ -63,15 +63,26 @@ export function makeRemoteAgentRestart(input: {
       await verifySshExecutionTarget({ executionTargetId: target });
     });
   const status = async (request: ServerRestartRemoteAgentInput) => {
-    let record = await storeFor().get(request.requestId);
-    const statusBinding = await resolveBinding(request.expectedWorkspaceExecutionTargetId);
-    if (record && !terminalPhases.has(record.phase) && statusBinding)
-      record = (await storeFor().findActive?.(statusBinding.runtime, record.projectId)) ?? record;
+    const store = storeFor();
+    let record = await store.get(request.requestId);
+    if (!record || record.projectId !== request.projectId) {
+      throw new Error("Remote restart request was not found for this project and target.");
+    }
+
+    let statusBinding: RemoteAgentRuntimeBinding | undefined;
+    if (!terminalPhases.has(record.phase)) {
+      try {
+        statusBinding = await resolveBinding(request.expectedWorkspaceExecutionTargetId);
+      } catch {
+        statusBinding = undefined;
+      }
+      if (statusBinding)
+        record = (await store.findActive?.(statusBinding.runtime, record.projectId)) ?? record;
+    }
+
     if (
-      !record ||
-      record.projectId !== request.projectId ||
-      (record.target !== request.expectedWorkspaceExecutionTargetId &&
-        statusBinding?.runtime.generation !== record.runtime.generation)
+      record.target !== request.expectedWorkspaceExecutionTargetId &&
+      statusBinding?.runtime.generation !== record.runtime.generation
     )
       throw new Error("Remote restart request was not found for this project and target.");
     return resultFor(record, request);

@@ -51,6 +51,8 @@ import { makeCommandOutcomeQuery } from "./OrchestrationEngine.commandOutcome.ts
 import { makeOrchestrationDomainEventDistribution } from "./OrchestrationEngine.domainEvents.ts";
 import { installOrchestrationEngineToolDispatchers } from "./OrchestrationEngine.toolDispatcher.ts";
 import { calculateCommandPayloadDigest } from "../commandDigest.ts";
+import { validateBootstrapSubmissionIdentity } from "./OrchestrationEngine.bootstrapIdentity.ts";
+import { OrchestrationBootstrapRecipeRepository } from "../../persistence/Services/OrchestrationBootstrapRecipes.ts";
 import {
   ORCHESTRATION_COMMAND_DEADLINE_MS,
   ORCHESTRATION_COMMAND_QUEUE_CAPACITY,
@@ -61,6 +63,7 @@ import {
 const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
+  const bootstrapRecipes = yield* Effect.serviceOption(OrchestrationBootstrapRecipeRepository);
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const operationalQueryOption = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
   const projectionCatalogQuery = yield* Effect.serviceOption(ProjectionCatalogQuery);
@@ -230,8 +233,17 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     eventStore.readReplay(fromSequenceExclusive, limit);
   const readEventsByCommandId: OrchestrationEngineShape["readEventsByCommandId"] = (commandId) =>
     eventStore.readByCommandId!(commandId);
-  const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
+  const dispatch: OrchestrationEngineShape["dispatch"] = (command, options) =>
     Effect.gen(function* () {
+      if (Option.isSome(bootstrapRecipes)) {
+        yield* validateBootstrapSubmissionIdentity({
+          command,
+          repository: bootstrapRecipes.value,
+          ...(options?.bootstrapSubmission
+            ? { bootstrapSubmission: options.bootstrapSubmission }
+            : {}),
+        });
+      }
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer({
         command,

@@ -1,6 +1,5 @@
 import {
   DEFAULT_SERVER_SETTINGS,
-  type ModelSelection,
   ProviderKind,
   type ProviderSession,
   ThreadId,
@@ -8,44 +7,29 @@ import {
 import { Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
-import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
-import { OrchestrationCommandInvariantError } from "../Errors.ts";
-import {
-  buildResumedTurnInput,
-  mapProviderSessionStatusToOrchestrationStatus,
-  toNonEmptyProviderInput,
-} from "./ProviderCommandReactorHelpers.ts";
-import {
-  maybeGenerateAndRenameWorktreeBranchForFirstTurn,
-  maybeGenerateThreadTitleForFirstTurn,
-} from "./ProviderCommandReactorSessionOps.firstTurn.ts";
-import {
-  appendReferencedThreadsToProviderInput,
-  prependThreadContextToProviderInput,
-  resolveAndExportThreadContextPath,
-} from "./ProviderCommandReactorSessionOps.threadContext.ts";
-import { shouldRebuildProviderContextFromTranscript } from "./ProviderCommandReactorSessionOps.context.ts";
-import { prependCapabilityContextToProviderInput } from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
-import {
-  rolloverProviderSessionAtHighWater,
-  withOneShotContextLimitRecovery,
-} from "./ProviderCommandReactorSessionOps.recovery.ts";
+import { mapProviderSessionStatusToOrchestrationStatus } from "./ProviderCommandReactorHelpers.ts";
 import { startProviderSession } from "./ProviderCommandReactorSessionOps.start.ts";
+import {
+  ongoingProviderWorkError,
+  capturedModelSelectionError,
+  resolveTurnExecutionSettings,
+  type EnsureSessionOptions,
+} from "./ProviderCommandReactorSessionOps.settings.ts";
 import type {
   SendTurnForThreadInput,
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
 
+import { sendTurnAttempt } from "./ProviderCommandReactorSessionOps.send.ts";
+import { withOneShotContextLimitRecovery } from "./ProviderCommandReactorSessionOps.recovery.ts";
+
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
     threadId: ThreadId,
     createdAt: string,
-    options?: {
-      readonly modelSelection?: ModelSelection;
-      readonly restartFreshIfInactive?: boolean;
-    },
+    options?: EnsureSessionOptions,
   ) {
     const {
       orchestrationEngine,
@@ -59,7 +43,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
     }
-    const desiredRuntimeMode = thread.runtimeMode;
+    const desiredRuntimeMode = options?.runtimeMode ?? thread.runtimeMode;
     const currentProvider: import("@bigbud/contracts").ProviderKind | undefined = Schema.is(
       ProviderKind,
     )(thread.session?.providerName)
@@ -110,6 +94,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         createdAt,
         provider: preferredProvider,
         modelSelection: desiredModelSelection,
+        runtimeMode: desiredRuntimeMode,
         cwd: effectiveCwd,
         ...(input?.fresh ? { fresh: true } : {}),
         ...(input?.preserveExistingBinding ? { preserveExistingBinding: true } : {}),
@@ -134,23 +119,30 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
+    // Per-turn callers always supply their resolved runtime. Preserve existing
+    // explicit session-reconfiguration behavior when no turn override is given.
+    const ongoingWorkError =
+      options?.runtimeMode !== undefined
+        ? ongoingProviderWorkError(thread, activeSession)
+        : undefined;
     const existingSessionThreadId =
       thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
     if (existingSessionThreadId) {
-      const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
+      const runtimeModeChanged = desiredRuntimeMode !== activeSession?.runtimeMode;
       const providerChanged =
         requestedModelSelection !== undefined &&
         requestedModelSelection.provider !== currentProvider;
-      if (!activeSession && options?.restartFreshIfInactive) {
-        const restartedSession = yield* start({ fresh: true });
-        capabilityContextStates.delete(threadId);
-        yield* bindSessionToThread(restartedSession);
-        return restartedSession.threadId;
-      }
       const sessionModelSwitch =
         currentProvider === undefined
           ? "in-session"
           : (yield* providerService.getCapabilities(currentProvider)).sessionModelSwitch;
+      const capturedModelError = capturedModelSelectionError({
+        modelSelection: desiredModelSelection,
+        activeSession,
+        sessionModelSwitch,
+        requireExactModel: options?.requireExactModel ?? false,
+      });
+      if (capturedModelError) return yield* capturedModelError;
       const modelChanged =
         requestedModelSelection !== undefined &&
         requestedModelSelection.model !== activeSession?.model;
@@ -167,8 +159,16 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
+        // The synchronous start projection uses thread defaults. Reconcile it
+        // with the reused live runtime without advancing the session epoch.
+        if (activeSession && thread.session?.runtimeMode !== desiredRuntimeMode) {
+          if (ongoingWorkError) return yield* ongoingWorkError;
+          yield* bindSessionToThread(activeSession);
+        }
         return existingSessionThreadId;
       }
+
+      if (ongoingWorkError) return yield* ongoingWorkError;
 
       const resumeCursor =
         providerChanged || shouldRestartForModelChange
@@ -179,8 +179,8 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         existingSessionThreadId,
         currentProvider,
         desiredProvider: desiredModelSelection.provider,
-        currentRuntimeMode: thread.session?.runtimeMode,
-        desiredRuntimeMode: thread.runtimeMode,
+        currentRuntimeMode: activeSession?.runtimeMode,
+        desiredRuntimeMode,
         runtimeModeChanged,
         providerChanged,
         modelChanged,
@@ -204,6 +204,8 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       return restartedSession.threadId;
     }
 
+    if (ongoingWorkError) return yield* ongoingWorkError;
+
     const startedSession = yield* start(
       options?.restartFreshIfInactive ? { fresh: true } : undefined,
     );
@@ -212,188 +214,20 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     return startedSession.threadId;
   });
 
-const sendTurnAttempt = (services: SessionOpServices) =>
-  Effect.fn("sendTurnAttempt")(function* (input: SendTurnForThreadInput) {
-    const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
-    const thread = yield* resolveThread(input.threadId);
-    if (!thread) {
-      return;
-    }
-    const bootstrapThread =
-      input.bootstrapSourceThreadId !== undefined
-        ? ((yield* resolveThread(input.bootstrapSourceThreadId)) ?? null)
-        : null;
-    if (input.bootstrapSourceThreadId !== undefined) {
-      if (!bootstrapThread) {
-        return yield* new OrchestrationCommandInvariantError({
-          commandType: "thread.turn.start",
-          detail: `Bootstrap source thread '${input.bootstrapSourceThreadId}' does not exist.`,
-        });
-      }
-      if (bootstrapThread.projectId !== thread.projectId) {
-        return yield* new OrchestrationCommandInvariantError({
-          commandType: "thread.turn.start",
-          detail: `Bootstrap source thread '${input.bootstrapSourceThreadId}' must belong to project '${thread.projectId}'.`,
-        });
-      }
-    }
-    const normalizedAttachments = input.attachments ?? [];
-    let activeSession = yield* providerService
-      .listSessions()
-      .pipe(
-        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
-      );
-    activeSession = yield* rolloverProviderSessionAtHighWater({
-      providerService,
-      states: services.capabilityContextStates,
-      threadId: input.threadId,
-      sessionEpoch: thread.session?.sessionEpoch ?? 0,
-      activeSession,
-      activities: thread.activities,
-    });
-    const shouldBootstrapFromTranscript = shouldRebuildProviderContextFromTranscript({
-      thread,
-      bootstrapThread,
-      activeSession,
-      messageText: input.messageText,
-      attachments: normalizedAttachments,
-    });
-
-    yield* ensureSessionForThread(services)(input.threadId, input.createdAt, {
-      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
-      restartFreshIfInactive: shouldBootstrapFromTranscript,
-    });
-    activeSession = yield* providerService
-      .listSessions()
-      .pipe(
-        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
-      );
-    if (input.modelSelection !== undefined) {
-      threadModelSelections.set(input.threadId, input.modelSelection);
-    }
-
-    yield* resolveAndExportThreadContextPath({
-      thread,
-      stateDir: services.serverConfig.stateDir,
-    });
-
-    const baseInput = shouldBootstrapFromTranscript
-      ? buildResumedTurnInput({
-          transcriptThread: bootstrapThread ?? thread,
-          latestTranscriptMessageText: input.messageText,
-          latestProviderInputText: input.providerInputText ?? input.messageText,
-        })
-      : (input.providerInputText ?? input.messageText);
-    const capabilityContextEnabled =
-      process.env.BIGBUD_CAPABILITY_CONTEXT_ENABLED?.trim().toLowerCase() !== "false";
-    const serverSettings = yield* services.serverSettingsService.getSettings.pipe(
-      Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
-    );
-    const providerInputWithCurrentThread = capabilityContextEnabled
-      ? prependCapabilityContextToProviderInput({
-          providerInputText: baseInput,
-          catalog: input.capabilityCatalog ?? BIGBUD_CAPABILITY_CATALOG,
-          thread,
-          ...(activeSession?.provider ? { provider: activeSession.provider } : {}),
-          ...(activeSession?.model ? { model: activeSession.model } : {}),
-          memoryContext: input.memoryContext ?? "",
-          agentBrowserPreference: serverSettings.agentBrowserPreference,
-          contextRole: bootstrapThread
-            ? "branch"
-            : thread.parentThread
-              ? "delegated-child"
-              : "main",
-          states: services.capabilityContextStates,
-        })
-      : prependThreadContextToProviderInput({
-          providerInputText:
-            input.memoryContext && input.memoryContext.length > 0
-              ? `Relevant persistent bigbud memory:\n${input.memoryContext}\n\n${baseInput}`
-              : baseInput,
-          threadId: thread.id,
-          threadTitle: thread.title,
-          computerUseEnabled: serverSettings.computerUseEnabled,
-          agentBrowserPreference: serverSettings.agentBrowserPreference,
-          serverMode: services.serverConfig.mode,
-        });
-    const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
-      providerInputText: providerInputWithCurrentThread ?? "",
-      currentThreadId: thread.id,
-      attachments: normalizedAttachments,
-      resolveThread,
-    });
-    const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
-    const sessionModelSwitch =
-      activeSession === undefined
-        ? "in-session"
-        : (yield* providerService.getCapabilities(activeSession.provider)).sessionModelSwitch;
-    const requestedModelSelection =
-      input.modelSelection ?? threadModelSelections.get(input.threadId) ?? thread.modelSelection;
-    const modelForTurn =
-      sessionModelSwitch === "unsupported"
-        ? activeSession?.model !== undefined
-          ? {
-              ...requestedModelSelection,
-              model: activeSession.model,
-            }
-          : requestedModelSelection
-        : input.modelSelection;
-
-    const providerAttachments = normalizedAttachments.filter(
-      (attachment) => attachment.type !== "thread",
-    );
-    const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
-    const turn = yield* providerService.sendTurn({
-      threadId: input.threadId,
-      ...(normalizedInput ? { input: normalizedInput } : {}),
-      ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
-      ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
-      ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
-      sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
-    });
-
-    const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
-    const sessionUnchangedSinceSend =
-      sessionBeforeTurn !== null &&
-      sessionAfterTurn !== null &&
-      sessionAfterTurn.status === sessionBeforeTurn.status &&
-      sessionAfterTurn.activeTurnId === sessionBeforeTurn.activeTurnId &&
-      sessionAfterTurn.updatedAt === sessionBeforeTurn.updatedAt &&
-      sessionAfterTurn.providerName === sessionBeforeTurn.providerName &&
-      sessionAfterTurn.runtimeMode === sessionBeforeTurn.runtimeMode;
-
-    if (sessionAfterTurn === null || sessionUnchangedSinceSend) {
-      yield* setThreadSession({
-        threadId: input.threadId,
-        session: {
-          threadId: input.threadId,
-          status: "running",
-          providerName:
-            sessionAfterTurn?.providerName ??
-            sessionBeforeTurn?.providerName ??
-            thread.modelSelection.provider,
-          runtimeMode:
-            sessionAfterTurn?.runtimeMode ?? sessionBeforeTurn?.runtimeMode ?? thread.runtimeMode,
-          activeTurnId: turn.turnId,
-          sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
-          reason: null,
-          lastError: null,
-          updatedAt: input.createdAt,
-        },
-        createdAt: input.createdAt,
-        expectedSessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
-      });
-    }
-  });
-
 export const sendTurnForThread = (services: SessionOpServices) =>
   Effect.fn("sendTurnForThread")(function* (input: SendTurnForThreadInput) {
+    const thread = yield* services.resolveThread(input.threadId);
+    if (!thread) return;
+    const effectiveInput = { ...input, ...resolveTurnExecutionSettings(thread, input) };
     yield* withOneShotContextLimitRecovery({
       threadId: input.threadId,
       providerService: services.providerService,
       states: services.capabilityContextStates,
-      attempt: () => sendTurnAttempt(services)(input),
+      attempt: () => sendTurnAttempt(services, ensureSessionForThread(services))(effectiveInput),
     });
   });
 
-export { maybeGenerateAndRenameWorktreeBranchForFirstTurn, maybeGenerateThreadTitleForFirstTurn };
+export {
+  maybeGenerateAndRenameWorktreeBranchForFirstTurn,
+  maybeGenerateThreadTitleForFirstTurn,
+} from "./ProviderCommandReactorSessionOps.firstTurn.ts";

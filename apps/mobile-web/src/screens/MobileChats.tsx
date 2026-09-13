@@ -1,4 +1,5 @@
-import { MessageSquareTextIcon } from "lucide-react";
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 import { MobileListSection } from "../components/shell/MobileAppHeader";
 import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
@@ -28,8 +29,12 @@ export function MobileChats() {
               ) : (
                 <MobileListSection
                   icon={
-                    <MessageSquareTextIcon
+                    <HugeiconsIcon
+                      aria-hidden="true"
                       className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+                      icon={Comment03Icon}
+                      size={14}
+                      strokeWidth={1.5}
                     />
                   }
                   title="Recents"

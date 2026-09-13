@@ -15,6 +15,8 @@ import { ProjectionPendingApprovalRepositoryLive } from "../src/persistence/Laye
 import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../src/persistence/Layers/ProjectionThreadWatches.ts";
+import { ProjectionKanbanRepositoryLive } from "../src/persistence/Layers/ProjectionKanban.ts";
+import { ProjectionNoteRepositoryLive } from "../src/persistence/Layers/ProjectionNotes.ts";
 import { ProjectionCheckpointRepository } from "../src/persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionPendingApprovalRepository } from "../src/persistence/Services/ProjectionPendingApprovals.ts";
 import { ProviderUnsupportedError } from "../src/provider/Errors.ts";
@@ -178,6 +180,8 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(gitCoreLayer),
       Layer.provideMerge(textGenerationLayer),
       Layer.provideMerge(serverSettingsLayer),
+      Layer.provideMerge(ProjectionKanbanRepositoryLive),
+      Layer.provideMerge(ProjectionNoteRepositoryLive),
       Layer.provide(
         OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
       ),

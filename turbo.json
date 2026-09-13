@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["TMPDIR", "TMP", "TEMP"],
   "globalEnv": [
     "PORT",
     "VITE_WS_URL",
@@ -9,7 +10,10 @@
     "BIGBUD_MODE",
     "BIGBUD_PORT",
     "MOBILE_WEB_PORT",
-    "VITE_MOBILE_WEB_URL",
+    "BIGBUD_DEV_WEB_PORT",
+    "BIGBUD_DEV_REPO_ROOT",
+    "BIGBUD_DEV_WEB_RESERVATION",
+    "BIGBUD_DEV_INSTANCE_OFFSET",
     "BIGBUD_DEV_INSTANCE",
     "BIGBUD_PORT_OFFSET",
     "BIGBUD_NO_BROWSER",

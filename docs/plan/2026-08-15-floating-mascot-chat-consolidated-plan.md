@@ -14,16 +14,12 @@ Every sent mascot conversation becomes a normal `standard` thread in the built-i
 
 New mascot drafts use `approval-required` rather than silently inheriting bigbud's current `full-access` default. The first release starts with the most recently submitted provider/model stored in the current Electron profile, validates it against current provider-specific availability, and requires explicit reselection if it is unavailable. A server-authoritative recent-model projection is deferred unless product requirements later demand cross-device history, full historical model options, or provider-accepted/completed semantics.
 
-This is the canonical consolidated plan. The two independent source plans remain preserved for comparison:
-
-- `docs/plan/2026-08-15-floating-mascot-chat-plan.md`
-- `docs/plan/2026-08-15-floating-mascot-chat-window-plan.md`
+This is the canonical plan for the floating mascot and compact chat work. Earlier independent drafts were
+consolidated here and removed after implementation.
 
 ## Related Work
 
 - Source discussion: [Floating mascot and compact chat assessment](bigbud-thread://b6eb4057-b16e-438d-92e9-b6b07b0b1940).
-- Independent plan A: [`2026-08-15-floating-mascot-chat-plan.md`](./2026-08-15-floating-mascot-chat-plan.md).
-- Independent plan B: [`2026-08-15-floating-mascot-chat-window-plan.md`](./2026-08-15-floating-mascot-chat-window-plan.md).
 - Existing compact conversation: `apps/web/src/components/chat/side-chat/FloatingSideChat.tsx`.
 - Electron reference: [Frameless windows](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles), [custom window interactions](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions), and [`BrowserWindow`](https://www.electronjs.org/docs/latest/api/browser-window).
 - No repository issue ID, pull request, note, or Kanban card was identified. Create an issue ID before implementation and link it here so product decisions, platform validation, rollout, and follow-up work remain traceable.

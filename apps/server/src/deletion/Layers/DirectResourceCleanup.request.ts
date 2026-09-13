@@ -173,40 +173,37 @@ export function paginateDirectCleanupResources(input: {
   readonly resources: ReadonlyArray<DirectCleanupResource>;
 }): ReadonlyArray<ReadonlyArray<DirectCleanupResource>> {
   const pages: Array<Array<DirectCleanupResource>> = [];
-  let page: Array<DirectCleanupResource> = [];
-  for (const resource of input.resources) {
-    const candidate = [...page, resource];
-    const request = buildDirectCleanupRequest({
-      requestId: `cleanup:${"f".repeat(64)}`,
-      operationId: input.operationId,
-      planDigest: input.planDigest,
-      proofDigest: "f".repeat(64),
-      deadlineUnixMs: Number.MAX_SAFE_INTEGER,
-      platform: input.platform,
-      resources: candidate,
-    });
-    const fits = candidate.length <= MAX_RESOURCES_PER_PAGE && requestFitsFrame(request);
-    if (!fits) {
-      if (page.length === 0) throw new Error("cleanup resource exceeds the protocol frame limit");
-      pages.push(page);
-      page = [resource];
-      const single = buildDirectCleanupRequest({
-        requestId: `cleanup:${"f".repeat(64)}`,
-        operationId: input.operationId,
-        planDigest: input.planDigest,
-        proofDigest: "f".repeat(64),
-        deadlineUnixMs: Number.MAX_SAFE_INTEGER,
-        platform: input.platform,
-        resources: page,
-      });
-      if (!requestFitsFrame(single)) {
-        throw new Error("cleanup resource exceeds the protocol frame limit");
+  for (let offset = 0; offset < input.resources.length; ) {
+    const fits = (count: number) =>
+      requestFitsFrame(
+        buildDirectCleanupRequest({
+          requestId: `cleanup:${"f".repeat(64)}`,
+          operationId: input.operationId,
+          planDigest: input.planDigest,
+          proofDigest: "f".repeat(64),
+          deadlineUnixMs: Number.MAX_SAFE_INTEGER,
+          platform: input.platform,
+          resources: input.resources.slice(offset, offset + count),
+        }),
+      );
+    const maximum = Math.min(MAX_RESOURCES_PER_PAGE, input.resources.length - offset);
+    let count = maximum;
+    if (!fits(maximum)) {
+      // Appending resources preserves existing root handles and only grows the frame.
+      // Search prefixes rather than re-encoding every growing page for every item.
+      let lower = 0;
+      let upper = maximum - 1;
+      while (lower < upper) {
+        const middle = Math.ceil((lower + upper) / 2);
+        if (fits(middle)) lower = middle;
+        else upper = middle - 1;
       }
-    } else {
-      page = candidate;
+      count = lower;
     }
+    if (count === 0) throw new Error("cleanup resource exceeds the protocol frame limit");
+    pages.push(input.resources.slice(offset, offset + count));
+    offset += count;
   }
-  if (page.length > 0) pages.push(page);
   return pages;
 }
 

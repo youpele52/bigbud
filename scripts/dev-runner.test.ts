@@ -85,7 +85,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.equal(env.BIGBUD_HOME, resolve(homedir(), ".bigbud"));
         assert.equal(env.T3CODE_HOME, resolve(homedir(), ".bigbud"));
         assert.equal(env.MOBILE_WEB_PORT, String(DEFAULT_MOBILE_WEB_PORT));
-        assert.equal(env.VITE_MOBILE_WEB_URL, `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`);
+        assert.equal(env.VITE_MOBILE_WEB_URL, undefined);
       }),
     );
 

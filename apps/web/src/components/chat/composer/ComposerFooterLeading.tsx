@@ -6,9 +6,9 @@ import {
   type RuntimeMode,
 } from "@bigbud/contracts";
 import type { ServerProvider } from "@bigbud/contracts";
-import { cn } from "~/lib/utils";
 import { ProviderModelPicker } from "../provider/ProviderModelPicker";
 import { CompactComposerControlsMenu } from "../common/CompactComposerControlsMenu";
+import { composerSurfaceStyles } from "./ComposerSurface.styles";
 
 type ModelOptionsByProvider = ComponentProps<typeof ProviderModelPicker>["modelOptionsByProvider"];
 interface ComposerFooterLeadingProps {
@@ -67,12 +67,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
     ref,
   ) {
     return (
-      <div
-        ref={ref}
-        className={cn(
-          "-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        )}
-      >
+      <div ref={ref} className={composerSurfaceStyles.footerLeading}>
         <ProviderModelPicker
           compact
           provider={selectedProvider}

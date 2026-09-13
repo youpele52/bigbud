@@ -5,44 +5,20 @@ import { useEffect, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
 import { ThreadId } from "@bigbud/contracts";
 import {
-  CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
-  CopyIcon,
   InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
-  type LucideIcon,
-  XIcon,
 } from "lucide-react";
+import { ToastCloseButton, ToastTitleAndDescription } from "./toast.presentation";
 
 import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
-import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
-import { announceMascotAttention } from "../floating-assistant/mascotAttention.logic";
+import { toastManager, anchoredToastManager, type ThreadToastData } from "./toast.manager";
+export type { ThreadToastData } from "./toast.manager";
 
-export type ThreadToastData = {
-  threadId?: ThreadId | null;
-  tooltipStyle?: boolean;
-  dismissAfterVisibleMs?: number;
-  hideOnActiveThread?: boolean;
-  hideCopyButton?: boolean;
-};
-
-const toastManager = Toast.createToastManager<ThreadToastData>();
-const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
-
-function attachMascotAttention(manager: { add: typeof toastManager.add }) {
-  const add = manager.add.bind(manager);
-  manager.add = ((...args: Parameters<typeof add>) => {
-    announceMascotAttention();
-    return add(...args);
-  }) as typeof manager.add;
-}
-
-attachMascotAttention(toastManager);
-attachMascotAttention(anchoredToastManager);
 type ToastId = ReturnType<typeof toastManager.add>;
 const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
 
@@ -53,25 +29,6 @@ const TOAST_ICONS = {
   success: CircleCheckIcon,
   warning: TriangleAlertIcon,
 } as const;
-
-function CopyErrorButton({ text }: { text: string }) {
-  const { copyToClipboard, isCopied } = useCopyToClipboard();
-
-  return (
-    <button
-      className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100"
-      onClick={() => copyToClipboard(text)}
-      title="Copy error"
-      type="button"
-    >
-      {isCopied ? (
-        <CheckIcon className="size-3.5 text-success" />
-      ) : (
-        <CopyIcon className="size-3.5" />
-      )}
-    </button>
-  );
-}
 
 type ToastPosition =
   | "top-left"
@@ -189,54 +146,6 @@ function ToastProvider({ children, position = "top-right", ...props }: ToastProv
       {children}
       <Toasts position={position} />
     </Toast.Provider>
-  );
-}
-
-function ToastCloseButton({ className }: { className?: string }) {
-  return (
-    <Toast.Close
-      aria-label="Close notification"
-      className={cn(
-        "shrink-0 rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        className,
-      )}
-    >
-      <XIcon className="size-3.5" />
-    </Toast.Close>
-  );
-}
-
-function ToastTitleAndDescription({
-  Icon,
-  description,
-  hideCopyButton,
-}: {
-  Icon: LucideIcon | null;
-  description: unknown;
-  hideCopyButton: boolean | undefined;
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 gap-2">
-      {Icon && (
-        <div
-          className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 mt-0.5"
-          data-slot="toast-icon"
-        >
-          <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
-        <Toast.Description
-          className="min-w-0 select-text wrap-break-word whitespace-pre-line text-muted-foreground"
-          data-slot="toast-description"
-        />
-        {typeof description === "string" && !hideCopyButton ? (
-          <CopyErrorButton text={description} />
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -370,6 +279,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                 <ToastCloseButton className="absolute top-3 right-3" />
                 <ToastTitleAndDescription
                   Icon={Icon}
+                  icon={toast.data?.icon}
                   description={showErrorCopyButton ? toast.description : null}
                   hideCopyButton={!showErrorCopyButton}
                 />
@@ -455,6 +365,7 @@ function AnchoredToasts() {
                       <ToastCloseButton className="absolute top-3 right-3" />
                       <ToastTitleAndDescription
                         Icon={Icon}
+                        icon={toast.data?.icon}
                         description={showErrorCopyButton ? toast.description : null}
                         hideCopyButton={!showErrorCopyButton}
                       />

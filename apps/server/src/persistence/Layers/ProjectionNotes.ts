@@ -1,5 +1,6 @@
 import { utimes } from "node:fs/promises";
 import { Effect, FileSystem, Layer, Option, Path, Semaphore } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { NoteId, ProjectId } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
 import {
@@ -7,6 +8,7 @@ import {
   type ProjectionNoteRepositoryShape,
 } from "../Services/ProjectionNotes.ts";
 import { PersistenceSqlError } from "../Errors.ts";
+import { ensureActiveProject, isActiveProject } from "./ProjectionProjectLifecycle.ts";
 import { resolveFileMtime } from "./ProjectionFileMtime.ts";
 
 const NOTES_DIR_SEGMENT = "notes";
@@ -48,6 +50,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
+  const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
 
   const notesBaseDir = path.join(config.stateDir, NOTES_DIR_SEGMENT);
   const mutationSemaphore = yield* Semaphore.make(1);
@@ -59,11 +62,22 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     return segments[1] === "global" ? null : ProjectId.makeUnsafe(segments[1]!);
   };
 
+  const ensureNoteProjectIsActive = (noteId: NoteId, forMutation = false) => {
+    const projectId = projectIdFromNoteId(noteId);
+    return projectId === null ? Effect.void : ensureActiveProject(sql, projectId, forMutation);
+  };
+
   const list: ProjectionNoteRepositoryShape["list"] = Effect.fn("ProjectionNoteRepository.list")(
     function* (input: {
       readonly projectId: ProjectId | null;
       readonly scope: "project" | "global";
     }) {
+      if (input.projectId !== null) {
+        if (input.scope === "project") yield* ensureActiveProject(sql, input.projectId);
+        else if (!(yield* isActiveProject(sql, input.projectId))) {
+          input = { ...input, projectId: null };
+        }
+      }
       const targetDir = input.projectId
         ? path.join(notesBaseDir, input.projectId)
         : path.join(notesBaseDir, "global");
@@ -140,6 +154,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
   const getById: ProjectionNoteRepositoryShape["getById"] = Effect.fn(
     "ProjectionNoteRepository.getById",
   )(function* (input: { readonly noteId: NoteId }) {
+    yield* ensureNoteProjectIsActive(input.noteId);
     const absolutePath = path.join(config.stateDir, input.noteId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
@@ -174,6 +189,9 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     readonly createdAt: string;
     readonly updatedAt: string;
   }) {
+    if (input.projectId !== null) {
+      yield* ensureActiveProject(sql, input.projectId, true);
+    }
     const title = input.title ?? deriveNoteTitle(input.content);
     const targetDir = input.projectId
       ? path.join(notesBaseDir, input.projectId)
@@ -235,6 +253,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     readonly updatedAt: string;
     readonly expectedUpdatedAt?: string | undefined;
   }) {
+    yield* ensureNoteProjectIsActive(input.noteId, true);
     const absolutePath = path.join(config.stateDir, input.noteId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
@@ -285,6 +304,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
   const deleteById: ProjectionNoteRepositoryShape["deleteById"] = Effect.fn(
     "ProjectionNoteRepository.deleteById",
   )(function* (input: { readonly noteId: NoteId }) {
+    yield* ensureNoteProjectIsActive(input.noteId, true);
     const absolutePath = path.join(config.stateDir, input.noteId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
@@ -301,9 +321,10 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
   return {
     list,
     getById,
-    create,
+    create: (input) => serializeMutation(create(input)),
     update,
-    deleteById,
+    deleteById: (input) => serializeMutation(deleteById(input)),
+    drainMutations: serializeMutation(Effect.void),
   } satisfies ProjectionNoteRepositoryShape;
 });
 

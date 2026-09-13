@@ -31,6 +31,7 @@ import {
   OrchestrationMessageRole,
   OrchestrationPendingInterruptFlushIntent,
   OrchestrationProposedPlan,
+  OrchestrationQueuedPrompt,
   OrchestrationSession,
   OrchestrationTask,
   OrchestrationTaskFreshness,
@@ -64,7 +65,7 @@ export const ThreadCreatedPayload = Schema.Struct({
 
 export const ThreadPromptQueuedPayload = Schema.Struct({
   threadId: ThreadId,
-  prompt: Schema.Struct({ id: MessageId, text: TrimmedNonEmptyString, createdAt: IsoDateTime }),
+  prompt: OrchestrationQueuedPrompt,
   // Recorded at decision time so idempotent callers can report the original
   // position even after later queue mutations.
   queuePosition: Schema.optional(NonNegativeInt),
@@ -85,12 +86,14 @@ export const ThreadQueuedPromptFlushCancelledPayload = Schema.Struct({
 export const ThreadDeletedPayload = Schema.Struct({
   threadId: ThreadId,
   threadIds: Schema.optional(Schema.Array(ThreadId)),
+  origin: Schema.optional(Schema.Literal("project-cascade")),
   deletedAt: IsoDateTime,
 });
 
 export const ThreadDeletionRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   mode: Schema.optional(Schema.Literals(["single", "subtree"])),
+  origin: Schema.optional(Schema.Literal("project-cascade")),
   deletingAt: IsoDateTime,
 });
 

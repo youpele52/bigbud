@@ -12,6 +12,7 @@ body,
 body {
   margin: 0;
   padding: 0;
+  position: relative;
   height: 100%;
   overflow: hidden;
 }
@@ -25,6 +26,15 @@ body {
   padding-top: env(safe-area-inset-top);
   padding-right: env(safe-area-inset-right);
   padding-left: env(safe-area-inset-left);
+}
+
+.mobile-drawer-popup {
+  translate: 0 var(--drawer-swipe-movement-y, 0px);
+}
+
+.mobile-drawer-popup[data-starting-style],
+.mobile-drawer-popup[data-ending-style] {
+  translate: 0 calc(100% + var(--drawer-swipe-movement-y, 0px));
 }
 
 .shimmer {

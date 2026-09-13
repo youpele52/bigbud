@@ -55,6 +55,23 @@ describe("LearningReactor scheduling", () => {
     ).toBe(true);
   });
 
+  it("suppresses duplicate memory work without advancing successful progress", () => {
+    expect(
+      shouldScheduleMemoryReview({
+        userMessageCount: 19,
+        latestMemoryUserMessageCount: null,
+        pending: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldScheduleMemoryReview({
+        userMessageCount: 19,
+        latestMemoryUserMessageCount: null,
+        pending: false,
+      }),
+    ).toBe(true);
+  });
+
   it("preserves provider identity when resolving learning selections", () => {
     expect(
       resolveLearningModelSelection({

@@ -1,5 +1,5 @@
 import type { ProjectId } from "@bigbud/contracts";
-import { FolderOpenIcon } from "lucide-react";
+import { LaptopMinimalIcon } from "lucide-react";
 
 import { MobileListSection } from "../components/shell/MobileAppHeader";
 import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
@@ -35,7 +35,7 @@ export function MobileProjectThreads({ projectId }: { projectId: ProjectId }) {
               ) : (
                 <MobileListSection
                   icon={
-                    <FolderOpenIcon
+                    <LaptopMinimalIcon
                       className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                     />
                   }

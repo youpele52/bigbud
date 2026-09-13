@@ -22,6 +22,9 @@ const page = await browser.newPage({
 });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
+page.on("console", (message) => {
+  if (message.type() === "error") errors.push(`console.error: ${message.text()}`);
+});
 const requests = [];
 let mode = "current";
 let socket;

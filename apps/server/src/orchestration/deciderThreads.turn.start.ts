@@ -165,8 +165,8 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
       ...(replyTo !== undefined ? { replyTo } : {}),
       ...(command.modelSelection !== undefined ? { modelSelection: command.modelSelection } : {}),
       ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
-      runtimeMode: targetThread.runtimeMode,
-      interactionMode: targetThread.interactionMode,
+      runtimeMode: command.runtimeMode,
+      interactionMode: command.interactionMode,
       ...(command.bootstrapSourceThreadId !== undefined
         ? { bootstrapSourceThreadId: command.bootstrapSourceThreadId }
         : {}),

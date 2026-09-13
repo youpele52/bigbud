@@ -1,9 +1,4 @@
-import {
-  LOCAL_EXECUTION_TARGET_ID,
-  ProviderSessionStartInput,
-  type ProviderSession,
-  type ThreadId,
-} from "@bigbud/contracts";
+import { type ProviderSession, type ThreadId } from "@bigbud/contracts";
 import { Duration, Effect, Exit, Option } from "effect";
 
 import {
@@ -18,14 +13,8 @@ import type { ProviderSessionDirectoryShape } from "../Services/ProviderSessionD
 import type { ProviderSessionDirectoryWriteError } from "../Services/ProviderSessionDirectory.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
 import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
-import {
-  formatUnsupportedProviderExecutionTargetDetail,
-  formatUnsupportedProviderLocalRuntimeRemoteWorkspaceDetail,
-  isUnsupportedProviderLocalRuntimeRemoteWorkspace,
-  supportsProviderExecutionTarget,
-} from "../providerExecutionTargets.ts";
-import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
-import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
+import { toValidationError } from "./ProviderServiceHelpers.ts";
+import { prepareProviderSession } from "./ProviderService.prepareSession.ts";
 
 const PROVIDER_SESSION_START_TIMEOUT = Duration.seconds(45);
 
@@ -64,53 +53,8 @@ export function makeStartSessionInternal(input: {
     ProviderSession,
     ProviderServiceError
   > {
-    const parsed = yield* decodeInputOrValidationError({
-      operation: "ProviderService.startSession",
-      schema: ProviderSessionStartInput,
-      payload: rawInput,
-    });
-    if (
-      parsed.provider !== undefined &&
-      parsed.modelSelection?.provider !== undefined &&
-      parsed.provider !== parsed.modelSelection.provider
-    ) {
-      return yield* toValidationError(
-        "ProviderService.startSession",
-        `Provider '${parsed.provider}' does not match modelSelection provider '${parsed.modelSelection.provider}'.`,
-      );
-    }
-    const provider = parsed.provider ?? parsed.modelSelection?.provider ?? "codex";
-    if (!input.isProviderComposed(provider)) {
-      return yield* toValidationError(
-        "ProviderService.startSession",
-        `Provider '${provider}' is unavailable in this bigbud build.`,
-      );
-    }
-
-    const capabilities = input.getProviderCapabilities(provider);
     const persistedBinding = Option.getOrUndefined(yield* input.directory.getBinding(threadId));
-    const workspaceDefaultExecutionTargetId =
-      persistedBinding?.workspaceExecutionTargetId ??
-      persistedBinding?.executionTargetId ??
-      LOCAL_EXECUTION_TARGET_ID;
-    const startInput = {
-      ...parsed,
-      threadId,
-      provider,
-      ...resolveProviderSessionExecutionTargets({
-        providerRuntimeExecutionTargetId: parsed.providerRuntimeExecutionTargetId,
-        workspaceExecutionTargetId: parsed.workspaceExecutionTargetId,
-        executionTargetId: parsed.executionTargetId,
-        useLegacyExecutionTargetForProviderRuntime:
-          !capabilities.supportsLocalRuntimeRemoteWorkspace,
-        defaultProviderRuntimeExecutionTargetId: capabilities.supportsLocalRuntimeRemoteWorkspace
-          ? LOCAL_EXECUTION_TARGET_ID
-          : (persistedBinding?.providerRuntimeExecutionTargetId ??
-            persistedBinding?.executionTargetId ??
-            workspaceDefaultExecutionTargetId),
-        defaultWorkspaceExecutionTargetId: workspaceDefaultExecutionTargetId,
-      }),
-    };
+    const startInput = yield* prepareProviderSession(input, threadId, rawInput, persistedBinding);
 
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "start-session",
@@ -120,57 +64,6 @@ export function makeStartSessionInternal(input: {
     });
 
     return yield* Effect.gen(function* () {
-      if (
-        isUnsupportedProviderLocalRuntimeRemoteWorkspace({
-          provider: startInput.provider,
-          providerRuntimeExecutionTargetId: startInput.providerRuntimeExecutionTargetId,
-          workspaceExecutionTargetId: startInput.workspaceExecutionTargetId,
-        })
-      ) {
-        return yield* toValidationError(
-          "ProviderService.startSession",
-          formatUnsupportedProviderLocalRuntimeRemoteWorkspaceDetail({
-            provider: startInput.provider,
-            workspaceExecutionTargetId: startInput.workspaceExecutionTargetId,
-          }),
-        );
-      }
-      if (
-        !supportsProviderExecutionTarget(
-          {
-            provider: startInput.provider,
-            executionTargetId: startInput.providerRuntimeExecutionTargetId,
-          },
-          input.getProviderCapabilities,
-        )
-      ) {
-        return yield* toValidationError(
-          "ProviderService.startSession",
-          formatUnsupportedProviderExecutionTargetDetail({
-            provider: startInput.provider,
-            executionTargetId: startInput.providerRuntimeExecutionTargetId,
-            surface: "Provider sessions",
-          }),
-        );
-      }
-
-      const settings = yield* input.serverSettings.getSettings.pipe(
-        Effect.mapError((error) =>
-          toValidationError(
-            "ProviderService.startSession",
-            `Failed to load provider settings: ${error.message}`,
-            error,
-          ),
-        ),
-      );
-      const providerSettings = settings.providers[startInput.provider];
-      if (!providerSettings?.enabled) {
-        return yield* toValidationError(
-          "ProviderService.startSession",
-          `Provider '${startInput.provider}' is disabled in bigbud settings.`,
-        );
-      }
-
       const adapter = yield* input.registry.getByProvider(startInput.provider);
       const recoveryMode = adapter.capabilities.sessionRecovery;
       const recoveryUnsupported = recoveryMode === "unsupported";

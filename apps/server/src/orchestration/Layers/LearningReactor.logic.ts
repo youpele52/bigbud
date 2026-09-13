@@ -9,8 +9,10 @@ export function countFinalizedUserMessages(messages: ReadonlyArray<Orchestration
 export function shouldScheduleMemoryReview(input: {
   readonly userMessageCount: number;
   readonly latestMemoryUserMessageCount: number | null;
+  readonly pending?: boolean;
 }): boolean {
   return (
+    !input.pending &&
     input.userMessageCount >= MEMORY_REVIEW_USER_MESSAGE_INTERVAL &&
     input.userMessageCount >=
       (input.latestMemoryUserMessageCount ?? 0) + MEMORY_REVIEW_USER_MESSAGE_INTERVAL

@@ -30,6 +30,8 @@ import {
 import { EMPTY_PENDING_USER_INPUT_ANSWERS } from "./shared";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { isSessionCompacting } from "../../common/threadActivityIndicator";
+import { useMemoryReviewStatus } from "../../common/memoryReviewStatus.hooks";
+import { shouldShowMemoryReviewStatus } from "../../common/memoryReviewStatus.logic";
 import { useServerSettings } from "../../../../rpc/serverState";
 import { useThinkingStreamStore } from "../../../../stores/thinkingStream/thinkingStream.store";
 
@@ -165,6 +167,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     () => derivePendingUserInputs(activeThread?.activities ?? []),
     [activeThread?.activities],
   );
+  const memoryReviewing = useMemoryReviewStatus(activeThread?.activities ?? []);
   const isOpencodePendingUserInputMode = pendingUserInputs.length > 0;
 
   const activePendingUserInput = pendingUserInputs[0] ?? null;
@@ -264,6 +267,14 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     isSendBusy ||
     isConnecting ||
     isRevertingCheckpoint;
+  const showMemoryReviewStatus = shouldShowMemoryReviewStatus({
+    memoryReviewing,
+    isWorking,
+    isCompacting,
+    hasPendingApproval: pendingApprovals.length > 0,
+    hasPendingUserInput: pendingUserInputs.length > 0,
+    hasUnconfirmedProvider: isSessionHealthUnconfirmed(activeThread?.session ?? null),
+  });
   const nowIso = new Date(nowTick).toISOString();
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,
@@ -327,6 +338,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     isSendBusy,
     activeSessionTurnRunning,
     isWorking,
+    showMemoryReviewStatus,
     nowIso,
     activeWorkStartedAt,
     workingVerb,

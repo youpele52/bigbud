@@ -93,7 +93,7 @@ describe("ThreadRetentionSettingsSection logic", () => {
     });
   });
 
-  it("does not call a pending cleanup finished", () => {
+  it("reports unconfirmed outcomes without claiming cleanup is still running", () => {
     expect(
       getRetentionCleanupSuccessToast({
         trigger: "manual",
@@ -106,8 +106,8 @@ describe("ThreadRetentionSettingsSection logic", () => {
         completedAt: "2026-08-18T00:00:00.000Z",
       }),
     ).toEqual({
-      title: "Thread cleanup still running",
-      description: "Deleted 0 so far, skipped 0. 4 still deleting.",
+      title: "Thread cleanup needs attention",
+      description: "Deleted 0 threads and skipped 0. 4 deletion outcomes could not be confirmed.",
     });
   });
 });

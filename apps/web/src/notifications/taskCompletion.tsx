@@ -2,6 +2,7 @@ import { ThreadId } from "@bigbud/contracts";
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { memoryReviewNotification } from "./memoryReview";
 import { toastManager } from "../components/ui/toast";
 import { announceMascotAttention } from "../components/floating-assistant/mascotAttention.logic";
 import { useSettings } from "../hooks/useSettings";
@@ -128,13 +129,11 @@ export function TaskCompletionNotifications() {
         continue;
       }
       for (const activity of thread.activities) {
-        if (activity.kind !== "learning.memory.updated" || previousActivityIds.has(activity.id)) {
-          continue;
-        }
+        if (previousActivityIds.has(activity.id)) continue;
+        const notification = memoryReviewNotification(activity.kind);
+        if (!notification) continue;
         toastManager.add({
-          type: "success",
-          title: "Memory updated",
-          description: "bigbud saved new persistent memory from this conversation.",
+          ...notification,
           data: { threadId: thread.id, hideOnActiveThread: false },
         });
       }

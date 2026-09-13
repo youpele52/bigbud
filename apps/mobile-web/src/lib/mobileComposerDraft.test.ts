@@ -1,11 +1,14 @@
-import { CommandId, ThreadId } from "@bigbud/contracts";
+import { CommandId, ThreadId, type ClientOrchestrationCommand } from "@bigbud/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  beginMobileComposerDraftLease,
   clearSubmittedMobileComposerDraftIfRevision,
   createMobileComposerDraft,
+  forgetMobileComposerDraft,
   makeMobileComposerDraftIdentity,
   readMobileComposerDraft,
+  writeMobileComposerDraftWithLease,
   writeMobileComposerDraft,
 } from "./mobileComposerDraft";
 
@@ -98,11 +101,20 @@ describe("mobile composer draft storage", () => {
 
   it("clears a submitted record only when the draft revision still matches", () => {
     const command = {
-      type: "thread.turn.interrupt" as const,
+      type: "thread.turn.start" as const,
       commandId: CommandId.makeUnsafe("command-1"),
       threadId: ThreadId.makeUnsafe("thread-1"),
       createdAt: "2026-01-01T00:00:00.000Z",
-    };
+      runtimeMode: "full-access",
+      interactionMode: "plan",
+      modelSelection: { provider: "codex", model: "gpt-5" },
+      message: {
+        messageId: "message-1" as never,
+        role: "user",
+        text: "draft",
+        attachments: [],
+      },
+    } satisfies ClientOrchestrationCommand;
     const draft = {
       ...createMobileComposerDraft({
         threadId: ThreadId.makeUnsafe("thread-1"),
@@ -121,5 +133,39 @@ describe("mobile composer draft storage", () => {
     const cleared = clearSubmittedMobileComposerDraftIfRevision({ ...draft, revision: 2 }, 2);
     expect(cleared.prompt).toBe("");
     expect(cleared.submitted).toBeNull();
+
+    const stopped = clearSubmittedMobileComposerDraftIfRevision(
+      {
+        ...draft,
+        revision: 2,
+        submitted: {
+          ...draft.submitted!,
+          command: {
+            type: "thread.turn.interrupt" as const,
+            commandId: command.commandId,
+            threadId: command.threadId,
+            createdAt: command.createdAt,
+          },
+        },
+      },
+      2,
+    );
+    expect(stopped.prompt).toBe("newer typing");
+    expect(stopped.submitted).toBeNull();
+  });
+
+  it("invalidates late writes after Forget while allowing a new owner to acquire a lease", () => {
+    const draft = createMobileComposerDraft({
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      prompt: "private draft",
+    });
+    const lease = beginMobileComposerDraftLease(identity);
+    expect(writeMobileComposerDraftWithLease(lease, draft).ok).toBe(true);
+    expect(forgetMobileComposerDraft(identity)).toBe(true);
+    expect(writeMobileComposerDraftWithLease(lease, draft).ok).toBe(false);
+    expect(readMobileComposerDraft(identity).draft).toBeNull();
+    const replacement = beginMobileComposerDraftLease(identity);
+    expect(writeMobileComposerDraftWithLease(replacement, draft).ok).toBe(true);
+    expect(readMobileComposerDraft(identity).draft?.prompt).toBe("private draft");
   });
 });

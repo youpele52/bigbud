@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { DEFAULT_WEB_PORT } from "@bigbud/shared/DevPorts";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
@@ -5,6 +7,7 @@ import babel from "@rolldown/plugin-babel";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineConfig } from "vite";
 import pkg from "./package.json" with { type: "json" };
+import { mobileDiscoveryPlugin } from "./src/dev/mobileDiscoveryPlugin";
 
 const port = Number(process.env.PORT ?? DEFAULT_WEB_PORT);
 const sourcemapEnv = (process.env.BIGBUD_WEB_SOURCEMAP ?? process.env.T3CODE_WEB_SOURCEMAP)
@@ -20,6 +23,7 @@ const buildSourcemap =
 
 export default defineConfig({
   plugins: [
+    mobileDiscoveryPlugin(fileURLToPath(new URL("../..", import.meta.url))),
     tanstackRouter(),
     react(),
     babel({

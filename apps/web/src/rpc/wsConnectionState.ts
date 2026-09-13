@@ -85,6 +85,19 @@ export function getWsConnectionUiState(status: WsConnectionStatus): WsConnection
   return "reconnecting";
 }
 
+export function formatWsReconnectAttempt(status: WsConnectionStatus): string {
+  const attempt = Math.max(1, Math.min(status.reconnectAttemptCount, status.reconnectMaxAttempts));
+  return `${attempt}/${status.reconnectMaxAttempts}`;
+}
+
+export function isWsReconnecting(status: WsConnectionStatus): boolean {
+  return (
+    status.hasConnected &&
+    getWsConnectionUiState(status) === "reconnecting" &&
+    (status.reconnectPhase === "waiting" || status.reconnectPhase === "attempting")
+  );
+}
+
 export function recordWsConnectionAttempt(socketUrl: string): WsConnectionStatus {
   return updateWsConnectionStatus((current) => ({
     ...current,

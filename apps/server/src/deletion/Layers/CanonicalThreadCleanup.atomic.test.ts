@@ -6,7 +6,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupRepositoryLive } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
-import { finalizeThreadCanonicalHistory } from "./CanonicalThreadCleanup.ts";
+import {
+  finalizeProjectCanonicalHistory,
+  finalizeThreadCanonicalHistory,
+} from "./CanonicalThreadCleanup.ts";
+import { prepareProjectCanonicalRows } from "./CanonicalThreadCleanup.project.test-fixtures.ts";
 import { recoverCanonicalPruningCandidates } from "./DirectResourceCleanupRecovery.ts";
 
 const layer = it.layer(
@@ -149,6 +153,33 @@ layer("atomic canonical pruning checkpoint", (it) => {
       const [proof] = yield* fixture.sql<{ readonly prunedAt: string | null }>`
         SELECT canonical_pruned_at AS "prunedAt" FROM direct_resource_cleanup_proofs
         WHERE operation_id = 'operation-success'
+      `;
+      assert.equal(proof!.prunedAt, fixture.now);
+    }),
+  );
+
+  it.effect("prunes project canonical history and records its checkpoint atomically", () =>
+    Effect.gen(function* () {
+      const fixture = yield* prepareProjectCanonicalRows("success");
+      yield* finalizeProjectCanonicalHistory({
+        projectionPipeline,
+        sql: fixture.sql,
+        projectId: fixture.projectId,
+        recordCheckpoint: fixture.repository.markCanonicalPruned(
+          fixture.operationId,
+          fixture.now,
+          "project",
+        ),
+      });
+      assert.equal(
+        (yield* fixture.sql`
+          SELECT 1 FROM orchestration_events WHERE event_id = 'project-event-success'
+        `).length,
+        0,
+      );
+      const [proof] = yield* fixture.sql<{ readonly prunedAt: string | null }>`
+        SELECT canonical_pruned_at AS "prunedAt" FROM direct_resource_cleanup_proofs
+        WHERE operation_id = 'project-operation-success'
       `;
       assert.equal(proof!.prunedAt, fixture.now);
     }),

@@ -1,8 +1,9 @@
-import { ThreadId } from "@bigbud/contracts";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { Cause, Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { verifyCanonicalPurgeProof } from "./EntityPurge.proof.ts";
+import { makeProjectDeletionSql } from "./ProjectDeletion.sql.ts";
 import { makeEntityPurgeSql } from "./EntityPurge.sql.ts";
 import {
   OrchestrationProjectionPipeline,
@@ -89,6 +90,60 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
     yield* finalizeThreadCanonicalHistoryWithCoverage(input);
   },
 );
+
+export const finalizeProjectCanonicalHistory = Effect.fn("finalizeProjectCanonicalHistory")(
+  function* (input: {
+    readonly projectionPipeline: OrchestrationProjectionPipelineShape;
+    readonly sql: SqlClient.SqlClient;
+    readonly projectId: ProjectId;
+    readonly recordCheckpoint?: Effect.Effect<void, Error>;
+  }) {
+    const verifyReplacement =
+      input.projectionPipeline.ensureVerifiedBaselineThroughWithoutCompaction;
+    if (verifyReplacement === undefined) {
+      return yield* Effect.fail(
+        new Error("verify-only projection baseline support is unavailable"),
+      );
+    }
+    const queries = makeEntityPurgeSql(input.sql);
+    const proof = yield* queries.readDeletionMarker({
+      entityKind: "project",
+      entityId: input.projectId,
+    });
+    const deletionSequence = proof[0]?.deletionSequence;
+    if (deletionSequence === null || deletionSequence === undefined) {
+      return yield* Effect.fail(new Error("project deletion proof is unavailable"));
+    }
+    yield* verifyReplacement(deletionSequence);
+    yield* finalizeProjectCanonicalHistoryWithCoverage(input);
+  },
+);
+
+export const finalizeProjectCanonicalHistoryWithCoverage = Effect.fn(
+  "finalizeProjectCanonicalHistoryWithCoverage",
+)(function* (input: {
+  readonly sql: SqlClient.SqlClient;
+  readonly projectId: ProjectId;
+  readonly recordCheckpoint?: Effect.Effect<void, Error>;
+}) {
+  const queries = makeEntityPurgeSql(input.sql);
+  const projectQueries = makeProjectDeletionSql(input.sql);
+  yield* input.sql.withTransaction(
+    Effect.gen(function* () {
+      yield* verifyCanonicalPurgeProof({
+        queries,
+        entityKind: "project",
+        entityId: input.projectId,
+      });
+      yield* queries.deleteProvenReceipts({
+        entityKind: "project",
+        entityId: input.projectId,
+      });
+      yield* projectQueries.deleteProvenProjectCanonical({ projectId: input.projectId });
+      yield* input.recordCheckpoint ?? Effect.void;
+    }),
+  );
+});
 
 export const finalizeThreadCanonicalHistoryWithCoverage = Effect.fn(
   "finalizeThreadCanonicalHistoryWithCoverage",

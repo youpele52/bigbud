@@ -155,6 +155,11 @@ export const makeDirectResourceCleanupRepository = Effect.gen(function* () {
           lease_expires_at = ${input.expiresAt}, updated_at = ${input.claimedAt}
         WHERE operation_id = ${input.operationId} AND state IN ('ready', 'retry')
           AND expected_platform = ${input.expectedPlatform}
+          AND EXISTS (
+            SELECT 1 FROM direct_resource_cleanup_proofs AS proof
+            WHERE proof.operation_id = direct_resource_cleanup_plans.operation_id
+              AND proof.canonical_pruned_at IS NOT NULL
+          )
           AND (next_attempt_at IS NULL OR next_attempt_at <= ${input.claimedAt})
           AND (lease_id IS NULL OR lease_expires_at <= ${input.claimedAt})
         RETURNING operation_id
@@ -178,7 +183,7 @@ export const makeDirectResourceCleanupRepository = Effect.gen(function* () {
               JOIN direct_resource_cleanup_proofs AS proof ON proof.operation_id = plan.operation_id
               WHERE plan.state IN ('ready', 'retry')
                 AND plan.expected_platform = ${input.expectedPlatform}
-                AND (proof.aggregate_kind = 'project' OR proof.canonical_pruned_at IS NOT NULL)
+                AND proof.canonical_pruned_at IS NOT NULL
                 AND (plan.next_attempt_at IS NULL OR plan.next_attempt_at <= ${input.claimedAt})
                 AND (plan.lease_id IS NULL OR plan.lease_expires_at <= ${input.claimedAt})
               ORDER BY COALESCE(plan.next_attempt_at, plan.created_at), plan.operation_id LIMIT 1

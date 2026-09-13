@@ -1,13 +1,18 @@
+import { SidebarBottomIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronLeftIcon, PanelLeftIcon, PlusIcon } from "lucide-react";
+import { ChevronLeftIcon, PlusIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { MobileHeaderBreadcrumbSegment } from "../../logic/mobileHeader.logic";
+import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
 import { BigbudLogo } from "./BigbudLogo";
-import { MobileConnectionIndicator } from "./MobileConnectionIndicator";
 import { cn } from "../../lib/cn";
-import { describeMobileConnection } from "./MobileNavigationSheet.logic";
+import {
+  describeMobileConnection,
+  MOBILE_NAVIGATION_TRIGGER_ID,
+} from "./MobileNavigationSheet.logic";
 
 interface MobileAppHeaderProps {
   title?: string | undefined;
@@ -17,9 +22,12 @@ interface MobileAppHeaderProps {
   backTo?: string | undefined;
   trailing?: ReactNode | undefined;
   conversation?: boolean | undefined;
+  conversationProviderIcon?: ReactNode | undefined;
   onOpenNavigation?: (() => void) | undefined;
   onNew?: (() => void) | undefined;
   connectionState?: MobileRecoveryState | undefined;
+  connection?: MobileConnectionState | undefined;
+  navigationOpen?: boolean | undefined;
 }
 
 function MobileHeaderBreadcrumb({
@@ -59,9 +67,12 @@ export function MobileAppHeader({
   backTo = "/mobile",
   trailing,
   conversation = false,
+  conversationProviderIcon,
   onOpenNavigation,
   onNew,
   connectionState,
+  connection,
+  navigationOpen = false,
 }: MobileAppHeaderProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isPairing = pathname.includes("/pair");
@@ -71,64 +82,86 @@ export function MobileAppHeader({
   }
 
   const chatsLabel = connectionState
-    ? `Open Chats. ${describeMobileConnection(connectionState)}`
+    ? `Open Chats. ${describeMobileConnection(connectionState, connection)}`
     : "Open Chats";
 
   return (
-    <header className="sticky top-0 z-40 -mx-4 mb-4 border-b border-border/60 bg-background px-4 py-3">
-      <div className="flex min-h-9 items-center gap-3">
+    <header className="sticky top-0 z-40 -mx-4 mb-4 border-b border-border bg-background px-3 py-2">
+      <div className="flex min-h-8 items-center gap-2">
         {conversation ? (
-          <button
-            aria-label={chatsLabel}
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-1.5 text-sm font-medium text-foreground active:bg-accent"
-            onClick={onOpenNavigation}
-            type="button"
+          <Link
+            aria-label="Go to bigbud home"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-primary transition-colors active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+            to="/mobile"
           >
-            <PanelLeftIcon className="size-4" />
-            <span>Chats</span>
-            {connectionState ? <MobileConnectionIndicator state={connectionState} /> : null}
-          </button>
+            <BigbudLogo className="h-4" />
+          </Link>
         ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {!conversation && showBack ? (
             <Link
               aria-label="Go back"
-              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors active:bg-accent"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-foreground transition-colors active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               to={backTo}
             >
               <ChevronLeftIcon className="size-5" />
             </Link>
           ) : null}
           {!conversation && showLogo ? (
-            <Link className="inline-flex items-center text-foreground" to="/mobile">
+            <Link
+              aria-label="Go to bigbud home"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              to="/mobile"
+            >
               <BigbudLogo className="h-7" />
             </Link>
-          ) : !conversation && breadcrumb && breadcrumb.length > 0 ? (
+          ) : null}
+          {conversation && conversationProviderIcon ? (
+            <span
+              aria-hidden="true"
+              className="inline-flex size-5 shrink-0 items-center justify-center"
+              data-mobile-conversation-provider-icon="true"
+            >
+              {conversationProviderIcon}
+            </span>
+          ) : null}
+          {!conversation && breadcrumb && breadcrumb.length > 0 ? (
             <MobileHeaderBreadcrumb segments={breadcrumb} />
           ) : title ? (
             <h1 className="truncate text-sm font-semibold text-foreground">{title}</h1>
+          ) : conversation ? (
+            <h1 className="truncate text-sm font-semibold text-foreground">New thread</h1>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {trailing}
-          {!conversation && onOpenNavigation ? (
+          {onOpenNavigation ? (
             <button
+              id={MOBILE_NAVIGATION_TRIGGER_ID}
+              aria-expanded={navigationOpen}
+              aria-haspopup="dialog"
               aria-label={chatsLabel}
-              className="inline-flex size-11 items-center justify-center rounded-full text-foreground active:bg-accent"
+              className="inline-flex size-11 items-center justify-center rounded-lg text-foreground transition-colors active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               onClick={onOpenNavigation}
               type="button"
             >
-              <PanelLeftIcon className="size-4" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                className="size-4"
+                icon={SidebarBottomIcon}
+                size={16}
+                strokeWidth={1.5}
+              />
             </button>
           ) : null}
           {onNew ? (
             <button
-              className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-foreground active:bg-accent"
+              aria-label="New chat"
+              className="inline-flex size-11 items-center justify-center rounded-lg text-foreground transition-colors active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               onClick={onNew}
               type="button"
             >
-              <PlusIcon className="size-4" />
-              <span>New</span>
+              <PlusIcon aria-hidden="true" className="size-4" />
             </button>
           ) : null}
         </div>

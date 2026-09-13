@@ -25,13 +25,23 @@ import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import { claimBootstrapWorktreeRecipe } from "./wsBootstrap.recipe.ts";
 import { ensureBootstrapWorktree, type BootstrapGit } from "./wsBootstrap.worktree.ts";
+import { runBootstrapSetupScript, type AppendBootstrapSetupActivity } from "./wsBootstrap.setup.ts";
+import { validateBootstrapSubmission } from "./wsBootstrap.submission.ts";
+import {
+  claimBootstrapSubmissionRecipe,
+  type BootstrapSubmissionRecipe,
+} from "./wsBootstrap.submissionRecipe.ts";
+import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import type { BootstrapSubmissionDispatch } from "../orchestration/Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
 export type BootstrapServices = {
   readonly orchestrationEngine: {
     dispatch: (
       cmd: OrchestrationCommand,
+      options?: { readonly bootstrapSubmission?: BootstrapSubmissionDispatch },
     ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
     getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
+    ensureThreadState?: NonNullable<OrchestrationEngineShape["ensureThreadState"]>;
     getCommandOutcome?: (
       commandId: CommandId,
     ) => Effect.Effect<GetCommandOutcomeResult, OrchestrationCommandReceiptRepositoryError>;
@@ -68,15 +78,7 @@ export function makeDispatchBootstrapThreadCommand(
   git: BootstrapServices["git"],
   projectSetupScriptRunner: BootstrapServices["projectSetupScriptRunner"],
   refreshGitStatus: BootstrapServices["refreshGitStatus"],
-  appendSetupScriptActivity: (input: {
-    readonly parentCommandId: CommandId;
-    readonly threadId: ThreadId;
-    readonly kind: "setup-script.requested" | "setup-script.started" | "setup-script.failed";
-    readonly summary: string;
-    readonly createdAt: string;
-    readonly payload: Record<string, unknown>;
-    readonly tone: "info" | "error";
-  }) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>,
+  appendSetupScriptActivity: AppendBootstrapSetupActivity,
   serverCommandId: (parentCommandId: CommandId, tag: string) => CommandId,
   withBootstrapCommandLock: BootstrapCommandLock,
   resolveWorktreeIdentity?: (input: {
@@ -88,7 +90,10 @@ export function makeDispatchBootstrapThreadCommand(
   bootstrapRecipes?: BootstrapServices["bootstrapRecipes"],
 ) {
   return function dispatchBootstrapThreadCommand(
-    command: Extract<OrchestrationCommand, { type: "thread.turn.start" | "thread.shell.run" }>,
+    command: Extract<
+      OrchestrationCommand,
+      { type: "thread.turn.start" | "thread.shell.run" | "thread.message.submit" }
+    >,
   ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> {
     return Effect.gen(function* () {
       const services = yield* Effect.services();
@@ -101,7 +106,15 @@ export function makeDispatchBootstrapThreadCommand(
 
       const getCommandOutcome = (commandId: CommandId) =>
         orchestrationEngine.getCommandOutcome
-          ? orchestrationEngine.getCommandOutcome(commandId)
+          ? orchestrationEngine
+              .getCommandOutcome(commandId)
+              .pipe(
+                Effect.flatMap((outcome) =>
+                  outcome.commandId === commandId
+                    ? Effect.succeed(outcome)
+                    : Effect.fail(new Error("Bootstrap receipt belongs to a different command.")),
+                ),
+              )
           : Effect.fail(new Error("Durable command outcome lookup is unavailable"));
 
       const resolveTargetProject = () =>
@@ -130,97 +143,45 @@ export function makeDispatchBootstrapThreadCommand(
           }),
         );
 
-      const recordSetupScriptLaunchFailure = (input: {
-        readonly error: unknown;
-        readonly requestedAt: string;
-        readonly worktreePath: string;
-      }) => {
-        const detail =
-          input.error instanceof Error ? input.error.message : "Unknown setup failure.";
-        return appendSetupScriptActivity({
-          parentCommandId: command.commandId,
-          threadId: command.threadId,
-          kind: "setup-script.failed",
-          summary: "Setup script failed to start",
-          createdAt: input.requestedAt,
-          payload: { detail, worktreePath: input.worktreePath },
-          tone: "error",
-        }).pipe(
-          Effect.ignoreCause({ log: false }),
-          Effect.flatMap(() =>
-            Effect.logWarning("bootstrap turn start failed to launch setup script", {
-              threadId: command.threadId,
-              worktreePath: input.worktreePath,
-              detail,
-            }),
-          ),
-        );
-      };
-
-      const recordSetupScriptStarted = (input: {
-        readonly requestedAt: string;
-        readonly worktreePath: string;
-        readonly scriptId: string;
-        readonly scriptName: string;
-        readonly terminalId: string;
-      }) => {
-        const payload = {
-          scriptId: input.scriptId,
-          scriptName: input.scriptName,
-          terminalId: input.terminalId,
-          worktreePath: input.worktreePath,
-        };
-        return Effect.all([
-          appendSetupScriptActivity({
-            parentCommandId: command.commandId,
-            threadId: command.threadId,
-            kind: "setup-script.requested",
-            summary: "Starting setup script",
-            createdAt: input.requestedAt,
-            payload,
-            tone: "info",
-          }),
-          appendSetupScriptActivity({
-            parentCommandId: command.commandId,
-            threadId: command.threadId,
-            kind: "setup-script.started",
-            summary: "Setup script started",
-            createdAt: new Date().toISOString(),
-            payload,
-            tone: "info",
-          }),
-        ]).pipe(Effect.asVoid, Effect.ignoreCause({ log: true }));
-      };
+      const resolveRecipeInput = () =>
+        Effect.gen(function* () {
+          const project = yield* resolveTargetProject();
+          const executionTargetId = project
+            ? resolveWorkspaceExecutionTargetId(project)
+            : undefined;
+          const prepare = bootstrap?.prepareWorktree;
+          const identity =
+            prepare && !prepare.branch
+              ? resolveWorktreeIdentity?.({
+                  parentCommandId: command.commandId,
+                  projectCwd: prepare.projectCwd,
+                  branch: prepare.baseBranch,
+                  ...(executionTargetId ? { executionTargetId } : {}),
+                })
+              : null;
+          return {
+            executionTargetId: executionTargetId ?? null,
+            projectId: targetProjectId ?? null,
+            projectCwd: prepare?.projectCwd ?? null,
+            baseBranch: prepare?.baseBranch ?? null,
+            requestedBranch: prepare?.branch ?? null,
+            deterministicWorktreePath: identity?.path ?? null,
+          };
+        });
 
       const runSetupProgram = () =>
         bootstrap?.runSetupScript && targetWorktreePath
-          ? (() => {
-              const worktreePath = targetWorktreePath;
-              const requestedAt = new Date().toISOString();
-              return projectSetupScriptRunner
-                .runForThread({
-                  threadId: command.threadId,
-                  ...(targetProjectId ? { projectId: targetProjectId } : {}),
-                  ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
-                  worktreePath,
-                })
-                .pipe(
-                  Effect.matchEffect({
-                    onFailure: (error: unknown) =>
-                      recordSetupScriptLaunchFailure({ error, requestedAt, worktreePath }),
-                    onSuccess: (setupResult) => {
-                      if (setupResult.status !== "started") return Effect.void;
-                      return recordSetupScriptStarted({
-                        requestedAt,
-                        worktreePath,
-                        scriptId: setupResult.scriptId,
-                        scriptName: setupResult.scriptName,
-                        terminalId: setupResult.terminalId,
-                      });
-                    },
-                  }),
-                );
-            })()
+          ? runBootstrapSetupScript({
+              parentCommandId: command.commandId,
+              setup: {
+                threadId: command.threadId,
+                ...(targetProjectId ? { projectId: targetProjectId } : {}),
+                ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
+                worktreePath: targetWorktreePath,
+              },
+              runForThread: projectSetupScriptRunner.runForThread,
+              appendActivity: appendSetupScriptActivity,
+            })
           : Effect.void;
 
       const runPostDispatchBootstrapEffects = () =>
@@ -235,9 +196,26 @@ export function makeDispatchBootstrapThreadCommand(
         );
 
       const bootstrapProgram = Effect.gen(function* () {
+        if (command.type === "thread.message.submit" && command.delivery === "queue" && bootstrap) {
+          return yield* new OrchestrationDispatchCommandError({
+            message: "Queue-only submissions cannot prepare bootstrap resources.",
+          });
+        }
         const parentOutcome = yield* getCommandOutcome(command.commandId);
+        isAcceptedThreadOutcome(parentOutcome, command.threadId, "bootstrap parent");
+        let submissionRecipe: BootstrapSubmissionRecipe | undefined;
+        if (command.type === "thread.message.submit" && bootstrap) {
+          if (parentOutcome.status === "unknown") {
+            yield* validateBootstrapSubmission({ command, engine: orchestrationEngine });
+          }
+          submissionRecipe = yield* claimBootstrapSubmissionRecipe({
+            command,
+            repository: bootstrapRecipes,
+            requireExisting: parentOutcome.status !== "unknown",
+            resolveRecipe: resolveRecipeInput,
+          });
+        }
         if (parentOutcome.status !== "unknown") {
-          isAcceptedThreadOutcome(parentOutcome, command.threadId, "bootstrap parent");
           return yield* orchestrationEngine.dispatch(finalTurnStartCommand);
         }
 
@@ -291,38 +269,29 @@ export function makeDispatchBootstrapThreadCommand(
             targetProjectId = canonicalThread.projectId;
             targetWorktreePath = canonicalThread.worktreePath;
           } else {
-            const project = yield* resolveTargetProject();
-            const executionTargetId = project
-              ? resolveWorkspaceExecutionTargetId(project)
-              : undefined;
-            const worktreeIdentity = bootstrap.prepareWorktree.branch
+            const recipe =
+              submissionRecipe ??
+              (yield* claimBootstrapWorktreeRecipe({
+                ...(yield* resolveRecipeInput()),
+                repository: bootstrapRecipes,
+                parentCommandId: command.commandId,
+                createdAt: command.createdAt,
+                projectCwd: bootstrap.prepareWorktree.projectCwd,
+                baseBranch: bootstrap.prepareWorktree.baseBranch,
+              }));
+            if (!recipe.projectCwd || !recipe.baseBranch) {
+              throw new Error("Bootstrap worktree recipe is missing its project or base branch.");
+            }
+            const worktreeIdentity = recipe.requestedBranch
               ? null
               : resolveWorktreeIdentity?.({
                   parentCommandId: command.commandId,
-                  projectCwd: bootstrap.prepareWorktree.projectCwd,
-                  branch: bootstrap.prepareWorktree.baseBranch,
-                  ...(executionTargetId ? { executionTargetId } : {}),
+                  projectCwd: recipe.projectCwd,
+                  branch: recipe.baseBranch,
+                  ...(recipe.executionTargetId
+                    ? { executionTargetId: recipe.executionTargetId }
+                    : {}),
                 });
-            const createInput = {
-              cwd: bootstrap.prepareWorktree.projectCwd,
-              ...(executionTargetId ? { executionTargetId } : {}),
-              branch: bootstrap.prepareWorktree.baseBranch,
-              ...(bootstrap.prepareWorktree.branch
-                ? { newBranch: bootstrap.prepareWorktree.branch }
-                : {}),
-              path: worktreeIdentity?.path ?? null,
-            } as const;
-            const recipe = yield* claimBootstrapWorktreeRecipe({
-              repository: bootstrapRecipes,
-              parentCommandId: command.commandId,
-              createdAt: command.createdAt,
-              executionTargetId: executionTargetId ?? null,
-              projectId: targetProjectId ?? null,
-              projectCwd: createInput.cwd,
-              baseBranch: createInput.branch,
-              requestedBranch: createInput.newBranch ?? null,
-              deterministicWorktreePath: createInput.path,
-            });
             targetProjectId = recipe.projectId ?? targetProjectId;
             targetProjectCwd = recipe.projectCwd;
             if (!recipe.requestedBranch && !recipe.deterministicWorktreePath) {
@@ -366,7 +335,12 @@ export function makeDispatchBootstrapThreadCommand(
           }
         }
 
-        const dispatchResult = yield* orchestrationEngine.dispatch(finalTurnStartCommand);
+        const dispatchResult = yield* orchestrationEngine.dispatch(
+          finalTurnStartCommand,
+          command.type === "thread.message.submit" && bootstrap
+            ? { bootstrapSubmission: { originalCommand: command } }
+            : undefined,
+        );
         runFork(runPostDispatchBootstrapEffects().pipe(Effect.ignoreCause({ log: true })));
         return dispatchResult;
       });

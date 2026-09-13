@@ -303,6 +303,14 @@ export class MobileRpcClient {
         timeoutMs: MOBILE_THREAD_TIMEOUT_MS,
       });
     } catch (error) {
+      const normalized = normalizeRecoveryRpcError(
+        error,
+        MOBILE_RECOVERY_WS_METHODS.getCommandOutcome,
+      );
+      if (normalized instanceof MobileRecoveryUnsupportedError) {
+        this.expectedUnsupportedClose = true;
+        throw normalized;
+      }
       throw new Error(formatRpcError(error), { cause: error });
     }
   }

@@ -28,6 +28,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
 import type { OrchestrationCommandReceiptRepositoryError } from "../../persistence/Errors.ts";
 import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion.ts";
+import type { BootstrapSubmissionDispatch } from "../Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
 /**
  * OrchestrationEngineShape - Service API for orchestration command and event flow.
@@ -94,6 +95,7 @@ export interface OrchestrationEngineShape {
    */
   readonly dispatch: (
     command: OrchestrationCommand,
+    options?: { readonly bootstrapSubmission?: BootstrapSubmissionDispatch },
   ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError, never>;
 
   /**

@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
@@ -21,6 +22,6 @@
       }
     ]
   },
-  "include": ["src", "vite.config.ts", "test"],
+  "include": ["src", "vite.config.ts", "dev*.ts", "test"],
   "exclude": ["src/hooks/pcm16-processor.worklet.ts"]
 }

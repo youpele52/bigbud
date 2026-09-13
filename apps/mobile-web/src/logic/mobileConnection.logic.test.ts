@@ -85,4 +85,51 @@ describe("mobile connection lifecycle evidence", () => {
     expect(onExpired).toHaveBeenCalledOnce();
     cancel();
   });
+
+  it("publishes reconnect thresholds from one incident clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const lifecycle = createMobileConnectionLifecycle();
+    const lease = lifecycle.begin("2030-01-01T00:01:00.000Z");
+
+    expect(lifecycle.getState().incidentLevel).toBe("short");
+    vi.advanceTimersByTime(1_999);
+    expect(lifecycle.getState().incidentLevel).toBe("short");
+    vi.advanceTimersByTime(1);
+    expect(lifecycle.getState().incidentLevel).toBe("reconnecting");
+    vi.advanceTimersByTime(7_999);
+    expect(lifecycle.getState().incidentLevel).toBe("reconnecting");
+    vi.advanceTimersByTime(1);
+    expect(lifecycle.getState().incidentLevel).toBe("escalated");
+
+    lease.handlers.onOpen?.();
+    expect(lifecycle.getState()).toMatchObject({
+      incidentLevel: "none",
+      incidentStartedAt: null,
+      transport: "open",
+    });
+  });
+
+  it("restarts incident timing after a healthy socket closes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const lifecycle = createMobileConnectionLifecycle();
+    const lease = lifecycle.begin("2030-01-01T00:01:00.000Z");
+    lease.handlers.onOpen?.();
+    vi.advanceTimersByTime(30_000);
+    lease.handlers.onClose?.({ code: 1006, reason: "network disappeared" });
+
+    expect(lifecycle.getState().incidentStartedAt).toBe(Date.now());
+    expect(lifecycle.getState().incidentLevel).toBe("short");
+    vi.advanceTimersByTime(2_000);
+    expect(lifecycle.getState().incidentLevel).toBe("reconnecting");
+  });
+
+  it("keeps browser offline advisory state separate from authorization", () => {
+    const lifecycle = createMobileConnectionLifecycle();
+    lifecycle.setBrowserOffline(true);
+    expect(lifecycle.getState()).toMatchObject({ browserOffline: true, authorization: "unknown" });
+    lifecycle.setBrowserOffline(false);
+    expect(lifecycle.getState().browserOffline).toBe(false);
+  });
 });

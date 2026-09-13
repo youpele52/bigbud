@@ -30,8 +30,16 @@ import {
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+import {
+  ClientThreadMessageSubmitCommand,
+  ThreadMessageSubmitCommand,
+} from "./orchestration.commands.client.messageSubmit";
 
 export { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+export {
+  ClientThreadMessageSubmitCommand,
+  ThreadMessageSubmitCommand,
+} from "./orchestration.commands.client.messageSubmit";
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -181,17 +189,6 @@ export const ThreadTurnStartCommand = Schema.Struct({
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
-  createdAt: IsoDateTime,
-});
-
-export const ThreadMessageSubmitCommand = Schema.Struct({
-  type: Schema.Literal("thread.message.submit"),
-  commandId: CommandId,
-  threadId: ThreadId,
-  message: Schema.Struct({ messageId: MessageId, text: TrimmedNonEmptyString }),
-  delivery: Schema.Literals(["auto", "queue"]).pipe(
-    Schema.withDecodingDefault(() => "auto" as const),
-  ),
   createdAt: IsoDateTime,
 });
 
@@ -382,7 +379,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
-  ThreadMessageSubmitCommand,
+  ClientThreadMessageSubmitCommand,
   ThreadQueuedPromptRemoveCommand,
   ThreadQueuedPromptFlushCommand,
   ClientThreadShellRunCommand,

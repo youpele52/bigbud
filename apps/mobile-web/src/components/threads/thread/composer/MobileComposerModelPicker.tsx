@@ -66,7 +66,7 @@ export function MobileComposerModelPicker({
       provider={selection.provider}
       providers={providers}
       subPopupClassName={subPopupClassName}
-      triggerClassName="min-h-11 max-w-[60vw] rounded-full border border-border bg-background/40 px-2.5 text-muted-foreground/70 hover:text-foreground/80"
+      triggerClassName="min-h-11 max-w-[60vw] rounded-lg border-transparent bg-transparent px-1.5 text-muted-foreground/70 hover:bg-muted/40 hover:text-foreground/80 focus-visible:bg-muted/40"
       triggerVariant="ghost"
       {...(onProviderUnlock ? { onProviderUnlock } : {})}
       onProviderModelChange={(provider, model, subProviderID) => {

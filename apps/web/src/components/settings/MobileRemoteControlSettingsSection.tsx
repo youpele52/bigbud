@@ -6,29 +6,19 @@ import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
-import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import {
-  resolveHostedMobileWebBaseUrl,
-  resolveLocalMobileWebBaseUrl,
-  normalizeBackendBaseUrl,
-  resolveDefaultBackendBaseUrl,
-  resolveDefaultMobileWebBaseUrl,
-  shouldPreferLiveBackendBaseUrl,
-  shouldResetMobileAppUrlToHosted,
-} from "./mobileRemoteControl.urls";
+import { normalizeBackendBaseUrl, resolveDefaultBackendBaseUrl } from "./mobileRemoteControl.urls";
+import { useMobileRemotePairing } from "./MobileRemoteControlSettingsSection.pairing";
+import { MobileRemoteUrlSelection } from "./MobileRemoteControlSettingsSection.urlSelection";
 import { MobileRemotePairingQrCode } from "./MobileRemotePairingQrCode";
 import {
   MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY,
-  MOBILE_WEB_BASE_URL_STORAGE_KEY,
   readStoredBackendBaseUrl,
-  readStoredMobileWebBaseUrl,
   resolveMobileRemoteControlStatus,
   resolveTailscaleRemoteBackendCheck,
-  stripTrailingSlash,
   syncTailscaleDerivedUrls,
 } from "./MobileRemoteControlSettingsSection.status";
 
@@ -39,10 +29,9 @@ export function MobileRemoteControlSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const queryClient = useQueryClient();
-  const [mobileBaseUrl, setMobileBaseUrl] = useState(readStoredMobileWebBaseUrl);
   const [backendBaseUrl, setBackendBaseUrl] = useState(readStoredBackendBaseUrl);
-  const [pairingLink, setPairingLink] = useState<string | null>(null);
-  const [pairingError, setPairingError] = useState<string | null>(null);
+  const pairing = useMobileRemotePairing(backendBaseUrl);
+  const { pairingLink, pairingError } = pairing;
 
   const { copyToClipboard, isCopied } = useCopyToClipboard({
     onCopy: () => {
@@ -70,8 +59,6 @@ export function MobileRemoteControlSettingsSection() {
     refetchInterval: 10_000,
   });
   const tailscaleStatus = tailscaleQuery.data;
-  const hostedMobileBaseUrl = resolveHostedMobileWebBaseUrl();
-  const localDevMobileBaseUrl = resolveLocalMobileWebBaseUrl();
 
   useEffect(() => {
     const status = tailscaleStatus;
@@ -81,37 +68,8 @@ export function MobileRemoteControlSettingsSection() {
     syncTailscaleDerivedUrls({
       status,
       setBackendBaseUrl,
-      setMobileBaseUrl,
-      shouldPreferLiveBackendBaseUrl,
-      shouldResetMobileAppUrlToHosted,
-      resolveHostedMobileWebBaseUrl,
-      resolveDefaultBackendBaseUrl,
-      resolveDefaultMobileWebBaseUrl,
     });
   }, [tailscaleStatus]);
-
-  const createPairingMutation = useMutation({
-    mutationFn: async () => {
-      const nextMobileBaseUrl = stripTrailingSlash(mobileBaseUrl.trim());
-      const nextBackendBaseUrl = normalizeBackendBaseUrl(backendBaseUrl);
-      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
-      window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextBackendBaseUrl);
-      setBackendBaseUrl(nextBackendBaseUrl);
-      return ensureNativeApi().server.createMobileRemotePairing({
-        scope: "thread-control",
-        baseUrl: nextMobileBaseUrl,
-        backendBaseUrl: nextBackendBaseUrl,
-      });
-    },
-    onSuccess: (pairing) => {
-      setPairingError(null);
-      setPairingLink(pairing.pairUrl);
-    },
-    onError: (error) => {
-      setPairingLink(null);
-      setPairingError(error instanceof Error ? error.message : String(error));
-    },
-  });
 
   const revokeSessionMutation = useMutation({
     mutationFn: (sessionId: string) =>
@@ -132,11 +90,6 @@ export function MobileRemoteControlSettingsSection() {
         const nextRemoteBaseUrl = normalizeBackendBaseUrl(status.remoteBaseUrl);
         setBackendBaseUrl(nextRemoteBaseUrl);
         window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
-        if (shouldResetMobileAppUrlToHosted(mobileBaseUrl, nextRemoteBaseUrl)) {
-          const nextMobileBaseUrl = stripTrailingSlash(resolveHostedMobileWebBaseUrl());
-          setMobileBaseUrl(nextMobileBaseUrl);
-          window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
-        }
       }
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
     },
@@ -150,11 +103,8 @@ export function MobileRemoteControlSettingsSection() {
     },
     onSuccess: async () => {
       const nextLocalBackend = normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
-      const nextLocalMobile = stripTrailingSlash(resolveDefaultMobileWebBaseUrl());
       setBackendBaseUrl(nextLocalBackend);
-      setMobileBaseUrl(nextLocalMobile);
       window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextLocalBackend);
-      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextLocalMobile);
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
     },
   });
@@ -270,32 +220,12 @@ export function MobileRemoteControlSettingsSection() {
           </div>
         </SettingsRow>
 
-        <SettingsRow
-          title="Mobile app URL"
-          description="Root origin of the mobile companion. Pairing links add /mobile automatically."
-        >
-          <div className="mt-3 space-y-3">
-            <Input
-              value={mobileBaseUrl}
-              onChange={(event) => setMobileBaseUrl(event.target.value)}
-            />
-            <ToggleGroup
-              value={mobileBaseUrl === hostedMobileBaseUrl ? ["production"] : ["local"]}
-              onValueChange={(values) => {
-                const value = values[0];
-                if (value === "production") setMobileBaseUrl(hostedMobileBaseUrl);
-                else if (value === "local" && localDevMobileBaseUrl) {
-                  setMobileBaseUrl(localDevMobileBaseUrl);
-                }
-              }}
-            >
-              <ToggleGroupItem value="production">bigbud</ToggleGroupItem>
-              {localDevMobileBaseUrl ? (
-                <ToggleGroupItem value="local">Local</ToggleGroupItem>
-              ) : null}
-            </ToggleGroup>
-          </div>
-        </SettingsRow>
+        <MobileRemoteUrlSelection
+          selection={pairing.selection}
+          onChange={pairing.updateSelection}
+          liveUrl={pairing.liveUrl}
+          isDiscovering={pairing.isDiscovering}
+        />
 
         <SettingsRow
           title="Backend URL"
@@ -310,14 +240,14 @@ export function MobileRemoteControlSettingsSection() {
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                disabled={!settings.mobileRemoteControl.enabled || createPairingMutation.isPending}
-                onClick={() => {
-                  setPairingLink(null);
-                  setPairingError(null);
-                  createPairingMutation.mutate();
-                }}
+                disabled={
+                  !settings.mobileRemoteControl.enabled ||
+                  pairing.isPairing ||
+                  !pairing.mobileBaseUrl
+                }
+                onClick={pairing.createPairing}
               >
-                {createPairingMutation.isPending ? "Creating..." : "Create pairing link"}
+                {pairing.isPairing ? "Creating..." : "Create pairing link"}
               </Button>
             </div>
             {pairingError ? <p className="text-xs text-destructive">{pairingError}</p> : null}

@@ -85,21 +85,22 @@ export function makeDirectResourceCleanupReconciliation(
     listCanonicalPruning: (limit) =>
       sql<{
         readonly operationId: string;
-        readonly threadId: string;
+        readonly aggregateKind: "thread" | "project";
+        readonly aggregateId: string;
         readonly deletionSequence: number;
       }>`
-        SELECT proof.operation_id AS "operationId", proof.aggregate_id AS "threadId",
-          proof.event_sequence AS "deletionSequence"
+        SELECT proof.operation_id AS "operationId", proof.aggregate_kind AS "aggregateKind",
+          proof.aggregate_id AS "aggregateId", proof.event_sequence AS "deletionSequence"
         FROM direct_resource_cleanup_proofs AS proof
         JOIN direct_resource_cleanup_plans AS plan ON plan.operation_id = proof.operation_id
-        WHERE proof.aggregate_kind = 'thread' AND proof.canonical_pruned_at IS NULL
-          AND plan.state IN ('ready', 'running', 'retry')
+        WHERE proof.aggregate_kind IN ('thread', 'project') AND proof.canonical_pruned_at IS NULL
+          AND plan.state IN ('ready', 'running', 'retry', 'completed')
         ORDER BY proof.event_sequence LIMIT ${Math.max(1, Math.min(100, Math.floor(limit)))}
       `.pipe(Effect.mapError((error) => new Error(String(error)))),
-    markCanonicalPruned: (operationId, at) =>
+    markCanonicalPruned: (operationId, at, aggregateKind = "thread") =>
       sql<{ readonly operationId: string }>`
         UPDATE direct_resource_cleanup_proofs SET canonical_pruned_at = ${at}
-        WHERE operation_id = ${operationId} AND aggregate_kind = 'thread'
+        WHERE operation_id = ${operationId} AND aggregate_kind = ${aggregateKind}
           AND canonical_pruned_at IS NULL
         RETURNING operation_id AS "operationId"
       `.pipe(
@@ -211,7 +212,7 @@ export function makeDirectResourceCleanupReconciliation(
                       eventType: row.eventType,
                       eventPayloadJson: row.eventPayloadJson,
                     })}, ${at},
-                    ${row.aggregateKind === "project" ? at : null}
+                    NULL
                   ) ON CONFLICT(operation_id) DO NOTHING
                 `.pipe(
                   Effect.andThen(sql`

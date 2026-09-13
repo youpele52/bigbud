@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Option, Path, Semaphore } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { utimes } from "node:fs/promises";
 import { KanbanCardId, type KanbanStatus, ProjectId } from "@bigbud/contracts";
 
@@ -6,12 +7,13 @@ import { ServerConfig } from "../../startup/config.ts";
 import {
   KanbanCardMetadata,
   KANBAN_DIR_SEGMENT,
-  KANBAN_STATUSES,
   fileSystemError,
   resolveMetadataPath,
   type StoredKanbanCard,
 } from "./ProjectionKanban.shared.ts";
 import { resolveFileMtime } from "./ProjectionFileMtime.ts";
+import { ensureActiveProject } from "./ProjectionProjectLifecycle.ts";
+import { makeListStoredCards } from "./ProjectionKanban.list.ts";
 import { nextKanbanColumnPosition } from "./ProjectionKanban.order.ts";
 import { makePlaceCard } from "./ProjectionKanban.placement.ts";
 import {
@@ -39,6 +41,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
+  const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
 
   const kanbanBaseDir = path.join(config.stateDir, KANBAN_DIR_SEGMENT);
   const mutationSemaphore = yield* Semaphore.make(1);
@@ -50,6 +53,11 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const projectIdFromCardId = (cardId: KanbanCardId): ProjectId | null => {
     const segments = cardId.split("/");
     return segments[1] === "global" ? null : ((segments[1] ?? null) as ProjectId | null);
+  };
+
+  const ensureCardProjectIsActive = (cardId: KanbanCardId, forMutation = false) => {
+    const projectId = projectIdFromCardId(cardId);
+    return projectId === null ? Effect.void : ensureActiveProject(sql, projectId, forMutation);
   };
 
   const tryReadCard = Effect.fn("ProjectionKanbanRepository.tryReadCard")(function* (
@@ -96,34 +104,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
     });
   });
 
-  const listStoredCards = Effect.fn("ProjectionKanbanRepository.listStoredCards")(function* (
-    input: ListProjectionKanbanCardsInput,
-  ) {
-    if (input.scope === "project" && input.projectId === null) {
-      return [];
-    }
-
-    const targetDir = resolveTargetDir(input.scope === "project" ? input.projectId : null);
-    const entries = yield* fs
-      .readDirectory(targetDir)
-      .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
-
-    const cards: Array<StoredKanbanCard> = [];
-
-    for (const entry of entries) {
-      if (!entry.endsWith(".md")) continue;
-      const absolutePath = path.join(targetDir, entry);
-      const card = yield* tryReadCard(absolutePath);
-      if (Option.isSome(card)) {
-        cards.push(card.value);
-      }
-    }
-
-    return cards.toSorted((a, b) => {
-      const statusDelta = KANBAN_STATUSES.indexOf(a.status) - KANBAN_STATUSES.indexOf(b.status);
-      return statusDelta !== 0 ? statusDelta : a.position - b.position;
-    });
-  });
+  const listStoredCards = makeListStoredCards({ fs, path, sql, resolveTargetDir, tryReadCard });
 
   const list: ProjectionKanbanRepositoryShape["list"] = Effect.fn(
     "ProjectionKanbanRepository.list",
@@ -135,6 +116,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const getById: ProjectionKanbanRepositoryShape["getById"] = Effect.fn(
     "ProjectionKanbanRepository.getById",
   )(function* (input) {
+    yield* ensureCardProjectIsActive(input.cardId);
     const absolutePath = path.join(config.stateDir, input.cardId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
@@ -166,6 +148,9 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const create: ProjectionKanbanRepositoryShape["create"] = Effect.fn(
     "ProjectionKanbanRepository.create",
   )(function* (input) {
+    if (input.projectId !== null) {
+      yield* ensureActiveProject(sql, input.projectId, true);
+    }
     const targetDir = resolveTargetDir(input.projectId);
     const fileStem = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     const absolutePath = path.join(targetDir, `${fileStem}.md`);
@@ -223,6 +208,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const updateUnlocked = Effect.fn("ProjectionKanbanRepository.update")(function* (
     input: UpdateProjectionKanbanCardInput,
   ) {
+    yield* ensureCardProjectIsActive(input.cardId, true);
     const absolutePath = path.join(config.stateDir, input.cardId);
     const card = yield* tryReadCard(absolutePath);
     if (Option.isNone(card)) {
@@ -280,12 +266,12 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const moveUnlocked = Effect.fn("ProjectionKanbanRepository.move")(function* (
     input: MoveProjectionKanbanCardInput,
   ) {
+    yield* ensureCardProjectIsActive(input.cardId, true);
     const absolutePath = path.join(config.stateDir, input.cardId);
     const card = yield* tryReadCard(absolutePath);
     if (Option.isNone(card)) {
       return yield* fileSystemError("move", "Kanban card not found");
     }
-
     const scopeInput: ListProjectionKanbanCardsInput = {
       projectId: card.value.projectId,
       scope: card.value.projectId ? "project" : "global",
@@ -309,12 +295,12 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
 
   const reorderWithinStatusUnlocked = Effect.fn("ProjectionKanbanRepository.reorderWithinStatus")(
     function* (input: ReorderProjectionKanbanCardInput) {
+      yield* ensureCardProjectIsActive(input.cardId, true);
       const absolutePath = path.join(config.stateDir, input.cardId);
       const card = yield* tryReadCard(absolutePath);
       if (Option.isNone(card)) {
         return yield* fileSystemError("reorderWithinStatus", "Kanban card not found");
       }
-
       if (card.value.status !== input.status) {
         return yield* fileSystemError(
           "reorderWithinStatus",
@@ -337,6 +323,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const deleteById: ProjectionKanbanRepositoryShape["deleteById"] = Effect.fn(
     "ProjectionKanbanRepository.deleteById",
   )(function* (input) {
+    yield* ensureCardProjectIsActive(input.cardId, true);
     const absolutePath = path.join(config.stateDir, input.cardId);
     const metadataPath = resolveMetadataPath(absolutePath);
 
@@ -363,11 +350,12 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   return {
     list,
     getById,
-    create,
+    create: (input) => serializeMutation(create(input)),
     update,
     move,
     reorderWithinStatus,
-    deleteById,
+    deleteById: (input) => serializeMutation(deleteById(input)),
+    drainMutations: serializeMutation(Effect.void),
   } satisfies ProjectionKanbanRepositoryShape;
 });
 

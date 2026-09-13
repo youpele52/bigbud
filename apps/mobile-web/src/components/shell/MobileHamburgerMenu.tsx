@@ -1,4 +1,6 @@
-import { LogOutIcon, MoonIcon, PanelLeftIcon, RefreshCwIcon, SunIcon } from "lucide-react";
+import { SidebarBottomIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { LogOutIcon, MoonIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
@@ -43,7 +45,13 @@ export function MobileHamburgerMenu({ onReconnect, onSignOut }: MobileHamburgerM
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        <PanelLeftIcon className="size-3.5" />
+        <HugeiconsIcon
+          aria-hidden="true"
+          className="size-3.5"
+          icon={SidebarBottomIcon}
+          size={14}
+          strokeWidth={1.5}
+        />
       </button>
       {open ? (
         <div
