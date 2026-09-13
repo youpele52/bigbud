@@ -21,6 +21,7 @@ export function createProviderServiceHarness() {
 
   const service: ProviderServiceShape = {
     startSession: () => unsupported(),
+    runBackgroundReview: () => Effect.die(new Error("Unexpected background review in test")),
     startSessionFresh: () => unsupported(),
     sendTurn: () => unsupported(),
     interruptTurn: () => unsupported(),

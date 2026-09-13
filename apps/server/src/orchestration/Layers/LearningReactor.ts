@@ -1,194 +1,31 @@
-import { CommandId, EventId, type TurnId } from "@bigbud/contracts";
-import { makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
+import { CommandId, EventId } from "@bigbud/contracts";
 import { createHash } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
-import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import { Effect, FileSystem, Layer, Stream } from "effect";
 
-import { reviewAndUpdateMemory } from "../../learning/LearningReview.ts";
 import { applyValidatedSkillPatch } from "../../learning/LearningValidation.ts";
 import { resolveSkillMutationPolicy } from "../../learning/SkillMutationPolicy.ts";
-import { MemoryStore } from "../../learning/Services/MemoryStore.ts";
 import { LearningJobRepository } from "../../persistence/Services/LearningJobs.ts";
 import type { LearningJob } from "../../persistence/Services/LearningJobs.ts";
 import { SkillChangeProposalRepository } from "../../persistence/Services/SkillChangeProposals.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { supportsProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
-import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
+import { makeLearningJobProcessor } from "./LearningReactor.process.ts";
 import * as LearningReactorLogic from "./LearningReactor.logic.ts";
-import { makeResolveSkillContext, resolveSkillName } from "./LearningReactor.skill.ts";
+import { resolveSkillName } from "./LearningReactor.skill.ts";
 
 const makeLearningReactor = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const learningJobs = yield* LearningJobRepository;
-  const memoryStore = yield* MemoryStore;
-  const config = yield* ServerConfig;
   const discovery = yield* DiscoveryRegistry;
   const proposals = yield* SkillChangeProposalRepository;
   const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const turnModels = new Map<string, string>();
-  const activeJobs = new Set<string>();
-
-  const resolveSkillContext = makeResolveSkillContext({ discovery, fs, path });
-
-  const processJob = Effect.fn("LearningReactor.processJob")(function* (job: LearningJob) {
-    if (activeJobs.has(job.jobId)) return;
-    activeJobs.add(job.jobId);
-    if (!supportsProviderWorkload(job.provider, "learning")) {
-      yield* learningJobs.setState({
-        jobId: job.jobId,
-        state: "requires-reselection",
-        updatedAt: new Date().toISOString(),
-      });
-      activeJobs.delete(job.jobId);
-      return;
-    }
-    yield* learningJobs.setState({
-      jobId: job.jobId,
-      state: "reviewing",
-      updatedAt: new Date().toISOString(),
-    });
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === job.threadId);
-    if (!thread) {
-      yield* learningJobs.setState({
-        jobId: job.jobId,
-        state: "failed",
-        updatedAt: new Date().toISOString(),
-      });
-      activeJobs.delete(job.jobId);
-      return;
-    }
-    const turnMessages = thread.messages.filter((message) => message.turnId === job.turnId);
-    const turnStartedAt = turnMessages.at(0)?.createdAt ?? job.createdAt;
-    const sourceUserMessage =
-      turnMessages.find((message) => message.role === "user")?.text ??
-      thread.messages.findLast(
-        (message) => message.role === "user" && message.createdAt <= turnStartedAt,
-      )?.text;
-    if (!sourceUserMessage) {
-      yield* learningJobs.setState({
-        jobId: job.jobId,
-        state: "failed",
-        updatedAt: new Date().toISOString(),
-      });
-      activeJobs.delete(job.jobId);
-      return;
-    }
-    const skill = yield* resolveSkillContext(sourceUserMessage, job.provider);
-    const review = yield* reviewAndUpdateMemory({
-      providerService,
-      memoryStore,
-      config,
-      thread,
-      projects: readModel.projects,
-      turnId: job.turnId,
-      modelSelection: job.modelSelection,
-      sourceUserMessage,
-      memoryReviewEnabled: job.memoryUserMessageCount !== null,
-      ...(skill ? { skillContext: skill.context } : {}),
-    });
-    const completedAt = new Date().toISOString();
-    yield* learningJobs.setState({ jobId: job.jobId, state: "completed", updatedAt: completedAt });
-    if (review.changed.length > 0) {
-      yield* orchestrationEngine
-        .dispatch({
-          type: "thread.activity.append",
-          commandId: CommandId.makeUnsafe(`learning-memory:${crypto.randomUUID()}`),
-          threadId: job.threadId,
-          activity: {
-            id: EventId.makeUnsafe(crypto.randomUUID()),
-            tone: "info",
-            kind: "learning.memory.updated",
-            summary: "Memory updated",
-            payload: { scopes: review.changed },
-            turnId: job.turnId as TurnId,
-            createdAt: completedAt,
-          },
-          createdAt: completedAt,
-        })
-        .pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("failed to publish memory update notification", {
-              threadId: job.threadId,
-              error: error.message,
-            }),
-          ),
-        );
-    }
-    if (
-      skill &&
-      review.skillPatch &&
-      review.skillPatch.oldText !== review.skillPatch.newText &&
-      applyValidatedSkillPatch({
-        current: skill.context.content,
-        oldText: review.skillPatch.oldText,
-        newText: review.skillPatch.newText,
-      }) !== null
-    ) {
-      const proposalId = crypto.randomUUID();
-      const createdAt = new Date().toISOString();
-      yield* proposals.create({
-        proposalId,
-        threadId: job.threadId,
-        turnId: job.turnId,
-        provider: job.provider,
-        skillPath: skill.context.path,
-        originalHash: createHash("sha256").update(skill.context.content).digest("hex"),
-        oldText: review.skillPatch.oldText,
-        newText: review.skillPatch.newText,
-        reason: review.skillPatch.reason,
-        status: "pending",
-        createdAt,
-        resolvedAt: null,
-      });
-      yield* orchestrationEngine.dispatch({
-        type: "thread.activity.append",
-        commandId: CommandId.makeUnsafe(`learning-skill-proposal:${proposalId}`),
-        threadId: job.threadId,
-        activity: {
-          id: EventId.makeUnsafe(crypto.randomUUID()),
-          tone: "approval",
-          kind: "approval.requested",
-          summary: "Skill improvement approval requested",
-          payload: {
-            requestId: `learning-skill:${proposalId}`,
-            requestKind: "file-change",
-            detail: `${review.skillPatch.reason}\n\n${skill.context.path}\n\n--- current\n${review.skillPatch.oldText}\n+++ proposed\n${review.skillPatch.newText}`,
-            sessionApprovalAvailable: false,
-          },
-          turnId: job.turnId as TurnId,
-          createdAt,
-        },
-        createdAt,
-      });
-    }
-    activeJobs.delete(job.jobId);
-  });
-
-  const processJobSafely = (job: LearningJob) =>
-    processJob(job).pipe(
-      Effect.catchCause((cause) =>
-        learningJobs
-          .setState({ jobId: job.jobId, state: "failed", updatedAt: new Date().toISOString() })
-          .pipe(
-            Effect.catch(() => Effect.void),
-            Effect.tap(() => Effect.sync(() => activeJobs.delete(job.jobId))),
-            Effect.tap(() =>
-              Effect.logWarning("learning review failed", {
-                threadId: job.threadId,
-                turnId: job.turnId,
-                cause: cause.toString(),
-              }),
-            ),
-          ),
-      ),
-    );
-  const worker = yield* makeDrainableWorker(processJobSafely);
+  const processJob = yield* makeLearningJobProcessor;
 
   const start: LearningReactorShape["start"] = Effect.fn("startLearningReactor")(function* () {
     yield* Effect.forkScoped(
@@ -205,7 +42,12 @@ const makeLearningReactor = Effect.gen(function* () {
           turnModels.set(key, event.payload.toModel);
           return Effect.void;
         }
-        if (event.type !== "turn.completed" || event.payload.state !== "completed") {
+        if (event.type !== "turn.completed") {
+          if (event.type === "turn.aborted" || event.type === "session.exited")
+            turnModels.delete(key);
+          return Effect.void;
+        }
+        if (event.payload.state !== "completed") {
           turnModels.delete(key);
           return Effect.void;
         }
@@ -219,11 +61,15 @@ const makeLearningReactor = Effect.gen(function* () {
           const sourceUserMessage = thread.messages.find(
             (message) => message.turnId === turnId && message.role === "user",
           )?.text;
-          const userMessageCount = LearningReactorLogic.countFinalizedUserMessages(thread.messages);
+          const pending = yield* learningJobs.hasPending({ threadId: thread.id });
+          const userMessageCount = yield* learningJobs.countFinalizedUserMessages({
+            threadId: thread.id,
+          });
           const latestMemoryUserMessageCount = yield* learningJobs.getLatestMemoryUserMessageCount({
             threadId: thread.id,
           });
           const memoryUserMessageCount = LearningReactorLogic.shouldScheduleMemoryReview({
+            pending,
             userMessageCount,
             latestMemoryUserMessageCount,
           })
@@ -248,9 +94,11 @@ const makeLearningReactor = Effect.gen(function* () {
             state: "queued",
             createdAt: event.createdAt,
             updatedAt: event.createdAt,
+            attemptCount: 0,
+            nextAttemptAt: null,
+            outcome: null,
           } satisfies LearningJob;
-          const created = yield* learningJobs.createIfAbsent(job);
-          if (created) yield* worker.enqueue(job);
+          yield* learningJobs.createIfAbsent(job);
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.logWarning("learning job creation failed", {
@@ -341,26 +189,28 @@ const makeLearningReactor = Effect.gen(function* () {
         );
       }),
     );
-    const queued = yield* learningJobs.listQueued().pipe(
-      Effect.catch((error) =>
-        Effect.logWarning("failed to restore queued learning jobs", {
-          error: error.message,
-        }).pipe(Effect.as([] as ReadonlyArray<LearningJob>)),
-      ),
-    );
-    yield* Effect.forEach(
-      queued,
-      (job) =>
-        supportsProviderWorkload(job.provider, "learning")
-          ? worker.enqueue(job)
-          : learningJobs
-              .setState({
-                jobId: job.jobId,
-                state: "requires-reselection",
-                updatedAt: new Date().toISOString(),
-              })
-              .pipe(Effect.catch(() => Effect.void)),
-      { concurrency: 1 },
+    yield* learningJobs
+      .recoverInterrupted({ now: new Date().toISOString() })
+      .pipe(
+        Effect.catch(() => Effect.logWarning("failed to recover interrupted learning reviews")),
+      );
+    yield* Effect.gen(function* () {
+      const jobs = yield* learningJobs.listQueued();
+      yield* Effect.forEach(
+        jobs,
+        (job) =>
+          processJob(job).pipe(
+            Effect.catchCause(() =>
+              Effect.logWarning("learning queue processing failed", { jobId: job.jobId }),
+            ),
+          ),
+        { concurrency: 1 },
+      );
+    }).pipe(
+      Effect.catchCause(() => Effect.logWarning("learning queue polling failed")),
+      Effect.andThen(Effect.sleep("5 seconds")),
+      Effect.forever,
+      Effect.forkScoped,
     );
   });
 

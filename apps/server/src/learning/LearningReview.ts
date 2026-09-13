@@ -1,10 +1,5 @@
-import {
-  ThreadId,
-  type ModelSelection,
-  type OrchestrationThread,
-  type ProjectId,
-} from "@bigbud/contracts";
-import { Duration, Effect, Fiber, Stream } from "effect";
+import { type ModelSelection, type OrchestrationThread, type ProjectId } from "@bigbud/contracts";
+import * as Effect from "effect/Effect";
 
 import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils.ts";
 import type { ProviderServiceShape } from "../provider/Services/ProviderService.ts";
@@ -14,7 +9,10 @@ import { validateMemoryReplacement } from "./LearningValidation.ts";
 
 const MAX_TRANSCRIPT_CHARS = 24_000;
 const MAX_MEMORY_CHARS = 8_000;
-const REVIEW_TIMEOUT = Duration.minutes(3);
+
+export class LearningReviewOutputError extends Error {
+  readonly _tag = "LearningReviewOutputError";
+}
 
 type ReviewResult = {
   readonly userMemory: string | null;
@@ -38,6 +36,28 @@ function extractJson(text: string): ReviewResult | null {
   if (!match) return null;
   try {
     const value = JSON.parse(match[0]) as Record<string, unknown>;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (
+      ["userMemory", "globalMemory", "projectMemory"].some(
+        (key) => value[key] !== null && typeof value[key] !== "string",
+      )
+    )
+      return null;
+    if (value.skillPatch !== null) {
+      const patch = value.skillPatch;
+      if (
+        !patch ||
+        typeof patch !== "object" ||
+        Array.isArray(patch) ||
+        !("oldText" in patch) ||
+        typeof patch.oldText !== "string" ||
+        !("newText" in patch) ||
+        typeof patch.newText !== "string" ||
+        !("reason" in patch) ||
+        typeof patch.reason !== "string"
+      )
+        return null;
+    }
     const read = (key: string) =>
       value[key] === null || typeof value[key] === "string" ? (value[key] as string | null) : null;
     return {
@@ -131,6 +151,7 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
     readonly workspaceRoot: string | null;
   }>;
   readonly turnId: string;
+  readonly jobId: string;
   readonly modelSelection: ModelSelection;
   readonly sourceUserMessage: string;
   readonly memoryReviewEnabled: boolean;
@@ -182,56 +203,23 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
       : []),
   ].join("\n\n");
 
-  const reviewThreadId = ThreadId.makeUnsafe(`learning-${crypto.randomUUID()}`);
-  const cwd =
-    resolveThreadWorkspaceCwd({ thread: input.thread, projects: input.projects }) ??
-    input.config.cwd;
-  const response = yield* Effect.scoped(
-    Effect.gen(function* () {
-      const collector = yield* input.providerService.streamEvents.pipe(
-        Stream.filter((event) => event.threadId === reviewThreadId),
-        Stream.takeUntil(
-          (event) => event.type === "turn.completed" || event.type === "turn.aborted",
-        ),
-        Stream.runFold(
-          () => "",
-          (text, event) =>
-            event.type === "content.delta" && event.payload.streamKind === "assistant_text"
-              ? text + event.payload.delta
-              : text,
-        ),
-        Effect.forkScoped,
-      );
-      yield* input.providerService.startSessionFresh(reviewThreadId, {
-        threadId: reviewThreadId,
-        provider: input.modelSelection.provider,
-        cwd,
-        modelSelection: input.modelSelection,
-        approvalPolicy: "untrusted",
-        sandboxMode: "read-only",
-        runtimeMode: "approval-required",
-      });
-      yield* input.providerService.sendTurn({
-        threadId: reviewThreadId,
-        input: prompt,
-        modelSelection: input.modelSelection,
-      });
-      return yield* Fiber.join(collector).pipe(Effect.timeout(REVIEW_TIMEOUT));
-    }).pipe(
-      Effect.ensuring(
-        input.providerService
-          .stopSession({ threadId: reviewThreadId })
-          .pipe(Effect.catch(() => Effect.void)),
-      ),
-    ),
-  );
+  const response = yield* input.providerService.runBackgroundReview({
+    ownerThreadId: input.thread.id,
+    jobId: input.jobId,
+    modelSelection: input.modelSelection,
+    cwd:
+      resolveThreadWorkspaceCwd({ thread: input.thread, projects: input.projects }) ??
+      input.config.cwd,
+    providerRuntimeExecutionTargetId: input.thread.providerRuntimeExecutionTargetId,
+    workspaceExecutionTargetId: input.thread.workspaceExecutionTargetId,
+    input: prompt,
+  });
 
   const result = extractJson(response);
   if (!result) {
-    return {
-      changed: [] as ReadonlyArray<"user" | "global" | "project">,
-      skillPatch: null,
-    };
+    return yield* Effect.fail(
+      new LearningReviewOutputError("The memory review returned invalid JSON."),
+    );
   }
   if (!memoryDocuments) {
     return {
@@ -256,6 +244,20 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
       content: sanitizeMemory(result.projectMemory),
     },
   ];
+  // Validate the entire proposal before writing any scope, so rejected output cannot
+  // partially update memory and then be recorded as an unchanged successful review.
+  for (const [index, update] of updates.entries()) {
+    const proposed = [result.userMemory, result.globalMemory, result.projectMemory][index];
+    if (
+      proposed !== null &&
+      (update.content === null ||
+        !validateMemoryReplacement(update.document.content, update.content))
+    ) {
+      return yield* Effect.fail(
+        new LearningReviewOutputError(`The ${update.scope} memory proposal failed validation.`),
+      );
+    }
+  }
   const changed: Array<"user" | "global" | "project"> = [];
   for (const update of updates) {
     if (

@@ -125,6 +125,7 @@ export function makeReactorProvider(
   const unsupported = () => Effect.die(new Error("Unsupported provider call in test")) as never;
   const service: ProviderServiceShape = {
     startSession: startSession as ProviderServiceShape["startSession"],
+    runBackgroundReview: () => Effect.die(new Error("Unexpected background review in test")),
     startSessionFresh: startSession as ProviderServiceShape["startSessionFresh"],
     sendTurn: sendTurn as ProviderServiceShape["sendTurn"],
     interruptTurn: interruptTurn as ProviderServiceShape["interruptTurn"],

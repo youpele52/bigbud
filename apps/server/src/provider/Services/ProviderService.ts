@@ -12,6 +12,8 @@
  * @module ProviderService
  */
 import type {
+  ExecutionTargetId,
+  ModelSelection,
   ProviderInterruptTurnInput,
   ProviderActiveTurnInspection,
   ProviderKind,
@@ -70,6 +72,17 @@ export type ProviderSessionReconciliationOptions = Pick<
  * ProviderServiceShape - Service API for provider session and turn orchestration.
  */
 export interface ProviderServiceShape {
+  /** Isolated, non-interactive review. Its owner holds the durable activity lease. */
+  readonly runBackgroundReview: (input: {
+    readonly ownerThreadId: ThreadId;
+    readonly jobId: string;
+    readonly modelSelection: ModelSelection;
+    readonly cwd: string;
+    readonly providerRuntimeExecutionTargetId?: ExecutionTargetId | undefined;
+    readonly workspaceExecutionTargetId?: ExecutionTargetId | undefined;
+    readonly input: string;
+  }) => Effect.Effect<string, ProviderServiceError>;
+
   /**
    * Start a provider session.
    */
