@@ -29,7 +29,7 @@ it.layer(
           '/repo/project', 'main', NULL, '/worktrees/owned', '2026-08-27T00:00:00.000Z'
         )
       `;
-        const migrations = yield* runMigrations();
+        const migrations = yield* runMigrations({ toMigrationInclusive: 114 });
         assert.deepStrictEqual(migrations, [[114, "OrchestrationBootstrapSubmissionRecipes"]]);
         const columns = yield* sql<{ name: string; notnull: number }>`
         PRAGMA table_info(orchestration_bootstrap_recipes)
@@ -82,7 +82,7 @@ it.layer(
           yield* repository.claimOrInspect({ ...submission, originalPayloadDigest: "changed" }),
           { status: "conflict", recipe: submission },
         );
-        assert.deepStrictEqual(yield* runMigrations(), []);
+        assert.deepStrictEqual(yield* runMigrations({ toMigrationInclusive: 114 }), []);
         assert.deepStrictEqual(
           yield* repository.getByParentCommandId(submission.parentCommandId),
           Option.some(submission),
