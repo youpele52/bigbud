@@ -4,11 +4,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
-- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
-- Keep your workspace organized across launches and switches: the sidebar remembers which sections and projects you left open, while the Files panel stays in sync as you move between workspaces.
-- Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
-- Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
+- Use bigbud from your phone with a conversation-first mobile workspace: move between chats, projects, files, and settings; keep drafts and pending input across reconnects; and recover safely when a connection or send is interrupted.
+- Work remotely with a more dependable managed agent: installation and upgrades recover from network failures, verify downloads before changing the remote computer, reconnect safely, preserve workspace state, and support files, Git, terminals, PTY sessions, and provider tools.
+- Recover conversations safely when something goes wrong: chat and shell sends now distinguish accepted, rejected, and uncertain outcomes, while reconnect recovery preserves drafts, pending prompts, and confirmed input instead of duplicating or losing work.
+- Choose models and reasoning settings with accurate provider guidance: live model catalogs, verified effort capabilities, custom-model support, and validation before a session or turn prevent unsupported selections from being presented as available.
+- Move through your workspace faster: `Cmd/Ctrl+L` focuses the active composer or browser URL, terminal links safely open local and remote files and previews, `Shift+Enter` inserts a clean terminal line, and terminal layout controls make split, terminal-only, and chat-only views easier to use.
 
 ## v0.2.208 (13 September, 2026)
 
