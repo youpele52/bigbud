@@ -2,7 +2,6 @@ import { CommandId, type OrchestrationThread, ThreadId } from "@bigbud/contracts
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
 import { finalizeThreadCanonicalHistory } from "../../deletion/Layers/CanonicalThreadCleanup.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
@@ -25,7 +24,10 @@ import { directCleanupProofDigest } from "../../deletion/Layers/DirectResourceCl
 import {
   describeRuntimeCleanupFailures,
   appendDeletionFailureActivity,
+  abortUnsafeProjectCascadeThreadDeletion,
+  cleanupDeletedThreadTerminalHistory,
   hydrateStoredDirectCleanupResources,
+  isSingleDeletionAlreadyFenced,
   makeStoppedDeletionSession,
   readFinalizeReceiptStatus,
   resolveDeletionRequestMode,
@@ -71,11 +73,17 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
       return;
     }
     if (
-      mode === "single" &&
-      (yield* orchestrationEngine.threadDeletion!.isFenceRoot(thread.id, "subtree"))
-    ) {
+      event.payload.origin === "project-cascade" &&
+      (yield* abortUnsafeProjectCascadeThreadDeletion(
+        sql,
+        orchestrationEngine,
+        thread.id,
+        mode,
+        event.occurredAt,
+      ))
+    )
       return;
-    }
+    if (yield* isSingleDeletionAlreadyFenced(orchestrationEngine, thread.id, mode)) return;
     const fenceAlreadyHeld = yield* orchestrationEngine.threadDeletion!.isFenceRoot(
       thread.id,
       mode,
@@ -97,15 +105,16 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
           Effect.gen(function* () {
             if (threads.some((candidate) => candidate.pinnedAt !== null)) return "pinned" as const;
             const liveSessions = yield* providerService.listSessions();
-            return threadSubtreeHasLiveActiveRuntime({ threads, liveSessions })
-              ? ("active" as const)
-              : undefined;
+            if (threadSubtreeHasLiveActiveRuntime({ threads, liveSessions })) {
+              return "active" as const;
+            }
+            preparedExecutor ??= yield* cleanupExecutor.prepare();
+            return undefined;
           }).pipe(
             Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
           ),
         teardown: (candidate) =>
           Effect.gen(function* () {
-            preparedExecutor ??= yield* cleanupExecutor.prepare();
             const liveSessions = yield* providerService.listSessions();
             const liveSession = liveSessions.find((session) => session.threadId === candidate.id);
             const providerCleanup =
@@ -160,11 +169,17 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
           ),
         finalize: (threadIds) =>
           Effect.gen(function* () {
-            const activeExecutor = (preparedExecutor ??= yield* cleanupExecutor.prepare());
-            const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
-              rootThreadId: thread.id,
-              threadIds,
-            });
+            const activeExecutor = preparedExecutor;
+            if (!activeExecutor) {
+              return yield* Effect.fail(new Error("cleanup executor was not prepared"));
+            }
+            const files =
+              event.payload.origin === "project-cascade"
+                ? { directResources: [], retainedResources: [], worktreeResources: [] }
+                : yield* orchestrationEngine.threadDeletion!.discoverFiles({
+                    rootThreadId: thread.id,
+                    threadIds,
+                  });
             const operationId = `direct-cleanup:${event.eventId}`;
             preparedOperationId = operationId;
             const finalizeCommandId = CommandId.makeUnsafe(
@@ -176,6 +191,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
               threadId: thread.id,
               threadIds,
               mode,
+              origin: event.payload.origin,
               createdAt: event.occurredAt,
             } as const;
             yield* Effect.tryPromise(() => activeExecutor.assertAlive());
@@ -285,25 +301,14 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 }).pipe(Effect.as(false)),
               ),
             );
-            yield* Effect.forEach(
-              threadIds,
-              (threadId) =>
-                terminal.close({ threadId, deleteHistory: true }).pipe(
-                  Effect.catch((error) =>
-                    Effect.logWarning("thread deletion terminal history cleanup deferred", {
-                      rootThreadId: thread.id,
-                      threadId,
-                      detail: String(error),
-                    }),
-                  ),
-                ),
-              { concurrency: 1, discard: true },
-            );
-            yield* recoverDirectCleanupWorktrees({
-              repository: cleanupRepository,
-              config,
-              operationId,
-            });
+            if (event.payload.origin !== "project-cascade") {
+              yield* cleanupDeletedThreadTerminalHistory(terminal, thread.id, threadIds);
+              yield* recoverDirectCleanupWorktrees({
+                repository: cleanupRepository,
+                config,
+                operationId,
+              });
+            }
             if (!pruningRecorded) return;
             if (directResources.length > 0 && preparedExecutor) {
               yield* executeReadyDirectCleanupPlan({

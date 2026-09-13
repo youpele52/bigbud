@@ -50,6 +50,7 @@ export const DeleteProjectionNoteInput = Schema.Struct({
 export type DeleteProjectionNoteInput = typeof DeleteProjectionNoteInput.Type;
 
 export interface ProjectionNoteRepositoryShape {
+  readonly drainMutations: Effect.Effect<void>;
   readonly list: (
     input: ListProjectionNotesInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionNote>, ProjectionRepositoryError>;

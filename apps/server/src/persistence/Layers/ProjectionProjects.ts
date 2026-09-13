@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { PersistedModelSelection, ProjectScript } from "@bigbud/contracts";
 import { toPersistenceSqlError } from "../Errors.ts";
+import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import {
   DeleteProjectionProjectInput,
   GetProjectionProjectInput,
@@ -163,9 +164,13 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
     );
 
   const deleteById: ProjectionProjectRepositoryShape["deleteById"] = (input) =>
-    deleteProjectionProjectRow(input).pipe(
-      Effect.mapError(toPersistenceSqlError("ProjectionProjectRepository.deleteById:query")),
-    );
+    sql
+      .withTransaction(
+        makeProjectDeletionSql(sql)
+          .deleteProjectOperationalDependents(input)
+          .pipe(Effect.andThen(deleteProjectionProjectRow(input))),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("ProjectionProjectRepository.deleteById:query")));
 
   const touchLastUsedAt: ProjectionProjectRepositoryShape["touchLastUsedAt"] = (input) =>
     touchProjectionProjectLastUsed(input).pipe(

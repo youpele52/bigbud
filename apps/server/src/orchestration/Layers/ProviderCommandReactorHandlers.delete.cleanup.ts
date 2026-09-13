@@ -59,6 +59,27 @@ export function makeStoppedDeletionSession(input: {
   };
 }
 
+export function cleanupDeletedThreadTerminalHistory(
+  terminal: Pick<TerminalManagerShape, "close">,
+  rootThreadId: ThreadId,
+  threadIds: ReadonlyArray<ThreadId>,
+) {
+  return Effect.forEach(
+    threadIds,
+    (threadId) =>
+      terminal.close({ threadId, deleteHistory: true }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("thread deletion terminal history cleanup deferred", {
+            rootThreadId,
+            threadId,
+            detail: String(error),
+          }),
+        ),
+      ),
+    { concurrency: 1, discard: true },
+  );
+}
+
 export function readFinalizeReceiptStatus(sql: SqlClient.SqlClient, commandId: string) {
   return sql<{ readonly status: string }>`
     SELECT status FROM orchestration_command_receipts WHERE command_id = ${commandId}
@@ -104,7 +125,48 @@ import {
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { Cause, Duration, Effect } from "effect";
 import type { ServerConfigShape } from "../../startup/config.ts";
+import type { TerminalManagerShape } from "../../terminal/Services/Manager.ts";
 import type { DirectCleanupResource } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
 import { resourceRoot } from "../../deletion/Layers/EntityPurge.resources.ts";
+import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
+
+export function abortUnsafeProjectCascadeThreadDeletion(
+  sql: SqlClient.SqlClient,
+  orchestrationEngine: OrchestrationEngineShape,
+  threadId: ThreadId,
+  mode: "single" | "subtree",
+  createdAt: string,
+) {
+  return Effect.gen(function* () {
+    const safe = yield* Effect.exit(
+      makeProjectDeletionSql(sql).assertThreadDeletionSafe({ threadId }),
+    );
+    if (safe._tag === "Success") return false;
+    yield* Effect.logWarning(
+      "project cascade thread deletion aborted due to cross-owned schedule",
+      {
+        threadId,
+      },
+    );
+    yield* orchestrationEngine.dispatch({
+      type: "thread.delete.abort",
+      commandId: serverCommandId("thread-delete-abort"),
+      threadId,
+      mode,
+      createdAt,
+    });
+    return true;
+  });
+}
+
+export function isSingleDeletionAlreadyFenced(
+  orchestrationEngine: OrchestrationEngineShape,
+  threadId: ThreadId,
+  mode: "single" | "subtree",
+) {
+  return mode === "single"
+    ? orchestrationEngine.threadDeletion!.isFenceRoot(threadId, "subtree")
+    : Effect.succeed(false);
+}

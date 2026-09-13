@@ -1,6 +1,6 @@
 import { Effect, Layer, Schedule } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { ThreadId } from "@bigbud/contracts";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 
 import { DirectResourceCleanupExecutor } from "../Services/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
@@ -11,7 +11,10 @@ import {
   MAX_DIRECT_CLEANUP_EXECUTION_ATTEMPTS,
   withDirectCleanupCapacity,
 } from "./DirectResourceCleanupCoordinator.ts";
-import { finalizeThreadCanonicalHistoryWithCoverage } from "./CanonicalThreadCleanup.ts";
+import {
+  finalizeProjectCanonicalHistoryWithCoverage,
+  finalizeThreadCanonicalHistoryWithCoverage,
+} from "./CanonicalThreadCleanup.ts";
 import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { recoverPreparedCleanupFinalizes } from "./DirectResourceCleanupRecovery.finalize.ts";
@@ -83,14 +86,24 @@ export const recoverDirectResourceCleanupOnce = Effect.fn(
         : verifyReplacement(highestSequence);
     },
     finalizeCandidate: (candidate) =>
-      finalizeThreadCanonicalHistoryWithCoverage({
-        sql,
-        threadId: ThreadId.makeUnsafe(candidate.threadId),
-        recordCheckpoint: repository.markCanonicalPruned(
-          candidate.operationId,
-          new Date().toISOString(),
-        ),
-      }),
+      candidate.aggregateKind === "project"
+        ? finalizeProjectCanonicalHistoryWithCoverage({
+            sql,
+            projectId: ProjectId.makeUnsafe(candidate.aggregateId),
+            recordCheckpoint: repository.markCanonicalPruned(
+              candidate.operationId,
+              new Date().toISOString(),
+              "project",
+            ),
+          })
+        : finalizeThreadCanonicalHistoryWithCoverage({
+            sql,
+            threadId: ThreadId.makeUnsafe(candidate.aggregateId),
+            recordCheckpoint: repository.markCanonicalPruned(
+              candidate.operationId,
+              new Date().toISOString(),
+            ),
+          }),
   });
   yield* recoverDirectCleanupWorktrees({ repository, config });
   yield* withDirectCleanupCapacity(

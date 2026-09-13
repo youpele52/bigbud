@@ -70,6 +70,7 @@ export const DeleteProjectionKanbanCardInput = Schema.Struct({
 export type DeleteProjectionKanbanCardInput = typeof DeleteProjectionKanbanCardInput.Type;
 
 export interface ProjectionKanbanRepositoryShape {
+  readonly drainMutations: Effect.Effect<void>;
   readonly list: (
     input: ListProjectionKanbanCardsInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionKanbanCard>, ProjectionRepositoryError>;

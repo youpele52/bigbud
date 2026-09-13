@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Option, Path } from "effect";
 import { KanbanCardId, type KanbanStatus } from "@bigbud/contracts";
 
+import type { ProjectionRepositoryError } from "../Errors.ts";
 import type { ListProjectionKanbanCardsInput } from "../Services/ProjectionKanban.ts";
 import {
   planKanbanColumnPlacement,
@@ -22,7 +23,7 @@ interface PlacementDeps {
   ) => Effect.Effect<Option.Option<StoredKanbanCard>, never, never>;
   readonly listStoredCards: (
     input: ListProjectionKanbanCardsInput,
-  ) => Effect.Effect<ReadonlyArray<StoredKanbanCard>, never, never>;
+  ) => Effect.Effect<ReadonlyArray<StoredKanbanCard>, ProjectionRepositoryError, never>;
 }
 
 export const makePlaceCard = (deps: PlacementDeps) =>

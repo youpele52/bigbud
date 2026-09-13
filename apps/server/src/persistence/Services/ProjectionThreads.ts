@@ -70,6 +70,8 @@ export type GetProjectionThreadInput = typeof GetProjectionThreadInput.Type;
 
 export const DeleteProjectionThreadInput = Schema.Struct({
   threadId: ThreadId,
+  threadIds: Schema.optional(Schema.Array(ThreadId)),
+  origin: Schema.optional(Schema.Literal("project-cascade")),
 });
 export type DeleteProjectionThreadInput = typeof DeleteProjectionThreadInput.Type;
 

@@ -111,7 +111,7 @@ export function makeDirectResourceCleanupProof(
                 ${input.operationId}, 'accepted', ${input.aggregateKind}, ${input.aggregateId},
                 ${input.payloadDigestVersion}, ${input.payloadDigest}, ${input.eventId},
                 ${input.eventSequence}, ${input.eventType}, ${input.eventPayloadJson}, ${proofDigest}, ${input.provenAt},
-                ${input.aggregateKind === "project" ? input.provenAt : null}
+                NULL
               ) ON CONFLICT(operation_id) DO NOTHING
             `;
             yield* sql`

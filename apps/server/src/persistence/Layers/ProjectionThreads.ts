@@ -6,6 +6,7 @@ import {
   OrchestrationTurnControlOperation,
   ParentThreadReference,
   PersistedModelSelection,
+  ThreadId,
 } from "@bigbud/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -15,6 +16,7 @@ import * as Struct from "effect/Struct";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import { captureWorktreePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
+import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
@@ -90,6 +92,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
 
 const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const projectDeletionSql = makeProjectDeletionSql(sql);
 
   const upsertProjectionThreadRow = SqlSchema.void({
     Request: ProjectionThreadWriteRow,
@@ -292,19 +295,28 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const deleteProjectionThreadRow = SqlSchema.void({
     Request: DeleteProjectionThreadInput,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, threadIds, origin }) =>
       sql.withTransaction(
         Effect.gen(function* () {
+          if (origin === "project-cascade") {
+            yield* projectDeletionSql.assertThreadDeletionSafeForThreads({
+              threadIds: (threadIds ?? [threadId]).map((id) => ThreadId.makeUnsafe(id)),
+            });
+          }
           yield* sql`
             UPDATE projection_threads
             SET parent_thread_id = NULL,
               parent_thread_title = NULL,
               parent_thread_project_id = NULL
-            WHERE parent_thread_id = ${threadId}
+            WHERE parent_thread_id IN (
+              SELECT value FROM json_each(${JSON.stringify(threadIds ?? [threadId])})
+            )
           `;
           yield* sql`
             DELETE FROM projection_threads
-            WHERE thread_id = ${threadId}
+            WHERE thread_id IN (
+              SELECT value FROM json_each(${JSON.stringify(threadIds ?? [threadId])})
+            )
           `;
         }),
       ),
