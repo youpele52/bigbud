@@ -2,21 +2,30 @@ import { OrchestrationMessage } from "@bigbud/contracts/orchestration/orchestrat
 import { Effect, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
-import type { LearningJobRepositoryShape } from "../Services/LearningJobs.ts";
+import { LearningJobAttempt, type LearningJobRepositoryShape } from "../Services/LearningJobs.ts";
 
 export function makeLearningJobQueries(sql: SqlClient.SqlClient) {
   const recoverInterrupted: LearningJobRepositoryShape["recoverInterrupted"] = Effect.fn(
     "LearningJobRepository.recoverInterrupted",
   )(function* ({ now }) {
-    yield* sql
+    const rows = yield* sql
       .withTransaction(
         Effect.gen(function* () {
+          const reviewing = yield* sql<LearningJobAttempt>`
+            SELECT job_id AS "jobId", thread_id AS "threadId", turn_id AS "turnId",
+              memory_user_message_count AS "memoryUserMessageCount", attempt_count AS "attemptCount"
+            FROM learning_jobs WHERE state = 'reviewing'
+          `;
           yield* sql`DELETE FROM thread_activity_leases WHERE activity_kind = 'learning'`;
           yield* sql`UPDATE learning_jobs SET state = CASE WHEN attempt_count >= 3 THEN 'failed' ELSE 'queued' END,
         next_attempt_at = NULL, outcome = 'interrupted', updated_at = ${now} WHERE state = 'reviewing'`;
+          return reviewing;
         }),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("LearningJobRepository.recoverInterrupted")));
+    return yield* Schema.decodeUnknownEffect(Schema.Array(LearningJobAttempt))(rows).pipe(
+      Effect.mapError(toPersistenceDecodeError("LearningJobRepository.recoverInterrupted:decode")),
+    );
   });
   const hasPending: LearningJobRepositoryShape["hasPending"] = Effect.fn(
     "LearningJobRepository.hasPending",

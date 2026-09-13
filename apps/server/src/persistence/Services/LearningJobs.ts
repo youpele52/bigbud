@@ -32,6 +32,16 @@ export const LearningJob = Schema.Struct({
 });
 export type LearningJob = typeof LearningJob.Type;
 
+/** The stable identity needed to close a review attempt during startup recovery. */
+export const LearningJobAttempt = Schema.Struct({
+  jobId: LearningJob.fields.jobId,
+  threadId: LearningJob.fields.threadId,
+  turnId: LearningJob.fields.turnId,
+  memoryUserMessageCount: LearningJob.fields.memoryUserMessageCount,
+  attemptCount: LearningJob.fields.attemptCount,
+});
+export type LearningJobAttempt = typeof LearningJobAttempt.Type;
+
 export const CreateLearningJobInput = LearningJob;
 export type CreateLearningJobInput = Omit<
   LearningJob,
@@ -60,7 +70,10 @@ export interface LearningJobRepositoryShape {
   }) => Effect.Effect<LearningJob | null, PersistenceSqlError | PersistenceDecodeError>;
   readonly recoverInterrupted: (input: {
     now: string;
-  }) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;
+  }) => Effect.Effect<
+    ReadonlyArray<LearningJobAttempt>,
+    PersistenceSqlError | PersistenceDecodeError
+  >;
   readonly hasPending: (input: {
     threadId: ThreadId;
   }) => Effect.Effect<boolean, PersistenceSqlError | PersistenceDecodeError>;

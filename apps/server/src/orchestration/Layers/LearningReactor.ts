@@ -15,6 +15,7 @@ import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
 import { makeLearningJobProcessor } from "./LearningReactor.process.ts";
 import * as LearningReactorLogic from "./LearningReactor.logic.ts";
+import { makeLearningActivityPublisher } from "./LearningReactor.activities.ts";
 import { resolveSkillName } from "./LearningReactor.skill.ts";
 
 const makeLearningReactor = Effect.gen(function* () {
@@ -26,6 +27,7 @@ const makeLearningReactor = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const turnModels = new Map<string, string>();
   const processJob = yield* makeLearningJobProcessor;
+  const activityPublisher = makeLearningActivityPublisher(orchestrationEngine);
 
   const start: LearningReactorShape["start"] = Effect.fn("startLearningReactor")(function* () {
     yield* Effect.forkScoped(
@@ -189,11 +191,27 @@ const makeLearningReactor = Effect.gen(function* () {
         );
       }),
     );
-    yield* learningJobs
+    const interrupted = yield* learningJobs
       .recoverInterrupted({ now: new Date().toISOString() })
       .pipe(
-        Effect.catch(() => Effect.logWarning("failed to recover interrupted learning reviews")),
+        Effect.catch(() => {
+          return Effect.logWarning("failed to recover interrupted learning reviews").pipe(
+            Effect.as([]),
+          );
+        }),
       );
+    yield* Effect.forEach(
+      interrupted,
+      (job) =>
+        job.memoryUserMessageCount === null
+          ? Effect.void
+          : activityPublisher.outcome(
+              job,
+              "interrupted",
+              "Memory review was interrupted and will recover",
+            ),
+      { concurrency: 1 },
+    );
     yield* Effect.gen(function* () {
       const jobs = yield* learningJobs.listQueued();
       yield* Effect.forEach(

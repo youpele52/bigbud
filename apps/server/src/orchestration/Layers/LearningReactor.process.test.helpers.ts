@@ -37,7 +37,7 @@ import {
 } from "../Services/ProjectionOperationalStateQuery.ts";
 import { makeLearningJobProcessor } from "./LearningReactor.process.ts";
 
-export function processorFixture(attemptCount = 1) {
+export function processorFixture(attemptCount = 1, memoryUserMessageCount: number | null = 15) {
   const now = "2026-09-13T12:00:00.000Z";
   const job: LearningJob = {
     jobId: "learning:processor",
@@ -46,7 +46,7 @@ export function processorFixture(attemptCount = 1) {
     provider: "codex",
     model: "test-model",
     modelSelection: { provider: "codex", model: "test-model" },
-    memoryUserMessageCount: 15,
+    memoryUserMessageCount,
     attemptCount,
     nextAttemptAt: null,
     outcome: null,

@@ -36,6 +36,27 @@ describe("LearningReactor processor", () => {
     expect(f.setState).toHaveBeenCalledWith(
       expect.objectContaining({ state: "completed", nextAttemptAt: null, outcome: "updated" }),
     );
+    expect(f.dispatch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        activity: expect.objectContaining({
+          kind: "learning.memory.started",
+          payload: expect.objectContaining({
+            jobId: f.job.jobId,
+            attempt: f.job.attemptCount,
+            expiresAt: expect.any(String),
+          }),
+        }),
+      }),
+    );
+    expect(f.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activity: expect.objectContaining({
+          kind: "learning.memory.updated",
+          payload: expect.objectContaining({ jobId: f.job.jobId, attempt: f.job.attemptCount }),
+        }),
+      }),
+    );
   });
 
   it("does nothing when another worker owns the claim", async () => {
@@ -45,6 +66,27 @@ describe("LearningReactor processor", () => {
     expect(f.acquireLease).not.toHaveBeenCalled();
     expect(f.runBackgroundReview).not.toHaveBeenCalled();
     expect(f.setState).not.toHaveBeenCalled();
+  });
+
+  it("does not publish memory lifecycle activities for skill-only work", async () => {
+    const f = processorFixture(1, null);
+    await f.run();
+    expect(f.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not publish memory lifecycle activities for skill-only failures", async () => {
+    const f = processorFixture(1, null);
+    f.runBackgroundReview.mockImplementation(() =>
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "codex",
+          method: "review",
+          detail: "offline",
+        }),
+      ),
+    );
+    await f.run();
+    expect(f.dispatch).not.toHaveBeenCalled();
   });
 
   it.each([

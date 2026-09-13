@@ -49,12 +49,28 @@ it.layer(layer)("LearningJobRepository recovery", (it) => {
       assert.equal((yield* repository.claim({ jobId: job.jobId, now: later }))?.attemptCount, 2);
       assert.isTrue(yield* repository.acquireLease({ jobId: job.jobId, threadId: job.threadId }));
       yield* sql`INSERT INTO thread_activity_leases VALUES ('browser-kept', ${job.threadId}, 'browser', ${now})`;
-      yield* repository.recoverInterrupted({ now: later });
+      assert.deepEqual(yield* repository.recoverInterrupted({ now: later }), [
+        {
+          jobId: "retry",
+          threadId: job.threadId,
+          turnId: job.turnId,
+          memoryUserMessageCount: 15,
+          attemptCount: 2,
+        },
+      ]);
       assert.deepEqual(yield* sql`SELECT lease_id FROM thread_activity_leases`, [
         { lease_id: "browser-kept" },
       ]);
       assert.equal((yield* repository.claim({ jobId: job.jobId, now: later }))?.attemptCount, 3);
-      yield* repository.recoverInterrupted({ now: later });
+      assert.deepEqual(yield* repository.recoverInterrupted({ now: later }), [
+        {
+          jobId: "retry",
+          threadId: job.threadId,
+          turnId: job.turnId,
+          memoryUserMessageCount: 15,
+          attemptCount: 3,
+        },
+      ]);
       assert.equal(yield* repository.claim({ jobId: job.jobId, now: later }), null);
       assert.isFalse(yield* repository.hasPending({ threadId: job.threadId }));
       assert.equal(

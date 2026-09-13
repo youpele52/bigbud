@@ -20,6 +20,7 @@ import { supportsProviderWorkload } from "../../provider/providerWorkloadSupport
 import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
+import { makeLearningActivityPublisher } from "./LearningReactor.activities.ts";
 import { makeResolveSkillContext } from "./LearningReactor.skill.ts";
 
 export const makeLearningJobProcessor = Effect.gen(function* () {
@@ -34,41 +35,7 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const resolveSkillContext = makeResolveSkillContext({ discovery, fs, path });
-
-  const notify = (
-    job: LearningJob,
-    outcome: string,
-    summary: string,
-    scopes: readonly string[] = [],
-  ) => {
-    const createdAt = new Date().toISOString();
-    return orchestrationEngine
-      .dispatch({
-        type: "thread.activity.append",
-        commandId: CommandId.makeUnsafe(
-          `learning-outcome:${job.jobId}:${job.attemptCount}:${outcome}`,
-        ),
-        threadId: job.threadId,
-        activity: {
-          id: EventId.makeUnsafe(`learning-outcome:${job.jobId}:${job.attemptCount}:${outcome}`),
-          tone: outcome === "failed" || outcome === "rejected" ? "error" : "info",
-          kind: `learning.memory.${outcome}`,
-          summary,
-          payload: { scopes, attempt: job.attemptCount },
-          turnId: job.turnId,
-          createdAt,
-        },
-        createdAt,
-      })
-      .pipe(
-        Effect.catch(() =>
-          Effect.logWarning("failed to publish learning outcome", {
-            threadId: job.threadId,
-            outcome,
-          }),
-        ),
-      );
-  };
+  const activityPublisher = makeLearningActivityPublisher(orchestrationEngine);
 
   const reviewJob = Effect.fn("LearningReactor.reviewJob")(function* (job: LearningJob) {
     const readModel = yield* query.getThreadOperationalState(job.threadId);
@@ -161,7 +128,7 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
       outcome,
     });
     if (job.memoryUserMessageCount !== null)
-      yield* notify(
+      yield* activityPublisher.outcome(
         job,
         outcome,
         outcome === "updated" ? "Memory updated" : "Memory reviewed; no changes needed",
@@ -184,7 +151,11 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
     yield* Effect.acquireUseRelease(
       learningJobs.acquireLease({ jobId: job.jobId, threadId: job.threadId }),
       (acquired) =>
-        acquired ? reviewJob(job) : Effect.fail(new Error("Learning owner unavailable")),
+        acquired
+          ? job.memoryUserMessageCount !== null
+            ? activityPublisher.started(job).pipe(Effect.andThen(reviewJob(job)))
+            : reviewJob(job)
+          : Effect.fail(new Error("Learning owner unavailable")),
       (acquired, exit) =>
         !acquired ||
         (Exit.isFailure(exit) &&
@@ -212,17 +183,19 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
           })
           .pipe(
             Effect.andThen(
-              notify(
-                job,
-                outcome,
-                rejected
-                  ? "Memory review output was rejected"
-                  : retry
-                    ? "Memory review could not finish; a retry is scheduled"
-                    : cleanupFailed
-                      ? "Memory review stopped because its session could not be closed"
-                      : "Memory review failed after three attempts",
-              ),
+              job.memoryUserMessageCount === null
+                ? Effect.void
+                : activityPublisher.outcome(
+                    job,
+                    outcome,
+                    rejected
+                      ? "Memory review output was rejected"
+                      : retry
+                        ? "Memory review could not finish; a retry is scheduled"
+                        : cleanupFailed
+                          ? "Memory review stopped because its session could not be closed"
+                          : "Memory review failed after three attempts",
+                  ),
             ),
             Effect.andThen(
               Effect.logWarning("learning review failed", {

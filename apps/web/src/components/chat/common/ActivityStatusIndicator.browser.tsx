@@ -117,6 +117,20 @@ it("keeps elapsed time alongside compaction status", async () => {
   await expect.element(screen.getByRole("status")).toHaveTextContent("1m");
 });
 
+it("renders the secondary memory label without foreground elapsed time", async () => {
+  mocks.status = { ...getWsConnectionStatus(), phase: "connected" };
+  const screen = await render(
+    <ActivityStatusIndicator
+      verb="Reviewing memory"
+      isCompacting={false}
+      activeWorkStartedAt={null}
+      nowIso="2026-09-13T12:04:00Z"
+    />,
+  );
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Reviewing memory");
+  await expect.element(screen.getByRole("status")).not.toHaveTextContent("0s");
+});
+
 it.each([
   { orchestrationStatus: "running", reason: "status:active" },
   { orchestrationStatus: "ready", reason: "context.compacting" },

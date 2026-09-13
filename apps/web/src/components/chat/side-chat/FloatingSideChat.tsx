@@ -136,11 +136,21 @@ export function CompactThreadConversation({
             />
           </div>
         </div>
-        {context.thread.isWorking || context.thread.isCompacting ? (
+        {context.thread.isWorking ||
+        context.thread.isCompacting ||
+        context.thread.showMemoryReviewStatus ? (
           <ActivityStatusIndicator
-            verb={context.thread.workingVerb}
-            isCompacting={context.thread.isCompacting}
-            activeWorkStartedAt={context.thread.activeWorkStartedAt}
+            verb={
+              context.thread.showMemoryReviewStatus
+                ? "Reviewing memory"
+                : context.thread.workingVerb
+            }
+            isCompacting={
+              context.thread.showMemoryReviewStatus ? false : context.thread.isCompacting
+            }
+            activeWorkStartedAt={
+              context.thread.showMemoryReviewStatus ? null : context.thread.activeWorkStartedAt
+            }
             nowIso={context.thread.nowIso}
           />
         ) : null}

@@ -82,9 +82,9 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Persistent Memory Recovery
 
 - Fixed background memory reviews failing before they could start, allowing qualifying conversations to update saved preferences and project decisions again.
-- Kept memory reviews separate from active chats and protected their source threads while reviews save changes, including when a review session cannot close cleanly.
-- Added up to three review attempts with retry progress preserved across restarts. Failed reviews no longer count toward successful review progress, and affected conversations can recover on a later completed turn without replaying the entire failed backlog.
-- Counted saved user messages when scheduling reviews so restarting the app or loading only recent chat history does not reset progress. Added clearer feedback for updated memory, unchanged reviews, rejected output, and failed reviews.
+- Kept memory reviews separate from active chats, protected their source threads while changes are saved, and added bounded retries that preserve progress across restarts.
+- Counted saved user messages when scheduling reviews so loaded history does not reset progress, and added clearer feedback for updated, unchanged, rejected, and failed reviews.
+- After foreground work settles, qualifying chats can show a secondary `Reviewing memory` status without interrupting provider work, compaction, approvals, or reconnects; completion toasts remain independent.
 
 ## v0.2.207 (7 September, 2026)
 

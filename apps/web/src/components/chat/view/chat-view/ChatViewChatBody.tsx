@@ -211,11 +211,13 @@ export function ChatViewChatBody({
                 onScrollToBottom={() => runtime.scrollBehavior.scrollMessagesToBottom("auto")}
               />
             ) : null}
-            {thread.isWorking || thread.isCompacting ? (
+            {thread.isWorking || thread.isCompacting || thread.showMemoryReviewStatus ? (
               <ActivityStatusIndicator
-                verb={thread.workingVerb}
-                isCompacting={thread.isCompacting}
-                activeWorkStartedAt={thread.activeWorkStartedAt}
+                verb={thread.showMemoryReviewStatus ? "Reviewing memory" : thread.workingVerb}
+                isCompacting={thread.showMemoryReviewStatus ? false : thread.isCompacting}
+                activeWorkStartedAt={
+                  thread.showMemoryReviewStatus ? null : thread.activeWorkStartedAt
+                }
                 nowIso={thread.nowIso}
               />
             ) : null}

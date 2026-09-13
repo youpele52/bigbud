@@ -14,6 +14,8 @@ describe("memory review notifications", () => {
 
   it("keeps unchanged reviews and unrelated activities out of toasts", () => {
     expect(memoryReviewNotification("learning.memory.unchanged")).toBeNull();
+    expect(memoryReviewNotification("learning.memory.started")).toBeNull();
+    expect(memoryReviewNotification("learning.memory.interrupted")).toBeNull();
     expect(memoryReviewNotification("approval.requested")).toBeNull();
   });
 });
