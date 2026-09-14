@@ -201,11 +201,11 @@ export function MobileComposer({
     <div
       data-mobile-composer="true"
       className={cn(
-        "min-h-0 shrink-0 bg-background",
+        "min-h-0 min-w-0 shrink-0 bg-background",
         "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
       )}
     >
-      <div className="mx-auto w-full max-w-3xl px-3 py-2">
+      <div className="mx-auto min-w-0 w-full max-w-3xl px-3 py-2">
         <MobileComposerDeliveryNotice
           deliveryState={deliveryState}
           {...(onCheckDelivery ? { onCheckDelivery } : {})}
@@ -216,7 +216,7 @@ export function MobileComposer({
             className={cn(
               composerSurfaceStyles.surface,
               composerSurfaceStyles.surfaceFocus,
-              "rounded-[20px] flex min-h-0 max-h-[min(52dvh,26rem)] flex-col overflow-hidden",
+              "rounded-[20px] flex min-h-0 min-w-0 max-h-[min(52dvh,26rem)] flex-col overflow-hidden",
             )}
             data-mobile-composer-surface="true"
           >

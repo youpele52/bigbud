@@ -44,7 +44,7 @@ export function MobileThreadView(props: MobileThreadViewProps) {
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="shrink-0 px-1 pb-2">
         <MobileConnectionNotice
           connection={props.connection}
@@ -56,7 +56,7 @@ export function MobileThreadView(props: MobileThreadViewProps) {
         <div
           data-mobile-transcript="true"
           ref={props.messagesScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 [scrollbar-gutter:stable]"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 [scrollbar-gutter:stable]"
         >
           <div className="flex min-h-full min-w-0 flex-col" data-mobile-transcript-content="true">
             {props.workLogEntries.length > 0 ? (

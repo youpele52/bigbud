@@ -29,7 +29,10 @@ page.on("console", (message) => {
 const longMessages = Array.from({ length: 36 }, (_, index) => ({
   id: `geometry-message-${index}`,
   role: index % 2 === 0 ? "assistant" : "user",
-  text: `${index % 2 === 0 ? "Streaming response" : "Reader prompt"} ${index} `.repeat(12),
+  text:
+    index === 0
+      ? `https://example.test/${"a".repeat(280)}`
+      : `${index % 2 === 0 ? "Streaming response" : "Reader prompt"} ${index} `.repeat(12),
   turnId: null,
   streaming: false,
   createdAt: `2026-09-09T00:${String(index).padStart(2, "0")}:00.000Z`,
@@ -127,6 +130,34 @@ try {
   await openThread();
   const transcript = page.locator('[data-mobile-transcript="true"]');
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length >= 30);
+  const widthGeometry = await page.evaluate(() => {
+    const transcriptElement = document.querySelector('[data-mobile-transcript="true"]');
+    const messageElements = Array.from(document.querySelectorAll("[data-message-id]"));
+    const transcriptBox = transcriptElement?.getBoundingClientRect();
+    const widestMessageRight = Math.max(
+      ...messageElements.map((element) => element.getBoundingClientRect().right),
+    );
+    return {
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      transcriptClientWidth: transcriptElement?.clientWidth ?? 0,
+      transcriptScrollWidth: transcriptElement?.scrollWidth ?? 0,
+      transcriptRight: transcriptBox?.right ?? 0,
+      widestMessageRight,
+    };
+  });
+  assert.ok(
+    widthGeometry.documentScrollWidth <= widthGeometry.documentClientWidth,
+    `mobile document must not overflow horizontally: ${JSON.stringify(widthGeometry)}`,
+  );
+  assert.ok(
+    widthGeometry.transcriptScrollWidth <= widthGeometry.transcriptClientWidth,
+    `mobile transcript must not overflow horizontally: ${JSON.stringify(widthGeometry)}`,
+  );
+  assert.ok(
+    widthGeometry.widestMessageRight <= widthGeometry.transcriptRight + 1,
+    `mobile messages must stay inside the transcript: ${JSON.stringify(widthGeometry)}`,
+  );
   const longGeometry = await transcript.evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,

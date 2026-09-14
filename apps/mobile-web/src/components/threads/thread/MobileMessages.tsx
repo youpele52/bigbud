@@ -35,7 +35,7 @@ export function MobileMessages({ messages, cwd, showEmptyState = false }: Mobile
   if (visibleMessages.length === 0) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
+    <div className="mx-auto flex min-w-0 w-full max-w-3xl flex-1 flex-col">
       {visibleMessages.map((message) => (
         <MobileMessage key={message.id} cwd={cwd} message={message} />
       ))}
@@ -53,7 +53,7 @@ function MobileMessage({
   if (message.role === "assistant") {
     return (
       <article className="group min-w-0 rounded-xl px-1 py-0.5 pb-4 transition-colors duration-300">
-        <div data-message-id={message.id} data-message-role={message.role}>
+        <div className="min-w-0" data-message-id={message.id} data-message-role={message.role}>
           <ChatMarkdown cwd={cwd} isStreaming={message.streaming} text={message.text} />
         </div>
         <div className="mt-1.5 flex justify-start">
@@ -75,12 +75,12 @@ function MobileMessage({
 
   return (
     <div
-      className="group flex flex-col items-end gap-1 pb-4"
+      className="group flex min-w-0 flex-col items-end gap-1 pb-4"
       data-message-id={message.id}
       data-message-role={message.role}
       data-scroll-anchor="true"
     >
-      <article className="max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300">
+      <article className="min-w-0 max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300">
         <UserMessageBody
           cwd={cwd}
           terminalContexts={displayedUserMessage.contexts}

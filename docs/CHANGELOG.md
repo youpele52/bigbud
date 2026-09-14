@@ -10,6 +10,39 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Truthful provider capabilities:** Model catalogs, reasoning options, and execution targets now reflect what each provider actually supports, including dynamic and custom configurations.
 - **Clearer work-in-progress feedback:** Reconnecting, compacting, provider failures, and other runtime states now surface with more consistent status and recovery guidance.
 
+## v0.2.209 (15 September, 2026)
+
+### Reliable Prompt Delivery
+
+- Follow-up messages sent while a provider is still working now wait in a bounded queue instead of being reported as failed, then continue automatically when the active turn is ready.
+- Preserved attachments, replies, title context, bootstrap details, proposed plans, model choices, runtime settings, and interaction settings through queue admission, persistence, replay, and delivery.
+- Added explicit queue-full and not-queueable errors, safe retry deduplication, and rules that keep metadata-bearing prompts separate when combining them would be unsafe.
+- Web and mobile send flows now share the same admission path and show when a prompt is queued.
+
+### More Resilient Remote Workspaces
+
+- Added a per-project choice between the managed bigbud remote agent and Direct SSH, with verification before saving and no remote-agent install or connection attempt for Direct SSH.
+- Hardened remote-agent installation, updates, reconnects, SSH execution, PTY handling, Git operations, and workspace-runtime routing across supported remote targets.
+- Direct SSH now follows the selected route without silent switching or replay after an ambiguous result, while managed-agent sessions retain their durable reconnect behavior.
+
+### Safer Remote Bridge and Codex Startup
+
+- Fixed remote bridge notifications so roots, cancellation, and future notification messages never produce invalid JSON-RPC responses or invoke tools, keeping the connection usable for later requests and preserving request IDs.
+- Added protocol and failure-boundary coverage for framed, fragmented, and coalesced messages, transport and HTTP failures, authentication errors, and invocation-state cleanup.
+- Remote Codex sessions now wait for explicit bridge readiness, isolate start/resume/fallback attempts, prioritize real startup failures over cached tool data, enforce bounded deadlines, and clean up when a process stops or is replaced.
+
+### Mobile and Chat Experience
+
+- Fixed mobile chat horizontal overflow caused by long messages, tool output, and composer content.
+- Added mobile queued-prompt feedback and aligned existing-thread sends with the shared delivery path.
+- Migrated working-status shimmer effects to Tailwind animations, removed duplicate keyframe CSS, and kept status labels consistent across chat and sidebar surfaces.
+- Kept app theme changes in the renderer so bigbud's Electron preference no longer changes the color scheme of external browser guests.
+
+### Clearer Workspace Recovery
+
+- Improved remote-project setup copy, focus states, SSH-key connection feedback, target verification errors, and provider capability routing so recovery actions describe the route that actually failed.
+- Preserved accepted prompt metadata and actionable errors across WebSocket bootstrap, provider admission, remote execution, and reconnect transitions.
+
 ## v0.2.208 (13 September, 2026)
 
 ### More Reliable Orchestration
@@ -236,7 +269,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Built the managed remote agent and its shared communication protocol in [Rust](https://rust-lang.org/) for lower-overhead remote execution, durable recovery, and reliable handling of files, Git, terminals, shell commands, and provider tools.
 - Made the managed remote agent the default transport for supported remote workspace files, Git, terminals, shell commands, and provider tools.
 - Routed Codex, Claude, Copilot, OpenCode, KiloCode, and Pi through one authenticated per-thread execution path instead of separate direct workspace SSH bridges.
-- Kept direct SSH as an explicit server-start compatibility mode via `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh`; there is no automatic transport switch after an agent operation is accepted.
+- Added a per-project Direct SSH choice alongside the bigbud remote agent, with verification before saving changes and no automatic switching after an operation is accepted.
 
 ### Reliable Workspace Refresh
 

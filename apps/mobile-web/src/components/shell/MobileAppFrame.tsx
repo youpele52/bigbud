@@ -108,14 +108,14 @@ export function MobileAppFrame({
     <div
       className={
         isThreadView
-          ? "mobile-shell h-dvh min-h-0 overflow-hidden bg-background text-foreground"
+          ? "mobile-shell h-dvh min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
           : "mobile-shell max-h-dvh min-h-dvh overflow-y-auto bg-background text-foreground"
       }
     >
       <div
         className={
           isThreadView
-            ? "mx-auto flex h-full min-h-0 max-w-3xl flex-col overflow-hidden px-4 pt-2"
+            ? "mx-auto flex h-full min-h-0 min-w-0 w-full max-w-3xl flex-col overflow-hidden px-4 pt-2"
             : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
         }
       >
@@ -135,7 +135,7 @@ export function MobileAppFrame({
             title={conversationTitle}
           />
         ) : null}
-        <main className={isThreadView ? "min-h-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
+        <main className={isThreadView ? "min-h-0 min-w-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
           {children}
         </main>
       </div>
