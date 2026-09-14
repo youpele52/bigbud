@@ -10,6 +10,7 @@ import {
   ProjectId,
   RuntimeTaskId,
   ThreadId,
+  TrimmedString,
   TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
@@ -255,11 +256,17 @@ export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
 export const OrchestrationQueuedPrompt = Schema.Struct({
   id: MessageId,
-  text: TrimmedNonEmptyString,
+  text: TrimmedString,
   createdAt: IsoDateTime,
+  /** Optional fields keep legacy queued-prompt events and snapshots decodable. */
+  attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  replyTo: Schema.optional(OrchestrationMessageReply),
   modelSelection: Schema.optional(ModelSelection),
+  titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: Schema.optional(RuntimeMode),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  bootstrapSourceThreadId: Schema.optional(ThreadId),
+  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 

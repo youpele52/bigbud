@@ -178,33 +178,41 @@ describe("ProviderRuntimeIngestion", () => {
     expect(native.sessionCreates).toBe(0);
     owner.stop();
 
-    await expect(
-      Effect.runPromise(
-        harness.engine.dispatch({
-          type: "thread.turn.start",
-          commandId: CommandId.makeUnsafe("cmd-direct-start-during-recovery"),
-          threadId,
-          message: {
-            messageId: asMessageId("message-attachment-during-recovery"),
-            role: "user",
-            text: "summarize this attachment",
-            attachments: [
-              {
-                type: "file",
-                id: "thread-attachment-00000000-0000-4000-8000-000000000020",
-                name: "report.txt",
-                mimeType: "text/plain",
-                sizeBytes: 12,
-                sourcePath: "/tmp/report.txt",
-              },
-            ],
-          },
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          runtimeMode: "approval-required",
-          createdAt: new Date().toISOString(),
-        }),
-      ),
-    ).rejects.toThrow("has an unresolved turn");
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-direct-start-during-recovery"),
+        threadId,
+        message: {
+          messageId: asMessageId("message-attachment-during-recovery"),
+          role: "user",
+          text: "summarize this attachment",
+          attachments: [
+            {
+              type: "file",
+              id: "thread-attachment-00000000-0000-4000-8000-000000000020",
+              name: "report.txt",
+              mimeType: "text/plain",
+              sizeBytes: 12,
+              sourcePath: "/tmp/report.txt",
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    const attachmentQueued = await waitForThread(
+      harness.engine,
+      (thread) =>
+        thread.queuedPrompts?.some(
+          (prompt) => prompt.id === "message-attachment-during-recovery",
+        ) ?? false,
+    );
+    expect(attachmentQueued.queuedPrompts?.[0]?.attachments).toEqual([
+      expect.objectContaining({ id: "thread-attachment-00000000-0000-4000-8000-000000000020" }),
+    ]);
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -225,7 +233,11 @@ describe("ProviderRuntimeIngestion", () => {
         thread.session?.activeTurnId === turnId &&
         thread.queuedPrompts?.some((prompt) => prompt.text === "ordinary follow-up") === true,
     );
-    expect(queued.queuedPrompts).toHaveLength(1);
+    expect(queued.queuedPrompts).toHaveLength(2);
+    expect(queued.queuedPrompts?.map((prompt) => prompt.id)).toEqual([
+      "message-attachment-during-recovery",
+      "message-ordinary-during-recovery",
+    ]);
     expect(queued.latestTurn?.turnId).toBe(turnId);
   });
 

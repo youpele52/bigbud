@@ -62,11 +62,26 @@ export function sameQueuedPromptOptions(left: QueueOptions, right: QueueOptions)
   );
 }
 
+export function hasNonCombinableQueuedPromptMetadata(prompt: OrchestrationQueuedPrompt): boolean {
+  return Boolean(
+    prompt.text.trim().length === 0 ||
+    prompt.attachments?.length ||
+    prompt.replyTo ||
+    prompt.titleSeed ||
+    prompt.bootstrapSourceThreadId ||
+    prompt.sourceProposedPlan,
+  );
+}
+
 /** Explicit and inherited options never share a turn, even if today's defaults match. */
 export function compatibleQueuedPrefix(prompts: ReadonlyArray<OrchestrationQueuedPrompt>) {
   const first = prompts[0];
   if (!first) return [];
-  const end = prompts.findIndex((prompt) => !sameQueuedPromptOptions(first, prompt));
+  if (hasNonCombinableQueuedPromptMetadata(first)) return [first];
+  const end = prompts.findIndex(
+    (prompt) =>
+      hasNonCombinableQueuedPromptMetadata(prompt) || !sameQueuedPromptOptions(first, prompt),
+  );
   return prompts.slice(0, end < 0 ? prompts.length : end);
 }
 
@@ -92,7 +107,8 @@ export function canNativelySteerQueuedPrefix(
       (prompt) =>
         prompt.modelSelection === undefined &&
         prompt.runtimeMode === undefined &&
-        prompt.interactionMode === undefined,
+        prompt.interactionMode === undefined &&
+        !hasNonCombinableQueuedPromptMetadata(prompt),
     )
   );
 }
@@ -135,5 +151,13 @@ export function consumableQueuedPrefix(input: {
   )
     return [];
   const prefix = exactQueuedPrefix(thread, messageIds);
-  return compatibleQueuedPrefix(prefix).length === prefix.length ? prefix : [];
+  const compatible = compatibleQueuedPrefix(prefix);
+  // Ordinary lifecycle/manual flushes may request a longer queue snapshot and
+  // should consume its safe compatible head. Control reservations must remain
+  // exact so a stale or malformed reservation is never partially consumed.
+  const hasControlReservation =
+    controlOperationId !== undefined ||
+    consumeOnly ||
+    thread.pendingInterruptFlushIntent !== undefined;
+  return !hasControlReservation ? compatible : compatible.length === prefix.length ? prefix : [];
 }

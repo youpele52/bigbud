@@ -28,6 +28,7 @@ import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTarget
 import { useMobileSessionState } from "../context/MobileSessionContext";
 import { useMobileThreadScroll } from "./MobileThread.scroll";
 import { MobileThreadView } from "./MobileThread.view";
+import { MobileQueueNotice } from "../components/threads/thread/MobileQueueNotice";
 import { createMobileUserInputHandlers } from "./MobileThread.userInput";
 import { describeRecoveryReason } from "../logic/mobileRecovery.types";
 import { isMobileConnectionActionsBlocked } from "../components/shell/MobileConnectionNotice.logic";
@@ -337,6 +338,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
   return (
     <div className="relative h-full">
+      <MobileQueueNotice queuedPromptCount={thread?.queuedPrompts?.length ?? 0} />
       <MobileThreadView
         activeWorkStartedAt={activeWorkStartedAt}
         isFollowing={isFollowing}

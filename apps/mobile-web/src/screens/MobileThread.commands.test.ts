@@ -1,7 +1,7 @@
 import { CommandId, MessageId, ThreadId, type OrchestrationThread } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildMobileExistingThreadTurnStartCommand } from "./MobileThread.commands";
+import { buildMobileExistingThreadMessageSubmitCommand } from "./MobileThread.commands";
 import { createMobileThreadCommands } from "./MobileThread.commands";
 import { createMobileCommandDeliveryController } from "../lib/mobileCommandDelivery";
 
@@ -28,8 +28,8 @@ function makeThread(): OrchestrationThread {
 }
 
 describe("mobile existing-thread command builder", () => {
-  it("uses a model-aware turn start and preserves thread modes", () => {
-    const command = buildMobileExistingThreadTurnStartCommand({
+  it("uses the admission submission and preserves thread modes", () => {
+    const command = buildMobileExistingThreadMessageSubmitCommand({
       commandId: CommandId.makeUnsafe("command-1"),
       createdAt: "2026-01-01T00:00:01.000Z",
       messageId: MessageId.makeUnsafe("message-1"),
@@ -40,14 +40,14 @@ describe("mobile existing-thread command builder", () => {
     });
 
     expect(command).toMatchObject({
-      type: "thread.turn.start",
+      type: "thread.message.submit",
       commandId: "command-1",
       interactionMode: "plan",
       modelSelection: { provider: "claudeAgent", model: "sonnet" },
       runtimeMode: "full-access",
+      delivery: "auto",
       message: {
         messageId: "message-1",
-        role: "user",
         text: "Continue this thread",
         attachments: [],
       },
@@ -96,7 +96,7 @@ describe("mobile existing-thread command builder", () => {
     await first;
     await second;
     expect(dispatchCommand.mock.calls[0]?.[0]).toMatchObject({
-      type: "thread.turn.start",
+      type: "thread.message.submit",
       modelSelection: { provider: "claudeAgent", model: "sonnet" },
     });
   });

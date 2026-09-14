@@ -198,16 +198,21 @@ export function makeDispatchBootstrapThreadCommand(
       const bootstrapProgram = Effect.gen(function* () {
         if (command.type === "thread.message.submit" && command.delivery === "queue" && bootstrap) {
           return yield* new OrchestrationDispatchCommandError({
-            message: "Queue-only submissions cannot prepare bootstrap resources.",
+            message: "Bootstrap resources cannot be deferred for a queue-only submission.",
+            code: "prompt_not_queueable",
           });
         }
         const parentOutcome = yield* getCommandOutcome(command.commandId);
         isAcceptedThreadOutcome(parentOutcome, command.threadId, "bootstrap parent");
         let submissionRecipe: BootstrapSubmissionRecipe | undefined;
+        if (
+          bootstrap &&
+          (command.type === "thread.turn.start" || command.type === "thread.message.submit") &&
+          parentOutcome.status === "unknown"
+        ) {
+          yield* validateBootstrapSubmission({ command, engine: orchestrationEngine });
+        }
         if (command.type === "thread.message.submit" && bootstrap) {
-          if (parentOutcome.status === "unknown") {
-            yield* validateBootstrapSubmission({ command, engine: orchestrationEngine });
-          }
           submissionRecipe = yield* claimBootstrapSubmissionRecipe({
             command,
             repository: bootstrapRecipes,

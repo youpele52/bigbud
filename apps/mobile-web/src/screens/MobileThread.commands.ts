@@ -62,7 +62,7 @@ interface MobileThreadCommandInput {
   readonly clearNewThread: () => void;
 }
 
-export function buildMobileExistingThreadTurnStartCommand(input: {
+export function buildMobileExistingThreadMessageSubmitCommand(input: {
   readonly commandId: CommandId;
   readonly messageId: MessageId;
   readonly threadId: ThreadId;
@@ -72,16 +72,16 @@ export function buildMobileExistingThreadTurnStartCommand(input: {
   readonly createdAt: string;
 }) {
   return {
-    type: "thread.turn.start" as const,
+    type: "thread.message.submit" as const,
     commandId: input.commandId,
     threadId: input.threadId,
     runtimeMode: input.thread.runtimeMode,
     interactionMode: input.thread.interactionMode,
     createdAt: input.createdAt,
     modelSelection: input.modelSelection,
+    delivery: "auto" as const,
     message: {
       messageId: input.messageId,
-      role: "user" as const,
       text: input.text,
       attachments: [],
     },
@@ -269,7 +269,7 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
     }
 
     if (!input.thread) return;
-    const command = buildMobileExistingThreadTurnStartCommand({
+    const command = buildMobileExistingThreadMessageSubmitCommand({
       commandId,
       createdAt,
       messageId,

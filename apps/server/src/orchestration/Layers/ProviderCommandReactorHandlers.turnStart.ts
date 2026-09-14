@@ -36,15 +36,7 @@ function canQueueTurnStart(input: {
   readonly event: TurnStartRequestedEvent;
   readonly message: OrchestrationMessage;
 }): boolean {
-  return (
-    input.message.text.trim().length > 0 &&
-    (input.message.attachments?.length ?? 0) === 0 &&
-    input.message.replyTo === undefined &&
-    input.event.payload.replyTo === undefined &&
-    input.event.payload.titleSeed === undefined &&
-    input.event.payload.bootstrapSourceThreadId === undefined &&
-    input.event.payload.sourceProposedPlan === undefined
-  );
+  return input.message.text.trim().length > 0 || (input.message.attachments?.length ?? 0) > 0;
 }
 
 function queueTurnStart(input: {
@@ -60,12 +52,25 @@ function queueTurnStart(input: {
     message: {
       messageId: message.id,
       text: message.text.trim(),
+      ...(message.attachments?.length ? { attachments: message.attachments } : {}),
+      ...(message.replyTo?.messageId !== undefined
+        ? { replyToMessageId: message.replyTo.messageId }
+        : event.payload.replyTo?.messageId !== undefined
+          ? { replyToMessageId: event.payload.replyTo.messageId }
+          : {}),
     },
     ...(event.payload.modelSelection !== undefined
       ? { modelSelection: event.payload.modelSelection }
       : {}),
+    ...(event.payload.titleSeed !== undefined ? { titleSeed: event.payload.titleSeed } : {}),
     runtimeMode: event.payload.runtimeMode,
     interactionMode: event.payload.interactionMode,
+    ...(event.payload.bootstrapSourceThreadId !== undefined
+      ? { bootstrapSourceThreadId: event.payload.bootstrapSourceThreadId }
+      : {}),
+    ...(event.payload.sourceProposedPlan !== undefined
+      ? { sourceProposedPlan: event.payload.sourceProposedPlan }
+      : {}),
     delivery: "queue",
     createdAt: event.payload.createdAt,
   });

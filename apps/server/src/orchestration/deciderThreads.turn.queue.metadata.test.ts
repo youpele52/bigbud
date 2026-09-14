@@ -254,7 +254,7 @@ describe("thread queued prompt metadata", () => {
     );
   });
 
-  it("rejects explicit flush across incompatible settings", async () => {
+  it("flushes the compatible prefix across incompatible settings", async () => {
     const prompts = [
       { id: MessageId.makeUnsafe("legacy"), text: "legacy", createdAt: now },
       {
@@ -277,7 +277,22 @@ describe("thread queued prompt metadata", () => {
         readModel: readModel({ queuedPrompts: prompts }),
       }),
     );
-    expect(events).toEqual([]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "thread.queued-prompts-flushed",
+          payload: { threadId, messageIds: [prompts[0]!.id] },
+        }),
+      ]),
+    );
+    expect(events).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "thread.queued-prompts-flushed",
+          payload: { threadId, messageIds: prompts.map((prompt) => prompt.id) },
+        }),
+      ]),
+    );
   });
 
   it("preserves metadata when the server can start immediately", async () => {
@@ -315,39 +330,41 @@ describe("thread queued prompt metadata", () => {
     });
   });
 
-  it("rejects metadata that cannot be retained in the busy queue", async () => {
+  it("retains attachments in the busy queue", async () => {
     const command = submit();
-    await expect(
-      Effect.runPromise(
-        decideThreadQueueCommand({
-          command: {
-            ...command,
-            message: {
-              ...command.message,
-              attachments: [
-                {
-                  type: "image",
-                  id: "image-1",
-                  name: "reference.png",
-                  mimeType: "image/png",
-                  sizeBytes: 1,
-                },
-              ],
-            },
+    const event = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: {
+          ...command,
+          message: {
+            ...command.message,
+            attachments: [
+              {
+                type: "image",
+                id: "image-1",
+                name: "reference.png",
+                mimeType: "image/png",
+                sizeBytes: 1,
+              },
+            ],
           },
-          readModel: readModel({
-            session: {
-              threadId,
-              status: "running",
-              providerName: "codex",
-              runtimeMode: "full-access",
-              activeTurnId: null,
-              lastError: null,
-              updatedAt: now,
-            },
-          }),
+        },
+        readModel: readModel({
+          session: {
+            threadId,
+            status: "running",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: now,
+          },
         }),
-      ),
-    ).rejects.toThrow("Attachments cannot be queued");
+      }),
+    );
+    expect(event).toMatchObject({
+      type: "thread.prompt-queued",
+      payload: { prompt: { attachments: [{ id: "image-1" }] } },
+    });
   });
 });

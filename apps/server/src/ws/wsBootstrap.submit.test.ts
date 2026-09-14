@@ -29,6 +29,22 @@ const command = {
   },
 } satisfies OrchestrationCommand;
 
+const directBootstrapCommand = {
+  type: "thread.turn.start" as const,
+  commandId: CommandId.makeUnsafe("turn-bootstrap"),
+  threadId: command.threadId,
+  message: {
+    messageId: MessageId.makeUnsafe("turn-bootstrap-message"),
+    role: "user" as const,
+    text: "hello",
+    attachments: [],
+  },
+  runtimeMode: "full-access" as const,
+  interactionMode: "default" as const,
+  createdAt: command.createdAt,
+  bootstrap: command.bootstrap,
+} satisfies OrchestrationCommand;
+
 function fixture(busy = false) {
   const receipts = new Map<CommandId, { digest: string; outcome: GetCommandOutcomeResult }>();
   let sequence = 0;
@@ -166,16 +182,28 @@ function fixture(busy = false) {
 describe("submission bootstrap safety", () => {
   it("rejects busy-thread preparation before changing its worktree", async () => {
     const run = fixture(true);
-    await expect(Effect.runPromise(run.build()(command))).rejects.toThrow(/idle thread/);
+    await expect(Effect.runPromise(run.build()(command))).rejects.toMatchObject({
+      code: "prompt_not_queueable",
+      message: expect.stringMatching(/busy/),
+    });
     expect(run.dispatch).not.toHaveBeenCalled();
     expect(run.createWorktree).not.toHaveBeenCalled();
   });
 
   it("rejects queue-only preparation before any child dispatch or physical work", async () => {
     const run = fixture();
-    await expect(Effect.runPromise(run.build()({ ...command, delivery: "queue" }))).rejects.toThrow(
-      /queue/i,
-    );
+    await expect(
+      Effect.runPromise(run.build()({ ...command, delivery: "queue" })),
+    ).rejects.toMatchObject({ code: "prompt_not_queueable" });
+    expect(run.dispatch).not.toHaveBeenCalled();
+    expect(run.createWorktree).not.toHaveBeenCalled();
+  });
+
+  it("rejects direct-start bootstrap on a busy existing thread before side effects", async () => {
+    const run = fixture(true);
+    await expect(Effect.runPromise(run.build()(directBootstrapCommand))).rejects.toMatchObject({
+      code: "prompt_not_queueable",
+    });
     expect(run.dispatch).not.toHaveBeenCalled();
     expect(run.createWorktree).not.toHaveBeenCalled();
   });

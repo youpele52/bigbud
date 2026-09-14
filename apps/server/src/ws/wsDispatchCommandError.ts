@@ -33,7 +33,9 @@ export function toDispatchCommandError(
   const message = cause instanceof Error ? cause.message : fallbackMessage;
   if (
     Schema.is(OrchestrationCommandInvariantError)(cause) &&
-    cause.code === "thread_already_exists"
+    (cause.code === "thread_already_exists" ||
+      cause.code === "prompt_queue_full" ||
+      cause.code === "prompt_not_queueable")
   ) {
     return new OrchestrationDispatchCommandError({
       message,

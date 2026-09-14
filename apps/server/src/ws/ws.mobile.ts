@@ -37,6 +37,7 @@ import { makeMobileRecoveryOutcomeHandler } from "./ws.mobile.recovery.ts";
 
 const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.turn.start",
+  "thread.message.submit",
   "thread.turn.interrupt",
   "thread.approval.respond",
   "thread.user-input.respond",
