@@ -40,7 +40,7 @@ describe("ActivityStatusIndicator reconnect status", () => {
     const reconnectingShimmer = document.querySelector<HTMLElement>(".shimmer");
     expect(reconnectingShimmer).not.toBeNull();
     expect(reconnectingShimmer && getComputedStyle(reconnectingShimmer).animationName).toBe(
-      "web-shimmer",
+      "tw-shimmer",
     );
     expect(document.querySelector(".animate-pulse")).not.toBeNull();
     mocks.status = { ...mocks.status, reconnectPhase: "attempting", reconnectAttemptCount: 5 };
@@ -81,9 +81,7 @@ it("prioritizes reconnecting over compaction and restores the provider activity 
   expect(document.querySelector(".text-warning")?.textContent).toBe("Compacting");
   const compactingShimmer = document.querySelector<HTMLElement>(".shimmer");
   expect(compactingShimmer).not.toBeNull();
-  expect(compactingShimmer && getComputedStyle(compactingShimmer).animationName).toBe(
-    "web-shimmer",
-  );
+  expect(compactingShimmer && getComputedStyle(compactingShimmer).animationName).toBe("tw-shimmer");
 
   mocks.status = {
     ...mocks.status,

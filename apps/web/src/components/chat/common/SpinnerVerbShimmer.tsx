@@ -19,9 +19,9 @@ export function SpinnerVerbShimmer({
     <span
       className={
         warningColor
-          ? "shimmer text-warning shimmer-color-warning/60 leading-none"
+          ? "shimmer text-warning leading-none"
           : workingColor
-            ? "shimmer text-info-foreground shimmer-color-info-foreground/60 leading-none"
+            ? "shimmer text-info-foreground leading-none"
             : "shimmer leading-none"
       }
     >
