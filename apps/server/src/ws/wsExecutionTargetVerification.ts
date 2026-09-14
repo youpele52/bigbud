@@ -24,6 +24,7 @@ import {
   unlockSshExecutionTargetKey,
   verifySshExecutionTarget,
 } from "../ssh/sshVerification.ts";
+import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
@@ -42,12 +43,15 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
         cause,
       }),
   });
-  remoteAgentUpdateCoordinator?.enqueue({
-    target: input.executionTargetId,
-    trigger: "authenticated",
-    authenticated: true,
-  });
-  if (!remoteAgentHealth) {
+  const usesRemoteAgent = isRemoteAgentExecutionTarget(input.executionTargetId);
+  if (usesRemoteAgent) {
+    remoteAgentUpdateCoordinator?.enqueue({
+      target: input.executionTargetId,
+      trigger: "authenticated",
+      authenticated: true,
+    });
+  }
+  if (!usesRemoteAgent || !remoteAgentHealth) {
     return { ...sshResult, remoteAgent: { status: "disabled" } };
   }
 
@@ -95,6 +99,11 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
   input: ServerInstallRemoteAgentInput,
   remoteAgentInstaller?: RemoteAgentInstaller,
 ): Effect.fn.Return<ServerInstallRemoteAgentResult, ServerInstallRemoteAgentError> {
+  if (!isRemoteAgentExecutionTarget(input.executionTargetId)) {
+    return yield* new ServerInstallRemoteAgentError({
+      message: "This project uses Direct SSH. No bigbud remote agent installation is required.",
+    });
+  }
   if (!remoteAgentInstaller) {
     return yield* new ServerInstallRemoteAgentError({
       message: "Remote agent installation is disabled by the server configuration.",

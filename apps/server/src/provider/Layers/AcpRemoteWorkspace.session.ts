@@ -10,6 +10,7 @@ import { Effect } from "effect";
 import { composeBridgeCleanups } from "../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { isLocalProviderRuntimeTarget } from "../../provider-runtime/providerRuntimeTarget.ts";
 import type { RemoteAgentPtyResolver } from "../../remote-agent/remoteAgentPtyAdapter.ts";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import {
   createRemoteWorkspaceAcpBridge,
   type RemoteWorkspaceAcpBridge,
@@ -45,15 +46,20 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
 
     let remoteBridge: RemoteWorkspaceAcpBridge | undefined;
     if (isRemoteWorkspaceTarget(executionContext.workspaceTarget)) {
+      const useRemoteAgentPty =
+        input.ptyResolver !== undefined &&
+        isRemoteAgentExecutionTarget(executionContext.workspaceTarget.executionTargetId);
       remoteBridge = yield* Effect.tryPromise({
         try: () =>
           createRemoteWorkspaceAcpBridge({
             workspaceTarget: executionContext.workspaceTarget,
-            ptyResolver: input.ptyResolver,
+            ptyResolver: useRemoteAgentPty ? input.ptyResolver : undefined,
             prefix: `bigbud-${input.provider}-remote-workspace-`,
             readmeLines: [
               `This directory runs ${input.provider} against a remote workspace.`,
-              "ACP filesystem and terminal requests are routed through the bigbud remote agent.",
+              useRemoteAgentPty
+                ? "ACP filesystem and terminal requests are routed through the bigbud remote agent."
+                : "ACP filesystem and terminal requests are routed directly over SSH.",
               "",
             ],
             ...(input.readinessProbe ? { readinessProbe: input.readinessProbe } : {}),

@@ -1,6 +1,7 @@
 import { Effect, Scope, ServiceMap } from "effect";
 
 import { assertSshExecutionTargetReady } from "../ssh/sshVerification.ts";
+import { isRemoteAgentExecutionTarget } from "./remoteAgentDefault.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
@@ -153,6 +154,10 @@ function defaultTargetList(): Promise<ReadonlyArray<string>> {
   }
 }
 
+function stateKey(target: string, root: string): string {
+  return `${target}\u0000${root}`;
+}
+
 async function bestEffortFailedCandidateCleanup(
   target: string,
   control: RemoteAgentControl,
@@ -211,6 +216,7 @@ export function makeRemoteAgentUpdateCoordinator(
   let sourceChangeInFlight: Promise<void> | undefined;
 
   const prepare = async (target: string, item: RemoteAgentUpdateScheduleItem): Promise<void> => {
+    if (!isRemoteAgentExecutionTarget(target)) return;
     if (
       !item.triggers.has("authenticated") &&
       !item.forceRetry &&
@@ -219,7 +225,8 @@ export function makeRemoteAgentUpdateCoordinator(
       return;
     const control = await openControl(target);
     rootByTarget.set(target, control.root);
-    const existing = rootInFlight.get(control.root);
+    const key = stateKey(target, control.root);
+    const existing = rootInFlight.get(key);
     if (existing) return existing;
     let resolvedArtifact: RemoteAgentArtifact | undefined;
     let requestId: string | undefined;
@@ -233,7 +240,7 @@ export function makeRemoteAgentUpdateCoordinator(
       });
       resolvedArtifact = resolved.artifact;
       const state = await control.registry.read();
-      stateByRoot.set(control.root, state);
+      stateByRoot.set(key, state);
       const identity = updateForArtifact(state, resolved.artifact);
       requestId = identity.requestId;
       buildId = [
@@ -263,17 +270,14 @@ export function makeRemoteAgentUpdateCoordinator(
         install: (input) => manager.install(input),
         ...(dependencies.connect ? { connect: dependencies.connect } : {}),
       });
-      stateByRoot.set(control.root, await control.registry.read());
+      stateByRoot.set(key, await control.registry.read());
     })();
-    rootInFlight.set(control.root, task);
+    rootInFlight.set(key, task);
     try {
       await task;
     } catch (cause) {
       if (cause instanceof RemoteAgentCapacityUnavailableError) {
-        stateByRoot.set(
-          control.root,
-          await control.registry.read().catch(() => emptyRemoteAgentRegistry()),
-        );
+        stateByRoot.set(key, await control.registry.read().catch(() => emptyRemoteAgentRegistry()));
         return;
       }
       if (!resolvedArtifact || !requestId || !buildId) throw cause;
@@ -282,14 +286,11 @@ export function makeRemoteAgentUpdateCoordinator(
           markUpdateFailure(currentState, requestId!, buildId!, resolvedArtifact!, cause),
         )
         .catch(() => undefined);
-      stateByRoot.set(
-        control.root,
-        await control.registry.read().catch(() => emptyRemoteAgentRegistry()),
-      );
+      stateByRoot.set(key, await control.registry.read().catch(() => emptyRemoteAgentRegistry()));
       if (isDefinitiveRemoteAgentUpdateFailure(cause))
         await bestEffortFailedCandidateCleanup(target, control, manager, buildId);
     } finally {
-      if (rootInFlight.get(control.root) === task) rootInFlight.delete(control.root);
+      if (rootInFlight.get(key) === task) rootInFlight.delete(key);
     }
   };
 
@@ -340,13 +341,14 @@ export function makeRemoteAgentUpdateCoordinator(
         return statusFromState(
           target,
           rootByTarget.get(target) ?? null,
-          stateByRoot.get(rootByTarget.get(target) ?? "") ?? emptyRemoteAgentRegistry(),
+          stateByRoot.get(stateKey(target, rootByTarget.get(target) ?? "")) ??
+            emptyRemoteAgentRegistry(),
           true,
           reconnectRequestId,
         );
       const control = await openControl(target);
       const state = await control.registry.read();
-      stateByRoot.set(control.root, state);
+      stateByRoot.set(stateKey(target, control.root), state);
       let capacityNoncompliant = false;
       try {
         capacityNoncompliant = (await control.inventory?.())?.noncompliant ?? false;

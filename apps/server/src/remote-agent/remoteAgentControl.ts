@@ -41,7 +41,12 @@ for path in "$home/.bigbud" "$home/.bigbud/agent"; do
   if test ! -e "$path"; then mkdir -m 700 -- "$path" || test -d "$path"; fi
   test -d "$path"
   test "$(stat -c '%u' -- "$path")" = "$(id -u)"
-  test "$(stat -c '%a' -- "$path")" = 700
+  mode=$(stat -c '%a' -- "$path")
+  if test "$path" = "$home/.bigbud"; then
+    test "$mode" = 700 || test "$mode" = 755
+  else
+    test "$mode" = 700
+  fi
 done
 printf '%s' "$home/.bigbud/agent"
 `)

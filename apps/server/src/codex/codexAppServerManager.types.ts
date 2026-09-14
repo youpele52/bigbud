@@ -18,6 +18,7 @@ import type {
   CodexEffectiveModelSelection,
   CodexModelCatalog,
 } from "./codexAppServerManager.modelSelection";
+import type { CodexMcpReadinessTracker } from "./codexAppServerManager.mcpReadiness.ts";
 
 export type PendingRequestKey = string;
 
@@ -94,6 +95,7 @@ export interface CodexSessionContext {
   effectiveModelSelection: CodexEffectiveModelSelection | undefined;
   nextRequestId: number;
   dynamicToolCallHandler?: CodexDynamicToolCallHandler | undefined;
+  mcpReadiness?: CodexMcpReadinessTracker | undefined;
   cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   stopping: boolean;
 }
@@ -155,6 +157,7 @@ export interface CodexAppServerStartSessionInput {
   readonly homePath?: string;
   readonly configArgs?: ReadonlyArray<string>;
   readonly expectedMcpServerNames?: ReadonlyArray<string>;
+  readonly requiredMcpServerNames?: ReadonlyArray<string>;
   readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
   readonly dynamicToolCallHandler?: CodexDynamicToolCallHandler;
   readonly cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;

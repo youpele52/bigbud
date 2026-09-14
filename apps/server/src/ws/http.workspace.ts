@@ -4,6 +4,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 
 import { ServerConfig } from "../startup/config";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import {
   RemoteWorkspaceRuntime,
   WorkspaceRuntime,
@@ -147,7 +148,10 @@ export const workspaceFilePreviewRouteLayer = HttpRouter.add(
       const workspaceRuntime = yield* WorkspaceRuntime;
       return yield* serveRemoteWorkspaceFile({
         request,
-        files: Option.isSome(remoteRuntime) ? remoteRuntime.value.files : workspaceRuntime.files,
+        files:
+          Option.isSome(remoteRuntime) && isRemoteAgentExecutionTarget(executionTargetId)
+            ? remoteRuntime.value.files
+            : workspaceRuntime.files,
         executionTargetId,
         cwd: projectCwd,
         relativePath,

@@ -54,13 +54,14 @@ describe("collectRemoteProjectWorktreePaths", () => {
         workspaceRoot: "/srv/project",
         sshKeyPath: "",
         authMode: "ssh-key",
+        remoteTransport: "agent",
         providerRuntimeLocation: "local",
       },
     });
 
     expect(error).toBeNull();
     expect(verifyExecutionTarget).toHaveBeenCalledWith({
-      executionTargetId: "ssh:host=devbox&user=alice&port=22&auth=ssh-key",
+      executionTargetId: "ssh:host=devbox&user=alice&port=22&auth=ssh-key&transport=agent",
       cwd: "/srv/worktree-a",
     });
     expect(dispatchCommand).toHaveBeenCalledWith(
@@ -96,6 +97,7 @@ describe("collectRemoteProjectWorktreePaths", () => {
         workspaceRoot: "/srv/project",
         sshKeyPath: "",
         authMode: "ssh-key",
+        remoteTransport: "agent",
         providerRuntimeLocation: "local",
       },
     });

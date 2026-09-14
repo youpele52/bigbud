@@ -7,81 +7,6 @@ import { type ExecuteGitInput, type ExecuteGitResult } from "../Services/GitCore
 import { quoteGitCommand } from "./GitCoreUtils.ts";
 import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS } from "./GitCoreExecutor.ts";
 
-const READ_ONLY_COMMANDS = new Set([
-  "cat-file",
-  "check-ignore",
-  "diff",
-  "for-each-ref",
-  "log",
-  "ls-files",
-  "rev-list",
-  "rev-parse",
-  "show",
-  "show-ref",
-  "status",
-]);
-
-function isReadOnlyBranchCommand(args: ReadonlyArray<string>): boolean {
-  if (args.length === 2 && args[1] === "--show-current") return true;
-  if (!args.includes("--list")) {
-    return (
-      (args.length === 3 && args[1] === "--no-color" && args[2] === "--no-column") ||
-      (args.length === 4 &&
-        args[1] === "--no-color" &&
-        args[2] === "--no-column" &&
-        args[3] === "--remotes")
-    );
-  }
-  return (
-    args.length === 5 &&
-    args[1] === "--list" &&
-    args[2] === "--no-column" &&
-    args[3]?.startsWith("--format=") === true
-  );
-}
-
-function isReadOnlyConfigCommand(args: ReadonlyArray<string>): boolean {
-  const options = args.slice(1);
-  const [first] = options;
-  if (["--get", "--get-all", "--get-regexp"].includes(first ?? "")) {
-    return options.length === 2 || (options.length === 3 && options[2] === "--show-origin");
-  }
-  return (
-    options.some((option) => option === "--list" || option === "-l") &&
-    options.every((option) => ["--list", "-l", "--show-origin"].includes(option))
-  );
-}
-
-function isReadOnlySymbolicRefCommand(args: ReadonlyArray<string>): boolean {
-  const values = args.slice(1);
-  const references = values.filter((value) => !value.startsWith("-"));
-  return (
-    references.length === 1 &&
-    values.every((value) => !value.startsWith("-") || ["--quiet", "-q", "--short"].includes(value))
-  );
-}
-
-function isReadOnlyGitCommand(args: ReadonlyArray<string>): boolean {
-  const [command = ""] = args;
-  if (READ_ONLY_COMMANDS.has(command)) return true;
-  if (command === "branch") return isReadOnlyBranchCommand(args);
-  if (command === "config") return isReadOnlyConfigCommand(args);
-  if (command === "symbolic-ref") return isReadOnlySymbolicRefCommand(args);
-  if (command === "remote") {
-    return (
-      args.length === 1 ||
-      (args.length === 2 && args[1] === "-v") ||
-      (args.length === 3 && ["get-url", "show"].includes(args[1] ?? ""))
-    );
-  }
-  return (
-    command === "worktree" &&
-    (args.length === 2 || args.length === 3) &&
-    args[1] === "list" &&
-    (args.length === 2 || args[2] === "--porcelain")
-  );
-}
-
 function safeEnvironment(input: ExecuteGitInput): Record<string, string> {
   const environment: Record<string, string> = {
     GIT_TERMINAL_PROMPT: "0",
@@ -111,16 +36,6 @@ function safeEnvironment(input: ExecuteGitInput): Record<string, string> {
   return environment;
 }
 
-function unsupportedMutation(input: ExecuteGitInput): GitCommandError {
-  return new GitCommandError({
-    operation: input.operation,
-    command: quoteGitCommand(input.args),
-    cwd: input.cwd,
-    detail:
-      "Direct SSH Git fallback supports read-only operations only; install the remote agent for Git mutations.",
-  });
-}
-
 export function makeSshGitExecutor() {
   return (input: ExecuteGitInput): Effect.Effect<ExecuteGitResult, GitCommandError> => {
     if (!input.executionTargetId) {
@@ -133,10 +48,6 @@ export function makeSshGitExecutor() {
         }),
       );
     }
-    if (!isReadOnlyGitCommand(input.args)) {
-      return Effect.fail(unsupportedMutation(input));
-    }
-
     return Effect.tryPromise({
       try: () =>
         runSshCommand({

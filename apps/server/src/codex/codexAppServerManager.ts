@@ -58,6 +58,11 @@ export {
   normalizeCodexModelSlug,
 } from "./codexModeInstructions";
 export { classifyCodexStderrLine, isRecoverableThreadResumeError } from "./codexStderrClassifier";
+export {
+  CODEX_MCP_STARTUP_STATUS_UPDATED,
+  CODEX_REQUIRED_MCP_READINESS_TIMEOUT_MS,
+  createCodexMcpReadinessTracker,
+} from "./codexAppServerManager.mcpReadiness.ts";
 
 export type {
   CodexAppServerSendTurnInput,
@@ -144,6 +149,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
 
     context.stopping = true;
+    context.mcpReadiness?.cancel(
+      new Error("Codex session stopped while waiting for MCP readiness."),
+    );
 
     for (const pending of context.pending.values()) {
       clearTimeout(pending.timeout);

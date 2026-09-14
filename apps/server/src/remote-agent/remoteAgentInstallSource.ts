@@ -139,7 +139,7 @@ async function loadDevelopmentReleaseManifest(
       throw error;
     }
     throw new RemoteAgentInstallManagerError(
-      `No valid development remote-agent release is published (${error instanceof Error ? error.message : String(error)}). Publish the matching release, set BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH to a local install source, or use BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh for local recovery.`,
+      `No valid development remote-agent release is published (${error instanceof Error ? error.message : String(error)}). Publish the matching release, set BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH to a local install source, or choose Direct SSH for a project that does not need the agent.`,
     );
   }
 }

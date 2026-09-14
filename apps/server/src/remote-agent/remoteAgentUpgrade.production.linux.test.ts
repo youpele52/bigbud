@@ -61,6 +61,9 @@ for (const architecture of architectures) {
           return;
         }
         await fixture.run(`umask 077; mkdir -p -m 700 '${root}/state'`);
+        // Older installations made the shared parent directory world-readable;
+        // the private agent root below it must remain mode 700.
+        await fixture.run(`chmod 755 '${home}/.bigbud'`);
         if (history !== "fresh")
           await fixture.run(
             `/fixtures/legacy-journal-seed '${root}/state/operations.journal' '${history}'`,

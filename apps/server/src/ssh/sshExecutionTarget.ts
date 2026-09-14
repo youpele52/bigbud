@@ -4,6 +4,7 @@ import path from "node:path";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 
 export type SshExecutionTargetAuthMode = "ssh-key" | "password";
+export type SshExecutionTransport = "agent" | "direct-ssh";
 
 export interface SshExecutionTarget {
   readonly executionTargetId: string;
@@ -12,6 +13,8 @@ export interface SshExecutionTarget {
   readonly port?: string;
   readonly authMode?: SshExecutionTargetAuthMode;
   readonly keyPath?: string;
+  /** Per-project transport override. Missing values retain the process default. */
+  readonly transport?: SshExecutionTransport;
 }
 
 export function parseSshExecutionTarget(
@@ -46,6 +49,9 @@ export function parseSshExecutionTarget(
   const authMode =
     authModeRaw === "ssh-key" || authModeRaw === "password" ? authModeRaw : undefined;
   const keyPath = params.get("keyPath")?.trim() ?? "";
+  const transportRaw = params.get("transport")?.trim();
+  const transport =
+    transportRaw === "agent" || transportRaw === "direct-ssh" ? transportRaw : undefined;
 
   return {
     executionTargetId: resolved,
@@ -54,7 +60,14 @@ export function parseSshExecutionTarget(
     ...(port ? { port } : {}),
     ...(authMode ? { authMode } : {}),
     ...(keyPath ? { keyPath } : {}),
+    ...(transport ? { transport } : {}),
   };
+}
+
+export function parseSshExecutionTransport(
+  executionTargetId: string | null | undefined,
+): SshExecutionTransport | undefined {
+  return parseSshExecutionTarget(executionTargetId)?.transport;
 }
 
 export function formatSshDestination(target: Pick<SshExecutionTarget, "host" | "user">): string {

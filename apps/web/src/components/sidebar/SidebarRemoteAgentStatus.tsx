@@ -17,6 +17,7 @@ import {
 } from "./Sidebar.projects.logic";
 
 export function remoteProjectAgentTarget(draft: RemoteProjectDraft): string | null {
+  if (draft.remoteTransport !== "agent") return null;
   try {
     return draft.host.trim() ? createRemoteProjectExecutionTargetId(draft) : null;
   } catch {

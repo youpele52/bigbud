@@ -96,9 +96,9 @@ describe("configured remote agent server layer", () => {
     expect(makeConfiguredRemoteAgentLayers().enabled).toBe(true);
   });
 
-  it("retains direct ssh as an explicit diagnostic fallback", () => {
+  it("keeps the agent services available when direct ssh is the legacy default", () => {
     process.env.BIGBUD_REMOTE_AGENT_TRANSPORT = "direct-ssh";
-    expect(makeConfiguredRemoteAgentLayers().enabled).toBe(false);
+    expect(makeConfiguredRemoteAgentLayers().enabled).toBe(true);
   });
 
   it("shares one resolved install source loader between health and installation", async () => {

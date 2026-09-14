@@ -23,9 +23,14 @@ import { makeLocalWorkspaceWatchLayer } from "../../remote-agent/localWorkspaceW
 export function makeTargetAwareRuntime(input: {
   readonly local: WorkspaceRuntimeBackendShape;
   readonly remote?: WorkspaceRuntimeBackendShape;
+  readonly useRemote?: (executionTargetId: string | undefined) => boolean;
 }): WorkspaceRuntimeBackendShape {
   const backend = (executionTargetId: string | undefined) =>
-    input.remote && !isLocalExecutionTarget(executionTargetId) ? input.remote : input.local;
+    input.remote &&
+    !isLocalExecutionTarget(executionTargetId) &&
+    (input.useRemote?.(executionTargetId) ?? true)
+      ? input.remote
+      : input.local;
   return {
     files: {
       writeFile: (value) => backend(value.executionTargetId).files.writeFile(value),
@@ -73,6 +78,7 @@ const workspaceSearchLive = Layer.effect(
 );
 const makeWorkspaceRuntimeLive = (
   localWatchLayer: Layer.Layer<WorkspaceWatch, never, FileSystem.FileSystem | Path.Path>,
+  useRemote?: (executionTargetId: string | undefined) => boolean,
 ) =>
   Layer.effect(
     WorkspaceRuntime,
@@ -84,6 +90,7 @@ const makeWorkspaceRuntimeLive = (
       return makeTargetAwareRuntime({
         local: { files, search, watch },
         ...(remote._tag === "Some" ? { remote: remote.value } : {}),
+        ...(useRemote ? { useRemote } : {}),
       });
     }),
   ).pipe(
@@ -105,12 +112,13 @@ export function makeWorkspaceRuntimeLayer(
     never,
     WorkspaceFileSystem | WorkspacePaths
   > = makeLocalWorkspaceWatchLayer(),
+  useRemote?: (executionTargetId: string | undefined) => boolean,
 ) {
   const resolvedLocalWatchLayer = localWatchLayer.pipe(
     Layer.provide(workspaceFileSystemForRuntimeLive),
     Layer.provide(WorkspacePathsLive),
   );
-  const workspaceRuntimeLive = makeWorkspaceRuntimeLive(resolvedLocalWatchLayer);
+  const workspaceRuntimeLive = makeWorkspaceRuntimeLive(resolvedLocalWatchLayer, useRemote);
   const runtime = remoteLayer
     ? workspaceRuntimeLive.pipe(Layer.provide(remoteLayer))
     : workspaceRuntimeLive;

@@ -16,7 +16,11 @@ interface MutationIdentity {
 }
 
 /** Every public multistep mutation owns one generation; nested stacked-action steps reuse theirs. */
-export function bindRemoteGitMutations(git: GitCoreShape): GitCoreShape {
+export function bindRemoteGitMutations(
+  git: GitCoreShape,
+  shouldBind: (executionTargetId: string | undefined) => boolean = (executionTargetId) =>
+    !isLocalExecutionTarget(executionTargetId),
+): GitCoreShape {
   const result = { ...git };
   const wrap = <K extends keyof GitCoreShape>(
     method: K,
@@ -29,7 +33,7 @@ export function bindRemoteGitMutations(git: GitCoreShape): GitCoreShape {
           ...args: readonly unknown[]
         ) => Effect.Effect<unknown, GitCommandError | GitServiceError>
       )(...args);
-      if (isLocalExecutionTarget(input.executionTargetId)) return effect;
+      if (!shouldBind(input.executionTargetId)) return effect;
       return Effect.gen(function* () {
         if (Option.isSome(yield* Effect.serviceOption(RemoteAgentGitActionBinding)))
           return yield* effect;

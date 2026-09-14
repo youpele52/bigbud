@@ -47,6 +47,14 @@ function buildIdForArtifact(artifact: RemoteAgentArtifact): string {
   return `${artifact.version}:${artifact.sha256}:${artifact.targetTriple}`;
 }
 
+function launchAttemptId(runtime: RemoteAgentRuntime): string {
+  return `launch-${runtime.generation}`;
+}
+
+function hasValidLaunchAttemptId(value: string | undefined): value is string {
+  return value !== undefined && /^[a-zA-Z0-9-]{1,64}$/.test(value);
+}
+
 function candidateRuntime(
   state: Awaited<ReturnType<RemoteAgentControl["registry"]["read"]>>,
   buildId: string,
@@ -65,7 +73,6 @@ function candidateRuntime(
 async function ensureCandidateLaunch(input: {
   readonly control: RemoteAgentControl;
   readonly runtime: RemoteAgentRuntime;
-  readonly requestId: string;
 }): Promise<void> {
   let state = await input.control.registry.read();
   let launch = state.launches.find((entry) => entry.buildId === remoteAgentBuildId(input.runtime));
@@ -75,6 +82,26 @@ async function ensureCandidateLaunch(input: {
   }
 
   let ownsReservation = false;
+  if (launch?.phase === "spawn-uncertain" && !hasValidLaunchAttemptId(launch.attemptId)) {
+    // Older coordinators used the full artifact request ID here. It can exceed
+    // the launch command's 64-character identity bound, and the command fails
+    // before SSH dispatch. Repair that durable reservation before retrying it.
+    state = await input.control.registry.update((current) => {
+      const existing = current.launches.find(
+        (entry) => entry.buildId === remoteAgentBuildId(input.runtime),
+      );
+      if (!existing || existing.phase !== "spawn-uncertain") return current;
+      ownsReservation = true;
+      return nextRemoteAgentRegistryRevision(current, {
+        launches: current.launches.map((entry) =>
+          entry.buildId === remoteAgentBuildId(input.runtime)
+            ? { ...entry, attemptId: launchAttemptId(input.runtime) }
+            : entry,
+        ),
+      });
+    });
+    launch = state.launches.find((entry) => entry.buildId === remoteAgentBuildId(input.runtime));
+  }
   state = await input.control.registry.update((current) => {
     const existing = current.launches.find(
       (entry) => entry.buildId === remoteAgentBuildId(input.runtime),
@@ -86,7 +113,7 @@ async function ensureCandidateLaunch(input: {
         ...current.launches,
         {
           id: input.runtime.generation,
-          attemptId: input.requestId,
+          attemptId: launchAttemptId(input.runtime),
           buildId: remoteAgentBuildId(input.runtime),
           phase: "spawn-uncertain" as const,
           epoch: "",
@@ -102,7 +129,10 @@ async function ensureCandidateLaunch(input: {
     try {
       output = (
         await input.control.run(
-          buildIsolatedRemoteAgentLaunch(input.runtime, launch.attemptId ?? input.requestId),
+          buildIsolatedRemoteAgentLaunch(
+            input.runtime,
+            launch.attemptId ?? launchAttemptId(input.runtime),
+          ),
         )
       ).trim();
     } catch (cause) {
@@ -217,7 +247,6 @@ export async function prepareRemoteAgentCandidate(input: {
   await ensureCandidateLaunch({
     control: input.control,
     runtime,
-    requestId: input.requestId,
   });
   const epoch = await verifyRemoteAgentRuntimeHealth({
     target: input.target,

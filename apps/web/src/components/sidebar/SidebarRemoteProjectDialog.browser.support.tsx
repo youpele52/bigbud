@@ -59,14 +59,22 @@ export const project = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
+export const directSshProject = {
+  ...project,
+  workspaceExecutionTargetId:
+    "ssh:host=old-host&user=alice&port=2222&auth=ssh-key&transport=direct-ssh",
+};
+
 function RemoteProjectEditHarness({
   createProject = vi.fn<CreateProject>().mockResolvedValue({ ok: true }),
+  selectedProject = project,
 }: {
   createProject?: CreateProject;
+  selectedProject?: typeof project;
 }) {
   const remote = useSidebarRemoteProjectAddActions({ createProject, isAddingProject: false });
   const projectActions = useSidebarProjectActions({
-    projects: [project] as never,
+    projects: [selectedProject] as never,
     threadIdsByProjectId: {},
     sidebarProjects: [],
     appSettings: { sidebarProjectSortOrder: "manual" } as never,
@@ -83,7 +91,7 @@ function RemoteProjectEditHarness({
     <>
       <button
         type="button"
-        onClick={() => projectActions.handleProjectContextMenu(project.id, { x: 1, y: 1 })}
+        onClick={() => projectActions.handleProjectContextMenu(selectedProject.id, { x: 1, y: 1 })}
       >
         Open project menu
       </button>
@@ -114,11 +122,17 @@ function RemoteProjectEditHarness({
   );
 }
 
-export async function mountHarness(createProject?: CreateProject) {
+export async function mountHarness(
+  createProject?: CreateProject,
+  selectedProject: typeof project = project,
+) {
   const host = document.createElement("div");
   document.body.append(host);
   const props = createProject === undefined ? {} : { createProject };
-  const screen = await render(<RemoteProjectEditHarness {...props} />, { container: host });
+  const screen = await render(
+    <RemoteProjectEditHarness {...props} selectedProject={selectedProject} />,
+    { container: host },
+  );
   return {
     [Symbol.asyncDispose]: async () => {
       await screen.unmount();

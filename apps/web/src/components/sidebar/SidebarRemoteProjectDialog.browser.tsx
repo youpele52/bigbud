@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 
 import {
   mountHarness,
+  directSshProject,
   project,
   resetApi,
   setApi,
@@ -29,6 +30,91 @@ describe("SidebarRemoteProjectDialog", () => {
     await expect.element(page.getByLabelText("Username")).toHaveValue("alice");
     await expect.element(page.getByLabelText("Port")).toHaveValue("2222");
     await expect.element(page.getByLabelText("Remote project path")).toHaveValue("/srv/project");
+    await expect
+      .element(page.getByText(/The bigbud remote agent keeps remote terminals/u))
+      .toBeInTheDocument();
+    await expect
+      .element(
+        page.getByText(
+          "Use the bigbud remote agent. The agent must be installed on the remote host.",
+        ),
+      )
+      .not.toBeInTheDocument();
+  });
+
+  it("verifies a Direct SSH switch before saving the project", async () => {
+    const verifyExecutionTarget = vi.fn().mockResolvedValue({ message: "SSH verified" });
+    const dispatchCommand = vi.fn().mockResolvedValue(undefined);
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget,
+      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      dispatchCommand,
+    });
+    await using _ = await mountHarness();
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+    await page.getByRole("button", { name: /Direct SSH/u }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(verifyExecutionTarget).toHaveBeenCalledWith({
+      executionTargetId: "ssh:host=old-host&user=alice&port=2222&auth=ssh-key&transport=direct-ssh",
+      cwd: "/srv/project",
+    });
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceExecutionTargetId:
+          "ssh:host=old-host&user=alice&port=2222&auth=ssh-key&transport=direct-ssh",
+      }),
+    );
+  });
+
+  it("verifies a switch back to the bigbud remote agent before saving", async () => {
+    const verifyExecutionTarget = vi.fn().mockResolvedValue({ message: "agent verified" });
+    const dispatchCommand = vi.fn().mockResolvedValue(undefined);
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget,
+      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      dispatchCommand,
+    });
+    await using _ = await mountHarness(undefined, directSshProject);
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+    await page.getByRole("button", { name: /bigbud remote agent/u }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(verifyExecutionTarget).toHaveBeenCalledWith({
+      executionTargetId: "ssh:host=old-host&user=alice&port=2222&auth=ssh-key&transport=agent",
+      cwd: "/srv/project",
+    });
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceExecutionTargetId:
+          "ssh:host=old-host&user=alice&port=2222&auth=ssh-key&transport=agent",
+      }),
+    );
+  });
+
+  it("does not save a transport switch when verification fails", async () => {
+    const dispatchCommand = vi.fn();
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget: vi.fn().mockRejectedValue(new Error("SSH host is unavailable")),
+      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      dispatchCommand,
+    });
+    await using _ = await mountHarness();
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+    await page.getByRole("button", { name: /Direct SSH/u }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect.element(page.getByText("SSH host is unavailable")).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(dispatchCommand).not.toHaveBeenCalled();
   });
 
   it("disables Save while the edit submission is pending", async () => {

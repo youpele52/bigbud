@@ -24,6 +24,7 @@ import {
   completeRemoteAgentGitAction,
 } from "../../remote-agent/remoteAgentGit.action.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 
 export function makeRunStackedActionStep(input: {
   gitCore: GitCoreShape;
@@ -219,7 +220,10 @@ export function makeRunStackedActionStep(input: {
       const target = input.executionTargetId;
       const composition = getConfiguredRemoteAgentComposition();
       const binding =
-        target && !isLocalExecutionTarget(target) && (composition?.managed ?? composition !== null)
+        target &&
+        !isLocalExecutionTarget(target) &&
+        isRemoteAgentExecutionTarget(target) &&
+        (composition?.managed ?? composition !== null)
           ? yield* Effect.tryPromise({
               try: () => reserveRemoteAgentGitAction(target, input.actionId, input),
               catch: (cause) =>

@@ -130,10 +130,16 @@ async function spawnRemotePty(
 export function makeRemoteAgentPtyAdapter(
   base: PtyAdapterShape,
   resolver: RemoteAgentPtyResolver,
+  shouldUseRemote: (executionTargetId: string | undefined) => boolean = (executionTargetId) =>
+    !isLocalExecutionTarget(executionTargetId),
 ): PtyAdapterShape {
   return {
     spawn: Effect.fn("remoteAgentPtyAdapter.spawn")(function* (input) {
-      if (!input.executionTargetId || isLocalExecutionTarget(input.executionTargetId)) {
+      if (
+        !input.executionTargetId ||
+        isLocalExecutionTarget(input.executionTargetId) ||
+        !shouldUseRemote(input.executionTargetId)
+      ) {
         return yield* base.spawn(input);
       }
       return yield* Effect.tryPromise({

@@ -19,6 +19,7 @@ import {
   RemoteAgentGitExecutorService,
   RemoteAgentGitOwnership,
 } from "../../remote-agent/remoteAgentGit.ts";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import { requireRemoteGitAgent, assertLocalExecutionTarget } from "./GitCore.target.ts";
 
 export { makeGitCore };
@@ -392,7 +393,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       }),
   } satisfies GitCoreShape;
   return Option.isSome(ownership) && ownership.value === "managed"
-    ? bindRemoteGitMutations(core)
+    ? bindRemoteGitMutations(core, isRemoteAgentExecutionTarget)
     : core;
 });
 

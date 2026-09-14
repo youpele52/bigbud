@@ -12,6 +12,7 @@ import {
   RemoteAgentAdmissionError,
 } from "../remote-agent/remoteAgentAdmission.ts";
 import { isRemoteAgentConfigured } from "../remote-agent/remoteAgentServerLayer.ts";
+import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import { scheduleRemoteAgentCleanup } from "../remote-agent/remoteAgentInstall.maintenance.ts";
 import { remoteAgentRuntimeSummary } from "../remote-agent/remoteAgentStatus.ts";
 import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
@@ -23,6 +24,10 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
   if (!isRemoteAgentConfigured())
     return yield* new ServerInstallRemoteAgentError({
       message: "Remote agent connections are disabled.",
+    });
+  if (!isRemoteAgentExecutionTarget(input.executionTargetId))
+    return yield* new ServerInstallRemoteAgentError({
+      message: "This project uses Direct SSH. Select bigbud remote agent before connecting it.",
     });
   const result = yield* Effect.tryPromise({
     try: () => remoteAgentAdmission.fresh(input.executionTargetId, input.requestId),

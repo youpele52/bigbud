@@ -147,7 +147,7 @@ export function createDevRunnerEnv({
       delete output.BIGBUD_DESKTOP_WS_URL;
       delete output.T3CODE_DESKTOP_WS_URL;
       output.BIGBUD_REMOTE_AGENT_TRANSPORT =
-        output.BIGBUD_REMOTE_AGENT_TRANSPORT?.trim() || "direct-ssh";
+        output.BIGBUD_REMOTE_AGENT_TRANSPORT?.trim() || "agent";
     }
 
     return output;

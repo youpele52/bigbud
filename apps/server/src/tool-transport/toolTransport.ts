@@ -7,7 +7,7 @@ import { runLocalToolCommand } from "./toolTransport.local.ts";
 import { runSshToolCommand } from "./toolTransport.ssh.ts";
 import {
   getConfiguredRemoteAgentComposition,
-  resolveRemoteAgentConfiguration,
+  resolveRemoteAgentTransport,
 } from "../remote-agent/remoteAgentDefault.ts";
 
 export type ToolExecutionTransport = "agent" | "local" | "ssh";
@@ -33,7 +33,7 @@ export interface RunToolCommandInput {
 }
 
 export function resolveToolTransportTarget(workspaceTarget: WorkspaceTarget): ToolTransportTarget {
-  const remoteTransport = resolveRemoteAgentConfiguration().transport;
+  const remoteTransport = resolveRemoteAgentTransport(workspaceTarget.executionTargetId);
   return {
     transport: isLocalWorkspaceTarget(workspaceTarget)
       ? "local"

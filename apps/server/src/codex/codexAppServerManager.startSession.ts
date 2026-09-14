@@ -23,6 +23,7 @@ import { normalizeCodexModelSlug } from "./codexModeInstructions";
 import { isRecoverableThreadResumeError } from "./codexStderrClassifier";
 import { startCodexAppServerProcess } from "./codexAppServerManager.process";
 import { hasReadyMcpServers, sleep } from "./codexAppServerManager.mcp";
+import { createCodexMcpReadinessTracker } from "./codexAppServerManager.mcpReadiness.ts";
 import { readObject, readString } from "./codexAppServerManager.protocol";
 import {
   type CodexAppServerStartSessionInput,
@@ -154,6 +155,9 @@ export async function startSession(
       ...(input.dynamicToolCallHandler
         ? { dynamicToolCallHandler: input.dynamicToolCallHandler }
         : {}),
+      ...(input.requiredMcpServerNames && input.requiredMcpServerNames.length > 0
+        ? { mcpReadiness: createCodexMcpReadinessTracker() }
+        : {}),
       ...(input.cleanupRemoteWorkspaceBridge
         ? { cleanupRemoteWorkspaceBridge: input.cleanupRemoteWorkspaceBridge }
         : {}),
@@ -247,6 +251,7 @@ export async function startSession(
 
     let threadOpenMethod: "thread/start" | "thread/resume" = "thread/start";
     let threadOpenResponse: unknown;
+    let threadOpenAttempt = context.mcpReadiness?.beginAttempt(resumeThreadId);
     if (resumeThreadId) {
       try {
         threadOpenMethod = "thread/resume";
@@ -271,6 +276,7 @@ export async function startSession(
           throw error;
         }
 
+        threadOpenAttempt?.abandon();
         threadOpenMethod = "thread/start";
         ops.emitLifecycleEvent(
           context,
@@ -284,6 +290,7 @@ export async function startSession(
           recoverable: true,
           cause: error instanceof Error ? error.message : String(error),
         }).pipe(ops.runPromise);
+        threadOpenAttempt = context.mcpReadiness?.beginAttempt();
         threadOpenResponse = await ops.sendRequest(context, "thread/start", threadStartParams);
       }
     } else {
@@ -299,6 +306,33 @@ export async function startSession(
       throw new Error(`${threadOpenMethod} response did not include a thread id.`);
     }
     const providerThreadId = threadIdRaw;
+    const sessionContext = context;
+    if (!sessionContext) {
+      throw new Error("Codex session context was lost before startup readiness.");
+    }
+
+    if (sessionContext.mcpReadiness && input.requiredMcpServerNames) {
+      await sessionContext.mcpReadiness.waitFor(
+        threadOpenAttempt!,
+        providerThreadId,
+        input.requiredMcpServerNames,
+        () =>
+          ops.sessions.get(threadId) === sessionContext &&
+          !sessionContext.stopping &&
+          sessionContext.session.status !== "error" &&
+          sessionContext.session.status !== "closed",
+      );
+      sessionContext.mcpReadiness.dispose();
+    }
+
+    if (
+      ops.sessions.get(threadId) !== context ||
+      context.stopping ||
+      context.session.status === "error" ||
+      context.session.status === "closed"
+    ) {
+      throw new Error("Codex session stopped before startup readiness could be published.");
+    }
 
     context.effectiveModelSelection = modelSelection;
     ops.updateSession(context, {
@@ -323,12 +357,15 @@ export async function startSession(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to start Codex session.";
     if (context) {
+      context.mcpReadiness?.dispose();
       ops.updateSession(context, {
         status: "error",
         lastError: message,
       });
       ops.emitErrorEvent(context, "session/startFailed", message);
-      ops.stopSession(threadId);
+      if (ops.sessions.get(threadId) === context) {
+        ops.stopSession(threadId);
+      }
     } else {
       ops.emitEvent({
         id: EventId.makeUnsafe(randomUUID()),

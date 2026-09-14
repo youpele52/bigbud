@@ -17,6 +17,7 @@ import { loadProcessScopedRemoteAgentInstallSource } from "./remoteAgentInstallS
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 import {
   getConfiguredRemoteAgentComposition,
+  isRemoteAgentExecutionTarget,
   resolveRemoteAgentConfiguration,
 } from "./remoteAgentDefault.ts";
 import { RemoteWorkspaceRuntime } from "../workspace-runtime/Services/WorkspaceRuntime.ts";
@@ -37,6 +38,10 @@ import type { RemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.
 import { makeRemoteAgentRestart } from "./remoteAgentRestart.ts";
 import { RemoteAgentRestartService } from "./remoteAgentRestart.types.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
+import { makeSshShellRunner } from "../ssh/sshShellRunner.ts";
+import { makeRemoteAgentInstaller } from "./remoteAgentServerLayer.installer.ts";
+
+export { makeRemoteAgentInstaller };
 
 export type RemoteAgentHealthResult =
   | { readonly status: "install-required" }
@@ -185,7 +190,7 @@ export function makeRemoteAgentHealth(
 }
 
 export function isRemoteAgentConfigured(): boolean {
-  return resolveRemoteAgentConfiguration().transport === "agent";
+  return getConfiguredRemoteAgentComposition() !== null;
 }
 
 interface RemoteAgentServerServicesDependencies {
@@ -302,8 +307,8 @@ export function makeRemoteAgentServerServices(
 }
 
 /**
- * Default live composition for the installed remote agent. Set
- * BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh for the diagnostic fallback.
+ * Default live composition for remote projects. The per-project target transport
+ * selects the managed agent or the direct SSH implementation at operation time.
  */
 export function makeConfiguredRemoteAgentLayers() {
   const configuration = resolveRemoteAgentConfiguration();
@@ -338,12 +343,22 @@ export function makeConfiguredRemoteAgentLayers() {
       return presence.stdout;
     },
   });
+  const directSshGitExecutor = makeSshGitExecutor();
   const services = Layer.mergeAll(
     composition.managed ? RemoteAgentRuntimeBindingsLive : Layer.empty,
     Layer.succeed(RemoteAgentGitOwnership, composition.managed ? "managed" : "external"),
     Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),
-    Layer.succeed(RemoteAgentGitExecutorService, composition.gitExecutor),
-    Layer.succeed(RemoteAgentShellRunner, composition.shellRunner),
+    Layer.succeed(RemoteAgentGitExecutorService, (input) =>
+      isRemoteAgentExecutionTarget(input.executionTargetId)
+        ? composition.gitExecutor(input)
+        : directSshGitExecutor(input),
+    ),
+    Layer.succeed(RemoteAgentShellRunner, {
+      resolve: (executionTargetId) =>
+        isRemoteAgentExecutionTarget(executionTargetId)
+          ? composition.shellRunner.resolve(executionTargetId)
+          : makeSshShellRunner(executionTargetId),
+    }),
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
     Layer.succeed(RemoteAgentUpdateCoordinator, updateCoordinator),
@@ -353,40 +368,13 @@ export function makeConfiguredRemoteAgentLayers() {
     services,
     workspace: makeWorkspaceRuntimeLayer(
       Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),
+      undefined,
+      isRemoteAgentExecutionTarget,
     ),
     ptyResolver: composition.ptyResolver,
     health,
     updateCoordinator,
     restart,
     enabled: true,
-  };
-}
-
-export function makeRemoteAgentInstaller(input: {
-  readonly installManager: {
-    readonly install: (input: {
-      readonly executionTargetId: string;
-      readonly source: RemoteAgentInstallSource;
-      readonly signal?: AbortSignal;
-    }) => Promise<{
-      readonly artifact: { readonly version: string };
-      readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
-    }>;
-  };
-  readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
-  readonly pool: { readonly close: (executionTargetId: string) => void };
-}): RemoteAgentInstaller {
-  return {
-    install: async (executionTargetId, signal) => {
-      const result = await input.installManager.install({
-        executionTargetId,
-        source: await input.loadInstallSource(signal),
-        ...(signal ? { signal } : {}),
-      });
-      return {
-        version: result.artifact.version,
-        ...(result.runtimeSummary ? { runtimeSummary: result.runtimeSummary } : {}),
-      };
-    },
   };
 }

@@ -3,8 +3,7 @@ import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
-
-const CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
+import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../remote-workspace-bridge/remoteWorkspaceTools.ts";
 
 export interface CodexRemoteWorkspaceBridge {
   readonly cwd: string;
@@ -45,11 +44,11 @@ export async function createCodexRemoteWorkspaceBridge(
       "-c",
       "app.default_tools_enabled=false",
       "-c",
-      `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.command=${quoteTomlString(resolveNodeExecutable())}`,
+      `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.command=${quoteTomlString(resolveNodeExecutable())}`,
       "-c",
-      `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.args=${quoteTomlStringArray([bridge.serverPath])}`,
+      `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.args=${quoteTomlStringArray([bridge.serverPath])}`,
       "-c",
-      `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.cwd=${quoteTomlString(bridge.cwd)}`,
+      `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.cwd=${quoteTomlString(bridge.cwd)}`,
     ],
     promptPrefix: [
       `bigbud remote workspace mode: the actual workspace lives on ${

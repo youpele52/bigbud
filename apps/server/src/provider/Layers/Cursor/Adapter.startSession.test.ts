@@ -124,7 +124,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
     }),
   );
 
-  it.effect("starts a remote workspace session when direct SSH has no PTY resolver", () =>
+  it.effect("keeps Direct SSH on SSH even when the agent PTY resolver is available", () =>
     Effect.gen(function* () {
       capturedAcpInputs.length = 0;
       const threadId = ThreadId.makeUnsafe("thread-cursor-direct-ssh");
@@ -139,7 +139,14 @@ describe("CursorAdapter startSession orchestration wiring", () => {
         {
           ...deps,
           notificationScope,
-          remoteAgentPtyResolver: undefined,
+          remoteAgentPtyResolver: {
+            resolveWorkspace: async () => {
+              throw new Error("Direct SSH must not resolve the remote agent workspace");
+            },
+            resolvePty: async () => {
+              throw new Error("Direct SSH must not resolve the remote agent PTY");
+            },
+          },
           getCursorSettings: () => Effect.succeed({ binaryPath: "agent", apiEndpoint: "" }),
         },
         {
@@ -148,7 +155,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
           cwd: "/srv/cursor-project",
           runtimeMode: "approval-required",
           providerRuntimeExecutionTargetId: "local",
-          workspaceExecutionTargetId: "ssh:devbox",
+          workspaceExecutionTargetId: "ssh:host=devbox&transport=direct-ssh",
         },
       ).pipe(Effect.scoped);
 

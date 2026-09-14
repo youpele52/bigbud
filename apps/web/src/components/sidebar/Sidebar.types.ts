@@ -7,7 +7,7 @@ import type { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import type { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import type { resolveThreadStatusPill } from "./Sidebar.logic";
-import type { RemoteProjectDraft } from "./Sidebar.projects.logic";
+import type { RemoteProjectDraft, RemoteProjectTransport } from "./Sidebar.projects.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
@@ -190,8 +190,9 @@ export interface SidebarState {
       | "workspaceRoot"
       | "sshKeyPath"
       | "authMode"
+      | "remoteTransport"
       | "providerRuntimeLocation",
-    value: string | ProviderRuntimeLocation,
+    value: string | ProviderRuntimeLocation | RemoteProjectTransport,
   ) => void;
   submitRemoteProjectDialog: () => Promise<void>;
   remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];

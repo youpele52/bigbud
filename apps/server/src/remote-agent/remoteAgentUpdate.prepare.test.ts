@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RemoteAgentAdmissionError } from "./remoteAgentAdmission.types.ts";
+import {
+  RemoteAgentAdmissionError,
+  nextRemoteAgentRegistryRevision,
+} from "./remoteAgentAdmission.types.ts";
 import {
   prepareRemoteAgentCandidate,
   buildRemoteAgentCandidateStartupWaitCommand,
@@ -11,6 +14,7 @@ import {
   installManagerFixture,
 } from "./remoteAgentInstallManager.fixtures.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 
 function hello() {
   return {
@@ -115,6 +119,67 @@ describe("remote agent candidate preparation", () => {
       }),
     ).rejects.toMatchObject({ code: "NOT_READY", buildFailure: true });
     expect((await fixture.control.registry.read()).updates[0]?.phase).toBe("checking");
+  });
+
+  it("repairs the invalid launch reservation written by older coordinators", async () => {
+    const fixture = installManagerFixture();
+    await fixture.manager.install(installInput);
+    const installed = await fixture.control.registry.read();
+    const runtime = installed.builds[0]!.runtime;
+    const oldAttemptId = `update-${artifact.sha256}`;
+    expect(oldAttemptId.length).toBeGreaterThan(64);
+    await fixture.control.registry.update((current) =>
+      nextRemoteAgentRegistryRevision(current, {
+        launches: [
+          {
+            id: runtime.generation,
+            attemptId: oldAttemptId,
+            buildId: remoteAgentBuildId(runtime),
+            phase: "spawn-uncertain",
+            epoch: "",
+          },
+        ],
+      }),
+    );
+
+    const commands: string[] = [];
+    fixture.control.run = vi.fn(async (command: string) => {
+      commands.push(command);
+      return command.includes("launch-reserved") ? "launch-reserved" : "ready";
+    });
+    const connection = {
+      handshake: async () => hello(),
+      request: async () => ({
+        type: "diagnosticResponse",
+        value: {
+          requestId: "readiness",
+          operationId: "readiness",
+          accepted: true,
+          terminal: true,
+          message: "agent-ready",
+        },
+      }),
+      close: vi.fn(),
+    } as unknown as RemoteAgentConnection;
+
+    await expect(
+      prepareRemoteAgentCandidate({
+        target: installInput.executionTargetId,
+        requestId: "recovery-request",
+        artifact,
+        source: installInput.source,
+        control: fixture.control,
+        install: (input) => fixture.manager.install(input),
+        connect: () => connection,
+      }),
+    ).resolves.toMatchObject({ status: "ready-for-reconnect" });
+
+    expect(commands[0]).toContain(`printf '%s' 'launch-${runtime.generation}'`);
+    expect(commands[0]).not.toContain(oldAttemptId);
+    expect((await fixture.control.registry.read()).launches[0]).toMatchObject({
+      phase: "ready",
+      attemptId: `launch-${runtime.generation}`,
+    });
   });
 
   it("uses a private candidate state path for startup polling", () => {

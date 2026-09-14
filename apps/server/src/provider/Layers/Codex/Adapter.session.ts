@@ -41,6 +41,7 @@ import {
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
 import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.session.bootstrap.ts";
 import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorkspace.ts";
+import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
@@ -158,6 +159,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(homePath ? { homePath } : {}),
         ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
         expectedMcpServerNames: [orchestrationConfig.serverName],
+        ...(remoteWorkspaceBridge
+          ? { requiredMcpServerNames: [REMOTE_WORKSPACE_MCP_SERVER_NAME] }
+          : {}),
         dynamicTools: orchestrationDynamicTools,
         dynamicToolCallHandler: createCodexThreadOrchestrationDynamicToolHandler(input.threadId),
         ...(cleanupBridge ? { cleanupRemoteWorkspaceBridge: cleanupBridge } : {}),

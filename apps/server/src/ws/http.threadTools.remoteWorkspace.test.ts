@@ -109,4 +109,43 @@ describe("remote workspace thread tool", () => {
     }
     expect(runToolCommand).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["direct SSH", "ssh", "ssh:host=devbox&user=root&port=22&transport=direct-ssh"],
+    ["remote agent", "agent", "ssh:host=devbox&user=root&port=22&transport=agent"],
+  ] as const)(
+    "returns a single actionable error for a failed %s call without replaying or rerouting it",
+    async (_label, transport, executionTargetId) => {
+      const message = `${transport} execution failed in fixture`;
+      vi.mocked(runToolCommand).mockRejectedValueOnce(new Error(message));
+
+      const result = await Effect.runPromise(
+        runRemoteWorkspaceProcess({
+          callerThreadId: threadId,
+          request: {
+            remoteInvocationId: `provider-${transport}-failure`,
+            remoteCommand: "pwd",
+          },
+        }).pipe(
+          Effect.provide(engineLayer({ executionTargetId, workspaceRoot: "/srv/project" })),
+          Effect.result,
+        ),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toMatchObject({ status: 502, message });
+      }
+      expect(runToolCommand).toHaveBeenCalledTimes(1);
+      expect(runToolCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: {
+            transport,
+            executionTargetId,
+            cwd: "/srv/project",
+          },
+        }),
+      );
+    },
+  );
 });
