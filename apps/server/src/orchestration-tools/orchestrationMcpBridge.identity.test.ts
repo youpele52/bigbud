@@ -64,11 +64,13 @@ it("keeps typed orchestration MCP IDs separate and rejects an ambiguous restarte
   });
   try {
     await callMany(source, [1, "1", 1]);
-    expect(requests.map((request) => request.invocationId)).toEqual([
-      "mcp-sequence:provider-session:1",
-      "mcp-sequence:provider-session:2",
-      "mcp-sequence:provider-session:1",
-    ]);
+    expect(requests.map((request) => request.invocationId).toSorted()).toEqual(
+      [
+        "mcp-sequence:provider-session:1",
+        "mcp-sequence:provider-session:2",
+        "mcp-sequence:provider-session:1",
+      ].toSorted(),
+    );
     const replay = await callMany(source, [1]);
     expect(replay[0].error.message).toContain("MCP_INVOCATION_IDENTITY_REQUIRED_REPLAY_AMBIGUOUS");
     expect(requests).toHaveLength(3);

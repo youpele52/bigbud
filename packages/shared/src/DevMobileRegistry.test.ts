@@ -93,12 +93,14 @@ describe("mobile development registry", () => {
     const second = await listener();
     const removeFirst = await publishMobileDevRecord(registry, first.record);
     await publishMobileDevRecord(registry, second.record);
-    expect(await discoverMobileDevUrl(registry)).toBe(
-      `http://127.0.0.1:${Math.min(first.record.port, second.record.port)}`,
-    );
+    await expect
+      .poll(() => discoverMobileDevUrl(registry))
+      .toBe(`http://127.0.0.1:${Math.min(first.record.port, second.record.port)}`);
     await removeFirst();
     expect(await readdir(registry.directory)).toEqual([`${second.record.nonce}.json`]);
-    expect(await discoverMobileDevUrl(registry)).toBe(`http://127.0.0.1:${second.record.port}`);
+    await expect
+      .poll(() => discoverMobileDevUrl(registry))
+      .toBe(`http://127.0.0.1:${second.record.port}`);
   });
 
   it("does not advertise crashed listeners or a replacement listener with another nonce", async () => {

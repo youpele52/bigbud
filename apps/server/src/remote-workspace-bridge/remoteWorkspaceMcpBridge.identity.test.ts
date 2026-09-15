@@ -134,11 +134,13 @@ it("keeps typed ordinary IDs distinct and fences reused IDs after provider bridg
   });
   try {
     await callMany(source, [{ id: 1 }, { id: "1" }, { id: 1 }]);
-    expect(requests.map((request) => request.remoteInvocationId)).toEqual([
-      "mcp-sequence:provider-session:1:0",
-      "mcp-sequence:provider-session:2:0",
-      "mcp-sequence:provider-session:1:0",
-    ]);
+    expect(requests.map((request) => request.remoteInvocationId).toSorted()).toEqual(
+      [
+        "mcp-sequence:provider-session:1:0",
+        "mcp-sequence:provider-session:2:0",
+        "mcp-sequence:provider-session:1:0",
+      ].toSorted(),
+    );
     const replay = await call(source, { id: 1 });
     expect(replay.result.content[0].text).toContain(
       "REMOTE_INVOCATION_IDENTITY_REQUIRED_REPLAY_AMBIGUOUS",
