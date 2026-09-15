@@ -48,6 +48,58 @@ harness.layer("background provider reviews", (it) => {
     ["kilocode", harness.kilocode],
     ["pi", harness.pi],
   ] as const) {
+    it.effect(`reconciles ${providerKind} review snapshots without duplicating streamed text`, () =>
+      Effect.gen(function* () {
+        const provider = yield* ProviderService;
+        const parts = [
+          '{"userMemory":null,',
+          '"globalMemory":null,"projectMemory":null,"skillPatch":null}',
+        ];
+        adapter.sendTurn.mockImplementationOnce((turn) =>
+          Effect.sync(() => {
+            const base = {
+              provider: providerKind,
+              threadId: turn.threadId,
+              createdAt: new Date().toISOString(),
+            };
+            for (const [index, text] of parts.entries()) {
+              const itemId = `review-part-${index}`;
+              for (const copy of [1, 2])
+                adapter.emit({
+                  ...base,
+                  itemId,
+                  eventId: asEventId(`delta-${index}-${copy}`),
+                  type: "content.delta",
+                  payload: { streamKind: "assistant_text", delta: text },
+                });
+              for (const copy of [1, 2])
+                adapter.emit({
+                  ...base,
+                  itemId,
+                  eventId: asEventId(`snapshot-${index}-${copy}`),
+                  type: "item.completed",
+                  payload: { itemType: "assistant_message", status: "completed", detail: text },
+                });
+            }
+            adapter.emit({
+              ...base,
+              eventId: asEventId("review-done"),
+              type: "turn.completed",
+              payload: { state: "completed" },
+            });
+            return { threadId: turn.threadId, turnId: asTurnId("review-turn") };
+          }),
+        );
+        const text = yield* provider.runBackgroundReview(request(providerKind));
+        assert.equal(text, parts.join(""));
+        assert.deepEqual(JSON.parse(text), {
+          userMemory: null,
+          globalMemory: null,
+          projectMemory: null,
+          skillPatch: null,
+        });
+      }),
+    );
     it.effect(
       `isolates ${providerKind} review sessions from migrated runtime bindings and events`,
       () =>

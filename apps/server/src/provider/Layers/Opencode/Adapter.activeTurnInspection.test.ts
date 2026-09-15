@@ -112,6 +112,33 @@ describe("OpenCode active turn inspection", () => {
     expect(recordValue.activeTurnId).toBe(TURN_ID);
   });
 
+  it("waits for local polling to flush final text before reporting native idle as completed", async () => {
+    const recordValue = record(client({ statuses: { [SESSION_ID]: { type: "idle" } } }));
+    recordValue.promptTurnId = TURN_ID;
+
+    const result = await Effect.runPromise(inspectionFor(recordValue)(THREAD_ID, TURN_ID));
+
+    expect(result).toMatchObject({
+      status: "running",
+      completionEvidence: { source: "opencode.prompt.final-output" },
+    });
+    expect(recordValue.activeTurnId).toBe(TURN_ID);
+  });
+
+  it("ignores idle inspection results when a newer turn starts during the request", async () => {
+    const clientValue = client();
+    const recordValue = record(clientValue);
+    clientValue.session.status.mockImplementationOnce(async () => {
+      recordValue.activeTurnId = NEXT_TURN_ID;
+      return response({ [SESSION_ID]: { type: "idle" } });
+    });
+
+    const result = await Effect.runPromise(inspectionFor(recordValue)(THREAD_ID, TURN_ID));
+
+    expect(result.status).toBe("unavailable");
+    expect(recordValue.activeTurnId).toBe(NEXT_TURN_ID);
+  });
+
   it("does not settle an unexpected native status as completed", async () => {
     const clientValue = client({ statuses: { [SESSION_ID]: { type: "future-status" } } });
     const recordValue = record(clientValue);

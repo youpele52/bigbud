@@ -116,38 +116,27 @@ export function toPromptTurnEvents(input: {
       (part) =>
         part.type === "text" && typeof part.text === "string" && part.text.trim().length > 0,
     );
-    const assistantText = assistantTextParts
-      .reduce((chunks, part) => {
-        if (part.type !== "text" || typeof part.text !== "string") {
-          return chunks;
-        }
-        const text = part.text.trim();
-        if (text.length > 0) {
-          chunks.push(text);
-        }
-        return chunks;
-      }, [] as Array<string>)
-      .join("\n\n");
-    const assistantCompletionItemId = assistantTextParts[0]?.id ?? promptInfo.id;
-
-    events.push(
-      yield* syntheticEventFn(
-        threadId,
-        record.sessionEpoch,
-        "item.completed",
-        {
-          itemType: "assistant_message",
-          status: promptInfo.error ? "failed" : "completed",
-          title: "Assistant message",
-          ...(assistantText ? { detail: assistantText } : {}),
-          data: promptInfo,
-        },
-        {
-          turnId,
-          itemId: assistantCompletionItemId,
-        },
-      ),
-    );
+    // Completion snapshots must describe the same item as their streamed deltas.
+    // Combining parts under the first ID prevents generic consumers reconciling them.
+    const completionParts =
+      assistantTextParts.length > 0 ? assistantTextParts : [{ id: promptInfo.id }];
+    for (const part of completionParts) {
+      events.push(
+        yield* syntheticEventFn(
+          threadId,
+          record.sessionEpoch,
+          "item.completed",
+          {
+            itemType: "assistant_message",
+            status: promptInfo.error ? "failed" : "completed",
+            title: "Assistant message",
+            ...("text" in part && part.text ? { detail: part.text } : {}),
+            data: promptInfo,
+          },
+          { turnId, itemId: part.id },
+        ),
+      );
+    }
 
     if (promptInfo.error) {
       const errorMessage =

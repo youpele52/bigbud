@@ -54,6 +54,9 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
           record.client.question.list(),
           record.client.permission.list(),
         ]);
+        if (record.activeTurnId !== turnId || deps.sessions.get(threadId) !== record) {
+          return unavailable();
+        }
         const statuses = requireData(statusResponse, "session.status");
         const questions = requireData(questionsResponse, "question.list");
         const permissions = requireData(permissionsResponse, "permission.list");
@@ -87,6 +90,16 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         }
 
         if (nativeStatusType === "idle") {
+          if (record.activeTurnId === turnId && record.promptTurnId === turnId) {
+            return {
+              status: "running",
+              observedAt,
+              completionEvidence: {
+                source: "opencode.prompt.final-output",
+                detail: "The local prompt is still collecting its final output.",
+              },
+            };
+          }
           if (deps.settleCompleted !== false) {
             record.activeTurnId = undefined;
             record.updatedAt = observedAt;

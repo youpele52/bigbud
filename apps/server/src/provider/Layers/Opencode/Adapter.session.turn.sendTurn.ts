@@ -28,6 +28,7 @@ import {
 import { toPromptTurnEvents } from "./Adapter.session.turn.sendTurn.events.ts";
 import { buildOpencodeSystemPrompt } from "./Adapter.session.turn.systemPrompt.ts";
 import type { TurnMethodDeps } from "./Adapter.session.ts";
+import { makeOpencodeTextStream } from "./Adapter.stream.text.ts";
 
 export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["sendTurn"] {
   const { provider, requireSession, syntheticEventFn, emitFn, teardownSessionRecord } = deps;
@@ -55,6 +56,9 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
 
       const turnId = TurnId.makeUnsafe(`opencode-turn-${randomUUID()}`);
       record.activeTurnId = turnId;
+      const textStream = makeOpencodeTextStream();
+      record.textStream = textStream;
+      record.promptTurnId = turnId;
       record.updatedAt = new Date().toISOString();
       record.turns.push({ id: turnId, items: [] });
 
@@ -135,6 +139,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
+        record.promptTurnId = undefined;
         return yield* new ProviderAdapterValidationError({
           provider,
           operation: "sendTurn",
@@ -161,7 +166,9 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
               tools: record.allowedTools,
               ...(record.variant ? { variant: record.variant } : {}),
               turnStillActive: () => record.activeTurnId === turnId,
+              textStream,
               onDelta: async (delta: StreamedPromptDelta) => {
+                if (record.activeTurnId !== turnId) return;
                 const runtimeEvent = await runPromise(
                   syntheticEventFn(
                     input.threadId,
@@ -177,6 +184,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                     },
                   ),
                 );
+                if (record.activeTurnId !== turnId) return;
                 await runPromise(emitFn([runtimeEvent]));
               },
             }),
@@ -189,7 +197,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
             }),
         });
 
-        if (!promptResult) {
+        if (!promptResult || record.activeTurnId !== turnId) {
           return;
         }
 
@@ -201,15 +209,20 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
           promptParts: promptResult.parts as ReadonlyArray<PromptResultPart>,
           syntheticEventFn,
         });
+        if (record.activeTurnId !== turnId) return;
         record.activeTurnId = undefined;
+        record.promptTurnId = undefined;
+        record.wasRetrying = false;
         record.updatedAt = new Date().toISOString();
         yield* emitFn(events);
       }).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
+            if (record.activeTurnId !== turnId) return;
             const errorMessage = toMessage(error, `Failed to send ${provider} turn.`);
             record.lastError = errorMessage;
             record.activeTurnId = undefined;
+            record.promptTurnId = undefined;
             record.updatedAt = new Date().toISOString();
             if (isOpencodeTransportFailure(error)) {
               yield* teardownSessionRecord(record);

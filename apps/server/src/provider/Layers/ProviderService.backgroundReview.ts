@@ -12,6 +12,7 @@ import {
   type SessionPreparationDependencies,
 } from "./ProviderService.prepareSession.ts";
 import { toValidationError } from "./ProviderServiceHelpers.ts";
+import { makeBackgroundReviewResponse } from "./ProviderService.backgroundReview.response.ts";
 
 const REVIEW_TIMEOUT = "3 minutes";
 const RESPONSE_LIMIT = 24_000;
@@ -61,21 +62,18 @@ export function makeBackgroundReviews(
           });
           const adapter = yield* input.registry.getByProvider(startInput.provider);
           const completed = yield* Deferred.make<string, ProviderServiceError>();
-          let text = "";
+          const response = makeBackgroundReviewResponse(RESPONSE_LIMIT);
           handlers.set(threadId, (event) => {
-            if (event.type === "content.delta" && event.payload.streamKind === "assistant_text") {
-              if (text.length + event.payload.delta.length > RESPONSE_LIMIT) {
-                return Deferred.fail(
-                  completed,
-                  fail("Background review response exceeded 24000 characters."),
-                ).pipe(Effect.asVoid);
-              }
-              text += event.payload.delta;
+            if (!response.append(event)) {
+              return Deferred.fail(
+                completed,
+                fail("Background review response exceeded 24000 characters."),
+              ).pipe(Effect.asVoid);
             }
             if (event.type === "turn.completed") {
               return (
                 event.payload.state === "completed"
-                  ? Deferred.succeed(completed, text)
+                  ? Deferred.succeed(completed, response.text())
                   : Deferred.fail(completed, fail("Background review turn failed."))
               ).pipe(Effect.asVoid);
             }

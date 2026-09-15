@@ -1,4 +1,5 @@
 import type { OpencodeClient, OutputFormat } from "@opencode-ai/sdk/v2";
+import { makeOpencodeTextStream, type OpencodeTextStream } from "./Adapter.stream.text.ts";
 
 const OPENCODE_PROMPT_REQUEST_TIMEOUT_MS = 15_000;
 const OPENCODE_PROMPT_POLL_INTERVAL_MS = 1_000;
@@ -141,47 +142,6 @@ function toStreamKind(part: PromptResultPart): StreamedPromptDelta["streamKind"]
   return undefined;
 }
 
-function diffPartText(previousText: string | undefined, nextText: string): string {
-  if (!previousText) {
-    return nextText;
-  }
-  if (nextText.startsWith(previousText)) {
-    return nextText.slice(previousText.length);
-  }
-  return nextText;
-}
-
-function collectStreamedDeltas(input: {
-  readonly parts: ReadonlyArray<PromptResultPart>;
-  readonly emittedTextByPartId: Map<string, string>;
-}): ReadonlyArray<StreamedPromptDelta> {
-  const deltas: StreamedPromptDelta[] = [];
-
-  for (const part of input.parts) {
-    const streamKind = toStreamKind(part);
-    const nextText = typeof part.text === "string" ? part.text : undefined;
-    if (!streamKind || !nextText || nextText.length === 0) {
-      continue;
-    }
-
-    const previousText = input.emittedTextByPartId.get(part.id);
-    const delta = diffPartText(previousText, nextText);
-    input.emittedTextByPartId.set(part.id, nextText);
-
-    if (delta.length === 0) {
-      continue;
-    }
-
-    deltas.push({
-      itemId: part.id,
-      streamKind,
-      delta,
-    });
-  }
-
-  return deltas;
-}
-
 async function fetchSessionMessages(
   client: OpencodeClient,
   sessionID: string,
@@ -220,11 +180,13 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
   readonly noReply?: boolean;
   readonly turnStillActive: () => boolean;
   readonly onDelta?: (delta: StreamedPromptDelta) => Promise<void>;
+  readonly textStream?: OpencodeTextStream;
 }): Promise<AssistantReply | undefined> {
   const latestCompletedAssistantBeforePrompt = findLatestCompletedAssistantReply(
     await fetchSessionMessages(input.client, input.sessionID),
   );
-  const emittedTextByPartId = new Map<string, string>();
+  if (!input.turnStillActive()) return undefined;
+  const textStream = input.textStream ?? makeOpencodeTextStream();
 
   const promptAsyncResponse = await withTimeout(
     (signal) =>
@@ -250,18 +212,19 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
 
   while (input.turnStillActive()) {
     const messages = await fetchSessionMessages(input.client, input.sessionID);
+    if (!input.turnStillActive()) return undefined;
     const latestAssistantReply = findLatestAssistantReply(messages);
 
     if (
       latestAssistantReply &&
       latestAssistantReply.info.id !== latestCompletedAssistantBeforePrompt?.info.id
     ) {
-      const deltas = collectStreamedDeltas({
-        parts: latestAssistantReply.parts,
-        emittedTextByPartId,
-      });
-      for (const delta of deltas) {
-        await input.onDelta?.(delta);
+      for (const part of latestAssistantReply.parts) {
+        if (!input.turnStillActive()) return undefined;
+        const streamKind = toStreamKind(part);
+        if (!streamKind || !part.text) continue;
+        const delta = textStream.snapshot(part.id, part.text);
+        if (delta) await input.onDelta?.({ itemId: part.id, streamKind, delta });
       }
 
       if (latestAssistantReply.info.time?.completed) {

@@ -115,7 +115,7 @@ describe("sendPromptAsyncAndWaitForCompletion", () => {
       parts: [{ type: "text", text: "think harder" }],
       system: "system",
       variant: "custom-xhigh",
-      turnStillActive: () => false,
+      turnStillActive: () => promptAsync.mock.calls.length === 0,
     });
 
     expect(promptAsync).toHaveBeenCalledWith(
