@@ -4,11 +4,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
+- **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
 - **Conversation-first mobile redesign:** A new mobile shell puts chats at the center, with clearer navigation, persistent drafts, and recovery for interrupted work.
-- **Stronger remote work:** Remote-agent installation, reconnects, workspace watching, terminals, and provider sessions are more resilient when the remote computer or connection changes.
-- **Safer delivery and recovery:** Sends now report whether they were accepted, rejected, or uncertain, while drafts and confirmed prompts survive retries, reconnects, and replacement threads.
-- **Truthful provider capabilities:** Model catalogs, reasoning options, and execution targets now reflect what each provider actually supports, including dynamic and custom configurations.
-- **Clearer work-in-progress feedback:** Reconnecting, compacting, provider failures, and other runtime states now surface with more consistent status and recovery guidance.
+- **Never lose a follow-up:** Messages sent while bigbud is busy wait safely and continue automatically.
+- **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
+- **Clearer recovery when something goes wrong:** Remote setup and connection errors now explain what failed and how to recover.
 
 ## v0.2.209 (15 September, 2026)
 
@@ -25,11 +25,30 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Hardened remote-agent installation, updates, reconnects, SSH execution, PTY handling, Git operations, and workspace-runtime routing across supported remote targets.
 - Direct SSH now follows the selected route without silent switching or replay after an ambiguous result, while managed-agent sessions retain their durable reconnect behavior.
 
+### Floating Assistant Screenshots
+
+- Added **Add screenshot to chat** to the mascot menu, so you can show bigbud what you’re looking at—even outside the bigbud app—and get help with it.
+- Added retry and discard recovery to help keep screenshots from getting lost when permissions, reloads, or interrupted sends get in the way.
+
+### Clearer Workspace Recovery
+
+- Improved remote-project setup copy, focus states, SSH-key connection feedback, target verification errors, and provider capability routing so recovery actions describe the route that actually failed.
+- Preserved accepted prompt metadata and actionable errors across WebSocket bootstrap, provider admission, remote execution, and reconnect transitions.
+
 ### Safer Remote Bridge and Codex Startup
 
 - Fixed remote bridge notifications so roots, cancellation, and future notification messages never produce invalid JSON-RPC responses or invoke tools, keeping the connection usable for later requests and preserving request IDs.
 - Added protocol and failure-boundary coverage for framed, fragmented, and coalesced messages, transport and HTTP failures, authentication errors, and invocation-state cleanup.
 - Remote Codex sessions now wait for explicit bridge readiness, isolate start/resume/fallback attempts, prioritize real startup failures over cached tool data, enforce bounded deadlines, and clean up when a process stops or is replaced.
+
+### Markdown Preview Navigation
+
+- Preserved the corresponding reading position when switching Markdown files between Raw and Preview modes, including content whose rendered layout changes because of frontmatter, lists, tables, code, images, or delayed loading.
+
+### Memory Review Reliability
+
+- Repaired memory-review leases left behind by older database schemas so qualifying background reviews can recover reliably after an upgrade.
+- Deduplicated streamed and final provider responses, including multipart and replayed updates, so each background memory-review result appears once and remains ordered across providers.
 
 ### Mobile and Chat Experience
 
@@ -37,11 +56,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added mobile queued-prompt feedback and aligned existing-thread sends with the shared delivery path.
 - Migrated working-status shimmer effects to Tailwind animations, removed duplicate keyframe CSS, and kept status labels consistent across chat and sidebar surfaces.
 - Kept app theme changes in the renderer so bigbud's Electron preference no longer changes the color scheme of external browser guests.
-
-### Clearer Workspace Recovery
-
-- Improved remote-project setup copy, focus states, SSH-key connection feedback, target verification errors, and provider capability routing so recovery actions describe the route that actually failed.
-- Preserved accepted prompt metadata and actionable errors across WebSocket bootstrap, provider admission, remote execution, and reconnect transitions.
 
 ## v0.2.208 (13 September, 2026)
 
