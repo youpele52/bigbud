@@ -1,5 +1,6 @@
 import { type ProviderKind } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useIncrementalList } from "~/hooks/useIncrementalList";
 import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
@@ -15,7 +16,6 @@ import {
 
 const INITIAL_VISIBLE_MODEL_COUNT = 5;
 const VISIBLE_MODEL_COUNT_INCREMENT = 20;
-const VISIBLE_MODEL_LIST_BOTTOM_THRESHOLD_PX = 96;
 
 export function ModelList({
   provider,
@@ -65,10 +65,13 @@ export function ModelList({
         option.group?.toLowerCase().includes(normalizedQuery),
     );
   }, [hasSearchQuery, query, visibleOptions]);
-  const [visibleModelCount, setVisibleModelCount] = useState(() =>
-    Math.min(filtered.length, INITIAL_VISIBLE_MODEL_COUNT),
-  );
-  const renderedOptions = filtered.slice(0, visibleModelCount);
+  const modelList = useIncrementalList({
+    items: filtered,
+    resetKey: JSON.stringify([provider, query]),
+    initialCount: INITIAL_VISIBLE_MODEL_COUNT,
+    increment: VISIBLE_MODEL_COUNT_INCREMENT,
+  });
+  const renderedOptions = modelList.items;
 
   const showRecentOptions = Boolean(recentOptions && recentOptions.length > 0 && !hasSearchQuery);
   const grouped = useMemo(() => groupModelOptions(renderedOptions), [renderedOptions]);
@@ -78,21 +81,9 @@ export function ModelList({
   const showUnavailableState = !loading && Boolean(unavailableMessage) && options.length === 0;
   const showEmptyState =
     !showLoadingState && !showUnavailableState && !hasVisibleModels && !showRecentOptions;
-  const hasMoreModelsToRender = visibleModelCount < filtered.length;
-
-  const loadMoreModels = () => {
-    setVisibleModelCount((current) =>
-      Math.min(filtered.length, current + VISIBLE_MODEL_COUNT_INCREMENT),
-    );
-  };
-
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    setVisibleModelCount(Math.min(filtered.length, INITIAL_VISIBLE_MODEL_COUNT));
-  }, [filtered.length, provider, query]);
 
   return (
     <div className="flex max-h-(--available-height) flex-col">
@@ -128,16 +119,7 @@ export function ModelList({
         ref={listBodyRef}
         data-testid="provider-model-list-scroll"
         className="min-h-0 max-h-[min(14rem,var(--available-height))] flex-1 overflow-y-auto"
-        onScroll={(event) => {
-          const currentTarget = event.currentTarget;
-          if (
-            hasMoreModelsToRender &&
-            currentTarget.scrollTop + currentTarget.clientHeight >=
-              currentTarget.scrollHeight - VISIBLE_MODEL_LIST_BOTTOM_THRESHOLD_PX
-          ) {
-            loadMoreModels();
-          }
-        }}
+        onScroll={(event) => modelList.onScroll(event.currentTarget)}
       >
         <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
           {showLoadingState ? (

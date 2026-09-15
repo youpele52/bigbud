@@ -7,7 +7,9 @@ import {
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerTriggerKind } from "../../../logic/composer";
 import { BookOpenIcon, BotIcon, FolderOpenIcon, PlugIcon } from "lucide-react";
+import { useIncrementalList } from "~/hooks/useIncrementalList";
 import { cn } from "~/lib/utils";
+import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import {
   Command,
@@ -84,7 +86,18 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   onOpenItemSourcePath?: (item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const previousScrollTop = useRef(0);
   const discoveryInputRef = useRef<HTMLInputElement>(null);
+  const modelList = useIncrementalList({
+    items: props.items,
+    enabled: props.discoverySearch?.command === "model",
+    resetKey: JSON.stringify([
+      props.triggerKind,
+      props.discoverySearch?.command,
+      props.discoverySearch?.query,
+    ]),
+    revealIndex: props.items.findIndex((item) => item.id === props.activeItemId),
+  });
 
   useLayoutEffect(() => {
     if (!props.activeItemId || !listRef.current) return;
@@ -92,6 +105,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
       `[data-composer-item-id="${CSS.escape(props.activeItemId)}"]`,
     );
     el?.scrollIntoView({ block: "nearest" });
+    previousScrollTop.current =
+      listRef.current.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')?.scrollTop ??
+      0;
   }, [props.activeItemId]);
 
   return (
@@ -106,6 +122,22 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
     >
       <div
         ref={listRef}
+        onScrollCapture={(event) => {
+          if (
+            event.target instanceof HTMLElement &&
+            event.target.dataset.slot === "scroll-area-viewport"
+          ) {
+            if (event.target.scrollTop > previousScrollTop.current)
+              modelList.onScroll(event.target);
+            previousScrollTop.current = event.target.scrollTop;
+          }
+        }}
+        onWheelCapture={(event) => {
+          const viewport = listRef.current?.querySelector<HTMLElement>(
+            '[data-slot="scroll-area-viewport"]',
+          );
+          if (viewport) modelList.onWheel(viewport, event.deltaY);
+        }}
         className="relative overflow-hidden rounded-xl border border-border/80 bg-popover/96 shadow-lg/8 backdrop-blur-xs"
       >
         {props.discoverySearch ? (
@@ -142,7 +174,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             />
           </Searchbar>
         ) : null}
-        <CommandList className="max-h-96">
+        <CommandList scrollAreaClassName="max-h-96">
           {props.discoverySearch && props.items.length > 0 ? (
             <CommandGroup>
               <CommandGroupLabel>
@@ -152,7 +184,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                     ? "Skills"
                     : "Models"}
               </CommandGroupLabel>
-              {props.items.map((item) => (
+              {modelList.items.map((item) => (
                 <ComposerCommandMenuItem
                   key={item.id}
                   item={item}
@@ -167,7 +199,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
               ))}
             </CommandGroup>
           ) : (
-            props.items.map((item) => (
+            modelList.items.map((item) => (
               <ComposerCommandMenuItem
                 key={item.id}
                 item={item}
@@ -182,6 +214,11 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             ))
           )}
         </CommandList>
+        {modelList.hasMore && (
+          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={modelList.loadMore}>
+            Show more models
+          </Button>
+        )}
         {props.items.length === 0 && (
           <p className="px-3 py-2 text-muted-foreground/70 text-xs">
             {props.isLoading
