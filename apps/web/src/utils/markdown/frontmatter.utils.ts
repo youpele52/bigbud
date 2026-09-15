@@ -1,5 +1,11 @@
-/** Regex matching YAML frontmatter at the start of a markdown file. */
-const YAML_FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/;
+export interface MarkdownPreviewPreparation {
+  readonly text: string;
+  /** 1-based lookup: renderedLineToSourceLine[renderedLine]. */
+  readonly renderedLineToSourceLine: ReadonlyArray<number>;
+}
+
+/** Capture the opening whitespace too: the legacy matcher can consume blank lines. */
+const YAML_FRONTMATTER_REGEX = /^(---\s*\n)([\s\S]*?)\n---\s*(?:\n|$)/;
 
 /**
  * Bolden YAML keys and preserve leading indentation within frontmatter.
@@ -35,8 +41,43 @@ function processFrontmatter(frontmatter: string): string {
  * leading indentation to show nesting.
  */
 export function formatYamlFrontmatterForPreview(content: string): string {
-  return content.replace(
-    YAML_FRONTMATTER_REGEX,
-    (_match, frontmatter) => `---\n\n${processFrontmatter(frontmatter)}\n\n---\n`,
+  return content.replace(YAML_FRONTMATTER_REGEX, (_match, _opening, frontmatter: string) =>
+    frontmatterReplacement(frontmatter),
   );
+}
+
+function identityLineMap(content: string): ReadonlyArray<number> {
+  return [0, ...content.split("\n").map((_line, index) => index + 1)];
+}
+
+function frontmatterReplacement(frontmatter: string): string {
+  return `---\n\n${processFrontmatter(frontmatter)}\n\n---\n`;
+}
+
+export function prepareYamlFrontmatterForPreview(content: string): MarkdownPreviewPreparation {
+  const match = YAML_FRONTMATTER_REGEX.exec(content);
+  if (!match) {
+    return { text: content, renderedLineToSourceLine: identityLineMap(content) };
+  }
+
+  const opening = match[1] ?? "";
+  const frontmatter = match[2] ?? "";
+  const body = content.slice(match[0].length);
+  const frontmatterStartLine = opening.split("\n").length;
+  const frontmatterLines = frontmatter.split("\n");
+  const closingSourceLine = frontmatterStartLine + frontmatterLines.length;
+  const bodyStartLine = match[0].split("\n").length;
+
+  return {
+    text: `${frontmatterReplacement(frontmatter)}${body}`,
+    renderedLineToSourceLine: [
+      0,
+      1,
+      1,
+      ...frontmatterLines.map((_line, index) => frontmatterStartLine + index),
+      closingSourceLine,
+      closingSourceLine,
+      ...body.split("\n").map((_line, index) => bodyStartLine + index),
+    ],
+  };
 }

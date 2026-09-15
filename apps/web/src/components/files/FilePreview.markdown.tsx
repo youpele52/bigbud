@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
-import { formatYamlFrontmatterForPreview } from "~/utils/markdown";
+import { prepareYamlFrontmatterForPreview } from "~/utils/markdown/frontmatter.utils";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
 import type { CodeAnnotationDraft } from "./FilePreview";
+import type { MarkdownFileViewMode } from "./FilePreview.scroll.logic";
 
-export type MarkdownFileViewMode = "raw" | "preview";
+export type { MarkdownFileViewMode } from "./FilePreview.scroll.logic";
 
 interface FilePreviewMarkdownToggleProps {
   viewMode: MarkdownFileViewMode;
@@ -44,24 +45,27 @@ export function FilePreviewMarkdownToggle({
 interface FilePreviewMarkdownContentProps {
   contents: string;
   cwd: string;
+  contentRef?: React.RefObject<HTMLDivElement | null> | undefined;
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export function FilePreviewMarkdownContent({
   contents,
   cwd,
+  contentRef,
   onContextMenu,
 }: FilePreviewMarkdownContentProps) {
-  const renderedContents = useMemo(() => formatYamlFrontmatterForPreview(contents), [contents]);
+  const preparation = useMemo(() => prepareYamlFrontmatterForPreview(contents), [contents]);
 
   return (
-    <div className="p-3" onContextMenu={onContextMenu}>
+    <div ref={contentRef} className="p-3" onContextMenu={onContextMenu}>
       <BaseMarkdown
-        text={renderedContents}
+        text={preparation.text}
         cwd={cwd}
         isStreaming={false}
         className="file-preview-markdown"
         preserveLineBreaks
+        sourceLineMap={preparation.renderedLineToSourceLine}
       />
     </div>
   );
@@ -71,6 +75,7 @@ interface FilePreviewMarkdownViewProps {
   contents: string;
   cwd: string;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
   linesContainerRef: React.RefObject<HTMLDivElement | null>;
   selectedRange: { startLine: number; endLine: number } | null;
   selectedText: string;
@@ -84,6 +89,7 @@ export function FilePreviewMarkdownView({
   contents,
   cwd,
   scrollContainerRef,
+  contentRef,
   linesContainerRef,
   selectedRange,
   selectedText,
@@ -98,7 +104,12 @@ export function FilePreviewMarkdownView({
       className="relative min-h-0 flex-1 overflow-auto"
       onScroll={onScroll}
     >
-      <FilePreviewMarkdownContent contents={contents} cwd={cwd} onContextMenu={onContextMenu} />
+      <FilePreviewMarkdownContent
+        contents={contents}
+        cwd={cwd}
+        contentRef={contentRef}
+        onContextMenu={onContextMenu}
+      />
       {selectedRange && onCreateAnnotation ? (
         <FilePreviewAnnotationComposer
           placement="sticky"

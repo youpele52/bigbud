@@ -25,6 +25,7 @@ import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../..
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
+import { createSourcePositionPlugin, sourcePositionProps } from "./BaseMarkdown.sourcePositions";
 
 export interface MarkdownAnchorClick {
   href: string;
@@ -37,6 +38,7 @@ interface BaseMarkdownProps {
   isStreaming?: boolean;
   className?: string | undefined;
   preserveLineBreaks?: boolean;
+  sourceLineMap?: ReadonlyArray<number> | undefined;
   onFileContextMenu?: (input: {
     targetPath: string;
     workspaceRoot: string | undefined;
@@ -91,7 +93,15 @@ function extractCodeBlock(
   };
 }
 
-function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNode }) {
+function MarkdownCodeBlock({
+  code,
+  children,
+  sourceProps,
+}: {
+  code: string;
+  children: ReactNode;
+  sourceProps: Record<string, number>;
+}) {
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleCopy = useCallback(() => {
@@ -122,7 +132,7 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   );
 
   return (
-    <div className="chat-markdown-codeblock leading-snug">
+    <div className="chat-markdown-codeblock leading-snug" {...sourceProps}>
       <button
         type="button"
         className="chat-markdown-copy-button"
@@ -152,6 +162,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
   isStreaming = false,
   className,
   preserveLineBreaks = false,
+  sourceLineMap,
   onFileContextMenu,
   onAnchorClick,
 }: BaseMarkdownProps) {
@@ -288,7 +299,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         }
 
         return (
-          <MarkdownCodeBlock code={codeBlock.code}>
+          <MarkdownCodeBlock code={codeBlock.code} sourceProps={sourcePositionProps(props)}>
             <SyntaxHighlightedCode
               code={codeBlock.code}
               language={extractFenceLanguage(codeBlock.className)}
@@ -303,6 +314,11 @@ export const BaseMarkdown = memo(function BaseMarkdown({
     [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],
   );
 
+  const rehypePlugins = useMemo(
+    () => (sourceLineMap ? [createSourcePositionPlugin(sourceLineMap)] : undefined),
+    [sourceLineMap],
+  );
+
   return (
     <div
       className={cn(
@@ -312,6 +328,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehypePlugins}
         components={markdownComponents}
         urlTransform={markdownUrlTransform}
       >
