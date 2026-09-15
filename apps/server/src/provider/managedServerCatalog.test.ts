@@ -64,6 +64,37 @@ describe("managed server catalog", () => {
     );
   });
 
+  it("retains every model from a connected OpenAI catalog", () => {
+    const modelIDs = Array.from({ length: 15 }, (_, index) => `gpt-${index + 1}`);
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: Object.fromEntries(
+            modelIDs.map((modelID) => [
+              modelID,
+              { id: modelID, providerID: "openai", name: modelID },
+            ]),
+          ),
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(
+      result.models.map(({ slug }) => slug),
+      modelIDs,
+    );
+    assert.isTrue(
+      result.models.every(
+        ({ group, subProviderID }) => group === "OpenAI" && subProviderID === "openai",
+      ),
+    );
+  });
+
   it("maps live OpenCode variants without synthesizing High/Medium/Low", () => {
     const result = resolveManagedServerCatalog({
       provider: "opencode",

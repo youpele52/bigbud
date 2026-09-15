@@ -1,6 +1,6 @@
 import type { OpencodeClient, Provider as OpencodeSdkProvider } from "@opencode-ai/sdk/v2";
 
-export type OpencodeProviderRecord = OpencodeSdkProvider;
+export type ManagedServerProviderRecord = OpencodeSdkProvider;
 
 function stringifyErrorObject(error: Record<string, unknown>): string | null {
   const directMessage = error.message;
@@ -20,7 +20,7 @@ function stringifyErrorObject(error: Record<string, unknown>): string | null {
   return serialized === undefined || serialized === "{}" ? null : serialized;
 }
 
-export function formatOpencodeSdkError(error: unknown): string {
+export function formatManagedServerSdkError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
@@ -39,21 +39,27 @@ export function formatOpencodeSdkError(error: unknown): string {
   return String(error);
 }
 
-export async function listOpencodeProviders(
+export async function listConnectedManagedServerProviders(
   client: OpencodeClient,
-): Promise<Array<OpencodeProviderRecord>> {
+): Promise<Array<ManagedServerProviderRecord>> {
   const providerListResp = await client.provider.list();
   if (providerListResp.error) {
     const configProvidersResp = await client.config.providers();
     if (configProvidersResp.error) {
       throw new Error(
-        `Failed to list OpenCode providers: ${formatOpencodeSdkError(
+        `Failed to list OpenCode providers: ${formatManagedServerSdkError(
           providerListResp.error,
-        )}; config fallback failed: ${formatOpencodeSdkError(configProvidersResp.error)}`,
+        )}; config fallback failed: ${formatManagedServerSdkError(configProvidersResp.error)}`,
       );
     }
     return configProvidersResp.data?.providers ?? [];
   }
 
-  return providerListResp.data?.all ?? [];
+  const providerByID = new Map(
+    (providerListResp.data?.all ?? []).map((provider) => [provider.id, provider]),
+  );
+  return (providerListResp.data?.connected ?? []).flatMap((providerID) => {
+    const provider = providerByID.get(providerID);
+    return provider ? [provider] : [];
+  });
 }

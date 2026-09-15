@@ -25,7 +25,7 @@ import { OpencodeProvider } from "../../Services/Opencode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerConfig } from "../../../startup/config.ts";
-import { listOpencodeProviders } from "./Provider.sdk";
+import { listConnectedManagedServerProviders } from "../../managedServerProviderDiscovery.ts";
 import { isVersionAtLeast } from "./Provider.version";
 import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
 
@@ -202,7 +202,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
                 },
               })
           : async (client) => {
-              const providers = await listOpencodeProviders(client);
+              const providers = await listConnectedManagedServerProviders(client);
               const catalog = resolveManagedServerCatalog({
                 provider: PROVIDER,
                 providers,

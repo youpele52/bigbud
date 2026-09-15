@@ -25,7 +25,7 @@ import { KilocodeProvider } from "../../Services/Kilocode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerConfig } from "../../../startup/config.ts";
-import { listOpencodeProviders } from "../Opencode/Provider.sdk";
+import { listConnectedManagedServerProviders } from "../../managedServerProviderDiscovery.ts";
 import { isVersionAtLeast } from "../Opencode/Provider.version";
 import { resolveKilocodeBinary } from "./Provider.binary";
 import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
@@ -203,7 +203,7 @@ export const checkKilocodeProviderStatus = Effect.fn("checkKilocodeProviderStatu
                 },
               })
           : async (client) => {
-              const providers = await listOpencodeProviders(client);
+              const providers = await listConnectedManagedServerProviders(client);
               const catalog = resolveManagedServerCatalog({
                 provider: PROVIDER,
                 providers,

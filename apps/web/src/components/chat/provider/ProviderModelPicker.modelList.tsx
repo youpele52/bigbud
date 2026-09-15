@@ -120,6 +120,7 @@ export function ModelList({
         data-testid="provider-model-list-scroll"
         className="min-h-0 max-h-[min(14rem,var(--available-height))] flex-1 overflow-y-auto"
         onScroll={(event) => modelList.onScroll(event.currentTarget)}
+        onWheel={(event) => modelList.onWheel(event.currentTarget, event.deltaY)}
       >
         <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
           {showLoadingState ? (
@@ -194,6 +195,11 @@ export function ModelList({
             </MenuGroup>
           ) : null}
         </MenuRadioGroup>
+        {modelList.hasMore ? (
+          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={modelList.loadMore}>
+            Show more models
+          </Button>
+        ) : null}
       </div>
     </div>
   );
