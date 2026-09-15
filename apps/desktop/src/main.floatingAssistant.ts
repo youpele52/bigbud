@@ -2,6 +2,7 @@ import { ipcMain, type App } from "electron";
 
 import { createCompactLinkHandoffCoordinator } from "./main.compactLinkHandoff";
 import { desktopIpcChannels } from "./main.channels";
+import { registerCompactScreenshotIpc } from "./window/ipcHandlers.compactScreenshot";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
 import type { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
@@ -30,6 +31,7 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     prepareForAppQuit,
     windowRegistry,
   } = options;
+  registerCompactScreenshotIpc(windowRegistry, floatingAssistantWindows.screenshots.handoff);
   ipcMain.removeAllListeners(channels.getWindowRole);
   ipcMain.on(channels.getWindowRole, (event) => {
     event.returnValue = windowRegistry.getRole(event.sender);

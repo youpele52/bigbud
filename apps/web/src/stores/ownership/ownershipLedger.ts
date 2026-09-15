@@ -1,6 +1,7 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 
 import type { DraftThreadState } from "../composer/types.store";
+import { findOwnershipReplacement } from "./ownershipLedger.replacements";
 import {
   mutateRevisionedLedger,
   resolveLedgerStorage,
@@ -74,7 +75,7 @@ function toRecord(
   draft: DraftThreadState,
   generation: number,
 ): OwnershipDraftRecord {
-  return { threadId, generation, ...draft };
+  return { ...draft, threadId, generation };
 }
 
 function getScopeState(ledger: OwnershipLedger, scope: OwnershipScope): OwnershipScopeState {
@@ -283,11 +284,7 @@ export async function replaceCollidingDraftOwnership(input: {
     const currentScope = getScopeState(ledger, scope);
     const previous = currentScope.draftsByThreadId[input.threadId];
     if (!previous) {
-      const invalidation = ledger.invalidationsByThreadId[input.threadId];
-      const priorReplacement = replacementIdsForScope(invalidation, scope)[scope];
-      const replacement = priorReplacement
-        ? currentScope.draftsByThreadId[priorReplacement]
-        : undefined;
+      const replacement = findOwnershipReplacement(ledger, input.threadId, scope);
       if (replacement) return { ledger, result: { previous: replacement, replacement } };
       throw new OwnershipLedgerUnavailableError("Colliding draft ownership is unavailable.");
     }

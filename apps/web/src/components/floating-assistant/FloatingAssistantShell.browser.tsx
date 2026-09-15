@@ -133,16 +133,42 @@ describe("CompactChatShell", () => {
 
   afterEach(() => {
     Reflect.deleteProperty(window, "nativeApi");
+    Reflect.deleteProperty(window, "desktopBridge");
     document.body.innerHTML = "";
   });
 
-  it("loads Chats and submits through an already-running provider without refreshing it", async () => {
+  it("loads Chats, receives a screenshot and sends through an already-running provider", async () => {
     let materializedThreadId: ThreadId | null = null;
     const dispatchCommand = vi.fn(async (command: { threadId: ThreadId }) => {
       materializedThreadId = command.threadId;
       return { sequence: 13 };
     });
     const refreshProviders = vi.fn();
+    const dataUrl = document.createElement("canvas").toDataURL("image/jpeg");
+    let screenshotPending = true;
+    const acknowledge = vi.fn(async () => {
+      screenshotPending = false;
+      return true;
+    });
+    window.desktopBridge = {
+      compactChatScreenshot: {
+        getPending: vi.fn(async (threadId: string) =>
+          screenshotPending
+            ? {
+                id: "cold-start-screenshot",
+                threadId,
+                name: "Screenshot.jpg",
+                mimeType: "image/jpeg",
+                sizeBytes: atob(dataUrl.split(",")[1]!).length,
+                dataUrl,
+              }
+            : null,
+        ),
+        acknowledge,
+        onAvailable: () => () => undefined,
+      },
+      confirm: vi.fn(async () => false),
+    } as unknown as NonNullable<typeof window.desktopBridge>;
     const getStartupProjectCatalog = vi.fn(async ({ scope, priorityProjectId }) =>
       scope === "local" && priorityProjectId === BUILT_IN_CHATS_PROJECT_ID
         ? chatsProjectPage
@@ -151,6 +177,12 @@ describe("CompactChatShell", () => {
     window.nativeApi = {
       orchestration: {
         dispatchCommand,
+        resolveThreadOwnership: vi.fn(async ({ threadId }: { threadId: ThreadId }) => ({
+          threadId,
+          status: "absent",
+          serverEpoch: "server-1",
+          canonicalRevision: 12,
+        })),
         getStartupProjectCatalog,
         getSelectedThreadDetail: vi.fn(async ({ threadId }) => threadDetail(threadId, 13)),
         getSidebarThreadCatalog: vi.fn(async () => ({
@@ -185,6 +217,20 @@ describe("CompactChatShell", () => {
         ).toBe(true);
       });
       expect(refreshProviders).not.toHaveBeenCalled();
+      await vi.waitFor(() =>
+        expect(acknowledge).toHaveBeenCalledExactlyOnceWith("cold-start-screenshot"),
+      );
+      expect(dispatchCommand).not.toHaveBeenCalled();
+      // An image-only draft must survive a cancelled New chat action.
+      await page.getByRole("button", { name: "New chat", exact: true }).click();
+      expect(window.desktopBridge.confirm).toHaveBeenCalledWith(
+        "Discard the unsent compact chat draft?",
+      );
+      expect(
+        Object.values(useComposerDraftStore.getState().draftsByThreadId).some((draft) =>
+          draft.images.some((image) => image.id === "cold-start-screenshot"),
+        ),
+      ).toBe(true);
       await page.getByTestId("composer-editor").fill("Hello from compact chat");
       const send = page.getByRole("button", { name: "Send message" });
       await expect.element(send).toBeEnabled();
@@ -197,6 +243,16 @@ describe("CompactChatShell", () => {
       expect(dispatchCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "thread.turn.start",
+          message: expect.objectContaining({
+            text: "Hello from compact chat",
+            attachments: expect.arrayContaining([
+              expect.objectContaining({
+                type: "image",
+                name: "Screenshot.jpg",
+                mimeType: "image/jpeg",
+              }),
+            ]),
+          }),
           modelSelection: { provider: "codex", model: "gpt-5.6-terra" },
           bootstrap: expect.objectContaining({
             createThread: expect.objectContaining({ projectId: BUILT_IN_CHATS_PROJECT_ID }),

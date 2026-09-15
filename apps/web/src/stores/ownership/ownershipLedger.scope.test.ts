@@ -2,13 +2,15 @@ import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useComposerDraftStore } from "../composer";
-import { resetComposerDraftStore } from "../composer/composer.store.test.utils";
+import { makeImage, resetComposerDraftStore } from "../composer/composer.store.test.utils";
 import { applyOwnershipLedgerToComposer } from "./ownershipLedger.composer";
+import { findOwnershipReplacement } from "./ownershipLedger.replacements";
 import {
   emptyOwnershipLedger,
   initializeOwnershipLedger,
   readOwnershipLedger,
   registerDraftOwnership,
+  replaceCollidingDraftOwnership,
 } from "./ownershipLedger";
 
 const projectId = ProjectId.makeUnsafe("scope-project");
@@ -104,6 +106,73 @@ describe("ownership ledger scopes", () => {
     expect(result.value.scopes.compact.draftsByThreadId[compactThreadId]?.branch).toBe("compact");
   });
 
+  it.each(["main", "compact"] as const)(
+    "recovers missed replacement revisions in %s",
+    async (scope) => {
+      const storage = createStorage();
+      const options = { storage, lockManager: null };
+      const finalId = ThreadId.makeUnsafe("scope-final-thread");
+      const before = await initializeOwnershipLedger({
+        scope,
+        draftsByThreadId: { [mainThreadId]: mainDraft },
+        projectDraftThreadIdByProjectId: { [projectId]: mainThreadId },
+        options,
+      });
+      applyOwnershipLedgerToComposer(before, scope);
+      useComposerDraftStore.getState().setPrompt(mainThreadId, "delayed draft");
+      useComposerDraftStore.getState().addImage(
+        mainThreadId,
+        makeImage({
+          id: "delayed-screenshot",
+          previewUrl: "data:image/jpeg;base64,anBlZw==",
+        }),
+      );
+      const replace = (threadId: ThreadId, nextId: ThreadId) =>
+        replaceCollidingDraftOwnership({
+          scope,
+          threadId,
+          status: "archived",
+          serverEpoch: "server-1",
+          canonicalRevision: 9,
+          invalidatedAt: "2026-08-27T01:00:00.000Z",
+          createThreadId: () => nextId,
+          options,
+        });
+      await replace(mainThreadId, compactThreadId);
+      await replace(compactThreadId, finalId);
+      const persisted = readOwnershipLedger(storage);
+      expect(persisted.status).toBe("ready");
+      if (persisted.status !== "ready") return;
+      applyOwnershipLedgerToComposer(persisted.value, scope);
+      expect(useComposerDraftStore.getState().draftsByThreadId[mainThreadId]).toBeUndefined();
+      expect(useComposerDraftStore.getState().draftsByThreadId[finalId]).toMatchObject({
+        prompt: "delayed draft",
+        images: [{ id: "delayed-screenshot" }],
+      });
+      expect(
+        (await replace(mainThreadId, ThreadId.makeUnsafe("unused"))).replacement.threadId,
+      ).toBe(finalId);
+      expect(
+        findOwnershipReplacement(
+          persisted.value,
+          mainThreadId,
+          scope === "main" ? "compact" : "main",
+        ),
+      ).toBeUndefined();
+      const cyclic = {
+        ...persisted.value,
+        invalidationsByThreadId: {
+          ...persisted.value.invalidationsByThreadId,
+          [compactThreadId]: {
+            ...persisted.value.invalidationsByThreadId[compactThreadId]!,
+            replacementThreadIdByScope: { [scope]: mainThreadId },
+          },
+        },
+      };
+      expect(findOwnershipReplacement(cyclic, mainThreadId, scope)).toBeUndefined();
+    },
+  );
+
   it("migrates an unscoped ledger into the main scope", () => {
     const storage = createStorage();
     const empty = emptyOwnershipLedger();
@@ -132,4 +201,61 @@ describe("ownership ledger scopes", () => {
     expect(result.value.initializedScopes).toEqual({ main: true, compact: false });
     expect(result.value.scopes.compact.draftsByThreadId).toEqual({});
   });
+
+  it.each(["main", "compact"] as const)(
+    "replaces a %s collision with a fresh record identity and generation",
+    async (scope) => {
+      const storage = createStorage();
+      const options = { storage, lockManager: null };
+      const before = await initializeOwnershipLedger({
+        scope,
+        draftsByThreadId: { [mainThreadId]: mainDraft },
+        projectDraftThreadIdByProjectId: { [projectId]: mainThreadId },
+        options,
+      });
+      applyOwnershipLedgerToComposer(before, scope);
+      useComposerDraftStore.getState().setPrompt(mainThreadId, "preserve this draft");
+      const replace = () =>
+        replaceCollidingDraftOwnership({
+          scope,
+          threadId: mainThreadId,
+          status: "archived",
+          serverEpoch: "server-1",
+          canonicalRevision: 9,
+          invalidatedAt: "2026-08-27T01:00:00.000Z",
+          createThreadId: () => compactThreadId,
+          options,
+        });
+      const result = await replace();
+      expect(result.replacement).toEqual({
+        ...mainDraft,
+        threadId: compactThreadId,
+        generation: before.nextGeneration,
+      });
+      expect(result.replacement.generation).toBeGreaterThan(result.previous.generation);
+      const persisted = readOwnershipLedger(storage);
+      expect(persisted.status).toBe("ready");
+      if (persisted.status !== "ready") return;
+      expect(persisted.value.scopes[scope].draftsByThreadId).toEqual({
+        [compactThreadId]: result.replacement,
+      });
+      expect(persisted.value.scopes[scope].projectBindingsByProjectId[projectId]).toEqual({
+        projectId,
+        threadId: compactThreadId,
+        generation: result.replacement.generation,
+      });
+      applyOwnershipLedgerToComposer(persisted.value, scope);
+      expect(useComposerDraftStore.getState().draftsByThreadId[mainThreadId]).toBeUndefined();
+      expect(useComposerDraftStore.getState().draftsByThreadId[compactThreadId]?.prompt).toBe(
+        "preserve this draft",
+      );
+      useComposerDraftStore.getState().setPrompt(compactThreadId, "edited after replacement");
+      applyOwnershipLedgerToComposer(persisted.value, scope);
+      expect(useComposerDraftStore.getState().draftsByThreadId[compactThreadId]?.prompt).toBe(
+        "edited after replacement",
+      );
+      // A repeated notification must resolve to the same durable replacement.
+      expect((await replace()).replacement).toEqual(result.replacement);
+    },
+  );
 });

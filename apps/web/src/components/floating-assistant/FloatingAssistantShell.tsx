@@ -14,6 +14,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 
 import { CompactChatPicker } from "./CompactChatPicker";
+import { CompactChatScreenshotReceiver } from "./CompactChatScreenshotReceiver";
 import { FloatingPendingApprovalCard } from "./FloatingPendingApprovalCard";
 import { MASCOT_ANIMATIONS } from "./mascotAssets";
 import { createMascotClickHandler } from "./mascotClick.logic";
@@ -254,14 +255,19 @@ export function CompactChatShell({
           onThreadMaterialized={synchronizeMaterializedThread}
         >
           {(context) => (
-            <CompactThreadConversation
-              {...context}
-              composerClassName="max-w-[calc(52rem*2/3)]"
-              projectPicker={<CompactChatPicker compactChat={compactChat} />}
-              renderPendingApproval={(approval) => <FloatingPendingApprovalCard {...approval} />}
-              workspaceRoot={workspaceRoot}
-              onMarkdownAnchorClick={canSendCompactLinkHandoff ? onMarkdownAnchorClick : undefined}
-            />
+            <>
+              <CompactChatScreenshotReceiver context={context} />
+              <CompactThreadConversation
+                {...context}
+                composerClassName="max-w-[calc(52rem*2/3)]"
+                projectPicker={<CompactChatPicker compactChat={compactChat} />}
+                renderPendingApproval={(approval) => <FloatingPendingApprovalCard {...approval} />}
+                workspaceRoot={workspaceRoot}
+                onMarkdownAnchorClick={
+                  canSendCompactLinkHandoff ? onMarkdownAnchorClick : undefined
+                }
+              />
+            </>
           )}
         </ThreadComposerSurface>
       )}

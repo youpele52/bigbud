@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./screenRecording": {
+      "types": "./src/screenRecording.ts",
+      "import": "./src/screenRecording.ts"
+    },
     "./DevPortAvailability": {
       "types": "./src/DevPortAvailability.ts",
       "import": "./src/DevPortAvailability.ts"

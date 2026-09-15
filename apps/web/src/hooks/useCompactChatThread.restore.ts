@@ -93,10 +93,10 @@ export function useCompactChatOwnershipRestoration(input: {
           return;
         }
         await initializeOwnershipFromComposer({ scope: "compact" });
-        const nextThreadId = await createOwnershipReplacementThreadId(ownership);
-        await replaceCanonicalOwnershipCollision({
+        const candidateThreadId = await createOwnershipReplacementThreadId(ownership);
+        const nextThreadId = await replaceCanonicalOwnershipCollision({
           ownership,
-          createThreadId: () => nextThreadId,
+          createThreadId: () => candidateThreadId,
           scope: "compact",
         });
         if (disposed) return;
