@@ -118,6 +118,7 @@ import Migration0114 from "./Migrations/114_OrchestrationBootstrapSubmissionReci
 import Migration0115 from "./Migrations/115_ProjectDeletionOwnership.ts";
 import Migration0116 from "./Migrations/116_RepairThreadRetentionFinitePolicies.ts";
 import Migration0118 from "./Migrations/118_LearningReviewRecovery.ts";
+import Migration0119 from "./Migrations/119_RepairLearningActivityLeases.ts";
 import Migration0117 from "./Migrations/117_RepairThreadRetentionItemIndependence.ts";
 
 export const migrationEntries = [
@@ -238,6 +239,7 @@ export const migrationEntries = [
   [116, "RepairThreadRetentionFinitePolicies", Migration0116],
   [117, "RepairThreadRetentionItemIndependence", Migration0117],
   [118, "LearningReviewRecovery", Migration0118],
+  [119, "RepairLearningActivityLeases", Migration0119],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

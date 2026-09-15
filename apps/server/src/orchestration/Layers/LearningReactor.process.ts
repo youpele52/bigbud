@@ -203,6 +203,7 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
                 jobId: job.jobId,
                 attempt: job.attemptCount,
                 outcome,
+                cause: Cause.pretty(cause),
               }),
             ),
           );

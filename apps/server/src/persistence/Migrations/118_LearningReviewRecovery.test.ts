@@ -18,8 +18,8 @@ it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()))("118_LearningReviewReco
       VALUES ('historical', 'owner', 'turn', 'codex', 'gpt-5', '{}', 15, 'failed', 'now', 'now')`;
       const artifacts =
         yield* sql`SELECT name, sql FROM sqlite_master WHERE tbl_name = 'thread_activity_leases' AND type IN ('index', 'trigger') ORDER BY name`;
-      yield* runMigrations();
-      assert.deepEqual(yield* runMigrations(), []);
+      yield* runMigrations({ toMigrationInclusive: 118 });
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 118 }), []);
       assert.deepEqual(
         yield* sql`SELECT name, sql FROM sqlite_master WHERE tbl_name = 'thread_activity_leases' AND type IN ('index', 'trigger') ORDER BY name`,
         artifacts,
