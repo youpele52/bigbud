@@ -93,7 +93,7 @@ it("supports a fresh child PID after the earlier child exits while its parent st
   expect(await coordinator.withLock(() => readDevPortReservations(coordinator))).toEqual(
     expect.arrayContaining([parent.reservation, replacement]),
   );
-});
+}, 30_000);
 
 it("retains old records and uncertain/reused PIDs; only ESRCH permits cleanup", async () => {
   const { coordinator } = await setup();

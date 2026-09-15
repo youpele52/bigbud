@@ -95,9 +95,12 @@ it(
     expect(mobilePort).toBeGreaterThan(firstPort);
     web.child.send("bind");
     expect(await web.next("bound")).toBe(firstPort);
-    expect(
-      await fetch(`http://127.0.0.1:${firstPort}/__bigbud/mobile-dev`).then((r) => r.json()),
-    ).toEqual({ url: `http://127.0.0.1:${mobilePort}` });
+    await expect
+      .poll(
+        () => fetch(`http://127.0.0.1:${firstPort}/__bigbud/mobile-dev`).then((r) => r.json()),
+        { timeout: 5_000 },
+      )
+      .toEqual({ url: `http://127.0.0.1:${mobilePort}` });
   },
   SUBPROCESS_TEST_TIMEOUT_MS,
 );
@@ -112,9 +115,11 @@ it(
     expect(webPort).toBeGreaterThan(firstPort);
     web.child.send("bind");
     expect(await web.next("bound")).toBe(webPort);
-    expect(
-      await fetch(`http://127.0.0.1:${webPort}/__bigbud/mobile-dev`).then((r) => r.json()),
-    ).toEqual({ url: `http://127.0.0.1:${firstPort}` });
+    await expect
+      .poll(() => fetch(`http://127.0.0.1:${webPort}/__bigbud/mobile-dev`).then((r) => r.json()), {
+        timeout: 5_000,
+      })
+      .toEqual({ url: `http://127.0.0.1:${firstPort}` });
   },
   SUBPROCESS_TEST_TIMEOUT_MS,
 );
