@@ -83,6 +83,13 @@ export function statusFromState(
     candidateVersion: candidate?.runtime.version ?? update?.identity?.version ?? null,
     predecessorVersion: predecessor?.runtime.version ?? null,
     outcome: update?.outcome ?? null,
-    reason: admission?.failureCode ?? update?.outcome ?? null,
+    reason:
+      admission?.warning ??
+      retired?.warning ??
+      admission?.failureCode ??
+      retired?.failureCode ??
+      update?.reason ??
+      update?.outcome ??
+      null,
   };
 }

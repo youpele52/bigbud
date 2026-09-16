@@ -5,13 +5,34 @@ import { render } from "vitest-browser-react";
 import { SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
 
 const api = vi.hoisted(() => ({ current: null as never }));
+const toast = vi.hoisted(() => ({ add: vi.fn() }));
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => api.current }));
+vi.mock("../ui/toast.manager", () => ({ toastManager: toast }));
 afterEach(() => {
+  toast.add.mockClear();
   api.current = null as never;
   document.body.innerHTML = "";
 });
 
 describe("explicit remote admission outcome", () => {
+  it("preserves the verification failure and guides manual transport selection", async () => {
+    const connectRemoteAgent = vi.fn();
+    api.current = {
+      server: {
+        verifyExecutionTarget: vi.fn().mockRejectedValue(new Error("Agent handshake timed out")),
+        connectRemoteAgent,
+      },
+    } as never;
+    await render(
+      <SidebarRemoteAgentStatus executionTargetId="ssh:failed?transport=agent" cwd="/workspace" />,
+    );
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Agent handshake timed out");
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("choose Direct SSH in Connection method to switch manually");
+    expect(connectRemoteAgent).not.toHaveBeenCalled();
+  });
+
   it("shows same-version fallback after admission and reload without connecting again", async () => {
     const fallback = {
       connectionId: "fallback",
@@ -60,14 +81,30 @@ describe("explicit remote admission outcome", () => {
     await vi.waitFor(() => expect(verifyExecutionTarget).toHaveBeenCalledOnce());
     await page.getByRole("button", { name: "Connect new session" }).click();
     await expect
-      .element(page.getByText("Using healthy fallback 0.2.207. Candidate admission: NOT_READY."))
+      .element(
+        page.getByText(
+          "Connected using existing agent 0.2.207. The updated agent did not confirm it was ready.",
+        ),
+      )
       .toBeVisible();
+    expect(toast.add).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        type: "warning",
+        description:
+          "Connected using existing agent 0.2.207. The updated agent did not confirm it was ready.",
+      }),
+    );
     await screen.unmount();
     await render(<SidebarRemoteAgentStatus executionTargetId="ssh:test" cwd="/workspace" />);
     await expect
-      .element(page.getByText("Using healthy fallback 0.2.207. Candidate admission: NOT_READY."))
+      .element(
+        page.getByText(
+          "Connected using existing agent 0.2.207. The updated agent did not confirm it was ready.",
+        ),
+      )
       .toBeVisible();
     expect(connectRemoteAgent).toHaveBeenCalledOnce();
+    expect(toast.add).toHaveBeenCalledOnce();
   });
 
   it("recovers the same request identity after a lost reply and remount", async () => {
@@ -102,6 +139,10 @@ describe("explicit remote admission outcome", () => {
     );
     await page.getByRole("button", { name: "Connect new session" }).click();
     await expect.element(page.getByText("reply lost")).toBeVisible();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("choose Direct SSH in Connection method to switch manually");
+    expect(connectRemoteAgent.mock.calls[0]?.[0].executionTargetId).toBe(target);
     const requestId = connectRemoteAgent.mock.calls[0]?.[0].requestId;
     expect(requestId).toMatch(/^[A-Za-z0-9-]{1,64}$/);
     await firstScreen.unmount();
@@ -121,6 +162,7 @@ describe("explicit remote admission outcome", () => {
       executionTargetId: target,
       reconnectRequestId: requestId,
     });
+    expect(toast.add).not.toHaveBeenCalled();
   });
 
   it("renders every persisted phase with exact versions, reasons, and severity", async () => {
@@ -192,6 +234,8 @@ describe("explicit remote admission outcome", () => {
       await expect.element(page.getByText("0.2.207", { exact: true })).toBeVisible();
       await expect.element(page.getByText("0.2.208", { exact: true })).toBeVisible();
       await expect.element(page.getByText("0.2.205", { exact: true })).toBeVisible();
+      if (current.phase === "failed-using-stable")
+        await expect.element(page.getByText("HEALTH_CHECK_FAILED", { exact: true })).toBeVisible();
       expect(connectRemoteAgent).not.toHaveBeenCalled();
       await screen.unmount();
     }

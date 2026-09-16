@@ -24,7 +24,7 @@ function connection(hello: { readonly agentEpoch: string }): RemoteAgentConnecti
 }
 
 describe("remote agent lifecycle", () => {
-  it("distinguishes ready, reconnecting, and pre-acceptance fallback", async () => {
+  it("retains the agent identity while reconnecting", async () => {
     const lifecycle = new RemoteAgentLifecycle({
       create: async () => connection({ agentEpoch: "1" }),
     });
@@ -35,10 +35,7 @@ describe("remote agent lifecycle", () => {
     expect(lifecycle.supportsCapability("workspace.files")).toBe(false);
     lifecycle.markTransportLoss();
     expect(lifecycle.snapshot.state).toBe("reconnecting");
-    expect(lifecycle.canFallback("unadmitted")).toBe(true);
-    expect(lifecycle.canFallback("accepted")).toBe(false);
-    expect(lifecycle.canFallback("may-have-been-sent")).toBe(false);
-    expect(lifecycle.canFallback("not-dispatched")).toBe(false);
+    expect(lifecycle.snapshot.agentEpoch).toBe("1");
   });
 
   it("degrades when a reconnect sees a new agent epoch", async () => {

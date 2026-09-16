@@ -7,15 +7,13 @@ import {
   type ServerGetRemoteAgentUpdateStatusInput,
   type ServerRemoteAgentUpdateStatus,
 } from "@bigbud/contracts/server/server.ts";
-import {
-  remoteAgentAdmission,
-  RemoteAgentAdmissionError,
-} from "../remote-agent/remoteAgentAdmission.ts";
+import { remoteAgentAdmission } from "../remote-agent/remoteAgentAdmission.ts";
 import { isRemoteAgentConfigured } from "../remote-agent/remoteAgentServerLayer.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import { scheduleRemoteAgentCleanup } from "../remote-agent/remoteAgentInstall.maintenance.ts";
 import { remoteAgentRuntimeSummary } from "../remote-agent/remoteAgentStatus.ts";
 import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
+import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
 
 export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(function* (
   input: ServerConnectRemoteAgentInput,
@@ -30,13 +28,19 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
       message: "This project uses Direct SSH. Select bigbud remote agent before connecting it.",
     });
   const result = yield* Effect.tryPromise({
-    try: () => remoteAgentAdmission.fresh(input.executionTargetId, input.requestId),
+    try: () =>
+      remoteAgentAdmission.fresh(
+        input.executionTargetId,
+        input.requestId,
+        async () =>
+          (await remoteAgentUpdateCoordinator?.prepareForAdmission(
+            input.executionTargetId,
+            input.requestId,
+          )) ?? {},
+      ),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
-        message:
-          cause instanceof RemoteAgentAdmissionError
-            ? cause.message
-            : "Remote connection could not be verified. Existing work is unchanged.",
+        message: remoteAgentFailureMessage(cause),
         cause,
       }),
   });

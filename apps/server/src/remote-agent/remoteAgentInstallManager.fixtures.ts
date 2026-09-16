@@ -38,7 +38,10 @@ export function installManagerFixture(
     registry: {
       read: async () => state,
       update: async (transition) => {
-        state = parseRemoteAgentRegistry(JSON.stringify(transition(state)));
+        const next = transition(state);
+        if (next !== state && next.revision !== state.revision + 1)
+          throw new Error("Invalid registry transition revision.");
+        state = parseRemoteAgentRegistry(JSON.stringify(next));
         return state;
       },
     },

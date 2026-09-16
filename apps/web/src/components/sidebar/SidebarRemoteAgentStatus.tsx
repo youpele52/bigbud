@@ -5,6 +5,11 @@ import type {
 } from "@bigbud/contracts/server/server.ts";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { Button } from "../ui/button";
+import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
+import {
+  notifyRemoteAgentConnection,
+  remoteAgentConnectionWarning,
+} from "./SidebarRemoteAgentConnection.notifications";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import {
   completeRemoteAgentAdmission,
@@ -84,9 +89,13 @@ export function SidebarRemoteAgentStatus({
             },
           );
       })
-      .catch(() => {
+      .catch((cause) => {
         if (active && observedRevision === revision.current)
-          setError("Remote agent status is unavailable. Verify the SSH connection to retry.");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Remote agent status is unavailable. Verify the SSH connection to retry.",
+          );
       });
     return () => {
       active = false;
@@ -100,6 +109,7 @@ export function SidebarRemoteAgentStatus({
     const actionRevision = ++revision.current;
     setBusy(true);
     setError(null);
+    setMessage(null);
     setFallback(false);
     try {
       const admissionRequestId =
@@ -123,10 +133,11 @@ export function SidebarRemoteAgentStatus({
         intent: "fresh",
       });
       if (actionRevision !== revision.current) return;
-      const usingFallback = result.outcome === "fallback";
+      const usingFallback = result.outcome === "fallback" || Boolean(result.warning);
       setFallback(usingFallback);
       setSummary(result);
       useRemoteAccessStore.getState().recordRemoteConnection(executionTargetId, result);
+      notifyRemoteAgentConnection(executionTargetId, result);
       setMessage(
         `Connected to ${usingFallback ? "healthy fallback " : ""}${result.currentVersion}. Existing terminals and operations keep their original runtime.`,
       );
@@ -152,6 +163,7 @@ export function SidebarRemoteAgentStatus({
   const predecessorVersion = updateStatus
     ? updateStatus.predecessorVersion
     : (summary?.fallbackVersion ?? null);
+  const connectionWarning = summary ? remoteAgentConnectionWarning(summary) : undefined;
 
   return (
     <section
@@ -185,18 +197,19 @@ export function SidebarRemoteAgentStatus({
           {remoteAgentUpdateStatusMessage(updateStatus)}
         </p>
       ) : null}
+      {updateStatus?.reason ? <p className="text-amber-600">{updateStatus.reason}</p> : null}
       <p className="text-xs text-muted-foreground">
-        Retained work stays on its original runtime, including after reconnect.
+        Connect new session checks for the latest compatible agent. Retained work stays on its
+        original runtime, including after reconnect.
       </p>
-      {summary?.outcome === "fallback" ? (
+      {connectionWarning ? (
         <p role="status" className="text-amber-600">
-          Using healthy fallback {summary.currentVersion}. Candidate admission:{" "}
-          {summary.failureCode ?? "unavailable"}.
+          {connectionWarning}
         </p>
       ) : null}
       {busy ? (
         <p role="status" className="text-blue-600">
-          Working…
+          Preparing and connecting…
         </p>
       ) : message ? (
         <p role="status" className={fallback ? "text-amber-600" : "text-emerald-600"}>
@@ -204,9 +217,10 @@ export function SidebarRemoteAgentStatus({
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-destructive">
+          <p>{error}</p>
+          {!error.includes("Direct SSH") ? <p>{REMOTE_AGENT_FAILURE_GUIDANCE}</p> : null}
+        </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button type="button" disabled={busy} onClick={() => void perform()}>

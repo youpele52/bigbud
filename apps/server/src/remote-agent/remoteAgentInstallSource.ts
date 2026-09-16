@@ -1,7 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 
 import { version as serverVersion } from "../../package.json" with { type: "json" };
-import { parseRemoteAgentArtifactManifest } from "./remoteAgentArtifact.ts";
 import {
   parseRemoteAgentInstallSource,
   RemoteAgentInstallManagerError,
@@ -116,34 +115,6 @@ async function downloadMetadata(
   );
 }
 
-async function loadDevelopmentReleaseManifest(
-  url: string,
-  options: InstallSourceLoadOptions,
-): Promise<RemoteAgentInstallSource> {
-  const manifestUrl = url.replace(
-    /remote-agent-install-source\.json$/,
-    "remote-agent-manifest.json",
-  );
-  try {
-    const bytes = await downloadMetadata(manifestUrl, false, options);
-    return {
-      manifest: parseRemoteAgentArtifactManifest(JSON.parse(new TextDecoder().decode(bytes))),
-      trustStore: {},
-      allowUntrustedDevelopmentArtifact: true,
-    };
-  } catch (error) {
-    if (
-      error instanceof RemoteAgentDownloadError &&
-      (error.details.abortOwner === "caller" || error.details.abortOwner === "shutdown")
-    ) {
-      throw error;
-    }
-    throw new RemoteAgentInstallManagerError(
-      `No valid development remote-agent release is published (${error instanceof Error ? error.message : String(error)}). Publish the matching release, set BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH to a local install source, or choose Direct SSH for a project that does not need the agent.`,
-    );
-  }
-}
-
 export async function loadRemoteAgentInstallSource(
   environment: NodeJS.ProcessEnv = process.env,
   options: InstallSourceLoadOptions = {},
@@ -157,13 +128,10 @@ export async function loadRemoteAgentInstallSource(
     const bytes = await downloadMetadata(url, explicitUrl, options);
     return parseInstallSourceJson(bytes, "the configured release host");
   } catch (error) {
-    if (
-      error instanceof RemoteAgentDownloadError &&
-      error.details.status === 404 &&
-      environment.BIGBUD_DESKTOP_PACKAGED === "0" &&
-      !explicitUrl
-    ) {
-      return loadDevelopmentReleaseManifest(url, options);
+    if (error instanceof RemoteAgentDownloadError && error.details.status === 404) {
+      throw new RemoteAgentInstallManagerError(
+        "Remote agent install source is unavailable (HTTP 404). Publish the matching release, configure BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH or BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL with a signed install source, or choose Direct SSH in the project's connection settings.",
+      );
     }
     if (error instanceof RemoteAgentInstallManagerError) throw error;
     throw new RemoteAgentInstallManagerError(

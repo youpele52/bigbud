@@ -11,6 +11,7 @@ import { remoteAgentBuildId, type RemoteAgentRuntime } from "./remoteAgentRuntim
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentInstallSource } from "./remoteAgentInstallManager.ts";
 import type { RemoteAgentArtifact } from "./remoteAgentArtifact.ts";
+import { readyRemoteAgentSelection } from "./remoteAgentAdmission.selection.ts";
 
 export class RemoteAgentUpdateDefinitiveError extends Error {
   readonly _tag = "RemoteAgentUpdateDefinitiveError";
@@ -165,7 +166,10 @@ async function markChecking(input: {
   readonly control: RemoteAgentControl;
   readonly requestId: string;
   readonly buildId: string;
-  readonly artifact: RemoteAgentArtifact;
+  readonly artifact: Pick<
+    RemoteAgentRuntime,
+    "version" | "sha256" | "buildDigest" | "targetTriple"
+  >;
 }): Promise<void> {
   const state = await input.control.registry.read();
   const predecessor = state.current ?? state.predecessor ?? undefined;
@@ -216,17 +220,28 @@ export async function prepareRemoteAgentCandidate(input: {
     throw new RemoteAgentUpdateUncertainError("Candidate retirement is still in progress.");
   }
   const priorUpdate = state.updates.find((entry) => entry.requestId === input.requestId);
-  if (priorUpdate?.phase === "ready-for-reconnect" && build?.binary === "present") {
+  const ready = readyRemoteAgentSelection(state, buildId);
+  if (
+    priorUpdate?.phase === "ready-for-reconnect" &&
+    build?.authenticated &&
+    ready &&
+    ready.epoch === priorUpdate.epoch
+  ) {
     return {
       status: "ready-for-reconnect",
       requestId: input.requestId,
       buildId,
       identity: input.artifact,
-      epoch: priorUpdate.epoch ?? "",
+      epoch: ready.epoch,
     };
   }
 
-  if (!build || build.binary !== "present" || build.health === "quarantined") {
+  if (
+    !build ||
+    build.binary !== "present" ||
+    build.health === "quarantined" ||
+    (!build.authenticated && !input.source.allowUntrustedDevelopmentArtifact)
+  ) {
     const result = await input.install({
       executionTargetId: input.target,
       source: input.source,
@@ -237,13 +252,38 @@ export async function prepareRemoteAgentCandidate(input: {
     build = state.builds.find((entry) => entry.id === buildId);
   }
   if (!build) throw new RemoteAgentUpdateUncertainError("Installed candidate was not published.");
+  const epoch = await prepareStagedRemoteAgentCandidate({
+    target: input.target,
+    requestId: input.requestId,
+    buildId,
+    control: input.control,
+    ...(input.connect ? { connect: input.connect } : {}),
+  });
+  return {
+    status: "ready-for-reconnect",
+    requestId: input.requestId,
+    buildId,
+    identity: input.artifact,
+    epoch,
+  };
+}
+
+/** Prepare already verified bytes without downloading or selecting another build. */
+export async function prepareStagedRemoteAgentCandidate(input: {
+  readonly target: string;
+  readonly requestId: string;
+  readonly buildId: string;
+  readonly control: RemoteAgentControl;
+  readonly connect?: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+}): Promise<string> {
+  const runtime = candidateRuntime(await input.control.registry.read(), input.buildId);
+  const buildId = input.buildId;
   await markChecking({
     control: input.control,
     requestId: input.requestId,
     buildId,
-    artifact: input.artifact,
+    artifact: runtime,
   });
-  const runtime = candidateRuntime(await input.control.registry.read(), buildId);
   await ensureCandidateLaunch({
     control: input.control,
     runtime,
@@ -265,11 +305,12 @@ export async function prepareRemoteAgentCandidate(input: {
     if (!launch || launch.phase === "proven-dead")
       throw new RemoteAgentUpdateUncertainError("Candidate launch changed during health checking.");
     return markRemoteAgentUpdate(
-      nextRemoteAgentRegistryRevision(current, {
+      {
+        ...current,
         launches: current.launches.map((entry) =>
           entry.buildId === buildId ? { ...entry, phase: "ready" as const, epoch } : entry,
         ),
-      }),
+      },
       {
         requestId: input.requestId,
         buildId,
@@ -277,19 +318,13 @@ export async function prepareRemoteAgentCandidate(input: {
         outcome: "ready",
         epoch,
         identity: {
-          version: input.artifact.version,
-          sha256: input.artifact.sha256,
-          buildDigest: input.artifact.buildDigest,
-          targetTriple: input.artifact.targetTriple,
+          version: runtime.version,
+          sha256: runtime.sha256,
+          buildDigest: runtime.buildDigest,
+          targetTriple: runtime.targetTriple,
         },
       },
     );
   });
-  return {
-    status: "ready-for-reconnect",
-    requestId: input.requestId,
-    buildId,
-    identity: input.artifact,
-    epoch,
-  };
+  return epoch;
 }
