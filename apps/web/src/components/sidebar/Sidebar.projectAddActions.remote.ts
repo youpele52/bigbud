@@ -14,6 +14,7 @@ import {
   createRemoteProjectExecutionTargetId,
   getRemoteProjectConnectionLabel,
   type RemoteProjectDraft,
+  type RemoteProjectTransport,
 } from "./Sidebar.projects.logic";
 import type { Project } from "../../models/types";
 import { useRemoteProjectSubmit } from "./Sidebar.projectAddActions.remote.submit";
@@ -120,13 +121,15 @@ export function useSidebarRemoteProjectAddActions({
   ]);
 
   const updateRemoteProjectDraft = useCallback(
-    <K extends RemoteProjectField | "authMode" | "providerRuntimeLocation">(
+    <K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation">(
       field: K,
       value: K extends "authMode"
         ? RemoteProjectDraft["authMode"]
-        : K extends "providerRuntimeLocation"
-          ? RemoteProjectDraft["providerRuntimeLocation"]
-          : string,
+        : K extends "remoteTransport"
+          ? RemoteProjectTransport
+          : K extends "providerRuntimeLocation"
+            ? RemoteProjectDraft["providerRuntimeLocation"]
+            : string,
     ) => {
       verificationRequestIdRef.current += 1;
       setRemoteProjectDraft((current) => ({ ...current, [field]: value }));

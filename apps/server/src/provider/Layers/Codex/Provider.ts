@@ -22,6 +22,7 @@ import {
   spawnAndCollect,
 } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import {
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
@@ -37,6 +38,7 @@ import { probeCodexDiscovery, type CodexDiscoverySnapshot } from "../../codexApp
 import { includeConfiguredCodexModels } from "../../codexAppServer.models";
 import { CodexProvider } from "../../Services/Codex/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsError } from "@bigbud/contracts";
 import { getCodexFallbackModels } from "./Provider.models";
 import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./Provider.auth";
@@ -323,9 +325,20 @@ export const CodexProviderLive = Layer.effect(
   CodexProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const decorateSnapshot = makeProviderEffortCacheDecorator<CodexSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) =>
+        JSON.stringify({ homePath: settings.homePath, customModels: settings.customModels }),
+    });
     const accountProbeCache = yield* Cache.make({
       capacity: 4,
       timeToLive: Duration.minutes(5),
@@ -363,6 +376,7 @@ export const CodexProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      decorateSnapshot,
       initialSnapshot: makeCodexInitialSnapshot,
     });
   }),

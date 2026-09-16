@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { readNativeApi } from "../../rpc/nativeApi";
 
 interface PreviewState {
+  fileKey: string | null;
   loading: boolean;
   loaded: boolean;
   contents: string;
@@ -17,6 +18,7 @@ interface UsePreviewLoadInput {
 }
 
 const INITIAL_STATE: PreviewState = {
+  fileKey: null,
   loading: true,
   loaded: false,
   contents: "",
@@ -30,6 +32,7 @@ export function usePreviewLoad({
   executionTargetId,
   onLoadError,
 }: UsePreviewLoadInput) {
+  const fileKey = JSON.stringify([executionTargetId ?? null, cwd, relativePath]);
   const [state, setState] = useState<PreviewState>(INITIAL_STATE);
   const previewRequestIdRef = useRef(0);
 
@@ -44,7 +47,7 @@ export function usePreviewLoad({
               ...current,
               loading: true,
             }
-          : INITIAL_STATE,
+          : { ...INITIAL_STATE, fileKey },
       );
 
       const api = readNativeApi();
@@ -62,6 +65,7 @@ export function usePreviewLoad({
           }
 
           return {
+            fileKey,
             loading: false,
             loaded: false,
             contents: "",
@@ -85,6 +89,7 @@ export function usePreviewLoad({
             }
 
             return {
+              fileKey,
               loading: false,
               loaded: true,
               contents: result.contents,
@@ -111,6 +116,7 @@ export function usePreviewLoad({
             }
 
             return {
+              fileKey,
               loading: false,
               loaded: false,
               contents: "",
@@ -120,12 +126,19 @@ export function usePreviewLoad({
           });
         });
     },
-    [cwd, executionTargetId, onLoadError, relativePath],
+    [cwd, executionTargetId, fileKey, onLoadError, relativePath],
+  );
+
+  useEffect(
+    () => () => {
+      ++previewRequestIdRef.current;
+    },
+    [loadPreview],
   );
 
   const refreshPreview = useCallback(() => {
     return loadPreview({ preserveContents: true });
   }, [loadPreview]);
 
-  return { state, loadPreview, refreshPreview };
+  return { state: state.fileKey === fileKey ? state : INITIAL_STATE, loadPreview, refreshPreview };
 }

@@ -3,6 +3,11 @@ import { homedir } from "node:os";
 import type { ModelCapabilities, ProviderKind, ServerProviderModel } from "@bigbud/contracts";
 import { Effect, FileSystem, Path } from "effect";
 
+import {
+  EMPTY_EFFORT_CAPABILITIES,
+  SEED_REASONING_CAPABILITIES,
+} from "./managedServerCatalog.effort.ts";
+
 const MODELS_PER_FALLBACK_PROVIDER = 5;
 const PROVIDER_PRIORITY = [
   "opencode",
@@ -20,13 +25,7 @@ const PROVIDER_PRIORITY = [
   "azure",
 ] as const;
 
-export const MANAGED_SERVER_EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
+export const MANAGED_SERVER_EMPTY_MODEL_CAPABILITIES: ModelCapabilities = EMPTY_EFFORT_CAPABILITIES;
 
 function model(
   slug: string,
@@ -41,16 +40,7 @@ function model(
     isCustom: false,
     group,
     subProviderID,
-    capabilities: {
-      ...MANAGED_SERVER_EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: reasoning
-        ? [
-            { value: "high", label: "High", isDefault: true },
-            { value: "medium", label: "Medium" },
-            { value: "low", label: "Low" },
-          ]
-        : [],
-    },
+    capabilities: reasoning ? SEED_REASONING_CAPABILITIES : EMPTY_EFFORT_CAPABILITIES,
   };
 }
 

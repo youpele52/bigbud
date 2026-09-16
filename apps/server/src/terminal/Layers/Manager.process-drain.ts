@@ -68,6 +68,8 @@ export function trySpawnWith(
 
     const attempt = yield* Effect.result(
       ctx.ptyAdapter.spawn({
+        ownerKey: JSON.stringify([session.threadId, session.terminalId]),
+        recoverOnly: session.remoteOwnerRecoveryRequired === true,
         shell: candidate.shell,
         ...(candidate.args ? { args: candidate.args } : {}),
         cwd: isLocalExecutionTarget(session.executionTargetId) ? session.cwd : homedir(),

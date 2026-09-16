@@ -40,7 +40,7 @@ export function MobileReaderOutline({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Open transcript outline"
-        className="flex flex-col items-end justify-center gap-px rounded-md px-1 py-1 outline-none transition-colors active:bg-accent/25 focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-11 min-w-11 flex-col items-end justify-center gap-px rounded-md px-1 py-1 outline-none transition-colors active:bg-accent/25 focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
@@ -54,7 +54,7 @@ export function MobileReaderOutline({
       </button>
       {open ? (
         <div
-          className="absolute top-1/2 right-full z-50 mr-3 max-h-[calc((100dvh-11rem-env(safe-area-inset-bottom))/3)] w-56 -translate-y-1/2 overflow-y-auto overscroll-y-contain rounded-xl border border-border/70 bg-background/96 p-1.5 shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92"
+          className="absolute top-1/2 right-full z-50 mr-3 max-h-[70%] w-56 -translate-y-1/2 overflow-y-auto overscroll-y-contain rounded-xl border border-border/70 bg-background/96 p-1.5 shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92"
           role="menu"
         >
           {anchors.map((anchor) => {
@@ -64,7 +64,7 @@ export function MobileReaderOutline({
                 key={anchor.messageId}
                 aria-current={isCurrent ? "location" : undefined}
                 className={cn(
-                  "block min-h-7 w-full rounded-lg px-2 text-left text-sm transition-colors",
+                  "block min-h-11 w-full rounded-lg px-2 text-left text-sm transition-colors",
                   isCurrent
                     ? "bg-accent/85 font-medium text-foreground active:bg-accent"
                     : "text-muted-foreground active:bg-accent active:text-foreground",

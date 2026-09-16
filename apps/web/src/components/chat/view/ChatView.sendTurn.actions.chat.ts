@@ -169,6 +169,8 @@ export async function sendChatTurn({
     models: selectedProviderModels,
     effort: selectedPromptEffort,
     text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
+    subProviderID:
+      "subProviderID" in selectedModelSelection ? selectedModelSelection.subProviderID : undefined,
   });
   const requestDigest = await digestMaterializationRequest({
     kind: "turn",

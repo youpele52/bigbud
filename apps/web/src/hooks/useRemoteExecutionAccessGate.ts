@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
 import { readNativeApi } from "../rpc/nativeApi";
+import { toastManager } from "../components/ui/toast";
 import {
   type RemoteExecutionAuthMode,
   useRemoteAccessStore,
@@ -27,7 +28,6 @@ interface EnsureRemoteExecutionTargetAccessInput {
   readonly onVerified?: () => Promise<void> | void;
   readonly resumeOnUnlockOnly?: boolean;
 }
-
 export interface RemoteExecutionAccessGate {
   readonly beginRemoteExecutionTargetAccessCheck: (
     input: EnsureRemoteExecutionTargetAccessInput,
@@ -45,7 +45,6 @@ export interface RemoteExecutionAccessGate {
   readonly setRemoteExecutionAuthSecret: (secret: string) => void;
   readonly submitRemoteExecutionAuth: () => Promise<void>;
 }
-
 async function verifyRemoteExecutionTarget(input: {
   readonly executionTargetId: string;
   readonly cwd?: string;
@@ -76,11 +75,11 @@ function openRemoteExecutionAuthDialog(input: {
   readonly unavailableTitle?: string;
   readonly authMode: RemoteExecutionAuthMode;
   readonly promptLabel: string;
-}) {
+}): boolean {
   if (!input.onVerified) {
-    return;
+    return false;
   }
-  useRemoteAccessStore.getState().openAuthDialog({
+  return useRemoteAccessStore.getState().openAuthDialog({
     pendingAction: {
       executionTargetId: input.executionTargetId,
       ...(input.cwd ? { cwd: input.cwd } : {}),
@@ -106,6 +105,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     markExecutionTargetVerified,
     setExecutionTargetCheck,
     closeAuthDialog,
+    clearAuthDialog,
     setRemoteExecutionAuthSecret,
     setRemoteExecutionAuthError,
     setIsAuthenticatingRemoteExecution,
@@ -123,6 +123,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       markExecutionTargetVerified: state.markExecutionTargetVerified,
       setExecutionTargetCheck: state.setExecutionTargetCheck,
       closeAuthDialog: state.closeAuthDialog,
+      clearAuthDialog: state.clearAuthDialog,
       setRemoteExecutionAuthSecret: state.setAuthSecret,
       setRemoteExecutionAuthError: state.setAuthError,
       setIsAuthenticatingRemoteExecution: state.setIsAuthenticating,
@@ -182,7 +183,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         check.authMode !== null &&
         check.promptLabel !== null
       ) {
-        openRemoteExecutionAuthDialog({
+        const opened = openRemoteExecutionAuthDialog({
           executionTargetId,
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.onVerified ? { onVerified: input.onVerified } : {}),
@@ -190,6 +191,12 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
           authMode: check.authMode,
           promptLabel: check.promptLabel,
         });
+        if (!opened) {
+          toastManager.add({
+            type: "warning",
+            title: "Another remote authentication request is already pending.",
+          });
+        }
         return false;
       }
 
@@ -231,7 +238,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         check.authMode !== null &&
         check.promptLabel !== null
       ) {
-        openRemoteExecutionAuthDialog({
+        const opened = openRemoteExecutionAuthDialog({
           executionTargetId,
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.onVerified ? { onVerified: input.onVerified } : {}),
@@ -239,6 +246,12 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
           authMode: check.authMode,
           promptLabel: check.promptLabel,
         });
+        if (!opened) {
+          toastManager.add({
+            type: "warning",
+            title: "Another remote authentication request is already pending.",
+          });
+        }
         return false;
       }
       if (check?.status === "error") {
@@ -307,16 +320,18 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
           passphrase: secret,
         });
       }
-      setExecutionTargetCheck(
-        pendingAction.executionTargetId,
-        resolveRemoteExecutionCheckingStatus(),
-      );
-      await verifyRemoteExecutionTarget({
-        executionTargetId: pendingAction.executionTargetId,
-        ...(pendingAction.cwd ? { cwd: pendingAction.cwd } : {}),
-      });
-      markExecutionTargetVerified(pendingAction.executionTargetId);
-      closeAuthDialog();
+      if (!pendingAction.skipAgentVerification) {
+        setExecutionTargetCheck(
+          pendingAction.executionTargetId,
+          resolveRemoteExecutionCheckingStatus(),
+        );
+        await verifyRemoteExecutionTarget({
+          executionTargetId: pendingAction.executionTargetId,
+          ...(pendingAction.cwd ? { cwd: pendingAction.cwd } : {}),
+        });
+        markExecutionTargetVerified(pendingAction.executionTargetId);
+      }
+      clearAuthDialog();
       await pendingAction.onVerified();
     } catch (error) {
       const errorMessage =
@@ -352,6 +367,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   }, [
     beginRemoteExecutionTargetAccessCheck,
     closeAuthDialog,
+    clearAuthDialog,
     markExecutionTargetVerified,
     pendingAction,
     remoteExecutionAuthMode,

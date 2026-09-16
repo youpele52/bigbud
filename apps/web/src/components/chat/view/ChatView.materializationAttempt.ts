@@ -125,7 +125,7 @@ export async function prepareDraftMaterialization(input: {
       return {
         status: "blocked",
         reason:
-          "Your previous send is still being checked. Its draft is safe and cannot be replaced yet.",
+          "Your previous send is still being checked. Choose New Thread to send a different prompt; this draft will stay saved.",
       };
     }
     await setMaterializationAttemptStatus(

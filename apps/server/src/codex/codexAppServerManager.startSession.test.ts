@@ -56,4 +56,26 @@ describe("Codex MCP startup readiness", () => {
       "Timed out waiting for mcpServerStatus/list.",
     );
   });
+
+  it("does not treat a failed server with a nonempty tool catalog as ready", () => {
+    expect(
+      hasReadyMcpServers(
+        {
+          servers: [
+            {
+              name: "bigbud_remote_workspace",
+              startupStatus: "failed",
+              tools: [{ name: "bash" }],
+            },
+            {
+              name: "bigbud_remote_workspace",
+              startupStatus: "ready",
+              tools: [{ name: "bash" }],
+            },
+          ],
+        },
+        ["bigbud_remote_workspace"],
+      ),
+    ).toBe(false);
+  });
 });

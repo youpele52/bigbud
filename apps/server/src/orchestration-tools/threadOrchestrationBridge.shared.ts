@@ -8,6 +8,10 @@ export interface ThreadOrchestrationHttpConfig {
   readonly port: number;
   readonly threadId: string;
   readonly token: string;
+  /** Stable provider-session boundary used to scope MCP request identities. */
+  readonly providerSessionId?: string;
+  /** Durable bridge-local state used when the provider exposes no originating tool identity. */
+  readonly providerInvocationStatePath?: string;
 }
 
 export interface ThreadOrchestrationSessionBridgeInput {
@@ -16,6 +20,7 @@ export interface ThreadOrchestrationSessionBridgeInput {
   readonly host: string | undefined;
   readonly port: number;
   readonly serverName?: string;
+  readonly providerSessionId?: string;
 }
 
 export const THREAD_ORCHESTRATION_API_PATH = "/api/internal/thread-tools";
@@ -79,6 +84,7 @@ export function resolveThreadOrchestrationHttpConfig(
     port: input.port,
     threadId: input.threadId,
     token,
+    providerSessionId: input.providerSessionId ?? input.threadId,
   };
 }
 
@@ -111,6 +117,83 @@ export function renderCallOrchestrationToolSource(): string {
     "  return payload;",
     "}",
   ].join("\n");
+}
+
+export function renderMcpInvocationIdentitySource(errorCode: string): string {
+  return [
+    "const invocationProcessId = `${process.pid}:${Date.now()}:${process.hrtime.bigint()}`;",
+    "let invocationStateLoad;",
+    "let invocationStateQueue = Promise.resolve();",
+    "function invocationStateKey(requestId) {",
+    "  return `${typeof requestId}:${String(requestId)}`;",
+    "}",
+    "async function writeInvocationState(state) {",
+    "  if (!CONFIG.providerInvocationStatePath) return;",
+    "  const statePath = CONFIG.providerInvocationStatePath;",
+    "  await import('node:fs/promises').then(async ({ mkdir, rename, writeFile }) => {",
+    "    await mkdir(dirname(statePath), { recursive: true });",
+    "    const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;",
+    "    await writeFile(temporaryPath, JSON.stringify(state), 'utf8');",
+    "    await rename(temporaryPath, statePath);",
+    "  });",
+    "}",
+    "async function loadInvocationState() {",
+    "  if (invocationStateLoad) return invocationStateLoad;",
+    "  invocationStateLoad = (async () => {",
+    "    const state = { nextSequence: 1, entries: {} };",
+    "    if (CONFIG.providerInvocationStatePath) {",
+    "      try {",
+    "        const { readFile } = await import('node:fs/promises');",
+    "        const saved = JSON.parse(await readFile(CONFIG.providerInvocationStatePath, 'utf8'));",
+    "        if (Number.isSafeInteger(saved?.nextSequence) && saved.nextSequence > 0) state.nextSequence = saved.nextSequence;",
+    "        if (saved?.entries && typeof saved.entries === 'object') state.entries = saved.entries;",
+    "      } catch (error) {",
+    "        if (error?.code !== 'ENOENT') throw error;",
+    "      }",
+    "      state.processId = invocationProcessId;",
+    "      await writeInvocationState(state);",
+    "    }",
+    "    return state;",
+    "  })();",
+    "  return invocationStateLoad;",
+    "}",
+    "function withInvocationStateLock(task) {",
+    "  const previous = invocationStateQueue;",
+    "  let release;",
+    "  invocationStateQueue = new Promise((resolve) => { release = resolve; });",
+    "  return previous.then(task).finally(() => release());",
+    "}",
+    "async function resolveMcpInvocationId(request) {",
+    "  const sessionId = String(CONFIG.providerSessionId || CONFIG.threadId);",
+    "  const scoped = (prefix, value) => {",
+    "    const identity = `${prefix}:${sessionId}:${value}`;",
+    "    return identity.length <= 200 ? identity : `${prefix}:${createHash('sha256').update(identity).digest('hex')}`;",
+    "  };",
+    "  const metadataId = request.params?._meta?.['bigbud/toolInvocationId'];",
+    "  if (typeof metadataId === 'string' && /^[\\x21-\\x7e]{1,200}$/.test(metadataId)) return scoped('mcp-meta', metadataId);",
+    "  const requestId = request.id;",
+    "  if ((typeof requestId !== 'string' && typeof requestId !== 'number') || (typeof requestId === 'number' && !Number.isSafeInteger(requestId))) throw new Error(`${ERROR_CODE}: tools/call must include a standard JSON-RPC request id. No work was dispatched.`);",
+    "  const typedIdentity = invocationStateKey(requestId);",
+    "  if (!CONFIG.providerInvocationStatePath) {",
+    "    if (!/^[\\x21-\\x7e]{1,200}$/.test(String(requestId))) throw new Error(`${ERROR_CODE}: the JSON-RPC request id is not a bounded stable identity. No work was dispatched.`);",
+    "    return scoped('mcp-request', typedIdentity);",
+    "  }",
+    "  return withInvocationStateLock(async () => {",
+    "    const state = await loadInvocationState();",
+    "    const previous = state.entries[typedIdentity];",
+    "    if (previous) {",
+    "      if (previous.processId !== invocationProcessId) throw new Error(`${ERROR_CODE}_REPLAY_AMBIGUOUS: the provider reused a request identity after bridge restart. No work was dispatched.`);",
+    "      return scoped('mcp-sequence', previous.sequence);",
+    "    }",
+    "    const sequence = state.nextSequence++;",
+    "    state.entries[typedIdentity] = { processId: invocationProcessId, sequence };",
+    "    await writeInvocationState(state);",
+    "    return scoped('mcp-sequence', sequence);",
+    "  });",
+    "}",
+  ]
+    .join("\n")
+    .replaceAll("${ERROR_CODE}", errorCode);
 }
 
 export function renderResolveCurrentThreadIdSource(): string {

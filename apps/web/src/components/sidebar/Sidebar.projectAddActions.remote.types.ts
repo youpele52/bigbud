@@ -1,6 +1,10 @@
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
-import type { RemoteProjectAuthMode, RemoteProjectDraft } from "./Sidebar.projects.logic";
+import type {
+  RemoteProjectAuthMode,
+  RemoteProjectDraft,
+  RemoteProjectTransport,
+} from "./Sidebar.projects.logic";
 import type {
   CreateProjectInput,
   CreateProjectResult,
@@ -39,14 +43,16 @@ export interface SidebarRemoteProjectAddActionsOutput {
   readonly openRemoteProjectEditDialog: (project: Project) => void;
   readonly closeRemoteProjectDialog: () => void;
   readonly updateRemoteProjectDraft: <
-    K extends RemoteProjectField | "authMode" | "providerRuntimeLocation",
+    K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation",
   >(
     field: K,
     value: K extends "authMode"
       ? RemoteProjectAuthMode
-      : K extends "providerRuntimeLocation"
-        ? ProviderRuntimeLocation
-        : string,
+      : K extends "remoteTransport"
+        ? RemoteProjectTransport
+        : K extends "providerRuntimeLocation"
+          ? ProviderRuntimeLocation
+          : string,
   ) => void;
   readonly submitRemoteProjectDialog: () => Promise<void>;
   readonly remoteAgentInstallRequest: SidebarRemoteAgentInstallRequest | null;

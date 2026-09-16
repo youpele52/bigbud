@@ -154,7 +154,8 @@ fn take_over_mismatched_supervisor(
     let peer = PeerProcess::open(peer_pid)?;
     let mut resume = ResumeGuard::stop(peer)?;
     let journal_has_active_work =
-        crate::operations::journal::inspect_active_operations(journal_path).unwrap_or(true);
+        crate::operations::journal::inspect_active_operations(journal_path)
+            .map_err(io::Error::other)?;
     if journal_has_active_work || has_live_children(peer_pid)? {
         return Ok(SupervisorPreparation::BlockedActiveWork);
     }

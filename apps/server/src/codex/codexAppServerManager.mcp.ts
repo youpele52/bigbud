@@ -41,16 +41,11 @@ export function hasReadyMcpServers(
 
   const expected = new Set(expectedServerNames);
   const ready = new Set<string>();
+  const failed = new Set<string>();
 
   for (const entry of readMcpServerStatusEntries(value)) {
     const name = typeof entry.name === "string" ? entry.name : undefined;
     if (!name || !expected.has(name)) {
-      continue;
-    }
-
-    const tools = Array.isArray(entry.tools) ? entry.tools : undefined;
-    if (tools && tools.length > 0) {
-      ready.add(name);
       continue;
     }
 
@@ -62,6 +57,19 @@ export function hasReadyMcpServers(
           : typeof entry.state === "string"
             ? entry.state.toLowerCase()
             : undefined;
+    if (startupStatus === "failed") {
+      failed.add(name);
+      ready.delete(name);
+      continue;
+    }
+    if (failed.has(name)) {
+      continue;
+    }
+    const tools = Array.isArray(entry.tools) ? entry.tools : undefined;
+    if (tools && tools.length > 0) {
+      ready.add(name);
+      continue;
+    }
     if (
       startupStatus === "ready" ||
       startupStatus === "running" ||

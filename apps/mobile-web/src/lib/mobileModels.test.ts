@@ -27,6 +27,26 @@ describe("mobileModels", () => {
     expect(approvals[0]?.requestKind).toBe("command");
   });
 
+  it("redacts approval details before rendering them", () => {
+    const approvals = derivePendingApprovals([
+      {
+        id: "event-1",
+        tone: "approval",
+        kind: "approval.requested",
+        summary: "Approval requested",
+        payload: {
+          requestId: "req-1",
+          requestType: "exec_command_approval",
+          detail: "Open wss://desktop.test/mobile-ws?token=secret",
+        },
+        turnId: null,
+        createdAt: "2026-06-24T12:00:00.000Z",
+      },
+    ] as never);
+
+    expect(approvals[0]?.detail).toBe("Open [websocket address redacted]");
+  });
+
   it("drops approvals once they are resolved", () => {
     const approvals = derivePendingApprovals([
       {

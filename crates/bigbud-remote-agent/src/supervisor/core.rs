@@ -1,34 +1,32 @@
+use super::control::exit_supervisor;
+use super::shutdown_response;
+use crate::{AgentSession, workspace_watch_event_frame};
+use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
+use bigbud_workspace_watch::WorkspaceWatchRegistry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use std::path::Path;
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
-
-use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame};
-use bigbud_workspace_watch::WorkspaceWatchRegistry;
-
-use crate::{AgentSession, ProcessJob, process::ProcessOptions, workspace_watch_event_frame};
-
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
-
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 #[cfg(unix)]
 pub(super) type Writer = Arc<Mutex<BufWriter<UnixStream>>>;
-
 #[cfg(unix)]
 pub(super) type Subscribers = Arc<Mutex<HashMap<String, Vec<Writer>>>>;
-
 #[cfg(unix)]
 #[path = "io.rs"]
 mod io_helpers;
 #[cfg(unix)]
+#[path = "jobs.rs"]
+mod jobs;
+#[cfg(unix)]
 use io_helpers::*;
-
+#[cfg(unix)]
+use jobs::{spawn_process_job, spawn_pty_job};
 #[cfg(test)]
 #[path = "test_hooks.rs"]
 mod test_hooks;
-
 #[cfg(unix)]
 pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<()> {
     let listener = UnixListener::bind(socket_path)?;
@@ -65,14 +63,12 @@ pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<(
     }
     Ok(())
 }
-
 #[cfg(unix)]
 fn set_private_socket_permissions(socket_path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o700))
 }
-
 #[cfg(not(unix))]
 pub fn run_supervisor(_session: AgentSession, _socket_path: &Path) -> io::Result<()> {
     Err(io::Error::new(
@@ -80,7 +76,6 @@ pub fn run_supervisor(_session: AgentSession, _socket_path: &Path) -> io::Result
         "the remote agent supervisor requires Unix-domain sockets on this platform",
     ))
 }
-
 #[cfg(unix)]
 fn serve_connection(
     stream: UnixStream,
@@ -125,10 +120,12 @@ fn serve_connection_loop(
         };
         match frame.payload {
             Some(bigbud_protocol::v1::frame::Payload::WorkspaceWatchStartRequest(request)) => {
-                let prepared = sessions
-                    .lock()
-                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
-                    .prepare_workspace_watch_start(request);
+                let prepared = {
+                    let session = sessions
+                        .lock()
+                        .map_err(|_| io::Error::other("agent session lock was poisoned"))?;
+                    session.prepare_workspace_watch_start(request)
+                };
                 match prepared {
                     Ok(prepared) => {
                         let subscription_id = prepared.response.subscription_id.clone();
@@ -165,10 +162,12 @@ fn serve_connection_loop(
                 }
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
-                let prepared = sessions
-                    .lock()
-                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
-                    .prepare_process_request(request);
+                let prepared = {
+                    let mut session = sessions
+                        .lock()
+                        .map_err(|_| io::Error::other("agent session lock was poisoned"))?;
+                    session.prepare_process_request(request)
+                };
                 match prepared {
                     Ok(prepared) => {
                         let response_result = write_responses(&writer, prepared.responses);
@@ -186,6 +185,16 @@ fn serve_connection_loop(
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessAttachRequest(request)) => {
                 let operation_id = request.operation_id.clone();
+                if !sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                    .is_accepting_work()
+                {
+                    return write_protocol_error(
+                        &writer,
+                        &crate::session::SessionError::Restarting,
+                    );
+                }
                 add_subscriber(&subscribers, &operation_id, Arc::clone(&writer))?;
                 let response = sessions
                     .lock()
@@ -207,10 +216,12 @@ fn serve_connection_loop(
                 }
             }
             Some(bigbud_protocol::v1::frame::Payload::PtyCreateRequest(request)) => {
-                let prepared = sessions
-                    .lock()
-                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
-                    .prepare_pty_create(request);
+                let prepared = {
+                    let mut session = sessions
+                        .lock()
+                        .map_err(|_| io::Error::other("agent session lock was poisoned"))?;
+                    session.prepare_pty_create(request)
+                };
                 match prepared {
                     Ok((response, job)) => {
                         let pty_id = match &response.payload {
@@ -230,6 +241,16 @@ fn serve_connection_loop(
             }
             Some(bigbud_protocol::v1::frame::Payload::PtyAttachRequest(request)) => {
                 let pty_id = request.pty_id.clone();
+                if !sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                    .is_accepting_work()
+                {
+                    return write_protocol_error(
+                        &writer,
+                        &crate::session::SessionError::Restarting,
+                    );
+                }
                 add_subscriber(&subscribers, &pty_id, Arc::clone(&writer))?;
                 let response = sessions
                     .lock()
@@ -250,6 +271,66 @@ fn serve_connection_loop(
                     }
                 }
             }
+            Some(bigbud_protocol::v1::frame::Payload::SupervisorShutdownRequest(request)) => {
+                let active_watchers = !watch_ids.is_empty() || watchers.has_active_subscriptions();
+                let active_subscribers = subscribers
+                    .lock()
+                    .map_err(|_| io::Error::other("subscriber lock was poisoned"))?
+                    .values()
+                    .any(|writers| !writers.is_empty());
+                let (response, accepted) = sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session lock was poisoned"))
+                    .map(|mut session| {
+                        shutdown_response(
+                            &mut session,
+                            request,
+                            active_watchers,
+                            active_subscribers,
+                        )
+                    })?;
+                write_responses(&writer, vec![response])?;
+                if accepted {
+                    let graceful_deadline =
+                        std::time::Instant::now() + std::time::Duration::from_secs(2);
+                    let mut settled = false;
+                    while std::time::Instant::now() < graceful_deadline {
+                        settled = sessions
+                            .lock()
+                            .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                            .restart_work_idle();
+                        if settled {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    if !settled {
+                        sessions
+                            .lock()
+                            .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                            .force_restart_work();
+                        let force_deadline =
+                            std::time::Instant::now() + std::time::Duration::from_secs(2);
+                        while std::time::Instant::now() < force_deadline {
+                            settled = sessions
+                                .lock()
+                                .map_err(|_| io::Error::other("agent session lock was poisoned"))?
+                                .restart_work_idle();
+                            if settled {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                    }
+                    if !settled {
+                        eprintln!(
+                            "remote agent restart shutdown could not verify all owned work stopped"
+                        );
+                    } else {
+                        exit_supervisor();
+                    }
+                }
+            }
             other_payload => {
                 let frame = bigbud_protocol::v1::Frame {
                     payload: other_payload,
@@ -265,92 +346,6 @@ fn serve_connection_loop(
             }
         }
     }
-}
-
-#[cfg(unix)]
-fn spawn_pty_job(
-    sessions: Arc<Mutex<AgentSession>>,
-    subscribers: Subscribers,
-    job: crate::pty::PtyJob,
-) {
-    let pty_id = job.handle.id.clone();
-    let pid = job.handle.pid;
-    std::thread::spawn(move || {
-        crate::pty::run_events(job.reader, pid, |event| match event {
-            crate::pty::PtyEvent::Output(bytes) => {
-                let response = sessions
-                    .lock()
-                    .ok()
-                    .and_then(|mut session| session.record_pty_output(&pty_id, bytes).ok());
-                if let Some(response) = response {
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
-                }
-            }
-            crate::pty::PtyEvent::Exited { exit_code, signal } => {
-                let response = sessions
-                    .lock()
-                    .ok()
-                    .and_then(|mut session| session.complete_pty(&pty_id, exit_code, signal).ok());
-                if let Some(response) = response {
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
-                }
-                remove_all_subscribers(&subscribers, &pty_id);
-            }
-        });
-    });
-}
-
-#[cfg(unix)]
-fn spawn_process_job(
-    sessions: Arc<Mutex<AgentSession>>,
-    subscribers: Subscribers,
-    job: ProcessJob,
-) {
-    std::thread::spawn(move || {
-        let operation_id = job.operation_id.clone();
-        let (output_sender, output_receiver) = mpsc::channel();
-        let process_thread = std::thread::spawn({
-            let process_job = job.clone();
-            move || {
-                crate::process::run_bounded_process_with_output(
-                    &process_job.workspace_root,
-                    &process_job.command,
-                    &process_job.args,
-                    ProcessOptions {
-                        environment: &process_job.environment,
-                        stdin_bytes: &process_job.stdin,
-                        timeout: process_job.timeout,
-                        max_output_bytes: process_job.max_output_bytes,
-                        cancellation: Some(&process_job.cancellation),
-                    },
-                    Arc::new(move |stream, bytes| {
-                        let _ = output_sender.send((stream, bytes.to_vec()));
-                    }),
-                )
-            }
-        });
-        for (stream, bytes) in output_receiver {
-            let response = sessions.lock().ok().and_then(|mut session| {
-                session
-                    .record_process_output(&operation_id, stream, bytes)
-                    .ok()
-            });
-            if let Some(response) = response {
-                let _ = broadcast_response(&subscribers, &operation_id, response);
-            }
-        }
-        let result = process_thread
-            .join()
-            .unwrap_or(Err(crate::process::ProcessError::ReaderJoin));
-        let responses = sessions
-            .lock()
-            .ok()
-            .and_then(|mut session| session.complete_streamed_process_job(job, result).ok());
-        if let Some(responses) = responses {
-            let _ = broadcast_responses(&subscribers, &operation_id, responses);
-            remove_all_subscribers(&subscribers, &operation_id);
-        }
-    });
 }
 
 #[cfg(unix)]

@@ -2,6 +2,12 @@ import type { CursorModelOptions, ModelCapabilities, ServerProviderModel } from 
 import type * as EffectAcpSchema from "effect-acp/schema";
 
 import {
+  buildAcpEffortLevels,
+  findAcpEffortConfigOption,
+  flattenAcpSessionConfigSelectOptions,
+  resolveAcpEffortChoice,
+} from "../../acp/acpSessionEffort.ts";
+import {
   type CursorAcpDiscoveredModel,
   type CursorSessionSelectOption,
   EMPTY_CAPABILITIES,
@@ -10,37 +16,7 @@ import {
 export function flattenSessionConfigSelectOptions(
   configOption: EffectAcpSchema.SessionConfigOption | undefined,
 ): ReadonlyArray<CursorSessionSelectOption> {
-  if (!configOption || configOption.type !== "select") {
-    return [];
-  }
-  return configOption.options.flatMap((entry) =>
-    "value" in entry
-      ? [{ value: entry.value.trim(), name: entry.name.trim() } satisfies CursorSessionSelectOption]
-      : entry.options.map(
-          (option) =>
-            ({
-              value: option.value.trim(),
-              name: option.name.trim(),
-            }) satisfies CursorSessionSelectOption,
-        ),
-  );
-}
-
-function normalizeCursorReasoningValue(value: string | null | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase();
-  switch (normalized) {
-    case "low":
-    case "medium":
-    case "high":
-    case "max":
-      return normalized;
-    case "xhigh":
-    case "extra-high":
-    case "extra high":
-      return "xhigh";
-    default:
-      return undefined;
-  }
+  return flattenAcpSessionConfigSelectOptions(configOption);
 }
 
 export function findCursorModelConfigOption(
@@ -49,35 +25,10 @@ export function findCursorModelConfigOption(
   return configOptions.find((option) => option.category === "model");
 }
 
-function getCursorConfigOptionCategory(option: EffectAcpSchema.SessionConfigOption): string {
-  return option.category?.trim().toLowerCase() ?? "";
-}
-
-function isCursorEffortConfigOption(option: EffectAcpSchema.SessionConfigOption): boolean {
-  const id = option.id.trim().toLowerCase();
-  const name = option.name.trim().toLowerCase();
-  return (
-    id === "effort" ||
-    id === "reasoning" ||
-    name === "effort" ||
-    name === "reasoning" ||
-    name.includes("effort") ||
-    name.includes("reasoning")
-  );
-}
-
 function findCursorEffortConfigOption(
   configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>,
 ): EffectAcpSchema.SessionConfigOption | undefined {
-  const candidates = configOptions.filter(
-    (option) => option.type === "select" && isCursorEffortConfigOption(option),
-  );
-  return (
-    candidates.find((option) => getCursorConfigOptionCategory(option) === "model_option") ??
-    candidates.find((option) => option.id.trim().toLowerCase() === "effort") ??
-    candidates.find((option) => getCursorConfigOptionCategory(option) === "thought_level") ??
-    candidates[0]
-  );
+  return findAcpEffortConfigOption(configOptions);
 }
 
 function isCursorContextConfigOption(option: EffectAcpSchema.SessionConfigOption): boolean {
@@ -118,25 +69,7 @@ export function buildCursorCapabilitiesFromConfigOptions(
     return EMPTY_CAPABILITIES;
   }
 
-  const reasoningConfig = findCursorEffortConfigOption(configOptions);
-  const reasoningEffortLevels =
-    reasoningConfig?.type === "select"
-      ? flattenSessionConfigSelectOptions(reasoningConfig).flatMap((entry) => {
-          const normalizedValue = normalizeCursorReasoningValue(entry.value);
-          if (!normalizedValue) {
-            return [];
-          }
-          return [
-            {
-              value: normalizedValue,
-              label: entry.name,
-              ...(normalizeCursorReasoningValue(reasoningConfig.currentValue) === normalizedValue
-                ? { isDefault: true }
-                : {}),
-            },
-          ];
-        })
-      : [];
+  const effortCapabilities = buildAcpEffortLevels(configOptions, EMPTY_CAPABILITIES);
 
   const contextOption = configOptions.find(
     (option) => option.category === "model_config" && isCursorContextConfigOption(option),
@@ -166,7 +99,7 @@ export function buildCursorCapabilitiesFromConfigOptions(
   );
 
   return {
-    reasoningEffortLevels,
+    ...effortCapabilities,
     supportsFastMode: fastOption ? isBooleanLikeConfigOption(fastOption) : false,
     supportsThinkingToggle: thinkingOption ? isBooleanLikeConfigOption(thinkingOption) : false,
     contextWindowOptions,
@@ -192,6 +125,14 @@ export function buildCursorDiscoveredModels(
       } satisfies ServerProviderModel,
     ];
   });
+}
+
+export function hasCursorModelCapabilities(
+  model: Pick<ServerProviderModel, "capabilities">,
+): boolean {
+  // Cache and seed overlays are intentionally probeable again. Only a live
+  // ACP response means this model's capability metadata is settled.
+  return model.capabilities?.effortMetadataOrigin === "live";
 }
 
 export function buildCursorDiscoveredModelsFromConfigOptions(
@@ -272,13 +213,9 @@ export function resolveCursorAcpConfigUpdates(
   const updates: Array<{ readonly configId: string; readonly value: string | boolean }> = [];
 
   const reasoningOption = findCursorEffortConfigOption(configOptions);
-  const requestedReasoning = normalizeCursorReasoningValue(modelOptions?.reasoning);
+  const requestedReasoning = modelOptions?.reasoning?.trim();
   if (reasoningOption && requestedReasoning) {
-    const value = findCursorSelectOptionValue(reasoningOption, (option) => {
-      const normalizedValue = normalizeCursorReasoningValue(option.value);
-      const normalizedName = normalizeCursorReasoningValue(option.name);
-      return normalizedValue === requestedReasoning || normalizedName === requestedReasoning;
-    });
+    const value = resolveAcpEffortChoice(reasoningOption, requestedReasoning);
     if (value) {
       updates.push({ configId: reasoningOption.id, value });
     }

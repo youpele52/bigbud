@@ -1,54 +1,54 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
 
 import { useMobileOrchestrationSync } from "../hooks/useMobileOrchestrationSync";
-import { MobileRpcClient } from "../lib/mobileRpc";
+import { useMobileConnection } from "../lib/mobileConnection";
 import { resolveMobileWebsocketUrl } from "../lib/mobileSession";
+import {
+  initialMobileConnectionState,
+  type MobileConnectionState,
+} from "../logic/mobileConnection.logic";
+import { initialMobileRecoveryState } from "../logic/mobileRecovery.types";
 import { useMobileSessionState } from "./MobileSessionContext";
 
 interface MobileRpcState {
-  readonly client: MobileRpcClient | null;
+  readonly client: ReturnType<typeof useMobileConnection>["client"];
   readonly wsUrl: string | null;
-  readonly connectionError: string | null;
+  readonly connection: MobileConnectionState;
+  readonly restart: () => void;
+  readonly recovery: ReturnType<typeof useMobileOrchestrationSync>["controller"];
+  readonly recoveryState: ReturnType<typeof useMobileOrchestrationSync>["recoveryState"];
 }
 
 const MobileRpcContext = createContext<MobileRpcState>({
   client: null,
   wsUrl: null,
-  connectionError: null,
+  connection: initialMobileConnectionState(),
+  restart: () => undefined,
+  recovery: null,
+  recoveryState: initialMobileRecoveryState(),
 });
 
 export function MobileRpcProvider({ children }: { children: ReactNode }) {
   const { session } = useMobileSessionState();
-  const queryClient = useQueryClient();
+  const recoveryRef = useRef<ReturnType<typeof useMobileOrchestrationSync>["controller"]>(null);
   const wsUrl = useMemo(() => (session ? resolveMobileWebsocketUrl(session) : null), [session]);
-  const client = useMemo(
-    () =>
-      wsUrl
-        ? new MobileRpcClient(wsUrl, {
-            onOpen: () => {
-              void queryClient.invalidateQueries({ queryKey: ["mobile-snapshot"] });
-              void queryClient.invalidateQueries({ queryKey: ["mobile-thread"] });
-            },
-          })
-        : null,
-    [queryClient, wsUrl],
-  );
-  useMobileOrchestrationSync(session, client);
-
-  useEffect(() => {
-    return () => {
-      void client?.dispose();
-    };
-  }, [client]);
+  const { client, connection, restart } = useMobileConnection(session, wsUrl, {
+    onClose: () => recoveryRef.current?.transportClosed(),
+    onOpen: () => recoveryRef.current?.transportOpened(),
+  });
+  const { controller: recovery, recoveryState } = useMobileOrchestrationSync(session, client);
+  recoveryRef.current = recovery;
 
   const value = useMemo<MobileRpcState>(
     () => ({
       client,
       wsUrl,
-      connectionError: null,
+      connection,
+      restart,
+      recovery,
+      recoveryState,
     }),
-    [client, wsUrl],
+    [client, connection, recovery, recoveryState, restart, wsUrl],
   );
 
   return <MobileRpcContext.Provider value={value}>{children}</MobileRpcContext.Provider>;

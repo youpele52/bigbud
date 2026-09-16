@@ -23,14 +23,15 @@ import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTa
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../ui/toast";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
-import { isRemoteExecutionTargetId, isSshExecutionTargetId } from "./Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
 import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
 import type {
   SidebarProjectActionsInput,
   SidebarProjectActionsOutput,
 } from "./Sidebar.projectActions.types";
+import { useSidebarProjectReconnectActions } from "./Sidebar.projectActions.reconnect";
+import { buildProjectContextMenuItems } from "./Sidebar.projectActions.menu";
 
-/** Encapsulates all project-level actions for the sidebar. */
 export function useSidebarProjectActions({
   projects,
   threadIdsByProjectId,
@@ -53,6 +54,7 @@ export function useSidebarProjectActions({
     (store) => store.verifiedExecutionTargetIds,
   );
   const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
+  const reconnect = useSidebarProjectReconnectActions(projects);
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -76,7 +78,6 @@ export function useSidebarProjectActions({
     markProjectRenameCommitted,
     commitProjectRename,
   } = useSidebarProjectRenameActions();
-
   const dismissPendingProjectDeleteConfirmation = useCallback(() => {
     setPendingProjectDeleteConfirmation(null);
   }, []);
@@ -94,7 +95,6 @@ export function useSidebarProjectActions({
     },
     [projects, threadIdsByProjectId],
   );
-
   const confirmPendingProjectDelete = useCallback(async () => {
     if (!pendingProjectDeleteConfirmation) {
       return;
@@ -159,7 +159,6 @@ export function useSidebarProjectActions({
     routeThreadId,
     threadIdsByProjectId,
   ]);
-
   const handleProjectContextMenuAsync = useCallback(
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
@@ -170,15 +169,15 @@ export function useSidebarProjectActions({
         return;
       }
 
-      const menuItems = [
-        { id: "rename", label: "Rename project" },
-        ...(isSshExecutionTargetId(resolveWorkspaceExecutionTargetId(project))
-          ? ([{ id: "edit-ssh", label: "Edit SSH configuration" }] as const)
-          : []),
-        ...(project.cwd ? ([{ id: "copy-path", label: "Copy Project Path" }] as const) : []),
-        { id: "delete", label: "Remove project", destructive: true },
-      ];
+      const menuItems = buildProjectContextMenuItems({
+        project,
+        reconnectDisabled: reconnect.isReconnectPending(projectId),
+      });
       const clicked = await api.contextMenu.show(menuItems, position);
+      if (clicked === "reconnect") {
+        reconnect.requestReconnect(projectId);
+        return;
+      }
       if (clicked === "rename") {
         cancelThreadRename();
         setRenamingProjectId(projectId);
@@ -210,6 +209,7 @@ export function useSidebarProjectActions({
       requestProjectDelete,
       setRenamingProjectId,
       setRenamingProjectTitle,
+      reconnect,
     ],
   );
 
@@ -386,6 +386,9 @@ export function useSidebarProjectActions({
     dismissPendingProjectDeleteConfirmation,
     confirmPendingProjectDelete,
     requestProjectDelete,
+    pendingReconnect: reconnect.pendingReconnect,
+    dismissReconnect: reconnect.dismissReconnect,
+    confirmReconnect: reconnect.confirmReconnect,
     handleProjectContextMenu,
     handleProjectDragStart,
     handleProjectDragEnd,

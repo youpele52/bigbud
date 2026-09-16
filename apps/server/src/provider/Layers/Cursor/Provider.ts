@@ -1,26 +1,45 @@
 import type { CursorSettings, ServerProvider, ServerSettingsError } from "@bigbud/contracts";
-import { Cause, Effect, Equal, Exit, Layer, Option, Result, Stream } from "effect";
+import {
+  Cause,
+  Effect,
+  Equal,
+  Exit,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Result,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
   buildServerProvider,
   collectStreamAsString,
   isCommandMissingCause,
+  providerModelsFromSettings,
   type CommandResult,
 } from "../../providerSnapshot.ts";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import { CursorProvider } from "../../Services/Cursor/Provider.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
+import { ServerConfig } from "../../../startup/config.ts";
 import {
   ABOUT_TIMEOUT_MS,
   buildCursorProviderSnapshot,
   isCursorAboutJsonFormatUnsupported,
   parseCursorAboutOutput,
 } from "./Provider.about.ts";
-import { discoverCursorModelsViaAcp } from "./Provider.discovery.ts";
+import {
+  discoverCursorModelCapabilitiesViaAcp,
+  discoverCursorModelsViaAcp,
+} from "./Provider.discovery.ts";
+import { hasCursorModelCapabilities } from "./Provider.config.ts";
 import {
   CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS,
   CURSOR_REFRESH_INTERVAL,
+  EMPTY_CAPABILITIES,
   getCursorFallbackModels,
   PROVIDER,
 } from "./Provider.shared.ts";
@@ -34,6 +53,8 @@ export {
 } from "./Provider.config.ts";
 export { buildCursorProviderSnapshot, parseCursorAboutOutput } from "./Provider.about.ts";
 export { discoverCursorModelsViaAcp } from "./Provider.discovery.ts";
+export { discoverCursorModelCapabilitiesViaAcp } from "./Provider.discovery.ts";
+export { hasCursorModelCapabilities } from "./Provider.config.ts";
 export { getCursorFallbackModels } from "./Provider.shared.ts";
 
 function buildInitialCursorProviderSnapshot(cursorSettings: CursorSettings): ServerProvider {
@@ -214,7 +235,20 @@ export const CursorProviderLive = Layer.effect(
   CursorProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const decorateSnapshot = makeProviderEffortCacheDecorator<CursorSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) =>
+        JSON.stringify({ apiEndpoint: settings.apiEndpoint, customModels: settings.customModels }),
+    });
 
     const checkProvider = checkCursorProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
@@ -232,6 +266,41 @@ export const CursorProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialCursorProviderSnapshot,
       checkProvider,
+      decorateSnapshot,
+      enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {
+        if (
+          !settings.enabled ||
+          snapshot.auth.status === "unauthenticated" ||
+          !snapshot.models.some((model) => !model.isCustom && !hasCursorModelCapabilities(model))
+        ) {
+          return Effect.void;
+        }
+
+        return discoverCursorModelCapabilitiesViaAcp(settings, snapshot.models).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.flatMap((discoveredModels) => {
+            if (discoveredModels.length === 0) return Effect.void;
+            const enrichedSnapshot = {
+              ...snapshot,
+              models: providerModelsFromSettings(
+                discoveredModels,
+                PROVIDER,
+                settings.customModels,
+                EMPTY_CAPABILITIES,
+              ),
+            };
+            return decorateSnapshot({ settings, snapshot: enrichedSnapshot, generation }).pipe(
+              Effect.flatMap(publishSnapshot),
+            );
+          }),
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Cursor ACP background capability enrichment failed", {
+              models: snapshot.models.map((model) => model.slug),
+              cause: Cause.pretty(cause),
+            }).pipe(Effect.asVoid),
+          ),
+        );
+      },
       refreshInterval: CURSOR_REFRESH_INTERVAL,
     });
   }),

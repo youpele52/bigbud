@@ -9,6 +9,7 @@ import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase, normalizeString } from "./Adapter.stream.utils.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { makeOpencodeTextStream } from "./Adapter.stream.text.ts";
 
 type MapEventContext = {
   readonly stamp: { readonly eventId: EventId; readonly createdAt: string };
@@ -47,6 +48,10 @@ export function mapMessagePartDelta(
     return [];
   }
 
+  const textStream = (session.textStream ??= makeOpencodeTextStream());
+  const nextDelta = textStream.delta(itemId, delta);
+  if (!nextDelta) return [];
+
   return [
     {
       ...eventBase({
@@ -62,7 +67,7 @@ export function mapMessagePartDelta(
       type: "content.delta",
       payload: {
         streamKind,
-        delta,
+        delta: nextDelta,
       },
     },
   ];

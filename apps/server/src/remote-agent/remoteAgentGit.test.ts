@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
+import { RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import { makeRemoteAgentGitCoreExecutor, makeRemoteAgentGitExecutor } from "./remoteAgentGit.ts";
 
 function makeProcessClient(input: {
@@ -53,6 +54,7 @@ describe("remote agent Git executor", () => {
         executionTargetId: "ssh:example",
         cwd: "/remote/project",
         operation: "git.status",
+        operationId: "git-operation-1",
         args: ["status", "--short"],
         stdin: "input",
       }),
@@ -83,6 +85,7 @@ describe("remote agent Git executor", () => {
       executionTargetId: "ssh:example",
       cwd: "/remote/project",
       operation: "git.log",
+      operationId: "git-operation-3",
       args: ["log"],
     } as const;
 
@@ -92,6 +95,62 @@ describe("remote agent Git executor", () => {
     await expect(
       Effect.runPromise(execute({ ...input, truncateOutputAtMaxBytes: true })),
     ).resolves.toMatchObject({ stdoutTruncated: true, stderrTruncated: true });
+  });
+
+  it("reuses one Git operation identity after transport loss", async () => {
+    const received: Array<Record<string, unknown>> = [];
+    let markerWrites = 0;
+    let accepted = false;
+    const processClient = makeProcessClient({ received });
+    const run = processClient.run;
+    processClient.run = async (request) => {
+      if (!accepted) {
+        accepted = true;
+        markerWrites++;
+        received.push(request as unknown as Record<string, unknown>);
+        throw new RemoteAgentConnectionError("transport lost after accepted Git operation");
+      }
+      return run(request);
+    };
+    const execute = makeRemoteAgentGitExecutor({ resolve: async () => processClient });
+    const retryable = execute({
+      executionTargetId: "ssh:example",
+      cwd: "/remote/project",
+      operation: "git.commit",
+      operationId: "git-retry-1",
+      args: ["commit", "-m", "message"],
+    });
+
+    await expect(Effect.runPromise(retryable)).rejects.toThrow("transport lost");
+    await Effect.runPromise(retryable);
+
+    expect(markerWrites).toBe(1);
+    expect(received.map((request) => request.operationId)).toEqual(["git-retry-1", "git-retry-1"]);
+  });
+
+  it("keeps observational Git status out of durable owner reservations", async () => {
+    const received: Array<Record<string, unknown>> = [];
+    let ownedCalls = 0;
+    const processClient = makeProcessClient({ received });
+    const execute = makeRemoteAgentGitExecutor({
+      resolve: async () => processClient,
+      runOwned: async () => {
+        ownedCalls++;
+        throw new Error("status must not reserve an owner");
+      },
+    });
+
+    await Effect.runPromise(
+      execute({
+        executionTargetId: "ssh:example",
+        cwd: "/remote/project",
+        operation: "git.status",
+        args: ["status", "--short"],
+      }),
+    );
+
+    expect(ownedCalls).toBe(0);
+    expect(received).toHaveLength(1);
   });
 
   it("forwards bounded Git environment values without secrets", async () => {

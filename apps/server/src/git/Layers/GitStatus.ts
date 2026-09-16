@@ -13,6 +13,7 @@ import { makeRemoteOps } from "./GitStatus.remotes.ts";
 import { makeUpstreamOps } from "./GitStatus.upstream.ts";
 import { makeCommitOps } from "./GitStatus.commit.ts";
 import { makeReadStatusDetails } from "./GitStatus.details.ts";
+import { gitMutationOperationId } from "./GitCoreExecutor.ts";
 
 export interface GitStatusOps {
   statusDetails: GitCoreShape["statusDetails"];
@@ -95,7 +96,7 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     );
 
   const pushCurrentBranch: GitCoreShape["pushCurrentBranch"] = Effect.fn("pushCurrentBranch")(
-    function* (cwd, fallbackBranch) {
+    function* (cwd, fallbackBranch, _executionTargetId, operationId) {
       const details = yield* statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
       if (!branch) {
@@ -153,12 +154,13 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
             "Cannot push because no git remote is configured for this repository.",
           );
         }
-        yield* runGit("GitCore.pushCurrentBranch.pushWithUpstream", cwd, [
-          "push",
-          "-u",
-          publishRemoteName,
-          `HEAD:refs/heads/${branch}`,
-        ]);
+        yield* runGit(
+          "GitCore.pushCurrentBranch.pushWithUpstream",
+          cwd,
+          ["push", "-u", publishRemoteName, `HEAD:refs/heads/${branch}`],
+          false,
+          { operationId: gitMutationOperationId(operationId, "pushWithUpstream") },
+        );
         return {
           status: "pushed" as const,
           branch,
@@ -171,11 +173,13 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
         Effect.catch(() => Effect.succeed(null)),
       );
       if (currentUpstream) {
-        yield* runGit("GitCore.pushCurrentBranch.pushUpstream", cwd, [
-          "push",
-          currentUpstream.remoteName,
-          `HEAD:${currentUpstream.upstreamBranch}`,
-        ]);
+        yield* runGit(
+          "GitCore.pushCurrentBranch.pushUpstream",
+          cwd,
+          ["push", currentUpstream.remoteName, `HEAD:${currentUpstream.upstreamBranch}`],
+          false,
+          { operationId: gitMutationOperationId(operationId, "pushUpstream") },
+        );
         return {
           status: "pushed" as const,
           branch,
@@ -184,7 +188,9 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
         };
       }
 
-      yield* runGit("GitCore.pushCurrentBranch.push", cwd, ["push"]);
+      yield* runGit("GitCore.pushCurrentBranch.push", cwd, ["push"], false, {
+        operationId: gitMutationOperationId(operationId, "push"),
+      });
       return {
         status: "pushed" as const,
         branch,
@@ -195,7 +201,7 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   );
 
   const pullCurrentBranch: GitCoreShape["pullCurrentBranch"] = Effect.fn("pullCurrentBranch")(
-    function* (cwd) {
+    function* (cwd, _executionTargetId, operationId) {
       const details = yield* statusDetails(cwd);
       const branch = details.branch;
       if (!branch) {
@@ -223,6 +229,7 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
       yield* executeGit("GitCore.pullCurrentBranch.pull", cwd, ["pull", "--ff-only"], {
         timeoutMs: 30_000,
         fallbackErrorMessage: "git pull failed",
+        operationId: gitMutationOperationId(operationId, "pull"),
       });
       const afterSha = yield* runGitStdout(
         "GitCore.pullCurrentBranch.afterSha",
@@ -240,30 +247,34 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     },
   );
 
-  const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(function* (cwd) {
-    const hasOrigin = yield* originRemoteExists(cwd);
-    if (!hasOrigin) {
-      return yield* new GitCommandError({
-        operation: "GitCore.fetch",
-        command: "fetch",
-        cwd,
-        detail: 'No "origin" remote configured.',
+  const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(
+    function* (cwd, _executionTargetId, operationId) {
+      const hasOrigin = yield* originRemoteExists(cwd);
+      if (!hasOrigin) {
+        return yield* new GitCommandError({
+          operation: "GitCore.fetch",
+          command: "fetch",
+          cwd,
+          detail: 'No "origin" remote configured.',
+        });
+      }
+
+      yield* executeGit("GitCore.fetch", cwd, ["fetch", "--quiet"], {
+        timeoutMs: 30_000,
+        fallbackErrorMessage: "git fetch failed",
+        operationId: gitMutationOperationId(operationId, "fetch"),
       });
-    }
 
-    yield* executeGit("GitCore.fetch", cwd, ["fetch", "--quiet"], {
-      timeoutMs: 30_000,
-      fallbackErrorMessage: "git fetch failed",
-    });
-
-    return { status: "fetched" as const };
-  });
+      return { status: "fetched" as const };
+    },
+  );
 
   const discardChanges: GitCoreShape["discardChanges"] = Effect.fn("discardChanges")(
-    function* (cwd) {
+    function* (cwd, _executionTargetId, operationId) {
       yield* executeGit("GitCore.discardChanges", cwd, ["checkout", "--", "."], {
         timeoutMs: 15_000,
         fallbackErrorMessage: "Failed to discard working tree changes",
+        operationId: gitMutationOperationId(operationId, "discard"),
       });
     },
   );

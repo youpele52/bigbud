@@ -1,4 +1,5 @@
 import { Effect, Layer, FileSystem, Path } from "effect";
+import { chmod } from "node:fs/promises";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
@@ -29,7 +30,7 @@ const makeRuntimeSqliteLayer = Effect.fn("makeRuntimeSqliteLayer")(function* (
   return clientModule.layer(config);
 }, Layer.unwrap);
 
-const makeSetup = () =>
+const makeSetup = (dbPath: string) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -39,6 +40,19 @@ const makeSetup = () =>
       yield* runMigrations();
       yield* ensureProjectionThreadsElevatorSummaryColumns(sql);
       yield* installTestProjectionThreadParentTriggers();
+      if (dbPath !== ":memory:") {
+        yield* Effect.promise(async () => {
+          await chmod(dbPath, 0o600);
+          for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+            try {
+              await chmod(sidecar, 0o600);
+            } catch (cause) {
+              if (!(cause instanceof Error) || !("code" in cause) || cause.code !== "ENOENT")
+                throw cause;
+            }
+          }
+        });
+      }
     }),
   );
 
@@ -50,7 +64,7 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
 
   return Layer.provideMerge(
-    makeSetup(),
+    makeSetup(dbPath),
     makeRuntimeSqliteLayer({
       filename: dbPath,
       spanAttributes: {
@@ -65,7 +79,7 @@ export const makeSqliteReadOnlyPersistenceLive = (dbPath: string) =>
   makeRuntimeSqliteLayer({ filename: dbPath, readonly: true });
 
 export const SqlitePersistenceMemory = Layer.provideMerge(
-  makeSetup(),
+  makeSetup(":memory:"),
   makeRuntimeSqliteLayer({ filename: ":memory:" }),
 );
 

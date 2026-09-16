@@ -6,7 +6,7 @@
 import { Effect } from "effect";
 
 import { type GitCoreShape, type GitCommitOptions } from "../Services/GitCore.ts";
-import { type GitHelpers } from "./GitCoreExecutor.ts";
+import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
 
 const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
 const RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
@@ -18,19 +18,24 @@ export function makeCommitOps(helpers: GitHelpers) {
 
   const prepareCommitContext: GitCoreShape["prepareCommitContext"] = Effect.fn(
     "prepareCommitContext",
-  )(function* (cwd, filePaths) {
+  )(function* (cwd, filePaths, _executionTargetId, operationId) {
     if (filePaths && filePaths.length > 0) {
-      yield* runGit("GitCore.prepareCommitContext.reset", cwd, ["reset"]).pipe(
-        Effect.catch(() => Effect.void),
+      yield* runGit("GitCore.prepareCommitContext.reset", cwd, ["reset"], false, {
+        operationId: gitMutationOperationId(operationId, "prepare.reset"),
+      }).pipe(Effect.catch(() => Effect.void));
+      yield* runGit(
+        "GitCore.prepareCommitContext.addSelected",
+        cwd,
+        ["add", "-A", "--", ...filePaths],
+        false,
+        {
+          operationId: gitMutationOperationId(operationId, "prepare.add.selected"),
+        },
       );
-      yield* runGit("GitCore.prepareCommitContext.addSelected", cwd, [
-        "add",
-        "-A",
-        "--",
-        ...filePaths,
-      ]);
     } else {
-      yield* runGit("GitCore.prepareCommitContext.addAll", cwd, ["add", "-A"]);
+      yield* runGit("GitCore.prepareCommitContext.addAll", cwd, ["add", "-A"], false, {
+        operationId: gitMutationOperationId(operationId, "prepare.add.all"),
+      });
     }
 
     const stagedSummary = yield* runGitStdout("GitCore.prepareCommitContext.stagedSummary", cwd, [
@@ -81,6 +86,7 @@ export function makeCommitOps(helpers: GitHelpers) {
           };
     yield* executeGit("GitCore.commit.commit", cwd, args, {
       ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.operationId ? { operationId: options.operationId } : {}),
       ...(progress ? { progress } : {}),
     }).pipe(Effect.asVoid);
     const commitSha = yield* runGitStdout("GitCore.commit.revParseHead", cwd, [

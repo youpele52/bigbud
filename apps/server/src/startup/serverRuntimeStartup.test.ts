@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Deferred, Effect, Fiber, Layer, Metric, Option, Ref, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 
 const writeStartupStatus = vi.hoisted(() => vi.fn());
 vi.mock("./startupStatus.ts", () => ({ writeStartupStatus }));
@@ -27,6 +27,7 @@ import {
   ServerRuntimeStartupError,
   ServerRuntimeStartup,
   ServerRuntimeStartupLive,
+  watchRemoteAgentSourceChanges,
 } from "./serverRuntimeStartup.ts";
 import { runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
@@ -149,6 +150,14 @@ it.effect("enqueueCommand waits for readiness and then drains queued work", () =
     }),
   ),
 );
+
+it.effect("routes configuration changes to one remote source refresh", () => {
+  const sourceChanged = vi.fn(async () => undefined);
+  return watchRemoteAgentSourceChanges({
+    changes: Stream.succeed({ changed: true }),
+    coordinator: { sourceChanged } as never,
+  }).pipe(Effect.tap(() => Effect.sync(() => expect(sourceChanged).toHaveBeenCalledOnce())));
+});
 
 it.effect("enqueueCommand fails queued work when readiness fails", () =>
   Effect.scoped(

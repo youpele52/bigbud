@@ -64,6 +64,159 @@ describe("managed server catalog", () => {
     );
   });
 
+  it("retains every model from a connected OpenAI catalog", () => {
+    const modelIDs = Array.from({ length: 15 }, (_, index) => `gpt-${index + 1}`);
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: Object.fromEntries(
+            modelIDs.map((modelID) => [
+              modelID,
+              { id: modelID, providerID: "openai", name: modelID },
+            ]),
+          ),
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(
+      result.models.map(({ slug }) => slug),
+      modelIDs,
+    );
+    assert.isTrue(
+      result.models.every(
+        ({ group, subProviderID }) => group === "OpenAI" && subProviderID === "openai",
+      ),
+    );
+  });
+
+  it("maps live OpenCode variants without synthesizing High/Medium/Low", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: {
+                none: {},
+                xhigh: { default: true },
+                custom: { name: "Custom Deep" },
+              },
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(
+      result.models[0]?.capabilities?.reasoningEffortLevels.map(({ value, label, isDefault }) => ({
+        value,
+        label,
+        isDefault,
+      })),
+      [
+        { value: "none", label: "None", isDefault: undefined },
+        { value: "xhigh", label: "Extra High", isDefault: true },
+        { value: "custom", label: "Custom Deep", isDefault: undefined },
+      ],
+    );
+    assert.strictEqual(result.models[0]?.capabilities?.effortMetadataStatus, "verified-supported");
+  });
+
+  it("treats an explicit empty variant list as unsupported", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: {},
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.deepStrictEqual(result.models[0]?.capabilities?.reasoningEffortLevels, []);
+    assert.strictEqual(
+      result.models[0]?.capabilities?.effortMetadataStatus,
+      "verified-unsupported",
+    );
+  });
+
+  it("treats an explicit reasoning denial as verified unsupported", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: false },
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.strictEqual(
+      result.models[0]?.capabilities?.effortMetadataStatus,
+      "verified-unsupported",
+    );
+  });
+
+  it("keeps malformed variant metadata unavailable", () => {
+    const result = resolveManagedServerCatalog({
+      provider: "opencode",
+      providers: [
+        {
+          name: "openai",
+          models: {
+            gpt: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              name: "GPT-5.4",
+              capabilities: { reasoning: true },
+              variants: null,
+            },
+          },
+        },
+      ],
+      customModels: [],
+      builtInModels: [],
+      emptyCapabilities,
+    });
+
+    assert.strictEqual(result.models[0]?.capabilities?.effortMetadataStatus, "unknown");
+  });
+
   it.effect("keeps healthy readiness while representing a transient catalog failure", () =>
     Effect.gen(function* () {
       const published = yield* Ref.make<ServerProvider | null>(null);

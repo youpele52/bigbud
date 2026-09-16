@@ -50,6 +50,25 @@ describe("process-scoped remote agent install source loader", () => {
     expect(request).toHaveBeenCalledOnce();
   });
 
+  it("refreshes the process cache only when explicitly requested", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(sourceJson("1.2.3")))
+      .mockResolvedValueOnce(new Response(sourceJson("1.2.4")));
+    const load = loader(request as unknown as typeof fetch);
+
+    await expect(load()).resolves.toMatchObject({
+      manifest: { artifacts: [{ version: "1.2.3" }] },
+    });
+    await expect(load()).resolves.toMatchObject({
+      manifest: { artifacts: [{ version: "1.2.3" }] },
+    });
+    await expect(load.refresh()).resolves.toMatchObject({
+      manifest: { artifacts: [{ version: "1.2.4" }] },
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it("coalesces concurrent loads", async () => {
     let resolve!: (response: Response) => void;
     const request = vi.fn(

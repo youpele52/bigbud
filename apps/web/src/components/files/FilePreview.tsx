@@ -5,18 +5,13 @@ import type { AnnotationIntent } from "../../stores/composer";
 import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
 import { FilePreviewCode } from "./FilePreview.code";
 import { FilePreviewHeader } from "./FilePreviewHeader";
-import {
-  FilePreviewMarkdownToggle,
-  FilePreviewMarkdownView,
-  type MarkdownFileViewMode,
-} from "./FilePreview.markdown";
+import { FilePreviewMarkdownToggle, FilePreviewMarkdownView } from "./FilePreview.markdown";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import {
   buildAbsolutePreviewPath,
   buildFilePreviewBreadcrumb,
   FILE_PREVIEW_LINE_HEIGHT,
-  getPreviewScrollTop,
   inferPreviewLanguage,
   isMarkdownFilePath,
   shouldShowPreviewLoading,
@@ -25,7 +20,8 @@ import {
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
 import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
-import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
+import { useFilePreviewPosition } from "./useFilePreviewPosition";
+import { useMarkdownPreviewScroll } from "./useMarkdownPreviewScroll";
 import { FilePreviewSearchFocus } from "./FilePreviewSearchFocus";
 import { BigbudLoader } from "../layout/BigbudLoader";
 
@@ -66,9 +62,9 @@ export const FilePreview = memo(function FilePreview({
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
   );
-  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownFileViewMode>("preview");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
+  const markdownContentRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
@@ -90,60 +86,46 @@ export const FilePreview = memo(function FilePreview({
     refreshPreview,
   });
 
-  useEffect(() => {
-    setSelectedRange(null);
-    setMarkdownViewMode("preview");
-  }, [relativePath]);
-
-  useEffect(() => {
-    if (!targetLine || state.loading || state.error) {
-      return;
-    }
-
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const scrollTop = getPreviewScrollTop(
-      targetLine,
-      state.contents.split("\n").length,
-      container.clientHeight,
-      FILE_PREVIEW_LINE_HEIGHT,
-    );
-    if (scrollTop === null) {
-      return;
-    }
-    container.scrollTo({ top: scrollTop, behavior: "smooth" });
-  }, [state.contents, state.error, state.loading, targetLine]);
-
-  useRestoreFilePreviewScroll({
-    containerRef: scrollContainerRef,
-    pathKey: `${cwd}:${relativePath}`,
-    initialScrollTop,
-    disabled: Boolean(targetLine || state.loading || state.error),
+  const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
+  const fileKey = JSON.stringify([executionTargetId ?? null, cwd, relativePath]);
+  const ready = state.loaded && !state.error;
+  const {
+    viewMode: markdownViewMode,
+    handleModeChange,
+    handleScroll,
+    cancelPendingRestore,
+  } = useMarkdownPreviewScroll({
+    fileKey,
+    ready,
+    contents: state.contents,
+    isMarkdownFile,
+    scrollContainerRef,
+    linesContainerRef,
+    markdownContentRef,
+    lineHeight: FILE_PREVIEW_LINE_HEIGHT,
+    totalLines: state.contents.split("\n").length,
+    onScrollPositionChange,
   });
 
-  const handleScroll = useCallback(
-    (event: React.UIEvent<HTMLDivElement>) =>
-      onScrollPositionChange?.(event.currentTarget.scrollTop),
-    [onScrollPositionChange],
-  );
-  const handleSearchMatch = useCallback(
-    (line: number) => {
-      onSearchMatch?.(line);
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      const scrollTop = getPreviewScrollTop(
-        line,
-        state.contents.split("\n").length,
-        container.clientHeight,
-        FILE_PREVIEW_LINE_HEIGHT,
-      );
-      if (scrollTop !== null) container.scrollTo({ top: scrollTop, behavior: "smooth" });
-    },
-    [onSearchMatch, state.contents],
-  );
+  useEffect(() => {
+    setSelectedRange(null);
+  }, [relativePath]);
+
+  const { claimInitialPosition, handleSearchMatch } = useFilePreviewPosition({
+    fileKey,
+    contents: state.contents,
+    ready,
+    isMarkdownFile,
+    mode: markdownViewMode,
+    totalLines: state.contents.split("\n").length,
+    targetLine,
+    initialScrollTop,
+    scrollContainerRef,
+    linesContainerRef,
+    markdownContentRef,
+    cancelPendingRestore,
+    onSearchMatch,
+  });
 
   const lines = useMemo(
     () =>
@@ -155,7 +137,6 @@ export const FilePreview = memo(function FilePreview({
     [state.contents],
   );
   const language = useMemo(() => inferPreviewLanguage(relativePath), [relativePath]);
-  const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
   const isPlainTextFile = useMemo(
     () => !isMarkdownFile && !shouldSyntaxHighlightPreviewPath(relativePath),
     [isMarkdownFile, relativePath],
@@ -265,8 +246,10 @@ export const FilePreview = memo(function FilePreview({
             <FilePreviewMarkdownToggle
               viewMode={markdownViewMode}
               onViewModeChange={(mode) => {
+                if (mode === markdownViewMode) return;
+                if (ready) claimInitialPosition();
                 setSelectedRange(null);
-                setMarkdownViewMode(mode);
+                handleModeChange(mode);
               }}
             />
           ) : null
@@ -285,6 +268,7 @@ export const FilePreview = memo(function FilePreview({
           contents={state.contents}
           cwd={cwd}
           scrollContainerRef={scrollContainerRef}
+          contentRef={markdownContentRef}
           linesContainerRef={linesContainerRef}
           selectedRange={selectedRange}
           selectedText={selectedText}

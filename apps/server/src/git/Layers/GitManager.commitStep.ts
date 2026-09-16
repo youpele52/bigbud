@@ -27,6 +27,7 @@ import {
   sanitizeCommitMessage,
   sanitizeProgressText,
 } from "./GitManager.commitUtils.ts";
+import { gitMutationOperationId } from "./GitCoreExecutor.helpers.ts";
 import { loadSkillPrompt } from "../Utils.ts";
 import { gitManagerError } from "./GitManager.prUtils.ts";
 import type { CommitAndBranchSuggestion, GitActionProgressPayload } from "./GitManager.types.ts";
@@ -46,12 +47,14 @@ export function makeCommitStep(
       includeBranch?: boolean;
       filePaths?: readonly string[];
       executionTargetId?: string;
+      operationId?: string;
       modelSelection: ModelSelection;
     }) {
       const context = yield* gitCore.prepareCommitContext(
         input.cwd,
         input.filePaths,
         input.executionTargetId,
+        input.operationId,
       );
       if (!context) {
         return null;
@@ -107,6 +110,7 @@ export function makeCommitStep(
     actionId?: string,
     executionTargetId?: string,
   ) {
+    const commitOperationId = gitMutationOperationId(actionId, "commit");
     const emit = (event: GitActionProgressPayload) =>
       progressReporter && actionId
         ? progressReporter.publish({
@@ -133,6 +137,7 @@ export function makeCommitStep(
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
         ...(executionTargetId ? { executionTargetId } : {}),
+        ...(commitOperationId ? { operationId: commitOperationId } : {}),
         modelSelection,
       });
     }
@@ -192,6 +197,7 @@ export function makeCommitStep(
         : null;
     const { commitSha } = yield* gitCore.commit(cwd, suggestion.subject, suggestion.body, {
       timeoutMs: COMMIT_TIMEOUT_MS,
+      ...(commitOperationId ? { operationId: commitOperationId } : {}),
       ...(commitProgress ? { progress: commitProgress } : {}),
       ...(executionTargetId ? { executionTargetId } : {}),
     });
@@ -218,7 +224,9 @@ export function makeCommitStep(
     commitMessage?: string,
     filePaths?: readonly string[],
     executionTargetId?: string,
+    actionId?: string,
   ) {
+    const commitOperationId = gitMutationOperationId(actionId, "commit");
     const suggestion = yield* resolveCommitAndBranchSuggestion({
       cwd,
       branch,
@@ -226,6 +234,7 @@ export function makeCommitStep(
       ...(filePaths ? { filePaths } : {}),
       includeBranch: true,
       ...(executionTargetId ? { executionTargetId } : {}),
+      ...(commitOperationId ? { operationId: commitOperationId } : {}),
       modelSelection,
     });
     if (!suggestion) {
@@ -243,12 +252,14 @@ export function makeCommitStep(
       cwd,
       branch: resolvedBranch,
       ...(executionTargetId ? { executionTargetId } : {}),
+      operationId: gitMutationOperationId(actionId, "branch.create"),
     });
     yield* Effect.scoped(
       gitCore.checkoutBranch({
         cwd,
         branch: resolvedBranch,
         ...(executionTargetId ? { executionTargetId } : {}),
+        operationId: gitMutationOperationId(actionId, "branch.checkout"),
       }),
     );
 

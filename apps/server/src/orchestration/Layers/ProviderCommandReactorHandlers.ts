@@ -14,7 +14,6 @@ import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSet
 import { ServerConfig } from "../../startup/config.ts";
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
-  formatProviderServiceCauseDetail,
   HANDLED_TURN_START_KEY_MAX,
   HANDLED_TURN_START_KEY_TTL_MINUTES,
   resolveThreadTitleSeed,
@@ -57,6 +56,7 @@ import {
   type ProviderIntentEvent,
 } from "./ProviderCommandReactorHandlers.events.ts";
 import { makeProviderCommandSessionStateHelpers } from "./ProviderCommandReactorHandlers.sessionState.ts";
+import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.turnStart.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -85,6 +85,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
   const { appendProviderFailureActivity, recordTurnStartFailure } =
     makeProviderFailureHandlers(orchestrationEngine);
+  const handleTurnStartFailure = makeHandleTurnStartFailure({
+    orchestrationEngine,
+    recordTurnStartFailure,
+  });
 
   const { assertRuntimeStartAllowed, resolveThread, setThreadSession } =
     makeProviderCommandSessionStateHelpers(orchestrationEngine);
@@ -278,21 +282,13 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
         : {}),
+      runtimeMode: event.payload.runtimeMode,
       interactionMode: event.payload.interactionMode,
       ...(event.payload.bootstrapSourceThreadId !== undefined
         ? { bootstrapSourceThreadId: event.payload.bootstrapSourceThreadId }
         : {}),
       createdAt: event.payload.createdAt,
-    }).pipe(
-      Effect.catchCause((cause) =>
-        recordTurnStartFailure({
-          threadId: event.payload.threadId,
-          context: "provider-turn-start",
-          detail: formatProviderServiceCauseDetail(cause),
-          createdAt: event.payload.createdAt,
-        }),
-      ),
-    );
+    }).pipe(Effect.catchCause((cause) => handleTurnStartFailure({ event, message, cause })));
     yield* saveProviderCapabilityContextState({
       states: capabilityContextStates,
       fileSystem,

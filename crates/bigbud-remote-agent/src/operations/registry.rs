@@ -1,6 +1,12 @@
 use super::*;
 
 impl OperationRegistry {
+    pub fn has_live_operations(&self, now: Instant) -> bool {
+        self.operations
+            .values()
+            .any(|record| !record.state.is_terminal() && record.expires_at > now)
+    }
+
     pub fn new(max_operations: usize, max_output_bytes: usize, retention: Duration) -> Self {
         Self {
             max_operations,

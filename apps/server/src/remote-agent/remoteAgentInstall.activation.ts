@@ -4,6 +4,12 @@ import {
   type RemoteAgentBuildIdentity,
 } from "./remoteAgentInstall.ts";
 
+/**
+ * Retired legacy takeover helpers. They remain isolated for compatibility
+ * tests and recovery documentation; no install-manager production path calls
+ * these scripts because they mutate the serving selector and legacy state.
+ */
+
 function buildActivationTransactionPrelude(identity: RemoteAgentBuildIdentity): string {
   const paths = buildRemoteAgentInstallPaths(identity);
   return `

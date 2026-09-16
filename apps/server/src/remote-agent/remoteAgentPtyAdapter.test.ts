@@ -99,4 +99,35 @@ describe("remote-agent PTY adapter", () => {
     expect(created[0]?.cwd).toBe("");
     expect(created[0]?.shell).toBe("/bin/sh");
   });
+
+  it("keeps an explicit Direct SSH target on the base PTY adapter", async () => {
+    const calls: string[] = [];
+    const base: PtyAdapterShape = {
+      spawn: () =>
+        Effect.sync(() => {
+          calls.push("ssh");
+          return fakeProcess;
+        }),
+    };
+    const resolver = {} as RemoteAgentPtyResolver;
+    const adapter = makeRemoteAgentPtyAdapter(
+      base,
+      resolver,
+      (executionTargetId) => executionTargetId?.includes("transport=agent") === true,
+    );
+
+    await Effect.runPromise(
+      adapter.spawn({
+        shell: "sh",
+        cwd: "/srv/project",
+        remoteCwd: "/srv/project",
+        cols: 80,
+        rows: 24,
+        env: {},
+        executionTargetId: "ssh:host=devbox&transport=direct-ssh",
+      }),
+    );
+
+    expect(calls).toEqual(["ssh"]);
+  });
 });

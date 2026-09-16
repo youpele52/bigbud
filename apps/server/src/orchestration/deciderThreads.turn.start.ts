@@ -9,18 +9,14 @@ import { Effect } from "effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+import {
+  MAX_QUEUED_PROMPTS,
+  makeQueuedPromptEvent,
+  PROMPT_QUEUE_FULL_DETAIL,
+  queuedPromptMatchesCommand,
+  resolvePromptReferences,
+} from "./ThreadPromptAdmission.logic.ts";
 import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
-
-const REPLY_EXCERPT_MAX_CHARS = 240;
-const TERMINAL_CONTEXT_BLOCK_REGEX = /\n*<terminal_context>\n[\s\S]*?\n<\/terminal_context>\s*/g;
-
-function buildReplyExcerpt(text: string): string {
-  const normalized = text.replace(TERMINAL_CONTEXT_BLOCK_REGEX, "\n").replace(/\s+/g, " ").trim();
-  if (normalized.length <= REPLY_EXCERPT_MAX_CHARS) {
-    return normalized;
-  }
-  return `${normalized.slice(0, REPLY_EXCERPT_MAX_CHARS - 3).trimEnd()}...`;
-}
 
 export function requireThreadReadyForMutation(input: {
   readonly thread: OrchestrationThread;
@@ -68,67 +64,39 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
   });
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
   if (isThreadTurnDispatchBlocked(targetThread)) {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Thread '${targetThread.id}' has an unresolved turn and cannot start another.`,
+    const existing = targetThread.queuedPrompts?.find(
+      (prompt) => prompt.id === command.message.messageId,
+    );
+    if (existing) {
+      if (!queuedPromptMatchesCommand(existing, command)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "This message ID is already queued with different content or settings.",
+        });
+      }
+      return [];
+    }
+    const queuedEvent = yield* makeQueuedPromptEvent({
+      command,
+      readModel,
+      targetThread,
+      queuePosition: (targetThread.queuedPrompts?.length ?? 0) + 1,
     });
+    if ((targetThread.queuedPrompts?.length ?? 0) >= MAX_QUEUED_PROMPTS) {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: PROMPT_QUEUE_FULL_DETAIL,
+        code: "prompt_queue_full",
+      });
+    }
+    return [queuedEvent];
   }
-  const sourceProposedPlan = command.sourceProposedPlan;
-  const sourceThread = sourceProposedPlan
-    ? yield* requireThread({
-        readModel,
-        command,
-        threadId: sourceProposedPlan.threadId,
-      })
-    : null;
-  const sourcePlan =
-    sourceProposedPlan && sourceThread
-      ? sourceThread.proposedPlans.find((entry) => entry.id === sourceProposedPlan.planId)
-      : null;
-  if (sourceProposedPlan && !sourcePlan) {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Proposed plan '${sourceProposedPlan.planId}' does not exist on thread '${sourceProposedPlan.threadId}'.`,
-    });
-  }
-  if (sourceThread && sourceThread.projectId !== targetThread.projectId) {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
-    });
-  }
-  const replyToMessageId = command.message.replyToMessageId;
-  const replyTarget =
-    replyToMessageId !== undefined
-      ? (targetThread.messages.find((entry) => entry.id === replyToMessageId) ?? null)
-      : null;
-  if (replyToMessageId !== undefined && !replyTarget) {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Reply target message '${replyToMessageId}' does not exist on thread '${targetThread.id}'.`,
-    });
-  }
-  if (replyTarget?.role === "system") {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Reply target message '${replyToMessageId}' cannot reference a system message.`,
-    });
-  }
-  if (replyTarget?.streaming) {
-    return yield* new OrchestrationCommandInvariantError({
-      commandType: command.type,
-      detail: `Reply target message '${replyToMessageId}' is still streaming and cannot be referenced yet.`,
-    });
-  }
-  const replyTo =
-    replyTarget !== null
-      ? {
-          messageId: replyTarget.id,
-          role: replyTarget.role,
-          createdAt: replyTarget.createdAt,
-          excerpt: buildReplyExcerpt(replyTarget.text),
-        }
-      : undefined;
+  const references = yield* resolvePromptReferences({
+    command,
+    readModel,
+    targetThread,
+  });
+  const sourceProposedPlan = references.sourceProposedPlan;
   const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
       aggregateKind: "thread",
@@ -143,7 +111,7 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
       role: "user",
       text: command.message.text,
       attachments: command.message.attachments,
-      ...(replyTo !== undefined ? { replyTo } : {}),
+      ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),
       turnId: null,
       streaming: false,
       createdAt: command.createdAt,
@@ -162,11 +130,11 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     payload: {
       threadId: command.threadId,
       messageId: command.message.messageId,
-      ...(replyTo !== undefined ? { replyTo } : {}),
+      ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),
       ...(command.modelSelection !== undefined ? { modelSelection: command.modelSelection } : {}),
       ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
-      runtimeMode: targetThread.runtimeMode,
-      interactionMode: targetThread.interactionMode,
+      runtimeMode: command.runtimeMode,
+      interactionMode: command.interactionMode,
       ...(command.bootstrapSourceThreadId !== undefined
         ? { bootstrapSourceThreadId: command.bootstrapSourceThreadId }
         : {}),

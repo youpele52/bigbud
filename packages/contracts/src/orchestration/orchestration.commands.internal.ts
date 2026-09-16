@@ -45,6 +45,7 @@ const ThreadDeleteFinalizeCommand = Schema.Struct({
   threadId: ThreadId,
   threadIds: Schema.optional(Schema.Array(ThreadId)),
   mode: Schema.optional(ThreadDeletionMode),
+  origin: Schema.optional(Schema.Literal("project-cascade")),
   createdAt: IsoDateTime,
 });
 

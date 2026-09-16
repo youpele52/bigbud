@@ -161,10 +161,49 @@ function trackedRepository(
 }
 
 layer("direct retention with SQLite lifecycle triggers", (it) => {
+  it.effect("keeps a persisted skip when the selected thread was already removed", () =>
+    Effect.gen(function* () {
+      yield* resetData();
+      const repository = yield* ThreadRetentionRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("removed-after-selection");
+      yield* seedThread(threadId);
+      const run = yield* seedRun({
+        runId: "removed-after-selection-run",
+        threadId,
+        deletionCommandId: "delete:removed-after-selection",
+        resumedProgress: false,
+      });
+      yield* sql`DELETE FROM projection_threads WHERE thread_id = ${threadId}`;
+      const result = yield* runDirectThreadRetention({
+        run,
+        repository,
+        orchestration: {
+          dispatch: () =>
+            repository
+              .recheckAndClaimItem({
+                runId: run.runId,
+                threadId,
+                expectedLastActivityAt: oldAt,
+                cutoffAt,
+                claimedAt: now,
+              })
+              .pipe(Effect.as({ sequence: 1 })),
+          getReadModel: () => Effect.succeed(readModel(threadId, true)),
+          streamDomainEvents: Stream.empty,
+        } as never,
+        now: () => Date.parse(now),
+      });
+      assert.deepEqual([result.deletedCount, result.skippedCount, result.pendingCount], [0, 1, 0]);
+      assert.equal((yield* repository.listRunItems(run.runId))[0]!.status, "skipped");
+    }),
+  );
+
   it.effect("completes a claimed item through the persisted lifecycle on resume", () =>
     Effect.gen(function* () {
       yield* resetData();
       const repository = yield* ThreadRetentionRepository;
+      const sql = yield* SqlClient.SqlClient;
       const threadId = ThreadId.makeUnsafe("retention-direct-sqlite-success");
       const deletionCommandId = "stable:retention:sqlite:success";
       yield* seedThread(threadId);
@@ -192,6 +231,7 @@ layer("direct retention with SQLite lifecycle triggers", (it) => {
             });
             assert.isTrue(claimed.claimed);
             dispatched.push({ commandId: command.commandId, createdAt: command.createdAt });
+            yield* sql`DELETE FROM projection_threads WHERE thread_id = ${command.threadId}`;
             deleted = true;
             return { sequence: 1 };
           }),

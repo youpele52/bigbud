@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap, Option } from "effect";
+import { RemoteAgentGitActionBinding } from "./remoteAgentGit.action.ts";
 
 import { GitCommandError } from "@bigbud/contracts/workspace/git.errors.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../git/Services/GitCore.ts";
@@ -10,6 +11,7 @@ import {
   remoteAgentWorkspaceHandle,
 } from "./remoteAgentProcessRequest.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import type { OwnedRemoteProcessRunner } from "./remoteAgentOwnedProcess.ts";
 
 export interface RemoteAgentGitExecuteInput {
   readonly executionTargetId: string;
@@ -25,6 +27,7 @@ export interface RemoteAgentGitExecuteInput {
 }
 
 export interface RemoteAgentGitClientResolver {
+  readonly runOwned?: OwnedRemoteProcessRunner;
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentProcessClient>;
 }
 
@@ -36,6 +39,11 @@ export class RemoteAgentGitExecutorService extends ServiceMap.Service<
   RemoteAgentGitExecutorService,
   RemoteAgentGitExecutor
 >()("bigbud/remote-agent/RemoteAgentGitExecutor") {}
+
+export class RemoteAgentGitOwnership extends ServiceMap.Service<
+  RemoteAgentGitOwnership,
+  "managed" | "external"
+>()("bigbud/remote-agent/GitOwnership") {}
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -69,10 +77,6 @@ function isAllowedGitEnvironmentName(name: string): boolean {
   );
 }
 
-function operationId(input: RemoteAgentGitExecuteInput): string {
-  return input.operationId ?? `git-${randomUUID()}`;
-}
-
 function gitEnvironment(input: NodeJS.ProcessEnv | undefined) {
   return [
     { name: "GIT_TERMINAL_PROMPT", value: "0" },
@@ -94,52 +98,76 @@ function asError(input: RemoteAgentGitExecuteInput, cause: unknown): GitCommandE
 }
 
 export function makeRemoteAgentGitExecutor(resolver: RemoteAgentGitClientResolver) {
-  return (input: RemoteAgentGitExecuteInput) =>
-    Effect.tryPromise({
-      try: async () => {
-        const client = await resolver.resolve(input.executionTargetId);
-        const handle = remoteAgentWorkspaceHandle(input);
-        const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-        const maxOutputBytes = input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
-        const environment = input.environment ?? [];
-        await new RemoteAgentWorkspaceClient(client.connection).openWorkspace(handle, input.cwd);
-        const digestInput = {
-          executionTargetId: input.executionTargetId,
-          cwd: input.cwd,
-          command: "git",
-          args: input.args,
-          environment,
-          timeoutMs,
-          maxOutputBytes,
-          ...(input.truncateOutputAtMaxBytes !== undefined
-            ? { truncateOutputAtMaxBytes: input.truncateOutputAtMaxBytes }
-            : {}),
-          ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
-        } as const;
-        const result = await client.run({
-          workspaceHandle: handle,
-          operationId: operationId(input),
-          requestDigest: remoteAgentProcessRequestDigest(digestInput),
-          command: "git",
-          args: input.args,
-          timeoutMs,
-          maxOutputBytes,
-          environment,
-          ...(input.stdin !== undefined ? { stdin: new TextEncoder().encode(input.stdin) } : {}),
-        });
-        if (result.completed.outputTruncated && input.truncateOutputAtMaxBytes !== true) {
-          throw new Error(`git ${input.args.join(" ")} exceeded the remote agent output limit.`);
-        }
-        return {
-          code: result.completed.hasExitCode ? result.completed.exitCode : -1,
-          stdout: new TextDecoder().decode(result.stdout),
-          stderr: new TextDecoder().decode(result.stderr),
-          stdoutTruncated: result.completed.outputTruncated,
-          stderrTruncated: result.completed.outputTruncated,
-        };
-      },
-      catch: (cause) => asError(input, cause),
-    });
+  return (input: RemoteAgentGitExecuteInput) => {
+    const durable = resolver.runOwned !== undefined && input.operationId !== undefined;
+    const id = input.operationId ?? `git-observation:${randomUUID()}`;
+    return Effect.serviceOption(RemoteAgentGitActionBinding).pipe(
+      Effect.flatMap((actionBinding) =>
+        Effect.tryPromise({
+          try: async () => {
+            const client = durable ? undefined : await resolver.resolve(input.executionTargetId);
+            const handle = remoteAgentWorkspaceHandle(input);
+            const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+            const maxOutputBytes = input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+            const environment = input.environment ?? [];
+            if (client)
+              await new RemoteAgentWorkspaceClient(client.connection).openWorkspace(
+                handle,
+                input.cwd,
+              );
+            const digestInput = {
+              executionTargetId: input.executionTargetId,
+              cwd: input.cwd,
+              command: "git",
+              args: input.args,
+              environment,
+              timeoutMs,
+              maxOutputBytes,
+              ...(input.truncateOutputAtMaxBytes !== undefined
+                ? { truncateOutputAtMaxBytes: input.truncateOutputAtMaxBytes }
+                : {}),
+              ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
+            } as const;
+            const request = {
+              workspaceHandle: handle,
+              operationId: id,
+              requestDigest: remoteAgentProcessRequestDigest(digestInput),
+              command: "git",
+              args: input.args,
+              timeoutMs,
+              maxOutputBytes,
+              environment,
+              ...(input.stdin !== undefined
+                ? { stdin: new TextEncoder().encode(input.stdin) }
+                : {}),
+            };
+            const result = durable
+              ? await resolver.runOwned({
+                  ownerKey: `git:${input.operationId}`,
+                  ...(Option.isSome(actionBinding) ? { binding: actionBinding.value } : {}),
+                  target: input.executionTargetId,
+                  cwd: input.cwd,
+                  request,
+                })
+              : await client!.run(request);
+            if (result.completed.outputTruncated && input.truncateOutputAtMaxBytes !== true) {
+              throw new Error(
+                `git ${input.args.join(" ")} exceeded the remote agent output limit.`,
+              );
+            }
+            return {
+              code: result.completed.hasExitCode ? result.completed.exitCode : -1,
+              stdout: new TextDecoder().decode(result.stdout),
+              stderr: new TextDecoder().decode(result.stderr),
+              stdoutTruncated: result.completed.outputTruncated,
+              stderrTruncated: result.completed.outputTruncated,
+            };
+          },
+          catch: (cause) => asError(input, cause),
+        }),
+      ),
+    );
+  };
 }
 
 export function makeRemoteAgentGitCoreExecutor(
@@ -163,7 +191,7 @@ export function makeRemoteAgentGitCoreExecutor(
       cwd: input.cwd,
       args: input.args,
       operation: input.operation,
-      ...(input.operationId ? { operationId: input.operationId } : {}),
+      ...(input.operationId !== undefined ? { operationId: input.operationId } : {}),
       ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       ...(input.maxOutputBytes !== undefined ? { maxOutputBytes: input.maxOutputBytes } : {}),
@@ -177,6 +205,9 @@ export function makeRemoteAgentGitCoreExecutor(
 
 export function makeRemoteAgentGitExecutorLayer(
   resolver: RemoteAgentGitClientResolver,
-): Layer.Layer<RemoteAgentGitExecutorService> {
-  return Layer.succeed(RemoteAgentGitExecutorService, makeRemoteAgentGitCoreExecutor(resolver));
+): Layer.Layer<RemoteAgentGitExecutorService | RemoteAgentGitOwnership> {
+  return Layer.merge(
+    Layer.succeed(RemoteAgentGitExecutorService, makeRemoteAgentGitCoreExecutor(resolver)),
+    Layer.succeed(RemoteAgentGitOwnership, resolver.runOwned ? "managed" : "external"),
+  );
 }

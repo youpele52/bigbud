@@ -96,6 +96,10 @@ describe("Claude model discovery", () => {
     expect(model.capabilities?.reasoningEffortLevels.map((option) => option.value)).toEqual(
       effortLevels,
     );
+    expect(model.capabilities?.effortMetadataStatus).toBe("seed");
+    expect(model.capabilities?.reasoningEffortLevels.some((option) => option.isDefault)).toBe(
+      false,
+    );
   });
 
   it("honors an explicit SDK effort capability denial", () => {
@@ -108,6 +112,18 @@ describe("Claude model discovery", () => {
     });
 
     expect(model.capabilities?.reasoningEffortLevels).toEqual([]);
+  });
+
+  it("keeps malformed SDK effort metadata unavailable", () => {
+    const model = mapClaudeModel({
+      value: "claude-malformed",
+      displayName: "Claude",
+      description: "Malformed",
+      supportedEffortLevels: "high" as never,
+    });
+
+    expect(model.capabilities?.effortMetadataStatus).toBe("unknown");
+    expect(model.capabilities?.effortMetadataOrigin).toBe("unknown");
   });
 
   it("keeps SDK-advertised xhigh as a typed native effort level", () => {

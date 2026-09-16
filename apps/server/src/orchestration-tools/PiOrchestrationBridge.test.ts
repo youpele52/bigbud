@@ -30,7 +30,8 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("action: 'create_thread'");
     expect(source).toContain("invocationId: toolCallId");
     expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
-    expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
+    expect(source).toContain("createHash('sha256')");
+    expect(source).not.toContain("randomUUID");
     expect(source).not.toContain("workspacePath");
     expect(source).toContain("watchForCompletion: watchForCompletion === true");
     expect(source).toContain('name: "get_thread_status"');

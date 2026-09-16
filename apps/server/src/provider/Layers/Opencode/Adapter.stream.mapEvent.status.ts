@@ -4,6 +4,7 @@ import { Effect } from "effect";
 
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase } from "./Adapter.stream.utils.ts";
+import { makeOpencodeTextStream } from "./Adapter.stream.text.ts";
 
 type RawOpencodeEvent = {
   readonly source: "opencode.sdk.session-event";
@@ -24,6 +25,10 @@ export function handleSessionIdle(
   provider: import("@bigbud/contracts").ProviderKind,
 ): Effect.Effect<ReadonlyArray<ProviderRuntimeEvent>> {
   return Effect.gen(function* () {
+    if (turnId === undefined) return [];
+    // Polling must flush the authoritative final text before completing a local
+    // prompt. An SSE idle notification can arrive before that final fetch.
+    if (session.promptTurnId === turnId) return [];
     const completedTurnId = turnId;
     session.activeTurnId = undefined;
     session.wasRetrying = false;
@@ -121,6 +126,7 @@ export function handleSessionStatus(
 
       const newTurnId = TurnId.makeUnsafe(`opencode-turn-${randomUUID()}`);
       session.activeTurnId = newTurnId;
+      session.textStream = makeOpencodeTextStream();
       session.turns.push({ id: newTurnId, items: [raw.payload] });
 
       return [

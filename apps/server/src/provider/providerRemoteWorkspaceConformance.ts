@@ -15,55 +15,63 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
     provider: "claudeAgent",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Claude's local MCP bridge dispatches through the shared remote-agent runtime.",
+    reason:
+      "Claude's local MCP bridge dispatches through the configured remote workspace transport.",
   },
   cliProxy: {
     provider: "cliProxy",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "CLIProxyAPI inherits Claude's shared remote-agent bridge path.",
+    reason: "CLIProxyAPI inherits Claude's configured remote workspace transport.",
   },
   codex: {
     provider: "codex",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Codex's local MCP bridge dispatches through the shared remote-agent runtime.",
+    reason:
+      "Codex's local MCP bridge dispatches through the configured remote workspace transport.",
   },
   copilot: {
     provider: "copilot",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Copilot's local session-filesystem bridge dispatches through the remote agent.",
+    reason:
+      "Copilot's local session-filesystem bridge dispatches through the configured remote workspace transport.",
   },
   cursor: {
     provider: "cursor",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Cursor ACP filesystem and terminal callbacks dispatch through the remote agent.",
+    reason:
+      "Cursor ACP filesystem and terminal callbacks dispatch through the configured remote workspace transport.",
   },
   devin: {
     provider: "devin",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Devin ACP filesystem and terminal callbacks dispatch through the remote agent.",
+    reason:
+      "Devin ACP filesystem and terminal callbacks dispatch through the configured remote workspace transport.",
   },
   kilocode: {
     provider: "kilocode",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "KiloCode's local built-in overrides dispatch through the remote agent.",
+    reason:
+      "KiloCode's local built-in overrides dispatch through the configured remote workspace transport.",
   },
   opencode: {
     provider: "opencode",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "OpenCode's local built-in overrides dispatch through the remote agent.",
+    reason:
+      "OpenCode's local built-in overrides dispatch through the configured remote workspace transport.",
   },
   pi: {
     provider: "pi",
     backend: "agent-runtime",
     supportsLocalRuntimeRemoteWorkspace: true,
-    reason: "Pi's local extension bridge dispatches through the remote agent.",
+    reason:
+      "Pi's local extension bridge dispatches through the configured remote workspace transport.",
   },
 };
 

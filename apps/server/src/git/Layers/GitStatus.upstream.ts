@@ -3,7 +3,8 @@
  *
  * @module GitStatus.upstream
  */
-import { Cache, Duration, Effect, Exit, Path } from "effect";
+import { Cache, Duration, Effect, Exit, Path, Option } from "effect";
+import { RemoteAgentGitActionBinding } from "../../remote-agent/remoteAgentGit.action.ts";
 
 import { GitCommandError } from "@bigbud/contracts";
 import { parseRemoteNames } from "../remoteRefs.ts";
@@ -93,6 +94,9 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   const refreshStatusUpstreamIfStale = Effect.fn("refreshStatusUpstreamIfStale")(function* (
     cwd: string,
   ) {
+    // A shared cache's lookup context is not a logical action's pinned generation.
+    // Mutations use current local tracking refs; observational refresh remains independently cached.
+    if (Option.isSome(yield* Effect.serviceOption(RemoteAgentGitActionBinding))) return;
     const upstream = yield* resolveCurrentUpstream(cwd);
     if (!upstream) return;
     const gitCommonDir = yield* resolveGitCommonDir(cwd);

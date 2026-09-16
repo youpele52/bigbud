@@ -87,7 +87,7 @@ export function SidebarUnlockSshKeyDialog({
             disabled={isSubmitting || secret.trim().length === 0}
             onClick={onSubmit}
           >
-            {isSubmitting ? "Submitting..." : submitLabel}
+            {isSubmitting ? "Connecting..." : submitLabel}
           </Button>
         </DialogFooter>
       </DialogPopup>

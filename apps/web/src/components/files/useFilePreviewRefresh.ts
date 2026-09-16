@@ -49,7 +49,9 @@ export function useFilePreviewRefresh({
   const debouncedRefreshRef = useRef(createDebouncedFilePreviewRefresh(refreshPreview));
 
   useEffect(() => {
-    debouncedRefreshRef.current = createDebouncedFilePreviewRefresh(refreshPreview);
+    const refresh = createDebouncedFilePreviewRefresh(refreshPreview);
+    debouncedRefreshRef.current = refresh;
+    return refresh.cancel;
   }, [refreshPreview]);
 
   useEffect(() => {
@@ -65,11 +67,12 @@ export function useFilePreviewRefresh({
       return;
     }
 
+    let active = true;
     const scheduleRefresh = () => {
-      debouncedRefreshRef.current.schedule();
+      if (active) debouncedRefreshRef.current.schedule();
     };
 
-    return api.projects.onDirectoryChange(
+    const unsubscribe = api.projects.onDirectoryChange(
       buildFilePreviewWatchInput({ cwd, relativePath, executionTargetId }),
       scheduleRefresh,
       {
@@ -77,5 +80,9 @@ export function useFilePreviewRefresh({
         shouldRetry: shouldRetryWorkspaceDirectoryWatch,
       },
     );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [cwd, executionTargetId, refreshContext, relativePath, remoteAgentWatchEnabled]);
 }

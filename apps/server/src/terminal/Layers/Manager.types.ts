@@ -26,6 +26,7 @@ export const DEFAULT_OPEN_ROWS = 30;
 // ---------------------------------------------------------------------------
 
 export interface TerminalSessionState {
+  remoteOwnerRecoveryRequired?: boolean;
   threadId: string;
   terminalId: string;
   executionTargetId: string;

@@ -11,6 +11,7 @@ import type {
 } from "@bigbud/contracts";
 import type { OpencodeClient, QuestionInfo } from "@opencode-ai/sdk/v2";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
+import type { OpencodeTextStream } from "./Adapter.stream.text.ts";
 
 export const PROVIDER = "opencode" as const;
 
@@ -67,9 +68,14 @@ export interface ActiveOpencodeSession {
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;
+  /** Last explicitly selected provider variant, retained for omitted-input turns. */
+  variant?: string | undefined;
   updatedAt: string;
   lastError: string | undefined;
   activeTurnId: TurnId | undefined;
+  textStream?: OpencodeTextStream;
+  /** Local prompt polling owns final text and completion for this turn. */
+  promptTurnId?: TurnId | undefined;
   lastUsage: ThreadTokenUsageSnapshot | undefined;
   /** True while the session is in a retry/rate-limit back-off loop. */
   wasRetrying: boolean;

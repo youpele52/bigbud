@@ -6,7 +6,6 @@ import {
 } from "@bigbud/contracts";
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Cause, Duration, Effect, type ServiceMap } from "effect";
-
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerManager.ts";
@@ -16,6 +15,7 @@ import type { SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import {
   buildOpenCodePermissionRules,
   isProviderModelSelection,
+  resolveProviderModelVariant,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
@@ -31,7 +31,7 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { startEventStream, toMessage } from "./Adapter.stream.ts";
-import { formatOpencodeSdkError } from "./Provider.sdk.ts";
+import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
 import {
   makeOpencodeBridgeCleanup,
   registerOpencodeRemoteWorkspaceMcp,
@@ -128,6 +128,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             host: deps.serverConfig.host,
             port: deps.serverConfig.port,
             serverName: buildOpencodeThreadOrchestrationServerName(input.threadId),
+            providerSessionId: `opencode:${input.threadId}:${input.sessionEpoch ?? 0}`,
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
@@ -243,7 +244,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           const toolIdsResponse = await client.tool.ids();
           if (toolIdsResponse.error || !Array.isArray(toolIdsResponse.data)) {
             throw new Error(
-              `Failed to list ${deps.provider} tool IDs: ${formatOpencodeSdkError(toolIdsResponse.error)}`,
+              `Failed to list ${deps.provider} tool IDs: ${formatManagedServerSdkError(toolIdsResponse.error)}`,
             );
           }
           return buildOpencodeAllowedTools({
@@ -275,8 +276,10 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
 
       let modelID: string | undefined;
       let providerID: string | undefined;
+      let variant: string | undefined;
       if (isProviderModelSelection(input.modelSelection, deps.provider)) {
         modelID = input.modelSelection.model;
+        variant = resolveProviderModelVariant(input.modelSelection, deps.provider);
         const selectionProviderID =
           "subProviderID" in input.modelSelection
             ? (input.modelSelection as { subProviderID?: string }).subProviderID
@@ -310,7 +313,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         return yield* new ProviderAdapterProcessError({
           provider: deps.provider,
           threadId: input.threadId,
-          detail: `Failed to create ${deps.provider} session: ${formatOpencodeSdkError(sessionResp.error)}`,
+          detail: `Failed to create ${deps.provider} session: ${formatManagedServerSdkError(sessionResp.error)}`,
         });
       }
 
@@ -338,6 +341,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         cwd: input.cwd,
         model: modelID,
         providerID,
+        variant,
         updatedAt: createdAt,
         lastError: undefined,
         activeTurnId: undefined,

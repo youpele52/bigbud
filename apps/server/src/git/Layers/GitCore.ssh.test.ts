@@ -84,19 +84,26 @@ describe("makeSshGitExecutor", () => {
     );
   });
 
-  it.each(MUTATION_COMMANDS)("rejects the mutation command %j before SSH", async (...args) => {
+  it.each(MUTATION_COMMANDS)("executes the mutation command %j through SSH", async (...args) => {
     const commandArgs = toCommandArgs(args);
-    await expect(
-      Effect.runPromise(
-        makeSshGitExecutor()({
-          operation: "GitCore.mutation",
-          cwd: "/srv/project",
-          executionTargetId: "ssh:example",
-          args: commandArgs,
-        }),
-      ),
-    ).rejects.toThrow("install the remote agent");
-    expect(runSshCommand).not.toHaveBeenCalled();
+    const result = await Effect.runPromise(
+      makeSshGitExecutor()({
+        operation: "GitCore.mutation",
+        cwd: "/srv/project",
+        executionTargetId: "ssh:example",
+        args: commandArgs,
+      }),
+    );
+
+    expect(result.stdout).toBe("output");
+    expect(runSshCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionTargetId: "ssh:example",
+        cwd: "/srv/project",
+        command: "git",
+        args: commandArgs,
+      }),
+    );
   });
 
   it("forwards only bounded Git environment values", async () => {

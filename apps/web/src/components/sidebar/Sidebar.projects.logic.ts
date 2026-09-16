@@ -7,6 +7,7 @@ import {
 import type { Project } from "../../models/types";
 
 export type RemoteProjectAuthMode = "ssh-key" | "password";
+export type RemoteProjectTransport = "agent" | "direct-ssh";
 
 export interface RemoteProjectDraft {
   displayName: string;
@@ -16,6 +17,7 @@ export interface RemoteProjectDraft {
   workspaceRoot: string;
   sshKeyPath: string;
   authMode: RemoteProjectAuthMode;
+  remoteTransport: RemoteProjectTransport;
   providerRuntimeLocation: ProviderRuntimeLocation;
 }
 
@@ -40,16 +42,18 @@ export function createDefaultRemoteProjectDraft(): RemoteProjectDraft {
     workspaceRoot: "",
     sshKeyPath: "",
     authMode: "ssh-key",
+    remoteTransport: "agent",
     providerRuntimeLocation: "local",
   };
 }
 
-function parseRemoteExecutionTarget(executionTargetId: string | null | undefined): {
+export function parseRemoteExecutionTarget(executionTargetId: string | null | undefined): {
   host: string;
   username: string | null;
   port: string | null;
   authMode: RemoteProjectAuthMode;
   sshKeyPath: string | null;
+  remoteTransport: RemoteProjectTransport;
 } | null {
   if (!isSshExecutionTargetId(executionTargetId)) {
     return null;
@@ -63,6 +67,7 @@ function parseRemoteExecutionTarget(executionTargetId: string | null | undefined
       port: null,
       authMode: "ssh-key",
       sshKeyPath: null,
+      remoteTransport: "agent",
     };
   }
 
@@ -81,6 +86,7 @@ function parseRemoteExecutionTarget(executionTargetId: string | null | undefined
     port: port.length > 0 ? port : null,
     authMode: params.get("auth") === "password" ? "password" : "ssh-key",
     sshKeyPath: params.get("keyPath")?.trim() || null,
+    remoteTransport: params.get("transport") === "direct-ssh" ? "direct-ssh" : "agent",
   };
 }
 
@@ -99,6 +105,7 @@ export function createRemoteProjectDraft(project: Project): RemoteProjectDraft |
     workspaceRoot: project.cwd ?? "",
     sshKeyPath: parsed.sshKeyPath ?? "",
     authMode: parsed.authMode,
+    remoteTransport: parsed.remoteTransport,
     providerRuntimeLocation:
       resolveProviderRuntimeExecutionTargetId(project) === workspaceExecutionTargetId
         ? "remote"
@@ -121,6 +128,7 @@ export function createRemoteProjectExecutionTargetId(draft: RemoteProjectDraft):
   }
 
   params.set("auth", draft.authMode);
+  params.set("transport", draft.remoteTransport);
 
   const sshKeyPath = draft.sshKeyPath.trim();
   if (sshKeyPath.length > 0) {

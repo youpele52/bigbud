@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { MACOS_SCREEN_RECORDING_SETTINGS_URL } from "@bigbud/shared/screenRecording";
 import { ArrowUpRightIcon, BotIcon, InfoIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -154,9 +155,7 @@ export function ComputerUseAccessSettingsSection() {
   const handleOpenScreenRecordingSettings = useCallback(() => {
     const api = readNativeApi();
     if (api) {
-      void api.shell.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-      );
+      void api.shell.openExternal(MACOS_SCREEN_RECORDING_SETTINGS_URL);
     }
   }, []);
 

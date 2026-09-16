@@ -2,7 +2,10 @@ import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, expect } from "vitest";
 
-import { RemoteAgentGitExecutorService } from "../../remote-agent/remoteAgentGit.ts";
+import {
+  RemoteAgentGitExecutorService,
+  RemoteAgentGitOwnership,
+} from "../../remote-agent/remoteAgentGit.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { makeGitCoreLayerLive } from "./GitComposition.ts";
 import { GitCoreDependenciesLayer } from "./GitCore.test.helpers.ts";
@@ -37,6 +40,41 @@ describe("Git production composition", () => {
 
       expect(result.stdout).toBe("remote status");
       expect(operations).toEqual(["composition.test"]);
+    }),
+  );
+
+  it.effect("uses a direct custom executor without managed owner services", () =>
+    Effect.gen(function* () {
+      const operations: string[] = [];
+      const remoteExecutorLayer = Layer.mergeAll(
+        Layer.succeed(RemoteAgentGitExecutorService, (input) => {
+          operations.push(input.operation);
+          return Effect.succeed({
+            code: 0,
+            stdout: "custom remote",
+            stderr: "",
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          });
+        }),
+        Layer.succeed(RemoteAgentGitOwnership, "external" as const),
+      );
+      const remoteLayer = makeGitCoreLayerLive(remoteExecutorLayer).pipe(
+        Layer.provide(GitCoreDependenciesLayer),
+      );
+
+      const result = yield* Effect.gen(function* () {
+        const git = yield* GitCore;
+        return yield* git.execute({
+          operation: "composition.custom",
+          cwd: "/remote/project",
+          executionTargetId: "ssh:example",
+          args: ["commit", "-m", "custom"],
+        });
+      }).pipe(Effect.provide(remoteLayer));
+
+      expect(result.stdout).toBe("custom remote");
+      expect(operations).toEqual(["composition.custom"]);
     }),
   );
 });

@@ -112,6 +112,11 @@ describe("OrchestrationEngine", () => {
         .map((event) => event.payload.mode),
     ).toEqual(["single", "subtree", "subtree"]);
     expect(
+      events
+        .filter((event) => event.type === "thread.deletion-requested")
+        .map((event) => event.payload.origin),
+    ).toEqual([undefined, "project-cascade", "project-cascade"]);
+    expect(
       await system.run(
         engine.threadDeletion!.isFenceRoot(ThreadId.makeUnsafe("thread-cascade-1"), "subtree"),
       ),

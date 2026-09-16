@@ -26,6 +26,7 @@ import {
   verifyOwnedLogsAbsent,
 } from "./EntityPurge.logs.ts";
 import { makeEntityPurgeSql } from "./EntityPurge.sql.ts";
+import { makeProjectDeletionSql } from "./ProjectDeletion.sql.ts";
 import { makeEntityPurgeClaims } from "./EntityPurge.claims.ts";
 import { makePurgeJobTransitions } from "./EntityPurge.jobs.ts";
 import { recordRemovedPurgeResource } from "./EntityPurge.metrics.ts";
@@ -47,7 +48,6 @@ const makeEntityPurge = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const config = yield* ServerConfig;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
-  const checkpointStore = yield* CheckpointStore;
   const queries = makeEntityPurgeSql(sql);
   const maintenanceSemaphore = yield* Semaphore.make(1);
   const captureResource = Effect.fn("EntityPurge.captureResource")(function* (
@@ -87,7 +87,7 @@ const makeEntityPurge = Effect.gen(function* () {
     sql,
   });
   const { captureCheckpointRefs, deleteCheckpointRefs } = makeEntityPurgeCheckpointOps({
-    checkpointStore,
+    checkpointStore: yield* CheckpointStore,
     queries,
   });
   const requestThread: PurgeShape["requestThread"] = Effect.fn("EntityPurge.requestThread")(
@@ -284,6 +284,7 @@ const makeEntityPurge = Effect.gen(function* () {
           yield* assertThreadRuntimeQuiescent(queries, threadId);
         } else {
           const projectId = entityId as ProjectId;
+          yield* makeProjectDeletionSql(sql).assertProjectDeletionSafe({ projectId });
           const threads = yield* queries.listProjectThreadIds({ projectId });
           yield* Effect.forEach(
             threads,

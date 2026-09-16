@@ -7,6 +7,7 @@ import { Effect, Layer } from "effect";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
+import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { CodexAdapter } from "../../Services/Codex/Adapter.ts";
 import { makeCodexAdapterLive } from "./Adapter.ts";
@@ -89,6 +90,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
       assert.equal(startInput?.serviceTier, "fast");
       assert.equal(startInput?.runtimeMode, "full-access");
       assert.deepStrictEqual(startInput?.expectedMcpServerNames, ["bigbud_orchestration"]);
+      assert.equal(startInput?.requiredMcpServerNames, undefined);
       expect(startInput?.configArgs?.some((arg) => arg.includes("bigbud_orchestration"))).toBe(
         true,
       );
@@ -129,6 +131,9 @@ validationLayer("CodexAdapterLive validation", (it) => {
       expect(startInput?.configArgs?.[2]).toBe("-c");
       expect(startInput?.configArgs?.[3]).toContain("mcp_servers.bigbud_remote_workspace.command=");
       expect(startInput?.developerInstructions).toContain("bigbud remote workspace mode");
+      assert.deepStrictEqual(startInput?.requiredMcpServerNames, [
+        REMOTE_WORKSPACE_MCP_SERVER_NAME,
+      ]);
     }),
   );
 });

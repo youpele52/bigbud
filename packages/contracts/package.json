@@ -30,11 +30,17 @@
     "./core/*": "./src/core/*",
     "./orchestration/*": "./src/orchestration/*",
     "./orchestration/orchestration.catalog": "./src/orchestration/orchestration.catalog.ts",
+    "./orchestration/orchestration.provider": "./src/orchestration/orchestration.provider.ts",
     "./orchestration/providerTurnLiveness": "./src/orchestration/providerTurnLiveness.ts",
     "./server/mobile": {
       "types": "./src/server/mobile.ts",
       "import": "./src/server/mobile.ts",
       "require": "./src/server/mobile.ts"
+    },
+    "./server/mobile.recovery": {
+      "types": "./src/server/mobile.recovery.ts",
+      "import": "./src/server/mobile.recovery.ts",
+      "require": "./src/server/mobile.recovery.ts"
     },
     "./server/rpc.mobile": {
       "types": "./src/server/rpc.mobile.ts",
@@ -43,6 +49,7 @@
     },
     "./server/rpc.retention": "./src/server/rpc.retention.ts",
     "./server/server": "./src/server/server.ts",
+    "./server/server.remoteRestart": "./src/server/server.remoteRestart.ts",
     "./server/threadRetention": "./src/server/threadRetention.ts",
     "./workspace/project": "./src/workspace/project.ts",
     "./workspace/*": "./src/workspace/*",

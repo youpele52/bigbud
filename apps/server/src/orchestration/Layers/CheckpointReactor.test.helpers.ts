@@ -3,18 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-import type { ProviderKind, ProviderRuntimeEvent, ProviderSession } from "@bigbud/contracts";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
-  EventId,
   ProjectId,
+  type ProviderKind,
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
-import { afterEach, vi } from "vitest";
+import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
+import { afterEach } from "vitest";
 
 import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
@@ -33,10 +32,7 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
-import {
-  ProviderService,
-  type ProviderServiceShape,
-} from "../../provider/Services/ProviderService.ts";
+import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -49,93 +45,9 @@ import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers
 export const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 export const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 
-export type LegacyProviderRuntimeEvent = {
-  readonly type: string;
-  readonly eventId: EventId;
-  readonly provider: ProviderKind;
-  readonly createdAt: string;
-  readonly threadId: ThreadId;
-  readonly turnId?: string | undefined;
-  readonly itemId?: string | undefined;
-  readonly requestId?: string | undefined;
-  readonly payload?: unknown | undefined;
-  readonly [key: string]: unknown;
-};
-
-export function createProviderServiceHarness(
-  cwd: string,
-  hasSession = true,
-  sessionCwd = cwd,
-  providerName: ProviderSession["provider"] = "codex",
-) {
-  const now = new Date().toISOString();
-  const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
-  const rollbackConversation = vi.fn(
-    (_input: { readonly threadId: ThreadId; readonly numTurns: number }) => Effect.void,
-  );
-
-  const unsupported = <A>() =>
-    Effect.die(new Error("Unsupported provider call in test")) as Effect.Effect<A, never>;
-  const listSessions = () =>
-    hasSession
-      ? Effect.succeed([
-          {
-            provider: providerName,
-            status: "ready",
-            runtimeMode: "full-access",
-            threadId: ThreadId.makeUnsafe("thread-1"),
-            cwd: sessionCwd,
-            createdAt: now,
-            updatedAt: now,
-          },
-        ] satisfies ReadonlyArray<ProviderSession>)
-      : Effect.succeed([] as ReadonlyArray<ProviderSession>);
-  const service: ProviderServiceShape = {
-    startSession: () => unsupported(),
-    startSessionFresh: () => unsupported(),
-    sendTurn: () => unsupported(),
-    interruptTurn: () => unsupported(),
-    inspectActiveTurn: () =>
-      Effect.succeed({ status: "unavailable", observedAt: new Date().toISOString() }),
-    listActiveTurnLiveness: () => Effect.succeed([]),
-    recordTurnInspection: () => Effect.void,
-    claimTurnTerminal: () => Effect.succeed(true),
-    respondToRequest: () => unsupported(),
-    respondToUserInput: () => unsupported(),
-    stopSession: () => unsupported(),
-    listSessions,
-    listSessionsForReconciliation: () =>
-      Effect.gen(function* () {
-        const sessions = yield* listSessions();
-        return {
-          sessions,
-          availableProviders: new Set([providerName]),
-          unavailableProviders: new Set(),
-          directoryAvailable: true,
-          diagnostics: [],
-        };
-      }),
-    getCapabilities: () =>
-      Effect.succeed({
-        sessionModelSwitch: "in-session",
-        ...(providerName === "claudeAgent" ? { conversationRewind: "unsupported" } : {}),
-      }),
-    rollbackConversation,
-    get streamEvents() {
-      return Stream.fromPubSub(runtimeEventPubSub);
-    },
-  };
-
-  const emit = (event: LegacyProviderRuntimeEvent): void => {
-    Effect.runSync(PubSub.publish(runtimeEventPubSub, event as unknown as ProviderRuntimeEvent));
-  };
-
-  return {
-    service,
-    rollbackConversation,
-    emit,
-  };
-}
+import { createProviderServiceHarness } from "./CheckpointReactor.test.provider.ts";
+export { createProviderServiceHarness } from "./CheckpointReactor.test.provider.ts";
+export type { LegacyProviderRuntimeEvent } from "./CheckpointReactor.test.provider.ts";
 
 export async function waitForThread(
   engine: OrchestrationEngineShape,

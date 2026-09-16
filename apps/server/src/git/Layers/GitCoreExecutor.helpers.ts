@@ -20,6 +20,8 @@ const commandLabel = (args: readonly string[]) => `git ${args.join(" ")}`;
 // ---------------------------------------------------------------------------
 
 export interface ExecuteGitOptions {
+  /** Stable caller identity reused when an ambiguous Git operation is retried. */
+  operationId?: string | undefined;
   stdin?: string | undefined;
   timeoutMs?: number | undefined;
   allowNonZeroExit?: boolean | undefined;
@@ -27,6 +29,22 @@ export interface ExecuteGitOptions {
   maxOutputBytes?: number | undefined;
   truncateOutputAtMaxBytes?: boolean | undefined;
   progress?: ExecuteGitProgress | undefined;
+}
+
+/**
+ * Derive a stable identity for one mutation within a larger logical Git action.
+ * Distinct commands must not share the same remote deduplication key.
+ */
+export function gitMutationOperationId(operationId: string, subOperation: string): string;
+export function gitMutationOperationId(
+  operationId: string | undefined,
+  subOperation: string,
+): string | undefined;
+export function gitMutationOperationId(
+  operationId: string | undefined,
+  subOperation: string,
+): string | undefined {
+  return operationId ? `${operationId}:${subOperation}` : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,9 +109,11 @@ export function makeGitHelpers(
     cwd: string,
     args: readonly string[],
     options: ExecuteGitOptions = {},
-  ): Effect.Effect<ExecuteGitResult, GitCommandError> =>
-    execute({
+  ): Effect.Effect<ExecuteGitResult, GitCommandError> => {
+    const operationId = options.operationId;
+    return execute({
       operation,
+      ...(operationId !== undefined ? { operationId } : {}),
       cwd,
       args,
       ...(options.stdin !== undefined ? { stdin: options.stdin } : {}),
@@ -128,14 +148,16 @@ export function makeGitHelpers(
         );
       }),
     );
+  };
 
   const runGit = (
     operation: string,
     cwd: string,
     args: readonly string[],
     allowNonZeroExit = false,
+    options: ExecuteGitOptions = {},
   ): Effect.Effect<void, GitCommandError> =>
-    executeGit(operation, cwd, args, { allowNonZeroExit }).pipe(Effect.asVoid);
+    executeGit(operation, cwd, args, { ...options, allowNonZeroExit }).pipe(Effect.asVoid);
 
   const runGitStdout = (
     operation: string,

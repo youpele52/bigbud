@@ -17,11 +17,14 @@ import type {
 } from "./remoteAgentProtocol.pty.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 import type { RemoteAgentResourceCleanupFrame } from "./remoteAgentProtocol.resourceCleanup.ts";
-
+import type { RemoteAgentControlFrame } from "./remoteAgentProtocol.control.ts";
+export type {
+  RemoteAgentSupervisorShutdownRequest,
+  RemoteAgentSupervisorShutdownResponse,
+} from "./remoteAgentProtocol.control.ts";
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
 export const REMOTE_AGENT_PROTOCOL_MINOR = 2;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
-
 export interface RemoteAgentClientHello {
   readonly protocolMajor: number;
   readonly protocolMinor: number;
@@ -317,6 +320,7 @@ export type {
 
 export type RemoteAgentFrame =
   | RemoteAgentResourceCleanupFrame
+  | RemoteAgentControlFrame
   | RemoteAgentWorkspaceWatchFrame
   | { readonly type: "clientHello"; readonly value: RemoteAgentClientHello }
   | { readonly type: "agentHello"; readonly value: RemoteAgentHello }

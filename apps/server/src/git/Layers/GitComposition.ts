@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Layer } from "effect";
 
 import { ProjectSetupScriptRunnerLive } from "../../project/Layers/ProjectSetupScriptRunner.ts";
 import { RemoteAgentGitExecutorService } from "../../remote-agent/remoteAgentGit.ts";
@@ -10,18 +10,16 @@ import { GitStatusBroadcasterLive } from "./GitStatusBroadcaster.ts";
 import { RemoteGitStatusInvalidationLive } from "./RemoteGitStatusInvalidation.ts";
 import { RoutingTextGenerationLive } from "./RoutingTextGeneration.ts";
 
-export function makeGitCoreLayerLive(remoteAgentLayer: Layer.Layer<RemoteAgentGitExecutorService>) {
-  const gitCoreWithRemoteExecutor = Layer.effect(
-    GitCore,
-    Effect.gen(function* () {
-      const remoteExecutor = yield* RemoteAgentGitExecutorService;
-      return yield* makeGitCore({ remoteExecuteOverride: remoteExecutor });
-    }),
-  );
+export function makeGitCoreLayerLive<E, R>(
+  remoteAgentLayer: Layer.Layer<RemoteAgentGitExecutorService, E, R>,
+) {
+  const gitCoreWithRemoteExecutor = Layer.effect(GitCore, makeGitCore());
   return gitCoreWithRemoteExecutor.pipe(Layer.provide(remoteAgentLayer));
 }
 
-export function makeGitLayerLive(remoteAgentLayer: Layer.Layer<RemoteAgentGitExecutorService>) {
+export function makeGitLayerLive<E, R>(
+  remoteAgentLayer: Layer.Layer<RemoteAgentGitExecutorService, E, R>,
+) {
   const gitCoreLive = makeGitCoreLayerLive(remoteAgentLayer);
   return Layer.empty.pipe(
     Layer.provideMerge(RemoteGitStatusInvalidationLive),

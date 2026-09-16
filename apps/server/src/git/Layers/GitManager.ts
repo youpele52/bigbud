@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
 import { Cache, Duration, Effect, Exit, FileSystem, Layer, Path, PlatformError } from "effect";
 import {
@@ -284,7 +285,10 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       input.cwd,
       input.executionTargetId,
     );
-    return yield* preparePullRequestThreadStep(input);
+    return yield* preparePullRequestThreadStep({
+      ...input,
+      operationId: input.operationId ?? `git-prepare-${randomUUID()}`,
+    });
   });
 
   const { runStackedAction: runStackedActionStep } = makeRunStackedActionStep({

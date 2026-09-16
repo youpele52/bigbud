@@ -2,6 +2,7 @@ import type {
   ModelSelection,
   OrchestrationThread,
   ProviderKind,
+  RuntimeMode,
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
@@ -19,6 +20,7 @@ export function startProviderSession(input: {
   readonly createdAt: string;
   readonly provider: ProviderKind;
   readonly modelSelection: ModelSelection;
+  readonly runtimeMode: RuntimeMode;
   readonly cwd: string | undefined;
   readonly fresh?: boolean;
   readonly resumeCursor?: unknown;
@@ -37,7 +39,7 @@ export function startProviderSession(input: {
       threadId: input.threadId,
       status: "starting",
       providerName: input.provider,
-      runtimeMode: input.thread.runtimeMode,
+      runtimeMode: input.runtimeMode,
       activeTurnId: null,
       sessionEpoch: nextSessionEpoch,
       lastError: null,
@@ -57,7 +59,7 @@ export function startProviderSession(input: {
       ...(input.cwd ? { cwd: input.cwd } : {}),
       modelSelection: input.modelSelection,
       ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-      runtimeMode: input.thread.runtimeMode,
+      runtimeMode: input.runtimeMode,
       sessionEpoch: nextSessionEpoch,
     }),
   );

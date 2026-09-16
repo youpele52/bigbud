@@ -23,6 +23,7 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
+  readonly detach?: () => void;
   readonly pid: number;
   write(data: string): void;
   resize(cols: number, rows: number): void;
@@ -32,6 +33,8 @@ export interface PtyProcess {
 }
 
 export interface PtySpawnInput {
+  readonly ownerKey?: string;
+  readonly recoverOnly?: boolean;
   shell: string;
   args?: string[];
   cwd: string;

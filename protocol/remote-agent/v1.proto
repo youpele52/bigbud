@@ -17,6 +17,8 @@ message Frame {
     CancelRequest cancel_request = 5;
     CancelResponse cancel_response = 6;
     ProtocolError protocol_error = 7;
+    SupervisorShutdownRequest supervisor_shutdown_request = 33;
+    SupervisorShutdownResponse supervisor_shutdown_response = 34;
     WorkspaceOpenRequest workspace_open_request = 8;
     WorkspaceOpenResponse workspace_open_response = 9;
     ReadFileRequest read_file_request = 10;

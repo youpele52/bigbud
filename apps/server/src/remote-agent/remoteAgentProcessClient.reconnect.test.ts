@@ -41,6 +41,27 @@ function output(sequence: number, text: string): RemoteAgentFrame {
 }
 
 describe("remote agent process client pre-acceptance recovery", () => {
+  it("surfaces missing durable output even when the retained operation completed successfully", async () => {
+    const client = new RemoteAgentProcessClient(
+      fakeConnection([
+        {
+          type: "processAttachResponse",
+          value: {
+            requestId: "attach",
+            operationId: "operation",
+            state: "completed",
+            nextSequence: 2,
+            firstRetainedSequence: 2,
+          },
+        },
+        completed,
+      ]),
+    );
+    await expect(client.attach({ operationId: "operation" })).rejects.toMatchObject({
+      code: "PROCESS_OUTPUT_GAP",
+    });
+  });
+
   it("reattaches when transport fails before the acceptance response", async () => {
     let reconnects = 0;
     const replacement = new RemoteAgentProcessClient(
@@ -82,7 +103,7 @@ describe("remote agent process client pre-acceptance recovery", () => {
     expect(reconnects).toBe(1);
   });
 
-  it("resubmits the same operation identity when the agent has no acceptance record", async () => {
+  it("never resubmits when the agent has no retained acceptance record", async () => {
     const digest = new Uint8Array([1, 2, 3]);
     const processRequests: RemoteAgentFrame[] = [];
     let attachRequested = false;
@@ -128,17 +149,15 @@ describe("remote agent process client pre-acceptance recovery", () => {
       async () => new RemoteAgentProcessClient(replacementConnection),
     );
 
-    await client.run({
-      workspaceHandle: "workspace",
-      operationId: "operation",
-      requestDigest: digest,
-      command: "printf",
-    });
+    await expect(
+      client.run({
+        workspaceHandle: "workspace",
+        operationId: "operation",
+        requestDigest: digest,
+        command: "printf",
+      }),
+    ).rejects.toMatchObject({ code: "PROCESS_OUTCOME_UNKNOWN" });
 
-    expect(processRequests).toHaveLength(1);
-    expect(processRequests[0]).toMatchObject({
-      type: "processRequest",
-      value: { operationId: "operation", requestDigest: digest },
-    });
+    expect(processRequests).toHaveLength(0);
   });
 });

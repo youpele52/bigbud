@@ -5,6 +5,8 @@ import {
   deleteAllHistoryForThread as ioDeleteAllHistoryForThread,
   deleteHistory as ioDeleteHistory,
   readHistory as ioReadHistory,
+  historyPath,
+  legacyHistoryPath,
 } from "./Manager.history-io";
 import { toSessionKey } from "./Manager.shell";
 import { type TerminalManagerState, type TerminalSessionState } from "./Manager.types";
@@ -67,6 +69,14 @@ export const makeHistoryAccessors = (input: {
   readonly historyLineLimit: number;
   readonly fileSystem: FileSystem.FileSystem;
 }) => ({
+  historyExists: (threadId: string, terminalId: string): Effect.Effect<boolean> =>
+    Effect.gen(function* () {
+      return (
+        (yield* input.fileSystem.exists(historyPath(input.logsDir, threadId, terminalId))) ||
+        (terminalId === "default" &&
+          (yield* input.fileSystem.exists(legacyHistoryPath(input.logsDir, threadId))))
+      );
+    }).pipe(Effect.orDie),
   readHistory: (threadId: string, terminalId: string): Effect.Effect<string> =>
     ioReadHistory(input.logsDir, input.historyLineLimit, threadId, terminalId).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),

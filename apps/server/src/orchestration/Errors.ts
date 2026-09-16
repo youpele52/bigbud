@@ -32,7 +32,9 @@ export class OrchestrationCommandInvariantError extends Schema.TaggedErrorClass<
   {
     commandType: Schema.String,
     detail: Schema.String,
-    code: Schema.optional(Schema.Literal("thread_already_exists")),
+    code: Schema.optional(
+      Schema.Literals(["thread_already_exists", "prompt_queue_full", "prompt_not_queueable"]),
+    ),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

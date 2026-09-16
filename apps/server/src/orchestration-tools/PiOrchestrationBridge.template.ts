@@ -32,10 +32,10 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
   return [
     'import { Type } from "@earendil-works/pi-ai";',
     'import { defineTool } from "@earendil-works/pi-coding-agent";',
-    'import { randomUUID } from "node:crypto";',
+    'import { createHash } from "node:crypto";',
     "",
     `const CONFIG = ${config};`,
-    "const SOURCE_MESSAGE_ID = randomUUID();",
+    "const SOURCE_MESSAGE_ID = `mcp-source:${createHash('sha256').update(String(CONFIG.providerSessionId || CONFIG.threadId)).digest('hex')}`;",
     "",
     "function textResult(message) {",
     "  return {",

@@ -5,6 +5,8 @@
  * @module SqliteClient
  */
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { chmodSync } from "node:fs";
+import { dirname } from "node:path";
 
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
@@ -222,14 +224,30 @@ const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
 const make = (
   options: SqliteClientConfig,
 ): Effect.Effect<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> =>
-  makeWithDatabase(
-    options,
-    () =>
-      new DatabaseSync(options.filename, {
-        readOnly: options.readonly ?? false,
-        allowExtension: options.allowExtension ?? false,
-      }),
-  );
+  makeWithDatabase(options, () => {
+    if (options.filename !== ":memory:" && dirname(options.filename) !== ".") {
+      chmodSync(dirname(options.filename), 0o700);
+    }
+    const database = new DatabaseSync(options.filename, {
+      readOnly: options.readonly ?? false,
+      allowExtension: options.allowExtension ?? false,
+    });
+    if (options.filename !== ":memory:") {
+      for (const filename of [
+        options.filename,
+        `${options.filename}-wal`,
+        `${options.filename}-shm`,
+      ]) {
+        try {
+          chmodSync(filename, 0o600);
+        } catch (cause) {
+          if (!(cause instanceof Error) || !("code" in cause) || cause.code !== "ENOENT")
+            throw cause;
+        }
+      }
+    }
+    return database;
+  });
 
 const makeMemory = (
   config: SqliteMemoryClientConfig = {},

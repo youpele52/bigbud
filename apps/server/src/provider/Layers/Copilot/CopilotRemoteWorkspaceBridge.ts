@@ -59,8 +59,9 @@ function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command:
       additionalProperties: false,
     },
     overridesBuiltInTool: true,
-    handler: async ({ command }) => {
+    handler: async ({ command }, invocation) => {
       const result = await runToolCommand({
+        invocationId: `copilot-tool:${invocation.sessionId}:${invocation.toolCallId}`,
         target: transportTarget,
         command: "sh",
         args: ["-lc", command],
@@ -106,7 +107,7 @@ export async function createCopilotRemoteWorkspaceBridge(
     cleanup: bridge.cleanup,
     clientSessionFsConfig: bridge.sessionFsConfig,
     sessionConfig: {
-      createSessionFsProvider: () => bridge.createSessionFsHandler(),
+      createSessionFsProvider: (session) => bridge.createSessionFsHandler(session.sessionId),
       excludedTools: [...COPILOT_REMOTE_WORKSPACE_EXCLUDED_TOOLS],
       tools: [createRemoteBashTool(workspaceTarget)],
       systemMessage: {

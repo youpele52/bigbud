@@ -94,10 +94,23 @@ export function runDirectThreadRetentionCoordinated(
     );
     if (!owned)
       return yield* Effect.fail(new Error("retention run active-slot ownership was lost"));
-    if (input.run.status !== "selecting") {
+    let runStatus = input.run.status;
+    if (runStatus === "preparing" || runStatus === "purging") {
+      const deferred = yield* input.repository.transitionRun({
+        runId: input.run.runId,
+        expectedStatuses: [runStatus],
+        nextStatus: "deferred",
+        updatedAt: createdAt,
+      });
+      if (!deferred) {
+        return yield* Effect.fail(new Error("retention recovery lost active-slot ownership"));
+      }
+      runStatus = "deferred";
+    }
+    if (runStatus !== "selecting") {
       const transitioned = yield* input.repository.transitionRun({
         runId: input.run.runId,
-        expectedStatuses: [input.run.status],
+        expectedStatuses: [runStatus],
         nextStatus: "selecting",
         updatedAt: createdAt,
       });
@@ -143,6 +156,9 @@ export function runDirectThreadRetentionCoordinated(
         return yield* Effect.fail(new Error("retention item disappeared after deletion dispatch"));
       }
       let status = persistedItem.value.status;
+      // Eligibility may change (including another deletion) after selection.
+      // A persisted terminal outcome takes precedence over the read model.
+      if (["completed", "skipped", "failed"].includes(status)) return;
       const transition = Effect.fn("ThreadRetention.transitionItemRequired")(function* (
         nextStatus: ThreadRetentionRunItem["status"],
         lastErrorCode: string | null = null,

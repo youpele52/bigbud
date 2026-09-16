@@ -24,6 +24,7 @@ import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import { noteThreadTitleCommand } from "../orchestration-tools/ThreadTitleLock.ts";
 import { decideThreadPinCommand } from "./deciderThreads.pin.ts";
+import { makeThreadDeletedPayload } from "./deciderThreads.lifecycle.delete.ts";
 
 /** Maximum number of seed messages accepted on `thread.create` to prevent write amplification. */
 const MAX_SEED_MESSAGES = 200;
@@ -206,20 +207,15 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         command,
         threadId: command.threadId,
       });
-      const occurredAt = command.createdAt;
       return {
         ...withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
-          occurredAt,
+          occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
         type: "thread.deleted",
-        payload: {
-          threadId: command.threadId,
-          ...(command.threadIds !== undefined ? { threadIds: command.threadIds } : {}),
-          deletedAt: occurredAt,
-        },
+        payload: makeThreadDeletedPayload(command),
       };
     }
 

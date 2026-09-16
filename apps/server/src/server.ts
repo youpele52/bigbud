@@ -87,6 +87,7 @@ import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
+import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
 import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
 import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
@@ -282,7 +283,7 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
         const base = yield* PtyAdapter;
         const resolver = configuredRemoteAgentLayers.ptyResolver;
         if (!resolver) return base;
-        return makeRemoteAgentPtyAdapter(base, resolver);
+        return makeRemoteAgentPtyAdapter(base, resolver, isRemoteAgentExecutionTarget);
       }),
     ).pipe(Layer.provide(PtyAdapterLive))
   : PtyAdapterLive;

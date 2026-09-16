@@ -8,6 +8,9 @@ impl AgentSession {
         if !self.ready {
             return Err(SessionError::HelloRequired);
         }
+        if !self.is_accepting_work() {
+            return Err(SessionError::Restarting);
+        }
         if request.pty_id.is_empty() {
             return Err(SessionError::Pty("PTY ID is required".to_owned()));
         }

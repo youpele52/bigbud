@@ -2,6 +2,7 @@ import type {
   ExecutionTargetId,
   ModelSelection,
   OrchestrationLatestTurn,
+  OrchestrationQueuedPrompt,
   OrchestrationProposedPlanId,
   OrchestrationSessionStatus,
   OrchestrationTurnControlOperation,
@@ -172,7 +173,7 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
-  queuedPrompts?: Array<{ id: MessageId; text: string; createdAt: string }>;
+  queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;
   queueHold?: boolean;
   error: string | null;

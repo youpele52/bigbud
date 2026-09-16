@@ -53,6 +53,12 @@ const manifest = parseRemoteAgentArtifactManifest({
   ],
 });
 
+function provisionLegacyActivationState(home: string): void {
+  const stateRoot = join(home, ".bigbud/agent/state");
+  mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
+  chmodSync(stateRoot, 0o700);
+}
+
 describe("remote agent artifact lifecycle", () => {
   it("maps only the initially supported Linux targets", () => {
     expect(resolveRemoteAgentTargetTriple("linux", "x86_64")).toBe("x86_64-unknown-linux-gnu");
@@ -125,6 +131,7 @@ describe("remote agent artifact lifecycle", () => {
     expect(script.command).toContain('ln "$staged" "$installed"');
     expect(script.command).not.toContain("target-triple");
     expect(script.command).toContain('[ -e "$path" ] || [ -L "$path" ]');
+    expect(script.command).not.toContain("state_root");
     expect(script.command).not.toContain("StrictHostKeyChecking=no");
     expect(script.stdin).toBe("AQID");
   });
@@ -199,6 +206,7 @@ describe("remote agent artifact lifecycle", () => {
             stagedBase64: bytes.toString("base64"),
           });
           run(install.command, install.stdin);
+          provisionLegacyActivationState(home);
           run(buildRemoteAgentActivationScript(artifact));
           if (artifact === oldArtifact) {
             run(buildRemoteAgentActivationFinalizeScript(artifact));
@@ -252,6 +260,7 @@ describe("remote agent artifact lifecycle", () => {
           stagedBase64: Buffer.from(bytes).toString("base64"),
         });
         run(install.command, install.stdin);
+        provisionLegacyActivationState(home);
         run(buildRemoteAgentActivationScript(artifact));
         const active = join(home, ".bigbud/agent/bin/current");
         expect(existsSync(active)).toBe(true);
@@ -288,6 +297,7 @@ describe("remote agent artifact lifecycle", () => {
           stagedBase64: Buffer.from(bytes).toString("base64"),
         });
         run(install.command, install.stdin);
+        provisionLegacyActivationState(home);
         const binRoot = join(home, ".bigbud/agent/bin");
         const active = join(binRoot, "current");
         const previous = join(binRoot, "previous");

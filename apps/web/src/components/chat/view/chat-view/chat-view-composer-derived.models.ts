@@ -86,8 +86,16 @@ export function useComposerProviderState(
         models: selectedProviderModels,
         prompt: base.prompt,
         modelOptions: composerModelOptions,
+        subProviderID: getModelSelectionSubProviderID(selectedDraftOrThreadModelSelection),
       }),
-    [base.prompt, composerModelOptions, selectedModel, selectedProvider, selectedProviderModels],
+    [
+      base.prompt,
+      composerModelOptions,
+      selectedDraftOrThreadModelSelection,
+      selectedModel,
+      selectedProvider,
+      selectedProviderModels,
+    ],
   );
 
   const selectedPromptEffort = composerProviderState.promptEffort;

@@ -1,36 +1,16 @@
-import {
-  ApprovalRequestId,
-  CommandId,
-  MessageId,
-  type ModelSelection,
-  type ProviderApprovalDecision,
-  type ThreadId,
-} from "@bigbud/contracts";
+import { type ModelSelection, type ThreadId } from "@bigbud/contracts";
 import { deriveWorkLogEntries } from "@bigbud/shared/workLog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { deriveActiveWorkStartedAt } from "~/logic/session/session.logic";
-import {
-  derivePendingUserInputProgress,
-  type PendingUserInputDraftAnswer,
-} from "~/logic/user-input";
-
 import { MobileStartupSplash } from "../components/shell/MobileStartupSplash";
-import {
-  applyMobileUserInputCustomAnswer,
-  resolveMobileUserInputAnswers,
-} from "../components/threads/thread/composer/MobileComposer";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { useMobileThread } from "../hooks/useMobileThread";
 import { useMobileWorkingState } from "../hooks/useMobileWorkingState";
 import { useMobileGitStatus } from "../hooks/useMobileGitStatus";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
-import {
-  clearMobileDraftThread,
-  getMobileDraftThread,
-  type MobileDraftThread,
-} from "../lib/mobileDraftThread";
+import { makeMobileComposerDraftIdentity } from "../lib/mobileDraftThread";
 import {
   isMobileComposerModelLocked,
   resolveMobileComposerModelSelection,
@@ -41,52 +21,54 @@ import {
   derivePendingUserInputs,
   resolveThreadWorkspaceRoot,
 } from "../lib/mobileModels";
-import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
 import { deriveUserTurnAnchorsFromThreadMessages } from "../logic/mobileReaderPosition.logic";
+import { createMobileThreadCommands } from "./MobileThread.commands";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 import { useMobileThreadScroll } from "./MobileThread.scroll";
 import { MobileThreadView } from "./MobileThread.view";
+import { MobileQueueNotice } from "../components/threads/thread/MobileQueueNotice";
 import { createMobileUserInputHandlers } from "./MobileThread.userInput";
-
-function newId() {
-  return crypto.randomUUID();
-}
-
-function newCommandId() {
-  return CommandId.makeUnsafe(newId());
-}
-
-function newMessageId() {
-  return MessageId.makeUnsafe(newId());
-}
-
-function resolveDraftWorkspaceRoot(
-  snapshot: NonNullable<ReturnType<typeof useMobileSnapshot>["snapshotQuery"]["data"]>,
-  draft: MobileDraftThread,
-): string | undefined {
-  const project = snapshot.projects.find((candidate) => candidate.id === draft.projectId);
-  return draft.worktreePath ?? project?.workspaceRoot ?? undefined;
-}
+import { describeRecoveryReason } from "../logic/mobileRecovery.types";
+import { isMobileConnectionActionsBlocked } from "../components/shell/MobileConnectionNotice.logic";
+import { redactMobileText } from "../lib/mobileRedaction";
+import { useMobileThreadState } from "./MobileThread.state";
+import { resolveDraftWorkspaceRoot } from "./MobileThread.workspace";
+import { useMobileThreadDelivery } from "./MobileThread.delivery";
 
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
-  const { client, snapshotQuery } = useMobileSnapshot(session);
+  const { client, connection, recovery, recoveryState, restart, snapshotQuery } =
+    useMobileSnapshot(session);
   const { threadQuery, threadError } = useMobileThread(session, threadId);
   const { providers } = useMobileServerConfig(session);
   const { startNewThread } = useMobileNewThread();
-  const [prompt, setPrompt] = useState("");
-  const [userInputAnswersByRequestId, setUserInputAnswersByRequestId] = useState<
-    Record<string, Record<string, PendingUserInputDraftAnswer>>
-  >({});
-  const [userInputQuestionIndexByRequestId, setUserInputQuestionIndexByRequestId] = useState<
-    Record<string, number>
-  >({});
   const [isRespondingToUserInput, setIsRespondingToUserInput] = useState(false);
-  const [pendingModelSelection, setPendingModelSelection] = useState<ModelSelection | null>(null);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
-  const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
+  const composerIdentity = useMemo(
+    () =>
+      session
+        ? makeMobileComposerDraftIdentity({
+            backendBaseUrl: session.backendBaseUrl,
+            sessionId: session.sessionId,
+            threadId,
+          })
+        : null,
+    [session, threadId],
+  );
+  const composerState = useMobileThreadState({ identity: composerIdentity, threadId });
+  const composerIdentityKey = composerIdentity
+    ? `${composerIdentity.backendOrigin}:${composerIdentity.sessionId}:${composerIdentity.threadId}`
+    : threadId;
+  const { delivery, decisionDelivery } = useMobileThreadDelivery({
+    identity: composerIdentityKey,
+    onStateChange: composerState.setDeliveryState,
+    submitted: composerState.submitted,
+  });
+  const draftThread = composerState.draftThread;
+  const prompt = composerState.prompt;
+  const clearNewThread = composerState.clearNewThread;
 
   const snapshotThread = useMemo(
     () => snapshotQuery.data?.threads.find((candidate) => candidate.id === threadId) ?? null,
@@ -150,18 +132,24 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { workingVerb, nowIso } = useMobileWorkingState(showWorkingIndicator);
 
   const activeUserInputAnswers = activePendingUserInput
-    ? (userInputAnswersByRequestId[activePendingUserInput.requestId] ?? {})
+    ? (composerState.userInputAnswersByRequestId[activePendingUserInput.requestId] ?? {})
     : {};
   const activeUserInputQuestionIndex = activePendingUserInput
-    ? (userInputQuestionIndexByRequestId[activePendingUserInput.requestId] ?? 0)
+    ? (composerState.userInputQuestionIndexByRequestId[activePendingUserInput.requestId] ?? 0)
     : 0;
+  const activeUserInputQuestion = activePendingUserInput?.questions[activeUserInputQuestionIndex];
+  const composerValue = activePendingUserInput
+    ? activeUserInputQuestion
+      ? (activeUserInputAnswers[activeUserInputQuestion.id]?.customAnswer ?? "")
+      : ""
+    : composerState.prompt;
 
   useEffect(() => {
     if (thread) {
-      clearMobileDraftThread(threadId);
+      clearNewThread();
       markThreadVisited(threadId);
     }
-  }, [thread, threadId]);
+  }, [clearNewThread, thread, threadId]);
 
   useEffect(() => {
     setProviderUnlocked(false);
@@ -176,26 +164,13 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     [thread?.messages],
   );
 
-  const { messagesScrollRef, readerPosition, scrollToMessage } = useMobileThreadScroll({
-    isRunning,
-    messages: thread?.messages ?? [],
-    threadId,
-    threadLoaded: thread !== null,
-    userTurnAnchorCount: userTurnAnchors.length,
-  });
-
-  const interruptTurn = useCallback(async () => {
-    if (!client) {
-      return;
-    }
-    await client.dispatchCommand({
-      type: "thread.turn.interrupt",
-      commandId: newCommandId(),
+  const { isFollowing, messagesScrollRef, readerPosition, scrollToLatest, scrollToMessage } =
+    useMobileThreadScroll({
+      messages: thread?.messages ?? [],
       threadId,
-      createdAt: new Date().toISOString(),
+      threadLoaded: thread !== null,
+      userTurnAnchorCount: userTurnAnchors.length,
     });
-    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
-  }, [client, snapshotQuery, threadId, threadQuery]);
 
   if (!session) {
     return <p className="px-1 py-8 text-sm text-muted-foreground">This phone is not paired yet.</p>;
@@ -203,18 +178,61 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
   const snapshot = snapshotQuery.data;
   const isDraft = thread === null && draftThread !== null;
+  const selectedThreadStatus =
+    recoveryState.selectedThreadId === threadId ? recoveryState.selectedThreadStatus : "unknown";
+  const selectedThreadUnavailable =
+    !isDraft &&
+    !thread &&
+    recoveryState.freshness !== "refreshing" &&
+    (selectedThreadStatus === "missing" ||
+      selectedThreadStatus === "deleted" ||
+      selectedThreadStatus === "present");
 
   if (!thread && !isDraft) {
-    if (threadQuery.isLoading) {
+    if (selectedThreadUnavailable) {
+      return (
+        <div className="grid gap-3 px-1 py-8">
+          <p className="text-sm font-medium text-foreground">
+            {selectedThreadStatus === "deleted" ? "Thread was deleted" : "Thread not found"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {selectedThreadStatus === "deleted"
+              ? "This thread is no longer available on the desktop server."
+              : "The selected thread is not available in this session."}
+          </p>
+        </div>
+      );
+    }
+    if (
+      (recoveryState.freshness === "unavailable" || recoveryState.freshness === "stale") &&
+      recoveryState.reason !== null
+    ) {
+      return (
+        <div className="grid gap-3 px-1 py-8">
+          <p className="text-sm font-medium text-foreground">Unable to recover thread</p>
+          <p className="text-sm text-muted-foreground">
+            {describeRecoveryReason(recoveryState.reason)}
+          </p>
+          <button
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 text-sm"
+            onClick={() => restart()}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    if (recoveryState.freshness === "refreshing" || threadQuery.isPending) {
       return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
     }
     if (threadError) {
       return (
         <div className="grid gap-3 px-1 py-8">
           <p className="text-sm font-medium text-foreground">Unable to load thread</p>
-          <p className="text-sm text-muted-foreground">{threadError}</p>
+          <p className="text-sm text-muted-foreground">{redactMobileText(threadError)}</p>
           <button
-            className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 text-sm"
             onClick={() => void threadQuery.refetch()}
             type="button"
           >
@@ -226,17 +244,21 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     return <p className="px-1 py-8 text-sm text-muted-foreground">Thread not found.</p>;
   }
 
-  if (!snapshot) {
+  if (!snapshot && !thread && !isDraft) {
     return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
   }
 
   const projectId = thread?.projectId ?? draftThread!.projectId;
-  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
+  const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
   const projectTitle = project?.title ?? "Unknown project";
   const workspaceRoot = thread
-    ? resolveThreadWorkspaceRoot(snapshot, thread)
+    ? snapshot
+      ? resolveThreadWorkspaceRoot(snapshot, thread)
+      : (thread.worktreePath ?? undefined)
     : draftThread
-      ? resolveDraftWorkspaceRoot(snapshot, draftThread)
+      ? snapshot
+        ? resolveDraftWorkspaceRoot(snapshot, draftThread)
+        : (draftThread.worktreePath ?? undefined)
       : undefined;
   const messages = thread?.messages ?? [];
   const activeWorkStartedAt = thread
@@ -259,211 +281,119 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       providers,
       isRunning,
     },
-    pendingModelSelection,
+    composerState.pendingModelSelection,
   );
 
-  const handleModelSelectionChange = useCallback(
-    (next: ModelSelection) => {
-      if (lockedProvider !== null && next.provider !== lockedProvider && project) {
-        startNewThread(project.id, next);
-        return;
-      }
-      setPendingModelSelection(next);
-    },
-    [lockedProvider, project, startNewThread],
-  );
-
-  async function sendPrompt() {
-    if (!client) {
+  const handleModelSelectionChange = (next: ModelSelection) => {
+    if (lockedProvider !== null && next.provider !== lockedProvider && project) {
+      startNewThread(project.id, next);
       return;
     }
+    composerState.setPendingModelSelection(next);
+  };
 
-    if (activePendingUserInput) {
-      const progress = derivePendingUserInputProgress(
-        activePendingUserInput.questions,
-        activeUserInputAnswers,
-        activeUserInputQuestionIndex,
-      );
-      const draftAnswers = { ...activeUserInputAnswers };
-      if (progress.activeQuestion && prompt.trim().length > 0) {
-        draftAnswers[progress.activeQuestion.id] = applyMobileUserInputCustomAnswer(
-          draftAnswers[progress.activeQuestion.id],
-          prompt,
-        );
-      }
-
-      if (progress.isLastQuestion) {
-        const answers = resolveMobileUserInputAnswers(activePendingUserInput, draftAnswers);
-        if (!answers) {
-          return;
-        }
-        setIsRespondingToUserInput(true);
-        try {
-          await client.dispatchCommand({
-            type: "thread.user-input.respond",
-            commandId: newCommandId(),
-            threadId,
-            requestId: activePendingUserInput.requestId,
-            answers,
-            createdAt: new Date().toISOString(),
-          });
-          setPrompt("");
-          setUserInputAnswersByRequestId((existing) => {
-            const next = { ...existing };
-            delete next[activePendingUserInput.requestId];
-            return next;
-          });
-          setUserInputQuestionIndexByRequestId((existing) => {
-            const next = { ...existing };
-            delete next[activePendingUserInput.requestId];
-            return next;
-          });
-          await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
-        } finally {
-          setIsRespondingToUserInput(false);
-        }
-      } else if (progress.canAdvance) {
-        setUserInputQuestionIndexByRequestId((existing) => ({
-          ...existing,
-          [activePendingUserInput.requestId]: activeUserInputQuestionIndex + 1,
-        }));
-        setPrompt("");
-      }
-      return;
-    }
-
-    if (prompt.trim().length === 0) {
-      return;
-    }
-
-    const trimmedPrompt = prompt.trim();
-    const createdAt = new Date().toISOString();
-    const messageId = newMessageId();
-
-    if (isDraft && draftThread && project) {
-      await client.dispatchCommand({
-        type: "thread.turn.start",
-        commandId: newCommandId(),
-        threadId,
-        runtimeMode: draftThread.runtimeMode,
-        interactionMode: draftThread.interactionMode,
-        createdAt,
-        modelSelection: selectedModelSelection,
-        bootstrap: buildMobileCreateThreadBootstrap({
-          project,
-          promptText: trimmedPrompt,
-          createdAt: draftThread.createdAt,
-          branch: draftThread.branch,
-          worktreePath: draftThread.worktreePath,
-          runtimeMode: draftThread.runtimeMode,
-          interactionMode: draftThread.interactionMode,
-          modelSelection: selectedModelSelection,
-        }),
-        message: {
-          messageId,
-          role: "user",
-          text: trimmedPrompt,
-          attachments: [],
-        },
-      });
-      clearMobileDraftThread(threadId);
-      setPendingModelSelection(null);
-      setPrompt("");
-      await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
-      return;
-    }
-
-    if (!thread) {
-      return;
-    }
-
-    await client.dispatchCommand({
-      type: "thread.message.submit",
-      commandId: newCommandId(),
-      threadId,
-      createdAt,
-      delivery: "auto",
-      message: {
-        messageId,
-        text: trimmedPrompt,
-      },
-    });
-    setPrompt("");
-    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
-  }
-
-  async function respondToApproval(
-    requestId: ApprovalRequestId,
-    decision: ProviderApprovalDecision,
-  ) {
-    if (!client) {
-      return;
-    }
-    await client.dispatchCommand({
-      type: "thread.approval.respond",
-      commandId: newCommandId(),
-      threadId,
-      requestId,
-      decision,
-      createdAt: new Date().toISOString(),
-    });
-    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
-  }
+  const commands = createMobileThreadCommands({
+    actionsAvailable: recoveryState.actionsAvailable,
+    activePendingUserInput,
+    activeUserInputAnswers,
+    activeUserInputQuestionIndex,
+    client,
+    draftThread,
+    isDraft,
+    project,
+    prompt,
+    recovery,
+    refetchSnapshot: snapshotQuery.refetch,
+    refetchThread: threadQuery.refetch,
+    selectedModelSelection,
+    clearNewThread: composerState.clearNewThread,
+    clearSubmittedIfRevision: composerState.clearSubmittedIfRevision,
+    delivery,
+    decisionDelivery,
+    revision: composerState.revision,
+    setIsRespondingToUserInput,
+    setPendingModelSelection: composerState.setPendingModelSelection,
+    setUserInputAnswersByRequestId: composerState.setUserInputAnswersByRequestId,
+    setUserInputQuestionIndexByRequestId: composerState.setUserInputQuestionIndexByRequestId,
+    thread,
+    threadId,
+  });
 
   const userInputHandlers = createMobileUserInputHandlers({
     activeAnswers: activeUserInputAnswers,
     activePendingUserInput,
     activeQuestionIndex: activeUserInputQuestionIndex,
-    sendPrompt,
-    setAnswersByRequestId: setUserInputAnswersByRequestId,
-    setPrompt,
-    setQuestionIndexByRequestId: setUserInputQuestionIndexByRequestId,
+    sendPrompt: commands.sendPrompt,
+    setAnswersByRequestId: composerState.setUserInputAnswersByRequestId,
+    setQuestionIndexByRequestId: composerState.setUserInputQuestionIndexByRequestId,
   });
 
+  const handleComposerChange = (value: string) => {
+    if (activePendingUserInput && activeUserInputQuestion) {
+      userInputHandlers.changeCustomAnswer(activeUserInputQuestion.id, value);
+      return;
+    }
+    composerState.setPrompt(value);
+  };
+
   return (
-    <MobileThreadView
-      activeWorkStartedAt={activeWorkStartedAt}
-      messages={messages}
-      messagesScrollRef={messagesScrollRef}
-      nowIso={nowIso}
-      readerOutlineProps={{
-        anchors: userTurnAnchors,
-        currentAnchorMessageId: readerPosition.currentAnchorMessageId,
-        onJumpToMessage: scrollToMessage,
-      }}
-      showWorkingIndicator={showWorkingIndicator}
-      workingVerb={workingVerb}
-      workLogEntries={workLogEntries}
-      workspaceRoot={workspaceRoot}
-      composerProps={{
-        availableProviders: providers,
-        isRespondingToUserInput: isRespondingToUserInput,
-        isRunning,
-        lockedProvider,
-        modelSelection: selectedModelSelection,
-        onAdvanceUserInput: userInputHandlers.advance,
-        onChange: setPrompt,
-        onChangeUserInputCustomAnswer: userInputHandlers.changeCustomAnswer,
-        onModelSelectionChange: handleModelSelectionChange,
-        onPreviousUserInputQuestion: userInputHandlers.previous,
-        onProviderUnlock: () => setProviderUnlocked(true),
-        onRespondToApproval: (requestId, decision) => void respondToApproval(requestId, decision),
-        onSend: () => void sendPrompt(),
-        onStop: () => void interruptTurn(),
-        onToggleUserInputOption: userInputHandlers.toggleOption,
-        pendingApproval: activePendingApproval,
-        pendingUserInput: activePendingUserInput,
-        placeholder: "Ask anything, @tag files/folders, or use / commands",
-        projectTitle,
-        isGitRepo: gitStatusQuery.data?.isRepo ?? false,
-        activeThreadBranch: thread?.branch ?? draftThread?.branch ?? null,
-        activeWorktreePath: thread?.worktreePath ?? draftThread?.worktreePath ?? null,
-        currentGitBranch: gitStatusQuery.data?.branch ?? null,
-        userInputAnswers: activeUserInputAnswers,
-        userInputQuestionIndex: activeUserInputQuestionIndex,
-        value: prompt,
-        workingVerb,
-      }}
-    />
+    <div className="relative h-full">
+      <MobileQueueNotice queuedPromptCount={thread?.queuedPrompts?.length ?? 0} />
+      <MobileThreadView
+        activeWorkStartedAt={activeWorkStartedAt}
+        isFollowing={isFollowing}
+        messages={messages}
+        messagesScrollRef={messagesScrollRef}
+        nowIso={nowIso}
+        onRetryRecovery={() => restart()}
+        onScrollToLatest={scrollToLatest}
+        readerOutlineProps={{
+          anchors: userTurnAnchors,
+          currentAnchorMessageId: readerPosition.currentAnchorMessageId,
+          onJumpToMessage: scrollToMessage,
+        }}
+        showWorkingIndicator={showWorkingIndicator}
+        recoveryState={recoveryState}
+        connection={connection}
+        workingVerb={workingVerb}
+        workLogEntries={workLogEntries}
+        workspaceRoot={workspaceRoot}
+        composerProps={{
+          availableProviders: providers,
+          isRespondingToUserInput: isRespondingToUserInput,
+          isRunning,
+          lockedProvider,
+          modelSelection: selectedModelSelection,
+          onAdvanceUserInput: userInputHandlers.advance,
+          onChange: handleComposerChange,
+          onCheckDelivery: () => void commands.checkDelivery(),
+          onModelSelectionChange: handleModelSelectionChange,
+          onPreviousUserInputQuestion: userInputHandlers.previous,
+          onProviderUnlock: () => setProviderUnlocked(true),
+          onRespondToApproval: (requestId, decision) =>
+            void commands.respondToApproval(requestId, decision),
+          onSend: () => void commands.sendPrompt(),
+          onStop: () => void commands.interruptTurn(),
+          onToggleUserInputOption: userInputHandlers.toggleOption,
+          pendingApproval: activePendingApproval,
+          pendingUserInput: activePendingUserInput,
+          stateDependentActionsDisabled:
+            isMobileConnectionActionsBlocked(connection, recoveryState) ||
+            !recoveryState.actionsAvailable,
+          deliveryState: delivery.getState().status,
+          storageWarning: composerState.storageWarning,
+          placeholder: "What are we working on?",
+          projectTitle,
+          isGitRepo: gitStatusQuery.data?.isRepo ?? false,
+          activeThreadBranch: thread?.branch ?? draftThread?.branch ?? null,
+          activeWorktreePath: thread?.worktreePath ?? draftThread?.worktreePath ?? null,
+          currentGitBranch: gitStatusQuery.data?.branch ?? null,
+          userInputAnswers: activeUserInputAnswers,
+          userInputQuestionIndex: activeUserInputQuestionIndex,
+          value: composerValue,
+          workingVerb,
+        }}
+      />
+    </div>
   );
 }

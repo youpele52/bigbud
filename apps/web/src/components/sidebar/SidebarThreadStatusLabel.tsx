@@ -40,7 +40,7 @@ export function SidebarThreadStatusLabel({
           }`}
         />
       )}
-      <span className="hidden md:inline">{status.label}</span>
+      <span className={`hidden md:inline ${status.pulse ? "shimmer" : ""}`}>{status.label}</span>
     </span>
   );
 }

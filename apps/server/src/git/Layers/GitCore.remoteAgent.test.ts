@@ -141,10 +141,12 @@ it.layer(TestLayer)("GitCore remote read-only composition", (it) => {
         const { initialBranch } = yield* initRepoWithCommit(cwd);
         const local = yield* GitCore;
         const targets: Array<string | undefined> = [];
+        const operationIds: Array<string | undefined> = [];
         const remote = yield* makeIsolatedGitCoreWithRemote({
           execute: local.execute,
           remoteExecute: (input) => {
             targets.push(input.executionTargetId);
+            operationIds.push(input.operationId);
             return local.execute({ ...input, executionTargetId: "local" });
           },
         });
@@ -154,26 +156,35 @@ it.layer(TestLayer)("GitCore remote read-only composition", (it) => {
           branch: "remote-branch",
           executionTargetId: "ssh:example",
           checkout: true,
+          operationId: "git-action:branch",
         });
         const renamed = yield* remote.renameBranch({
           cwd,
           oldBranch: "remote-branch",
           newBranch: "remote-renamed",
           executionTargetId: "ssh:example",
+          operationId: "git-action:rename",
         });
         expect(renamed.branch).toBe("remote-renamed");
         yield* remote.checkoutBranch({
           cwd,
           branch: initialBranch,
           executionTargetId: "ssh:example",
+          operationId: "git-action:checkout",
         });
         yield* remote.deleteBranch({
           cwd,
           branch: "remote-renamed",
           executionTargetId: "ssh:example",
+          operationId: "git-action:delete",
         });
         expect(targets.length).toBeGreaterThan(0);
         expect(targets.every((target) => target === "ssh:example")).toBe(true);
+        expect(operationIds).toContain("git-action:branch:create");
+        expect(operationIds).toContain("git-action:branch:checkout");
+        expect(operationIds).toContain("git-action:rename");
+        expect(operationIds).toContain("git-action:checkout");
+        expect(operationIds).toContain("git-action:delete");
       }),
     );
 

@@ -6,6 +6,7 @@ import {
   createMobileDraftThread,
   getMobileDraftThread,
   setMobileDraftThread,
+  makeMobileComposerDraftIdentity,
 } from "../lib/mobileDraftThread";
 import {
   buildMobileCreateThreadBootstrap,
@@ -35,10 +36,15 @@ describe("mobileDraftThread", () => {
 
   it("stores and clears draft threads in session storage", () => {
     const draft = createMobileDraftThread(BUILT_IN_CHATS_PROJECT_ID);
-    setMobileDraftThread(draft);
-    expect(getMobileDraftThread(draft.threadId)).toEqual(draft);
-    clearMobileDraftThread(draft.threadId);
-    expect(getMobileDraftThread(draft.threadId)).toBeNull();
+    const identity = makeMobileComposerDraftIdentity({
+      backendBaseUrl: "https://desktop.example/mobile",
+      sessionId: "session-1",
+      threadId: draft.threadId,
+    });
+    setMobileDraftThread(identity, draft);
+    expect(getMobileDraftThread(identity)).toEqual(draft);
+    clearMobileDraftThread(identity);
+    expect(getMobileDraftThread(identity)).toBeNull();
   });
 });
 

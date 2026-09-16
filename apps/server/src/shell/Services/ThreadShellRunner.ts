@@ -1,6 +1,7 @@
 import { Effect, Schema, ServiceMap } from "effect";
 
 export interface ThreadShellRunInput {
+  readonly invocationId?: string;
   readonly threadId: string;
   readonly cwd: string;
   readonly command: string;
@@ -26,7 +27,7 @@ export interface ThreadShellRunnerShape {
   readonly run: (
     input: ThreadShellRunInput,
   ) => Effect.Effect<ThreadShellRunResult, ThreadShellRunnerError>;
-  readonly closeThread: (threadId: string) => Effect.Effect<void>;
+  readonly closeThread: (threadId: string) => Effect.Effect<void, ThreadShellRunnerError>;
 }
 
 export class ThreadShellRunner extends ServiceMap.Service<

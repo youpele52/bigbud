@@ -3,13 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type {
-  ModelSelection,
-  ProviderRuntimeEvent,
-  ProviderSession,
-  ServerDiscoveryCatalog,
-  ServerSettings,
-} from "@bigbud/contracts";
+import type { ModelSelection, ServerDiscoveryCatalog, ServerSettings } from "@bigbud/contracts";
 import {
   ApprovalRequestId,
   CommandId,
@@ -20,7 +14,7 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { TextGenerationError } from "@bigbud/contracts";
-import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterEach, vi } from "vitest";
 
@@ -40,12 +34,8 @@ import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Lay
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
-import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
-import {
-  ProviderService,
-  type ProviderServiceShape,
-} from "../../provider/Services/ProviderService.ts";
+import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { deriveServerPaths, ServerConfig } from "../../startup/config.ts";
 import {
   TerminalHistoryError,
@@ -62,6 +52,13 @@ import { EntityPurgeLive } from "../../deletion/Layers/EntityPurge.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
+import { makeReactorProvider } from "./ProviderCommandReactor.test.provider.ts";
+import { ProjectionNoteRepositoryLive } from "../../persistence/Layers/ProjectionNotes.ts";
+import { ProjectionKanbanRepositoryLive } from "../../persistence/Layers/ProjectionKanban.ts";
+import {
+  DirectResourceCleanupExecutor,
+  type DirectResourceCleanupExecutorShape,
+} from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
 import { ProviderCommandReactorLive } from "./ProviderCommandReactor.ts";
 
 const cleanupTasks = new Set<() => Promise<void>>();
@@ -116,6 +113,7 @@ export async function waitFor(
 }
 
 export async function createHarness(input?: {
+  readonly cleanupExecutor?: DirectResourceCleanupExecutorShape;
   readonly baseDir?: string;
   readonly workspaceRoot?: string;
   readonly threadModelSelection?: ModelSelection;
@@ -133,106 +131,16 @@ export async function createHarness(input?: {
   trackedDirs.add(baseDir);
   const { stateDir } = deriveServerPathsSync(baseDir, undefined);
   trackedDirs.add(stateDir);
-  const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
-  let nextSessionIndex = 1;
-  const runtimeSessions: Array<ProviderSession> = [];
-  const modelSelection = input?.threadModelSelection ?? {
-    provider: "codex",
-    model: "gpt-5-codex",
-  };
-  const startSession = vi.fn((_: unknown, providerInput: unknown) => {
-    const sessionIndex = nextSessionIndex++;
-    const resumeCursor =
-      typeof providerInput === "object" && providerInput !== null && "resumeCursor" in providerInput
-        ? providerInput.resumeCursor
-        : undefined;
-    const threadId =
-      typeof providerInput === "object" &&
-      providerInput !== null &&
-      "threadId" in providerInput &&
-      typeof providerInput.threadId === "string"
-        ? ThreadId.makeUnsafe(providerInput.threadId)
-        : ThreadId.makeUnsafe(`thread-${sessionIndex}`);
-    const session: ProviderSession = {
-      provider: modelSelection.provider,
-      status: "ready" as const,
-      runtimeMode:
-        typeof providerInput === "object" &&
-        providerInput !== null &&
-        "runtimeMode" in providerInput &&
-        (providerInput.runtimeMode === "approval-required" ||
-          providerInput.runtimeMode === "full-access")
-          ? providerInput.runtimeMode
-          : "full-access",
-      ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
-      threadId,
-      resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
-      createdAt: now,
-      updatedAt: now,
-    };
-    runtimeSessions.push(session);
-    return Effect.succeed(session);
-  });
-  const sendTurn = vi.fn((_: unknown) =>
-    Effect.succeed({
-      threadId: ThreadId.makeUnsafe("thread-1"),
-      turnId: asTurnId("turn-1"),
-    }),
-  );
-  const interruptTurn = vi.fn((interruptInput: unknown) => {
-    if (input?.interruptTurnFailure) {
-      return Effect.fail(
-        new ProviderAdapterRequestError({
-          provider: modelSelection.provider,
-          method: "interruptTurn",
-          detail: input.interruptTurnFailure,
-        }),
-      );
-    }
-    if (!input?.interruptTurnLeavesSessionActive) {
-      const threadId =
-        typeof interruptInput === "object" &&
-        interruptInput !== null &&
-        "threadId" in interruptInput
-          ? (interruptInput as { threadId?: ThreadId }).threadId
-          : undefined;
-      const session = runtimeSessions.find((entry) => entry.threadId === threadId);
-      const sessionIndex = runtimeSessions.findIndex((entry) => entry.threadId === threadId);
-      if (session && sessionIndex >= 0) {
-        runtimeSessions[sessionIndex] = {
-          ...session,
-          status: "ready",
-          activeTurnId: undefined,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-    }
-    return Effect.void;
-  });
-  const respondToRequest = vi.fn<ProviderServiceShape["respondToRequest"]>(() => Effect.void);
-  const respondToUserInput = vi.fn<ProviderServiceShape["respondToUserInput"]>(() => Effect.void);
-  const stopSession = vi.fn((stopInput: unknown) =>
-    Effect.gen(function* () {
-      if (input?.stopSessionFailure) {
-        return yield* new ProviderAdapterRequestError({
-          provider: modelSelection.provider,
-          method: "stopSession",
-          detail: input.stopSessionFailure,
-        });
-      }
-      const threadId =
-        typeof stopInput === "object" && stopInput !== null && "threadId" in stopInput
-          ? (stopInput as { threadId?: ThreadId }).threadId
-          : undefined;
-      if (!threadId) {
-        return;
-      }
-      const index = runtimeSessions.findIndex((session) => session.threadId === threadId);
-      if (index >= 0) {
-        runtimeSessions.splice(index, 1);
-      }
-    }),
-  );
+  const {
+    service,
+    modelSelection,
+    startSession,
+    sendTurn,
+    interruptTurn,
+    respondToRequest,
+    respondToUserInput,
+    stopSession,
+  } = makeReactorProvider(input, now);
   const renameBranch = vi.fn((gitInput: unknown) =>
     Effect.succeed({
       branch:
@@ -311,37 +219,6 @@ export async function createHarness(input?: {
 
   const unsupported = () => Effect.die(new Error("Unsupported provider call in test")) as never;
   const discoveryCatalog = input?.discoveryCatalog ?? { agents: [], skills: [] };
-  const service: ProviderServiceShape = {
-    startSession: startSession as ProviderServiceShape["startSession"],
-    startSessionFresh: startSession as ProviderServiceShape["startSessionFresh"],
-    sendTurn: sendTurn as ProviderServiceShape["sendTurn"],
-    interruptTurn: interruptTurn as ProviderServiceShape["interruptTurn"],
-    inspectActiveTurn: () =>
-      Effect.succeed({ status: "unavailable", observedAt: new Date().toISOString() }),
-    listActiveTurnLiveness: () => Effect.succeed([]),
-    recordTurnInspection: () => Effect.void,
-    claimTurnTerminal: () => Effect.succeed(true),
-    respondToRequest: respondToRequest as ProviderServiceShape["respondToRequest"],
-    respondToUserInput: respondToUserInput as ProviderServiceShape["respondToUserInput"],
-    stopSession: stopSession as ProviderServiceShape["stopSession"],
-    listSessions: () => Effect.succeed(runtimeSessions),
-    listSessionsForReconciliation: () =>
-      Effect.succeed({
-        sessions: runtimeSessions,
-        availableProviders: new Set(runtimeSessions.map((session) => session.provider)),
-        unavailableProviders: new Set(),
-        directoryAvailable: true,
-        diagnostics: [],
-      }),
-    getCapabilities: (_provider) =>
-      Effect.succeed({
-        sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
-      }),
-    rollbackConversation: () => unsupported(),
-    get streamEvents() {
-      return Stream.fromPubSub(runtimeEventPubSub);
-    },
-  };
   const browserService: BrowserManagerShape = {
     launch: () => Effect.void,
     navigate: () => unsupported(),
@@ -378,6 +255,13 @@ export async function createHarness(input?: {
     Layer.provideMerge(ComputerUseDisabledTestLayer),
   );
   const layer = ProviderCommandReactorLive.pipe(
+    Layer.provideMerge(ProjectionNoteRepositoryLive),
+    Layer.provideMerge(ProjectionKanbanRepositoryLive),
+    Layer.provide(
+      input?.cleanupExecutor
+        ? Layer.succeed(DirectResourceCleanupExecutor, input.cleanupExecutor)
+        : Layer.empty,
+    ),
     Layer.provideMerge(orchestrationLayer),
     Layer.provideMerge(
       Layer.succeed(ProjectionThreadWatchRepository, {

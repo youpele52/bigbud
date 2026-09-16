@@ -11,7 +11,7 @@ import type {
 } from "@bigbud/contracts";
 import type { PermissionRuleset } from "@opencode-ai/sdk/v2";
 
-import { listOpencodeProviders } from "./Provider.sdk.ts";
+import { listConnectedManagedServerProviders } from "../../managedServerProviderDiscovery.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 // ── Model selection type guard ────────────────────────────────────────
@@ -31,6 +31,16 @@ export function isProviderModelSelection(
     "model" in value &&
     typeof value.model === "string"
   );
+}
+
+export function resolveProviderModelVariant(value: unknown, provider: string): string | undefined {
+  if (!isProviderModelSelection(value, provider)) return undefined;
+  const options = value.options;
+  if (!options || typeof options !== "object") return undefined;
+  const reasoningEffort = (options as { readonly reasoningEffort?: unknown }).reasoningEffort;
+  if (typeof reasoningEffort !== "string") return undefined;
+  const trimmed = reasoningEffort.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 // ── Approval decision mapper ──────────────────────────────────────────
@@ -88,7 +98,7 @@ export async function resolveProviderIDForModel(
   modelID: string,
 ): Promise<string | undefined> {
   try {
-    const providers = await listOpencodeProviders(client);
+    const providers = await listConnectedManagedServerProviders(client);
     for (const p of providers) {
       if (p.models && modelID) {
         if (modelID in p.models) return p.id;

@@ -15,7 +15,8 @@ export async function withRemoteReadReconnect<T>(input: {
     return await input.operation(client);
   } catch (cause) {
     if (!(cause instanceof RemoteAgentConnectionError)) throw cause;
-    client = await input.resolver.resolve(input.target);
+    if (!client.reconnect) throw cause;
+    client = await client.reconnect();
     return input.operation(client);
   }
 }

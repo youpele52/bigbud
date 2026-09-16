@@ -9,9 +9,14 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { createHash } from "node:crypto";
 
 import { discoverProjectDeletionFiles } from "../../deletion/Layers/ProjectDeletion.files.ts";
+import { finalizeProjectCanonicalHistory } from "../../deletion/Layers/CanonicalThreadCleanup.ts";
+import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { ProjectionNoteRepository } from "../../persistence/Services/ProjectionNotes.ts";
+import { ProjectionKanbanRepository } from "../../persistence/Services/ProjectionKanban.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { waitForReadModelCondition, type ReadModelSettleCheck } from "./readModelSettle.ts";
 import { DirectResourceCleanupExecutor } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
@@ -86,8 +91,12 @@ export function evaluateProjectThreadSettle(
 
 export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
+  const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const config = yield* ServerConfig;
+  const notes = yield* ProjectionNoteRepository;
+  const kanban = yield* ProjectionKanbanRepository;
   const sql = yield* SqlClient.SqlClient;
+  const purgeQueries = makeProjectDeletionSql(sql);
   const cleanupExecutorService = yield* Effect.serviceOption(DirectResourceCleanupExecutor);
   const cleanupExecutor = Option.isSome(cleanupExecutorService)
     ? cleanupExecutorService.value
@@ -123,7 +132,6 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
       return;
     }
 
-    const result = yield* waitForProjectThreadsToSettle(deps, event.payload.projectId);
     const createdAt = new Date().toISOString();
     const abortDeletion = orchestrationEngine
       .dispatch({
@@ -139,6 +147,18 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
             .pipe(Effect.ignore),
         ),
       );
+    const ownershipSafe = yield* Effect.exit(
+      purgeQueries.assertProjectDeletionSafe({ projectId: event.payload.projectId }),
+    );
+    if (ownershipSafe._tag === "Failure") {
+      yield* Effect.logWarning("project deletion aborted due to cross-owned schedule", {
+        projectId: event.payload.projectId,
+      });
+      yield* abortDeletion;
+      return;
+    }
+
+    const result = yield* waitForProjectThreadsToSettle(deps, event.payload.projectId);
 
     if (!result.ok) {
       yield* Effect.logWarning("project deletion aborted", {
@@ -156,6 +176,20 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
     }
     const preparedExecutor = preparedExecutorExit.value;
     yield* Effect.gen(function* () {
+      const drainResult = yield* Effect.exit(
+        Effect.gen(function* () {
+          yield* notes.drainMutations;
+          yield* kanban.drainMutations;
+        }),
+      );
+      if (drainResult._tag === "Failure") {
+        yield* Effect.logWarning("project deletion mutation drain failed", {
+          projectId: event.payload.projectId,
+          detail: String(drainResult.cause),
+        });
+        yield* abortDeletion;
+        return;
+      }
       const files = yield* discoverProjectDeletionFiles(event.payload.projectId).pipe(
         Effect.provideService(ServerConfig, config),
         Effect.catch(() =>
@@ -298,6 +332,28 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
           ),
         );
       if (proofPersisted) {
+        yield* purgeQueries.deleteProjectDependents({
+          projectId: event.payload.projectId,
+        });
+        const canonicalPruningRecorded = yield* finalizeProjectCanonicalHistory({
+          projectionPipeline,
+          sql,
+          projectId: event.payload.projectId,
+          recordCheckpoint: cleanupRepository.markCanonicalPruned(
+            operationId,
+            new Date().toISOString(),
+            "project",
+          ),
+        }).pipe(
+          Effect.as(true),
+          Effect.catch((error) =>
+            Effect.logWarning("project canonical history cleanup deferred", {
+              projectId: event.payload.projectId,
+              detail: String(error),
+            }).pipe(Effect.as(false)),
+          ),
+        );
+        if (!canonicalPruningRecorded) return;
         yield* executeReadyDirectCleanupPlan({
           operationId,
           planDigest: storedPlan.planDigest,

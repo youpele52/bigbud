@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { startEventStream } from "./Adapter.stream.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
+import { makeOpencodeTextStream } from "./Adapter.stream.text.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("opencode-stream-recovery-thread");
 const TURN_ID = TurnId.makeUnsafe("opencode-stream-recovery-turn");
@@ -87,6 +88,25 @@ async function eventually(assertion: () => void): Promise<void> {
 }
 
 describe("OpenCode SSE recovery", () => {
+  it("keeps live delivery available for turns without a local polling owner", async () => {
+    const record = session({ event: { subscribe: async () => ({ stream: eofStream() }) } });
+    record.textStream = makeOpencodeTextStream();
+    expect(record.textStream.delta("text", "ab")).toBe("ab");
+    const emitted: ProviderRuntimeEvent[] = [];
+    const owner = startEventStream(
+      record,
+      () => Effect.void,
+      makeSyntheticEvent,
+      (events) => Effect.sync(() => void emitted.push(...events)),
+      ServiceMap.empty(),
+      undefined,
+      { retryDelays: [], random: () => 0 },
+    );
+    await eventually(() => expect(emitted).toHaveLength(1));
+    expect(record.textStream.delta("text", "cd")).toBe("cd");
+    owner.stop();
+  });
+
   it("preserves the active turn and emits one typed health event after bounded EOF recovery", async () => {
     let subscriptions = 0;
     let reconciliations = 0;
@@ -106,6 +126,9 @@ describe("OpenCode SSE recovery", () => {
         },
       },
     });
+    record.textStream = makeOpencodeTextStream();
+    record.promptTurnId = TURN_ID;
+    expect(record.textStream.delta("text", "ab")).toBe("ab");
     const owner = startEventStream(
       record,
       () => Effect.void,
@@ -120,6 +143,8 @@ describe("OpenCode SSE recovery", () => {
     expect(reconciliations).toBeGreaterThan(0);
     expect(sessionCreates).toBe(0);
     expect(record.activeTurnId).toBe(TURN_ID);
+    expect(record.textStream.delta("text", "ef")).toBe("");
+    expect(record.textStream.snapshot("text", "abcdef")).toBe("cdef");
     expect(emitted[0]).toMatchObject({
       type: "session.state.changed",
       turnId: TURN_ID,

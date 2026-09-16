@@ -5,7 +5,18 @@ import type {
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
-import { Cache, Duration, Effect, Equal, Layer, Option, Result, Stream } from "effect";
+import {
+  Cache,
+  Duration,
+  Effect,
+  Equal,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Result,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -19,8 +30,10 @@ import {
   spawnAndCollect,
 } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import { ClaudeProvider } from "../../Services/Claude/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsError } from "@bigbud/contracts";
 import {
   BUILT_IN_MODELS,
@@ -335,7 +348,19 @@ export const ClaudeProviderLive = Layer.effect(
   ClaudeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const decorateSnapshot = makeProviderEffortCacheDecorator<ClaudeSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) => JSON.stringify(settings),
+    });
     const capabilitiesProbeCache = yield* Cache.make({
       capacity: 1,
       timeToLive: Duration.minutes(5),
@@ -361,6 +386,7 @@ export const ClaudeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      decorateSnapshot,
       initialSnapshot: makeClaudeInitialSnapshot,
     });
   }),

@@ -9,7 +9,7 @@ import {
   type WsConnectionStatus,
   type WsConnectionUiState,
   useWsConnectionStatus,
-  WS_RECONNECT_MAX_ATTEMPTS,
+  formatWsReconnectAttempt,
 } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
 import { useOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
@@ -26,6 +26,7 @@ import {
 } from "./WebSocketConnectionSurface.blocking";
 import { useWebSocketHeartbeat } from "./WebSocketConnectionSurface.heartbeat";
 import { toastManager } from "./ui/toast";
+import type { ThreadToastData } from "./ui/toast.manager";
 import { useDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
@@ -40,11 +41,7 @@ function describeOfflineToast(): string {
 }
 
 function formatReconnectAttemptLabel(status: WsConnectionStatus): string {
-  const reconnectAttempt = Math.max(
-    1,
-    Math.min(status.reconnectAttemptCount, WS_RECONNECT_MAX_ATTEMPTS),
-  );
-  return `Attempt ${reconnectAttempt}/${status.reconnectMaxAttempts}`;
+  return `Attempt ${formatWsReconnectAttempt(status)}`;
 }
 
 function describeExhaustedToast(): string {
@@ -254,14 +251,15 @@ export function WebSocketConnectionCoordinator() {
               title: `Disconnected from ${APP_SERVER_NAME}`,
               type: "loading" as const,
               data: {
+                icon: "wifi" as const,
                 hideCopyButton: true,
               },
             };
 
       if (toastIdRef.current) {
-        toastManager.update(toastIdRef.current, toastPayload);
+        toastManager.update<ThreadToastData>(toastIdRef.current, toastPayload);
       } else {
-        toastIdRef.current = toastManager.add(toastPayload);
+        toastIdRef.current = toastManager.add<ThreadToastData>(toastPayload);
       }
     } else if (toastIdRef.current) {
       toastManager.close(toastIdRef.current);

@@ -14,7 +14,13 @@ describe("OpencodeRemoteWorkspaceBridge", () => {
         executionTargetId: "ssh:host=devbox&user=root&port=22",
         cwd: "/srv/project",
       },
-      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+      {
+        host: "127.0.0.1",
+        port: 3000,
+        threadId: "thread-1",
+        token: "token-1",
+        providerSessionId: "opencode:thread-1:0",
+      },
     );
 
     expect(bridge.serverName).toBe("bigbud_remote_workspace");

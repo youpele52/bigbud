@@ -162,6 +162,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           threadId: input.threadId,
           host: deps.serverConfig.host,
           port: deps.serverConfig.port,
+          providerSessionId: `claude:${sessionId ?? input.threadId}:${sessionEpoch}`,
         }),
       catch: (cause) =>
         new ProviderAdapterProcessError({

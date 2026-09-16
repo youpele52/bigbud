@@ -270,6 +270,21 @@ describe("FloatingAssistantWindows", () => {
     expect(compactChat.operations).toEqual(["restore", "alwaysOnTop", "show", "focus"]);
   });
 
+  it("keeps late-ready floating windows hidden while a screenshot is being captured", async () => {
+    const { registry, windows } = createWindows();
+    await windows.openCompactChat();
+    const compactChat = registry.get("compact-chat") as unknown as MockWindow;
+    const mascot = registry.get("mascot") as unknown as MockWindow;
+    vi.spyOn(windows.screenshots, "isCapturing", "get").mockReturnValue(true);
+    compactChat.operations.length = 0;
+    mascot.operations.length = 0;
+    emitWindow(compactChat, "ready-to-show");
+    emitWindow(mascot, "ready-to-show");
+    await windows.openCompactChat();
+    expect(compactChat.show).not.toHaveBeenCalled();
+    expect(mascot.showInactive).not.toHaveBeenCalled();
+  });
+
   it("does not touch a destroyed mascot when disable races compact chat creation", async () => {
     const { registry, windows } = createWindows();
 
@@ -287,6 +302,7 @@ describe("FloatingAssistantWindows", () => {
       onDisable: vi.fn(),
       onHideMascot: vi.fn(),
       onOpenChat: vi.fn(),
+      onScreenshot: vi.fn(),
       onOpenMain: vi.fn(),
       onQuit: vi.fn(),
       onRestart: vi.fn(),
@@ -294,6 +310,7 @@ describe("FloatingAssistantWindows", () => {
 
     expect(labels).toEqual([
       "Open chat",
+      "Add screenshot to chat",
       "New chat",
       "Open bigbud",
       "separator",

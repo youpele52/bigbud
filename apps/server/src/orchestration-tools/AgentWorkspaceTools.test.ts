@@ -47,6 +47,7 @@ function dependencies(
   const noteValues = input.noteValues ?? [noteValue];
   const cardValues = input.cardValues ?? [cardValue];
   const notes = {
+    drainMutations: Effect.void,
     list: ({ projectId: selectedProjectId, scope: selectedScope }) =>
       Effect.succeed(
         noteValues.filter((value) =>
@@ -61,6 +62,7 @@ function dependencies(
     deleteById: vi.fn(() => Effect.void),
   } satisfies ProjectionNoteRepositoryShape;
   const kanban = {
+    drainMutations: Effect.void,
     list: ({ projectId: selectedProjectId, scope: selectedScope }) =>
       Effect.succeed(
         cardValues.filter((value) =>

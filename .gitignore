@@ -23,7 +23,6 @@ __screenshots__/
 .codex-snapshots/
 docs/ideas/
 docs/handoff/
-docs/plan/
 /target/
 build-certs/
 # Local server state can contain per-thread authorization tokens.

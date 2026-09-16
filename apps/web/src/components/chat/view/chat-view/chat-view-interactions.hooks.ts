@@ -104,6 +104,10 @@ export function useChatViewInteractions({
     modelOptions: composer.composerModelOptions?.[composer.selectedProvider],
     prompt: base.prompt,
     onPromptChange: setPromptFromTraits,
+    subProviderID:
+      "subProviderID" in composer.selectedModelSelection
+        ? composer.selectedModelSelection.subProviderID
+        : undefined,
   });
 
   const providerTraitsPicker = renderProviderTraitsPicker({
@@ -114,6 +118,10 @@ export function useChatViewInteractions({
     modelOptions: composer.composerModelOptions?.[composer.selectedProvider],
     prompt: base.prompt,
     onPromptChange: setPromptFromTraits,
+    subProviderID:
+      "subProviderID" in composer.selectedModelSelection
+        ? composer.selectedModelSelection.subProviderID
+        : undefined,
   });
 
   const applyPromptReplacement = useApplyPromptReplacement({

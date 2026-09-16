@@ -100,14 +100,7 @@ export function usePlanHandlers({
       interactionMode: "default" | "plan";
     }) => {
       const api = readNativeApi();
-      if (
-        !api ||
-        !activeThread ||
-        !isServerThread ||
-        isSendBusy ||
-        isConnecting ||
-        sendInFlightRef.current
-      ) {
+      if (!api || !activeThread || !isServerThread || isConnecting || sendInFlightRef.current) {
         return;
       }
 
@@ -206,7 +199,6 @@ export function usePlanHandlers({
       beginLocalDispatch,
       forceStickToBottom,
       isConnecting,
-      isSendBusy,
       isServerThread,
       persistThreadSettingsForNextTurn,
       planCardDismissedForTurnRef,

@@ -3,6 +3,7 @@ import { Schema } from "effect";
 
 import {
   GitCreateWorktreeInput,
+  GitFetchInput,
   LOCAL_EXECUTION_TARGET_ID,
   GitPreparePullRequestThreadInput,
   GitRunStackedActionResult,
@@ -11,6 +12,7 @@ import {
 } from "./git";
 
 const decodeCreateWorktreeInput = Schema.decodeUnknownSync(GitCreateWorktreeInput);
+const decodeFetchInput = Schema.decodeUnknownSync(GitFetchInput);
 const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
   GitPreparePullRequestThreadInput,
 );
@@ -40,6 +42,23 @@ describe("GitCreateWorktreeInput", () => {
 
     expect(parsed.executionTargetId).toBe("ssh:prod");
   });
+
+  it("accepts an optional stable mutation operation id", () => {
+    const parsed = decodeCreateWorktreeInput({
+      cwd: "/repo",
+      branch: "feature/stable",
+      path: null,
+      operationId: "git-rpc-1",
+    });
+
+    expect(parsed.operationId).toBe("git-rpc-1");
+  });
+});
+
+describe("GitFetchInput", () => {
+  it("remains compatible when operationId is omitted", () => {
+    expect(decodeFetchInput({ cwd: "/repo" }).operationId).toBeUndefined();
+  });
 });
 
 describe("GitPreparePullRequestThreadInput", () => {
@@ -52,6 +71,17 @@ describe("GitPreparePullRequestThreadInput", () => {
 
     expect(parsed.reference).toBe("#42");
     expect(parsed.mode).toBe("worktree");
+  });
+
+  it("accepts an optional stable preparation operation id", () => {
+    const parsed = decodePreparePullRequestThreadInput({
+      cwd: "/repo",
+      reference: "#42",
+      mode: "worktree",
+      operationId: "prepare-retry-1",
+    });
+
+    expect(parsed.operationId).toBe("prepare-retry-1");
   });
 });
 

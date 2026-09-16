@@ -46,7 +46,7 @@ export function monitorProviderRuntimeEvents(input: {
       Effect.catchCause((cause) =>
         Effect.logWarning("provider event monitor exited", { provider: adapter.provider, cause }),
       ),
-      Effect.forkScoped,
+      Effect.forkScoped({ startImmediately: true }),
     ),
   ).pipe(Effect.asVoid);
 }

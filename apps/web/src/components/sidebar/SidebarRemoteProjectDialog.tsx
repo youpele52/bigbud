@@ -9,8 +9,13 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import type { RemoteProjectAuthMode, RemoteProjectDraft } from "./Sidebar.projects.logic";
+import type {
+  RemoteProjectAuthMode,
+  RemoteProjectDraft,
+  RemoteProjectTransport,
+} from "./Sidebar.projects.logic";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import { remoteProjectAgentTarget, SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
 
 type RemoteProjectField =
   | "displayName"
@@ -35,13 +40,17 @@ interface SidebarRemoteProjectDialogProps {
   isSubmitting: boolean;
   isVerifying: boolean;
   onOpenChange: (open: boolean) => void;
-  onFieldChange: <K extends RemoteProjectField | "authMode" | "providerRuntimeLocation">(
+  onFieldChange: <
+    K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation",
+  >(
     field: K,
     value: K extends "authMode"
       ? RemoteProjectAuthMode
-      : K extends "providerRuntimeLocation"
-        ? ProviderRuntimeLocation
-        : string,
+      : K extends "remoteTransport"
+        ? RemoteProjectTransport
+        : K extends "providerRuntimeLocation"
+          ? ProviderRuntimeLocation
+          : string,
   ) => void;
   onSubmit: () => void;
 }
@@ -70,7 +79,8 @@ function AuthModeButton({
     <button
       type="button"
       disabled={disabled}
-      className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+      aria-pressed={active}
+      className={`rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 ${
         active
           ? "border-primary/35 bg-primary/8 text-foreground shadow-xs/5"
           : "border-border/70 bg-muted/24 text-foreground/90 hover:bg-accent/50"
@@ -97,6 +107,7 @@ export function SidebarRemoteProjectDialog({
   onSubmit,
 }: SidebarRemoteProjectDialogProps) {
   const isEditing = mode === "edit";
+  const agentTarget = isEditing ? remoteProjectAgentTarget(draft) : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl">
@@ -181,6 +192,29 @@ export function SidebarRemoteProjectDialog({
           </div>
 
           <div className="space-y-2">
+            <div className="text-xs font-medium text-foreground">Connection method</div>
+            <p className="text-muted-foreground text-xs leading-4">
+              The bigbud remote agent keeps remote terminals and long-running work available through
+              reconnects. Direct SSH runs each operation over SSH without installing an agent. This
+              choice is independent of where the provider runtime runs.
+            </p>
+            <div aria-label="Connection method" className="grid gap-2 sm:grid-cols-2" role="group">
+              <AuthModeButton
+                active={draft.remoteTransport === "agent"}
+                description="Requires installation on the remote host."
+                label="bigbud remote agent"
+                onClick={() => onFieldChange("remoteTransport", "agent")}
+              />
+              <AuthModeButton
+                active={draft.remoteTransport === "direct-ssh"}
+                description="Uses your existing SSH setup without an agent."
+                label="Direct SSH"
+                onClick={() => onFieldChange("remoteTransport", "direct-ssh")}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <div className="text-xs font-medium text-foreground">Provider runtime</div>
             <div className="grid gap-2 sm:grid-cols-2">
               <AuthModeButton
@@ -237,6 +271,9 @@ export function SidebarRemoteProjectDialog({
             <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-emerald-700 text-xs leading-4 dark:text-emerald-300">
               {verificationMessage}
             </div>
+          ) : null}
+          {agentTarget && open ? (
+            <SidebarRemoteAgentStatus executionTargetId={agentTarget} cwd={draft.workspaceRoot} />
           ) : null}
 
           {error ? (

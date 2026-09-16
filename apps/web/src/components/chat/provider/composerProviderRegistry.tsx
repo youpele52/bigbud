@@ -6,11 +6,13 @@ import {
 } from "@bigbud/contracts";
 import {
   isClaudeUltrathinkPrompt,
+  getRawProviderEffort,
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCopilotModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
   normalizeCursorModelOptionsWithCapabilities,
   normalizeDevinModelOptionsWithCapabilities,
+  normalizeKilocodeModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
   resolveEffort,
@@ -27,6 +29,7 @@ export type ComposerProviderStateInput = {
   models: ReadonlyArray<ServerProviderModel>;
   prompt: string;
   modelOptions: ProviderModelOptions | null | undefined;
+  subProviderID?: string | null | undefined;
 };
 
 export type ComposerProviderState = {
@@ -46,6 +49,7 @@ type TraitRenderInput = {
   modelOptions: ProviderModelOptions[ProviderKind] | undefined;
   prompt: string;
   onPromptChange: (prompt: string) => void;
+  subProviderID?: string | null | undefined;
 };
 
 function getProviderOptions(
@@ -58,7 +62,12 @@ function getProviderOptions(
 function normalizeProviderOptions(
   input: ComposerProviderStateInput,
 ): ProviderModelOptions[ProviderKind] | undefined {
-  const caps = getProviderModelCapabilities(input.models, input.model, input.provider);
+  const caps = getProviderModelCapabilities(
+    input.models,
+    input.model,
+    input.provider,
+    input.subProviderID,
+  );
   switch (input.provider) {
     case "codex":
       return normalizeCodexModelOptionsWithCapabilities(caps, input.modelOptions?.codex);
@@ -71,7 +80,7 @@ function normalizeProviderOptions(
     case "opencode":
       return normalizeOpencodeModelOptionsWithCapabilities(caps, input.modelOptions?.opencode);
     case "kilocode":
-      return normalizeOpencodeModelOptionsWithCapabilities(caps, input.modelOptions?.kilocode);
+      return normalizeKilocodeModelOptionsWithCapabilities(caps, input.modelOptions?.kilocode);
     case "pi":
       return normalizePiModelOptionsWithCapabilities(caps, input.modelOptions?.pi);
     case "cliProxy":
@@ -82,15 +91,14 @@ function normalizeProviderOptions(
 }
 
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
-  const caps = getProviderModelCapabilities(input.models, input.model, input.provider);
+  const caps = getProviderModelCapabilities(
+    input.models,
+    input.model,
+    input.provider,
+    input.subProviderID,
+  );
   const providerOptions = getProviderOptions(input.provider, input.modelOptions);
-  const rawEffort = providerOptions
-    ? "effort" in providerOptions
-      ? providerOptions.effort
-      : "reasoningEffort" in providerOptions
-        ? providerOptions.reasoningEffort
-        : null
-    : null;
+  const rawEffort = getRawProviderEffort(input.provider, providerOptions);
   const ultrathinkActive =
     caps.promptInjectedEffortLevels.length > 0 && isClaudeUltrathinkPrompt(input.prompt);
 
@@ -114,6 +122,7 @@ export function renderProviderTraitsMenuContent(input: TraitRenderInput): ReactN
       models={input.models}
       threadId={input.threadId}
       model={input.model}
+      subProviderID={input.subProviderID}
       modelOptions={input.modelOptions}
       prompt={input.prompt}
       onPromptChange={input.onPromptChange}
@@ -129,6 +138,7 @@ export function renderProviderTraitsPicker(input: TraitRenderInput): ReactNode {
       models={input.models}
       threadId={input.threadId}
       model={input.model}
+      subProviderID={input.subProviderID}
       modelOptions={input.modelOptions}
       prompt={input.prompt}
       onPromptChange={input.onPromptChange}

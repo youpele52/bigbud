@@ -222,4 +222,8 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
 // ---------------------------------------------------------------------------
 
 export type { ExecuteGitOptions, GitHelpers } from "./GitCoreExecutor.helpers.ts";
-export { wrapExecuteWithMetrics, makeGitHelpers } from "./GitCoreExecutor.helpers.ts";
+export {
+  gitMutationOperationId,
+  wrapExecuteWithMetrics,
+  makeGitHelpers,
+} from "./GitCoreExecutor.helpers.ts";

@@ -1,15 +1,7 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
-  type ClaudeModelOptions,
-  type CopilotModelOptions,
-  type CodexModelOptions,
-  type CursorModelOptions,
-  type DevinModelOptions,
-  type ModelCapabilities,
   type ModelSelection,
-  type OpencodeModelOptions,
-  type PiModelOptions,
   type ProviderKind,
 } from "@bigbud/contracts";
 
@@ -18,184 +10,38 @@ export interface SelectableModelOption {
   name: string;
 }
 
-// ── Effort helpers ────────────────────────────────────────────────────
-
-/** Check whether a capabilities object includes a given effort value. */
-export function hasEffortLevel(caps: ModelCapabilities, value: string): boolean {
-  return caps.reasoningEffortLevels.some((l) => l.value === value);
-}
-
-/** Return the default effort value for a capabilities object, or null if none. */
-export function getDefaultEffort(caps: ModelCapabilities): string | null {
-  return caps.reasoningEffortLevels.find((l) => l.isDefault)?.value ?? null;
-}
-
-/**
- * Resolve a raw effort option against capabilities.
- *
- * Returns the effective effort value — the explicit value if supported and not
- * prompt-injected, otherwise the model's default. Returns `undefined` only
- * when the model has no effort levels at all.
- *
- * Prompt-injected efforts (e.g. "ultrathink") are excluded because they are
- * applied via prompt text, not the effort API parameter.
- */
-export function resolveEffort(
-  caps: ModelCapabilities,
-  raw: string | null | undefined,
-): string | undefined {
-  const defaultValue = getDefaultEffort(caps);
-  const trimmed = typeof raw === "string" ? raw.trim() : null;
-  if (
-    trimmed &&
-    !caps.promptInjectedEffortLevels.includes(trimmed) &&
-    hasEffortLevel(caps, trimmed)
-  ) {
-    return trimmed;
-  }
-  return defaultValue ?? undefined;
-}
-
-// ── Context window helpers ───────────────────────────────────────────
-
-/** Check whether a capabilities object includes a given context window value. */
-export function hasContextWindowOption(caps: ModelCapabilities, value: string): boolean {
-  return caps.contextWindowOptions.some((o) => o.value === value);
-}
-
-/** Return the default context window value, or `null` if none is defined. */
-export function getDefaultContextWindow(caps: ModelCapabilities): string | null {
-  return caps.contextWindowOptions.find((o) => o.isDefault)?.value ?? null;
-}
-
-/**
- * Resolve a raw `contextWindow` option against capabilities.
- *
- * Returns the effective context window value — the explicit value if supported,
- * otherwise the model's default. Returns `undefined` only when the model has
- * no context window options at all.
- *
- * Unlike effort levels (where the API has matching defaults), the context
- * window requires an explicit API suffix (e.g. `[1m]`), so we always preserve
- * the resolved value to avoid ambiguity between "user chose the default" and
- * "not specified".
- */
-export function resolveContextWindow(
-  caps: ModelCapabilities,
-  raw: string | null | undefined,
-): string | undefined {
-  const defaultValue = getDefaultContextWindow(caps);
-  if (!raw) return defaultValue ?? undefined;
-  return hasContextWindowOption(caps, raw) ? raw : (defaultValue ?? undefined);
-}
-
-export function normalizeCodexModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: CodexModelOptions | null | undefined,
-): CodexModelOptions | undefined {
-  const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
-  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
-  const nextOptions: CodexModelOptions = {
-    ...(reasoningEffort
-      ? {
-          reasoningEffort,
-        }
-      : {}),
-    ...(fastMode !== undefined ? { fastMode } : {}),
-  };
-  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
-}
-
-export function normalizeClaudeModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: ClaudeModelOptions | null | undefined,
-): ClaudeModelOptions | undefined {
-  const rawEffort = trimOrNull(modelOptions?.effort);
-  const effort =
-    rawEffort && caps.promptInjectedEffortLevels.includes(rawEffort)
-      ? rawEffort
-      : resolveEffort(caps, rawEffort);
-  const ultracode = caps.workflowModes?.some((mode) => mode.value === "ultracode")
-    ? modelOptions?.ultracode
-    : undefined;
-  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
-  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
-  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
-  const nextOptions: ClaudeModelOptions = {
-    ...(thinking !== undefined ? { thinking } : {}),
-    ...(effort ? { effort: effort as ClaudeModelOptions["effort"] } : {}),
-    ...(ultracode !== undefined ? { ultracode } : {}),
-    ...(fastMode !== undefined ? { fastMode } : {}),
-    ...(contextWindow !== undefined ? { contextWindow } : {}),
-  };
-  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
-}
-
-export function normalizeCopilotModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: CopilotModelOptions | null | undefined,
-): CopilotModelOptions | undefined {
-  const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
-  return reasoningEffort
-    ? {
-        reasoningEffort: reasoningEffort as CopilotModelOptions["reasoningEffort"],
-      }
-    : undefined;
-}
-
-export function normalizeOpencodeModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: OpencodeModelOptions | null | undefined,
-): OpencodeModelOptions | undefined {
-  const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
-  return reasoningEffort
-    ? {
-        reasoningEffort: reasoningEffort as OpencodeModelOptions["reasoningEffort"],
-      }
-    : undefined;
-}
-
-export function normalizeCursorModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: CursorModelOptions | null | undefined,
-): CursorModelOptions | undefined {
-  const reasoning = resolveEffort(caps, modelOptions?.reasoning);
-  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
-  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
-  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
-  const nextOptions: CursorModelOptions = {
-    ...(thinking !== undefined ? { thinking } : {}),
-    ...(reasoning ? { reasoning: reasoning as CursorModelOptions["reasoning"] } : {}),
-    ...(fastMode !== undefined ? { fastMode } : {}),
-    ...(contextWindow !== undefined ? { contextWindow } : {}),
-  };
-  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
-}
-
-export function normalizeDevinModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: DevinModelOptions | null | undefined,
-): DevinModelOptions | undefined {
-  const reasoning = resolveEffort(caps, modelOptions?.reasoning);
-  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
-  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
-  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
-  const nextOptions: DevinModelOptions = {
-    ...(thinking !== undefined ? { thinking } : {}),
-    ...(reasoning ? { reasoning: reasoning as DevinModelOptions["reasoning"] } : {}),
-    ...(fastMode !== undefined ? { fastMode } : {}),
-    ...(contextWindow !== undefined ? { contextWindow } : {}),
-  };
-  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
-}
-
-export function normalizePiModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: PiModelOptions | null | undefined,
-): PiModelOptions | undefined {
-  const thinkingLevel = trimOrNull(modelOptions?.thinkingLevel);
-  return thinkingLevel && hasEffortLevel(caps, thinkingLevel) ? { thinkingLevel } : undefined;
-}
+export {
+  formatEffortLabel,
+  getDefaultEffort,
+  getEffortMetadataStatus,
+  hasEffortLevel,
+  isAuthoritativeEffortMetadata,
+  resolveEffort,
+  sanitizeEffortOptions,
+  withEffortProvenance,
+} from "./model.effort";
+export {
+  buildNextProviderOptions,
+  getProviderEffortField,
+  getRawProviderEffort,
+  patchProviderEffort,
+} from "./model.effortFields";
+export {
+  getDefaultContextWindow,
+  hasContextWindowOption,
+  resolveContextWindow,
+} from "./model.context";
+export {
+  normalizeClaudeModelOptionsWithCapabilities,
+  normalizeCodexModelOptionsWithCapabilities,
+  normalizeCopilotModelOptionsWithCapabilities,
+  normalizeCursorModelOptionsWithCapabilities,
+  normalizeDevinModelOptionsWithCapabilities,
+  normalizeKilocodeModelOptionsWithCapabilities,
+  normalizeOpencodeModelOptionsWithCapabilities,
+  normalizePiModelOptionsWithCapabilities,
+} from "./model.normalize";
+export { trimOrNull } from "./model.strings";
 
 export function isClaudeUltrathinkPrompt(text: string | null | undefined): boolean {
   return typeof text === "string" && /\bultrathink\b/i.test(text);
@@ -267,13 +113,6 @@ export function resolveModelSlugForProvider(
   model: string | null | undefined,
 ): string {
   return resolveModelSlug(model, provider);
-}
-
-/** Trim a string, returning null for empty/missing values. */
-export function trimOrNull<T extends string>(value: T | null | undefined): T | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim() as T;
-  return trimmed || null;
 }
 
 /**

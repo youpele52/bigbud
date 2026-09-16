@@ -767,14 +767,15 @@ Current implementation status:
 
 1. Supported remote workspaces select the agent before execution by default and use the managed `$HOME/.bigbud/agent/bin/current` path unless `BIGBUD_REMOTE_AGENT_BINARY` overrides it.
 2. Provider remote-workspace bridges call the authenticated per-thread bigbud endpoint; they no longer construct or launch their own SSH workspace commands.
-3. `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh` selects the centralized compatibility transport before execution. It is a recovery mode, not an automatic per-operation fallback.
-4. An accepted agent operation is never retried through direct SSH after an ambiguous result.
+3. Each SSH remote project stores an explicit `agent` or `direct-ssh` transport choice in its execution target. `BIGBUD_REMOTE_AGENT_TRANSPORT` remains the process default for legacy target IDs only.
+4. Direct SSH verifies and runs the project over SSH without installing the bigbud agent; agent projects retain the managed runtime and durable reconnect behavior.
+5. An accepted agent operation is never retried through direct SSH after an ambiguous result.
 
 Remaining rollout gates:
 
 1. Record privacy-preserving lifecycle diagnostics: versions, capability, timings, reconnect reason classes, and terminal error codes. Never record commands, paths, file contents, prompts, or provider output.
-2. Retain an explicit repair/reinstall action and direct SSH recovery mode until signed artifact delivery, live-host integration, soak, and provider parity evidence pass the supported matrix.
-3. Remove the recovery mode only after at least one stable release has demonstrated parity on that matrix.
+2. Retain an explicit repair/reinstall action and the per-project Direct SSH choice until signed artifact delivery, live-host integration, soak, and provider parity evidence pass the supported matrix.
+3. Keep both project connection methods available; the agent remains the path for durable reconnect and operation recovery.
 
 ## Original First Implementation Slice
 

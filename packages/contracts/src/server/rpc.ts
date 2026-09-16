@@ -75,6 +75,7 @@ import {
   WsServerGetHandoffJobRpc,
   WsServerGetSettingsRpc,
   WsServerInstallRemoteAgentRpc,
+  WsServerConnectRemoteAgentRpc,
   WsServerListMobileRemoteSessionsRpc,
   WsServerPingRpc,
   WsServerReadDocumentUrlRpc,
@@ -99,6 +100,11 @@ import {
   WsTerminalRestartRpc,
   WsTerminalWriteRpc,
 } from "./rpc.core";
+import {
+  WsServerGetRemoteAgentUpdateStatusRpc,
+  WsServerRestartRemoteAgentRpc,
+  WsServerGetRemoteAgentRestartStatusRpc,
+} from "./rpc.remoteAgent";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
   WsOrchestrationAcknowledgeDeliveryBaselineRpc,
@@ -150,6 +156,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerActivateCliProxyRpc,
   WsServerVerifyExecutionTargetRpc,
   WsServerInstallRemoteAgentRpc,
+  WsServerConnectRemoteAgentRpc,
+  WsServerGetRemoteAgentUpdateStatusRpc,
+  WsServerRestartRemoteAgentRpc,
+  WsServerGetRemoteAgentRestartStatusRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,
   WsServerUpsertKeybindingRpc,

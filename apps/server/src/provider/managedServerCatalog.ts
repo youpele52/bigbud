@@ -6,6 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
+import { capabilitiesFromManagedModel } from "./managedServerCatalog.effort.ts";
 import { providerModelsFromSettings } from "./providerSnapshot";
 import { getSubProviderDisplayName } from "./subProviderDisplayNames";
 import { runCoordinatedProviderProbe } from "./providerProbeCoordinator.ts";
@@ -15,6 +16,7 @@ interface ManagedCatalogModel {
   readonly providerID: string;
   readonly name: string;
   readonly capabilities?: { readonly reasoning?: boolean };
+  readonly variants?: unknown;
 }
 
 interface ManagedCatalogProvider {
@@ -28,12 +30,14 @@ export function resolveManagedServerCatalog(input: {
   readonly customModels: ReadonlyArray<string>;
   readonly builtInModels: ReadonlyArray<ServerProviderModel>;
   readonly emptyCapabilities: ModelCapabilities;
+  readonly overlayModels?: (
+    models: ReadonlyArray<ServerProviderModel>,
+  ) => ReadonlyArray<ServerProviderModel>;
 }): { readonly configured: boolean; readonly models: ReadonlyArray<ServerProviderModel> } {
   const models: ServerProviderModel[] = [];
   for (const provider of input.providers) {
     if (!provider.models) continue;
     for (const model of Object.values(provider.models)) {
-      const supportsReasoning = model.capabilities?.reasoning === true;
       const modelName = model.name.trim();
       models.push({
         slug: model.id,
@@ -41,34 +45,31 @@ export function resolveManagedServerCatalog(input: {
         isCustom: false,
         group: getSubProviderDisplayName(provider.name),
         subProviderID: model.providerID,
-        capabilities: {
-          ...input.emptyCapabilities,
-          reasoningEffortLevels: supportsReasoning
-            ? [
-                { value: "high", label: "High", isDefault: true },
-                { value: "medium", label: "Medium" },
-                { value: "low", label: "Low" },
-              ]
-            : [],
-        },
+        capabilities: capabilitiesFromManagedModel({
+          reasoning: model.capabilities?.reasoning,
+          variants: model.variants,
+          emptyCapabilities: input.emptyCapabilities,
+          provenanceOrigin: "live",
+        }),
       });
     }
   }
 
+  const catalogModels =
+    models.length > 0
+      ? [
+          ...models,
+          ...providerModelsFromSettings(
+            [],
+            input.provider,
+            input.customModels,
+            input.emptyCapabilities,
+          ),
+        ]
+      : input.builtInModels;
   return {
     configured: models.length > 0,
-    models:
-      models.length > 0
-        ? [
-            ...models,
-            ...providerModelsFromSettings(
-              [],
-              input.provider,
-              input.customModels,
-              input.emptyCapabilities,
-            ),
-          ]
-        : input.builtInModels,
+    models: input.overlayModels ? input.overlayModels(catalogModels) : catalogModels,
   };
 }
 

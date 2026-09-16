@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
 import {
@@ -7,8 +5,12 @@ import {
   remoteAgentWorkspaceHandle,
 } from "./remoteAgentProcessRequest.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import type { OwnedRemoteProcessRunner } from "./remoteAgentOwnedProcess.ts";
+
+let observationalRequestSequence = 0;
 
 export interface RemoteAgentToolRunInput {
+  readonly invocationId?: string;
   readonly executionTargetId: string;
   readonly cwd: string;
   readonly command: string;
@@ -50,19 +52,23 @@ function commandLabel(input: RemoteAgentToolRunInput): string {
 }
 
 export function makeRemoteAgentToolRunner(input: {
+  readonly runOwned?: OwnedRemoteProcessRunner;
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentProcessClient>;
 }): RemoteAgentToolRunner {
   return async (runInput) => {
-    const client = await input.resolve(runInput.executionTargetId);
+    const durable = input.runOwned !== undefined && runInput.invocationId !== undefined;
+    const client = durable ? undefined : await input.resolve(runInput.executionTargetId);
     const handle = remoteAgentWorkspaceHandle(runInput);
     const args = runInput.args ?? [];
     const requestEnvironment = environment(runInput.env);
     const timeoutMs = runInput.timeoutMs ?? 30_000;
     const maxOutputBytes = runInput.maxBufferBytes ?? 8 * 1024 * 1024;
-    await new RemoteAgentWorkspaceClient(client.connection).openWorkspace(handle, runInput.cwd);
-    const result = await client.run({
+    if (client)
+      await new RemoteAgentWorkspaceClient(client.connection).openWorkspace(handle, runInput.cwd);
+    const request = {
       workspaceHandle: handle,
-      operationId: `tool-${randomUUID()}`,
+      operationId:
+        runInput.invocationId ?? `observation:${process.pid}:${++observationalRequestSequence}`,
       requestDigest: remoteAgentProcessRequestDigest({
         executionTargetId: runInput.executionTargetId,
         cwd: runInput.cwd,
@@ -79,7 +85,16 @@ export function makeRemoteAgentToolRunner(input: {
       maxOutputBytes,
       environment: requestEnvironment,
       ...(runInput.stdin !== undefined ? { stdin: new TextEncoder().encode(runInput.stdin) } : {}),
-    });
+    };
+    const result = durable
+      ? await input.runOwned({
+          ownerKey: `tool:${runInput.invocationId}`,
+          invocationId: runInput.invocationId,
+          target: runInput.executionTargetId,
+          cwd: runInput.cwd,
+          request,
+        })
+      : await client!.run(request);
     const stdout = new TextDecoder().decode(result.stdout);
     const stderr = new TextDecoder().decode(result.stderr);
     const code = result.completed.hasExitCode ? result.completed.exitCode : null;

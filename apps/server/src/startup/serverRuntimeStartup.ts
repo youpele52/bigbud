@@ -1,4 +1,16 @@
-import { Data, Deferred, Effect, Exit, Layer, Ref, Schedule, Scope, ServiceMap } from "effect";
+import {
+  Data,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Scope,
+  ServiceMap,
+  Stream,
+} from "effect";
 
 import { ServerConfig } from "./config";
 import { Keybindings } from "../keybindings/keybindings";
@@ -15,6 +27,10 @@ import { writeStartupStatus } from "./startupStatus.ts";
 import { runThreadRetentionSettingsMigration } from "./ThreadRetentionSettingsMigration.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 import {
+  RemoteAgentUpdateCoordinator,
+  type RemoteAgentUpdateCoordinatorShape,
+} from "../remote-agent/remoteAgentUpdate.coordinator.ts";
+import {
   CommandAdmissionError,
   STARTUP_COMMAND_DEADLINE_MS,
   STARTUP_COMMAND_QUEUE_CAPACITY,
@@ -25,6 +41,10 @@ import {
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
   readonly cause?: unknown;
+}> {}
+
+class RemoteAgentSourceRefreshError extends Data.TaggedError("RemoteAgentSourceRefreshError")<{
+  readonly cause: unknown;
 }> {}
 
 export interface ServerRuntimeStartupShape {
@@ -39,6 +59,28 @@ export class ServerRuntimeStartup extends ServiceMap.Service<
   ServerRuntimeStartup,
   ServerRuntimeStartupShape
 >()("t3/serverRuntimeStartup") {}
+
+/** Feed the existing settings/configuration watcher into remote source discovery. */
+export function watchRemoteAgentSourceChanges(input: {
+  readonly changes: Stream.Stream<unknown>;
+  readonly coordinator: RemoteAgentUpdateCoordinatorShape;
+}): Effect.Effect<void> {
+  return input.changes.pipe(
+    Stream.runForEach(() =>
+      Effect.tryPromise({
+        try: () => input.coordinator.sourceChanged(),
+        catch: (cause) => new RemoteAgentSourceRefreshError({ cause }),
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("remote agent source refresh after settings change failed", {
+            cause,
+          }),
+        ),
+      ),
+    ),
+    Effect.ignoreCause({ log: true }),
+  );
+}
 
 interface QueuedCommand {
   readonly run: Effect.Effect<void, never>;
@@ -158,6 +200,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
   const threadRetention = yield* Effect.serviceOption(ThreadRetention);
+  const remoteAgentUpdateCoordinator = yield* Effect.serviceOption(RemoteAgentUpdateCoordinator);
   const commandGate = yield* makeCommandGate();
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
@@ -257,6 +300,15 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
 
       yield* Effect.logDebug("Accepting commands");
       yield* commandGate.signalCommandReady;
+      if (Option.isSome(remoteAgentUpdateCoordinator)) {
+        yield* remoteAgentUpdateCoordinator.value.start;
+        yield* Effect.forkScoped(
+          watchRemoteAgentSourceChanges({
+            changes: serverSettings.streamChanges,
+            coordinator: remoteAgentUpdateCoordinator.value,
+          }),
+        );
+      }
       yield* Effect.logDebug("startup phase: waiting for http listener");
       yield* runStartupPhase("http.wait", Deferred.await(httpListening));
       yield* Effect.sync(() => writeStartupStatus("ready"));

@@ -174,6 +174,27 @@ export default function Sidebar() {
           </SidebarFooter>
 
           <AlertDialog
+            open={s.pendingReconnect !== null}
+            onOpenChange={(open) => {
+              if (!open) s.dismissReconnect();
+            }}
+          >
+            <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
+              {s.pendingReconnect ? (
+                <ConfirmationPanel
+                  title={`Reconnect "${s.pendingReconnect.projectName}"?`}
+                  description="Reconnect restarts the bigbud remote service and interrupts the turns and terminals it manages, including other projects using this service. Saved project settings are kept."
+                  cancelLabel="Cancel"
+                  confirmLabel="Reconnect"
+                  confirmVariant="destructive"
+                  onCancel={s.dismissReconnect}
+                  onConfirm={() => void s.confirmReconnect()}
+                />
+              ) : null}
+            </AlertDialogPopup>
+          </AlertDialog>
+
+          <AlertDialog
             open={s.pendingDeleteConfirmation !== null}
             onOpenChange={(open) => {
               if (!open) {

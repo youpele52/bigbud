@@ -31,6 +31,7 @@ describe("remote project SSH editing", () => {
       workspaceRoot: "~/workspace/project",
       sshKeyPath: "~/.ssh/id_ed25519",
       authMode: "ssh-key",
+      remoteTransport: "agent",
       providerRuntimeLocation: "local",
     });
   });

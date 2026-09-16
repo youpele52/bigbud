@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isExecutionTargetVerified, useRemoteAccessStore } from "./remoteAccess.store";
 
@@ -84,5 +84,28 @@ describe("remoteAccessStore", () => {
     expect(useRemoteAccessStore.getState().isAuthDialogOpen).toBe(false);
     expect(useRemoteAccessStore.getState().pendingAction).toBeNull();
     expect(useRemoteAccessStore.getState().authPromptLabel).toBe("");
+  });
+
+  it("does not replace an existing authentication continuation", () => {
+    const onCancel = vi.fn();
+    const store = useRemoteAccessStore.getState();
+    expect(
+      store.openAuthDialog({
+        pendingAction: { executionTargetId: "ssh:first", onVerified: vi.fn(), onCancel },
+        authMode: "password",
+        promptLabel: "first",
+      }),
+    ).toBe(true);
+    expect(
+      useRemoteAccessStore.getState().openAuthDialog({
+        pendingAction: { executionTargetId: "ssh:second", onVerified: vi.fn() },
+        authMode: "password",
+        promptLabel: "second",
+      }),
+    ).toBe(false);
+    expect(useRemoteAccessStore.getState().authPromptLabel).toBe("first");
+
+    useRemoteAccessStore.getState().closeAuthDialog();
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

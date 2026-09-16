@@ -37,6 +37,15 @@ it.layer(layer)("LearningJobRepository", (it) => {
       assert.equal((yield* repository.listQueued()).length, 1);
       assert.equal(
         yield* repository.getLatestMemoryUserMessageCount({ threadId: job.threadId }),
+        null,
+      );
+      yield* repository.setState({
+        jobId: job.jobId,
+        state: "completed",
+        updatedAt: job.updatedAt,
+      });
+      assert.equal(
+        yield* repository.getLatestMemoryUserMessageCount({ threadId: job.threadId }),
         15,
       );
 
@@ -50,7 +59,7 @@ it.layer(layer)("LearningJobRepository", (it) => {
       );
       assert.equal(
         yield* repository.getLatestMemoryUserMessageCount({ threadId: job.threadId }),
-        30,
+        15,
       );
     }),
   );

@@ -14,7 +14,13 @@ describe("ClaudeRemoteWorkspaceBridge", () => {
         executionTargetId: "ssh:host=devbox&user=root&port=22",
         cwd: "/srv/project",
       },
-      { host: "127.0.0.1", port: 3000, threadId: "thread-1", token: "token-1" },
+      {
+        host: "127.0.0.1",
+        port: 3000,
+        threadId: "thread-1",
+        token: "token-1",
+        providerSessionId: "claude:session-1:0",
+      },
       async () => ({ os: "linux", architecture: "x86_64" }),
     );
 

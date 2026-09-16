@@ -71,10 +71,15 @@ export const discoverDevinModelCapabilitiesViaAcp = (
         );
       }
 
-      const targetModelSlugs = new Set(
+      const liveModelSlugs = new Set(
         existingModels
-          .filter((model) => !model.isCustom && !hasDevinModelCapabilities(model))
+          .filter((model) => !model.isCustom && hasDevinModelCapabilities(model))
           .map((model) => model.slug),
+      );
+      const targetModelSlugs = new Set(
+        modelChoices
+          .map((modelChoice) => modelChoice.value.trim())
+          .filter((slug) => !liveModelSlugs.has(slug)),
       );
       if (targetModelSlugs.size === 0) {
         return buildDevinDiscoveredModels(

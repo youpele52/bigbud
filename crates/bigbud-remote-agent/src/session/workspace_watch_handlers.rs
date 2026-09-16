@@ -77,6 +77,9 @@ impl AgentSession {
         if !self.ready {
             return Err(SessionError::HelloRequired);
         }
+        if !self.is_accepting_work() {
+            return Err(SessionError::Restarting);
+        }
         if request.subscription_id.is_empty() {
             return Err(SessionError::MissingWorkspaceWatchSubscriptionId);
         }

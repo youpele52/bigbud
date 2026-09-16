@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createMobileOrchestrationSyncController,
   FALLBACK_REFETCH_DELAY_MS,
+  MAX_PENDING_MOBILE_EVENTS,
 } from "./mobileOrchestrationSync.logic";
 
 const sessionId = "session-1";
@@ -274,7 +275,7 @@ describe("mobileOrchestrationSync.logic", () => {
     expect(cache.invalidatedKeys).toContainEqual(["mobile-thread", sessionId]);
   });
 
-  it("flushes queued non-immediate events during dispose", () => {
+  it("discards queued non-immediate events during dispose", () => {
     const cache = makeQueryClient({
       snapshot: makeSnapshot(),
       thread: makeThread(),
@@ -296,7 +297,59 @@ describe("mobileOrchestrationSync.logic", () => {
 
     controller.dispose();
 
-    expect(cache.getThread()?.messages[0]?.text).toBe("Done");
+    expect(cache.getThread()?.messages[0]?.text).toBeUndefined();
     expect(scheduler.clearTimeout).not.toHaveBeenCalled();
+  });
+
+  it("rejects events beyond the bounded pending queue", () => {
+    const cache = makeQueryClient();
+    const scheduler = {
+      queueMicrotask: vi.fn(),
+      setTimeout: vi.fn(() => 1),
+      clearTimeout: vi.fn(),
+    };
+    const onQueueOverflow = vi.fn();
+    const controller = createMobileOrchestrationSyncController({
+      onQueueOverflow,
+      queryClient: cache.queryClient,
+      sessionId,
+      scheduler,
+    });
+
+    for (let sequence = 1; sequence <= MAX_PENDING_MOBILE_EVENTS; sequence += 1) {
+      expect(
+        controller.queueEvent(makeMessageSentEvent({ text: "x", streaming: false, sequence })),
+      ).toBe(true);
+    }
+    expect(
+      controller.queueEvent(
+        makeMessageSentEvent({
+          text: "overflow",
+          streaming: false,
+          sequence: MAX_PENDING_MOBILE_EVENTS + 1,
+        }),
+      ),
+    ).toBe(false);
+    expect(onQueueOverflow).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
+  it("clears fallback work when a recovery generation resets", () => {
+    const cache = makeQueryClient();
+    const scheduler = {
+      queueMicrotask: vi.fn((callback: () => void) => callback()),
+      setTimeout: vi.fn(() => 1),
+      clearTimeout: vi.fn(),
+    };
+    const controller = createMobileOrchestrationSyncController({
+      queryClient: cache.queryClient,
+      sessionId,
+      scheduler,
+    });
+
+    controller.queueEvent(makeMessageSentEvent({ text: "unknown", streaming: false, sequence: 1 }));
+    controller.reset();
+
+    expect(scheduler.clearTimeout).toHaveBeenCalledWith(1);
   });
 });

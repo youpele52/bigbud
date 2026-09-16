@@ -251,7 +251,12 @@ export function useCompactChatThread() {
   }, [bootstrapComplete, hydrationStatus, restoring, serverThread, threadId]);
 
   const discardDraft = useCallback(async () => {
-    if (prompt.trim().length > 0) {
+    const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
+    if (
+      prompt.trim().length > 0 ||
+      (draft?.images.length ?? 0) > 0 ||
+      (draft?.files.length ?? 0) > 0
+    ) {
       const discard = await window.desktopBridge?.confirm("Discard the unsent compact chat draft?");
       if (!discard) return false;
     }

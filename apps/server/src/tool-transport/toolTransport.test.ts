@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { remoteAgentToolRunner } = vi.hoisted(() => ({
+const { remoteAgentToolRunner, resolveRemoteAgentTransport } = vi.hoisted(() => ({
   remoteAgentToolRunner: vi.fn(),
+  resolveRemoteAgentTransport: vi.fn(() => "agent" as const),
 }));
 
 vi.mock("./toolTransport.local.ts", () => ({
@@ -13,16 +14,13 @@ vi.mock("./toolTransport.ssh.ts", () => ({
 }));
 
 vi.mock("../remote-agent/remoteAgentDefault.ts", () => ({
-  resolveRemoteAgentConfiguration: vi.fn(() => ({
-    transport: "agent",
-    binaryPath: "$HOME/.bigbud/agent/bin/current",
-  })),
+  resolveRemoteAgentTransport,
   getConfiguredRemoteAgentComposition: vi.fn(() => ({ toolRunner: remoteAgentToolRunner })),
 }));
 
 import { runLocalToolCommand } from "./toolTransport.local.ts";
 import { runSshToolCommand } from "./toolTransport.ssh.ts";
-import { resolveRemoteAgentConfiguration } from "../remote-agent/remoteAgentDefault.ts";
+import { resolveRemoteAgentTransport as resolveRemoteAgentTransportExport } from "../remote-agent/remoteAgentDefault.ts";
 import { resolveToolTransportTarget, runToolCommand } from "./toolTransport.ts";
 
 describe("toolTransport", () => {
@@ -45,10 +43,7 @@ describe("toolTransport", () => {
   });
 
   it("resolves the explicit direct SSH fallback before command dispatch", () => {
-    vi.mocked(resolveRemoteAgentConfiguration).mockReturnValueOnce({
-      transport: "direct-ssh",
-      binaryPath: null,
-    });
+    vi.mocked(resolveRemoteAgentTransportExport).mockReturnValueOnce("direct-ssh");
 
     expect(
       resolveToolTransportTarget({

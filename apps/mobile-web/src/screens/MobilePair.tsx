@@ -13,6 +13,7 @@ import {
   MobileTitle,
 } from "../components/shell/MobileShell";
 import { writeMobileSession } from "../lib/mobileSession";
+import { clearMobileDraftThreads } from "../lib/mobileDraftThread";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 
 function readPairingSecret() {
@@ -69,7 +70,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
 
 export function MobilePair({ pairingId }: { pairingId: string }) {
   const navigate = useNavigate();
-  const { setSession } = useMobileSessionState();
+  const { session: previousSession, setSession } = useMobileSessionState();
   const [label, setLabel] = useState("mobile-device");
   const [error, setError] = useState<string | null>(null);
   const rawBackendBaseUrl = useMemo(
@@ -149,6 +150,16 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
         scope: payload.scope,
         expiresAt: payload.expiresAt,
       };
+      if (
+        previousSession &&
+        (previousSession.sessionId !== nextSession.sessionId ||
+          previousSession.backendBaseUrl !== nextSession.backendBaseUrl)
+      ) {
+        clearMobileDraftThreads({
+          backendBaseUrl: previousSession.backendBaseUrl,
+          sessionId: previousSession.sessionId,
+        });
+      }
       writeMobileSession(nextSession);
       setSession(nextSession);
       await navigate({ to: "/mobile" });

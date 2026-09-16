@@ -15,26 +15,35 @@ import {
 } from "./mobileOrchestrationEvents.logic";
 
 export const FALLBACK_REFETCH_DELAY_MS = 1_500;
+export const MAX_PENDING_MOBILE_EVENTS = 2_000;
+export const MAX_PENDING_MOBILE_EVENT_BYTES = 4 * 1024 * 1024;
 
 type QueryKey = ReadonlyArray<string>;
 
-type MobileQueryClient = {
+export type MobileQueryClient = {
   setQueryData<T>(queryKey: QueryKey, updater: (current: T | undefined) => T | undefined): void;
   removeQueries(input: { readonly queryKey: QueryKey }): void;
   invalidateQueries(input: { readonly queryKey: QueryKey }): Promise<unknown>;
 };
 
-type Scheduler = {
+export type MobileSyncScheduler = {
   readonly queueMicrotask: (callback: () => void) => void;
   readonly setTimeout: (callback: () => void, delayMs: number) => number;
   readonly clearTimeout: (timeoutId: number) => void;
 };
 
+export interface MobileOrchestrationSyncController {
+  readonly queueEvent: (event: OrchestrationEvent) => boolean;
+  readonly flush: () => boolean;
+  readonly reset: () => void;
+  readonly dispose: () => void;
+}
+
 function readThreadId(event: OrchestrationEvent): string | null {
   return "threadId" in event.payload ? event.payload.threadId : null;
 }
 
-function defaultScheduler(): Scheduler {
+function defaultScheduler(): MobileSyncScheduler {
   return {
     queueMicrotask,
     setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
@@ -45,13 +54,22 @@ function defaultScheduler(): Scheduler {
 export function createMobileOrchestrationSyncController(input: {
   readonly queryClient: MobileQueryClient;
   readonly sessionId: string;
-  readonly scheduler?: Scheduler;
+  readonly scheduler?: MobileSyncScheduler;
+  readonly onUnhandledEvent?: () => void;
+  readonly onQueueOverflow?: () => void;
 }) {
   const { queryClient, sessionId } = input;
   const scheduler = input.scheduler ?? defaultScheduler();
   const pendingEvents: OrchestrationEvent[] = [];
   let flushScheduled = false;
   let fallbackRefetchTimeoutId: number | null = null;
+  let pendingEventBytes = 0;
+
+  const clearFallbackRefetch = () => {
+    if (fallbackRefetchTimeoutId === null) return;
+    scheduler.clearTimeout(fallbackRefetchTimeoutId);
+    fallbackRefetchTimeoutId = null;
+  };
 
   const scheduleFallbackRefetch = () => {
     if (fallbackRefetchTimeoutId !== null) {
@@ -146,36 +164,59 @@ export function createMobileOrchestrationSyncController(input: {
 
     if (!handledEveryEvent) {
       scheduleFallbackRefetch();
+      input.onUnhandledEvent?.();
     }
+    return handledEveryEvent;
   };
 
   const flushPendingEvents = () => {
     flushScheduled = false;
     if (pendingEvents.length === 0) {
-      return;
+      return true;
     }
     const events = pendingEvents.splice(0, pendingEvents.length);
-    applyEvents(events);
+    pendingEventBytes = 0;
+    return applyEvents(events);
   };
 
   return {
     queueEvent(event: OrchestrationEvent) {
+      const eventBytes = new TextEncoder().encode(JSON.stringify(event)).byteLength;
+      if (
+        pendingEvents.length >= MAX_PENDING_MOBILE_EVENTS ||
+        pendingEventBytes + eventBytes > MAX_PENDING_MOBILE_EVENT_BYTES
+      ) {
+        pendingEvents.splice(0, pendingEvents.length);
+        pendingEventBytes = 0;
+        flushScheduled = false;
+        input.onQueueOverflow?.();
+        return false;
+      }
       pendingEvents.push(event);
+      pendingEventBytes += eventBytes;
       if (shouldFlushOrchestrationEventImmediately(event)) {
-        flushPendingEvents();
-        return;
+        return flushPendingEvents();
       }
       if (!flushScheduled) {
         flushScheduled = true;
         scheduler.queueMicrotask(flushPendingEvents);
       }
+      return true;
+    },
+    flush() {
+      return flushPendingEvents();
+    },
+    reset() {
+      clearFallbackRefetch();
+      pendingEvents.splice(0, pendingEvents.length);
+      pendingEventBytes = 0;
+      flushScheduled = false;
     },
     dispose() {
-      if (fallbackRefetchTimeoutId !== null) {
-        scheduler.clearTimeout(fallbackRefetchTimeoutId);
-        fallbackRefetchTimeoutId = null;
-      }
-      flushPendingEvents();
+      clearFallbackRefetch();
+      pendingEvents.splice(0, pendingEvents.length);
+      pendingEventBytes = 0;
+      flushScheduled = false;
     },
   };
 }

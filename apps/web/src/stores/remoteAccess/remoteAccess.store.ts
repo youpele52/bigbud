@@ -1,11 +1,14 @@
 import { create } from "zustand";
 import { type AppCheckStatus } from "../../lib/checkStatus";
+import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
 
 interface PendingRemoteAccessAction {
   readonly executionTargetId: string;
   readonly cwd?: string;
   readonly onVerified: () => Promise<void> | void;
   readonly unavailableTitle?: string;
+  readonly skipAgentVerification?: boolean;
+  readonly onCancel?: () => void;
 }
 
 export type RemoteExecutionAuthMode = "ssh-key-passphrase" | "password";
@@ -20,6 +23,8 @@ export interface RemoteExecutionCheckState {
 }
 
 interface RemoteAccessState {
+  remoteConnections: Record<string, ServerRemoteAgentRuntimeSummary>;
+  recordRemoteConnection: (target: string, summary: ServerRemoteAgentRuntimeSummary) => void;
   verifiedExecutionTargetIds: Record<string, true>;
   executionTargetChecks: Record<string, RemoteExecutionCheckState>;
   pendingAction: PendingRemoteAccessAction | null;
@@ -39,14 +44,19 @@ interface RemoteAccessState {
     pendingAction: PendingRemoteAccessAction;
     authMode: RemoteExecutionAuthMode;
     promptLabel: string;
-  }) => void;
+    skipAgentVerification?: boolean;
+  }) => boolean;
   closeAuthDialog: () => void;
+  clearAuthDialog: () => void;
   setAuthSecret: (secret: string) => void;
   setAuthError: (error: string | null) => void;
   setIsAuthenticating: (authenticating: boolean) => void;
 }
 
 export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
+  remoteConnections: {},
+  recordRemoteConnection: (target, summary) =>
+    set((state) => ({ remoteConnections: { ...state.remoteConnections, [target]: summary } })),
   verifiedExecutionTargetIds: {},
   executionTargetChecks: {},
   pendingAction: null,
@@ -119,7 +129,9 @@ export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
         },
       };
     }),
-  openAuthDialog: ({ pendingAction, authMode, promptLabel }) =>
+  openAuthDialog: ({ pendingAction, authMode, promptLabel }) => {
+    const current = useRemoteAccessStore.getState().pendingAction;
+    if (current) return false;
     set({
       pendingAction,
       isAuthDialogOpen: true,
@@ -128,8 +140,14 @@ export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
       authSecret: "",
       authError: null,
       isAuthenticating: false,
-    }),
-  closeAuthDialog: () =>
+    });
+    return true;
+  },
+  closeAuthDialog: () => {
+    useRemoteAccessStore.getState().pendingAction?.onCancel?.();
+    useRemoteAccessStore.getState().clearAuthDialog();
+  },
+  clearAuthDialog: () =>
     set({
       pendingAction: null,
       isAuthDialogOpen: false,

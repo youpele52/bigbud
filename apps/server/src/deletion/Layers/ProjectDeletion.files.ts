@@ -44,9 +44,8 @@ export const discoverProjectDeletionFiles = Effect.fn("ProjectDeletion.discoverF
   if (!segment) return yield* Effect.fail(new Error("invalid project id"));
   return {
     projectId,
-    resources: yield* Effect.forEach(
-      ["project-memory", "project-notes", "project-kanban"] as const,
-      (kind) => captureResource(kind, segment),
+    resources: yield* Effect.forEach(["project-notes", "project-kanban"] as const, (kind) =>
+      captureResource(kind, segment),
     ),
   } satisfies DiscoveredProjectDeletionFiles;
 });

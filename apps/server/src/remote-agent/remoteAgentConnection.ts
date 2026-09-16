@@ -13,6 +13,8 @@ import {
   type RemoteAgentHello,
 } from "./remoteAgentProtocol.ts";
 import { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
+import { buildPinnedRemoteAgentProxy } from "./remoteAgentRuntime.launch.ts";
+import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
 export { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
 
@@ -72,6 +74,7 @@ export function closeRemoteAgentProcess(
 }
 
 export interface RemoteAgentSshProcessInput {
+  readonly runtime?: RemoteAgentRuntime;
   readonly executionTargetId: string;
   readonly binaryPath: string;
   readonly maxFrameBytes?: number;
@@ -85,17 +88,7 @@ type FrameWaiter = {
 
 type FrameListener = (frame: RemoteAgentFrame) => boolean | void;
 
-function shellQuote(value: string): string {
-  if (/^\$HOME(?:\/[\w.+-]+)*$/.test(value)) {
-    return `"${value}"`;
-  }
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-export function buildRemoteAgentIdentityProbeCommand(binaryPath: string): string {
-  const binary = shellQuote(binaryPath);
-  return `if test -x ${binary}; then exec ${binary} --check; else printf 'missing'; fi`;
-}
+export { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.identity.ts";
 
 export class RemoteAgentConnection {
   private readonly maxFrameBytes: number;
@@ -154,7 +147,12 @@ export class RemoteAgentConnection {
     const invocation = buildSshCommandInvocation({
       executionTargetId: input.executionTargetId,
       command: "sh",
-      args: ["-lc", buildRemoteAgentProxyCommand(input.binaryPath)],
+      args: [
+        "-lc",
+        input.runtime
+          ? buildPinnedRemoteAgentProxy(input.runtime)
+          : buildRemoteAgentProxyCommand(input.binaryPath),
+      ],
     });
     return new RemoteAgentConnection(
       spawn(invocation.command, invocation.args, { stdio: ["pipe", "pipe", "pipe"] }),

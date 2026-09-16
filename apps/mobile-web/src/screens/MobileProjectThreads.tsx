@@ -1,12 +1,10 @@
 import type { ProjectId } from "@bigbud/contracts";
-import { FolderOpenIcon } from "lucide-react";
+import { LaptopMinimalIcon } from "lucide-react";
 
 import { MobileListSection } from "../components/shell/MobileAppHeader";
-import { MobileNewChatFab } from "../components/threads/MobileNewChatFab";
 import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
 import { MobileSessionGate } from "../components/shell/MobileSessionGate";
 import { MobileThreadList } from "../components/threads/MobileThreadList";
-import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { threadsForProject } from "../lib/mobileModels";
 import { useMobileSessionState } from "../context/MobileSessionContext";
@@ -14,7 +12,6 @@ import { useMobileSessionState } from "../context/MobileSessionContext";
 export function MobileProjectThreads({ projectId }: { projectId: ProjectId }) {
   const { session } = useMobileSessionState();
   const { snapshotQuery, connectionError } = useMobileSnapshot(session);
-  const { startNewThread } = useMobileNewThread();
 
   return (
     <MobileSessionGate
@@ -38,7 +35,7 @@ export function MobileProjectThreads({ projectId }: { projectId: ProjectId }) {
               ) : (
                 <MobileListSection
                   icon={
-                    <FolderOpenIcon
+                    <LaptopMinimalIcon
                       className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                     />
                   }
@@ -48,7 +45,6 @@ export function MobileProjectThreads({ projectId }: { projectId: ProjectId }) {
                 </MobileListSection>
               )}
             </div>
-            <MobileNewChatFab ariaLabel="New thread" onClick={() => startNewThread(projectId)} />
           </>
         );
       }}

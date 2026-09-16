@@ -300,6 +300,8 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedErrorClass<O
         "deadline_exceeded",
         "command_id_conflict",
         "unauthorized",
+        "prompt_queue_full",
+        "prompt_not_queueable",
       ]),
     ),
     retryAfterMs: Schema.optional(NonNegativeInt),

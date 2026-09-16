@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId, TurnId } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   asProjectId,
@@ -175,11 +175,13 @@ describe("ProviderCommandReactor", () => {
   it("reacts to project.delete by deleting live child threads before final project delete", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
+    const preservedMemoryDirectory = path.join(harness.stateDir, "memory", "projects", "project-1");
     const projectDirectories = [
-      path.join(harness.stateDir, "memory", "projects", "project-1"),
       path.join(harness.stateDir, "notes", "project-1"),
       path.join(harness.stateDir, "kanban", "project-1"),
     ];
+    fs.mkdirSync(preservedMemoryDirectory, { recursive: true });
+    fs.writeFileSync(path.join(preservedMemoryDirectory, "preserve.txt"), "preserve");
     for (const directory of projectDirectories) {
       fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(path.join(directory, "delete.txt"), "delete");
@@ -267,5 +269,69 @@ describe("ProviderCommandReactor", () => {
     expect(thread).toBeUndefined();
     expect(child).toBeUndefined();
     await waitFor(() => projectDirectories.every((directory) => !fs.existsSync(directory)));
+    expect(fs.readFileSync(path.join(preservedMemoryDirectory, "preserve.txt"), "utf8")).toBe(
+      "preserve",
+    );
+  });
+
+  it("aborts project deletion before child teardown when cleanup preparation is unavailable", async () => {
+    const prepare = vi.fn(() => Effect.fail(new Error("cleanup helper unavailable")) as never);
+    const harness = await createHarness({ cleanupExecutor: { prepare } });
+    const childThreadId = ThreadId.makeUnsafe("project-delete-preflight-child");
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-project-preflight-child-create"),
+        threadId: childThreadId,
+        projectId: asProjectId("project-1"),
+        title: "Preflight child",
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        interactionMode: "default",
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          projectId: asProjectId("project-1"),
+          title: "New thread",
+        },
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "project.delete",
+        commandId: CommandId.makeUnsafe("cmd-project-preflight-delete"),
+        projectId: asProjectId("project-1"),
+      }),
+    );
+
+    await waitFor(async () => {
+      const model = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        model.projects.find((project) => project.id === asProjectId("project-1"))?.deletingAt ===
+        null
+      );
+    });
+    const model = await Effect.runPromise(harness.engine.getReadModel());
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(model.projects.find((project) => project.id === asProjectId("project-1"))).toMatchObject(
+      {
+        deletedAt: null,
+        deletingAt: null,
+      },
+    );
+    expect(
+      model.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-1")),
+    ).toMatchObject({
+      deletedAt: null,
+      deletingAt: null,
+    });
+    expect(model.threads.find((thread) => thread.id === childThreadId)).toMatchObject({
+      deletedAt: null,
+      deletingAt: null,
+    });
   });
 });

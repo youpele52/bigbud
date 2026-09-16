@@ -13,6 +13,7 @@ import {
   type ThinkingActivityDeltaEvent,
 } from "@bigbud/contracts";
 import type { OrchestrationEventStoreError } from "../persistence/Errors";
+import type { OrchestrationDeliveryLiveCapture } from "../orchestration/Services/OrchestrationEngine.ts";
 import {
   isThinkingStreamKind,
   thinkingActivityIdFromRuntimeEvent,
@@ -30,7 +31,8 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
     streamDomainEvents: Stream.Stream<OrchestrationEvent>;
     openDeliveryLiveCapture?: (
       capacity?: number,
-    ) => Effect.Effect<Stream.Stream<OrchestrationEvent>, never, Scope.Scope>;
+      maxBytes?: number,
+    ) => Effect.Effect<OrchestrationDeliveryLiveCapture, never, Scope.Scope>;
   };
   readonly nonBlockingLiveCapacity?: number;
   readonly pendingSequenceCapacity?: number;
@@ -70,7 +72,7 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
     );
     const replayStream = Stream.fromIterable(replayEvents);
     const liveStream =
-      engineCapture ?? Stream.fromQueue(liveEventQueue as Queue.Queue<OrchestrationEvent>);
+      engineCapture?.stream ?? Stream.fromQueue(liveEventQueue as Queue.Queue<OrchestrationEvent>);
     const replayAndLive = Stream.merge(replayStream, liveStream);
     const source =
       input.nonBlockingLiveCapacity && liveOverflow !== null

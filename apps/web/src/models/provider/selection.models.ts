@@ -196,6 +196,7 @@ export function resolveAppModelSelectionState(
     modelOptions: {
       [provider]: provider === selection.provider ? selection.options : undefined,
     },
+    subProviderID: "subProviderID" in selection ? selection.subProviderID : undefined,
   });
 
   if (provider === selection.provider) {

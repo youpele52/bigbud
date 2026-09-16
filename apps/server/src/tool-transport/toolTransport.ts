@@ -7,7 +7,7 @@ import { runLocalToolCommand } from "./toolTransport.local.ts";
 import { runSshToolCommand } from "./toolTransport.ssh.ts";
 import {
   getConfiguredRemoteAgentComposition,
-  resolveRemoteAgentConfiguration,
+  resolveRemoteAgentTransport,
 } from "../remote-agent/remoteAgentDefault.ts";
 
 export type ToolExecutionTransport = "agent" | "local" | "ssh";
@@ -19,6 +19,7 @@ export interface ToolTransportTarget {
 }
 
 export interface RunToolCommandInput {
+  readonly invocationId?: string;
   readonly target: ToolTransportTarget;
   readonly command: string;
   readonly args?: ReadonlyArray<string>;
@@ -32,7 +33,7 @@ export interface RunToolCommandInput {
 }
 
 export function resolveToolTransportTarget(workspaceTarget: WorkspaceTarget): ToolTransportTarget {
-  const remoteTransport = resolveRemoteAgentConfiguration().transport;
+  const remoteTransport = resolveRemoteAgentTransport(workspaceTarget.executionTargetId);
   return {
     transport: isLocalWorkspaceTarget(workspaceTarget)
       ? "local"
@@ -68,6 +69,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
       throw new Error("Remote agent transport requires an explicit workspace root.");
     }
     return composition.toolRunner({
+      ...(input.invocationId !== undefined ? { invocationId: input.invocationId } : {}),
       executionTargetId: input.target.executionTargetId,
       cwd: input.target.cwd,
       command: input.command,

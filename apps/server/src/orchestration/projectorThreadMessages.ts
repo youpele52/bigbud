@@ -32,6 +32,7 @@ export function projectThreadMessageSent(
         role: payload.role,
         text: payload.text,
         ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
+        ...(payload.replyTo !== undefined ? { replyTo: payload.replyTo } : {}),
         turnId: payload.turnId,
         streaming: payload.streaming,
         createdAt: payload.createdAt,
@@ -58,6 +59,7 @@ export function projectThreadMessageSent(
                 updatedAt: message.updatedAt,
                 turnId: message.turnId,
                 ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
+                ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
               }
             : entry,
         )

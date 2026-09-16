@@ -72,7 +72,7 @@ function command(commandId: string, messageId: string) {
 }
 
 describe("direct turn-start dispatch safety", () => {
-  it("marks the accepted start as starting before provider feedback and rejects another direct start", async () => {
+  it("marks the accepted start as starting before provider feedback and queues another direct start", async () => {
     const initial = readModel();
     const first = await Effect.runPromise(
       decideThreadTurnStartCommand({
@@ -91,14 +91,14 @@ describe("direct turn-start dispatch safety", () => {
       status: "starting",
       activeTurnId: null,
     });
-    await expect(
-      Effect.runPromise(
-        decideThreadTurnStartCommand({
-          command: command("start-second", "message-second"),
-          readModel: afterStart,
-        }),
-      ),
-    ).rejects.toThrow("has an unresolved turn");
+    const queued = await Effect.runPromise(
+      decideThreadTurnStartCommand({
+        command: command("start-second", "message-second"),
+        readModel: afterStart,
+      }),
+    );
+    expect(queued.map((event) => event.type)).toEqual(["thread.prompt-queued"]);
+    expect(queued.some((event) => event.type === "thread.turn-start-requested")).toBe(false);
 
     const afterFailure = await Effect.runPromise(
       projectEvent(
@@ -131,4 +131,65 @@ describe("direct turn-start dispatch safety", () => {
       "thread.turn-start-requested",
     ]);
   });
+
+  it.each(["starting", "running", "active-turn", "approval", "user-input"] as const)(
+    "queues a direct prompt for the authoritative %s busy state",
+    async (state) => {
+      const baseThread = readModel().threads[0]!;
+      const busyThread =
+        state === "starting" || state === "running"
+          ? {
+              ...baseThread,
+              session: {
+                threadId,
+                status: state,
+                providerName: "codex" as const,
+                runtimeMode: "full-access" as const,
+                activeTurnId: null,
+                lastError: null,
+                updatedAt: now,
+              },
+            }
+          : state === "active-turn"
+            ? {
+                ...baseThread,
+                session: {
+                  threadId,
+                  status: "ready" as const,
+                  providerName: "codex" as const,
+                  runtimeMode: "full-access" as const,
+                  activeTurnId: "active-turn" as never,
+                  lastError: null,
+                  updatedAt: now,
+                },
+              }
+            : {
+                ...baseThread,
+                activities: [
+                  {
+                    id: "pending" as never,
+                    kind: state === "approval" ? "approval.requested" : "user-input.requested",
+                    tone: state === "approval" ? "approval" : "info",
+                    summary: "Pending interaction",
+                    payload:
+                      state === "approval"
+                        ? { requestId: "approval" }
+                        : { requestId: "input", questions: [{}] },
+                    turnId: null,
+                    createdAt: now,
+                  },
+                ],
+              };
+      const typedBusyThread = busyThread as OrchestrationReadModel["threads"][number];
+      const events = await Effect.runPromise(
+        decideThreadTurnStartCommand({
+          command: command(`direct-${state}`, `message-${state}`),
+          readModel: { ...readModel(), threads: [typedBusyThread] },
+        }),
+      );
+
+      expect(events.map((event) => event.type)).toEqual(["thread.prompt-queued"]);
+      expect(JSON.stringify(events)).not.toContain("unresolved turn");
+    },
+  );
 });

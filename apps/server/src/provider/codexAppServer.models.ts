@@ -1,16 +1,21 @@
 import type { ModelCapabilities } from "@bigbud/contracts/core/model.ts";
 import type { ServerProviderModel } from "@bigbud/contracts/server/server.providers.ts";
+import { withEffortProvenance } from "@bigbud/shared/model";
 
 import { providerModelsFromSettings } from "./providerSnapshot";
 import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
 
-export const UNVERIFIED_CODEX_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
+export const UNVERIFIED_CODEX_MODEL_CAPABILITIES: ModelCapabilities = withEffortProvenance(
+  {
+    reasoningEffortLevels: [],
+    supportsFastMode: false,
+    supportsThinkingToggle: false,
+    contextWindowOptions: [],
+    promptInjectedEffortLevels: [],
+  },
+  "unknown",
+  "unknown",
+);
 
 function titleCaseReasoningEffort(value: string): string {
   if (value === "xhigh") {
@@ -50,13 +55,23 @@ export function parseCodexReasoningEffortLevels(
 export function parseCodexModelCapabilities(model: Record<string, unknown>): ModelCapabilities {
   const additionalSpeedTiers = readArray(model.additionalSpeedTiers) ?? [];
   const serviceTiers = readArray(model.serviceTiers) ?? [];
-  return {
-    ...UNVERIFIED_CODEX_MODEL_CAPABILITIES,
-    reasoningEffortLevels: parseCodexReasoningEffortLevels(model),
-    supportsFastMode:
-      additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast") ||
-      serviceTiers.length > 0,
-  };
+  const reasoningEffortLevels = parseCodexReasoningEffortLevels(model);
+  const advertised = readArray(model.supportedReasoningEfforts);
+  return withEffortProvenance(
+    {
+      ...UNVERIFIED_CODEX_MODEL_CAPABILITIES,
+      reasoningEffortLevels,
+      supportsFastMode:
+        additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast") ||
+        serviceTiers.length > 0,
+    },
+    advertised === undefined
+      ? "unknown"
+      : reasoningEffortLevels.length > 0
+        ? "verified-supported"
+        : "verified-unsupported",
+    advertised === undefined ? "unknown" : "live",
+  );
 }
 
 export function includeConfiguredCodexModels(

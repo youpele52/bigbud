@@ -42,6 +42,7 @@ export const ThreadToolRequest = Schema.Struct({
   workspaceTool: Schema.optional(Schema.Literals(AGENT_WORKSPACE_TOOL_NAMES)),
   workspaceArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   remoteCommand: Schema.optional(Schema.String),
+  remoteInvocationId: Schema.optional(Schema.String),
   remoteArgs: Schema.optional(Schema.Array(Schema.String)),
   remoteStdin: Schema.optional(Schema.String),
   remoteAllowNonZeroExit: Schema.optional(Schema.Boolean),

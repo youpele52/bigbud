@@ -111,6 +111,15 @@ import Migration0107 from "./Migrations/107_OrchestrationBootstrapRecipes.ts";
 import Migration0108 from "./Migrations/108_DirectResourceCleanupPlans.ts";
 import Migration0109 from "./Migrations/109_RepairOrchestrationEventIdSequences.ts";
 import Migration0110 from "./Migrations/110_DirectResourceCleanupWorktrees.ts";
+import Migration0111 from "./Migrations/111_RemoteAgentRuntimeBindings.ts";
+import Migration0112 from "./Migrations/112_RemoteAgentReplayFence.ts";
+import Migration0113 from "./Migrations/113_RemoteAgentRestartRequests.ts";
+import Migration0114 from "./Migrations/114_OrchestrationBootstrapSubmissionRecipes.ts";
+import Migration0115 from "./Migrations/115_ProjectDeletionOwnership.ts";
+import Migration0116 from "./Migrations/116_RepairThreadRetentionFinitePolicies.ts";
+import Migration0118 from "./Migrations/118_LearningReviewRecovery.ts";
+import Migration0119 from "./Migrations/119_RepairLearningActivityLeases.ts";
+import Migration0117 from "./Migrations/117_RepairThreadRetentionItemIndependence.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -222,6 +231,15 @@ export const migrationEntries = [
   [108, "DirectResourceCleanupPlans", Migration0108],
   [109, "RepairOrchestrationEventIdSequences", Migration0109],
   [110, "DirectResourceCleanupWorktrees", Migration0110],
+  [111, "RemoteAgentRuntimeBindings", Migration0111],
+  [112, "RemoteAgentReplayFence", Migration0112],
+  [113, "RemoteAgentRestartRequests", Migration0113],
+  [114, "OrchestrationBootstrapSubmissionRecipes", Migration0114],
+  [115, "ProjectDeletionOwnership", Migration0115],
+  [116, "RepairThreadRetentionFinitePolicies", Migration0116],
+  [117, "RepairThreadRetentionItemIndependence", Migration0117],
+  [118, "LearningReviewRecovery", Migration0118],
+  [119, "RepairLearningActivityLeases", Migration0119],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

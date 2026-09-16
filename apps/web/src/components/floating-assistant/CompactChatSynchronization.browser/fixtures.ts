@@ -4,6 +4,8 @@ import {
   TurnId,
   type GetSelectedThreadDetailResult,
   type GetStartupProjectCatalogResult,
+  type OrchestrationEvent,
+  type OrchestrationDeliveryBatch,
   type ThreadId,
   type ThreadSummary,
 } from "@bigbud/contracts";
@@ -146,4 +148,16 @@ export function initialReplayEvents(threadId: ThreadId) {
       { sequence: 13 },
     ),
   ];
+}
+export function deliveryBatch(event: OrchestrationEvent): OrchestrationDeliveryBatch {
+  return {
+    type: "batch",
+    route: "direct-unmanaged",
+    consumerId: "compact-test",
+    consumerGeneration: 1,
+    serverEpoch: "server-1",
+    subscriptionGeneration: 1,
+    batchId: `batch-${event.sequence}`,
+    events: [event],
+  };
 }

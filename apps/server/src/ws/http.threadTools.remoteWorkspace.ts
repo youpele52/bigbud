@@ -1,5 +1,6 @@
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Effect } from "effect";
+import { createHash } from "node:crypto";
 
 import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils.ts";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
@@ -16,6 +17,7 @@ const MAX_REMOTE_ARGUMENT_BYTES = 1024 * 1024;
 const MAX_REMOTE_ARGUMENT_COUNT = 256;
 
 export interface RemoteWorkspaceProcessRequest {
+  readonly remoteInvocationId?: string | undefined;
   readonly remoteCommand?: string | undefined;
   readonly remoteArgs?: ReadonlyArray<string> | undefined;
   readonly remoteStdin?: string | undefined;
@@ -45,6 +47,12 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
   readonly callerThreadId: ThreadId;
   readonly request: RemoteWorkspaceProcessRequest;
 }) {
+  const invocationId = input.request.remoteInvocationId;
+  if (!invocationId || invocationId.length > 256 || !/^[\x21-\x7e]+$/.test(invocationId))
+    return yield* new ThreadToolRequestError({
+      status: 400,
+      message: "A stable remote tool invocation identity is required.",
+    });
   const command = input.request.remoteCommand?.trim() ?? "";
   if (!command || command.includes("\0") || Buffer.byteLength(command) > MAX_REMOTE_COMMAND_BYTES) {
     return yield* new ThreadToolRequestError({
@@ -125,6 +133,9 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
   return yield* Effect.tryPromise({
     try: () =>
       runToolCommand({
+        invocationId: createHash("sha256")
+          .update(JSON.stringify([input.callerThreadId, invocationId]))
+          .digest("hex"),
         target: resolveToolTransportTarget({
           location: "remote",
           executionTargetId,

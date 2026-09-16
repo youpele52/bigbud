@@ -34,28 +34,14 @@ import type {
 
 import type { GitCommandError } from "@bigbud/contracts";
 
-export interface ExecuteGitInput {
-  readonly operation: string;
+import type { ExecuteGitInput, ExecuteGitResult } from "./GitCore.execution.ts";
+export type { ExecuteGitInput, ExecuteGitResult, ExecuteGitProgress } from "./GitCore.execution.ts";
+
+export interface GitOperationOptions {
   readonly operationId?: string | undefined;
-  readonly cwd: string;
-  readonly executionTargetId?: string | undefined;
-  readonly args: ReadonlyArray<string>;
-  readonly stdin?: string;
-  readonly env?: NodeJS.ProcessEnv;
-  readonly allowNonZeroExit?: boolean;
-  readonly timeoutMs?: number;
-  readonly maxOutputBytes?: number;
-  readonly truncateOutputAtMaxBytes?: boolean;
-  readonly progress?: ExecuteGitProgress;
 }
 
-export interface ExecuteGitResult {
-  readonly code: number;
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly stdoutTruncated: boolean;
-  readonly stderrTruncated: boolean;
-}
+export type GitMutationInput<T> = T & GitOperationOptions;
 
 export interface GitStatusDetails extends Omit<GitStatusResult, "pr"> {
   upstreamRef: string | null;
@@ -64,17 +50,6 @@ export interface GitStatusDetails extends Omit<GitStatusResult, "pr"> {
 export interface GitPreparedCommitContext {
   stagedSummary: string;
   stagedPatch: string;
-}
-
-export interface ExecuteGitProgress {
-  readonly onStdoutLine?: (line: string) => Effect.Effect<void, never>;
-  readonly onStderrLine?: (line: string) => Effect.Effect<void, never>;
-  readonly onHookStarted?: (hookName: string) => Effect.Effect<void, never>;
-  readonly onHookFinished?: (input: {
-    hookName: string;
-    exitCode: number | null;
-    durationMs: number | null;
-  }) => Effect.Effect<void, never>;
 }
 
 export interface GitCommitProgress {
@@ -91,6 +66,7 @@ export interface GitCommitProgress {
 }
 
 export interface GitCommitOptions {
+  readonly operationId?: string | undefined;
   readonly timeoutMs?: number;
   readonly progress?: GitCommitProgress;
   readonly executionTargetId?: string | undefined;
@@ -200,6 +176,7 @@ export interface GitCoreShape {
     cwd: string,
     filePaths?: readonly string[],
     executionTargetId?: string,
+    operationId?: string,
   ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
 
   /**
@@ -219,6 +196,7 @@ export interface GitCoreShape {
     cwd: string,
     fallbackBranch: string | null,
     executionTargetId?: string,
+    operationId?: string,
   ) => Effect.Effect<GitPushResult, GitCommandError>;
 
   /**
@@ -298,6 +276,7 @@ export interface GitCoreShape {
   readonly pullCurrentBranch: (
     cwd: string,
     executionTargetId?: string,
+    operationId?: string,
   ) => Effect.Effect<GitPullResult, GitCommandError>;
 
   /**
@@ -306,6 +285,7 @@ export interface GitCoreShape {
   readonly fetch: (
     cwd: string,
     executionTargetId?: string,
+    operationId?: string,
   ) => Effect.Effect<GitFetchResult, GitCommandError>;
 
   /**
@@ -314,73 +294,84 @@ export interface GitCoreShape {
   readonly discardChanges: (
     cwd: string,
     executionTargetId?: string,
+    operationId?: string,
   ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a worktree and branch from a base branch.
    */
   readonly createWorktree: (
-    input: GitCreateWorktreeInput,
+    input: GitMutationInput<GitCreateWorktreeInput>,
   ) => Effect.Effect<GitCreateWorktreeResult, GitServiceError>;
 
   /**
    * Materialize a GitHub pull request head as a local branch without switching checkout.
    */
   readonly fetchPullRequestBranch: (
-    input: GitFetchPullRequestBranchInput & { executionTargetId?: string | undefined },
+    input: GitMutationInput<
+      GitFetchPullRequestBranchInput & { executionTargetId?: string | undefined }
+    >,
   ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Ensure a named remote exists for the provided URL, returning the reused or created remote name.
    */
-  readonly ensureRemote: (input: GitEnsureRemoteInput) => Effect.Effect<string, GitCommandError>;
+  readonly ensureRemote: (
+    input: GitMutationInput<GitEnsureRemoteInput>,
+  ) => Effect.Effect<string, GitCommandError>;
 
   /**
    * Fetch a remote branch into a local branch without checkout.
    */
   readonly fetchRemoteBranch: (
-    input: GitFetchRemoteBranchInput,
+    input: GitMutationInput<GitFetchRemoteBranchInput>,
   ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Set the upstream tracking branch for a local branch.
    */
   readonly setBranchUpstream: (
-    input: GitSetBranchUpstreamInput,
+    input: GitMutationInput<GitSetBranchUpstreamInput>,
   ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Remove an existing worktree.
    */
-  readonly removeWorktree: (input: GitRemoveWorktreeInput) => Effect.Effect<void, GitServiceError>;
+  readonly removeWorktree: (
+    input: GitMutationInput<GitRemoveWorktreeInput>,
+  ) => Effect.Effect<void, GitServiceError>;
 
   /**
    * Rename an existing local branch.
    */
   readonly renameBranch: (
-    input: GitRenameBranchInput,
+    input: GitMutationInput<GitRenameBranchInput>,
   ) => Effect.Effect<GitRenameBranchResult, GitCommandError>;
 
-  readonly deleteBranch: (input: GitDeleteBranchInput) => Effect.Effect<void, GitCommandError>;
+  readonly deleteBranch: (
+    input: GitMutationInput<GitDeleteBranchInput>,
+  ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a local branch.
    */
   readonly createBranch: (
-    input: GitCreateBranchInput,
+    input: GitMutationInput<GitCreateBranchInput>,
   ) => Effect.Effect<GitCreateBranchResult, GitServiceError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.
    */
   readonly checkoutBranch: (
-    input: GitCheckoutInput,
+    input: GitMutationInput<GitCheckoutInput>,
   ) => Effect.Effect<GitCheckoutResult, GitServiceError>;
 
   /**
    * Initialize a repository in the provided directory.
    */
-  readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitServiceError>;
+  readonly initRepo: (
+    input: GitMutationInput<GitInitInput>,
+  ) => Effect.Effect<void, GitServiceError>;
 
   /**
    * List local branch names (short format).

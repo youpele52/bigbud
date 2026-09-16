@@ -4,11 +4,134 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
-- Work remotely with confidence: bigbud asks before installing its Rust-based managed agent on the remote computer, then uses one authenticated connection for files, Git, terminals, shell commands, and provider tools.
-- Keep your workspace organized across launches and switches: the sidebar remembers which sections and projects you left open, while the Files panel stays in sync as you move between workspaces.
-- Get more reliable Claude and CLIProxyAPI sessions with safer turn handling, accurate task check-offs, bounded recovery, clearer diagnostics, authentication checks, and live model validation.
-- Browse more safely with isolated browser sessions, protected navigation, persistent tabs, URL-or-search handling, synced history and bookmarks, and reliable recovery when tabs or connections fail.
+- **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
+- **Conversation-first mobile redesign:** A new mobile shell puts chats at the center, with clearer navigation, persistent drafts, and recovery for interrupted work.
+- **Never lose a follow-up:** Messages sent while bigbud is busy wait safely and continue automatically.
+- **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
+- **Clearer recovery when something goes wrong:** Remote setup and connection errors now explain what failed and how to recover.
+
+## v0.2.209 (15 September, 2026)
+
+### Reliable Prompt Delivery
+
+- Follow-up messages sent while a provider is still working now wait in a bounded queue instead of being reported as failed, then continue automatically when the active turn is ready.
+- Preserved attachments, replies, title context, bootstrap details, proposed plans, model choices, runtime settings, and interaction settings through queue admission, persistence, replay, and delivery.
+- Added explicit queue-full and not-queueable errors, safe retry deduplication, and rules that keep metadata-bearing prompts separate when combining them would be unsafe.
+- Web and mobile send flows now share the same admission path and show when a prompt is queued.
+
+### More Resilient Remote Workspaces
+
+- Added a per-project choice between the managed bigbud remote agent and Direct SSH, with verification before saving and no remote-agent install or connection attempt for Direct SSH.
+- Hardened remote-agent installation, updates, reconnects, SSH execution, PTY handling, Git operations, and workspace-runtime routing across supported remote targets.
+- Direct SSH now follows the selected route without silent switching or replay after an ambiguous result, while managed-agent sessions retain their durable reconnect behavior.
+
+### Floating Assistant Screenshots
+
+- Added **Add screenshot to chat** to the mascot menu, so you can show bigbud what you’re looking at—even outside the bigbud app—and get help with it.
+- Added retry and discard recovery to help keep screenshots from getting lost when permissions, reloads, or interrupted sends get in the way.
+
+### Clearer Workspace Recovery
+
+- Improved remote-project setup copy, focus states, SSH-key connection feedback, target verification errors, and provider capability routing so recovery actions describe the route that actually failed.
+- Preserved accepted prompt metadata and actionable errors across WebSocket bootstrap, provider admission, remote execution, and reconnect transitions.
+
+### Safer Remote Bridge and Codex Startup
+
+- Fixed remote bridge notifications so roots, cancellation, and future notification messages never produce invalid JSON-RPC responses or invoke tools, keeping the connection usable for later requests and preserving request IDs.
+- Added protocol and failure-boundary coverage for framed, fragmented, and coalesced messages, transport and HTTP failures, authentication errors, and invocation-state cleanup.
+- Remote Codex sessions now wait for explicit bridge readiness, isolate start/resume/fallback attempts, prioritize real startup failures over cached tool data, enforce bounded deadlines, and clean up when a process stops or is replaced.
+
+### Markdown Preview Navigation
+
+- Preserved the corresponding reading position when switching Markdown files between Raw and Preview modes, including content whose rendered layout changes because of frontmatter, lists, tables, code, images, or delayed loading.
+
+### Memory Review Reliability
+
+- Repaired memory-review leases left behind by older database schemas so qualifying background reviews can recover reliably after an upgrade.
+- Deduplicated streamed and final provider responses, including multipart and replayed updates, so each background memory-review result appears once and remains ordered across providers.
+
+### Mobile and Chat Experience
+
+- Fixed mobile chat horizontal overflow caused by long messages, tool output, and composer content.
+- Added mobile queued-prompt feedback and aligned existing-thread sends with the shared delivery path.
+- Migrated working-status shimmer effects to Tailwind animations, removed duplicate keyframe CSS, and kept status labels consistent across chat and sidebar surfaces.
+- Kept app theme changes in the renderer so bigbud's Electron preference no longer changes the color scheme of external browser guests.
+
+## v0.2.208 (13 September, 2026)
+
+### More Reliable Orchestration
+
+- Hardened command processing, command receipts, thread identity, deletion fences, project-deletion ownership, projection failures, storage failures, and queued-prompt recovery so retries and restarts do not duplicate work or lose ownership.
+- Added safer orchestration startup and WebSocket recovery, including bounded replay, clearer dispatch errors, mobile delivery improvements, server health handling, and protection against stale or conflicting thread state.
+- Protected draft threads from server-owned, archived, deleted, or concurrently materialized thread IDs, and repaired ownership across reconnects, retries, project switches, and concurrent actions.
+- Chat and shell sends now distinguish accepted, rejected, and unknown outcomes, preserving user input when delivery cannot be confirmed.
+
+### Desktop Event Delivery
+
+- Added a packaged Rust Desktop Delivery Supervisor for ordered, bounded event batches, application acknowledgements, consumer generations, restart recovery, and reconnect reattachment.
+- Added lifecycle diagnostics for degraded or incompatible supervisor states and a fenced TypeScript fallback that cannot deliver concurrently with the supervisor.
+- Added supervisor protocol fixtures, packaging, signing, SBOM, artifact verification, and CI smoke-test coverage.
+
+### Remote Workspace and Agent Reliability
+
+- Hardened remote-agent startup, reconnects, PTY handling, workspace watches, journal recovery, path resolution, and backend readiness across local and remote execution targets, including durable remote-project restart requests and authentication continuation.
+- Added explicit execution-target capability checks and safer routing for supported local provider runtimes using remote workspaces.
+- Added remote-workspace ACP bridges for Cursor and Devin, while keeping provider availability bounded by each provider's declared capabilities.
+- Improved remote workspace protocol framing, release packaging, native binaries, and artifact verification for supported platforms.
+
+### Provider Discovery and Session Improvements
+
+- Made provider effort capabilities authoritative, persistently cached verified effort metadata, and validated provider-specific model, reasoning-effort, and execution-target selections before starting work.
+- Improved provider availability checks, model catalog loading, deferred model-picker rendering, and remote-workspace messaging without treating unavailable discovery data as a healthy runtime.
+- Hardened Claude MCP/session handling and ACP integrations, including safer startup behavior, more predictable provider routing and lifecycle failures, and recovery that avoids unnecessary session restarts when no model is explicitly selected.
+
+### Desktop and Release Reliability
+
+- Hardened desktop backend startup and shutdown, native path resolution, and packaged Rust sidecars. Release builds now verify macOS signatures and notarization, optional Windows signing, and Linux artifact contents.
+- Added clearer runtime readiness and connection state handling for desktop, mobile, and WebSocket clients, with safer recovery when services restart or become temporarily unavailable.
+- Updated CI and release workflows, Rust protocol support, and packaging checks for the expanded runtime and remote-agent surface.
+
+### Chat and Workspace UX
+
+- Improved send-turn handling for chat, shell, automation, orchestra, side chat, and compact chat flows, including safer pending-input and failure recovery.
+- Preserved pending sends when remote recovery creates a replacement thread, preventing confirmed user input from being stranded during reconnects.
+- Refined provider model selection, sidebar project and thread actions, archived-thread collision navigation and highlighting, Git controls, and mascot state feedback.
+- Improved state transitions for new threads, persisted drafts, startup restoration, project ordering, and archived-thread collisions, including ownership checks before reusing a thread ID.
+- Unified the chat activity area for provider states: reconnecting now takes priority, compaction appears as an amber `Compacting...` status, and the duplicate compaction label was removed from the composer.
+
+### Mobile Web Redesign
+
+- Redesigned the mobile web experience around a conversation-first workspace with clearer navigation between chats, projects, files, and settings.
+- Added mobile-friendly composer, drawer, thread, and recovery interactions for reconnects, retries, and pending sends.
+- Preserved drafts and in-progress user input across navigation, reconnects, and delivery failures so work is not unexpectedly lost.
+- Added mobile browser lifecycle and visual-parity coverage for the redesigned experience.
+- Filtered deleted projects and threads from mobile recents and project lists, placed Recents before Projects, and fixed the launch-page New chat action so it opens a valid draft like the header shortcut.
+
+### Mobile Remote Pairing
+
+- Simplified mobile pairing around one discovered backend, with hosted, local, and custom mobile URL choices that preserve existing preferences while adapting to development and remote environments.
+- Added live mobile-web discovery and pairing-state handling so generated links remain usable when the backend or development listener changes.
+
+### Retention Recovery
+
+- Repaired retention-policy migrations across older database schemas and made table rebuilding preserve dependent indexes, triggers, and child data during upgrades.
+- Hardened interrupted retention runs so preparing or purging work is safely deferred and resumed, terminal item outcomes are preserved, and execution failures are visible in server diagnostics and user feedback.
+
+### Clearer Activity Status
+
+- Added animated status shimmer treatment for working, reconnecting, and compacting states, with warning colors, reduced-motion support, and a concise `Compacting` label.
+
+### Development Workflow
+
+- Coordinated desktop, web, server, and mobile development instances through shared discovery and reservations, letting the mobile listener claim an available port atomically instead of relying on stale preflight checks.
+- Added lifecycle, collision, routing, and publication coverage for the development registries and listeners.
+
+### Persistent Memory Recovery
+
+- Fixed background memory reviews failing before they could start, allowing qualifying conversations to update saved preferences and project decisions again.
+- Kept memory reviews separate from active chats, protected their source threads while changes are saved, and added bounded retries that preserve progress across restarts.
+- Counted saved user messages when scheduling reviews so loaded history does not reset progress, and added clearer feedback for updated, unchanged, rejected, and failed reviews.
+- After foreground work settles, qualifying chats can show a secondary `Reviewing memory` status without interrupting provider work, compaction, approvals, or reconnects; completion toasts remain independent.
 
 ## v0.2.207 (7 September, 2026)
 
@@ -160,7 +283,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Built the managed remote agent and its shared communication protocol in [Rust](https://rust-lang.org/) for lower-overhead remote execution, durable recovery, and reliable handling of files, Git, terminals, shell commands, and provider tools.
 - Made the managed remote agent the default transport for supported remote workspace files, Git, terminals, shell commands, and provider tools.
 - Routed Codex, Claude, Copilot, OpenCode, KiloCode, and Pi through one authenticated per-thread execution path instead of separate direct workspace SSH bridges.
-- Kept direct SSH as an explicit server-start compatibility mode via `BIGBUD_REMOTE_AGENT_TRANSPORT=direct-ssh`; there is no automatic transport switch after an agent operation is accepted.
+- Added a per-project Direct SSH choice alongside the bigbud remote agent, with verification before saving changes and no automatic switching after an operation is accepted.
 
 ### Reliable Workspace Refresh
 

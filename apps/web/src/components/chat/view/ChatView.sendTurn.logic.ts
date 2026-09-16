@@ -8,6 +8,7 @@ import {
   sendShellCommand,
   submitPlanFollowUp,
 } from "./ChatView.sendTurn.actions";
+import { canOptimisticallyQueuePrompt } from "./ChatView.sendTurn.admission.logic";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 /** Returns the `onSend` handler for the composer form. */
@@ -29,10 +30,6 @@ export function useOnSend(input: UseOnSendInput) {
         isForceSend,
         sendInFlightRef: inFlightRef,
         promptRef: pRef,
-        composerImages,
-        composerFiles,
-        composerAnnotations,
-        composerTerminalContexts,
         isComposerShellMode,
         showPlanFollowUpPrompt: planFollowUp,
         activeProposedPlan: proposedPlan,
@@ -60,20 +57,12 @@ export function useOnSend(input: UseOnSendInput) {
         });
         return;
       }
-      if (shouldQueuePrompt()) {
-        if (
-          composerImages.length > 0 ||
-          composerFiles.length > 0 ||
-          composerAnnotations.length > 0 ||
-          composerTerminalContexts.length > 0
-        ) {
-          toastManager.add({
-            type: "warning",
-            title: "Attachments cannot be queued",
-            description: "Wait for the current turn to finish before sending attachments.",
-          });
-          return;
-        }
+      const canOptimisticallyQueue = canOptimisticallyQueuePrompt({
+        ...inputRef.current,
+        shouldQueuePrompt: shouldQueuePrompt(),
+        planFollowUp,
+      });
+      if (canOptimisticallyQueue) {
         const queueResult = inputRef.current.queueComposerPrompt(trimmed);
         if (queueResult === "queued") {
           resetComposerDraft();
@@ -86,7 +75,8 @@ export function useOnSend(input: UseOnSendInput) {
         }
         return;
       }
-      if ((sendBusy && !isForceSend()) || connecting || inFlightRef.current) return;
+      if ((sendBusy && !isForceSend() && !shouldQueuePrompt()) || connecting || inFlightRef.current)
+        return;
       if (planFollowUp && proposedPlan) {
         await submitPlanFollowUp({
           proposedPlan,

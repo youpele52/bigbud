@@ -15,6 +15,7 @@ import { decodeWorkspaceFrame } from "./remoteAgentProtocol.codec.workspace.deco
 import { decodeProcessFrame } from "./remoteAgentProtocol.codec.process.decode.ts";
 import { decodePtyFrame } from "./remoteAgentProtocol.codec.pty.decode.ts";
 import { decodeResourceCleanupFrame } from "./remoteAgentProtocol.codec.resourceCleanup.ts";
+import { decodeRemoteAgentControlFrame } from "./remoteAgentProtocol.codec.control.ts";
 
 function decodeClientHello(bytes: Uint8Array): RemoteAgentClientHello {
   const value = {
@@ -318,6 +319,7 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
       if (
         !(
           (field >= 8 && field <= 32) ||
+          (field >= 33 && field <= 34) ||
           (field >= 42 && field <= 57) ||
           (field >= 100 && field <= 107)
         )
@@ -331,7 +333,9 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
       const processFrame = decodeProcessFrame(field, payload);
       const ptyFrame = decodePtyFrame(field, payload);
       const cleanupFrame = decodeResourceCleanupFrame(field, payload);
-      const decodedFrame = workspaceFrame ?? processFrame ?? ptyFrame ?? cleanupFrame;
+      const controlFrame = decodeRemoteAgentControlFrame(field, payload);
+      const decodedFrame =
+        workspaceFrame ?? processFrame ?? ptyFrame ?? cleanupFrame ?? controlFrame;
       if (!decodedFrame) return;
       if (frame) {
         throw new RemoteAgentProtocolDecodeError("protobuf frame contains multiple payloads");

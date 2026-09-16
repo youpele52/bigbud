@@ -7,6 +7,7 @@ import {
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
 } from "./window/certificateChallenge.channels";
 import { isDesktopMenuAction } from "./window/menuAction.validation";
+import { desktopIpcChannels } from "./main.channels";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -62,6 +63,18 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   openMainWindow: (threadId) => ipcRenderer.invoke(OPEN_MAIN_WINDOW_CHANNEL, threadId),
   openCompactChat: () => ipcRenderer.invoke(OPEN_COMPACT_CHAT_CHANNEL),
+  compactChatScreenshot: {
+    getPending: (threadId) =>
+      ipcRenderer.invoke(desktopIpcChannels.getPendingCompactScreenshot, threadId),
+    acknowledge: (captureId) =>
+      ipcRenderer.invoke(desktopIpcChannels.acknowledgeCompactScreenshot, captureId),
+    onAvailable: (listener) => {
+      const wrappedListener = () => listener();
+      ipcRenderer.on(desktopIpcChannels.compactScreenshotAvailable, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(desktopIpcChannels.compactScreenshotAvailable, wrappedListener);
+    },
+  },
   beginMascotDrag: (point) => ipcRenderer.invoke(BEGIN_MASCOT_DRAG_CHANNEL, point),
   moveMascot: (point) => ipcRenderer.invoke(MOVE_MASCOT_CHANNEL, point),
   hideCompactChat: () => ipcRenderer.invoke(HIDE_COMPACT_CHAT_CHANNEL),

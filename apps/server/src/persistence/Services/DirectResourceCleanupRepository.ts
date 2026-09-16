@@ -58,12 +58,17 @@ export interface DirectResourceCleanupRepositoryShape {
   readonly listCanonicalPruning: (limit: number) => Effect.Effect<
     ReadonlyArray<{
       readonly operationId: string;
-      readonly threadId: string;
+      readonly aggregateKind: "thread" | "project";
+      readonly aggregateId: string;
       readonly deletionSequence: number;
     }>,
     Error
   >;
-  readonly markCanonicalPruned: (operationId: string, at: string) => Effect.Effect<void, Error>;
+  readonly markCanonicalPruned: (
+    operationId: string,
+    at: string,
+    aggregateKind?: "thread" | "project",
+  ) => Effect.Effect<void, Error>;
   readonly listPreparedFinalizeCandidates: (input: {
     readonly createdAfter: string;
     readonly operationAfter: string;

@@ -2,6 +2,7 @@ import {
   makeRemoteAgentComposition,
   type RemoteAgentComposition,
 } from "./remoteAgentComposition.ts";
+import { parseSshExecutionTarget, parseSshExecutionTransport } from "../ssh/sshExecutionTarget.ts";
 
 export const DEFAULT_REMOTE_AGENT_BINARY = "$HOME/.bigbud/agent/bin/current";
 
@@ -22,12 +23,38 @@ export function resolveRemoteAgentConfiguration(
     throw new Error("BIGBUD_REMOTE_AGENT_TRANSPORT must be either 'agent' or 'direct-ssh'.");
   }
   if (requestedTransport === "direct-ssh") {
-    return { transport: "direct-ssh", binaryPath: null };
+    return {
+      transport: "direct-ssh",
+      // The process default controls legacy target IDs only. Agent projects
+      // remain available in the same server so users can choose per project.
+      binaryPath: environment.BIGBUD_REMOTE_AGENT_BINARY?.trim() || DEFAULT_REMOTE_AGENT_BINARY,
+    };
   }
   return {
     transport: "agent",
     binaryPath: environment.BIGBUD_REMOTE_AGENT_BINARY?.trim() || DEFAULT_REMOTE_AGENT_BINARY,
   };
+}
+
+/** Resolve a project transport while retaining the process setting for legacy target IDs. */
+export function resolveRemoteAgentTransport(
+  executionTargetId: string | null | undefined,
+  environment: NodeJS.ProcessEnv = process.env,
+): RemoteAgentTransport {
+  return (
+    parseSshExecutionTransport(executionTargetId) ??
+    resolveRemoteAgentConfiguration(environment).transport
+  );
+}
+
+export function isRemoteAgentExecutionTarget(
+  executionTargetId: string | null | undefined,
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    parseSshExecutionTarget(executionTargetId) !== null &&
+    resolveRemoteAgentTransport(executionTargetId, environment) === "agent"
+  );
 }
 
 export function getConfiguredRemoteAgentComposition(): RemoteAgentComposition | null {

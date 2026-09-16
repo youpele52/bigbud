@@ -19,6 +19,26 @@ describe("normalizeProviderModelOptions Codex effort", () => {
   });
 });
 
+describe("normalizeProviderModelOptions opaque provider efforts", () => {
+  it("preserves OpenCode, KiloCode, Cursor, and Devin custom identifiers", () => {
+    expect(
+      normalizeProviderModelOptions({ opencode: { reasoningEffort: " none " } }, "opencode"),
+    ).toMatchObject({ opencode: { reasoningEffort: "none" } });
+    expect(
+      normalizeProviderModelOptions({ kilocode: { reasoningEffort: "custom-xhigh" } }, "kilocode"),
+    ).toMatchObject({ kilocode: { reasoningEffort: "custom-xhigh" } });
+    expect(normalizeProviderModelOptions({ cursor: { reasoning: "max" } }, "cursor")).toMatchObject(
+      { cursor: { reasoning: "max" } },
+    );
+    expect(
+      normalizeProviderModelOptions({ cursor: { reasoningEffort: "max" } }, "cursor"),
+    ).toMatchObject({ cursor: { reasoning: "max" } });
+    expect(normalizeProviderModelOptions({ devin: { reasoning: "max" } }, "devin")).toMatchObject({
+      devin: { reasoning: "max" },
+    });
+  });
+});
+
 describe("normalizeProviderModelOptions Claude effort", () => {
   it("preserves trimmed future and legacy prompt-injected effort values", () => {
     expect(

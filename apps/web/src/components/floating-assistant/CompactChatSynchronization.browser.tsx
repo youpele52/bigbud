@@ -36,6 +36,7 @@ import {
   TURN_1,
   TURN_2,
   chatsProjectPage,
+  deliveryBatch,
   initialReplayEvents,
   threadDetail,
   threadSummary,
@@ -97,7 +98,7 @@ describe("compact chat synchronization", () => {
     let materialized = false;
     let projectionSequence = 10;
     let ownedThreadId: ThreadId | null = null;
-    const listeners = new Set<(event: OrchestrationEvent) => void>();
+    const listeners = new Set<Parameters<NativeApi["orchestration"]["onDomainEvent"]>[0]>();
     let resubscribe: (() => void) | undefined;
     const unsubscribe = vi.fn();
     const getSelectedThreadDetail = vi.fn(async ({ threadId }: { threadId: ThreadId }) => {
@@ -140,6 +141,19 @@ describe("compact chat synchronization", () => {
     window.nativeApi = {
       orchestration: {
         dispatchCommand,
+        acknowledgeDelivery: vi.fn(async ({ appliedThroughSequence }) => ({
+          accepted: true,
+          fenced: false,
+          acknowledgedSequence: appliedThroughSequence,
+        })),
+        resolveThreadOwnership: vi.fn(async ({ threadId }: { threadId: ThreadId }) => ({
+          threadId,
+          ...(materialized
+            ? { status: "active", projectId: BUILT_IN_CHATS_PROJECT_ID }
+            : { status: "absent", reusePolicy: "canonical-identity-unclaimed" }),
+          serverEpoch: "server-1",
+          canonicalRevision: projectionSequence,
+        })),
         getSelectedThreadDetail,
         getSidebarThreadCatalog,
         getStartupProjectCatalog: vi.fn(async () => chatsProjectPage(projectionSequence)),
@@ -190,7 +204,7 @@ describe("compact chat synchronization", () => {
 
       const emit = (event: OrchestrationEvent) => {
         projectionSequence = event.sequence;
-        for (const listener of listeners) listener(event);
+        for (const listener of listeners) void listener(deliveryBatch(event));
       };
       emit(
         makeEvent(

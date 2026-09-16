@@ -167,6 +167,9 @@ export function startEventStream(
         throw new Error("SSE event stream ended unexpectedly.");
       } catch (error) {
         if (abortController.signal.aborted || !isOwner()) return;
+        if (session.promptTurnId !== undefined && session.promptTurnId === session.activeTurnId) {
+          session.textStream?.invalidateLive();
+        }
         if (attempt === retryDelays.length) {
           const turnId = session.activeTurnId;
           await reconcile();

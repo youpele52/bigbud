@@ -2,7 +2,6 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
-  ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -13,16 +12,21 @@ import {
   decideThreadTurnStartCommand,
   requireThreadReadyForMutation,
 } from "./deciderThreads.turn.start.ts";
-import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
+import {
+  canAutoDispatchQueuedPrompts,
+  compatibleQueuedPrefix,
+  consumableQueuedPrefix,
+  hasActiveQueueReservation,
+  hasNonCombinableQueuedPromptMetadata,
+} from "./QueuedPromptPolicy.logic.ts";
+import {
+  MAX_QUEUED_PROMPTS,
+  makeQueuedPromptEvent,
+  PROMPT_QUEUE_FULL_DETAIL,
+  queuedPromptMatchesCommand,
+  queuedPromptToTurnStartCommand,
+} from "./ThreadPromptAdmission.logic.ts";
 
-const MAX_QUEUED_PROMPTS = 5;
-const hasActiveReservation = (thread: OrchestrationReadModel["threads"][number]) =>
-  Boolean(
-    thread.pendingTurnControlOperation?.reservedPromptIds.length &&
-    !["completed", "failed", "superseded", "cancelled"].includes(
-      thread.pendingTurnControlOperation.state,
-    ),
-  );
 type QueueCommand = Extract<
   OrchestrationCommand,
   | { type: "thread.message.submit" }
@@ -34,29 +38,58 @@ type QueueCommand = Extract<
 const queuedFollowUpText = (texts: ReadonlyArray<string>): string =>
   ["Additional instructions:", ...texts.map((text) => `- ${text.trim()}`)].join("\n");
 
-function makeQueuedEvent(input: {
-  readonly command: Extract<QueueCommand, { type: "thread.message.submit" }>;
-  readonly threadId: ThreadId;
-  readonly queuePosition: number;
-}): Omit<Extract<OrchestrationEvent, { type: "thread.prompt-queued" }>, "sequence"> {
+function makeTurnStartCommand(
+  command: Extract<QueueCommand, { type: "thread.message.submit" }>,
+  thread: OrchestrationReadModel["threads"][number],
+  message: Extract<OrchestrationCommand, { type: "thread.turn.start" }>["message"],
+): Extract<OrchestrationCommand, { type: "thread.turn.start" }> {
   return {
-    ...withEventBase({
-      aggregateKind: "thread",
-      aggregateId: input.threadId,
-      occurredAt: input.command.createdAt,
-      commandId: input.command.commandId,
-    }),
-    type: "thread.prompt-queued",
-    payload: {
-      threadId: input.threadId,
-      prompt: {
-        id: input.command.message.messageId,
-        text: input.command.message.text.trim(),
-        createdAt: input.command.createdAt,
-      },
-      queuePosition: input.queuePosition,
-    },
+    type: "thread.turn.start",
+    commandId: command.commandId,
+    threadId: thread.id,
+    message,
+    ...(command.modelSelection !== undefined ? { modelSelection: command.modelSelection } : {}),
+    ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
+    runtimeMode: command.runtimeMode ?? thread.runtimeMode,
+    interactionMode: command.interactionMode ?? thread.interactionMode,
+    ...(command.bootstrap !== undefined ? { bootstrap: command.bootstrap } : {}),
+    ...(command.bootstrapSourceThreadId !== undefined
+      ? { bootstrapSourceThreadId: command.bootstrapSourceThreadId }
+      : {}),
+    ...(command.sourceProposedPlan !== undefined
+      ? { sourceProposedPlan: command.sourceProposedPlan }
+      : {}),
+    createdAt: command.createdAt,
   };
+}
+
+type QueuedPrompt = NonNullable<OrchestrationReadModel["threads"][number]["queuedPrompts"]>[number];
+type ThreadTurnStartCommand = Extract<OrchestrationCommand, { type: "thread.turn.start" }>;
+
+function requiresIndividualFlush(prompt: QueuedPrompt) {
+  return hasNonCombinableQueuedPromptMetadata(prompt);
+}
+
+function buildQueuedFlushTurnStart(input: {
+  readonly prompt: QueuedPrompt;
+  readonly thread: OrchestrationReadModel["threads"][number];
+  readonly commandId: ThreadTurnStartCommand["commandId"];
+  readonly createdAt: string;
+  readonly messageId?: ThreadTurnStartCommand["message"]["messageId"];
+  readonly prompts: ReadonlyArray<QueuedPrompt>;
+}) {
+  return queuedPromptToTurnStartCommand({
+    prompt: input.prompt,
+    thread: input.thread,
+    commandId: input.commandId,
+    createdAt: input.createdAt,
+    ...(requiresIndividualFlush(input.prompt)
+      ? {}
+      : {
+          messageId: input.messageId ?? input.prompt.id,
+          text: queuedFollowUpText(input.prompts.map((prompt) => prompt.text)),
+        }),
+  });
 }
 
 export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(function* (input: {
@@ -86,10 +119,12 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
 
   if (command.type === "thread.queued-prompt.remove") {
     if (
-      hasActiveReservation(thread) &&
-      thread.pendingTurnControlOperation?.reservedPromptIds.includes(command.messageId)
-    )
+      (hasActiveQueueReservation(thread) &&
+        thread.pendingTurnControlOperation?.reservedPromptIds.includes(command.messageId)) ||
+      thread.pendingInterruptFlushIntent?.queuedPromptIds.includes(command.messageId)
+    ) {
       return [];
+    }
     return {
       ...withEventBase({
         aggregateKind: "thread",
@@ -108,52 +143,50 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       detail: `Thread '${thread.id}' is archived.`,
     });
   }
-  const safelyIdle = isThreadConfirmedIdleForDispatch(thread);
+  const canAutoDispatch = canAutoDispatchQueuedPrompts(thread);
 
   if (command.type === "thread.message.submit") {
     const queuedPrompts = thread.queuedPrompts ?? [];
-    if (queuedPrompts.some((prompt) => prompt.id === command.message.messageId)) return [];
-    if (
-      command.delivery === "auto" &&
-      safelyIdle &&
-      !thread.queueHold &&
-      queuedPrompts.length === 0
-    ) {
+    const existing = queuedPrompts.find((prompt) => prompt.id === command.message.messageId);
+    if (existing) {
+      if (!queuedPromptMatchesCommand(existing, command)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "This message ID is already queued with different content or settings.",
+        });
+      }
+      return [];
+    }
+    if (command.delivery === "auto" && canAutoDispatch && queuedPrompts.length === 0) {
       return yield* decideThreadTurnStartCommand({
         readModel,
-        command: {
-          type: "thread.turn.start",
-          commandId: command.commandId,
-          threadId: thread.id,
-          message: {
-            messageId: command.message.messageId,
-            role: "user",
-            text: command.message.text,
-            attachments: [],
-          },
-          runtimeMode: thread.runtimeMode,
-          interactionMode: thread.interactionMode,
-          createdAt: command.createdAt,
-        },
+        command: makeTurnStartCommand(command, thread, {
+          messageId: command.message.messageId,
+          role: "user",
+          text: command.message.text,
+          attachments: command.message.attachments ?? [],
+          ...(command.message.replyToMessageId !== undefined
+            ? { replyToMessageId: command.message.replyToMessageId }
+            : {}),
+        }),
       });
     }
+    const queuedEvent = yield* makeQueuedPromptEvent({
+      command,
+      readModel,
+      targetThread: thread,
+      queuePosition: queuedPrompts.length + 1,
+    });
     if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
       return yield* new OrchestrationCommandInvariantError({
         commandType: command.type,
-        detail: "A thread can queue at most 5 prompts.",
+        detail: PROMPT_QUEUE_FULL_DETAIL,
+        code: "prompt_queue_full",
       });
     }
-    const queuedEvent = makeQueuedEvent({
-      command,
-      threadId: thread.id,
-      queuePosition: queuedPrompts.length + 1,
-    });
-    if (command.delivery !== "auto" || !safelyIdle || thread.queueHold) return queuedEvent;
+    if (command.delivery !== "auto" || !canAutoDispatch) return queuedEvent;
 
-    // The queue existed while the thread was idle. Persist the new prompt and
-    // consume the exact combined prefix in this one command, preventing a
-    // crash/restart window where the new auto follow-up is stranded.
-    const prompts = [...queuedPrompts, queuedEvent.payload.prompt];
+    const prompts = compatibleQueuedPrefix([...queuedPrompts, queuedEvent.payload.prompt]);
     const flushedEvent: Omit<OrchestrationEvent, "sequence"> = {
       ...withEventBase({
         aggregateKind: "thread",
@@ -166,48 +199,19 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     };
     const startEvents = yield* decideThreadTurnStartCommand({
       readModel,
-      command: {
-        type: "thread.turn.start",
+      command: buildQueuedFlushTurnStart({
+        prompt: prompts[0]!,
+        thread,
         commandId: command.commandId,
-        threadId: thread.id,
-        message: {
-          messageId: command.message.messageId,
-          role: "user",
-          text: queuedFollowUpText(prompts.map((prompt) => prompt.text)),
-          attachments: [],
-        },
-        runtimeMode: thread.runtimeMode,
-        interactionMode: thread.interactionMode,
         createdAt: command.createdAt,
-      },
+        prompts,
+      }),
     });
     return [queuedEvent, flushedEvent, ...startEvents];
   }
 
-  if (!safelyIdle && command.type === "thread.queued-prompt.flush" && !command.acknowledged)
-    return [];
-  if (
-    hasActiveReservation(thread) &&
-    thread.pendingTurnControlOperation?.operationId !== command.controlOperationId
-  ) {
-    return [];
-  }
-  const pendingIntent = thread.pendingInterruptFlushIntent;
-  if (
-    pendingIntent !== null &&
-    pendingIntent !== undefined &&
-    (pendingIntent.queuedPromptIds.length !== command.messageIds.length ||
-      pendingIntent.queuedPromptIds.some((id, index) => id !== command.messageIds[index]))
-  ) {
-    return [];
-  }
-  const prefix = (thread.queuedPrompts ?? []).slice(0, command.messageIds.length);
-  if (
-    prefix.length !== command.messageIds.length ||
-    prefix.some((prompt, index) => prompt.id !== command.messageIds[index])
-  ) {
-    return [];
-  }
+  const prefix = consumableQueuedPrefix({ thread, ...command });
+  if (prefix.length === 0) return [];
   const flushedEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
       aggregateKind: "thread",
@@ -216,25 +220,19 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       commandId: command.commandId,
     }),
     type: "thread.queued-prompts-flushed",
-    payload: { threadId: thread.id, messageIds: command.messageIds },
+    payload: { threadId: thread.id, messageIds: prefix.map((prompt) => prompt.id) },
   };
   if (command.consumeOnly) return flushedEvent;
   const startEvents = yield* decideThreadTurnStartCommand({
     readModel,
-    command: {
-      type: "thread.turn.start",
+    command: buildQueuedFlushTurnStart({
+      prompt: prefix[0]!,
+      thread,
       commandId: command.commandId,
-      threadId: thread.id,
-      message: {
-        messageId: command.messageId,
-        role: "user",
-        text: queuedFollowUpText(prefix.map((prompt) => prompt.text)),
-        attachments: [],
-      },
-      runtimeMode: thread.runtimeMode,
-      interactionMode: thread.interactionMode,
       createdAt: command.createdAt,
-    },
+      messageId: command.messageId,
+      prompts: prefix,
+    }),
   });
   return [flushedEvent, ...startEvents];
 });

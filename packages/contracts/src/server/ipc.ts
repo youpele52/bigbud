@@ -11,6 +11,7 @@ import type {
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
 
 export type {
   DesktopRuntimeArch,
@@ -64,7 +65,8 @@ export interface DesktopTailscaleRemoteAccessStatus {
   error: string | null;
 }
 
-export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
+export interface DesktopBridge
+  extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge, DesktopScreenshotBridge {
   getWindowRole?: () => DesktopWindowRole | null;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;

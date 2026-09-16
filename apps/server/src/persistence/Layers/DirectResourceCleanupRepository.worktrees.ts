@@ -69,7 +69,7 @@ export function makeDirectResourceCleanupWorktrees(
               WHERE worktree.state IN ('pending', 'retry')
                 AND (worktree.next_attempt_at IS NULL OR worktree.next_attempt_at <= ${input.dueAt})
                 AND (${input.operationId ?? null} IS NULL OR worktree.operation_id = ${input.operationId ?? null})
-                AND (proof.aggregate_kind = 'project' OR proof.canonical_pruned_at IS NOT NULL)
+                AND proof.canonical_pruned_at IS NOT NULL
                 AND plan.state <> 'cancelled'
               ORDER BY plan.created_at, worktree.operation_id, worktree.original_index
               LIMIT ${Math.max(1, Math.min(100, Math.floor(input.limit)))}

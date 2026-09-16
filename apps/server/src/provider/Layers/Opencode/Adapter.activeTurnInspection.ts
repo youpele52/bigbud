@@ -3,7 +3,7 @@ import type { ProviderActiveTurnInspection } from "@bigbud/contracts/orchestrati
 import { Effect } from "effect";
 
 import { ProviderAdapterRequestError } from "../../Errors.ts";
-import { formatOpencodeSdkError } from "./Provider.sdk.ts";
+import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 interface ActiveTurnInspectionDeps {
@@ -34,7 +34,7 @@ function requireData<T>(
   method: string,
 ): NonNullable<T> {
   if (response.error) {
-    throw new Error(`${method} failed: ${formatOpencodeSdkError(response.error)}`);
+    throw new Error(`${method} failed: ${formatManagedServerSdkError(response.error)}`);
   }
   if (response.data === undefined) {
     throw new Error(`${method} returned no data.`);
@@ -54,6 +54,9 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
           record.client.question.list(),
           record.client.permission.list(),
         ]);
+        if (record.activeTurnId !== turnId || deps.sessions.get(threadId) !== record) {
+          return unavailable();
+        }
         const statuses = requireData(statusResponse, "session.status");
         const questions = requireData(questionsResponse, "question.list");
         const permissions = requireData(permissionsResponse, "permission.list");
@@ -87,6 +90,16 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         }
 
         if (nativeStatusType === "idle") {
+          if (record.activeTurnId === turnId && record.promptTurnId === turnId) {
+            return {
+              status: "running",
+              observedAt,
+              completionEvidence: {
+                source: "opencode.prompt.final-output",
+                detail: "The local prompt is still collecting its final output.",
+              },
+            };
+          }
           if (deps.settleCompleted !== false) {
             record.activeTurnId = undefined;
             record.updatedAt = observedAt;
@@ -127,7 +140,9 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
               },
             };
           }
-          throw new Error(`session.get failed: ${formatOpencodeSdkError(sessionResponse.error)}`);
+          throw new Error(
+            `session.get failed: ${formatManagedServerSdkError(sessionResponse.error)}`,
+          );
         }
         if (!sessionResponse.data) throw new Error("session.get returned no data.");
 
@@ -147,7 +162,7 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         new ProviderAdapterRequestError({
           provider: "opencode",
           method: "activeTurnInspection",
-          detail: formatOpencodeSdkError(cause),
+          detail: formatManagedServerSdkError(cause),
           cause,
         }),
     });

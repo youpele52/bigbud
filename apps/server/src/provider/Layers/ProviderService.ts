@@ -56,6 +56,7 @@ import {
 } from "./ProviderService.turnLiveness.ts";
 import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
+import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
 
 export interface ProviderServiceLiveOptions {
@@ -84,28 +85,34 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const turnLiveness = yield* Effect.serviceOption(ProviderTurnLivenessRepository);
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
-  const publishRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    Effect.succeed(event).pipe(
-      Effect.tap((canonicalEvent) =>
-        canonicalEventLogger ? canonicalEventLogger.write(canonicalEvent, null) : Effect.void,
-      ),
-      Effect.flatMap((canonicalEvent) => PubSub.publish(runtimeEventPubSub, canonicalEvent)),
-      Effect.asVoid,
-    );
-
   const upsertSessionBinding = makeUpsertSessionBinding(directory);
 
   const providers = yield* registry.listProviders();
-  const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
+  const background = makeBackgroundReviews({
+    registry,
+    serverSettings,
+    getProviderCapabilities: resolveCapabilities,
+    isProviderComposed,
+  });
+  const adapters = yield* Effect.forEach(providers, (provider) =>
+    registry.getByProvider(provider).pipe(Effect.map(background.forDiscovery)),
+  );
   const processRuntimeEvent = makeProcessProviderRuntimeEvent({
     observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
-    publish: publishRuntimeEvent,
+    publish: (event) =>
+      (canonicalEventLogger ? canonicalEventLogger.write(event, null) : Effect.void).pipe(
+        Effect.andThen(PubSub.publish(runtimeEventPubSub, event)),
+        Effect.asVoid,
+      ),
   });
 
   yield* monitorProviderRuntimeEvents({
     adapters,
     liveness: turnLiveness,
-    process: processRuntimeEvent,
+    process: (event) =>
+      background.isBackground(event.threadId)
+        ? background.process(event)
+        : processRuntimeEvent(event),
   });
 
   // Build session routing helpers
@@ -125,7 +132,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const stopStaleSessionsForThread = makeStopStaleSessionsForThread(adapters, analytics);
 
-  const startSession: ProviderServiceShape["startSession"] = makeStartSessionInternal({
+  const startDependencies = {
     registry,
     directory,
     upsertSessionBinding,
@@ -134,16 +141,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     getProviderCapabilities: resolveCapabilities,
     isProviderComposed,
     stopStaleSessionsForThread,
-  });
-  const startSessionFresh: ProviderServiceShape["startSessionFresh"] = makeStartSessionInternal({
-    registry,
-    directory,
-    upsertSessionBinding,
-    analytics,
-    serverSettings,
-    getProviderCapabilities: resolveCapabilities,
-    isProviderComposed,
-    stopStaleSessionsForThread,
+  };
+  const startSession = makeStartSessionInternal(startDependencies);
+  const startSessionFresh = makeStartSessionInternal({
+    ...startDependencies,
     options: { reusePersistedResumeCursor: false },
   });
 
@@ -367,6 +368,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
 
   return {
+    runBackgroundReview: background.run,
     startSession,
     startSessionFresh,
     sendTurn,
@@ -383,9 +385,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     listSessionsForReconciliation,
     getCapabilities,
     rollbackConversation,
-    // Each access creates a fresh PubSub subscription so that multiple
-    // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
-    // independently receive all runtime events.
+    // Each consumer independently receives all canonical runtime events.
     get streamEvents(): ProviderServiceShape["streamEvents"] {
       return Stream.fromPubSub(runtimeEventPubSub);
     },

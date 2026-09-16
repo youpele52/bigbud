@@ -13,6 +13,8 @@ import {
 } from "./remoteAgentSupervisor.ts";
 import { type RunSshCommandInput } from "../ssh/sshProcess.ts";
 
+/** Retired compatibility transaction; candidate staging is stateless and isolated. */
+
 function commandStdout(result: unknown): string {
   return typeof result === "object" && result !== null && "stdout" in result
     ? String((result as { stdout?: unknown }).stdout ?? "")
@@ -102,7 +104,7 @@ export async function runRemoteAgentActivationTransaction(input: {
       }
     } catch (recoveryError) {
       throw new Error(
-        `Remote agent candidate failed verification and rollback failed: ${errorMessage(recoveryError)}`,
+        `Remote agent candidate failed verification: ${errorMessage(error)}; rollback failed: ${errorMessage(recoveryError)}`,
         { cause: recoveryError },
       );
     }

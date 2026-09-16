@@ -20,6 +20,7 @@ import type { BootstrapGit } from "./wsBootstrap.worktree.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import type { BootstrapWorktreeIdentity } from "./wsBootstrap.ts";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
+import { findMatchingBootstrapSubmissionRecipe } from "./wsBootstrap.submissionRecipe.ts";
 
 type PublicDispatchSource = Extract<CommandGatewaySource, "desktop" | "mobile" | "automation">;
 type DispatchSource = PublicDispatchSource | "internal";
@@ -93,19 +94,34 @@ export function makeWsRpcCommandDispatch(input: {
     OrchestrationDispatchCommandError | ServerRuntimeStartupError | CommandAdmissionError
   > => {
     const dispatchEffect =
-      normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+      (normalizedCommand.type === "thread.turn.start" ||
+        normalizedCommand.type === "thread.message.submit") &&
+      normalizedCommand.bootstrap
         ? dispatchBootstrapThreadCommand(normalizedCommand)
-        : input.commandGateway.dispatchNormalized({
-            command: normalizedCommand,
-            context: {
-              actor: source === "internal" ? "server" : "authenticated-user",
-              source,
-              authorizationScope: source === "internal" ? "internal" : "authenticated-session",
-            },
+        : Effect.gen(function* () {
+            // A retry must not evade the original recipe by removing bootstrap.
+            if (normalizedCommand.type === "thread.message.submit") {
+              yield* findMatchingBootstrapSubmissionRecipe({
+                command: normalizedCommand,
+                repository: input.bootstrapRecipes,
+              });
+            }
+            return yield* input.commandGateway.dispatchNormalized({
+              command: normalizedCommand,
+              context: {
+                actor: source === "internal" ? "server" : "authenticated-user",
+                source,
+                authorizationScope: source === "internal" ? "internal" : "authenticated-session",
+              },
+            });
           });
 
+    const serializedEffect =
+      normalizedCommand.type === "thread.message.submit" && !normalizedCommand.bootstrap
+        ? input.withBootstrapCommandLock(normalizedCommand.commandId, dispatchEffect)
+        : dispatchEffect;
     return input.startup
-      .enqueueCommand(dispatchEffect)
+      .enqueueCommand(serializedEffect)
       .pipe(
         Effect.mapError((cause) =>
           toDispatchCommandError(cause, "Failed to dispatch orchestration command"),

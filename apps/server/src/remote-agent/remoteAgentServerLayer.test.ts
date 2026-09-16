@@ -96,9 +96,9 @@ describe("configured remote agent server layer", () => {
     expect(makeConfiguredRemoteAgentLayers().enabled).toBe(true);
   });
 
-  it("retains direct ssh as an explicit diagnostic fallback", () => {
+  it("keeps the agent services available when direct ssh is the legacy default", () => {
     process.env.BIGBUD_REMOTE_AGENT_TRANSPORT = "direct-ssh";
-    expect(makeConfiguredRemoteAgentLayers().enabled).toBe(false);
+    expect(makeConfiguredRemoteAgentLayers().enabled).toBe(true);
   });
 
   it("shares one resolved install source loader between health and installation", async () => {
@@ -261,7 +261,7 @@ describe("remote agent health", () => {
 });
 
 describe("remote agent installer", () => {
-  it("invalidates the old pooled connection so the next use gets the installed identity", async () => {
+  it("keeps the serving pooled connection unchanged when an update is staged", async () => {
     let installed = false;
     const closed = vi.fn();
     const pool = new RemoteAgentConnectionPool({
@@ -299,12 +299,12 @@ describe("remote agent installer", () => {
     await expect(installer.install("ssh:example")).resolves.toEqual({
       version: artifact.version,
     });
-    expect(closed).toHaveBeenCalledOnce();
+    expect(closed).not.toHaveBeenCalled();
     await pool.get("ssh:example");
     expect(pool.snapshot("ssh:example")).toMatchObject({
       state: "ready",
-      agentVersion: artifact.version,
-      buildDigest: artifact.buildDigest,
+      agentVersion: "0.1.0",
+      buildDigest: "old-digest",
     });
   });
 

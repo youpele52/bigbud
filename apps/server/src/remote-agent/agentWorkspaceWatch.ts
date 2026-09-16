@@ -219,9 +219,11 @@ export function makeAgentWorkspaceWatch(
             let lastGeneration = 0;
             let lastSequence = 0;
             let consecutiveStartFailures = 0;
+            let reconnect: (() => Promise<RemoteAgentWorkspaceClient>) | undefined;
             while (!abortController.signal.aborted) {
               try {
-                const client = await resolver.resolve(targetId);
+                const client = await (reconnect ? reconnect() : resolver.resolve(targetId));
+                reconnect = client.reconnect;
                 await client.openWorkspace(workspaceHandle, workspaceRoot);
                 let receivedEventBeforeStart = false;
                 const subscription = await client.watchDirectory({

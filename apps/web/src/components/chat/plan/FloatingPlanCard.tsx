@@ -3,7 +3,7 @@ import type { ExecutionTargetId } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisIcon, XIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 
 import type { ActivePlanState, LatestProposedPlanState } from "../../../logic/session";
 import {
@@ -96,6 +96,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
     void api.projects
       .writeFile({
         cwd: workspaceRoot,
+        operationId: `workspace-write-${randomUUID()}`,
         ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
         relativePath: filename,
         contents: normalizePlanMarkdownForExport(planMarkdown),

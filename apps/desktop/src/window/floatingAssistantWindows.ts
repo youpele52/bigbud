@@ -10,6 +10,7 @@ import {
 } from "./floatingAssistantWindows.alwaysOnTop";
 import { clampBounds, COMPACT_CHAT_MIN_SIZE, compactChatBounds, MASCOT_SIZE } from "./mascotBounds";
 import { getIconOption } from "./windowManager";
+import { FloatingAssistantScreenshot } from "./floatingAssistantScreenshot";
 
 export interface FloatingAssistantWindowsDeps {
   readonly desktopDir: string;
@@ -26,12 +27,19 @@ export interface FloatingAssistantWindowsDeps {
 }
 
 export class FloatingAssistantWindows {
+  readonly screenshots: FloatingAssistantScreenshot;
   #mascotCreation: Promise<BrowserWindow> | null = null;
   #compactCreation: Promise<BrowserWindow> | null = null;
   #mascotDragOffset: { x: number; y: number } | null = null;
   #mascotBoundsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly deps: FloatingAssistantWindowsDeps) {}
+  constructor(private readonly deps: FloatingAssistantWindowsDeps) {
+    this.screenshots = new FloatingAssistantScreenshot({
+      registry: deps.registry,
+      isEnabled: () => deps.preferences.get().floatingAssistantEnabled,
+      openChat: () => this.openCompactChat(),
+    });
+  }
 
   ensureMascot(): Promise<BrowserWindow> {
     const existing = this.deps.registry.get("mascot");
@@ -47,6 +55,7 @@ export class FloatingAssistantWindows {
   async openCompactChat(): Promise<BrowserWindow> {
     const existing = this.deps.registry.get("compact-chat");
     if (existing) {
+      if (this.screenshots.isCapturing) return existing;
       if (existing.isMinimized()) existing.restore();
       reassertFloatingAssistantAlwaysOnTop(existing);
       existing.show();
@@ -91,6 +100,7 @@ export class FloatingAssistantWindows {
   }
 
   disable(): void {
+    this.screenshots.clear();
     this.flushMascotBounds();
     this.deps.preferences.update({ floatingAssistantEnabled: false, mascotVisible: false });
     this.deps.registry.get("compact-chat")?.destroy();
@@ -98,6 +108,7 @@ export class FloatingAssistantWindows {
   }
 
   destroyForQuit(): void {
+    this.screenshots.clear();
     this.flushMascotBounds();
     for (const window of [
       this.deps.registry.get("compact-chat"),
@@ -232,6 +243,7 @@ export class FloatingAssistantWindows {
             },
             onHideMascot: () => this.hideMascot(),
             onOpenChat: () => void this.openCompactChat(),
+            onScreenshot: () => void this.screenshots.request(),
             onOpenMain: this.deps.onOpenMain,
             onQuit: this.deps.onQuit,
             onRestart: this.deps.onRestart,
@@ -244,6 +256,7 @@ export class FloatingAssistantWindows {
       });
     });
     window.once("ready-to-show", () => {
+      if (this.screenshots.isCapturing) return;
       if (role === "mascot") window.showInactive();
       else window.show();
     });
@@ -258,12 +271,14 @@ export function buildMascotContextMenuTemplate(actions: {
   readonly onDisable: () => void;
   readonly onHideMascot: () => void;
   readonly onOpenChat: () => void;
+  readonly onScreenshot: () => void;
   readonly onOpenMain: () => void;
   readonly onQuit: () => void;
   readonly onRestart: () => void;
 }) {
   return [
     { label: "Open chat", click: () => actions.onOpenChat() },
+    { label: "Add screenshot to chat", click: actions.onScreenshot },
     { label: "New chat", click: () => actions.onOpenChat() },
     { label: "Open bigbud", click: actions.onOpenMain },
     { type: "separator" as const },

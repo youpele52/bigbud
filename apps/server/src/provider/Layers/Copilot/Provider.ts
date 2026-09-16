@@ -1,5 +1,7 @@
 import type { CopilotSettings, ModelCapabilities, ServerProviderModel } from "@bigbud/contracts";
-import { Effect, Equal, Layer, Result, Stream } from "effect";
+import { CODEX_REASONING_EFFORT_OPTIONS } from "@bigbud/contracts";
+import { withEffortProvenance } from "@bigbud/shared/model";
+import { Effect, Equal, FileSystem, Layer, Path, Result, Stream } from "effect";
 import { CopilotClient, type ModelInfo } from "@github/copilot-sdk";
 
 import {
@@ -8,48 +10,61 @@ import {
   type ProviderProbeResult,
 } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
+import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import { CopilotProvider } from "../../Services/Copilot/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
+import { ServerConfig } from "../../../startup/config.ts";
 import { ProviderAdapterProcessError } from "../../Errors";
 import { makeCopilotClientOptions } from "./Adapter.types";
 
 const PROVIDER = "copilot" as const;
-const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
+const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = withEffortProvenance(
+  {
+    reasoningEffortLevels: [],
+    supportsFastMode: false,
+    supportsThinkingToggle: false,
+    contextWindowOptions: [],
+    promptInjectedEffortLevels: [],
+  },
+  "unknown",
+  "unknown",
+);
+
+const COPILOT_SENDABLE_REASONING_EFFORTS = new Set<string>(CODEX_REASONING_EFFORT_OPTIONS);
+
+const SEED_COPILOT_REASONING_LEVELS = [
+  { value: "xhigh", label: "Extra High" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+] as const;
 
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "gpt-5",
     name: "GPT-5",
     isCustom: false,
-    capabilities: {
-      ...EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-    },
+    capabilities: withEffortProvenance(
+      {
+        ...EMPTY_MODEL_CAPABILITIES,
+        reasoningEffortLevels: [...SEED_COPILOT_REASONING_LEVELS],
+      },
+      "seed",
+      "seed",
+    ),
   },
   {
     slug: "gpt-5-mini",
     name: "GPT-5 Mini",
     isCustom: false,
-    capabilities: {
-      ...EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-    },
+    capabilities: withEffortProvenance(
+      {
+        ...EMPTY_MODEL_CAPABILITIES,
+        reasoningEffortLevels: [...SEED_COPILOT_REASONING_LEVELS],
+      },
+      "seed",
+      "seed",
+    ),
   },
   {
     slug: "claude-sonnet-4",
@@ -59,24 +74,53 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   },
 ];
 
-function mapCopilotModelCapabilities(model: ModelInfo): ModelCapabilities {
-  const supportsReasoningEffort = model.capabilities.supports?.reasoningEffort ?? false;
+export function mapCopilotModelCapabilities(model: ModelInfo): ModelCapabilities {
+  const rawSupportsReasoningEffort = (
+    model as ModelInfo & {
+      readonly capabilities?: { readonly supports?: { readonly reasoningEffort?: unknown } };
+    }
+  ).capabilities?.supports?.reasoningEffort;
+  const supportsReasoningEffort = rawSupportsReasoningEffort === true;
+  const supportsReasoningKnown = typeof rawSupportsReasoningEffort === "boolean";
   const defaultReasoningEffort = model.defaultReasoningEffort;
-  return {
-    reasoningEffortLevels:
-      supportsReasoningEffort && model.supportedReasoningEfforts
-        ? model.supportedReasoningEfforts.map((value) => ({
-            value,
-            label:
-              value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
-            ...(value === defaultReasoningEffort ? { isDefault: true } : {}),
-          }))
-        : [],
-    supportsFastMode: false,
-    supportsThinkingToggle: false,
-    contextWindowOptions: [],
-    promptInjectedEffortLevels: [],
-  };
+  const rawAdvertised = (model as ModelInfo & { readonly supportedReasoningEfforts?: unknown })
+    .supportedReasoningEfforts;
+  const advertisedPresent = Array.isArray(rawAdvertised);
+  const advertised = advertisedPresent
+    ? (rawAdvertised as ReadonlyArray<unknown>).flatMap((value) =>
+        typeof value === "string" ? [value] : [],
+      )
+    : [];
+  const sendable = advertised.filter((value) => COPILOT_SENDABLE_REASONING_EFFORTS.has(value));
+  const defaultSendable =
+    defaultReasoningEffort && COPILOT_SENDABLE_REASONING_EFFORTS.has(defaultReasoningEffort)
+      ? defaultReasoningEffort
+      : undefined;
+  return withEffortProvenance(
+    {
+      reasoningEffortLevels: sendable.map((value) => ({
+        value,
+        label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
+        ...(value === defaultSendable ? { isDefault: true } : {}),
+      })),
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    },
+    !supportsReasoningKnown
+      ? "unknown"
+      : !supportsReasoningEffort
+        ? "verified-unsupported"
+        : !advertisedPresent
+          ? "unknown"
+          : advertised.length === 0
+            ? "verified-unsupported"
+            : sendable.length > 0
+              ? "verified-supported"
+              : "verified-unsupported",
+    "live",
+  );
 }
 
 function mapCopilotModel(model: ModelInfo): ServerProviderModel {
@@ -272,6 +316,18 @@ export const CopilotProviderLive = Layer.effect(
   CopilotProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
+    const serverConfig = yield* ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const decorateSnapshot = makeProviderEffortCacheDecorator<CopilotSettings>({
+      provider: PROVIDER,
+      stateDir: serverConfig.stateDir,
+      workspaceFingerprint: serverConfig.cwd,
+      fileSystem,
+      path,
+      executionIdentity: (settings) => settings.binaryPath,
+      configFingerprint: (settings) => JSON.stringify(settings),
+    });
     const checkProvider = checkCopilotProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
     );
@@ -286,6 +342,7 @@ export const CopilotProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      decorateSnapshot,
       initialSnapshot: makeCopilotInitialSnapshot,
     });
   }),

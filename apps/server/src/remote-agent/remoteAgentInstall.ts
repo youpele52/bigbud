@@ -8,6 +8,7 @@ import { runSshCommand } from "../ssh/sshProcess.ts";
 
 const SAFE_REMOTE_PATH_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const SAFE_ARTIFACT_SHA256 = /^[a-f0-9]{64}$/;
+const SAFE_RESERVATION_ID = /^[A-Za-z0-9-]{1,128}$/;
 
 export type RemoteAgentBuildIdentity = Pick<RemoteAgentArtifact, "version" | "sha256">;
 
@@ -26,6 +27,8 @@ export interface RemoteAgentInstallScriptInput {
   readonly artifact: RemoteAgentArtifact;
   readonly targetTriple: RemoteAgentTargetTriple;
   readonly stagedBase64: string;
+  /** Durable remote stage fence held for the complete upload command lifetime. */
+  readonly reservationId?: string;
 }
 
 function buildRemoteAgentInstallRoots() {
@@ -119,17 +122,44 @@ export function buildRemoteAgentInstallScript(input: RemoteAgentInstallScriptInp
   if (input.stagedBase64.length === 0) {
     throw new Error("Remote agent installation payload cannot be empty.");
   }
+  if (input.reservationId !== undefined && !SAFE_RESERVATION_ID.test(input.reservationId)) {
+    throw new Error("Invalid remote agent staging reservation.");
+  }
   const paths = buildRemoteAgentInstallPaths(input.artifact);
+  const reservation = input.reservationId
+    ? `
+staging_root=${paths.root}/staging
+install -d -m 700 "$staging_root"
+reservation_id='${input.reservationId}'
+reservation_lock="$staging_root/$reservation_id.lock"
+reservation_fence="$staging_root/$reservation_id.fence"
+if test ! -e "$reservation_lock" && test ! -L "$reservation_lock"; then
+  (set -C; umask 077; : > "$reservation_lock") 2>/dev/null || true
+fi
+test -f "$reservation_lock"
+test ! -L "$reservation_lock"
+test "$(stat -c '%u' "$reservation_lock")" = "$(id -u)"
+test "$(stat -c '%a' "$reservation_lock")" = "600"
+exec 9<> "$reservation_lock"
+if ! flock -n -x 9; then printf reservation-in-progress; exit 75; fi
+if test ! -e "$reservation_fence" && test ! -L "$reservation_fence"; then
+  (set -C; umask 077; printf active > "$reservation_fence") 2>/dev/null || true
+fi
+test -f "$reservation_fence"
+test ! -L "$reservation_fence"
+test "$(cat "$reservation_fence")" = active
+`
+    : "";
   const command = `
 set -eu
 umask 077
-root=${paths.root}
-bin_root=${paths.binRoot}
-state_root=${paths.stateRoot}
-version_root=${paths.versionRoot}
-build_root=${paths.buildRoot}
-installed=${paths.installedBinary}
-for path in "$root" "$bin_root" "$state_root" "$version_root" "$build_root"; do
+  root=${paths.root}
+  bin_root=${paths.binRoot}
+  staging_root=$root/staging
+  version_root=${paths.versionRoot}
+  build_root=${paths.buildRoot}
+  installed=${paths.installedBinary}
+for path in "$root" "$bin_root" "$staging_root" "$version_root" "$build_root"; do
   if [ -e "$path" ] || [ -L "$path" ]; then
     test ! -L "$path"
     test -d "$path"
@@ -137,13 +167,15 @@ for path in "$root" "$bin_root" "$state_root" "$version_root" "$build_root"; do
     test "$(stat -c '%a' "$path")" = "700"
   fi
 done
-install -d -m 700 "$root" "$bin_root" "$state_root" "$version_root" "$build_root"
+install -d -m 700 "$root" "$bin_root" "$staging_root" "$version_root" "$build_root"
+${reservation}
 staged=$(mktemp "$build_root/.bigbud-remote-agent.stage.XXXXXX")
 trap 'rm -f "$staged"' EXIT HUP INT TERM
 base64 --decode > "$staged"
 test "$(wc -c < "$staged")" -eq '${input.artifact.sizeBytes}'
 test "$(sha256sum "$staged" | awk '{print $1}')" = '${input.artifact.sha256}'
 chmod 700 "$staged"
+sync -f "$staged"
 if ln "$staged" "$installed" 2>/dev/null; then
   rm -f "$staged"
 else
@@ -156,6 +188,7 @@ else
   test "$(sha256sum "$installed" | awk '{print $1}')" = '${input.artifact.sha256}'
   rm -f "$staged"
 fi
+sync -f "$build_root"
 trap - EXIT HUP INT TERM
 `;
   return { command, stdin: input.stagedBase64, paths };
@@ -178,6 +211,7 @@ export async function installRemoteAgentArtifact(input: {
   readonly bytes: Uint8Array;
   readonly trustStore: RemoteAgentArtifactTrustStore;
   readonly skipSignatureVerification?: boolean;
+  readonly reservationId?: string;
 }): Promise<RemoteAgentInstallPaths> {
   if (!input.skipSignatureVerification) {
     verifyRemoteAgentArtifactSignature(input.artifact, input.trustStore);
@@ -187,6 +221,7 @@ export async function installRemoteAgentArtifact(input: {
     artifact: input.artifact,
     targetTriple: input.targetTriple,
     stagedBase64: Buffer.from(input.bytes).toString("base64"),
+    ...(input.reservationId ? { reservationId: input.reservationId } : {}),
   });
   await runSshCommand({
     executionTargetId: input.executionTargetId,

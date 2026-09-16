@@ -228,6 +228,7 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
               payload: {
                 threadId: thread.id,
                 mode: "subtree" as const,
+                origin: "project-cascade" as const,
                 deletingAt: occurredAt,
               },
             },

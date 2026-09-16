@@ -22,7 +22,8 @@
     "prepack": "node scripts/verifyWorkspaceAgentPackage.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "benchmark:startup-catalog": "BIGBUD_STARTUP_CATALOG_BENCHMARK=1 vitest run src/orchestration/Layers/ProjectionCatalogQuery.scale.test.ts"
+    "benchmark:startup-catalog": "BIGBUD_STARTUP_CATALOG_BENCHMARK=1 vitest run src/orchestration/Layers/ProjectionCatalogQuery.scale.test.ts",
+    "benchmark:mobile-recovery-memory": "bun scripts/mobileRecoveryMemoryBenchmark.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.219",
