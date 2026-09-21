@@ -74,7 +74,8 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("MCP_INVOCATION_IDENTITY_REQUIRED");
     expect(source).toContain("invocationId,");
     expect(source).toContain("sourceMessageId: sourceMessageId(invocationId)");
-    expect(source).not.toContain("randomUUID");
+    expect(source).toContain("invocationStateFormatVersion");
+    expect(source).toContain("completeMcpInvocation");
     expect(source).not.toContain("workspacePath");
     expect(source).not.toContain('name: "invocationId"');
     expect(source).not.toContain('name: "sourceMessageId"');
@@ -188,6 +189,9 @@ describe("orchestrationMcpBridge", () => {
     };
 
     const codex = buildCodexOrchestrationBridgeConfig(bridge);
+    expect(codex.configArgs).toContain(
+      `mcp_servers.${bridge.serverName}.env.ELECTRON_RUN_AS_NODE="1"`,
+    );
     expect(mergeCodexConfigArgs(["-c", "foo=bar"], codex)).toEqual(
       expect.arrayContaining(["-c", "foo=bar", ...codex.configArgs]),
     );
@@ -202,6 +206,11 @@ describe("orchestrationMcpBridge", () => {
       },
       claude,
     );
+    expect(claude.mcpServers[bridge.serverName]).toEqual({
+      command: resolveNodeExecutable(),
+      args: [bridge.serverPath],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    });
     expect(merged.allowedTools).toEqual(
       expect.arrayContaining([
         "Read",
@@ -234,6 +243,7 @@ describe("orchestrationMcpBridge", () => {
         type: "local",
         command: [resolveNodeExecutable(), bridge.serverPath],
         cwd: bridge.bridgeDir,
+        environment: { ELECTRON_RUN_AS_NODE: "1" },
         enabled: true,
         timeout: 10_000,
       },
@@ -255,7 +265,7 @@ describe("orchestrationMcpBridge", () => {
         name: "bigbud_orchestration",
         command: resolveNodeExecutable(),
         args: [bridge.serverPath],
-        env: [],
+        env: [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }],
       },
     ]);
   });

@@ -1,5 +1,6 @@
 import type { OpencodeClient, OutputFormat } from "@opencode-ai/sdk/v2";
 import { makeOpencodeTextStream, type OpencodeTextStream } from "./Adapter.stream.text.ts";
+import { runWithAbortableDeadline } from "./Adapter.requestDeadline.ts";
 
 const OPENCODE_PROMPT_REQUEST_TIMEOUT_MS = 15_000;
 const OPENCODE_PROMPT_POLL_INTERVAL_MS = 1_000;
@@ -78,16 +79,6 @@ type AssistantReply = {
   readonly parts: ReadonlyArray<PromptResultPart>;
 };
 
-function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    controller.abort(new Error(`OpenCode request timed out after ${timeoutMs}ms.`));
-  }, timeoutMs);
-  return run(controller.signal).finally(() => {
-    clearTimeout(timeout);
-  });
-}
-
 function findLatestCompletedAssistantReply(
   messages: ReadonlyArray<PromptMessageSnapshot>,
 ): AssistantReply | undefined {
@@ -146,8 +137,10 @@ async function fetchSessionMessages(
   client: OpencodeClient,
   sessionID: string,
 ): Promise<ReadonlyArray<PromptMessageSnapshot>> {
-  const messagesResponse = await withTimeout(
-    (signal) =>
+  const messagesResponse = await runWithAbortableDeadline({
+    operation: "OpenCode session.messages",
+    timeoutMs: OPENCODE_PROMPT_REQUEST_TIMEOUT_MS,
+    run: (signal) =>
       client.session.messages(
         {
           sessionID,
@@ -155,14 +148,26 @@ async function fetchSessionMessages(
         },
         { signal },
       ),
-    OPENCODE_PROMPT_REQUEST_TIMEOUT_MS,
-  );
+  });
 
   if (messagesResponse.error) {
     throw messagesResponse.error;
   }
 
   return (messagesResponse.data ?? []) as ReadonlyArray<PromptMessageSnapshot>;
+}
+
+export async function recoverCompletedAssistantReply(input: {
+  readonly client: OpencodeClient;
+  readonly sessionID: string;
+  readonly notBeforeMs: number;
+}): Promise<AssistantReply | undefined> {
+  const reply = findLatestCompletedAssistantReply(
+    await fetchSessionMessages(input.client, input.sessionID),
+  );
+  if (!reply) return undefined;
+  const replyAt = reply.info.time?.completed ?? reply.info.time?.created ?? 0;
+  return replyAt >= input.notBeforeMs ? reply : undefined;
 }
 
 export async function sendPromptAsyncAndWaitForCompletion(input: {
@@ -188,8 +193,10 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
   if (!input.turnStillActive()) return undefined;
   const textStream = input.textStream ?? makeOpencodeTextStream();
 
-  const promptAsyncResponse = await withTimeout(
-    (signal) =>
+  const promptAsyncResponse = await runWithAbortableDeadline({
+    operation: "OpenCode session.promptAsync",
+    timeoutMs: OPENCODE_PROMPT_REQUEST_TIMEOUT_MS,
+    run: (signal) =>
       input.client.session.promptAsync(
         {
           sessionID: input.sessionID,
@@ -203,8 +210,7 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
         },
         { signal },
       ),
-    OPENCODE_PROMPT_REQUEST_TIMEOUT_MS,
-  );
+  });
 
   if (promptAsyncResponse.error) {
     throw promptAsyncResponse.error;

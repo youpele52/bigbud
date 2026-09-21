@@ -14,16 +14,30 @@ describe("createRemoteDirectoryPollingStream", () => {
         readSnapshot: async () => (reads++ === 0 ? "before" : "after"),
       });
 
-      const event = yield* Stream.runHead(stream);
+      const event = yield* Stream.runHead(Stream.drop(stream, 1));
       expect(Option.isSome(event)).toBe(true);
       if (!Option.isSome(event)) throw new Error("Expected a directory invalidation event.");
       expect(event.value).toEqual({
         version: 1,
         type: "directoryChanged",
         relativePath: "src",
-        generation: 1,
+        generation: 2,
         backend: "directSshPoll",
       });
+    }),
+  );
+
+  it.effect("invalidates a stale preview after the first SSH snapshot establishes the watch", () =>
+    Effect.gen(function* () {
+      const stream = createRemoteDirectoryPollingStream({
+        cwd: "/remote/project",
+        relativePath: "",
+        readSnapshot: async () => "already changed before watching",
+      });
+      const event = yield* Stream.runHead(stream);
+      expect(Option.isSome(event)).toBe(true);
+      if (!Option.isSome(event)) throw new Error("Expected initial reconciliation.");
+      expect(event.value).toMatchObject({ type: "directoryChanged", relativePath: "" });
     }),
   );
 

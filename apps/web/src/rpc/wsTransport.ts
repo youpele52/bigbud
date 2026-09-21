@@ -4,6 +4,7 @@ import { RpcClient } from "effect/unstable/rpc";
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
 import { markWsInboundActivity } from "./wsActivity";
 import { waitForDesktopBackendReady } from "./desktopBackendReady";
+import { resolveSubscriptionRetryDelayMs, type SubscriptionRetryDelay } from "./wsTransport.retry";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
@@ -12,7 +13,7 @@ import {
 } from "./protocol";
 
 interface SubscribeOptions {
-  readonly retryDelay?: Duration.Input;
+  readonly retryDelay?: SubscriptionRetryDelay;
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
   readonly shouldRetry?: (error: unknown) => boolean;
@@ -127,9 +128,7 @@ export class WsTransport {
 
     let active = true;
     let hasReceivedValue = false;
-    const retryDelayMs = Duration.toMillis(
-      Duration.fromInputUnsafe(options?.retryDelay ?? DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS),
-    );
+    let retryAttempt = 0;
     let cancelCurrentStream: () => void = NOOP;
 
     void (async () => {
@@ -152,6 +151,9 @@ export class WsTransport {
             () => {
               this.hasReportedTransportDisconnect = false;
               hasReceivedValue = true;
+            },
+            () => {
+              retryAttempt = 0;
             },
           );
           cancelCurrentStream = runningStream.cancel;
@@ -190,6 +192,12 @@ export class WsTransport {
             });
           }
           this.hasReportedTransportDisconnect = true;
+          retryAttempt += 1;
+          const retryDelayMs = resolveSubscriptionRetryDelayMs(
+            options?.retryDelay,
+            { error, attempt: retryAttempt },
+            DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS,
+          );
           await sleep(retryDelayMs);
         }
 
@@ -277,6 +285,7 @@ export class WsTransport {
     listener: (value: TValue) => void | Promise<void>,
     isActive: () => boolean,
     markValueReceived: () => void,
+    markValueApplied: () => void,
   ): {
     readonly cancel: () => void;
     readonly completed: Promise<void>;
@@ -302,6 +311,7 @@ export class WsTransport {
                 markValueReceived();
                 return Promise.resolve()
                   .then(() => listener(value))
+                  .then(markValueApplied)
                   .catch((error: unknown) => {
                     listenerFailure = markWsSubscriptionListenerFailure(error);
                     return Promise.reject(listenerFailure);

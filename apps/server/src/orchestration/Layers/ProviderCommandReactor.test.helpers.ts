@@ -60,6 +60,7 @@ import {
   type DirectResourceCleanupExecutorShape,
 } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
 import { ProviderCommandReactorLive } from "./ProviderCommandReactor.ts";
+import { registerLiveSessionSettler } from "./ProviderCommandReactor.test.settleTurn.ts";
 
 const cleanupTasks = new Set<() => Promise<void>>();
 const trackedDirs = new Set<string>();
@@ -140,6 +141,7 @@ export async function createHarness(input?: {
     respondToRequest,
     respondToUserInput,
     stopSession,
+    settleLiveSession,
   } = makeReactorProvider(input, now);
   const renameBranch = vi.fn((gitInput: unknown) =>
     Effect.succeed({
@@ -319,6 +321,7 @@ export async function createHarness(input?: {
   });
 
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
+  registerLiveSessionSettler(engine, settleLiveSession);
   const projectionPipeline = await runtime.runPromise(
     Effect.service(OrchestrationProjectionPipeline),
   );

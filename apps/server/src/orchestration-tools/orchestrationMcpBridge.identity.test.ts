@@ -40,7 +40,7 @@ async function callMany(source: string, ids: ReadonlyArray<string | number>) {
   }
 }
 
-it("keeps typed orchestration MCP IDs separate and rejects an ambiguous restarted retry", async () => {
+it("keeps typed orchestration MCP IDs separate across bridge restarts", async () => {
   const stateRoot = mkdtempSync(join(tmpdir(), "bigbud-orchestration-mcp-identity-"));
   const requests: Array<{ invocationId: string }> = [];
   const server = createServer(async (request, response) => {
@@ -63,17 +63,17 @@ it("keeps typed orchestration MCP IDs separate and rejects an ambiguous restarte
     providerInvocationStatePath: join(stateRoot, "mcp-state.json"),
   });
   try {
-    await callMany(source, [1, "1", 1]);
-    expect(requests.map((request) => request.invocationId).toSorted()).toEqual(
-      [
-        "mcp-sequence:provider-session:1",
-        "mcp-sequence:provider-session:2",
-        "mcp-sequence:provider-session:1",
-      ].toSorted(),
+    await callMany(source, [1, "1"]);
+    const invocationIds = requests.map((request) => request.invocationId);
+    expect(invocationIds).toHaveLength(2);
+    expect(new Set(invocationIds).size).toBe(2);
+    expect(invocationIds.every((id) => /^mcp-digest:provider-session:[a-f0-9]{64}$/.test(id))).toBe(
+      true,
     );
     const replay = await callMany(source, [1]);
-    expect(replay[0].error.message).toContain("MCP_INVOCATION_IDENTITY_REQUIRED_REPLAY_AMBIGUOUS");
+    expect(replay[0].result).toEqual({ content: [{ type: "text", text: "{}" }] });
     expect(requests).toHaveLength(3);
+    expect(requests.at(-1)?.invocationId).toBe(invocationIds[0]);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

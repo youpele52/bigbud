@@ -41,6 +41,13 @@ export class AsyncBoundedChannel<T> {
     return new Promise<T | null>((resolve) => this.takers.push(resolve));
   }
 
+  tryTake(): T | null {
+    const value = this.values.shift();
+    if (value === undefined) return null;
+    this.offerWaiters.shift()?.();
+    return value;
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

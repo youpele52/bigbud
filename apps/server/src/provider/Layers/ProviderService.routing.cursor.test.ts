@@ -206,4 +206,45 @@ routing.layer("ProviderServiceLive routing", (it) => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }).pipe(Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("does not persist an active turn after a completed blocking Cursor send", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+
+      const session = yield* provider.startSession(asThreadId("thread-cursor-idle"), {
+        provider: "cursor",
+        threadId: asThreadId("thread-cursor-idle"),
+        runtimeMode: "full-access",
+      });
+      yield* provider.sendTurn({
+        threadId: session.threadId,
+        input: "hello",
+        attachments: [],
+      });
+
+      const runtime = yield* runtimeRepository.getByThreadId({
+        threadId: session.threadId,
+      });
+      assert.equal(Option.isSome(runtime), true);
+      if (Option.isSome(runtime)) {
+        const payload = runtime.value.runtimePayload;
+        assert.equal(payload !== null && typeof payload === "object", true);
+        if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+          const runtimePayload = payload as {
+            activeTurnId: string | null;
+            lastRuntimeEvent: string | null;
+          };
+          assert.equal(runtimePayload.activeTurnId, null);
+          assert.equal(runtimePayload.lastRuntimeEvent, "provider.sendTurn");
+        }
+      }
+      const live = (yield* provider.listSessions()).find(
+        (entry) => entry.threadId === session.threadId,
+      );
+      assert.equal(live?.status, "ready");
+      assert.equal(live?.activeTurnId, undefined);
+      assert.equal(routing.cursor.sendTurn.mock.calls.length, 1);
+    }),
+  );
 });

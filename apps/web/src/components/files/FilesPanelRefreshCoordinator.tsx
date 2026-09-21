@@ -106,16 +106,17 @@ export function FilesPanelRefreshCoordinator({
   const activePreviewDirectory = previewPath
     ? (getFilePreviewWatchRelativePath(previewPath) ?? "")
     : null;
-  const reachablePreviewDirectory =
+  // Opening a preview does not require its ancestors to be loaded in the tree.
+  const watchablePreviewDirectory =
     activePreviewDirectory !== null &&
-    getDirectoryPathReachability(activePreviewDirectory, directoryStateByPath) === "reachable"
+    getDirectoryPathReachability(activePreviewDirectory, directoryStateByPath) !== "unreachable"
       ? activePreviewDirectory
       : null;
   const nextWatchedDirectoryPaths = useMemo(() => {
     const paths = new Set(visibleDirectoryPaths);
-    if (reachablePreviewDirectory !== null) paths.add(reachablePreviewDirectory);
-    return getPrioritizedWatchedDirectoryPaths([...paths], reachablePreviewDirectory);
-  }, [reachablePreviewDirectory, visibleDirectoryPaths]);
+    if (watchablePreviewDirectory !== null) paths.add(watchablePreviewDirectory);
+    return getPrioritizedWatchedDirectoryPaths([...paths], watchablePreviewDirectory);
+  }, [watchablePreviewDirectory, visibleDirectoryPaths]);
   const watchedDirectoryPathSetKey = getWatchedDirectoryPathSetKey(nextWatchedDirectoryPaths);
   const stableWatchedDirectoryPathsRef = useRef({
     key: watchedDirectoryPathSetKey,
@@ -158,19 +159,18 @@ export function FilesPanelRefreshCoordinator({
         },
       };
     };
-    const tasksForFullSweep = (): FilesPanelRefreshTask[] => {
+    const tasksForDirectory = (
+      relativePath: string,
+      refreshPreview: boolean,
+    ): FilesPanelRefreshTask[] => {
       const tasks: FilesPanelRefreshTask[] = [];
       const currentPreviewTask = previewTask();
-      if (currentPreviewTask) tasks.push(currentPreviewTask);
-      if (reachablePreviewDirectory !== null) {
-        tasks.push(directoryTask(reachablePreviewDirectory, 10, loadDirectoryRef.current));
-      }
-      for (const relativePath of watchedDirectoryPaths) {
-        if (relativePath === reachablePreviewDirectory) continue;
+      if (currentPreviewTask && refreshPreview) tasks.push(currentPreviewTask);
+      if (watchedDirectoryPaths.includes(relativePath)) {
         tasks.push(
           directoryTask(
             relativePath,
-            relativePath.length === 0 ? 20 : 30,
+            relativePath === watchablePreviewDirectory ? 10 : relativePath.length === 0 ? 20 : 30,
             loadDirectoryRef.current,
           ),
         );
@@ -178,32 +178,12 @@ export function FilesPanelRefreshCoordinator({
       return tasks;
     };
     const scheduleDirectoryEvent = (event: ProjectDirectoryWatchEvent) => {
-      if (event.type === "rescanRequired") {
-        coordinator.scheduleAll(tasksForFullSweep());
-        return;
-      }
-
-      const relativePath = event.relativePath;
-      const tasks: FilesPanelRefreshTask[] = [];
-      const currentPreviewTask = previewTask();
       const previewChanged = shouldRefreshPreviewForDirectoryEvent(
         event,
         previewPath,
         activePreviewDirectory,
       );
-      if (currentPreviewTask && previewChanged) {
-        tasks.push(currentPreviewTask);
-      }
-      if (watchedDirectoryPaths.includes(relativePath)) {
-        tasks.push(
-          directoryTask(
-            relativePath,
-            relativePath === reachablePreviewDirectory ? 10 : relativePath.length === 0 ? 20 : 30,
-            loadDirectoryRef.current,
-          ),
-        );
-      }
-      coordinator.scheduleAll(tasks);
+      coordinator.scheduleAll(tasksForDirectory(event.relativePath, previewChanged));
     };
     const unsubscribe = watchedDirectoryPaths.map((relativePath) =>
       api.projects.onDirectoryChange(
@@ -238,7 +218,10 @@ export function FilesPanelRefreshCoordinator({
                   : "The workspace watcher could not be started.",
             });
           },
-          onResubscribe: () => coordinator.scheduleAll(tasksForFullSweep()),
+          onResubscribe: () =>
+            coordinator.scheduleAll(
+              tasksForDirectory(relativePath, relativePath === activePreviewDirectory),
+            ),
           shouldRetry: shouldRetryWorkspaceDirectoryWatch,
         },
       ),
@@ -252,7 +235,7 @@ export function FilesPanelRefreshCoordinator({
     activePreviewDirectory,
     coordinator,
     previewPath,
-    reachablePreviewDirectory,
+    watchablePreviewDirectory,
     watchEnabled,
     watchedDirectoryPaths,
     watchedDirectoryPathSetKey,

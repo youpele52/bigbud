@@ -1,5 +1,9 @@
 import { Schema } from "effect";
 import {
+  remoteAgentConnectionWarningFields,
+  validateRemoteAgentConnectionWarning,
+} from "./remoteAgentInstall.registry.connection.ts";
+import {
   RemoteAgentRuntimeSchema,
   validateRemoteAgentRuntime,
   remoteAgentBuildId,
@@ -33,6 +37,7 @@ const LaunchSchema = Schema.Struct({
   epoch: Schema.String,
 });
 const AdmissionRetirementSchema = Schema.Struct({
+  ...remoteAgentConnectionWarningFields,
   id: Schema.String,
   buildId: Schema.String,
   epoch: Schema.String,
@@ -72,6 +77,7 @@ const UpdateSchema = Schema.Struct({
     Schema.Literals(["capacity", "installed", "ready", "failed", "uncertain"]),
   ),
   identity: Schema.optional(UpdateIdentitySchema),
+  reason: Schema.optional(Schema.String),
   epoch: Schema.optional(Schema.String),
   predecessorBuildId: Schema.optional(Schema.String),
 });
@@ -108,6 +114,7 @@ export const RemoteAgentRegistrySchema = Schema.Struct({
   launches: Schema.Array(LaunchSchema),
   admissions: Schema.Array(
     Schema.Struct({
+      ...remoteAgentConnectionWarningFields,
       id: Schema.String,
       buildId: Schema.String,
       phase: Schema.Literals(["prepared", "ready"]),
@@ -273,6 +280,8 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
   }
   const updateIds = new Set<string>();
   for (const update of state.updates) {
+    if (update.reason !== undefined && update.reason.length > 512)
+      throw new Error("Remote agent update failure detail exceeds its bound.");
     printable(update.requestId, "update request id", 256);
     printable(update.buildId, "update build id");
     if (updateIds.has(update.requestId) || !ids.has(update.buildId))
@@ -333,6 +342,7 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
   }
   const admissionIds = new Set<string>();
   for (const admission of state.admissions) {
+    validateRemoteAgentConnectionWarning(admission);
     if (admission.requestedBuildId) printable(admission.requestedBuildId, "requested build");
     if (admission.failureCode) printable(admission.failureCode, "admission failure", 64);
     printable(admission.id, "admission id");
@@ -355,6 +365,7 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
   }
   const retiredAdmissionIds = new Set<string>();
   for (const retirement of state.admissionRetirements ?? []) {
+    validateRemoteAgentConnectionWarning(retirement);
     printable(retirement.id, "retired admission id");
     printable(retirement.buildId, "retired admission build id");
     if (retirement.epoch) printable(retirement.epoch, "retired admission epoch", 256);

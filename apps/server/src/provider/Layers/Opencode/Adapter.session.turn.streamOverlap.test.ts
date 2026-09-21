@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { makeTurnMethods } from "./Adapter.session.turn.ts";
+import { makeActiveTurnInspection } from "./Adapter.activeTurnInspection.ts";
 import { makeMapEvent } from "./Adapter.stream.mapEvent.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { makeBackgroundReviewResponse } from "../ProviderService.backgroundReview.response.ts";
@@ -12,13 +13,13 @@ const THREAD_ID = ThreadId.makeUnsafe("memory-review-overlap");
 const MEMORY_JSON =
   '{"userMemory":"Prefers concise answers","globalMemory":null,"projectMemory":null,"skillPatch":null}';
 
-function reply(text: string, completed = true, id = "assistant-1") {
+function reply(text: string, completed = true, id = "assistant-1", completedAt = 100) {
   return [
     {
       info: {
         id,
         role: "assistant",
-        time: completed ? { completed: 100 } : { created: 50 },
+        time: completed ? { completed: completedAt } : { created: 50 },
       },
       parts: [{ id: `${id}-text`, type: "text", text }],
     },
@@ -50,7 +51,13 @@ function harness(provider: "opencode" | "kilocode") {
           if (!next) throw new Error("Unexpected messages request");
           return { data: await next, error: undefined };
         },
+        status: async () => ({
+          data: { "session-memory": { type: "idle" } },
+          error: undefined,
+        }),
       },
+      question: { list: async () => ({ data: [], error: undefined }) },
+      permission: { list: async () => ({ data: [], error: undefined }) },
     },
     releaseServer: () => undefined,
     opencodeSessionId: "session-memory",
@@ -106,6 +113,10 @@ function harness(provider: "opencode" | "kilocode") {
     start: () => Effect.runPromise(sendTurn({ threadId: THREAD_ID, input: "Review memory" })),
     waitCalls: (count: number) => vi.waitFor(() => expect(calls).toBe(count), { timeout: 3_000 }),
     waitCompleted: () => vi.waitFor(() => expect(record.activeTurnId).toBeUndefined()),
+    inspect: (turnId: import("@bigbud/contracts").TurnId) =>
+      Effect.runPromise(
+        makeActiveTurnInspection({ sessions: new Map([[THREAD_ID, record]]) })(THREAD_ID, turnId),
+      ),
     sse,
     delta: (delta: string) =>
       sse("message.part.delta", {
@@ -209,6 +220,35 @@ describe.each(["opencode", "kilocode"] as const)("%s memory review stream overla
       h.emitted.slice(completionIndex + 1).some((event) => event.type === "content.delta"),
     ).toBe(false);
     expect(h.completions()[0]?.turnId).toBe(turn.turnId);
+  });
+
+  it("lets canonical ingestion own recovered completion when polling settles concurrently", async () => {
+    const h = harness(provider);
+    const stalledPoll = deferredMessages();
+    h.responses.push(stalledPoll.promise);
+    const turn = await h.start();
+    await h.waitCalls(2);
+    h.responses.push(reply(MEMORY_JSON, true, "assistant-1", Date.now()));
+
+    const inspection = await h.inspect(turn.turnId);
+
+    expect(inspection).toMatchObject({
+      status: "running",
+      completionEvidence: { source: "opencode.prompt.terminal-ingestion-pending" },
+    });
+    expect(h.completions()).toHaveLength(1);
+    expect(h.record.promptTerminalEventsEnqueuedTurnId).toBe(turn.turnId);
+    expect(h.record.activeTurnId).toBeUndefined();
+
+    stalledPoll.resolve(reply(MEMORY_JSON));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.completions()).toHaveLength(1);
+    expect(
+      h.emitted.filter(
+        (event) =>
+          event.type === "item.completed" && event.payload.itemType === "assistant_message",
+      ),
+    ).toHaveLength(1);
   });
 
   it("ignores a previous turn's delayed polling result after a new turn starts", async () => {

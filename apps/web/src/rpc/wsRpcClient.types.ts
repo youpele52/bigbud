@@ -86,12 +86,14 @@ import type {
 } from "@bigbud/contracts/server/threadRetention";
 
 import type { WsRpcProtocolClient } from "./protocol";
+import type { SubscriptionRetryDelay } from "./wsTransport.retry";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly retryDelay?: SubscriptionRetryDelay;
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
   readonly shouldRetry?: (error: unknown) => boolean;

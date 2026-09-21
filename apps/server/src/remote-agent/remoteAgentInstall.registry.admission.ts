@@ -29,7 +29,7 @@ function retiredAdmission(
   state: RemoteAgentRegistry,
   entry: Pick<
     RemoteAgentRegistry["admissions"][number],
-    "id" | "buildId" | "epoch" | "requestedBuildId" | "failureCode"
+    "id" | "buildId" | "epoch" | "requestedBuildId" | "failureCode" | "warning" | "requestedVersion"
   >,
   outcome: "selected" | "fallback" | "rejected",
   failureCode?: string,
@@ -47,6 +47,8 @@ function retiredAdmission(
         buildId: entry.buildId,
         epoch: entry.epoch,
         outcome,
+        ...(entry.warning ? { warning: entry.warning } : {}),
+        ...(entry.requestedVersion ? { requestedVersion: entry.requestedVersion } : {}),
         ...(entry.requestedBuildId ? { requestedBuildId: entry.requestedBuildId } : {}),
         ...(failureCode
           ? { failureCode }
@@ -147,6 +149,8 @@ export function pruneRemoteAgentHistory(state: RemoteAgentRegistry): RemoteAgent
       buildId: entry.buildId,
       epoch: entry.epoch,
       outcome: entry.outcome ?? ("selected" as const),
+      ...(entry.warning ? { warning: entry.warning } : {}),
+      ...(entry.requestedVersion ? { requestedVersion: entry.requestedVersion } : {}),
       ...(entry.requestedBuildId ? { requestedBuildId: entry.requestedBuildId } : {}),
       ...(entry.failureCode ? { failureCode: entry.failureCode } : {}),
     })),

@@ -62,12 +62,24 @@ export function makeReactorProvider(
     runtimeSessions.push(session);
     return Effect.succeed(session);
   });
-  const sendTurn = vi.fn((_: unknown) =>
-    Effect.succeed({
-      threadId: ThreadId.makeUnsafe("thread-1"),
-      turnId: TurnId.makeUnsafe("turn-1"),
-    }),
-  );
+  const sendTurn = vi.fn((_: unknown) => {
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const turnId = TurnId.makeUnsafe("turn-1");
+    const sessionIndex = runtimeSessions.findIndex((session) => session.threadId === threadId);
+    const session = runtimeSessions[sessionIndex];
+    if (session && sessionIndex >= 0) {
+      runtimeSessions[sessionIndex] = {
+        ...session,
+        status: "running",
+        activeTurnId: turnId,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return Effect.succeed({
+      threadId,
+      turnId,
+    });
+  });
   const interruptTurn = vi.fn((interruptInput: unknown) => {
     if (input?.interruptTurnFailure) {
       return Effect.fail(
@@ -164,5 +176,17 @@ export function makeReactorProvider(
     respondToRequest,
     respondToUserInput,
     stopSession,
+    settleLiveSession: (threadId: ThreadId) => {
+      const sessionIndex = runtimeSessions.findIndex((session) => session.threadId === threadId);
+      const session = runtimeSessions[sessionIndex];
+      if (session && sessionIndex >= 0) {
+        runtimeSessions[sessionIndex] = {
+          ...session,
+          status: "ready",
+          activeTurnId: undefined,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    },
   };
 }

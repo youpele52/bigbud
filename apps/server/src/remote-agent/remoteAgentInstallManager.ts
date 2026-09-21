@@ -15,7 +15,7 @@ import {
   stageRemoteAgentBuild,
 } from "./remoteAgentInstall.stage.ts";
 import { cleanupRemoteAgentBuilds } from "./remoteAgentInstall.cleanup.ts";
-import { prepareRemoteAgentPredecessorRetirement } from "./remoteAgentInstall.retirement.ts";
+import { prepareRemoteAgentInstallCapacity } from "./remoteAgentInstall.capacity.ts";
 import { remoteAgentRuntimeSummary } from "./remoteAgentStatus.ts";
 import { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.ts";
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
@@ -229,7 +229,7 @@ export function makeRemoteAgentInstallManager(
                 // Capacity reclamation requires durable local owner evidence.
               }
             }
-            return prepareRemoteAgentPredecessorRetirement({
+            return prepareRemoteAgentInstallCapacity({
               target: input.executionTargetId,
               control: capacity.control,
               build: capacity.build,

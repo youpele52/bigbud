@@ -130,6 +130,8 @@ export const ServerVerifyExecutionTargetInput = Schema.Struct({
 export type ServerVerifyExecutionTargetInput = typeof ServerVerifyExecutionTargetInput.Type;
 
 export const ServerRemoteAgentRuntimeSummary = Schema.Struct({
+  warning: Schema.optional(TrimmedNonEmptyString),
+  requestedVersion: Schema.optional(TrimmedNonEmptyString),
   outcome: Schema.optional(Schema.Literals(["selected", "fallback"])),
   currentBuildId: Schema.optional(TrimmedNonEmptyString),
   requestedBuildId: Schema.optional(TrimmedNonEmptyString),

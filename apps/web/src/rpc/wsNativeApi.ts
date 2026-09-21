@@ -12,10 +12,13 @@ import {
 import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 import { isWsSubscriptionListenerFailure } from "./wsTransport";
+import { cappedExponentialRetryDelay } from "./wsTransport.retry";
 
 let instance: { api: NativeApi } | null = null;
 const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
 const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
+const ORCHESTRATION_RETRY_BASE_DELAY_MS = 250;
+const ORCHESTRATION_RETRY_MAX_DELAY_MS = 8_000;
 
 function resolveDeliveryConsumerId(): string {
   try {
@@ -113,6 +116,14 @@ export function createWsNativeApi(): NativeApi {
         );
       },
       {
+        retryDelay: ({ error }) =>
+          isWsSubscriptionListenerFailure(error)
+            ? cappedExponentialRetryDelay({
+                attempt: orchestrationApplicationFailures,
+                baseMs: ORCHESTRATION_RETRY_BASE_DELAY_MS,
+                maxMs: ORCHESTRATION_RETRY_MAX_DELAY_MS,
+              })
+            : ORCHESTRATION_RETRY_BASE_DELAY_MS,
         onResubscribe: () => {
           activeBaselineRecovery = null;
           for (const callback of domainResubscribeCallbacks) callback();
@@ -120,11 +131,11 @@ export function createWsNativeApi(): NativeApi {
         shouldRetry: (error) => {
           if (!isWsSubscriptionListenerFailure(error)) return true;
           orchestrationApplicationFailures += 1;
-          if (orchestrationApplicationFailures < MAX_ORCHESTRATION_NO_PROGRESS_FAILURES) {
-            return true;
-          }
           const identity = latestDeliveryIdentity;
-          if (identity) {
+          if (
+            orchestrationApplicationFailures === MAX_ORCHESTRATION_NO_PROGRESS_FAILURES &&
+            identity
+          ) {
             setOrchestrationDeliveryLifecycle({
               type: "lifecycle",
               route: identity.route,
@@ -136,7 +147,10 @@ export function createWsNativeApi(): NativeApi {
               reasonCode: "application_no_progress",
             });
           }
-          return false;
+          // The supervisor retains the authoritative cursor and will issue a
+          // replay or baseline reset on the next generation. Stopping here
+          // leaves persisted messages invisible until the renderer restarts.
+          return true;
         },
       },
     );

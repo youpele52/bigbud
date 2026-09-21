@@ -30,6 +30,19 @@ describe("remote agent physical inventory", () => {
     expect(inventory.noncompliant).toBe(true);
   });
 
+  it("records verified metadata without consuming a payload slot", () => {
+    const inventory = parseRemoteAgentInventory(
+      [
+        "remote-agent-inventory-v1",
+        `file\t${first}\tlegacy\tL3RtcC9h`,
+        `file\t${second}\tmetadata\tL3RtcC9hL3RhcmdldC10cmlwbGU=`,
+      ].join("\n"),
+    );
+    expect(inventory.uniqueDigests).toEqual(new Set([first]));
+    expect(inventory.entries.at(-1)?.kind).toBe("metadata");
+    expect(inventory.noncompliant).toBe(false);
+  });
+
   it("uses a private canonical root and exact hash output in the remote probe", () => {
     const command = buildRemoteAgentInventoryCommand("/home/test/.bigbud/agent");
     expect(command).toContain("remote-agent-inventory-v1");

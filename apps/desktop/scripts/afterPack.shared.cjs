@@ -51,30 +51,60 @@ function assertPackagedDesktopSupervisor(serverDir, platformName) {
   }
 }
 
-function ensureLinuxBackendModulesSymlink(serverDir) {
+/**
+ * Create and verify the POSIX backend module link before electron-builder
+ * signs macOS bundles or seals Linux AppImages. Unexpected packaged content is
+ * a build error: deleting it here could hide a broken or tampered artifact.
+ */
+function ensurePosixBackendModulesSymlink(serverDir) {
   const modulesDir = path.join(serverDir, "_modules");
   const nodeModulesPath = path.join(serverDir, "node_modules");
 
-  if (!fs.existsSync(modulesDir)) {
-    console.warn(`[afterPack] Backend _modules directory not found at ${modulesDir}`);
-    return;
+  let modulesStat;
+  try {
+    modulesStat = fs.lstatSync(modulesDir);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(`[afterPack] Backend _modules directory is missing at ${modulesDir}`, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+  if (!modulesStat.isDirectory()) {
+    throw new Error(`[afterPack] Backend _modules is not a directory at ${modulesDir}`);
   }
 
   try {
     const stat = fs.lstatSync(nodeModulesPath);
-    if (stat.isSymbolicLink()) {
-      console.log("[afterPack] Backend node_modules symlink already present.");
-      return;
+    if (!stat.isSymbolicLink()) {
+      throw new Error(
+        `[afterPack] Backend node_modules must be a symlink to _modules, found packaged content at ${nodeModulesPath}`,
+      );
     }
-    fs.rmSync(nodeModulesPath, { recursive: true, force: true });
+    const target = fs.readlinkSync(nodeModulesPath);
+    if (target !== "_modules") {
+      throw new Error(
+        `[afterPack] Backend node_modules symlink must target exactly _modules, found ${target}`,
+      );
+    }
+    console.log("[afterPack] Backend node_modules symlink already valid.");
   } catch (error) {
     if (error?.code !== "ENOENT") {
       throw error;
     }
+    fs.symlinkSync("_modules", nodeModulesPath, "dir");
+    console.log("[afterPack] Created backend node_modules symlink for POSIX package.");
   }
 
-  fs.symlinkSync("_modules", nodeModulesPath, "dir");
-  console.log("[afterPack] Created backend node_modules symlink for Linux package.");
+  const finalStat = fs.lstatSync(nodeModulesPath);
+  if (!finalStat.isSymbolicLink() || fs.readlinkSync(nodeModulesPath) !== "_modules") {
+    throw new Error(`[afterPack] Final backend node_modules symlink verification failed.`);
+  }
+}
+
+function shouldEnsurePosixBackendModulesSymlink(platformName) {
+  return platformName === "darwin" || platformName === "linux";
 }
 
 module.exports = {
@@ -82,5 +112,6 @@ module.exports = {
   resolvePackagedServerDir,
   assertPackagedBundledSkills,
   assertPackagedDesktopSupervisor,
-  ensureLinuxBackendModulesSymlink,
+  ensurePosixBackendModulesSymlink,
+  shouldEnsurePosixBackendModulesSymlink,
 };

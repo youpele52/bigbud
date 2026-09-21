@@ -4,7 +4,6 @@ import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import {
   pinRemoteAgentBuild,
   promoteRemoteAgentBuild,
-  quarantineRemoteAgentBuild,
 } from "./remoteAgentInstall.registry.transitions.ts";
 import { MAX_REMOTE_AGENT_ADMISSION_RETIREMENTS } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
@@ -24,48 +23,15 @@ import {
 } from "./remoteAgentAdmission.types.ts";
 import { verifyRemoteAgentRuntimeAdmission } from "./remoteAgentAdmission.verify.ts";
 import type { RemoteAgentArtifact, RemoteAgentArtifactTrustStore } from "./remoteAgentArtifact.ts";
-import { markRemoteAgentUpdate } from "./remoteAgentUpdate.state.ts";
+import {
+  firstRemoteAgentSelection,
+  readyRemoteAgentSelection as readySelection,
+  readyRemoteAgentStableSelection,
+} from "./remoteAgentAdmission.selection.ts";
+import type { RemoteAgentAdmissionPreparation } from "./remoteAgentUpdate.admission.types.ts";
+import { markRemoteAgentAdmissionFailure } from "./remoteAgentAdmission.failure.ts";
 
 export { RemoteAgentAdmissionError } from "./remoteAgentAdmission.types.ts";
-
-type ReadyRemoteAgentSelection = {
-  readonly buildId: string;
-  readonly epoch: string;
-};
-
-function readySelection(
-  state: Awaited<ReturnType<RemoteAgentControl["registry"]["read"]>>,
-  buildId: string | null,
-): ReadyRemoteAgentSelection | undefined {
-  if (!buildId) return undefined;
-  const build = state.builds.find((entry) => entry.id === buildId);
-  const launch = state.launches.find(
-    (entry) => entry.buildId === buildId && entry.phase === "ready" && entry.epoch,
-  );
-  if (!build || !launch || build.binary !== "present" || build.health === "quarantined")
-    return undefined;
-  if (buildId === state.pending) {
-    const update = state.updates.find(
-      (entry) => entry.buildId === buildId && entry.phase === "ready-for-reconnect",
-    );
-    if (!update || update.epoch !== launch.epoch) return undefined;
-  } else if (!build.authenticated || build.health !== "healthy") {
-    return undefined;
-  }
-  return { buildId, epoch: launch.epoch };
-}
-
-function firstSelection(state: Awaited<ReturnType<RemoteAgentControl["registry"]["read"]>>): {
-  readonly primary: string | null;
-  readonly requestedBuildId?: string;
-} {
-  const pending = readySelection(state, state.pending);
-  if (pending && pending.buildId !== state.current)
-    return { primary: pending.buildId, requestedBuildId: pending.buildId };
-  if (readySelection(state, state.current)) return { primary: state.current };
-  if (readySelection(state, state.predecessor)) return { primary: state.predecessor };
-  return { primary: null };
-}
 
 export function makeRemoteAgentAdmission(
   dependencies: {
@@ -156,7 +122,11 @@ export function makeRemoteAgentAdmission(
       await bindings.bindConnection(target, binding.connectionId, binding);
       return binding;
     },
-    admitFresh: async (target: string, requestId: string) => {
+    admitFresh: async (
+      target: string,
+      requestId: string,
+      preparation: RemoteAgentAdmissionPreparation = {},
+    ) => {
       if (!/^[a-zA-Z0-9-]{1,64}$/.test(requestId))
         throw new Error("Invalid fresh connection identity.");
       const control = await controlFor(target);
@@ -196,7 +166,7 @@ export function makeRemoteAgentAdmission(
       // request can only revisit this build or its already-recorded fallback;
       // it may never observe a newer pending build and silently migrate.
       if (!prior) {
-        const planned = firstSelection(state);
+        const planned = firstRemoteAgentSelection(state, preparation);
         if (!planned.primary)
           throw new RemoteAgentAdmissionError(
             "ADMISSION_UNAVAILABLE",
@@ -207,8 +177,8 @@ export function makeRemoteAgentAdmission(
           if (existing) return current;
           const selected =
             readySelection(current, planned.primary) ??
-            readySelection(current, current.current) ??
-            readySelection(current, current.predecessor);
+            readyRemoteAgentStableSelection(current, current.current) ??
+            readyRemoteAgentStableSelection(current, current.predecessor);
           if (!selected)
             throw new RemoteAgentAdmissionError(
               "ADMISSION_UNAVAILABLE",
@@ -222,6 +192,12 @@ export function makeRemoteAgentAdmission(
                 buildId: selected.buildId,
                 phase: "prepared",
                 epoch: "",
+                ...(preparation.warning
+                  ? { warning: preparation.warning, failureCode: "UPDATE_PREPARATION_FAILED" }
+                  : {}),
+                ...(preparation.requestedVersion
+                  ? { requestedVersion: preparation.requestedVersion }
+                  : {}),
                 ...(planned.requestedBuildId ? { requestedBuildId: planned.requestedBuildId } : {}),
               },
             ],
@@ -243,7 +219,7 @@ export function makeRemoteAgentAdmission(
           );
       const choices = [prepared.buildId, ...fallbackIds];
       const failures: string[] = [];
-      let failureCode: string | undefined;
+      let failureCode = prepared.failureCode;
       for (const buildId of choices) {
         state = await control.registry.read();
         const preparedNow = state.admissions.find((entry) => entry.id === requestId);
@@ -335,14 +311,7 @@ export function makeRemoteAgentAdmission(
           failureCode = cause instanceof RemoteAgentAdmissionError ? cause.code : "UNREACHABLE";
           if (cause instanceof RemoteAgentAdmissionError && cause.buildFailure) {
             await control.registry.update((current) =>
-              markRemoteAgentUpdate(quarantineRemoteAgentBuild(current, buildId), {
-                requestId:
-                  current.updates.find((entry) => entry.buildId === buildId)?.requestId ??
-                  requestId,
-                buildId,
-                phase: "failed",
-                outcome: "failed",
-              }),
+              markRemoteAgentAdmissionFailure(current, buildId, requestId, cause),
             );
           }
 
@@ -379,12 +348,20 @@ export function makeRemoteAgentAdmission(
     status: api.status,
     resolveBinding: api.resolveBinding,
     verify,
-    fresh: (target: string, requestId: string) => {
-      if (requestId.length > 64)
+    fresh: (
+      target: string,
+      requestId: string,
+      preparation?:
+        | RemoteAgentAdmissionPreparation
+        | (() => Promise<RemoteAgentAdmissionPreparation>),
+    ) => {
+      if (!/^[a-zA-Z0-9-]{1,64}$/.test(requestId))
         throw new RemoteAgentAdmissionRateLimitError("Invalid fresh connection identity.");
-      return withRemoteAgentAdmissionGuard(target, requestId, () =>
-        api.admitFresh(target, requestId),
-      );
+      // Admission limits and serialization also cover expensive update preparation.
+      return withRemoteAgentAdmissionGuard(target, requestId, async () => {
+        const prepared = typeof preparation === "function" ? await preparation() : preparation;
+        return api.admitFresh(target, requestId, prepared);
+      });
     },
   };
 }

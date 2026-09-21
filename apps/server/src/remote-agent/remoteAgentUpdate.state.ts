@@ -189,10 +189,12 @@ export function markRemoteAgentUpdate(
     readonly outcome?: RemoteAgentRegistry["updates"][number]["outcome"];
     readonly identity?: RemoteAgentRegistry["updates"][number]["identity"];
     readonly epoch?: string;
+    readonly reason?: string;
   },
 ): RemoteAgentRegistry {
   const prior = state.updates.find((update) => update.requestId === input.requestId);
   const update = {
+    ...(input.reason ? { reason: input.reason } : {}),
     ...updateRecord(state, input.requestId, input.buildId, input.phase, input.outcome),
     ...((input.identity ?? prior?.identity) ? { identity: input.identity ?? prior?.identity } : {}),
     ...((input.epoch ?? prior?.epoch) ? { epoch: input.epoch ?? prior?.epoch } : {}),

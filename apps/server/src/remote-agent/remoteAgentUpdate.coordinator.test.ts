@@ -202,6 +202,8 @@ describe("remote agent update coordinator", () => {
 
     await expect(coordinator.getStatus("ssh:known")).resolves.toMatchObject({
       phase: "capacity-noncompliant",
+      reason:
+        "bigbud could not verify every file in the remote installation, so it left the installation unchanged.",
     });
     expect(openControl).toHaveBeenCalledOnce();
     expect(fixture.installArtifact).not.toHaveBeenCalled();

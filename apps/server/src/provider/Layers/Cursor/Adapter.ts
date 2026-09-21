@@ -266,7 +266,16 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       );
 
     const listSessions: CursorAdapterShape["listSessions"] = () =>
-      Effect.sync(() => Array.from(sessions.values(), (c) => ({ ...c.session })));
+      Effect.sync(() =>
+        Array.from(sessions.values(), (c) => {
+          const { activeTurnId: _activeTurnId, ...session } = c.session;
+          return {
+            ...session,
+            status: c.activeTurnId ? ("running" as const) : ("ready" as const),
+            ...(c.activeTurnId ? { activeTurnId: c.activeTurnId } : {}),
+          };
+        }),
+      );
 
     const hasSession: CursorAdapterShape["hasSession"] = (threadId) =>
       Effect.sync(() => {

@@ -200,12 +200,13 @@ describe("DesktopSupervisorDeliveryCoordinator", () => {
       readReplay: async () => replay([event(1), event(2)]),
     });
     const firstBatch = await takeBatch(subscription);
-    const firstAck = await coordinator.acknowledge(ackFor(firstBatch));
-    await expect(coordinator.acknowledge(ackFor(firstBatch))).resolves.toEqual(firstAck);
-
-    const secondBatch = await takeBatch(subscription);
-    expect(secondBatch.route).toBe(firstBatch.route);
-    expect(secondBatch.events[0]?.sequence).toBe(2);
+    expect(firstBatch.events.map((entry) => entry.sequence)).toEqual([1, 2]);
+    const batchAck = ackFor(firstBatch, {
+      receivedThroughSequence: 2,
+      appliedThroughSequence: 2,
+    });
+    const firstAck = await coordinator.acknowledge(batchAck);
+    await expect(coordinator.acknowledge(batchAck)).resolves.toEqual(firstAck);
     await coordinator.close();
   });
 
@@ -224,16 +225,17 @@ describe("DesktopSupervisorDeliveryCoordinator", () => {
     const firstBatch = await takeBatch(subscription);
     expect(firstBatch.route).toBe("fallback-fenced");
     await expect(
-      coordinator.acknowledge(ackFor(firstBatch, { appliedThroughSequence: 2 })),
+      coordinator.acknowledge(ackFor(firstBatch, { appliedThroughSequence: 1 })),
     ).resolves.toEqual({ accepted: false, fenced: true, acknowledgedSequence: 0 });
-    await expect(coordinator.acknowledge(ackFor(firstBatch))).resolves.toEqual({
+    await expect(
+      coordinator.acknowledge(
+        ackFor(firstBatch, { receivedThroughSequence: 2, appliedThroughSequence: 2 }),
+      ),
+    ).resolves.toEqual({
       accepted: true,
       fenced: false,
-      acknowledgedSequence: 1,
+      acknowledgedSequence: 2,
     });
-    const secondBatch = await takeBatch(subscription);
-    expect(secondBatch.route).toBe("fallback-fenced");
-    expect(secondBatch.events[0]?.sequence).toBe(2);
     await coordinator.close();
   });
 

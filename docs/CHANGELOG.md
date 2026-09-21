@@ -10,6 +10,36 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
 - **Clearer recovery when something goes wrong:** Remote setup and connection errors now explain what failed and how to recover.
 
+## v0.2.210 (22 September, 2026)
+
+### Automatic Remote-Agent Updates
+
+- New remote connections now refresh the configured release, select the latest verified compatible agent, prepare it when needed, and wait for health confirmation before using it.
+- Preserved each connection's selected runtime across reconnects and retries, preventing stale update selection, silent downgrades, or moving existing work onto a different runtime.
+- Added durable update history with requested versions, actionable failure details, signed artifact verification, and an amber warning when a healthy older agent is used as a fallback.
+- Kept Direct SSH explicit and independent from managed-agent installation, updates, and recovery.
+
+### Safer Remote Workspace Recovery
+
+- Recovered remote-agent capacity by recognizing legitimate legacy files, reclaiming only verified unowned stale payloads, and leaving uncertain installations unchanged.
+- Improved remote workspace watchers and file-preview refreshes so local and remote changes reconcile more reliably after reconnects or missed updates.
+- Preserved the verified agent identity shown for an active connection and improved setup, connection, and fallback messages so the next recovery step is clear.
+- Ensured remote MCP bridges launched from Electron use the correct Node runtime instead of inheriting desktop-shell arguments.
+
+### More Reliable Desktop Startup
+
+- Packaged macOS and Linux builds now create and verify the backend `node_modules` link before signing or sealing the application.
+- Packaged macOS startup validates the signed module layout without modifying the app bundle at runtime; Windows retains its junction-and-copy fallback.
+- Added a specific recovery diagnostic for incomplete or damaged backend modules, directing users to reinstall bigbud when the local installation cannot start.
+
+### Provider and Orchestration Recovery
+
+- Desktop orchestration events now drain in contiguous, bounded batches, reducing acknowledgement overhead while preserving ordering and replay safety.
+- Stabilized MCP invocation identity across orchestration and remote-workspace bridges so concurrent requests, retries, and reconnects do not cross wires or lose cleanup state.
+- Strengthened provider turn lifecycle handling across Codex, Claude, Cursor, Devin, and OpenCode, including idle cleanup, session stamping, attachment routing, and remote execution recovery.
+- OpenCode requests now use bounded deadlines and can recover final output when the provider becomes idle; duplicate settlement is prevented and unrecoverable finalization now fails explicitly.
+- WebSocket subscriptions retry with resettable, capped backoff, and listener failures remain recoverable instead of permanently stopping delivery.
+
 ## v0.2.209 (15 September, 2026)
 
 ### Reliable Prompt Delivery

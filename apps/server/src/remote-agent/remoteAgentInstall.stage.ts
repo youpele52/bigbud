@@ -3,12 +3,17 @@ import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentRegistryBuild } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentInventory } from "./remoteAgentUpdate.inventory.ts";
 import {
+  remoteAgentInventoryCapacityIssue,
+  remoteAgentInventoryCapacityMessage,
+  type RemoteAgentInventoryCapacityIssue,
+} from "./remoteAgentUpdate.inventory.ts";
+import {
   failRemoteAgentStage,
   releaseRemoteAgentStage,
   reserveRemoteAgentStage,
   publishRemoteAgentStage,
 } from "./remoteAgentInstall.registry.transitions.ts";
-import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
+import { remoteAgentRuntimeEqual, validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { markRemoteAgentUpdate, reserveRemoteAgentUpdate } from "./remoteAgentUpdate.state.ts";
 
@@ -24,11 +29,16 @@ export class RemoteAgentStageDefinitiveError extends Error {
 export class RemoteAgentCapacityUnavailableError extends Error {
   readonly _tag = "RemoteAgentCapacityUnavailableError";
 
-  constructor(readonly status: "waiting-for-capacity" | "capacity-noncompliant") {
+  constructor(
+    readonly status: "waiting-for-capacity" | "capacity-noncompliant",
+    readonly capacityIssue: RemoteAgentInventoryCapacityIssue | null = null,
+  ) {
     super(
-      status === "capacity-noncompliant"
-        ? "Remote agent installation root is over capacity or has uncertain ownership."
-        : "Both remote agent storage slots are occupied; installation is waiting for safe retirement.",
+      capacityIssue
+        ? remoteAgentInventoryCapacityMessage(capacityIssue)
+        : status === "capacity-noncompliant"
+          ? "Remote agent installation root is over capacity or has uncertain ownership."
+          : "Both remote agent storage slots are occupied; installation is waiting for safe retirement.",
     );
     this.name = "RemoteAgentCapacityUnavailableError";
   }
@@ -75,6 +85,12 @@ export async function stageRemoteAgentBuild<A>(input: {
     binary: "absent" as const,
     runtime: build,
   };
+  const existing = (await control.registry.read()).builds.find((entry) => entry.id === id);
+  if (existing && !remoteAgentRuntimeEqual(existing.runtime, build)) {
+    throw new Error(
+      "The existing runtime descriptor does not match the managed installation path.",
+    );
+  }
   if (control.inventory) {
     let inventory = await control.inventory();
     if (input.prepareCapacity) {
@@ -93,8 +109,10 @@ export async function stageRemoteAgentBuild<A>(input: {
     });
     const update = reserved.updates.find((entry) => entry.requestId === intentId);
     if (update?.phase === "waiting-for-capacity") {
+      const capacityIssue = remoteAgentInventoryCapacityIssue(inventory);
       throw new RemoteAgentCapacityUnavailableError(
-        inventory.noncompliant ? "capacity-noncompliant" : "waiting-for-capacity",
+        capacityIssue ? "capacity-noncompliant" : "waiting-for-capacity",
+        capacityIssue,
       );
     }
     await control.registry.update((state) =>
@@ -156,10 +174,15 @@ export async function stageRemoteAgentBuild<A>(input: {
   }
   try {
     await control.registry.update((state) => {
+      const installed = state.builds.find((entry) => entry.id === id);
+      if (!installed || !remoteAgentRuntimeEqual(installed.runtime, build)) {
+        throw new Error("The checked installation path no longer matches the runtime descriptor.");
+      }
       const published = publishRemoteAgentStage(state, intentId);
-      if (published === state) return state;
+      if (published === state && (!input.authenticated || installed.authenticated)) return state;
       return {
         ...published,
+        revision: state.revision + 1,
         builds: published.builds.map((build) =>
           build.id === id
             ? Object.assign({}, build, {
@@ -172,7 +195,14 @@ export async function stageRemoteAgentBuild<A>(input: {
     });
   } catch (cause) {
     const observed = await control.registry.read();
-    if (!observed.stages.some((stage) => stage.id === intentId && stage.phase === "published"))
+    const installed = observed.builds.find((entry) => entry.id === id);
+    if (
+      !observed.stages.some((stage) => stage.id === intentId && stage.phase === "published") ||
+      !installed ||
+      installed.binary !== "present" ||
+      !remoteAgentRuntimeEqual(installed.runtime, build) ||
+      (input.authenticated && !installed.authenticated)
+    )
       throw cause;
   }
   if (control.inventory)

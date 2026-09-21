@@ -6,6 +6,7 @@ import {
 } from "./remoteWorkspaceBridge.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import { deriveMcpInvocationStatePath } from "../orchestration-tools/mcpInvocationStatePath.ts";
 import { renderRemoteWorkspaceMcpServerSource } from "./remoteWorkspaceMcpBridge.template.ts";
 import {
   probeRemoteWorkspaceReadiness,
@@ -23,15 +24,14 @@ async function writeBridgeFiles(
   httpConfig: ThreadOrchestrationHttpConfig,
 ): Promise<string> {
   const serverPath = path.join(bridge.bridgeDir, "remote-workspace-mcp-server.mjs");
+  const providerInvocationStatePath = httpConfig.providerInvocationStatePath
+    ? deriveMcpInvocationStatePath(httpConfig.providerInvocationStatePath, "remote-workspace")
+    : undefined;
   await bridge.writeWorkspaceFile(
     ".bigbud/remote-workspace-mcp-server.mjs",
     renderRemoteWorkspaceMcpServerSource({
       ...httpConfig,
-      providerInvocationStatePath: path.join(
-        bridge.bridgeDir,
-        ".bigbud",
-        "mcp-invocation-state.json",
-      ),
+      ...(providerInvocationStatePath ? { providerInvocationStatePath } : {}),
     }),
   );
   return serverPath;

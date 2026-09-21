@@ -237,7 +237,8 @@ export function promoteRemoteAgentBuild(
                   phase: "ready" as const,
                   epoch: admission.epoch,
                   outcome:
-                    admission.requestedBuildId && admission.requestedBuildId !== buildId
+                    entry.warning ||
+                    (admission.requestedBuildId && admission.requestedBuildId !== buildId)
                       ? ("fallback" as const)
                       : ("selected" as const),
                   ...(admission.requestedBuildId

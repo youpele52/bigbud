@@ -16,6 +16,7 @@ import { buildRemoteAgentInstallPaths } from "./remoteAgentInstall.ts";
 import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
 import { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
 import { artifact, installManagerFixture } from "./remoteAgentInstallManager.fixtures.ts";
+import { nextRemoteAgentRegistryRevision } from "./remoteAgentAdmission.types.ts";
 
 function build(version: string, number: number) {
   const sha256 = String(number).repeat(64).slice(0, 64);
@@ -293,7 +294,9 @@ describe("remote agent predecessor retirement", () => {
         return "dead";
       },
     });
-    await fixture.control.registry.update(() => predecessorState(predecessor, current));
+    await fixture.control.registry.update((state) =>
+      nextRemoteAgentRegistryRevision(state, predecessorState(predecessor, current)),
+    );
     const source = {
       manifest: { schemaVersion: 1 as const, artifacts: [candidateArtifact] },
       trustStore: {},
@@ -344,7 +347,9 @@ describe("remote agent predecessor retirement", () => {
         return "dead";
       },
     });
-    await fixture.control.registry.update(() => predecessorState(predecessor, current));
+    await fixture.control.registry.update((state) =>
+      nextRemoteAgentRegistryRevision(state, predecessorState(predecessor, current)),
+    );
     fixture.installArtifact.mockRejectedValueOnce(
       new Error("candidate write failed after retirement"),
     );

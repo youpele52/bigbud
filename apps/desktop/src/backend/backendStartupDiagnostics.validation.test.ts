@@ -17,6 +17,9 @@ const safeState = {
 
 it("accepts only bounded, structured startup diagnostics", () => {
   expect(isBackendStartupState(safeState)).toBe(true);
+  expect(isBackendStartupState({ ...safeState, failureReason: "backend_modules_invalid" })).toBe(
+    true,
+  );
   expect(isBackendStartupState({ ...safeState, failureReason: "arbitrary" })).toBe(false);
   expect(
     isBackendStartupState({

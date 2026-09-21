@@ -23,7 +23,7 @@ describe("orchestrationMcpBridge.session", () => {
           name: "bigbud_orchestration",
           command: resolveNodeExecutable(),
           args: [prepared.bridge.serverPath],
-          env: [],
+          env: [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }],
         },
       ]);
 
