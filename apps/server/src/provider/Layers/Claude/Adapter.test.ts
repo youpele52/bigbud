@@ -107,6 +107,7 @@ describe("ClaudeAdapterLive", () => {
         return;
       }
       assert.equal(remoteWorkspaceServer.command, resolveNodeExecutable());
+      assert.deepEqual(remoteWorkspaceServer.env, { ELECTRON_RUN_AS_NODE: "1" });
       assert.deepEqual(remoteWorkspaceServer.args, [
         path.join(createInput?.options.cwd ?? "", ".bigbud/remote-workspace-mcp-server.mjs"),
       ]);

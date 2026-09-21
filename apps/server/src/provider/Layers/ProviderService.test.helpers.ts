@@ -65,6 +65,7 @@ export type LegacyProviderRuntimeEvent = {
 export function makeFakeCodexAdapter(
   provider: ProviderKind = "codex",
   capabilities: Partial<ProviderAdapterCapabilities> = {},
+  options?: { readonly blockingCompletedSendTurn?: boolean },
 ) {
   const sessions = new Map<ThreadId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
@@ -107,9 +108,22 @@ export function makeFakeCodexAdapter(
         );
       }
 
+      const turnId = TurnId.makeUnsafe(`turn-${String(input.threadId)}`);
+      if (!options?.blockingCompletedSendTurn) {
+        const session = sessions.get(input.threadId);
+        if (session) {
+          sessions.set(input.threadId, {
+            ...session,
+            status: "running",
+            activeTurnId: turnId,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+
       return Effect.succeed({
         threadId: input.threadId,
-        turnId: TurnId.makeUnsafe(`turn-${String(input.threadId)}`),
+        turnId,
       });
     },
   );
@@ -268,8 +282,8 @@ export function makeProviderServiceLayer(options?: {
   const copilot = makeFakeCodexAdapter("copilot");
   const opencode = makeFakeCodexAdapter("opencode");
   const pi = makeFakeCodexAdapter("pi");
-  const cursor = makeFakeCodexAdapter("cursor");
-  const devin = makeFakeCodexAdapter("devin");
+  const cursor = makeFakeCodexAdapter("cursor", {}, { blockingCompletedSendTurn: true });
+  const devin = makeFakeCodexAdapter("devin", {}, { blockingCompletedSendTurn: true });
   const includeCliProxyAdapter = options?.includeCliProxyAdapter !== false;
   const registry: typeof ProviderAdapterRegistry.Service = {
     getByProvider: (provider) =>

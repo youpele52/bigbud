@@ -148,11 +148,14 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
 
-    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as
+      | { input?: string; attachments?: ReadonlyArray<{ type: string }> }
+      | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
     expect(sendInput?.input).toContain(
       `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
     );
+    expect(sendInput?.attachments).toEqual([expect.objectContaining({ type: "file" })]);
   });
 
   it("adds path-reference attachment metadata with full path to providers", async () => {
@@ -189,9 +192,12 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
 
-    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as
+      | { input?: string; attachments?: ReadonlyArray<{ type: string }> }
+      | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
     expect(sendInput?.input).toContain(`- index.html (file, path reference) -> ${attachmentPath}`);
+    expect(sendInput?.attachments).toBeUndefined();
   });
 
   it("injects structured reply context into provider input for replied messages", async () => {

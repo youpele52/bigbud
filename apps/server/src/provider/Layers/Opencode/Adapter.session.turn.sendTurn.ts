@@ -20,6 +20,7 @@ import {
 } from "./Adapter.session.helpers.ts";
 import {
   isOpencodeTransportFailure,
+  recoverCompletedAssistantReply,
   sendPromptAsyncAndWaitForCompletion,
   type PromptResultInfo,
   type PromptResultPart,
@@ -59,6 +60,10 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       const textStream = makeOpencodeTextStream();
       record.textStream = textStream;
       record.promptTurnId = turnId;
+      record.promptSettlementTurnId = undefined;
+      record.promptTerminalEventsEnqueuedTurnId = undefined;
+      record.promptStartedAtMs = Date.now();
+      record.promptFinalizationStartedAtMs = undefined;
       record.updatedAt = new Date().toISOString();
       record.turns.push({ id: turnId, items: [] });
 
@@ -140,12 +145,73 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
         record.promptTurnId = undefined;
+        record.promptStartedAtMs = undefined;
+        record.promptFinalizationStartedAtMs = undefined;
         return yield* new ProviderAdapterValidationError({
           provider,
           operation: "sendTurn",
           issue: `Unable to resolve ${provider} provider for model '${record.model}'.`,
         });
       }
+
+      const settlePromptResult = (promptResult: {
+        readonly info: PromptResultInfo;
+        readonly parts: ReadonlyArray<PromptResultPart>;
+      }) =>
+        Effect.gen(function* () {
+          if (
+            record.activeTurnId !== turnId ||
+            record.promptTurnId !== turnId ||
+            record.promptSettlementTurnId === turnId
+          ) {
+            return false;
+          }
+          // Claim settlement before any asynchronous work so polling and the
+          // inactivity recovery probe cannot both emit terminal events.
+          record.promptSettlementTurnId = turnId;
+          const events = yield* toPromptTurnEvents({
+            record,
+            threadId: input.threadId,
+            turnId,
+            promptInfo: promptResult.info,
+            promptParts: promptResult.parts,
+            syntheticEventFn,
+          });
+          if (record.activeTurnId !== turnId) return false;
+          yield* emitFn(events);
+          if (record.activeTurnId !== turnId) return false;
+          // From this point onward the canonical terminal event is the sole
+          // owner of liveness settlement. Inspection may observe the local
+          // turn clearing before runtime ingestion consumes the queued event.
+          record.promptTerminalEventsEnqueuedTurnId = turnId;
+          record.activeTurnId = undefined;
+          record.promptTurnId = undefined;
+          record.promptSettlementTurnId = undefined;
+          record.recoverPromptCompletion = undefined;
+          record.promptStartedAtMs = undefined;
+          record.promptFinalizationStartedAtMs = undefined;
+          record.wasRetrying = false;
+          record.updatedAt = new Date().toISOString();
+          return true;
+        });
+
+      record.recoverPromptCompletion = async (expectedTurnId) => {
+        if (
+          expectedTurnId !== turnId ||
+          record.activeTurnId !== turnId ||
+          record.promptTurnId !== turnId ||
+          record.promptSettlementTurnId === turnId
+        ) {
+          return false;
+        }
+        const promptResult = await recoverCompletedAssistantReply({
+          client: record.client,
+          sessionID: record.opencodeSessionId,
+          notBeforeMs: record.promptStartedAtMs ?? 0,
+        });
+        if (!promptResult) return false;
+        return runPromise(settlePromptResult(promptResult));
+      };
 
       const promptEffect = Effect.gen(function* () {
         const promptResult = yield* Effect.tryPromise({
@@ -165,7 +231,10 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                 : {}),
               tools: record.allowedTools,
               ...(record.variant ? { variant: record.variant } : {}),
-              turnStillActive: () => record.activeTurnId === turnId,
+              turnStillActive: () =>
+                record.activeTurnId === turnId &&
+                record.promptTurnId === turnId &&
+                record.promptSettlementTurnId !== turnId,
               textStream,
               onDelta: async (delta: StreamedPromptDelta) => {
                 if (record.activeTurnId !== turnId) return;
@@ -197,24 +266,13 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
             }),
         });
 
-        if (!promptResult || record.activeTurnId !== turnId) {
+        if (!promptResult) {
           return;
         }
-
-        const events = yield* toPromptTurnEvents({
-          record,
-          threadId: input.threadId,
-          turnId,
-          promptInfo: promptResult.info as PromptResultInfo,
-          promptParts: promptResult.parts as ReadonlyArray<PromptResultPart>,
-          syntheticEventFn,
+        yield* settlePromptResult({
+          info: promptResult.info as PromptResultInfo,
+          parts: promptResult.parts as ReadonlyArray<PromptResultPart>,
         });
-        if (record.activeTurnId !== turnId) return;
-        record.activeTurnId = undefined;
-        record.promptTurnId = undefined;
-        record.wasRetrying = false;
-        record.updatedAt = new Date().toISOString();
-        yield* emitFn(events);
       }).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
@@ -223,6 +281,11 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
             record.lastError = errorMessage;
             record.activeTurnId = undefined;
             record.promptTurnId = undefined;
+            record.promptSettlementTurnId = undefined;
+            record.promptTerminalEventsEnqueuedTurnId = undefined;
+            record.recoverPromptCompletion = undefined;
+            record.promptStartedAtMs = undefined;
+            record.promptFinalizationStartedAtMs = undefined;
             record.updatedAt = new Date().toISOString();
             if (isOpencodeTransportFailure(error)) {
               yield* teardownSessionRecord(record);

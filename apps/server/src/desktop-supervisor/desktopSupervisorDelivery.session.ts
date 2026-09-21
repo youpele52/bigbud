@@ -21,10 +21,11 @@ import type { DesktopSupervisorDeliveryCoordinator } from "./desktopSupervisorDe
 import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.ts";
 import { isDesktopSupervisorIncompatibleProtocolError } from "./desktopSupervisorProtocol.ts";
 import { DesktopSupervisorShadowComparator } from "./desktopSupervisorShadow.ts";
-import { deliverEvent } from "./desktopSupervisorDelivery.session.batch.ts";
+import { deliverBatch } from "./desktopSupervisorDelivery.session.batch.ts";
 import { acknowledgeProjectionBaseline } from "./desktopSupervisorDelivery.session.baseline.ts";
 import { requestProjectionBaseline } from "./desktopSupervisorDelivery.session.recovery.ts";
 import { inspectCompleteReplay } from "./desktopSupervisorDelivery.session.replay.ts";
+import { collectDeliveryBatch } from "./desktopSupervisorDelivery.session.queue.ts";
 
 export type AckGate = {
   readonly batchId: string;
@@ -270,20 +271,31 @@ export class DesktopSupervisorDeliverySession {
       await this.emitLifecycle("live");
     }
     while (!this.closed) {
-      const event = await this.nextEvent();
-      if (!event) return;
+      const events = await this.nextBatch();
+      if (!events) return;
       try {
-        await deliverEvent(this, event);
+        await deliverBatch(this, events);
       } catch (cause) {
         if (this.closed) return;
         if (this.route !== "supervisor") throw cause;
-        this.pending.set(event.sequence, event);
+        for (const event of events) this.pending.set(event.sequence, event);
         this.consecutiveDeliveryFailures += 1;
         await this.recoverSupervisor(
           cause instanceof Error ? cause.name : "supervisor_delivery_failure",
         );
       }
     }
+  }
+
+  private async nextBatch(): Promise<ReadonlyArray<OrchestrationEvent> | null> {
+    const first = await this.nextEvent();
+    if (!first) return null;
+    return collectDeliveryBatch({
+      first,
+      channel: this.input,
+      pending: this.pending,
+      deliverySequence: this.deliverySequence,
+    });
   }
 
   private async nextEvent(): Promise<OrchestrationEvent | null> {
