@@ -252,6 +252,8 @@ jobs:
 
           if [[ "${{ matrix.platform }}" == "mac" ]]; then
             echo "macOS signing and notarization are required."
+            ulimit -n 65536
+            echo "macOS build open-file limit: $(ulimit -n)"
             args+=(--signed)
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
             if [[ "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
