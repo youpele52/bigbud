@@ -9,7 +9,6 @@ import {
   writeBackendSessionBoundary,
 } from "../logging/logging";
 import {
-  ensureBackendModulesPath,
   resolveBackendCwd,
   resolveBackendEntry,
   resolveBackendLauncherPath,
@@ -28,6 +27,10 @@ import {
   recordBackendStartupDevelopmentDiagnostics,
   recordBackendStartupFailure,
 } from "./backendStartupState";
+import {
+  ensureBackendModulesPath,
+  reportBackendModulesStartupFailure,
+} from "./backendModulesStartup";
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
 import { withBackendNodeOptions } from "./backendEnv";
 import {
@@ -112,6 +115,9 @@ export async function startBackend(): Promise<void> {
     backendStartPending
   )
     return;
+  const backendModulesFailure = ensureBackendModulesPath();
+  if (backendModulesFailure)
+    return reportBackendModulesStartupFailure(backendModulesFailure, logBackendLifecycle);
   backendStartPending = true;
   let computerUseRuntimeEnv: NodeJS.ProcessEnv | undefined;
   try {
@@ -130,7 +136,6 @@ export async function startBackend(): Promise<void> {
     return;
   const startupGeneration = beginBackendStartup();
   logBackendLifecycle("startup_requested", `generation=${startupGeneration}`);
-
   const backendObservabilitySettings = readPersistedBackendObservabilitySettings(
     _deps.serverSettingsPath,
   );
@@ -148,7 +153,6 @@ export async function startBackend(): Promise<void> {
     scheduleBackendRestart(`missing server entry at ${backendEntry}`);
     return;
   }
-
   const backendLogSink = _deps.getBackendLogSink();
   const captureBackendLogs = backendLogSink !== null;
   const packagedOpencodeBinDir = resolvePackagedOpencodeBinaryDir();
@@ -158,7 +162,6 @@ export async function startBackend(): Promise<void> {
   const packagedDesktopSupervisorBinary = resolvePackagedDesktopSupervisorBinary();
   const backendLauncherPath = resolveBackendLauncherPath();
   const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
-  ensureBackendModulesPath();
   let child: ChildProcess.ChildProcess;
   try {
     child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
@@ -240,7 +243,6 @@ export async function startBackend(): Promise<void> {
       },
     );
   }
-
   let stderrTail = "";
   const MAX_STDERR_TAIL = 8_192;
   if (child.stderr) {
@@ -304,7 +306,6 @@ export async function startBackend(): Promise<void> {
     `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)} exec=${backendLauncherPath}`,
   );
   captureBackendOutput(child, backendLogSink);
-
   child.on("error", (error) => {
     logBackendLifecycle(
       "child_error",
@@ -338,7 +339,6 @@ export async function startBackend(): Promise<void> {
     }
     scheduleBackendRestart(error.message);
   });
-
   child.on("exit", (code, signal) => {
     logBackendLifecycle(
       "child_exit",

@@ -9,10 +9,10 @@
  * electron-builder silently strips directories named `node_modules` from
  * `extraResources` copies.  The build script works around this by renaming
  * the server's `node_modules` to `_modules` before electron-builder runs.
- * At runtime the desktop main process must recreate a path that Node.js ESM
- * resolution can find (it walks up the directory tree looking for
- * `node_modules/`).  `NODE_PATH` is NOT used because Node.js ESM ignores it —
- * only CJS honours `NODE_PATH`.
+ * The packaging hook creates the POSIX link before signing or sealing; the
+ * desktop startup helper validates it on macOS and preserves the existing
+ * runtime creation behavior on Linux and Windows. `NODE_PATH` is NOT used
+ * because Node.js ESM ignores it — only CJS honours `NODE_PATH`.
  *
  * ## Strategy by platform
  *
@@ -49,7 +49,8 @@ export type ModuleLinkType = "junction" | "dir";
 
 /**
  * The complete plan for making `_modules` resolvable as `node_modules`.
- * The plan is pure data; execution is handled by `ensureBackendModulesPath`.
+ * The plan is pure data; execution and startup validation live in
+ * `backendModulesStartup.ts`.
  */
 export interface BackendModulesLinkPlan {
   /** Absolute path to the server directory inside `Resources/`. */
