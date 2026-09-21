@@ -34,6 +34,8 @@ describe("codexRemoteWorkspaceBridge", () => {
       expect.stringContaining("mcp_servers.bigbud_remote_workspace.args="),
       "-c",
       expect.stringContaining("mcp_servers.bigbud_remote_workspace.cwd="),
+      "-c",
+      'mcp_servers.bigbud_remote_workspace.env.ELECTRON_RUN_AS_NODE="1"',
     ]);
     expect(bridge.promptPrefix).toContain("bigbud remote workspace mode");
     expect(bridge.promptPrefix).toContain("/srv/project");

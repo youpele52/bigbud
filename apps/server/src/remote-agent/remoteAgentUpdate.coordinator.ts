@@ -28,6 +28,10 @@ import { remoteAgentFailureDetail } from "./remoteAgentFailure.ts";
 import { makeRemoteAgentAdmissionPreparation } from "./remoteAgentUpdate.admission.ts";
 import { makeRemoteAgentPreparationQueue } from "./remoteAgentUpdate.queue.ts";
 import { statusFromState, type RemoteAgentUpdateStatus } from "./remoteAgentUpdate.status.ts";
+import {
+  remoteAgentInventoryCapacityIssue,
+  type RemoteAgentInventoryCapacityIssue,
+} from "./remoteAgentUpdate.inventory.ts";
 
 export interface RemoteAgentUpdateCoordinatorShape {
   readonly start: Effect.Effect<void, never, Scope.Scope>;
@@ -205,20 +209,14 @@ export function makeRemoteAgentUpdateCoordinator(
       const control = await openControl(target);
       const state = await control.registry.read();
       stateByRoot.set(stateKey(target, control.root), state);
-      let capacityNoncompliant = false;
+      let capacityIssue: RemoteAgentInventoryCapacityIssue | null = null;
       try {
-        capacityNoncompliant = (await control.inventory?.())?.noncompliant ?? false;
+        const inventory = await control.inventory?.();
+        capacityIssue = inventory ? remoteAgentInventoryCapacityIssue(inventory) : null;
       } catch {
         // Keep status conservative when physical inventory cannot be verified.
       }
-      return statusFromState(
-        target,
-        control.root,
-        state,
-        false,
-        reconnectRequestId,
-        capacityNoncompliant,
-      );
+      return statusFromState(target, control.root, state, false, reconnectRequestId, capacityIssue);
     },
     drain: () => scheduler.drain(),
     prepareForAdmission: makeRemoteAgentAdmissionPreparation({

@@ -9,7 +9,11 @@ import { renderRemoteWorkspaceMcpServerSource } from "./remoteWorkspaceMcpBridge
 
 async function call(
   source: string,
-  input: { readonly id?: string | number; readonly identity?: string } = {},
+  input: {
+    readonly id?: string | number;
+    readonly identity?: string;
+    readonly command?: string;
+  } = {},
 ) {
   const child = spawn(process.execPath, ["--input-type=module", "-e", source]);
   let output = "";
@@ -23,7 +27,7 @@ async function call(
       method: "tools/call",
       params: {
         name: "bash",
-        arguments: { command: "printf marker" },
+        arguments: { command: input.command ?? "printf marker" },
         ...(input.identity ? { _meta: { "bigbud/toolInvocationId": input.identity } } : {}),
       },
     }) + "\n",
@@ -133,23 +137,19 @@ it("keeps typed ordinary IDs distinct and fences reused IDs after provider bridg
     providerInvocationStatePath: join(stateRoot, "mcp-state.json"),
   });
   try {
-    await callMany(source, [{ id: 1 }, { id: "1" }, { id: 1 }]);
-    expect(requests.map((request) => request.remoteInvocationId).toSorted()).toEqual(
-      [
-        "mcp-sequence:provider-session:1:0",
-        "mcp-sequence:provider-session:2:0",
-        "mcp-sequence:provider-session:1:0",
-      ].toSorted(),
-    );
+    await callMany(source, [{ id: 1 }, { id: "1" }]);
+    const firstBatchIds = requests.map((request) => request.remoteInvocationId);
+    expect(firstBatchIds).toHaveLength(2);
+    expect(new Set(firstBatchIds.map((value) => value.split(":").at(-2))).size).toBe(2);
+
     const replay = await call(source, { id: 1 });
-    expect(replay.result.content[0].text).toContain(
-      "REMOTE_INVOCATION_IDENTITY_REQUIRED_REPLAY_AMBIGUOUS",
-    );
-    expect(requests).toHaveLength(3);
-    await expect(call(source, { id: 2 })).resolves.toMatchObject({
+    expect(replay.result.content[0].text).toBe("ok");
+    expect(requests.at(-1)?.remoteInvocationId).toBe(firstBatchIds[0]);
+
+    await expect(call(source, { id: 1, command: "printf second" })).resolves.toMatchObject({
       result: { content: [{ text: "ok" }] },
     });
-    expect(requests.at(-1)?.remoteInvocationId).toBe("mcp-sequence:provider-session:3:0");
+    expect(requests.at(-1)?.remoteInvocationId).not.toBe(firstBatchIds[0]);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

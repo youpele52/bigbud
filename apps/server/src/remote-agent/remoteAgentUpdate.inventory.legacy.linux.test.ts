@@ -19,12 +19,15 @@ describe.runIf(linuxControlAvailable)("Linux legacy remote agent inventory", () 
     try {
       const root = fixture.root;
       const legacy = `${root}/bin/0.2.205/bigbud-remote-agent`;
+      const targetTriple = `${root}/bin/0.2.205/target-triple`;
       const managed = `${root}/bin/0.2.209/${managedDigest}/bigbud-remote-agent`;
       await fixture.run(`umask 077
 mkdir -p -m 700 '${root}/bin/0.2.205' '${root}/bin/0.2.209/${managedDigest}'
 printf legacy > '${legacy}'
+printf 'aarch64-unknown-linux-gnu\n' > '${targetTriple}'
 printf managed > '${managed}'
 chmod 700 '${legacy}' '${managed}'
+chmod 600 '${targetTriple}'
 ln -s '${legacy}' '${root}/bin/current'
 ln -s '${legacy}' '${root}/bin/previous'
 ln -s current '${root}/bin/legacy-alias'
@@ -41,6 +44,69 @@ ln -s current '${root}/bin/legacy-alias'
       expect(inventory.unknownOwner).toBe(true);
       expect(inventory.untracked).toBe(false);
       expect(inventory.noncompliant).toBe(false);
+      expect(inventory.entries).toContainEqual({
+        digest: createHash("sha256").update("aarch64-unknown-linux-gnu\n").digest("hex"),
+        path: targetTriple,
+        kind: "metadata",
+      });
+    } finally {
+      fixture.close();
+    }
+  });
+
+  it.each([
+    ["malformed contents", "not-a-target", "600"],
+    ["missing trailing newline", "aarch64-unknown-linux-gnu", "600"],
+    ["multiple trailing newlines", "aarch64-unknown-linux-gnu\\n\\n", "600"],
+    ["unsafe permissions", "aarch64-unknown-linux-gnu\\n", "644"],
+  ])("keeps target-triple metadata fail-closed with %s", async (_label, contents, mode) => {
+    const fixture = createLinuxControlFixture();
+    try {
+      const root = fixture.root;
+      const legacy = `${root}/bin/0.2.205/bigbud-remote-agent`;
+      const targetTriple = `${root}/bin/0.2.205/target-triple`;
+      await fixture.run(`umask 077
+mkdir -p -m 700 '${root}/bin/0.2.205'
+printf legacy > '${legacy}'
+printf '${contents}' > '${targetTriple}'
+chmod 700 '${legacy}'
+chmod '${mode}' '${targetTriple}'
+ln -s '${legacy}' '${root}/bin/current'
+`);
+      const inventory = parseRemoteAgentInventory(
+        await fixture.run(buildRemoteAgentInventoryCommand(root)),
+      );
+      expect(inventory.entries).toContainEqual(
+        expect.objectContaining({ path: targetTriple, kind: "unknown" }),
+      );
+      expect(inventory.untracked).toBe(true);
+      expect(inventory.noncompliant).toBe(true);
+    } finally {
+      fixture.close();
+    }
+  });
+
+  it.each([
+    ["nested path", "0.2.205/nested"],
+    ["other version", "0.2.209"],
+  ])("keeps target-triple metadata fail-closed at a %s", async (_label, directory) => {
+    const fixture = createLinuxControlFixture();
+    try {
+      const root = fixture.root;
+      const misplaced = `${root}/bin/${directory}/target-triple`;
+      await fixture.run(`umask 077
+mkdir -p -m 700 '${root}/bin/${directory}'
+printf 'aarch64-unknown-linux-gnu\n' > '${misplaced}'
+chmod 600 '${misplaced}'
+`);
+      const inventory = parseRemoteAgentInventory(
+        await fixture.run(buildRemoteAgentInventoryCommand(root)),
+      );
+      expect(inventory.entries).toContainEqual(
+        expect.objectContaining({ path: misplaced, kind: "unknown" }),
+      );
+      expect(inventory.untracked).toBe(true);
+      expect(inventory.noncompliant).toBe(true);
     } finally {
       fixture.close();
     }

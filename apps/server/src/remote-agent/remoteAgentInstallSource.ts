@@ -46,11 +46,17 @@ function resolveInstallSourceUrl(environment: NodeJS.ProcessEnv): string {
       "BIGBUD_REMOTE_AGENT_RELEASE_REPOSITORY must use the owner/repository format.",
     );
   }
-  const version = environment.BIGBUD_REMOTE_AGENT_RELEASE_VERSION?.trim() || serverVersion;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(version)) {
-    throw new RemoteAgentInstallManagerError("The remote agent release version is invalid.");
+  const configuredVersion = environment.BIGBUD_REMOTE_AGENT_RELEASE_VERSION?.trim();
+  if (configuredVersion) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(configuredVersion)) {
+      throw new RemoteAgentInstallManagerError("The remote agent release version is invalid.");
+    }
+    return `https://github.com/${repository}/releases/download/v${configuredVersion}/remote-agent-install-source.json`;
   }
-  return `https://github.com/${repository}/releases/download/v${version}/remote-agent-install-source.json`;
+  if (environment.BIGBUD_DESKTOP_PACKAGED !== "1") {
+    return `https://github.com/${repository}/releases/latest/download/remote-agent-install-source.json`;
+  }
+  return `https://github.com/${repository}/releases/download/v${serverVersion}/remote-agent-install-source.json`;
 }
 
 function parseInstallSourceJson(bytes: Uint8Array, label: string): RemoteAgentInstallSource {

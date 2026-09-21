@@ -274,6 +274,16 @@ export function SidebarRemoteProjectDialog({
           ) : null}
           {agentTarget && open ? (
             <SidebarRemoteAgentStatus executionTargetId={agentTarget} cwd={draft.workspaceRoot} />
+          ) : isEditing && draft.remoteTransport === "direct-ssh" ? (
+            <section
+              aria-label="Remote connection"
+              className="rounded-lg border border-border p-3 text-sm"
+            >
+              <dl className="grid grid-cols-2 gap-1">
+                <dt>Current connection</dt>
+                <dd>Direct SSH</dd>
+              </dl>
+            </section>
           ) : null}
 
           {error ? (

@@ -2,7 +2,7 @@ import type { Options as ClaudeQueryOptions } from "@anthropic-ai/claude-agent-s
 
 import { createRemoteWorkspaceMcpBridge } from "../../../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
+import { ELECTRON_NODE_RUNTIME_ENV, resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 import type { ThreadOrchestrationHttpConfig } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import {
@@ -56,6 +56,7 @@ export async function createClaudeRemoteWorkspaceBridge(
         [REMOTE_WORKSPACE_MCP_SERVER_NAME]: {
           command: resolveNodeExecutable(),
           args: [bridge.serverPath],
+          env: { ...ELECTRON_NODE_RUNTIME_ENV },
         },
       },
     },

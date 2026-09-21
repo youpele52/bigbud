@@ -50,7 +50,7 @@ export function SidebarRemoteAgentStatus({
     let active = true;
     const observedRevision = ++revision.current;
     requestId.current = readRemoteAgentAdmissionRequestId(executionTargetId);
-    setSummary(null);
+    setSummary(useRemoteAccessStore.getState().remoteConnections[executionTargetId] ?? null);
     setUpdateStatus(null);
     setError(null);
     setBusy(false);

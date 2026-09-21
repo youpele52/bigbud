@@ -3,6 +3,11 @@ import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentRegistryBuild } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentInventory } from "./remoteAgentUpdate.inventory.ts";
 import {
+  remoteAgentInventoryCapacityIssue,
+  remoteAgentInventoryCapacityMessage,
+  type RemoteAgentInventoryCapacityIssue,
+} from "./remoteAgentUpdate.inventory.ts";
+import {
   failRemoteAgentStage,
   releaseRemoteAgentStage,
   reserveRemoteAgentStage,
@@ -24,11 +29,16 @@ export class RemoteAgentStageDefinitiveError extends Error {
 export class RemoteAgentCapacityUnavailableError extends Error {
   readonly _tag = "RemoteAgentCapacityUnavailableError";
 
-  constructor(readonly status: "waiting-for-capacity" | "capacity-noncompliant") {
+  constructor(
+    readonly status: "waiting-for-capacity" | "capacity-noncompliant",
+    readonly capacityIssue: RemoteAgentInventoryCapacityIssue | null = null,
+  ) {
     super(
-      status === "capacity-noncompliant"
-        ? "Remote agent installation root is over capacity or has uncertain ownership."
-        : "Both remote agent storage slots are occupied; installation is waiting for safe retirement.",
+      capacityIssue
+        ? remoteAgentInventoryCapacityMessage(capacityIssue)
+        : status === "capacity-noncompliant"
+          ? "Remote agent installation root is over capacity or has uncertain ownership."
+          : "Both remote agent storage slots are occupied; installation is waiting for safe retirement.",
     );
     this.name = "RemoteAgentCapacityUnavailableError";
   }
@@ -99,8 +109,10 @@ export async function stageRemoteAgentBuild<A>(input: {
     });
     const update = reserved.updates.find((entry) => entry.requestId === intentId);
     if (update?.phase === "waiting-for-capacity") {
+      const capacityIssue = remoteAgentInventoryCapacityIssue(inventory);
       throw new RemoteAgentCapacityUnavailableError(
-        inventory.noncompliant ? "capacity-noncompliant" : "waiting-for-capacity",
+        capacityIssue ? "capacity-noncompliant" : "waiting-for-capacity",
+        capacityIssue,
       );
     }
     await control.registry.update((state) =>

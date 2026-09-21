@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 
 const api = vi.hoisted(() => ({ current: null as never }));
 const toast = vi.hoisted(() => ({ add: vi.fn() }));
@@ -11,6 +12,7 @@ vi.mock("../ui/toast.manager", () => ({ toastManager: toast }));
 afterEach(() => {
   toast.add.mockClear();
   api.current = null as never;
+  useRemoteAccessStore.setState({ remoteConnections: {} });
   document.body.innerHTML = "";
 });
 
@@ -31,6 +33,29 @@ describe("explicit remote admission outcome", () => {
       .element(page.getByRole("alert"))
       .toHaveTextContent("choose Direct SSH in Connection method to switch manually");
     expect(connectRemoteAgent).not.toHaveBeenCalled();
+  });
+
+  it("keeps the last verified agent visible when a later SSH check fails", async () => {
+    const target = "ssh:failed-after-connection?transport=agent";
+    useRemoteAccessStore.getState().recordRemoteConnection(target, {
+      currentVersion: "0.2.205",
+      pendingVersion: "0.2.209",
+      fallbackVersion: null,
+    });
+    api.current = {
+      server: {
+        verifyExecutionTarget: vi.fn().mockRejectedValue(new Error("SSH connection closed")),
+        connectRemoteAgent: vi.fn(),
+        getRemoteAgentUpdateStatus: vi.fn().mockRejectedValue(new Error("SSH unavailable")),
+      },
+    } as never;
+
+    await render(<SidebarRemoteAgentStatus executionTargetId={target} cwd="/workspace" />);
+
+    const versions = page.getByRole("region", { name: "Remote agent versions" });
+    await expect.element(versions).toHaveTextContent("Current connection");
+    await expect.element(versions).toHaveTextContent("0.2.205");
+    await expect.element(page.getByRole("alert")).toHaveTextContent("SSH connection closed");
   });
 
   it("shows same-version fallback after admission and reload without connecting again", async () => {
@@ -79,6 +104,9 @@ describe("explicit remote admission outcome", () => {
       <SidebarRemoteAgentStatus executionTargetId="ssh:test" cwd="/workspace" />,
     );
     await vi.waitFor(() => expect(verifyExecutionTarget).toHaveBeenCalledOnce());
+    const versions = page.getByRole("region", { name: "Remote agent versions" });
+    await expect.element(versions).toHaveTextContent("Current connection");
+    await expect.element(versions).toHaveTextContent("0.2.207");
     await page.getByRole("button", { name: "Connect new session" }).click();
     await expect
       .element(

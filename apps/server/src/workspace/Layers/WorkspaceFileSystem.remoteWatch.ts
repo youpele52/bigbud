@@ -71,7 +71,8 @@ export function createRemoteDirectoryPollingStream(
               const nextSnapshot = await input.readSnapshot();
               failureCount = 0;
 
-              if (disconnected) {
+              // The preview may predate the first successful snapshot or a reconnect.
+              if (disconnected || previousSnapshot === undefined) {
                 generation += 1;
                 Queue.offerUnsafe(queue, {
                   version: 1,

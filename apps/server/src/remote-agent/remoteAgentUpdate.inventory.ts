@@ -6,7 +6,7 @@ const SAFE_ROOT = /^\/[A-Za-z0-9._+@%/:=-]*$/;
 export interface RemoteAgentInventoryEntry {
   readonly digest: string;
   readonly path: string;
-  readonly kind: "managed" | "legacy" | "staging" | "unknown";
+  readonly kind: "managed" | "legacy" | "staging" | "metadata" | "unknown";
 }
 
 export interface RemoteAgentInventory {
@@ -17,6 +17,34 @@ export interface RemoteAgentInventory {
   readonly untracked: boolean;
   readonly uncertain: boolean;
   readonly noncompliant: boolean;
+}
+
+export type RemoteAgentInventoryCapacityIssue =
+  | "untracked-path"
+  | "uncertain-scan"
+  | "excess-payloads";
+
+export function remoteAgentInventoryCapacityIssue(
+  inventory: RemoteAgentInventory,
+): RemoteAgentInventoryCapacityIssue | null {
+  if (inventory.untracked) return "untracked-path";
+  if (inventory.uncertain) return "uncertain-scan";
+  if (inventory.uniqueDigests.size > 2) return "excess-payloads";
+  if (inventory.noncompliant) return "uncertain-scan";
+  return null;
+}
+
+export function remoteAgentInventoryCapacityMessage(
+  issue: RemoteAgentInventoryCapacityIssue,
+): string {
+  switch (issue) {
+    case "untracked-path":
+      return "The remote installation contains an unrecognized file or link, so bigbud left it unchanged.";
+    case "uncertain-scan":
+      return "bigbud could not verify every file in the remote installation, so it left the installation unchanged.";
+    case "excess-payloads":
+      return "The remote installation contains more than two distinct agent payloads.";
+  }
 }
 
 function quote(value: string): string {
@@ -93,7 +121,7 @@ if test -d "$bin" && test ! -L "$bin"; then
     digest=$(sha256sum -- "$path" | awk '\\''{print $1}'\\'') || { printf '\\''uncertain\\n'\\''; continue; }
       test "$(printf '%s' "$digest" | wc -c)" -eq 64 || { printf '\\''uncertain\\n'\\''; continue; }
       case "$digest" in *[!a-f0-9]*) printf '\\''uncertain\\n'\\''; continue;; esac
-      kind=$(classify_agent_binary "$path" "$0")
+      kind=$(classify_agent_path "$path" "$0")
       printf '\\''file\\t%s\\t%s\\t%s\\n'\\'' "$digest" "$kind" "$(printf '\\''%s'\\'' "$path" | base64 -w0)"
     done
   ' "$bin" {} +
@@ -154,7 +182,7 @@ scan_arbitrary_links() {
       case "$status" in
         0)
           case "$target" in
-            "$bin"/*) kind=$(classify_agent_binary "$target" "$bin");;
+            "$bin"/*) kind=$(classify_agent_path "$target" "$bin");;
             "$staging"/*) kind=staging;;
             *) kind=unknown;;
           esac
@@ -179,7 +207,7 @@ if test -d "$bin" && test ! -L "$bin"; then
     if test -L "$link"; then
       target=$(resolve_file "$link") || { printf 'unknown\\n'; continue; }
       case "$target" in
-        "$bin"/*) emit_file "$target" "$(classify_agent_binary "$target" "$bin")";;
+        "$bin"/*) emit_file "$target" "$(classify_agent_path "$target" "$bin")";;
         *) emit_file "$target" legacy;;
       esac
     fi
@@ -210,7 +238,13 @@ export function parseRemoteAgentInventory(text: string): RemoteAgentInventory {
     const [tag, digest, kind, encodedPath] = line.split("\t");
     if (tag !== "file" || !/^[a-f0-9]{64}$/.test(digest ?? "") || !encodedPath)
       throw new Error("Invalid remote agent inventory entry.");
-    if (kind !== "managed" && kind !== "legacy" && kind !== "staging" && kind !== "unknown")
+    if (
+      kind !== "managed" &&
+      kind !== "legacy" &&
+      kind !== "staging" &&
+      kind !== "metadata" &&
+      kind !== "unknown"
+    )
       throw new Error("Invalid remote agent inventory owner.");
     const path = decode(encodedPath);
     if (!path.startsWith("/") || path.includes("\0")) throw new Error("Invalid inventory path.");
@@ -222,7 +256,9 @@ export function parseRemoteAgentInventory(text: string): RemoteAgentInventory {
       untracked = true;
     }
   }
-  const uniqueDigests = new Set(entries.map((entry) => entry.digest));
+  const uniqueDigests = new Set(
+    entries.filter((entry) => entry.kind !== "metadata").map((entry) => entry.digest),
+  );
   return {
     entries,
     uniqueDigests,

@@ -62,7 +62,7 @@ describe("local workspace watcher child integration", () => {
     });
     const consume = Effect.runPromise(
       Effect.flatMap(watch, (stream) =>
-        Stream.runForEach(Stream.take(stream, 4), (event) =>
+        Stream.runForEach(Stream.take(stream, 5), (event) =>
           Effect.sync(() => {
             events.push(event);
             if (
@@ -78,7 +78,13 @@ describe("local workspace watcher child integration", () => {
     );
 
     try {
-      await waitFor(() => agent.processId !== undefined, "watcher child did not start");
+      await waitFor(
+        () =>
+          events.some(
+            (event) => event.type === "rescanRequired" && event.reason === "watchInvalidated",
+          ),
+        "initial watch reconciliation was not delivered",
+      );
       const firstProcessId = agent.processId!;
       const firstEpoch = agent.agentEpoch!;
       writeFileSync(join(root, previewPath), "first external change");
@@ -109,7 +115,13 @@ describe("local workspace watcher child integration", () => {
       expect(previewRefreshes).toBe(2);
       expect(
         events.map((event) => (event.type === "rescanRequired" ? event.reason : event.type)),
-      ).toEqual(["directoryChanged", "transportLost", "agentRestarted", "directoryChanged"]);
+      ).toEqual([
+        "watchInvalidated",
+        "directoryChanged",
+        "transportLost",
+        "agentRestarted",
+        "directoryChanged",
+      ]);
       expect(events.at(-1)).toMatchObject({ backend: expect.stringMatching(/native|poll/) });
     } finally {
       agent.close();
