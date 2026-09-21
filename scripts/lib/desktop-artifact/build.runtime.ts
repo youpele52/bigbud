@@ -221,3 +221,38 @@ export const pruneSourceMaps = Effect.fn("pruneSourceMaps")(function* (
       }),
   });
 });
+
+export const pruneNonRuntimeTypeArtifacts = Effect.fn("pruneNonRuntimeTypeArtifacts")(function* (
+  rootDir: string,
+  label: string,
+) {
+  yield* Effect.tryPromise({
+    try: async () => {
+      const removableExtensions = new Set([".d.ts", ".d.mts", ".d.cts", ".ts", ".tsx"]);
+      const visit = async (currentDir: string): Promise<void> => {
+        const entries = await readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const entryPath = join(currentDir, entry.name);
+          if (entry.isDirectory()) {
+            await visit(entryPath);
+            continue;
+          }
+
+          if (
+            entry.isFile() &&
+            [...removableExtensions].some((extension) => entry.name.endsWith(extension))
+          ) {
+            await rm(entryPath, { force: true });
+          }
+        }
+      };
+
+      await visit(rootDir);
+    },
+    catch: (cause) =>
+      new BuildScriptError({
+        message: `Failed to prune non-runtime type artifacts from ${label} at ${rootDir}.`,
+        cause,
+      }),
+  });
+});
