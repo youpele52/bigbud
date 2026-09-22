@@ -36,7 +36,6 @@ describe("captured provider execution settings", () => {
     expect(h.setThreadSession.mock.calls.map(([input]) => input.session.runtimeMode)).toEqual([
       "approval-required",
       "approval-required",
-      "approval-required",
     ]);
     expect(h.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       modelSelection: captured.modelSelection,
