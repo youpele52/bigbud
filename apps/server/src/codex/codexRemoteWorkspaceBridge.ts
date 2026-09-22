@@ -1,6 +1,6 @@
 import { createRemoteWorkspaceMcpBridge } from "../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
-import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
+import { ELECTRON_NODE_RUNTIME_ENV, resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import type { ThreadOrchestrationHttpConfig } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../remote-workspace-bridge/remoteWorkspaceTools.ts";
@@ -49,6 +49,9 @@ export async function createCodexRemoteWorkspaceBridge(
       `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.args=${quoteTomlStringArray([bridge.serverPath])}`,
       "-c",
       `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.cwd=${quoteTomlString(bridge.cwd)}`,
+      // MCP clients filter inherited environment variables; Electron must run as Node.
+      "-c",
+      `mcp_servers.${REMOTE_WORKSPACE_MCP_SERVER_NAME}.env.ELECTRON_RUN_AS_NODE=${quoteTomlString(ELECTRON_NODE_RUNTIME_ENV.ELECTRON_RUN_AS_NODE)}`,
     ],
     promptPrefix: [
       `bigbud remote workspace mode: the actual workspace lives on ${

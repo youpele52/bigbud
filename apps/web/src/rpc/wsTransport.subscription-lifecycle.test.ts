@@ -145,6 +145,75 @@ describe("WsTransport subscription attempt lifecycle", () => {
     unsubscribe();
     await transport.dispose();
   });
+
+  it("backs off repeated listener failures and resets only after successful application", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    const retryAttempts: number[] = [];
+    let listenerCalls = 0;
+    const unsubscribe = transport.subscribe(
+      (client) => client[WS_METHODS.subscribeServerLifecycle]({}),
+      () => {
+        listenerCalls += 1;
+        if (listenerCalls <= 3 || listenerCalls === 5) {
+          throw new Error("deterministic application failure");
+        }
+      },
+      {
+        retryDelay: ({ attempt }) => {
+          retryAttempts.push(attempt);
+          return 1;
+        },
+      },
+    );
+
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const socket = getSocket(sockets);
+    socket.open();
+    const sendLatest = async (sequence: number) => {
+      const requests = socket.sent
+        .map((message) => JSON.parse(message) as WireMessage)
+        .filter((message) => message._tag === "Request");
+      const request = requests.at(-1);
+      if (!request?.id) throw new Error("expected active subscription request");
+      socket.serverMessage(
+        JSON.stringify({
+          _tag: "Chunk",
+          requestId: request.id,
+          values: [
+            {
+              version: 1,
+              sequence,
+              type: "welcome",
+              payload: { cwd: "/tmp/project", projectName: "project" },
+            },
+          ],
+        }),
+      );
+    };
+
+    for (let failure = 1; failure <= 3; failure += 1) {
+      await waitFor(() => {
+        const requests = socket.sent.filter((message) => JSON.parse(message)._tag === "Request");
+        expect(requests).toHaveLength(failure);
+      });
+      await sendLatest(failure);
+      await waitFor(() => expect(retryAttempts).toHaveLength(failure));
+    }
+
+    await waitFor(() => {
+      const requests = socket.sent.filter((message) => JSON.parse(message)._tag === "Request");
+      expect(requests).toHaveLength(4);
+    });
+    await sendLatest(4);
+    await waitFor(() => expect(listenerCalls).toBe(4));
+    await sendLatest(5);
+    await waitFor(() => expect(retryAttempts).toHaveLength(4));
+
+    expect(retryAttempts).toEqual([1, 2, 3, 1]);
+
+    unsubscribe();
+    await transport.dispose();
+  });
 });
 
 interface WireMessage {

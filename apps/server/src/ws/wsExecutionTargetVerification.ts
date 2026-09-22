@@ -25,6 +25,7 @@ import {
   verifySshExecutionTarget,
 } from "../ssh/sshVerification.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
+import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
 
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
@@ -113,7 +114,7 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
     try: (signal) => remoteAgentInstaller.install(input.executionTargetId, signal),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
-        message: "Remote agent staging failed. Existing connections were not changed.",
+        message: remoteAgentFailureMessage(cause),
         cause,
       }),
   });

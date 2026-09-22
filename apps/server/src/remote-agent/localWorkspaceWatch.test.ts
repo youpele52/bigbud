@@ -57,12 +57,12 @@ describe("local workspace watcher", () => {
     try {
       const events = Array.from(
         await Effect.runPromise(
-          Effect.flatMap(watch, (stream) => Stream.runCollect(Stream.take(stream, 2))),
+          Effect.flatMap(watch, (stream) => Stream.runCollect(Stream.take(stream, 3))),
         ),
       );
       expect(
         events.map((event) => (event.type === "rescanRequired" ? event.reason : event.type)),
-      ).toEqual(["transportLost", "agentRestarted"]);
+      ).toEqual(["watchInvalidated", "transportLost", "agentRestarted"]);
       expect(attempts).toBe(2);
     } finally {
       rmSync(cwd, { recursive: true, force: true });

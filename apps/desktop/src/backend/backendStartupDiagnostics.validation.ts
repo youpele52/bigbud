@@ -13,6 +13,7 @@ import {
 
 const reasons = new Set<DesktopBackendStartupFailureReason>([
   "server_entry_missing",
+  "backend_modules_invalid",
   "bootstrap_failed",
   "child_spawn_failed",
   "child_exit_before_ready",

@@ -17,7 +17,7 @@ import {
 import { markWsSubscriptionListenerFailure } from "./wsTransport";
 
 describe("wsNativeApi — orchestration", () => {
-  it("bounds orchestration application retries while leaving transport failures retryable", async () => {
+  it("keeps recovery retryable after repeated orchestration application failures", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
     const { getOrchestrationDeliveryLifecycle } = await import("./orchestrationDeliveryState");
     const applicationError = new Error("deterministic recovery failure");
@@ -28,7 +28,11 @@ describe("wsNativeApi — orchestration", () => {
       | ((item: OrchestrationDeliveryStreamItem) => Promise<void>)
       | undefined;
     const options = call?.[2] as
-      | { shouldRetry?: (error: unknown) => boolean; onResubscribe?: () => void }
+      | {
+          retryDelay?: (context: { error: unknown; attempt: number }) => number;
+          shouldRetry?: (error: unknown) => boolean;
+          onResubscribe?: () => void;
+        }
       | undefined;
     const recovery = {
       type: "recovery" as const,
@@ -45,20 +49,39 @@ describe("wsNativeApi — orchestration", () => {
 
     expect(options?.shouldRetry?.(new Error("socket closed"))).toBe(true);
     const decisions: boolean[] = [];
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const delays: number[] = [];
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       await expect(listener(recovery)).rejects.toBe(applicationError);
-      decisions.push(
-        options?.shouldRetry?.(markWsSubscriptionListenerFailure(applicationError)) ?? false,
-      );
+      const markedError = markWsSubscriptionListenerFailure(applicationError);
+      decisions.push(options?.shouldRetry?.(markedError) ?? false);
+      delays.push(options?.retryDelay?.({ error: markedError, attempt: attempt + 1 }) ?? -1);
     }
 
-    expect(decisions).toEqual([true, true, false]);
+    expect(decisions).toEqual([true, true, true, true]);
+    expect(delays).toEqual([250, 500, 1_000, 2_000]);
     expect(getOrchestrationDeliveryLifecycle()).toMatchObject({
       state: "degraded",
       reasonCode: "application_no_progress",
       consumerGeneration: 7,
       acknowledgedSequence: 4,
     });
+
+    rpcClientMock.orchestration.acknowledgeDelivery.mockResolvedValue({
+      accepted: true,
+      fenced: false,
+      acknowledgedSequence: 10,
+    });
+    await api.orchestration.acknowledgeDelivery({
+      batchId: "batch-progress",
+      consumerId: "consumer-persistent",
+      consumerGeneration: 7,
+      receivedThroughSequence: 10,
+      appliedThroughSequence: 10,
+      applicationDurationMs: 1,
+    });
+    const nextError = markWsSubscriptionListenerFailure(applicationError);
+    expect(options?.shouldRetry?.(nextError)).toBe(true);
+    expect(options?.retryDelay?.({ error: nextError, attempt: 99 })).toBe(250);
   });
 
   it("recovers the verified cursor across renderer reload before replaying the next ordered events", async () => {

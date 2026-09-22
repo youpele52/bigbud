@@ -10,7 +10,8 @@ import {
   resolveThreadOrchestrationHttpConfig,
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
-import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
+import { resolveMcpInvocationStatePath } from "./mcpInvocationStatePath.ts";
+import { ELECTRON_NODE_RUNTIME_ENV, resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "./AgentWorkspaceTools.ts";
 
 export interface ThreadOrchestrationBridgeInput {
@@ -42,6 +43,7 @@ export interface ClaudeOrchestrationBridgeConfig {
     {
       readonly command: string;
       readonly args: ReadonlyArray<string>;
+      readonly env: Readonly<Record<string, string>>;
     }
   >;
   readonly allowedTools: ReadonlyArray<string>;
@@ -62,6 +64,7 @@ export interface OpencodeOrchestrationBridgeConfig {
     readonly type: "local";
     readonly command: Array<string>;
     readonly cwd?: string;
+    readonly environment: Readonly<Record<string, string>>;
     readonly enabled: true;
     readonly timeout: number;
   };
@@ -86,10 +89,17 @@ export async function createThreadOrchestrationBridge(
     threadId: input.threadId,
   });
   const httpConfig = resolveThreadOrchestrationHttpConfig(input, token);
+  const providerSessionId = httpConfig.providerSessionId ?? input.threadId;
+  const invocationStatePath = resolveMcpInvocationStatePath({
+    stateDir: input.stateDir,
+    threadId: input.threadId,
+    providerSessionId,
+    namespace: "orchestration",
+  });
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
   const durableHttpConfig = {
     ...httpConfig,
-    providerInvocationStatePath: path.join(bridgeDir, ".bigbud", "mcp-invocation-state.json"),
+    providerInvocationStatePath: invocationStatePath,
   };
   const serverPath = path.join(bridgeDir, ".bigbud", "orchestration-mcp-server.mjs");
   await writeFile(serverPath, renderOrchestrationMcpServerSource(durableHttpConfig), "utf8");
@@ -123,6 +133,9 @@ export function buildCodexOrchestrationBridgeConfig(
       `mcp_servers.${bridge.serverName}.args=${quoteTomlStringArray([bridge.serverPath])}`,
       "-c",
       `mcp_servers.${bridge.serverName}.cwd=${quoteTomlString(bridge.bridgeDir)}`,
+      // MCP clients filter inherited environment variables; Electron must run as Node.
+      "-c",
+      `mcp_servers.${bridge.serverName}.env.ELECTRON_RUN_AS_NODE=${quoteTomlString(ELECTRON_NODE_RUNTIME_ENV.ELECTRON_RUN_AS_NODE)}`,
     ],
   };
 }
@@ -135,6 +148,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       [bridge.serverName]: {
         command: resolveNodeExecutable(),
         args: [bridge.serverPath],
+        env: { ...ELECTRON_NODE_RUNTIME_ENV },
       },
     },
     allowedTools: [
@@ -164,6 +178,7 @@ export function buildOpencodeOrchestrationBridgeConfig(
       type: "local",
       command: [resolveNodeExecutable(), bridge.serverPath],
       ...(bridge.bridgeDir ? { cwd: bridge.bridgeDir } : {}),
+      environment: { ...ELECTRON_NODE_RUNTIME_ENV },
       enabled: true,
       timeout: OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS,
     },
@@ -179,7 +194,12 @@ export function buildAcpOrchestrationBridgeConfig(
         name: bridge.serverName,
         command: resolveNodeExecutable(),
         args: [bridge.serverPath],
-        env: [],
+        env: [
+          {
+            name: "ELECTRON_RUN_AS_NODE",
+            value: ELECTRON_NODE_RUNTIME_ENV.ELECTRON_RUN_AS_NODE,
+          },
+        ],
       },
     ],
   };

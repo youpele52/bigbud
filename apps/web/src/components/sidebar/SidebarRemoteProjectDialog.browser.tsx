@@ -42,6 +42,22 @@ describe("SidebarRemoteProjectDialog", () => {
       .not.toBeInTheDocument();
   });
 
+  it("shows Direct SSH as the current connection for an existing Direct SSH project", async () => {
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget: vi.fn(),
+      getSnapshot: vi.fn(),
+      dispatchCommand: vi.fn(),
+    });
+    await using _ = await mountHarness(undefined, directSshProject);
+
+    await page.getByRole("button", { name: "Open project menu" }).click();
+
+    const connection = page.getByRole("region", { name: "Remote connection" });
+    await expect.element(connection).toHaveTextContent("Current connection");
+    await expect.element(connection).toHaveTextContent("Direct SSH");
+  });
+
   it("verifies a Direct SSH switch before saving the project", async () => {
     const verifyExecutionTarget = vi.fn().mockResolvedValue({ message: "SSH verified" });
     const dispatchCommand = vi.fn().mockResolvedValue(undefined);

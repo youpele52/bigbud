@@ -5,26 +5,13 @@ import { isRemoteAgentExecutionTarget } from "./remoteAgentDefault.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
-import type {
-  RemoteAgentInstallSource,
-  RemoteAgentResolvedArtifact,
-} from "./remoteAgentInstallManager.ts";
+import type { RemoteAgentInstallSource } from "./remoteAgentInstallManager.ts";
 import type { RemoteAgentArtifact } from "./remoteAgentArtifact.ts";
-import { RemoteAgentCapacityUnavailableError } from "./remoteAgentInstall.stage.ts";
 import { makeRemoteAgentInstallManager } from "./remoteAgentInstallManager.ts";
 import {
   makeRemoteAgentInstallSourceLoader,
   type RemoteAgentInstallSourceLoader,
 } from "./remoteAgentInstallSource.ts";
-import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
-import { reconcileRemoteAgentLaunchExits } from "./remoteAgentInstall.reconcile.ts";
-import { quarantineRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
-import { markRemoteAgentUpdate } from "./remoteAgentUpdate.state.ts";
-import {
-  isDefinitiveRemoteAgentUpdateFailure,
-  buildRemoteAgentCandidateExitWaitCommand,
-  prepareRemoteAgentCandidate,
-} from "./remoteAgentUpdate.prepare.ts";
 import {
   makeRemoteAgentUpdateScheduler,
   type RemoteAgentUpdateScheduleItem,
@@ -35,7 +22,16 @@ import { registerRemoteAgentUpdateTrigger } from "./remoteAgentInstall.maintenan
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 import type { RemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
 import { emptyRemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
+import { makeRemoteAgentDiscovery } from "./remoteAgentUpdate.discovery.ts";
+import type { RemoteAgentAdmissionPreparation } from "./remoteAgentUpdate.admission.types.ts";
+import { remoteAgentFailureDetail } from "./remoteAgentFailure.ts";
+import { makeRemoteAgentAdmissionPreparation } from "./remoteAgentUpdate.admission.ts";
+import { makeRemoteAgentPreparationQueue } from "./remoteAgentUpdate.queue.ts";
 import { statusFromState, type RemoteAgentUpdateStatus } from "./remoteAgentUpdate.status.ts";
+import {
+  remoteAgentInventoryCapacityIssue,
+  type RemoteAgentInventoryCapacityIssue,
+} from "./remoteAgentUpdate.inventory.ts";
 
 export interface RemoteAgentUpdateCoordinatorShape {
   readonly start: Effect.Effect<void, never, Scope.Scope>;
@@ -51,6 +47,10 @@ export interface RemoteAgentUpdateCoordinatorShape {
     reconnectRequestId?: string,
   ) => Promise<RemoteAgentUpdateStatus>;
   readonly drain: () => Promise<void>;
+  readonly prepareForAdmission: (
+    target: string,
+    requestId: string,
+  ) => Promise<RemoteAgentAdmissionPreparation>;
 }
 
 export class RemoteAgentUpdateCoordinator extends ServiceMap.Service<
@@ -81,63 +81,6 @@ function sourceLoader(): RemoteAgentInstallSourceLoader {
   return makeRemoteAgentInstallSourceLoader();
 }
 
-function versionParts(version: string): ReadonlyArray<number> {
-  return version.match(/\d+/g)?.map((part) => Number(part)) ?? [];
-}
-
-function compareVersions(left: string, right: string): number {
-  const a = versionParts(left);
-  const b = versionParts(right);
-  for (let index = 0; index < Math.max(a.length, b.length); index++) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return left.localeCompare(right);
-}
-
-function sameArtifactIdentity(
-  runtime: Pick<RemoteAgentRuntime, "version" | "sha256" | "buildDigest" | "targetTriple">,
-  artifact: RemoteAgentArtifact,
-): boolean {
-  return (
-    runtime.version === artifact.version &&
-    runtime.sha256 === artifact.sha256 &&
-    runtime.buildDigest === artifact.buildDigest &&
-    runtime.targetTriple === artifact.targetTriple
-  );
-}
-
-function updateForArtifact(
-  state: RemoteAgentRegistry,
-  artifact: RemoteAgentResolvedArtifact["artifact"],
-) {
-  const requestId = `update-${artifact.sha256}`;
-  return { requestId, update: state.updates.find((entry) => entry.requestId === requestId) };
-}
-
-function markUpdateFailure(
-  state: RemoteAgentRegistry,
-  requestId: string,
-  buildId: string,
-  artifact: RemoteAgentArtifact,
-  cause: unknown,
-): RemoteAgentRegistry {
-  const prior = state.updates.find((entry) => entry.requestId === requestId);
-  return markRemoteAgentUpdate(state, {
-    requestId,
-    buildId,
-    phase: isDefinitiveRemoteAgentUpdateFailure(cause) ? "failed" : "uncertain",
-    outcome: isDefinitiveRemoteAgentUpdateFailure(cause) ? "failed" : "uncertain",
-    identity: {
-      version: artifact.version,
-      sha256: artifact.sha256,
-      buildDigest: artifact.buildDigest,
-      targetTriple: artifact.targetTriple,
-    },
-    ...(prior?.epoch ? { epoch: prior.epoch } : {}),
-  });
-}
-
 function isReusableTarget(target: string, check: (target: string) => boolean): boolean {
   try {
     return check(target);
@@ -158,35 +101,6 @@ function stateKey(target: string, root: string): string {
   return `${target}\u0000${root}`;
 }
 
-async function bestEffortFailedCandidateCleanup(
-  target: string,
-  control: RemoteAgentControl,
-  manager: NonNullable<RemoteAgentUpdateCoordinatorDependencies["installManager"]>,
-  buildId: string,
-): Promise<void> {
-  let state = await control.registry.read();
-  const build = state.builds.find((entry) => entry.id === buildId);
-  if (!build) return;
-  await control.registry.update((current) => quarantineRemoteAgentBuild(current, buildId));
-  const launch = state.launches.find((entry) => entry.buildId === buildId);
-  if (launch && launch.phase !== "proven-dead") {
-    try {
-      const result = await control.run(buildRemoteAgentSupervisorShutdownCommand(build.runtime));
-      if (result.trim() === "shutdown-accepted") {
-        const exited = await control.run(buildRemoteAgentCandidateExitWaitCommand(build.runtime));
-        if (exited.trim() === "exited") await reconcileRemoteAgentLaunchExits(control);
-      }
-    } catch {
-      return;
-    }
-  }
-  state = await control.registry.read();
-  if (state.launches.some((entry) => entry.buildId === buildId && entry.phase !== "proven-dead"))
-    return;
-  await control.registry.update((current) => quarantineRemoteAgentBuild(current, buildId));
-  if (manager.cleanup) await manager.cleanup(target).catch(() => undefined);
-}
-
 export function makeRemoteAgentUpdateCoordinator(
   dependencies: RemoteAgentUpdateCoordinatorDependencies = {},
 ): RemoteAgentUpdateCoordinatorShape {
@@ -205,16 +119,26 @@ export function makeRemoteAgentUpdateCoordinator(
       void Effect.runPromise(
         Effect.logWarning("remote agent update preparation failed", {
           target,
-          cause: cause instanceof Error ? cause.message : String(cause),
+          cause: remoteAgentFailureDetail(cause),
         }),
       );
     });
   let scheduler: RemoteAgentUpdateScheduler;
-  const rootInFlight = new Map<string, Promise<void>>();
+  const runPreparation = makeRemoteAgentPreparationQueue();
   const rootByTarget = new Map<string, string>();
   const stateByRoot = new Map<string, RemoteAgentRegistry>();
   let sourceChangeInFlight: Promise<void> | undefined;
 
+  const onState = (target: string, control: RemoteAgentControl, state: RemoteAgentRegistry) => {
+    rootByTarget.set(target, control.root);
+    stateByRoot.set(stateKey(target, control.root), state);
+  };
+  const discover = makeRemoteAgentDiscovery({
+    manager,
+    loadSource,
+    onState,
+    ...(dependencies.connect ? { connect: dependencies.connect } : {}),
+  });
   const prepare = async (target: string, item: RemoteAgentUpdateScheduleItem): Promise<void> => {
     if (!isRemoteAgentExecutionTarget(target)) return;
     if (
@@ -225,73 +149,9 @@ export function makeRemoteAgentUpdateCoordinator(
       return;
     const control = await openControl(target);
     rootByTarget.set(target, control.root);
-    const key = stateKey(target, control.root);
-    const existing = rootInFlight.get(key);
-    if (existing) return existing;
-    let resolvedArtifact: RemoteAgentArtifact | undefined;
-    let requestId: string | undefined;
-    let buildId: string | undefined;
-    const task = (async () => {
-      const source: RemoteAgentInstallSource = await loadSource();
-      const resolved = await manager.resolveArtifact({
-        executionTargetId: target,
-        source,
-        verifySignature: true,
-      });
-      resolvedArtifact = resolved.artifact;
-      const state = await control.registry.read();
-      stateByRoot.set(key, state);
-      const identity = updateForArtifact(state, resolved.artifact);
-      requestId = identity.requestId;
-      buildId = [
-        resolved.artifact.version,
-        resolved.artifact.sha256,
-        resolved.artifact.targetTriple,
-      ].join(":");
-      const update = identity.update;
-      const current = state.builds.find((build) => build.id === state.current);
-      const pending = state.builds.find((build) => build.id === state.pending);
-      if (current && compareVersions(resolved.artifact.version, current.runtime.version) < 0)
-        return;
-      if (pending && compareVersions(resolved.artifact.version, pending.runtime.version) < 0)
-        return;
-      if (current && sameArtifactIdentity(current.runtime, resolved.artifact)) return;
-      const failedIdentityMatches =
-        update?.identity !== undefined
-          ? sameArtifactIdentity(update.identity, resolved.artifact)
-          : update?.buildId === buildId;
-      if (update?.phase === "failed" && failedIdentityMatches && !item.forceRetry) return;
-      await prepareRemoteAgentCandidate({
-        target,
-        requestId,
-        artifact: resolved.artifact,
-        source,
-        control,
-        install: (input) => manager.install(input),
-        ...(dependencies.connect ? { connect: dependencies.connect } : {}),
-      });
-      stateByRoot.set(key, await control.registry.read());
-    })();
-    rootInFlight.set(key, task);
-    try {
-      await task;
-    } catch (cause) {
-      if (cause instanceof RemoteAgentCapacityUnavailableError) {
-        stateByRoot.set(key, await control.registry.read().catch(() => emptyRemoteAgentRegistry()));
-        return;
-      }
-      if (!resolvedArtifact || !requestId || !buildId) throw cause;
-      await control.registry
-        .update((currentState) =>
-          markUpdateFailure(currentState, requestId!, buildId!, resolvedArtifact!, cause),
-        )
-        .catch(() => undefined);
-      stateByRoot.set(key, await control.registry.read().catch(() => emptyRemoteAgentRegistry()));
-      if (isDefinitiveRemoteAgentUpdateFailure(cause))
-        await bestEffortFailedCandidateCleanup(target, control, manager, buildId);
-    } finally {
-      if (rootInFlight.get(key) === task) rootInFlight.delete(key);
-    }
+    await runPreparation(stateKey(target, control.root), async () => {
+      await discover(target, control, { refreshSource: false, forceRetry: item.forceRetry });
+    });
   };
 
   scheduler =
@@ -349,21 +209,20 @@ export function makeRemoteAgentUpdateCoordinator(
       const control = await openControl(target);
       const state = await control.registry.read();
       stateByRoot.set(stateKey(target, control.root), state);
-      let capacityNoncompliant = false;
+      let capacityIssue: RemoteAgentInventoryCapacityIssue | null = null;
       try {
-        capacityNoncompliant = (await control.inventory?.())?.noncompliant ?? false;
+        const inventory = await control.inventory?.();
+        capacityIssue = inventory ? remoteAgentInventoryCapacityIssue(inventory) : null;
       } catch {
         // Keep status conservative when physical inventory cannot be verified.
       }
-      return statusFromState(
-        target,
-        control.root,
-        state,
-        false,
-        reconnectRequestId,
-        capacityNoncompliant,
-      );
+      return statusFromState(target, control.root, state, false, reconnectRequestId, capacityIssue);
     },
     drain: () => scheduler.drain(),
+    prepareForAdmission: makeRemoteAgentAdmissionPreparation({
+      openControl,
+      runPreparation,
+      discover,
+    }),
   } satisfies RemoteAgentUpdateCoordinatorShape;
 }

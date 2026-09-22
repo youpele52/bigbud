@@ -15,6 +15,8 @@ export function remoteAgentRuntimeSummary(
     )
     .toSorted((a, b) => b.promotion - a.promotion)[0];
   return {
+    ...(admission?.warning ? { warning: admission.warning } : {}),
+    ...(admission?.requestedVersion ? { requestedVersion: admission.requestedVersion } : {}),
     ...(current ? { currentBuildId: current.id } : {}),
     ...(admission?.outcome ? { outcome: admission.outcome } : {}),
     ...(admission?.requestedBuildId ? { requestedBuildId: admission.requestedBuildId } : {}),

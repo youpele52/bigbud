@@ -56,24 +56,6 @@ export function makeSendTurnEffect(
         mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
     });
 
-    ctx.activeTurnId = turnId;
-    ctx.lastPlanFingerprint = undefined;
-    ctx.session = {
-      ...ctx.session,
-      activeTurnId: turnId,
-      updatedAt: yield* deps.nowIso,
-    };
-
-    yield* deps.offerRuntimeEvent({
-      type: "turn.started",
-      ...(yield* deps.makeEventStamp()),
-      sessionEpoch: ctx.sessionEpoch,
-      provider: PROVIDER,
-      threadId: input.threadId,
-      turnId,
-      payload: { model: resolvedModel },
-    });
-
     const promptParts: Array<ContentBlock> = [];
     if (input.input?.trim()) {
       promptParts.push({ type: "text", text: input.input.trim() });
@@ -118,21 +100,37 @@ export function makeSendTurnEffect(
       });
     }
 
-    const result = yield* ctx.acp
-      .prompt({ prompt: promptParts })
-      .pipe(
-        Effect.mapError((error) =>
-          mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
-        ),
-      );
-
-    ctx.turns.push({ id: turnId, items: [{ prompt: promptParts, result }] });
+    ctx.activeTurnId = turnId;
+    ctx.lastPlanFingerprint = undefined;
     ctx.session = {
       ...ctx.session,
+      status: "running",
       activeTurnId: turnId,
       updatedAt: yield* deps.nowIso,
-      model: resolvedModel,
     };
+
+    yield* deps.offerRuntimeEvent({
+      type: "turn.started",
+      ...(yield* deps.makeEventStamp()),
+      sessionEpoch: ctx.sessionEpoch,
+      provider: PROVIDER,
+      threadId: input.threadId,
+      turnId,
+      payload: { model: resolvedModel },
+    });
+
+    const result = yield* ctx.acp.prompt({ prompt: promptParts }).pipe(
+      Effect.mapError((error) =>
+        mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+      ),
+      Effect.tapError(() => Effect.sync(() => settleIdleDevinTurn(ctx))),
+    );
+
+    ctx.turns.push({ id: turnId, items: [{ prompt: promptParts, result }] });
+    settleIdleDevinTurn(ctx, {
+      updatedAt: yield* deps.nowIso,
+      model: resolvedModel,
+    });
 
     yield* deps.offerRuntimeEvent({
       type: "turn.completed",
@@ -153,4 +151,18 @@ export function makeSendTurnEffect(
       resumeCursor: ctx.session.resumeCursor,
     };
   });
+}
+
+function settleIdleDevinTurn(
+  ctx: DevinSessionContext,
+  next?: { readonly updatedAt?: string; readonly model?: string },
+) {
+  ctx.activeTurnId = undefined;
+  ctx.session = {
+    ...ctx.session,
+    status: "ready",
+    activeTurnId: undefined,
+    ...(next?.updatedAt !== undefined ? { updatedAt: next.updatedAt } : {}),
+    ...(next?.model !== undefined ? { model: next.model } : {}),
+  };
 }

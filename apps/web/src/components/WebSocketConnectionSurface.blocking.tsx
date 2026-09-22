@@ -93,6 +93,8 @@ function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectio
 }
 
 const startupFailureCopy = {
+  backend_modules_invalid:
+    "The local backend installation is incomplete or damaged. Reinstalling bigbud repairs it.",
   bootstrap_failed: "The local startup configuration could not be applied.",
   child_exit_before_ready: "The local backend stopped before it was ready.",
   child_spawn_failed: "The local backend process could not be started.",

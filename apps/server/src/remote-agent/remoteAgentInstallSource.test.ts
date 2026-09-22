@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { version as serverVersion } from "../../package.json" with { type: "json" };
 import { loadRemoteAgentInstallSource } from "./remoteAgentInstallSource.ts";
 
 const temporaryDirectories: string[] = [];
@@ -76,6 +77,36 @@ describe("remote agent install source", () => {
     );
   });
 
+  it("resolves an unpinned local development build from the latest stable release", async () => {
+    const request = vi.fn((_input: string | URL | Request, _init?: RequestInit) =>
+      Promise.resolve(new Response(JSON.stringify(installSource()))),
+    );
+
+    await loadRemoteAgentInstallSource(
+      { BIGBUD_DESKTOP_PACKAGED: "0" },
+      { fetch: request, logger: () => undefined },
+    );
+
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.json",
+    );
+  });
+
+  it("keeps packaged builds pinned to their release version", async () => {
+    const request = vi.fn((_input: string | URL | Request, _init?: RequestInit) =>
+      Promise.resolve(new Response(JSON.stringify(installSource()))),
+    );
+
+    await loadRemoteAgentInstallSource(
+      { BIGBUD_DESKTOP_PACKAGED: "1" },
+      { fetch: request, logger: () => undefined },
+    );
+
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.json`,
+    );
+  });
+
   it("allows an explicit source override and only follows same-origin redirects", async () => {
     const responses = [
       new Response(null, {
@@ -104,41 +135,36 @@ describe("remote agent install source", () => {
     ]);
   });
 
-  it("uses the checksummed release manifest only for unpackaged desktop development", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(null, { status: 404 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(installSource().manifest), {
-          status: 200,
-          headers: { "content-length": "500" },
-        }),
-      );
-    vi.stubGlobal("fetch", request);
-
-    const source = await loadRemoteAgentInstallSource({ BIGBUD_DESKTOP_PACKAGED: "0" });
-
-    expect(source.allowUntrustedDevelopmentArtifact).toBe(true);
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(String(request.mock.calls[1]?.[0])).toContain("remote-agent-manifest.json");
-  });
-
-  it("explains how to recover when the development release is not published", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
-
-    await expect(loadRemoteAgentInstallSource({ BIGBUD_DESKTOP_PACKAGED: "0" })).rejects.toThrow(
-      "Publish the matching release",
-    );
-  });
-
-  it("fails closed on a packaged 404 without a development fallback", async () => {
+  it("fails closed when the latest development release has no install source", async () => {
     const request = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
-    vi.stubGlobal("fetch", request);
 
-    await expect(loadRemoteAgentInstallSource({ BIGBUD_DESKTOP_PACKAGED: "1" })).rejects.toThrow(
-      "HTTP 404",
+    await expect(
+      loadRemoteAgentInstallSource(
+        { BIGBUD_DESKTOP_PACKAGED: "0" },
+        { fetch: request, logger: () => undefined },
+      ),
+    ).rejects.toThrow(
+      "Remote agent install source is unavailable (HTTP 404). Publish the matching release, configure BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH or BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL with a signed install source, or choose Direct SSH in the project's connection settings.",
     );
     expect(request).toHaveBeenCalledOnce();
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.json",
+    );
+  });
+
+  it("fails closed when the packaged release has no install source", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+
+    await expect(
+      loadRemoteAgentInstallSource(
+        { BIGBUD_DESKTOP_PACKAGED: "1" },
+        { fetch: request, logger: () => undefined },
+      ),
+    ).rejects.toThrow("Remote agent install source is unavailable (HTTP 404)");
+    expect(request).toHaveBeenCalledOnce();
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.json`,
+    );
   });
 
   it("rejects malformed metadata without retrying", async () => {

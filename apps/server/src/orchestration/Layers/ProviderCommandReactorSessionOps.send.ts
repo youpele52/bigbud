@@ -22,6 +22,7 @@ import type {
   SendTurnForThreadInput,
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
+import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
 
 export const sendTurnAttempt = (
   services: SessionOpServices,
@@ -163,7 +164,7 @@ export const sendTurnAttempt = (
     const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
 
     const providerAttachments = normalizedAttachments.filter(
-      (attachment) => attachment.type !== "thread",
+      (attachment) => attachment.type === "file" || attachment.type === "image",
     );
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const turn = yield* providerService.sendTurn({
@@ -176,6 +177,11 @@ export const sendTurnAttempt = (
     });
 
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    const liveSession = yield* providerService
+      .listSessions()
+      .pipe(
+        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+      );
     const sessionUnchangedSinceSend =
       sessionBeforeTurn !== null &&
       sessionAfterTurn !== null &&
@@ -185,7 +191,13 @@ export const sendTurnAttempt = (
       sessionAfterTurn.providerName === sessionBeforeTurn.providerName &&
       sessionAfterTurn.runtimeMode === sessionBeforeTurn.runtimeMode;
 
-    if (sessionAfterTurn === null || sessionUnchangedSinceSend) {
+    if (
+      shouldStampRunningSessionAfterSend({
+        liveSession,
+        sessionAfterTurn,
+        sessionUnchangedSinceSend,
+      })
+    ) {
       yield* setThreadSession({
         threadId: input.threadId,
         session: {

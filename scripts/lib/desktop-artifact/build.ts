@@ -22,6 +22,7 @@ import {
 import {
   pickExternalDependencies,
   pruneMacServerRuntimeArtifacts,
+  pruneNonRuntimeTypeArtifacts,
   pruneSourceMaps,
   resolveElectronBuilderBinary,
   stagePackagedOpencodeWindowsBinary,
@@ -256,6 +257,10 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     yield* Effect.log("[desktop-artifact] Pruning non-mac native runtime artifacts...");
     yield* pruneMacServerRuntimeArtifacts(path.join(stageServerDir, "node_modules"));
   }
+  yield* pruneNonRuntimeTypeArtifacts(
+    path.join(stageServerDir, "node_modules"),
+    "server runtime dependencies",
+  );
 
   // electron-builder silently strips node_modules from extraResources copies.
   // Rename to _modules so the directory survives into the packaged app.

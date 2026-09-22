@@ -125,6 +125,47 @@ describe("OpenCode active turn inspection", () => {
     expect(recordValue.activeTurnId).toBe(TURN_ID);
   });
 
+  it("recovers completed final output when OpenCode is idle but local polling is stuck", async () => {
+    const recordValue = record(client({ statuses: { [SESSION_ID]: { type: "idle" } } }));
+    recordValue.promptTurnId = TURN_ID;
+    recordValue.recoverPromptCompletion = vi.fn(async () => {
+      recordValue.promptTerminalEventsEnqueuedTurnId = TURN_ID;
+      recordValue.activeTurnId = undefined;
+      recordValue.promptTurnId = undefined;
+      return true;
+    });
+
+    const result = await Effect.runPromise(inspectionFor(recordValue)(THREAD_ID, TURN_ID));
+
+    expect(result).toMatchObject({
+      status: "running",
+      completionEvidence: { source: "opencode.prompt.terminal-ingestion-pending" },
+    });
+    expect(recordValue.recoverPromptCompletion).toHaveBeenCalledWith(TURN_ID);
+  });
+
+  it("fails bounded finalization instead of reporting working forever", async () => {
+    const clientValue = client({ statuses: { [SESSION_ID]: { type: "idle" } } });
+    const recordValue = record(clientValue);
+    recordValue.promptTurnId = TURN_ID;
+    recordValue.promptFinalizationStartedAtMs = 1_000;
+    recordValue.recoverPromptCompletion = vi.fn(async () => false);
+    const inspection = makeActiveTurnInspection({
+      sessions: new Map([[THREAD_ID, recordValue]]),
+      now: () => 31_001,
+      finalizationDeadlineMs: 30_000,
+    });
+
+    const result = await Effect.runPromise(inspection(THREAD_ID, TURN_ID));
+
+    expect(result).toMatchObject({
+      status: "failed",
+      errorEvidence: { source: "opencode.prompt.final-output-timeout" },
+    });
+    expect(recordValue.activeTurnId).toBeUndefined();
+    expect(recordValue.promptTurnId).toBeUndefined();
+  });
+
   it("ignores idle inspection results when a newer turn starts during the request", async () => {
     const clientValue = client();
     const recordValue = record(clientValue);
@@ -171,7 +212,10 @@ describe("OpenCode active turn inspection", () => {
       status: "unavailable",
       errorEvidence: { source: "opencode.session.get" },
     });
-    expect(clientValue.session.get).toHaveBeenCalledWith({ sessionID: SESSION_ID });
+    expect(clientValue.session.get).toHaveBeenCalledWith(
+      { sessionID: SESSION_ID },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(recordValue.activeTurnId).toBe(TURN_ID);
     expect(recordValue.wasRetrying).toBe(true);
     expect(recordValue.updatedAt).toBe("2026-08-18T00:00:00.000Z");
@@ -209,6 +253,25 @@ describe("OpenCode active turn inspection", () => {
       _tag: "ProviderAdapterRequestError",
       method: "activeTurnInspection",
     });
+  });
+
+  it("bounds inspection when the OpenCode SDK ignores abort", async () => {
+    vi.useFakeTimers();
+    const clientValue = client();
+    clientValue.session.status.mockImplementationOnce(() => new Promise(() => undefined));
+    const inspection = makeActiveTurnInspection({
+      sessions: new Map([[THREAD_ID, record(clientValue)]]),
+      requestDeadlineMs: 100,
+    });
+
+    const operation = Effect.runPromise(inspection(THREAD_ID, TURN_ID));
+    const assertion = expect(operation).rejects.toMatchObject({
+      _tag: "ProviderAdapterRequestError",
+      method: "activeTurnInspection",
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await assertion;
+    vi.useRealTimers();
   });
 
   it.each([["different", NEXT_TURN_ID]] as const)(

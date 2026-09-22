@@ -5,12 +5,19 @@ import { Effect } from "effect";
 import { ProviderAdapterRequestError } from "../../Errors.ts";
 import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
+import { runWithAbortableDeadline } from "./Adapter.requestDeadline.ts";
 
 interface ActiveTurnInspectionDeps {
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
   /** Recovery probes must not settle local state; the supervisor owns settlement. */
   readonly settleCompleted?: boolean;
+  readonly now?: () => number;
+  readonly finalizationDeadlineMs?: number;
+  readonly requestDeadlineMs?: number;
 }
+
+export const OPENCODE_FINALIZATION_DEADLINE_MS = 30_000;
+const OPENCODE_INSPECTION_REQUEST_DEADLINE_MS = 10_000;
 
 function unavailable(): ProviderActiveTurnInspection {
   return {
@@ -19,6 +26,17 @@ function unavailable(): ProviderActiveTurnInspection {
     errorEvidence: {
       source: "opencode.active-turn-inspection",
       detail: "The native OpenCode session identity is not available in this server process.",
+    },
+  };
+}
+
+function terminalIngestionPending(observedAt: string): ProviderActiveTurnInspection {
+  return {
+    status: "running",
+    observedAt,
+    completionEvidence: {
+      source: "opencode.prompt.terminal-ingestion-pending",
+      detail: "Canonical completion events are queued for runtime ingestion.",
     },
   };
 }
@@ -49,10 +67,23 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
 
     return Effect.tryPromise({
       try: async (): Promise<ProviderActiveTurnInspection> => {
+        const requestDeadlineMs = deps.requestDeadlineMs ?? OPENCODE_INSPECTION_REQUEST_DEADLINE_MS;
         const [statusResponse, questionsResponse, permissionsResponse] = await Promise.all([
-          record.client.session.status(),
-          record.client.question.list(),
-          record.client.permission.list(),
+          runWithAbortableDeadline({
+            operation: "OpenCode session.status",
+            timeoutMs: requestDeadlineMs,
+            run: (signal) => record.client.session.status(undefined, { signal }),
+          }),
+          runWithAbortableDeadline({
+            operation: "OpenCode question.list",
+            timeoutMs: requestDeadlineMs,
+            run: (signal) => record.client.question.list(undefined, { signal }),
+          }),
+          runWithAbortableDeadline({
+            operation: "OpenCode permission.list",
+            timeoutMs: requestDeadlineMs,
+            run: (signal) => record.client.permission.list(undefined, { signal }),
+          }),
         ]);
         if (record.activeTurnId !== turnId || deps.sessions.get(threadId) !== record) {
           return unavailable();
@@ -90,7 +121,57 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
         }
 
         if (nativeStatusType === "idle") {
+          if (record.promptTerminalEventsEnqueuedTurnId === turnId) {
+            return terminalIngestionPending(observedAt);
+          }
+          if (record.activeTurnId !== turnId) return unavailable();
           if (record.activeTurnId === turnId && record.promptTurnId === turnId) {
+            if (deps.settleCompleted === false) {
+              return {
+                status: "running",
+                observedAt,
+                completionEvidence: {
+                  source: "opencode.prompt.final-output",
+                  detail: "The local prompt is still collecting its final output.",
+                },
+              };
+            }
+            const nowMs = deps.now?.() ?? Date.now();
+            record.promptFinalizationStartedAtMs ??= nowMs;
+            const deadlineMs = deps.finalizationDeadlineMs ?? OPENCODE_FINALIZATION_DEADLINE_MS;
+            let recoveryError: unknown;
+            try {
+              const recovered = await record.recoverPromptCompletion?.(turnId);
+              if (recovered || record.promptTerminalEventsEnqueuedTurnId === turnId) {
+                return terminalIngestionPending(observedAt);
+              }
+              if (record.activeTurnId !== turnId) return unavailable();
+            } catch (cause) {
+              recoveryError = cause;
+            }
+            if (nowMs - record.promptFinalizationStartedAtMs >= deadlineMs) {
+              const detail = recoveryError
+                ? `OpenCode became idle, but final output recovery failed: ${formatManagedServerSdkError(recoveryError)}`
+                : "OpenCode became idle, but final output did not become available before the recovery deadline.";
+              record.activeTurnId = undefined;
+              record.promptTurnId = undefined;
+              record.promptSettlementTurnId = undefined;
+              record.promptTerminalEventsEnqueuedTurnId = undefined;
+              record.recoverPromptCompletion = undefined;
+              record.promptStartedAtMs = undefined;
+              record.promptFinalizationStartedAtMs = undefined;
+              record.lastError = detail;
+              record.updatedAt = observedAt;
+              return {
+                status: "failed",
+                observedAt,
+                errorEvidence: {
+                  source: "opencode.prompt.final-output-timeout",
+                  detail,
+                },
+              };
+            }
+            if (recoveryError) throw recoveryError;
             return {
               status: "running",
               observedAt,
@@ -126,8 +207,11 @@ export function makeActiveTurnInspection(deps: ActiveTurnInspectionDeps) {
           };
         }
 
-        const sessionResponse = await record.client.session.get({
-          sessionID: record.opencodeSessionId,
+        const sessionResponse = await runWithAbortableDeadline({
+          operation: "OpenCode session.get",
+          timeoutMs: requestDeadlineMs,
+          run: (signal) =>
+            record.client.session.get({ sessionID: record.opencodeSessionId }, { signal }),
         });
         if (sessionResponse.error) {
           if (isNotFound(sessionResponse.error)) {

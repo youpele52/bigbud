@@ -5,6 +5,11 @@ import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
 import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.projectAddActions.remote.types";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
+import {
+  notifyRemoteAgentConnection,
+  remoteAgentConnectionWarning,
+} from "./SidebarRemoteAgentConnection.notifications";
 import {
   completeRemoteAgentAdmission,
   getRemoteAgentAdmissionRequestId,
@@ -54,10 +59,12 @@ export function SidebarRemoteAgentInstallDialog({
         useRemoteAccessStore
           .getState()
           .recordRemoteConnection(request.executionTargetId, connected);
+        notifyRemoteAgentConnection(request.executionTargetId, connected);
         completeRemoteAgentAdmission(request.executionTargetId, admissionRequestId);
         setConnectionRequestId(null);
         await onInstalled(
-          `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`,
+          remoteAgentConnectionWarning(connected) ??
+            `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`,
         );
         return;
       }
@@ -66,7 +73,13 @@ export function SidebarRemoteAgentInstallDialog({
       });
       setStagedMessage(result.message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to install the remote agent.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : stagedMessage
+            ? "Failed to prepare and connect the remote agent."
+            : "Failed to install the remote agent.",
+      );
     } finally {
       setIsInstalling(false);
     }
@@ -91,25 +104,31 @@ export function SidebarRemoteAgentInstallDialog({
                     `Download a verified agent for ${request.targetLabel}. Existing connections remain on their current runtime.`}
                 </p>
                 <p>
-                  The update starts only when you choose Connect new session. Reloads, reconnects
-                  and retries do not activate it.
+                  The downloaded agent may be prepared in the background. Connect new session checks
+                  for the latest compatible agent and verifies it before connecting. Existing
+                  sessions keep their original runtime.
                 </p>
                 <p>
                   The agent is installed under <code>~/.bigbud/agent</code>, runs with your SSH user
                   permissions, and opens no inbound network port.
                 </p>
                 <p>
-                  Choose No to cancel setup. The remote agent will not be changed and the remote
-                  project will not be created or updated.
+                  Cancel setup to leave the project unchanged. Downloaded agent builds stay
+                  available for a later connection.
                 </p>
-                {error ? <p className="text-destructive">{error}</p> : null}
+                {error ? (
+                  <div role="alert" className="space-y-2 text-destructive">
+                    <p>{error}</p>
+                    {!error.includes("Direct SSH") ? <p>{REMOTE_AGENT_FAILURE_GUIDANCE}</p> : null}
+                  </div>
+                ) : null}
               </div>
             }
             cancelLabel={stagedMessage ? "Later" : "Cancel"}
             confirmLabel={
               isInstalling
                 ? stagedMessage
-                  ? "Connecting..."
+                  ? "Preparing and connecting..."
                   : "Downloading..."
                 : stagedMessage
                   ? "Connect new session"

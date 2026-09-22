@@ -30,13 +30,6 @@ export interface RemoteAgentConnectionFactory {
   readonly expectedEpoch?: string;
 }
 
-export type RemoteAgentDispatchState =
-  | "unadmitted"
-  | "not-dispatched"
-  | "may-have-been-sent"
-  | "accepted"
-  | "terminal";
-
 export class RemoteAgentLifecycle {
   private snapshotValue: RemoteAgentLifecycleSnapshot = { state: "unavailable" };
   private connectionValue: RemoteAgentConnection | null = null;
@@ -137,10 +130,6 @@ export class RemoteAgentLifecycle {
         (capability) => capability.name === name && capability.major === major,
       ) ?? false
     );
-  }
-
-  canFallback(state: RemoteAgentDispatchState): boolean {
-    return state === "unadmitted";
   }
 
   close(): void {

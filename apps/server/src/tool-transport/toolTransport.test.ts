@@ -42,7 +42,7 @@ describe("toolTransport", () => {
     });
   });
 
-  it("resolves the explicit direct SSH fallback before command dispatch", () => {
+  it("resolves an explicitly selected Direct SSH transport before command dispatch", () => {
     vi.mocked(resolveRemoteAgentTransportExport).mockReturnValueOnce("direct-ssh");
 
     expect(
@@ -119,7 +119,30 @@ describe("toolTransport", () => {
     expect(runSshToolCommand).not.toHaveBeenCalled();
   });
 
-  it("keeps explicit fallback commands on the ssh tool runner", async () => {
+  it.each(["agent unavailable", "connection lost after acceptance"])(
+    "never retries through Direct SSH when %s",
+    async (message) => {
+      const failure = new Error(message);
+      remoteAgentToolRunner.mockRejectedValueOnce(failure);
+      await expect(
+        runToolCommand({
+          target: {
+            transport: "agent",
+            executionTargetId: "ssh:host=devbox&transport=agent",
+            cwd: "/workspace",
+          },
+          command: "sh",
+          args: ["-c", "echo example"],
+          invocationId: "stable-invocation",
+        }),
+      ).rejects.toBe(failure);
+      expect(remoteAgentToolRunner).toHaveBeenCalledOnce();
+      expect(runSshToolCommand).not.toHaveBeenCalled();
+      expect(runLocalToolCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps manually selected Direct SSH commands on the ssh tool runner", async () => {
     vi.mocked(runSshToolCommand).mockResolvedValueOnce({
       stdout: "",
       stderr: "",

@@ -50,6 +50,7 @@ function client(input: {
 async function collectEvents(input: {
   readonly resolve: () => Promise<RemoteAgentWorkspaceClient>;
   readonly count: number;
+  readonly includeInitialReconciliation?: boolean;
 }) {
   const watch = makeRemoteWorkspaceWatch(
     { resolve: input.resolve },
@@ -61,12 +62,40 @@ async function collectEvents(input: {
   });
   return Array.from(
     await Effect.runPromise(
-      Effect.flatMap(watch, (stream) => Stream.runCollect(Stream.take(stream, input.count))),
+      Effect.flatMap(watch, (stream) =>
+        Stream.runCollect(
+          Stream.take(
+            input.includeInitialReconciliation
+              ? stream
+              : Stream.filter(
+                  stream,
+                  (event) =>
+                    !(
+                      event.version === 2 &&
+                      event.type === "rescanRequired" &&
+                      event.reason === "watchInvalidated" &&
+                      event.sequence === 0
+                    ),
+                ),
+            input.count,
+          ),
+        ),
+      ),
     ),
   );
 }
 
 describe("remote workspace watcher", () => {
+  it("reconciles the preview once watching is active even without subsequent edits", async () => {
+    const events = await collectEvents({
+      resolve: async () => client({}),
+      count: 1,
+      includeInitialReconciliation: true,
+    });
+    expect(events).toMatchObject([
+      { type: "rescanRequired", reason: "watchInvalidated", relativePath: "docs", sequence: 0 },
+    ]);
+  });
   it("forwards exact changed paths without polling in TypeScript", async () => {
     const events = await collectEvents({
       resolve: async () =>
@@ -203,7 +232,7 @@ describe("remote workspace watcher", () => {
     expect(events.map((event) => event.type)).toEqual(["directoryChanged", "rescanRequired"]);
   });
 
-  it("preserves an event received before the older start response", async () => {
+  it("reconciles before buffered startup events without losing events or sequence order", async () => {
     const events = await collectEvents({
       resolve: async () =>
         client({
@@ -230,11 +259,24 @@ describe("remote workspace watcher", () => {
             },
           ],
         }),
-      count: 2,
+      count: 3,
+      includeInitialReconciliation: true,
     });
 
-    expect(events.map((event) => event.type)).toEqual(["directoryChanged", "rescanRequired"]);
-    expect(events.map((event) => event.backend)).toEqual(["poll", "poll"]);
+    expect(events).toMatchObject([
+      { type: "rescanRequired", generation: 8, sequence: 0, backend: "poll" },
+      { type: "directoryChanged", generation: 8, sequence: 1, backend: "poll" },
+      {
+        type: "rescanRequired",
+        reason: "watchInvalidated",
+        generation: 8,
+        sequence: 3,
+        backend: "poll",
+      },
+    ]);
+    expect(events.map((event) => (event.version === 2 ? event.sequence : undefined))).toEqual([
+      0, 1, 3,
+    ]);
   });
 
   it("fails once when the connected agent does not support watching", async () => {

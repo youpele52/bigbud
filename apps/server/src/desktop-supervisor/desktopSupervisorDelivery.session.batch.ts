@@ -10,20 +10,18 @@ const textEncoder = new TextEncoder();
 
 export function makeProtocolBatch(
   session: DesktopSupervisorDeliverySession,
-  event: OrchestrationEvent,
+  events: ReadonlyArray<OrchestrationEvent>,
 ): DesktopSupervisorEventBatch {
   const value = {
     serverEpoch: session.coordinator.serverEpoch,
     subscriptionGeneration: session.generation,
     consumerId: session.consumerId,
     consumerGeneration: session.generation,
-    events: [
-      {
-        eventId: event.eventId,
-        sequence: event.sequence,
-        canonicalPayload: textEncoder.encode(JSON.stringify(event)),
-      },
-    ],
+    events: events.map((event) => ({
+      eventId: event.eventId,
+      sequence: event.sequence,
+      canonicalPayload: textEncoder.encode(JSON.stringify(event)),
+    })),
   };
   return { ...value, batchId: computeDesktopSupervisorBatchId(value) };
 }
@@ -31,7 +29,7 @@ export function makeProtocolBatch(
 export function makeDeliveryBatch(
   session: DesktopSupervisorDeliverySession,
   batch: DesktopSupervisorEventBatch,
-  event: OrchestrationEvent,
+  events: ReadonlyArray<OrchestrationEvent>,
 ): OrchestrationDeliveryBatch {
   return {
     type: "batch",
@@ -41,18 +39,28 @@ export function makeDeliveryBatch(
     serverEpoch: session.coordinator.serverEpoch,
     subscriptionGeneration: session.generation,
     batchId: batch.batchId,
-    events: [event],
+    events: [...events],
   };
 }
 
-export async function deliverEvent(
+export async function deliverBatch(
   session: DesktopSupervisorDeliverySession,
-  event: OrchestrationEvent,
+  events: ReadonlyArray<OrchestrationEvent>,
 ): Promise<void> {
-  if (event.sequence !== session.deliverySequence + 1) {
+  const first = events[0];
+  const final = events.at(-1);
+  if (!first || !final) {
+    throw new Error("desktop delivery batch must contain at least one event");
+  }
+  if (first.sequence !== session.deliverySequence + 1) {
     throw new Error("desktop delivery sequence gap requires replay");
   }
-  const protocolBatch = makeProtocolBatch(session, event);
+  for (let index = 1; index < events.length; index += 1) {
+    if (events[index]!.sequence !== events[index - 1]!.sequence + 1) {
+      throw new Error("desktop delivery batch must be contiguous");
+    }
+  }
+  const protocolBatch = makeProtocolBatch(session, events);
   session.shadow.observeBatch(protocolBatch, session.route);
   if (session.route === "supervisor") {
     await session.coordinator.deliverSupervisor(protocolBatch);
@@ -65,7 +73,7 @@ export async function deliverEvent(
       batchId: protocolBatch.batchId,
       consumerId: session.consumerId,
       consumerGeneration: session.generation,
-      finalSequence: event.sequence,
+      finalSequence: final.sequence,
       resolve: () => {
         clearTimeout(timeout);
         resolve();
@@ -76,6 +84,6 @@ export async function deliverEvent(
       },
     };
   });
-  await session.output.offer(makeDeliveryBatch(session, protocolBatch, event));
+  await session.output.offer(makeDeliveryBatch(session, protocolBatch, events));
   await acknowledged;
 }

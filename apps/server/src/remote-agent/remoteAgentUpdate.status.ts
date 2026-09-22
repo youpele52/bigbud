@@ -1,4 +1,8 @@
 import type { RemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
+import {
+  remoteAgentInventoryCapacityMessage,
+  type RemoteAgentInventoryCapacityIssue,
+} from "./remoteAgentUpdate.inventory.ts";
 
 export type RemoteAgentUpdateStatusPhase =
   | "idle"
@@ -33,7 +37,7 @@ export function statusFromState(
   state: RemoteAgentRegistry,
   authenticationUnavailable = false,
   reconnectRequestId?: string,
-  capacityNoncompliant = false,
+  capacityIssue: RemoteAgentInventoryCapacityIssue | null = null,
 ): RemoteAgentUpdateStatus {
   const update = state.updates.at(-1);
   const current = state.builds.find((build) => build.id === state.current);
@@ -48,12 +52,10 @@ export function statusFromState(
   const phase: RemoteAgentUpdateStatusPhase =
     authenticationUnavailable && !update
       ? "waiting-for-authentication"
-      : capacityNoncompliant
+      : capacityIssue
         ? "capacity-noncompliant"
         : update?.phase === "waiting-for-capacity"
-          ? update.outcome === "capacity" && state.builds.length > 2
-            ? "capacity-noncompliant"
-            : "waiting-for-capacity"
+          ? "waiting-for-capacity"
           : update?.phase === "reserved"
             ? "reserved"
             : update?.phase === "installing"
@@ -83,6 +85,14 @@ export function statusFromState(
     candidateVersion: candidate?.runtime.version ?? update?.identity?.version ?? null,
     predecessorVersion: predecessor?.runtime.version ?? null,
     outcome: update?.outcome ?? null,
-    reason: admission?.failureCode ?? update?.outcome ?? null,
+    reason:
+      (capacityIssue ? remoteAgentInventoryCapacityMessage(capacityIssue) : undefined) ??
+      admission?.warning ??
+      retired?.warning ??
+      admission?.failureCode ??
+      retired?.failureCode ??
+      update?.reason ??
+      update?.outcome ??
+      null,
   };
 }

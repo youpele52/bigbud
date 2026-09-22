@@ -47,12 +47,12 @@ import {
 } from "./ProviderService.sessionLifecycle.ts";
 import { makeProcessProviderRuntimeEvent } from "./ProviderService.runtimeEvents.ts";
 import { ProviderTurnLivenessRepository } from "../../persistence/Services/ProviderTurnLiveness.ts";
+import { recordAcceptedSendTurn } from "./ProviderService.sendTurn.record.ts";
 import {
   makeTurnLivenessOperations,
   markProviderTurnTerminal,
   monitorProviderRuntimeEvents,
   observeProviderRuntimeEvent,
-  startAcceptedTurnLiveness,
 } from "./ProviderService.turnLiveness.ts";
 import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
@@ -184,25 +184,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
       const turn = yield* routed.adapter.sendTurn(input);
-      const turnStartedAt = new Date().toISOString();
-      yield* startAcceptedTurnLiveness(turnLiveness, {
+      yield* recordAcceptedSendTurn({
+        adapter: routed.adapter,
+        directory,
+        liveness: turnLiveness,
         threadId: input.threadId,
         turnId: turn.turnId,
-        provider: routed.adapter.provider,
         sessionEpoch: input.sessionEpoch ?? 0,
-        startedAt: turnStartedAt,
-      });
-      yield* directory.upsert({
-        threadId: input.threadId,
-        provider: routed.adapter.provider,
-        status: "running",
         ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
-        runtimePayload: {
-          ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
-          activeTurnId: turn.turnId,
-          lastRuntimeEvent: "provider.sendTurn",
-          lastRuntimeEventAt: turnStartedAt,
-        },
+        ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       });
       yield* analytics.record("provider.turn.sent", {
         provider: routed.adapter.provider,

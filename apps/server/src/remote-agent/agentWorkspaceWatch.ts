@@ -225,68 +225,76 @@ export function makeAgentWorkspaceWatch(
                 const client = await (reconnect ? reconnect() : resolver.resolve(targetId));
                 reconnect = client.reconnect;
                 await client.openWorkspace(workspaceHandle, workspaceRoot);
-                let receivedEventBeforeStart = false;
+                const bufferedEvents: RemoteAgentWorkspaceWatchEvent[] = [];
+                let subscriptionActive = false;
+                const emitAgentEvent = (event: RemoteAgentWorkspaceWatchEvent) => {
+                  const continuityLost =
+                    (lastGeneration !== 0 && event.generation !== lastGeneration) ||
+                    (event.generation === lastGeneration && event.sequence !== lastSequence + 1);
+                  lastGeneration = event.generation;
+                  lastSequence = event.sequence;
+                  const nextBackend = event.backend
+                    ? rustWatchBackend(event.backend)
+                    : currentBackend;
+                  if (nextBackend !== currentBackend) {
+                    currentBackend = nextBackend;
+                    runFork(
+                      Effect.logInfo("Workspace watcher backend changed").pipe(
+                        Effect.annotateLogs({ targetId, workspaceRoot, backend: currentBackend }),
+                      ),
+                    );
+                  }
+                  offer(
+                    continuityLost
+                      ? rescanEvent({
+                          relativePath,
+                          generation: event.generation,
+                          sequence: event.sequence,
+                          reason: "watchInvalidated",
+                          backend: currentBackend,
+                        })
+                      : projectEvent(relativePath, event, currentBackend),
+                  );
+                };
                 const subscription = await client.watchDirectory({
                   subscriptionId: randomUUID(),
                   workspaceHandle,
                   path: relativePath || ".",
                   onEvent: (event) => {
-                    receivedEventBeforeStart = true;
-                    const continuityLost =
-                      (lastGeneration !== 0 && event.generation !== lastGeneration) ||
-                      (event.generation === lastGeneration &&
-                        lastSequence !== 0 &&
-                        event.sequence !== lastSequence + 1);
-                    lastGeneration = event.generation;
-                    lastSequence = event.sequence;
-                    const nextBackend = event.backend
-                      ? rustWatchBackend(event.backend)
-                      : currentBackend;
-                    if (nextBackend !== currentBackend) {
-                      currentBackend = nextBackend;
-                      runFork(
-                        Effect.logInfo("Workspace watcher backend changed").pipe(
-                          Effect.annotateLogs({ targetId, workspaceRoot, backend: currentBackend }),
-                        ),
-                      );
+                    if (!subscriptionActive) {
+                      bufferedEvents.push(event);
+                      return;
                     }
-                    offer(
-                      continuityLost
-                        ? rescanEvent({
-                            relativePath,
-                            generation: event.generation,
-                            sequence: event.sequence,
-                            reason: "watchInvalidated",
-                            backend: currentBackend,
-                          })
-                        : projectEvent(relativePath, event, currentBackend),
-                    );
+                    emitAgentEvent(event);
                   },
                 });
                 closeActive = subscription.close;
                 consecutiveStartFailures = 0;
-                if (!receivedEventBeforeStart) {
-                  lastGeneration = subscription.started.generation;
-                  lastSequence = 0;
-                  currentBackend = rustWatchBackend(subscription.started.backend);
-                }
+                const firstBufferedEvent = bufferedEvents[0];
+                lastGeneration = firstBufferedEvent?.generation ?? subscription.started.generation;
+                lastSequence = 0;
+                currentBackend = rustWatchBackend(
+                  firstBufferedEvent?.backend || subscription.started.backend,
+                );
                 runFork(
                   Effect.logInfo("Workspace watcher started").pipe(
                     Effect.annotateLogs({ targetId, workspaceRoot, backend: currentBackend }),
                   ),
                 );
-                if (recoveryRequired) {
-                  offer(
-                    rescanEvent({
-                      relativePath,
-                      generation: lastGeneration,
-                      sequence: 0,
-                      reason: "agentRestarted",
-                      backend: currentBackend,
-                    }),
-                  );
-                  recoveryRequired = false;
-                }
+                // Reconcile reads made before this subscription became active, including
+                // paths that did not appear in any events delivered during startup.
+                offer(
+                  rescanEvent({
+                    relativePath,
+                    generation: lastGeneration,
+                    sequence: 0,
+                    reason: recoveryRequired ? "agentRestarted" : "watchInvalidated",
+                    backend: currentBackend,
+                  }),
+                );
+                recoveryRequired = false;
+                subscriptionActive = true;
+                for (const event of bufferedEvents) emitAgentEvent(event);
                 const abortWait = waitForAbort(abortController.signal);
                 await Promise.race([subscription.failed, abortWait.promise]);
                 abortWait.cancel();

@@ -6,6 +6,11 @@ export const DESKTOP_SUPERVISOR_HEARTBEAT_MS = 5_000;
 export const DESKTOP_SUPERVISOR_INPUT_CAPACITY = 2_000;
 export const DESKTOP_SUPERVISOR_OUTPUT_CAPACITY = 32;
 export const DESKTOP_SUPERVISOR_REPLAY_BUFFER_CAPACITY = 4_000;
+// Matches the Rust supervisor's negotiated in-flight event limit. A caught-up
+// consumer still receives a single event immediately; queued bursts are
+// drained into one acknowledgement round trip.
+export const DESKTOP_SUPERVISOR_BATCH_EVENT_CAPACITY = 256;
+export const DESKTOP_SUPERVISOR_BATCH_PAYLOAD_CAPACITY_BYTES = 512 * 1024;
 export const DESKTOP_SUPERVISOR_APPLICATION_ACK_TIMEOUT_MS = 15_000;
 export const DESKTOP_SUPERVISOR_BASELINE_ACK_TIMEOUT_MS = 65_000;
 // Detached generation fences use logical LRU eviction at this hard capacity.

@@ -76,6 +76,12 @@ export interface ActiveOpencodeSession {
   textStream?: OpencodeTextStream;
   /** Local prompt polling owns final text and completion for this turn. */
   promptTurnId?: TurnId | undefined;
+  promptSettlementTurnId?: TurnId | undefined;
+  /** Canonical terminal events were queued; runtime ingestion now owns settlement. */
+  promptTerminalEventsEnqueuedTurnId?: TurnId | undefined;
+  promptStartedAtMs?: number | undefined;
+  promptFinalizationStartedAtMs?: number | undefined;
+  recoverPromptCompletion?: ((turnId: TurnId) => Promise<boolean>) | undefined;
   lastUsage: ThreadTokenUsageSnapshot | undefined;
   /** True while the session is in a retry/rate-limit back-off loop. */
   wasRetrying: boolean;
