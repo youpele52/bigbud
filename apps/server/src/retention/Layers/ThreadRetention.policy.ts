@@ -1,6 +1,6 @@
 import type { ThreadRetentionPolicy } from "@bigbud/contracts/core/settings.threadRetention.ts";
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 
 import type { ThreadRetentionRepositoryShape } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
@@ -39,6 +39,7 @@ export function makeSetThreadRetentionPolicy(input: {
         return yield* retentionError("failed", "Thread retention settings are unavailable.");
       }
       const previousPolicy = yield* input.getPolicy;
+      const previousAuthority = yield* input.repository.getPolicyAuthority();
       const persist = (policy: ThreadRetentionPolicy) =>
         persistThreadRetentionPolicy({
           policy,
@@ -48,6 +49,17 @@ export function makeSetThreadRetentionPolicy(input: {
             input.repository.setPolicyAuthority({
               policy: nextPolicy,
               source: "explicit",
+              selectionMode:
+                policy === "never"
+                  ? (Option.getOrUndefined(previousAuthority)?.selectionMode ?? "legacy-subtree")
+                  : "per-thread",
+              ageCriterion:
+                policy === "never"
+                  ? (Option.getOrUndefined(previousAuthority)?.ageCriterion ??
+                    "last-conversation-activity")
+                  : request.policy === "never"
+                    ? "last-conversation-activity"
+                    : (request.ageCriterion ?? "last-conversation-activity"),
               updatedAt: new Date().toISOString(),
             }),
         });
@@ -61,6 +73,7 @@ export function makeSetThreadRetentionPolicy(input: {
       const result = yield* input.repository.consumePolicyChallenge({
         token: request.challengeToken,
         policy: request.policy,
+        ageCriterion: request.ageCriterion ?? "last-conversation-activity",
         consumedAt: new Date().toISOString(),
       });
       if (result === "expired") {

@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 
 import { DirectResourceCleanupRepositoryLive } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { makeRetentionCleanupReader } from "../../persistence/Layers/ThreadRetentionRepository.cleanup.ts";
 import {
   finalizeProjectCanonicalHistory,
   finalizeProjectCanonicalHistoryWithCoverage,
@@ -119,6 +120,47 @@ layer("project canonical checkpoint production paths", (it) => {
           (candidate) => candidate.operationId === f.operationId,
         ).length,
         1,
+      );
+    }),
+  );
+
+  it.effect("recovers canonical history after physical cleanup becomes blocked", () =>
+    Effect.gen(function* () {
+      const f = yield* prepareProjectCanonicalRows("blocked-prune");
+      const failed = yield* Effect.exit(
+        finalizeProjectCanonicalHistoryWithCoverage({
+          sql: f.sql,
+          projectId: f.projectId,
+          recordCheckpoint: Effect.fail(new Error("checkpoint unavailable")),
+        }),
+      );
+      assert.equal(failed._tag, "Failure");
+      yield* f.sql`UPDATE direct_resource_cleanup_plans SET state = 'blocked'
+        WHERE operation_id = ${f.operationId}`;
+      assert.equal(
+        yield* makeRetentionCleanupReader(f.sql)("project-source-blocked-prune"),
+        "pending",
+      );
+      assert.equal(
+        (yield* f.repository.listCanonicalPruning(10)).filter(
+          (candidate) => candidate.operationId === f.operationId,
+        ).length,
+        1,
+      );
+      yield* finalizeProjectCanonicalHistoryWithCoverage({
+        sql: f.sql,
+        projectId: f.projectId,
+        recordCheckpoint: f.repository.markCanonicalPruned(f.operationId, f.now, "project"),
+      });
+      assert.equal(
+        (yield* f.repository.listCanonicalPruning(10)).filter(
+          (candidate) => candidate.operationId === f.operationId,
+        ).length,
+        0,
+      );
+      assert.equal(
+        yield* makeRetentionCleanupReader(f.sql)("project-source-blocked-prune"),
+        "blocked",
       );
     }),
   );

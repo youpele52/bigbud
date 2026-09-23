@@ -6,7 +6,11 @@ import {
   PositiveInt,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
-import { FiniteThreadRetentionPolicy } from "../core/settings.threadRetention";
+import {
+  FiniteThreadRetentionPolicy,
+  ThreadRetentionAgeCriterion,
+  ThreadRetentionSelectionMode,
+} from "../core/settings.threadRetention";
 
 export const ThreadRetentionConsentTrigger = Schema.Literals(["manual", "policy-change"]);
 export type ThreadRetentionConsentTrigger = typeof ThreadRetentionConsentTrigger.Type;
@@ -15,6 +19,8 @@ export const ThreadRetentionConsentChallenge = Schema.Struct({
   token: TrimmedNonEmptyString,
   trigger: ThreadRetentionConsentTrigger,
   policy: FiniteThreadRetentionPolicy,
+  selectionMode: ThreadRetentionSelectionMode,
+  ageCriterion: ThreadRetentionAgeCriterion,
   cutoffAt: IsoDateTime,
   expiresAt: IsoDateTime,
   singleUse: Schema.Literal(true),
@@ -24,6 +30,7 @@ export type ThreadRetentionConsentChallenge = typeof ThreadRetentionConsentChall
 export const ServerPreviewThreadRetentionInput = Schema.Struct({
   trigger: ThreadRetentionConsentTrigger,
   policy: FiniteThreadRetentionPolicy,
+  ageCriterion: Schema.optional(ThreadRetentionAgeCriterion),
 });
 export type ServerPreviewThreadRetentionInput = typeof ServerPreviewThreadRetentionInput.Type;
 
@@ -43,10 +50,12 @@ export type ThreadRetentionMaintenanceState = typeof ThreadRetentionMaintenanceS
 export const ServerThreadRetentionPreview = Schema.Struct({
   generatedAt: IsoDateTime,
   policy: FiniteThreadRetentionPolicy,
+  selectionMode: ThreadRetentionSelectionMode,
+  ageCriterion: ThreadRetentionAgeCriterion,
   cutoffAt: IsoDateTime,
   eligibleCount: NonNegativeInt,
-  oldestEligibleActivityAt: Schema.NullOr(IsoDateTime),
-  newestEligibleActivityAt: Schema.NullOr(IsoDateTime),
+  oldestEligibleAgeAt: Schema.NullOr(IsoDateTime),
+  newestEligibleAgeAt: Schema.NullOr(IsoDateTime),
   exclusionCounts: Schema.Array(ThreadRetentionExclusionCount),
   estimatedAttachmentCount: NonNegativeInt,
   estimatedResourceCount: NonNegativeInt,
@@ -77,14 +86,26 @@ export const ServerThreadRetentionRun = Schema.Struct({
   runId: TrimmedNonEmptyString,
   trigger: Schema.Literals(["manual", "scheduled"]),
   policy: FiniteThreadRetentionPolicy,
+  selectionMode: Schema.optional(ThreadRetentionSelectionMode),
+  ageCriterion: Schema.optional(ThreadRetentionAgeCriterion),
   cutoffAt: IsoDateTime,
   status: ThreadRetentionRunStatus,
   eligibleCount: NonNegativeInt,
   selectedCount: NonNegativeInt,
   requestedCount: NonNegativeInt,
+  uncertainCount: Schema.optional(NonNegativeInt),
   completedCount: NonNegativeInt,
   skippedCount: NonNegativeInt,
   failedCount: NonNegativeInt,
+  removableResourceCount: Schema.optional(NonNegativeInt),
+  completedResourceCount: Schema.optional(NonNegativeInt),
+  retainedResourceCount: Schema.optional(NonNegativeInt),
+  retainedSharedResourceCount: Schema.optional(NonNegativeInt),
+  retainedExternalResourceCount: Schema.optional(NonNegativeInt),
+  unverifiedResourceCount: Schema.optional(NonNegativeInt),
+  pendingResourceCount: Schema.optional(NonNegativeInt),
+  blockedResourceCount: Schema.optional(NonNegativeInt),
+  canonicalPendingCount: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   completedAt: Schema.NullOr(IsoDateTime),
@@ -123,6 +144,8 @@ export type ServerListThreadRetentionRunsInput = typeof ServerListThreadRetentio
 export const ServerListThreadRetentionRunsResult = Schema.Struct({
   runs: Schema.Array(ServerThreadRetentionRun),
   availability: Schema.Literals(["available", "disabled"]),
+  policySelectionMode: Schema.optional(ThreadRetentionSelectionMode),
+  policyAgeCriterion: Schema.optional(ThreadRetentionAgeCriterion),
 });
 export type ServerListThreadRetentionRunsResult = typeof ServerListThreadRetentionRunsResult.Type;
 
@@ -130,6 +153,7 @@ export const ServerSetThreadRetentionPolicyInput = Schema.Union([
   Schema.Struct({ policy: Schema.Literal("never") }),
   Schema.Struct({
     policy: FiniteThreadRetentionPolicy,
+    ageCriterion: Schema.optional(ThreadRetentionAgeCriterion),
     challengeToken: TrimmedNonEmptyString,
   }),
 ]);

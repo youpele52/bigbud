@@ -30,8 +30,11 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           WHERE consumed_at IS NOT NULL OR expires_at < ${challenge.issuedAt}
         `;
         yield* input.sql`INSERT INTO thread_retention_consent_challenges (
-          challenge_id, token_hash, trigger_kind, policy, cutoff_at, expires_at, issued_at
+          challenge_id, token_hash, trigger_kind, policy, selection_mode,
+          age_criterion, cutoff_at, expires_at, issued_at
         ) VALUES (${challenge.challengeId}, ${tokenHash(token)}, ${challenge.trigger}, ${challenge.policy},
+          ${challenge.selectionMode ?? "per-thread"},
+          ${challenge.ageCriterion ?? "last-conversation-activity"},
           ${challenge.cutoffAt}, ${challenge.expiresAt}, ${challenge.issuedAt})`;
         yield* input.sql`
           DELETE FROM thread_retention_consent_challenges
@@ -54,11 +57,14 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           challengeId: string;
           trigger: string;
           policy: string;
+          selectionMode: string;
+          ageCriterion: string;
           cutoffAt: string;
           expiresAt: string;
           consumedAt: string | null;
         }>`
           SELECT challenge_id AS "challengeId", trigger_kind AS trigger, policy,
+            selection_mode AS "selectionMode", age_criterion AS "ageCriterion",
             cutoff_at AS "cutoffAt", expires_at AS "expiresAt", consumed_at AS "consumedAt"
           FROM thread_retention_consent_challenges
           WHERE token_hash = ${tokenHash(challenge.token)} LIMIT 1
@@ -68,6 +74,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           row === undefined ||
           row.trigger !== challenge.trigger ||
           row.policy !== challenge.policy ||
+          row.selectionMode !== (challenge.selectionMode ?? "per-thread") ||
+          row.ageCriterion !== (challenge.ageCriterion ?? "last-conversation-activity") ||
           row.cutoffAt !== challenge.cutoffAt
         )
           return "invalid";
@@ -76,6 +84,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
         const consumed = yield* input.sql`
           UPDATE thread_retention_consent_challenges SET consumed_at = ${challenge.consumedAt}
           WHERE challenge_id = ${row.challengeId} AND consumed_at IS NULL
+            AND selection_mode = ${row.selectionMode} AND age_criterion = ${row.ageCriterion}
             AND expires_at >= ${challenge.consumedAt}
           RETURNING challenge_id
         `;
@@ -86,6 +95,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
   const readChallenge = (token: string) =>
     input.sql<RetentionChallenge>`
       SELECT challenge_id AS "challengeId", trigger_kind AS trigger, policy,
+        selection_mode AS "selectionMode", age_criterion AS "ageCriterion",
         cutoff_at AS "cutoffAt", issued_at AS "issuedAt", expires_at AS "expiresAt",
         consumed_at AS "consumedAt"
       FROM thread_retention_consent_challenges
@@ -101,13 +111,19 @@ export function makeThreadRetentionChallenges<E, R>(input: {
     input.sql.withTransaction(
       Effect.gen(function* () {
         const challenge = yield* readChallenge(request.token);
-        if (Option.isNone(challenge) || challenge.value.trigger !== request.trigger) {
+        if (
+          Option.isNone(challenge) ||
+          challenge.value.trigger !== request.trigger ||
+          challenge.value.selectionMode !== "per-thread"
+        ) {
           return { consumed: false, result: "invalid" } as const;
         }
         const result = yield* consumeChallenge({
           token: request.token,
           trigger: request.trigger,
           policy: challenge.value.policy,
+          selectionMode: challenge.value.selectionMode,
+          ageCriterion: challenge.value.ageCriterion,
           cutoffAt: challenge.value.cutoffAt,
           consumedAt: request.consumedAt,
         });
@@ -115,6 +131,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
         const equivalent = yield* input.sql<{ runId: string; cutoffAt: string }>`
           SELECT run_id AS "runId", cutoff_at AS "cutoffAt" FROM thread_retention_runs
           WHERE trigger_kind = 'manual' AND policy = ${challenge.value.policy}
+            AND selection_mode = ${challenge.value.selectionMode ?? "legacy-subtree"}
+            AND age_criterion = ${challenge.value.ageCriterion ?? "last-conversation-activity"}
             AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
             AND cutoff_at = ${challenge.value.cutoffAt}
           ORDER BY CASE WHEN active_slot = 1 THEN 0 ELSE 1 END,
@@ -127,6 +145,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
             UPDATE thread_retention_runs SET status = 'cancelled', completed_at = ${request.consumedAt},
               updated_at = ${request.consumedAt}, active_slot = NULL
             WHERE trigger_kind = 'manual' AND policy = ${challenge.value.policy}
+              AND selection_mode = ${challenge.value.selectionMode ?? "legacy-subtree"}
+              AND age_criterion = ${challenge.value.ageCriterion ?? "last-conversation-activity"}
               AND run_id <> ${canonical.runId} AND status = 'queued' AND active_slot IS NULL
               AND cutoff_at = ${canonical.cutoffAt}
               AND selected_count = 0 AND requested_count = 0
@@ -145,6 +165,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
             runId: request.runId,
             trigger: request.trigger,
             policy: challenge.value.policy,
+            selectionMode: challenge.value.selectionMode,
+            ageCriterion: challenge.value.ageCriterion,
             cutoffAt: challenge.value.cutoffAt,
             createdAt: request.consumedAt,
           }),
@@ -167,6 +189,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           token: request.token,
           trigger: "manual",
           policy: challenge.value.policy,
+          selectionMode: challenge.value.selectionMode,
+          ageCriterion: challenge.value.ageCriterion,
           cutoffAt: challenge.value.cutoffAt,
           consumedAt: request.consumedAt,
         });
@@ -174,6 +198,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           ? ({
               consumed: true,
               policy: challenge.value.policy,
+              selectionMode: challenge.value.selectionMode,
+              ageCriterion: challenge.value.ageCriterion,
               cutoffAt: challenge.value.cutoffAt,
             } as const)
           : ({ consumed: false, result } as const);
@@ -183,6 +209,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
   const consumePolicyChallenge = (request: {
     readonly token: string;
     readonly policy: RetentionChallenge["policy"];
+    readonly ageCriterion?: RetentionChallenge["ageCriterion"];
     readonly consumedAt: string;
   }) =>
     input.sql.withTransaction(
@@ -191,7 +218,9 @@ export function makeThreadRetentionChallenges<E, R>(input: {
         if (
           Option.isNone(challenge) ||
           challenge.value.trigger !== "policy-change" ||
-          challenge.value.policy !== request.policy
+          challenge.value.policy !== request.policy ||
+          challenge.value.selectionMode !== "per-thread" ||
+          challenge.value.ageCriterion !== (request.ageCriterion ?? "last-conversation-activity")
         ) {
           return "invalid" as const;
         }
@@ -199,6 +228,8 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           token: request.token,
           trigger: "policy-change",
           policy: request.policy,
+          selectionMode: "per-thread",
+          ageCriterion: request.ageCriterion ?? "last-conversation-activity",
           cutoffAt: challenge.value.cutoffAt,
           consumedAt: request.consumedAt,
         });

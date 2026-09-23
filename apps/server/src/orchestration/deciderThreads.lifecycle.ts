@@ -195,7 +195,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         type: "thread.deletion-requested",
         payload: {
           threadId: command.threadId,
-          mode: "subtree",
+          mode: command.selectionMode === "per-thread" ? "single" : "subtree",
           deletingAt: command.createdAt,
         },
       };

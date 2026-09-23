@@ -89,6 +89,8 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverPreviewThreadRetention: "server.previewThreadRetention",
   serverStartThreadRetention: "server.startThreadRetention",
+  serverGetThreadRetentionRun: "server.getThreadRetentionRun",
+  serverListThreadRetentionRuns: "server.listThreadRetentionRuns",
   serverSetThreadRetentionPolicy: "server.setThreadRetentionPolicy",
   serverSetThreadPinned: "server.setThreadPinned",
   serverReadDocumentUrl: "server.readDocumentUrl",

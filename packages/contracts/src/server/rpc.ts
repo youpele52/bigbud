@@ -48,6 +48,8 @@ import {
   WsServerPreviewThreadRetentionRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerStartThreadRetentionRpc,
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
 } from "./rpc.retention";
 import {
   WsGitCheckoutRpc,
@@ -168,6 +170,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerPreviewThreadRetentionRpc,
   WsServerStartThreadRetentionRpc,
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerSetThreadPinnedRpc,
   WsServerReadDocumentUrlRpc,

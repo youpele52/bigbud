@@ -3,11 +3,11 @@ import {
   THREAD_RETENTION_POLICIES,
   THREAD_RETENTION_POLICY_LABELS,
   type FiniteThreadRetentionPolicy,
+  type ThreadRetentionAgeCriterion,
   type ThreadRetentionPolicy,
 } from "@bigbud/contracts/core/settings.threadRetention";
 import type {
   ServerThreadRetentionPreview,
-  ServerThreadRetentionResult,
   ThreadRetentionConsentTrigger,
 } from "@bigbud/contracts/server/threadRetention";
 import { Trash2Icon } from "lucide-react";
@@ -24,28 +24,40 @@ import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ThreadBehaviorSettingsRows } from "./ThreadRetentionSettingsSection.behavior";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
+import { ThreadRetentionCriterionSelect } from "./ThreadRetentionCriterionSelect";
 import {
-  formatRetentionCleanupResult,
-  getRetentionCleanupLoadingToast,
-  getRetentionCleanupSuccessToast,
+  formatRetentionResourceOutcomes,
+  useThreadRetentionProgress,
+} from "./ThreadRetentionSettingsSection.progress";
+import {
+  getRetentionRunStatusMessage,
   getRetentionPolicyUpdatedToast,
 } from "./ThreadRetentionSettingsSection.logic";
 
 export function ThreadRetentionSettingsSection() {
   const policy = useSettings().threadRetentionPolicy;
+  const progress = useThreadRetentionProgress();
   const actionButtonRef = useRef<HTMLButtonElement>(null);
   const policyTriggerRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const previewSequenceRef = useRef(0);
   const mountedRef = useRef(true);
   const [manualPolicy, setManualPolicy] = useState<FiniteThreadRetentionPolicy>("7-days");
+  const [manualCriterion, setManualCriterion] = useState<ThreadRetentionAgeCriterion>(
+    "last-conversation-activity",
+  );
+  const [automaticCriterion, setAutomaticCriterion] = useState<ThreadRetentionAgeCriterion>(
+    "last-conversation-activity",
+  );
   const [dialogTrigger, setDialogTrigger] = useState<ThreadRetentionConsentTrigger | null>(null);
   const [dialogPolicy, setDialogPolicy] = useState<FiniteThreadRetentionPolicy>("7-days");
+  const [dialogCriterion, setDialogCriterion] = useState<ThreadRetentionAgeCriterion>(
+    "last-conversation-activity",
+  );
   const [preview, setPreview] = useState<ServerThreadRetentionPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
-  const [result, setResult] = useState<ServerThreadRetentionResult | null>(null);
   const busy = previewBusy || actionBusy;
 
   useEffect(() => {
@@ -55,6 +67,8 @@ export function ThreadRetentionSettingsSection() {
       previewSequenceRef.current += 1;
     };
   }, []);
+
+  useEffect(() => setAutomaticCriterion(progress.policyCriterion), [progress.policyCriterion]);
 
   const showError = useCallback((title: string, error: unknown) => {
     toastManager.add({
@@ -72,12 +86,22 @@ export function ThreadRetentionSettingsSection() {
     setPreviewBusy(false);
   }, []);
 
+  const cancelDialog = useCallback(() => {
+    if (dialogTrigger === "policy-change") setAutomaticCriterion(progress.policyCriterion);
+    closeDialog();
+  }, [closeDialog, dialogTrigger, progress.policyCriterion]);
+
   const requestPreview = useCallback(
-    async (trigger: ThreadRetentionConsentTrigger, nextPolicy: FiniteThreadRetentionPolicy) => {
+    async (
+      trigger: ThreadRetentionConsentTrigger,
+      nextPolicy: FiniteThreadRetentionPolicy,
+      criterion: ThreadRetentionAgeCriterion,
+    ) => {
       const sequence = previewSequenceRef.current + 1;
       previewSequenceRef.current = sequence;
       setDialogTrigger(trigger);
       setDialogPolicy(nextPolicy);
+      setDialogCriterion(criterion);
       setPreview(null);
       setPreviewError(null);
       setPreviewBusy(true);
@@ -85,6 +109,7 @@ export function ThreadRetentionSettingsSection() {
         const result = await ensureNativeApi().server.previewThreadRetention({
           trigger,
           policy: nextPolicy,
+          ageCriterion: criterion,
         });
         if (!mountedRef.current || sequence !== previewSequenceRef.current) return;
         setPreview(result);
@@ -102,7 +127,12 @@ export function ThreadRetentionSettingsSection() {
 
   const handlePolicyChange = useCallback(
     (nextPolicy: ThreadRetentionPolicy) => {
-      if (nextPolicy === policy) return;
+      if (
+        nextPolicy === policy &&
+        progress.policyMode === "per-thread" &&
+        automaticCriterion === progress.policyCriterion
+      )
+        return;
       if (nextPolicy === "never") {
         setActionBusy(true);
         void ensureNativeApi()
@@ -114,15 +144,22 @@ export function ThreadRetentionSettingsSection() {
           });
         return;
       }
-      void requestPreview("policy-change", nextPolicy);
+      void requestPreview("policy-change", nextPolicy, automaticCriterion);
     },
-    [policy, requestPreview, showError],
+    [
+      policy,
+      progress.policyMode,
+      progress.policyCriterion,
+      automaticCriterion,
+      requestPreview,
+      showError,
+    ],
   );
 
   const confirmAction = useCallback(async () => {
     if (!preview || !dialogTrigger) return;
     if (Date.parse(preview.challenge.expiresAt) <= Date.now()) {
-      await requestPreview(dialogTrigger, preview.policy);
+      await requestPreview(dialogTrigger, preview.policy, dialogCriterion);
       return;
     }
     const trigger = dialogTrigger;
@@ -134,27 +171,19 @@ export function ThreadRetentionSettingsSection() {
       if (trigger === "policy-change") {
         const settings = await ensureNativeApi().server.setThreadRetentionPolicy({
           policy: nextPolicy,
+          ageCriterion: dialogCriterion,
           challengeToken,
         });
         applySettingsUpdated(settings);
+        void progress.refreshRecent().catch(() => {});
         toastManager.add({ type: "success", ...getRetentionPolicyUpdatedToast() });
         return;
       }
-      const toastId = toastManager.add({
-        type: "loading",
-        timeout: 0,
-        ...getRetentionCleanupLoadingToast(),
-      });
       try {
         const run = await ensureNativeApi().server.startThreadRetention({ challengeToken });
-        toastManager.update(toastId, {
-          type: run.pendingCount > 0 ? "warning" : "success",
-          timeout: 5_000,
-          ...getRetentionCleanupSuccessToast(run),
-        });
-        if (mountedRef.current) setResult(run);
+        progress.beginRun(run);
       } catch (error) {
-        toastManager.update(toastId, {
+        toastManager.add({
           type: "error",
           timeout: 5_000,
           title: "Unable to confirm thread cleanup",
@@ -166,9 +195,12 @@ export function ThreadRetentionSettingsSection() {
     } finally {
       if (mountedRef.current) setActionBusy(false);
     }
-  }, [closeDialog, dialogTrigger, preview, requestPreview, showError]);
+  }, [closeDialog, dialogTrigger, dialogCriterion, preview, progress, requestPreview, showError]);
 
-  const selectedLabel = THREAD_RETENTION_POLICY_LABELS[policy];
+  const selectedLabel =
+    policy !== "never" && progress.policyMode !== "per-thread"
+      ? `${THREAD_RETENTION_POLICY_LABELS[policy]} · Legacy subtree cleanup`
+      : THREAD_RETENTION_POLICY_LABELS[policy];
   const dialogTitle =
     dialogTrigger === "policy-change"
       ? `Delete old threads after ${THREAD_RETENTION_POLICY_LABELS[dialogPolicy]}?`
@@ -181,13 +213,24 @@ export function ThreadRetentionSettingsSection() {
         <SettingsRow
           title="Automatically delete old threads"
           searchTerms={["Automatic thread cleanup"]}
-          description="The server checks daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Eligible root thread subtrees are cleaned up together. Pinned and active subtrees are skipped."
+          description="The server checks daily. New policies delete eligible threads individually using the selected age rule. Existing legacy policies keep subtree cleanup until you review and change them."
           layout="three-quarter-control"
           statusPlacement="below"
           status={
-            result ? (
+            progress.run ? (
               <p className="text-xs text-muted-foreground">
-                Latest cleanup: {formatRetentionCleanupResult(result)}
+                {getRetentionRunStatusMessage(progress.run)}
+                {formatRetentionResourceOutcomes(progress.run)
+                  ? ` · ${formatRetentionResourceOutcomes(progress.run)}`
+                  : ""}
+              </p>
+            ) : progress.recentRuns[0] ? (
+              <p className="text-xs text-muted-foreground">
+                Latest cleanup: {progress.recentRuns[0].completedCount} threads deleted ·{" "}
+                {progress.recentRuns[0].status.replaceAll("_", " ")}
+                {formatRetentionResourceOutcomes(progress.recentRuns[0])
+                  ? ` · ${formatRetentionResourceOutcomes(progress.recentRuns[0])}`
+                  : ""}
               </p>
             ) : null
           }
@@ -223,8 +266,24 @@ export function ThreadRetentionSettingsSection() {
           }
         />
         <SettingsRow
+          title="Automatic cleanup age rule"
+          description="Created uses the thread's creation time. Last conversation activity uses the latest user message, or creation if there is none."
+          layout="three-quarter-control"
+          control={
+            <ThreadRetentionCriterionSelect
+              value={automaticCriterion}
+              disabled={busy}
+              label="Automatic cleanup age rule"
+              onChange={(criterion) => {
+                setAutomaticCriterion(criterion);
+                if (policy !== "never") void requestPreview("policy-change", policy, criterion);
+              }}
+            />
+          }
+        />
+        <SettingsRow
           title="Delete eligible threads now"
-          description="Runs now across all projects. Choose the cutoff in the confirmation dialog. Automatic cleanup above is separate. Eligible root thread subtrees and their descendants are cleaned up together."
+          description="Runs across all projects. Choose a period and age rule in the confirmation dialog. Eligible threads are deleted individually; surviving children are kept."
           layout="three-quarter-control"
           control={
             <Button
@@ -234,7 +293,7 @@ export function ThreadRetentionSettingsSection() {
               className="w-full font-normal text-xs text-destructive [:hover,:active,[data-pressed]]:text-destructive"
               disabled={busy}
               onClick={() => {
-                void requestPreview("manual", manualPolicy);
+                void requestPreview("manual", manualPolicy, manualCriterion);
               }}
             >
               <Trash2Icon />
@@ -247,7 +306,7 @@ export function ThreadRetentionSettingsSection() {
       <AlertDialog
         open={dialogTrigger !== null}
         onOpenChange={(open) => {
-          if (!open) closeDialog();
+          if (!open) cancelDialog();
         }}
       >
         <AlertDialogPopup
@@ -272,7 +331,7 @@ export function ThreadRetentionSettingsSection() {
             confirmDisabled={
               previewBusy || !preview || (dialogTrigger === "manual" && preview.eligibleCount === 0)
             }
-            onCancel={closeDialog}
+            onCancel={cancelDialog}
             onConfirm={() => void confirmAction()}
             descriptionSlot={
               <div className="space-y-3">
@@ -288,7 +347,7 @@ export function ThreadRetentionSettingsSection() {
                         ) {
                           const nextPolicy = value as FiniteThreadRetentionPolicy;
                           setManualPolicy(nextPolicy);
-                          void requestPreview("manual", nextPolicy);
+                          void requestPreview("manual", nextPolicy, manualCriterion);
                         }
                       }}
                     >
@@ -307,6 +366,15 @@ export function ThreadRetentionSettingsSection() {
                         ))}
                       </SelectPopup>
                     </Select>
+                    <ThreadRetentionCriterionSelect
+                      value={manualCriterion}
+                      disabled={actionBusy || previewBusy}
+                      label="One-off cleanup age rule"
+                      onChange={(criterion) => {
+                        setManualCriterion(criterion);
+                        void requestPreview("manual", manualPolicy, criterion);
+                      }}
+                    />
                   </div>
                 ) : null}
                 <ThreadRetentionConfirmationContent

@@ -19,6 +19,7 @@ import { OrchestrationProjectionPipeline } from "../../orchestration/Services/Pr
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { recoverPreparedCleanupFinalizes } from "./DirectResourceCleanupRecovery.finalize.ts";
 import { recoverDirectCleanupWorktrees } from "./DirectResourceCleanupRecovery.worktrees.ts";
+import { reconcileStagedManagedAttachments } from "../../attachments/managedAttachmentOwnership.ts";
 
 export function recoverCanonicalPruningCandidates<
   Candidate,
@@ -69,6 +70,11 @@ export const recoverDirectResourceCleanupOnce = Effect.fn(
   const orchestration = yield* OrchestrationEngineService;
   const claimedAt = new Date().toISOString();
   const expectedPlatform = `${process.platform}/${process.arch}`;
+  yield* reconcileStagedManagedAttachments(config.attachmentsDir).pipe(
+    Effect.catch((error) =>
+      Effect.logWarning("managed attachment reconciliation deferred", { detail: String(error) }),
+    ),
+  );
   yield* repository.reconcilePrepared(claimedAt, expectedPlatform);
   yield* recoverPreparedCleanupFinalizes({
     repository,

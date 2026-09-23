@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 
 import { ThreadId } from "@bigbud/contracts";
@@ -6,23 +7,27 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { threadAttachmentRelativePaths, type ThreadAssetRow } from "./EntityPurge.assets.ts";
 import { exclusiveOwnedLogNames, readOwnedLogDirectory } from "./EntityPurge.logs.ts";
-import {
-  captureResourceIdentity,
-  deleteResourceAtomically,
-  managedRelativePath,
-  resolvePurgeResource,
-  resourceRoot,
-  resourcesConflict,
-} from "./EntityPurge.resources.ts";
+import { deleteResourceAtomically, resolvePurgeResource } from "./EntityPurge.resources.ts";
 import type { PurgeResource } from "../../persistence/Services/PurgeJobRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import type { DirectCleanupResource } from "../Services/DirectResourceCleanupExecutor.ts";
 import { captureDirectCleanupIdentity } from "./DirectResourceCleanup.identity.ts";
+import { parseAttachmentIdFromRelativePath } from "../../attachments/attachmentStore.ts";
+import { discoverThreadWorktrees } from "./ThreadDeletion.worktrees.ts";
 
 export interface DiscoveredThreadDeletionFiles {
   readonly resources: ReadonlyArray<PurgeResource>;
   readonly directResources: ReadonlyArray<DirectCleanupResource>;
   readonly worktreeResources: ReadonlyArray<PurgeResource>;
+  readonly retainedExternalWorktrees: ReadonlyArray<{
+    readonly resourceId: string;
+    readonly recordedPath: string;
+  }>;
+  readonly retainedUnverifiedAttachments: ReadonlyArray<{
+    readonly resourceId: string;
+    readonly relativePath: string;
+    readonly reason: string;
+  }>;
   readonly retainedResources: ReadonlyArray<{
     readonly resourceId: string;
     readonly kind: "attachment";
@@ -36,28 +41,20 @@ export interface ThreadDeletionOrphanedResource {
   readonly detail: string;
 }
 
-const captureResource = Effect.fn("ThreadDeletion.captureResource")(function* (
-  kind: PurgeResource["kind"],
-  relativePath: string,
-) {
-  const config = yield* ServerConfig;
-  yield* Effect.tryPromise(() => nodeFs.mkdir(resourceRoot(config, kind), { recursive: true }));
-  const resolved = resolvePurgeResource(config, {
-    kind,
-    relativePath,
-    identity: null,
-    quarantineName: `.bigbud-purge-${crypto.randomUUID()}`,
-    action: "delete",
-  });
-  const identity = yield* Effect.tryPromise(() => captureResourceIdentity(resolved));
-  return {
-    kind,
-    relativePath,
-    identity,
-    quarantineName: `.bigbud-purge-${crypto.randomUUID()}`,
-    action: "delete",
-  } satisfies PurgeResource;
-});
+async function lstatIfPresent(filePath: string) {
+  try {
+    return await nodeFs.lstat(filePath, { bigint: true });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTDIR")
+    )
+      return null;
+    throw error;
+  }
+}
 
 const captureDirectResource = Effect.fn("ThreadDeletion.captureDirectResource")(function* (
   kind: DirectCleanupResource["kind"],
@@ -96,25 +93,125 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
     const config = yield* ServerConfig;
     const threadIds = [...new Set(input.threadIds)];
     const rows = yield* sql<ThreadAssetRow>`
-    SELECT NULL AS "activityKind", NULL AS "activityPayloadJson",
+    SELECT messages.message_id AS "sourceId", NULL AS "activityKind", NULL AS "activityPayloadJson",
       messages.attachments_json AS "attachmentsJson", threads.worktree_path AS "worktreePath",
-      projects.workspace_root AS "workspaceRoot"
+      projects.workspace_root AS "workspaceRoot",
+      threads.workspace_execution_target_id AS "workspaceExecutionTargetId",
+      threads.execution_target_id AS "executionTargetId"
     FROM projection_threads AS threads
     LEFT JOIN projection_projects AS projects ON projects.project_id = threads.project_id
     LEFT JOIN projection_thread_messages AS messages ON messages.thread_id = threads.thread_id
     WHERE threads.thread_id IN ${sql.in(threadIds)}
     UNION ALL
-    SELECT activities.kind, activities.payload_json, NULL, NULL, NULL
+    SELECT activities.activity_id, activities.kind, activities.payload_json, NULL, NULL, NULL,
+      NULL, NULL
     FROM projection_thread_activities AS activities
     WHERE activities.thread_id IN ${sql.in(threadIds)}
   `;
     const resources = new Map<string, PurgeResource>();
-    for (const relativePath of threadAttachmentRelativePaths(rows)) {
-      const attachmentId = relativePath.slice(0, relativePath.lastIndexOf("."));
+    const retainedExternalWorktrees: Array<{ resourceId: string; recordedPath: string }> = [];
+    const retainedUnverifiedAttachments: Array<{
+      resourceId: string;
+      relativePath: string;
+      reason: string;
+    }> = [];
+    const manifestPaths = new Set<string>();
+    for (const row of rows) {
+      const paths = yield* Effect.try({
+        try: () => threadAttachmentRelativePaths([row]),
+        catch: () => ({ _tag: "InvalidAttachmentManifest" as const }),
+      }).pipe(Effect.catch(() => Effect.succeed(null)));
+      if (paths === null) {
+        retainedUnverifiedAttachments.push({
+          resourceId: `manifest:${row.sourceId ?? input.rootThreadId}`,
+          relativePath: "",
+          reason: "manifest_invalid",
+        });
+      } else for (const relativePath of paths) manifestPaths.add(relativePath);
+    }
+    for (const relativePath of manifestPaths) {
+      const attachmentId = parseAttachmentIdFromRelativePath(relativePath);
+      if (!attachmentId) {
+        retainedUnverifiedAttachments.push({
+          resourceId: `attachment:${relativePath}`,
+          relativePath,
+          reason: "invalid_attachment_id",
+        });
+        continue;
+      }
+      const ownership = (yield* sql<{
+        relativePath: string;
+        creatorThreadId: string;
+        lifecycle: string;
+        fileDevice: string | null;
+        fileId: string | null;
+        contentSha256: string;
+        sizeBytes: number;
+      }>`
+        SELECT relative_path AS "relativePath", creator_thread_id AS "creatorThreadId",
+          lifecycle, file_device AS "fileDevice", file_id AS "fileId",
+          content_sha256 AS "contentSha256", size_bytes AS "sizeBytes"
+        FROM managed_attachment_ownership WHERE attachment_id = ${attachmentId}
+      `)[0];
+      const resourceId = `attachment:${relativePath}`;
+      if (
+        !ownership ||
+        ownership.relativePath !== relativePath ||
+        ownership.lifecycle !== "published" ||
+        ownership.fileDevice === null ||
+        ownership.fileId === null
+      ) {
+        retainedUnverifiedAttachments.push({
+          resourceId,
+          relativePath,
+          reason: "ownership_unverified",
+        });
+        continue;
+      }
+      const filePath = resolvePurgeResource(config, {
+        kind: "attachment",
+        relativePath,
+        identity: null,
+        quarantineName: null,
+        action: "delete",
+      }).target;
+      const current = yield* Effect.tryPromise(() => lstatIfPresent(filePath));
+      if (
+        current &&
+        (!current.isFile() ||
+          current.dev.toString() !== ownership.fileDevice ||
+          current.ino.toString() !== ownership.fileId ||
+          current.size !== BigInt(ownership.sizeBytes))
+      ) {
+        retainedUnverifiedAttachments.push({
+          resourceId,
+          relativePath,
+          reason: "identity_changed",
+        });
+        continue;
+      }
+      if (current) {
+        const bytes = yield* Effect.tryPromise(() => nodeFs.readFile(filePath));
+        if (createHash("sha256").update(bytes).digest("hex") !== ownership.contentSha256) {
+          retainedUnverifiedAttachments.push({
+            resourceId,
+            relativePath,
+            reason: "content_changed",
+          });
+          continue;
+        }
+      }
       const [{ shared } = { shared: 0 }] = yield* sql<{ readonly shared: number }>`
       SELECT EXISTS (
-        SELECT 1 FROM projection_thread_attachment_refs
-        WHERE thread_id NOT IN ${sql.in(threadIds)} AND attachment_id IN (${attachmentId}, '')
+        SELECT 1 FROM projection_thread_attachment_refs AS ref
+        JOIN projection_threads AS live ON live.thread_id = ref.thread_id
+        WHERE ref.thread_id NOT IN ${sql.in(threadIds)} AND live.deleted_at IS NULL
+          AND ref.attachment_id IN (${attachmentId}, '')
+        UNION ALL
+        SELECT 1 FROM managed_attachment_references AS ref
+        JOIN projection_threads AS live ON live.thread_id = ref.thread_id
+        WHERE ref.thread_id NOT IN ${sql.in(threadIds)} AND live.deleted_at IS NULL
+          AND ref.attachment_id = ${attachmentId} AND ref.active = 1
       ) AS shared
     `;
       resources.set(`attachment:${relativePath}`, {
@@ -125,34 +222,22 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
         action: shared === 1 ? "retain-shared" : "delete",
       });
     }
-    for (const worktreePath of new Set(
-      rows.flatMap((row) => (row.worktreePath === null ? [] : [row.worktreePath])),
-    )) {
-      const relativePath = managedRelativePath(config.worktreesDir, worktreePath);
-      if (!relativePath)
-        return yield* Effect.fail(new Error("thread worktree is outside the managed root"));
-      const resource = yield* captureResource("managed-worktree", relativePath);
-      const others = yield* sql<{ readonly worktreePath: string }>`
-      SELECT worktree_path AS "worktreePath" FROM projection_threads
-      WHERE thread_id NOT IN ${sql.in(threadIds)} AND worktree_path IS NOT NULL
+    const owned = yield* sql<{ attachmentId: string; relativePath: string }>`
+      SELECT attachment_id AS "attachmentId", relative_path AS "relativePath"
+      FROM managed_attachment_ownership WHERE creator_thread_id IN ${sql.in(threadIds)}
     `;
-      for (const other of others) {
-        const otherRelativePath = managedRelativePath(config.worktreesDir, other.worktreePath);
-        if (!otherRelativePath) continue;
-        const otherResource = yield* captureResource("managed-worktree", otherRelativePath);
-        if (
-          resourcesConflict(
-            { resolved: resolvePurgeResource(config, resource), identity: resource.identity },
-            {
-              resolved: resolvePurgeResource(config, otherResource),
-              identity: otherResource.identity,
-            },
-          )
-        )
-          return yield* Effect.fail(new Error("managed worktree ownership is shared"));
-      }
-      resources.set(`managed-worktree:${relativePath}`, resource);
+    for (const row of owned) {
+      if (!manifestPaths.has(row.relativePath))
+        retainedUnverifiedAttachments.push({
+          resourceId: `attachment:${row.relativePath}`,
+          relativePath: row.relativePath,
+          reason: "manifest_missing",
+        });
     }
+    const worktrees = yield* discoverThreadWorktrees({ rows, threadIds });
+    retainedExternalWorktrees.push(...worktrees.retainedExternalWorktrees);
+    for (const resource of worktrees.resources)
+      resources.set(`managed-worktree:${resource.relativePath}`, resource);
     const knownThreadIds = (yield* sql<{ readonly threadId: string }>`
     SELECT thread_id AS "threadId" FROM projection_threads
   `).map((row) => row.threadId);
@@ -192,6 +277,8 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
       resources: allResources,
       directResources,
       worktreeResources: allResources.filter((resource) => resource.kind === "managed-worktree"),
+      retainedExternalWorktrees,
+      retainedUnverifiedAttachments,
       retainedResources: allResources.flatMap((resource) =>
         resource.kind === "attachment" && resource.action === "retain-shared"
           ? [

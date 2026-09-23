@@ -8,25 +8,46 @@ import type {
 } from "../Services/ThreadRetentionRepository.ts";
 import { THREAD_RETENTION_NONTERMINAL_RUN_STATUSES } from "../Services/ThreadRetentionRepository.ts";
 import { PURGE_MAX_ATTEMPTS } from "../Services/PurgeJobRepository.ts";
-import { retentionDurableExclusions } from "./ThreadRetentionRepository.eligibility.ts";
+import {
+  retentionAgeSql,
+  retentionExclusionCaseSql,
+} from "./ThreadRetentionRepository.eligibility.ts";
+import {
+  retentionEligibleRootFromSql,
+  retentionSubtreeCteSql,
+} from "./ThreadRetentionRepository.pages.ts";
 
 export function makeThreadRetentionQueue<E, R>(input: {
   readonly sql: SqlClient.SqlClient;
   readonly getRun: (runId: string) => Effect.Effect<Option.Option<ThreadRetentionRun>, E, R>;
 }) {
-  const eligible = retentionDurableExclusions(input.sql);
-
   const createQueuedRun = Effect.fn("ThreadRetentionRepository.createQueuedRun")(function* (
     runInput: CreateRetentionRunInput,
   ) {
+    const mode = runInput.selectionMode ?? "legacy-subtree";
+    const criterion = runInput.ageCriterion ?? "last-conversation-activity";
+    const estimate =
+      mode === "legacy-subtree"
+        ? yield* input.sql.unsafe<{ count: number }>(
+            `${retentionSubtreeCteSql} SELECT COUNT(*) AS count ${retentionEligibleRootFromSql}`,
+            [runInput.cutoffAt],
+          )
+        : yield* input.sql.unsafe<{ count: number }>(
+            `SELECT COUNT(*) AS count FROM projection_threads AS t
+           WHERE t.deleted_at IS NULL AND ${retentionAgeSql("t", criterion)} <= ?
+             AND (${retentionExclusionCaseSql("t", "per-thread")}) IS NULL`,
+            [runInput.cutoffAt],
+          );
     yield* input.sql`
       INSERT INTO thread_retention_runs (
-        run_id, trigger_kind, policy, cutoff_at, status, active_slot, eligible_count,
+        run_id, trigger_kind, policy, selection_mode, age_criterion,
+        cutoff_at, status, active_slot, eligible_count,
         created_at, updated_at
-      ) VALUES (${runInput.runId}, ${runInput.trigger}, ${runInput.policy}, ${runInput.cutoffAt},
+      ) VALUES (${runInput.runId}, ${runInput.trigger}, ${runInput.policy},
+        ${runInput.selectionMode ?? "legacy-subtree"},
+        ${runInput.ageCriterion ?? "last-conversation-activity"}, ${runInput.cutoffAt},
         'queued', NULL,
-        (SELECT COUNT(*) FROM projection_threads AS t
-          WHERE t.last_activity_at <= ${runInput.cutoffAt} AND ${eligible}),
+        ${estimate[0]?.count ?? 0},
         ${runInput.createdAt}, ${runInput.createdAt})
       ON CONFLICT DO NOTHING
     `;

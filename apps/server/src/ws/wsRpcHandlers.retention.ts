@@ -3,6 +3,8 @@ import type {
   ServerPreviewThreadRetentionInput,
   ServerSetThreadRetentionPolicyInput,
   ServerStartThreadRetentionInput,
+  ServerGetThreadRetentionRunInput,
+  ServerListThreadRetentionRunsInput,
 } from "@bigbud/contracts/server/threadRetention.ts";
 
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
@@ -25,6 +27,18 @@ export function makeThreadRetentionWsRpcHandlers(context: WsRpcContext) {
         {
           "rpc.aggregate": "server",
         },
+      ),
+    [WS_METHODS.serverGetThreadRetentionRun]: (input: ServerGetThreadRetentionRunInput) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetThreadRetentionRun,
+        context.threadRetention.getRun(input),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverListThreadRetentionRuns]: (input: ServerListThreadRetentionRunsInput) =>
+      observeRpcEffect(
+        WS_METHODS.serverListThreadRetentionRuns,
+        context.threadRetention.listRecentRuns(input),
+        { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverSetThreadRetentionPolicy]: (input: ServerSetThreadRetentionPolicyInput) =>
       observeRpcEffect(

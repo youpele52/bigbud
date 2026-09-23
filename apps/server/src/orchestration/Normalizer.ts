@@ -12,6 +12,7 @@ import {
 import { resolveAttachmentPath } from "../attachments/attachmentStore";
 import { createNormalizedAttachmentId } from "./Normalizer.attachmentIdentity.ts";
 import { persistSubmissionAttachment } from "./Normalizer.attachmentStorage.ts";
+import { persistManagedAttachment } from "../attachments/managedAttachmentOwnership.ts";
 import { ServerConfig } from "../startup/config";
 import { parseBase64DataUrl } from "../attachments/imageMime";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
@@ -100,10 +101,17 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       return command as OrchestrationCommand;
     }
 
-    const writeAttachment = (destination: string, bytes: Uint8Array) =>
-      command.type === "thread.message.submit"
-        ? persistSubmissionAttachment(destination, bytes)
-        : fileSystem.writeFile(destination, bytes);
+    const writeAttachment = (attachmentId: string, destination: string, bytes: Uint8Array) =>
+      persistManagedAttachment({
+        attachmentsDir: serverConfig.attachmentsDir,
+        attachmentId,
+        creatorThreadId: command.threadId,
+        destination,
+        bytes,
+        write: persistSubmissionAttachment(destination, bytes).pipe(
+          Effect.map((created) => created === true),
+        ),
+      });
 
     const persistFileAttachment = (
       attachment: UploadChatAttachment,
@@ -153,7 +161,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               }),
           ),
         );
-        yield* writeAttachment(attachmentPath, bytes).pipe(
+        yield* writeAttachment(attachmentId, attachmentPath, bytes).pipe(
           Effect.mapError(
             () =>
               new OrchestrationDispatchCommandError({
@@ -219,7 +227,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
                   }),
               ),
             );
-            yield* writeAttachment(attachmentPath, bytes).pipe(
+            yield* writeAttachment(attachmentId, attachmentPath, bytes).pipe(
               Effect.mapError(
                 () =>
                   new OrchestrationDispatchCommandError({

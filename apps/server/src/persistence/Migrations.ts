@@ -121,6 +121,7 @@ import Migration0118 from "./Migrations/118_LearningReviewRecovery.ts";
 import Migration0119 from "./Migrations/119_RepairLearningActivityLeases.ts";
 import Migration0117 from "./Migrations/117_RepairThreadRetentionItemIndependence.ts";
 import Migration0120 from "./Migrations/120_ProjectionMessageSearch.ts";
+import Migration0121 from "./Migrations/121_ThreadRetentionSelectionMode.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -242,6 +243,7 @@ export const migrationEntries = [
   [118, "LearningReviewRecovery", Migration0118],
   [119, "RepairLearningActivityLeases", Migration0119],
   [120, "ProjectionMessageSearch", Migration0120],
+  [121, "ThreadRetentionSelectionMode", Migration0121],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

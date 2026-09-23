@@ -62,6 +62,7 @@ const ThreadRetentionDeleteCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   runId: TrimmedNonEmptyString,
+  selectionMode: Schema.optional(Schema.Literals(["legacy-subtree", "per-thread"])),
   expectedLastActivityAt: IsoDateTime,
   cutoffAt: IsoDateTime,
   createdAt: IsoDateTime,

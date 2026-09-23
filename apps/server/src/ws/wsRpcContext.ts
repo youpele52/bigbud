@@ -148,6 +148,8 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const threadRetention = Option.getOrElse(threadRetentionOption, () => ({
       preview: retentionUnavailable,
       enqueue: retentionUnavailable,
+      getRun: retentionUnavailable,
+      listRecentRuns: retentionUnavailable,
       setPolicy: retentionUnavailable,
       runScheduledOnce: retentionUnavailable(),
       start: Effect.void,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatRetentionCutoff,
   getRetentionCleanupSuccessToast,
   getRetentionMaintenanceMessage,
   getRetentionPollIntervalMs,
@@ -28,6 +29,9 @@ const RUN = {
 } as const;
 
 describe("ThreadRetentionSettingsSection logic", () => {
+  it("shows the exact inclusive cutoff in UTC regardless of local timezone", () => {
+    expect(formatRetentionCutoff("2026-09-16T13:42:01.000Z")).toBe("2026-09-16T13:42:01.000Z");
+  });
   it("polls active and deferred runs but stops at every terminal state", () => {
     expect(getRetentionPollIntervalMs(RUN)).toBe(2_000);
     expect(getRetentionPollIntervalMs({ ...RUN, status: "deferred" })).toBe(5_000);
