@@ -134,6 +134,7 @@ export const WS_METHODS = {
 export const ORCHESTRATION_WS_METHODS = {
   getSidebarThreadCatalog: "orchestration.getSidebarThreadCatalog",
   getStartupProjectCatalog: "orchestration.getStartupProjectCatalog",
+  searchConversationMessages: "orchestration.searchConversationMessages",
   getProjectThreadSummaries: "orchestration.getProjectThreadSummaries",
   getSelectedThreadDetail: "orchestration.getSelectedThreadDetail",
   getThreadOwnership: "orchestration.getThreadOwnership",

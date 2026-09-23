@@ -30,6 +30,10 @@ import {
   GetSelectedThreadDetailResult,
 } from "./orchestration.detail";
 import { GetThreadOwnershipInput, GetThreadOwnershipResult } from "./orchestration.ownership";
+import {
+  SearchConversationMessagesInput,
+  SearchConversationMessagesResult,
+} from "./orchestration.search";
 
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
@@ -193,6 +197,10 @@ export const OrchestrationRpcSchemas = {
   getStartupProjectCatalog: {
     input: GetStartupProjectCatalogInput,
     output: GetStartupProjectCatalogResult,
+  },
+  searchConversationMessages: {
+    input: SearchConversationMessagesInput,
+    output: SearchConversationMessagesResult,
   },
   getProjectThreadSummaries: {
     input: GetProjectThreadSummariesInput,

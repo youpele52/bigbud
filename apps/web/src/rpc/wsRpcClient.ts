@@ -313,6 +313,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog](input),
         ),
+      searchConversationMessages: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.searchConversationMessages](input),
+        ),
       getProjectThreadSummaries: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getProjectThreadSummaries](input),

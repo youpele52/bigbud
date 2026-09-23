@@ -12,6 +12,8 @@ import type {
   GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
+  SearchConversationMessagesInput,
+  SearchConversationMessagesResult,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
@@ -253,6 +255,9 @@ export interface NativeApi {
     getStartupProjectCatalog: (
       input: GetStartupProjectCatalogInput,
     ) => Promise<GetStartupProjectCatalogResult>;
+    searchConversationMessages: (
+      input: SearchConversationMessagesInput,
+    ) => Promise<SearchConversationMessagesResult>;
     getProjectThreadSummaries: (
       input: GetProjectThreadSummariesInput,
     ) => Promise<GetProjectThreadSummariesResult>;

@@ -48,6 +48,7 @@ const ThreadMessagePageRequest = ThreadPageRequest.pipe(
   Schema.fieldsAssign({
     cursorCreatedAt: Schema.NullOr(Schema.String),
     cursorMessageId: Schema.NullOr(Schema.String),
+    anchorMessageId: Schema.NullOr(Schema.String),
   }),
 );
 const ThreadTurnPageRequest = ThreadPageRequest.pipe(
@@ -103,7 +104,7 @@ export function makeGetSelectedThreadDetail(
   const readMessages = SqlSchema.findAll({
     Request: ThreadMessagePageRequest,
     Result: ThreadDetailMessageDbRow,
-    execute: ({ threadId, limit, cursorCreatedAt, cursorMessageId }) => sql`
+    execute: ({ threadId, limit, cursorCreatedAt, cursorMessageId, anchorMessageId }) => sql`
       SELECT
         message_id AS "messageId",
         thread_id AS "threadId",
@@ -118,9 +119,18 @@ export function makeGetSelectedThreadDetail(
       FROM projection_thread_messages
       WHERE thread_id = ${threadId}
         AND (
+          ${anchorMessageId} IS NOT NULL AND (
+            created_at < (SELECT created_at FROM projection_thread_messages
+              WHERE thread_id = ${threadId} AND message_id = ${anchorMessageId})
+            OR (created_at = (SELECT created_at FROM projection_thread_messages
+              WHERE thread_id = ${threadId} AND message_id = ${anchorMessageId})
+              AND message_id >= ${anchorMessageId})
+          )
+          OR ${anchorMessageId} IS NULL AND (
           ${cursorCreatedAt} IS NULL
           OR created_at < ${cursorCreatedAt}
           OR (created_at = ${cursorCreatedAt} AND message_id > ${cursorMessageId})
+          )
         )
       ORDER BY created_at DESC, message_id ASC
       LIMIT ${limit}
@@ -269,6 +279,7 @@ export function makeGetSelectedThreadDetail(
                 limit: messageLimit + 1,
                 cursorCreatedAt: input.messageCursor?.createdAt ?? null,
                 cursorMessageId: input.messageCursor?.messageId ?? null,
+                anchorMessageId: input.messageAnchorId ?? null,
               }),
               activities: readActivities({
                 threadId: input.threadId,

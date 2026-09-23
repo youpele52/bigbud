@@ -167,6 +167,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   orchestration: {
     getSidebarThreadCatalog: vi.fn(),
     getStartupProjectCatalog: vi.fn(),
+    searchConversationMessages: vi.fn(),
     getProjectThreadSummaries: vi.fn(),
     getSelectedThreadDetail: vi.fn(),
     getThreadOwnership: vi.fn(),

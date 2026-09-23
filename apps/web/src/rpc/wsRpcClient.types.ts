@@ -305,6 +305,9 @@ export interface WsRpcClient {
     readonly getStartupProjectCatalog: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getStartupProjectCatalog
     >;
+    readonly searchConversationMessages: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.searchConversationMessages
+    >;
     readonly getProjectThreadSummaries: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
     >;
