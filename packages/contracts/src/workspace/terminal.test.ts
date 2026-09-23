@@ -189,6 +189,7 @@ describe("TerminalSessionSnapshot", () => {
         worktreePath: null,
         status: "running",
         pid: 1234,
+        runtimeGeneration: "run-1",
         history: "hello\n",
         exitCode: null,
         exitSignal: null,
@@ -218,6 +219,7 @@ describe("TerminalEvent", () => {
         threadId: "thread-1",
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: new Date().toISOString(),
+        runtimeGeneration: "run-1",
         exitCode: 0,
         exitSignal: null,
       }),
@@ -232,6 +234,19 @@ describe("TerminalEvent", () => {
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: new Date().toISOString(),
         hasRunningSubprocess: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts a cleared terminal agent identity", () => {
+    expect(
+      decodes(TerminalEvent, {
+        type: "agentIdentity",
+        threadId: "thread-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+        createdAt: new Date().toISOString(),
+        runtimeGeneration: "run-1",
+        provider: null,
       }),
     ).toBe(true);
   });
@@ -251,6 +266,7 @@ describe("TerminalEvent", () => {
           worktreePath: "/tmp/project/.t3/worktrees/feature-a",
           status: "running",
           pid: 1234,
+          runtimeGeneration: "run-1",
           history: "",
           exitCode: null,
           exitSignal: null,

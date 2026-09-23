@@ -4,6 +4,7 @@ import { capHistory, sanitizeTerminalHistoryChunk } from "./Manager.history";
 import { cleanupProcessHandles, type ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import type { PtyProcess } from "../Services/PTY";
 import type { TerminalSessionState } from "./Manager.types";
+import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 
 export function drainProcessEventsWith(
   ctx: ProcessLifecycleContext,
@@ -61,7 +62,7 @@ export function drainProcessEventsWith(
               ctx.historyLineLimit,
             );
           }
-          session.updatedAt = new Date().toISOString();
+          session.updatedAt = nextTerminalTimestamp(session.updatedAt);
 
           return {
             type: "output",
@@ -69,6 +70,7 @@ export function drainProcessEventsWith(
             terminalId: session.terminalId,
             history: sanitized.visibleText.length > 0 ? session.history : null,
             data: combinedData,
+            createdAt: session.updatedAt,
           } as const;
         }
 
@@ -77,6 +79,8 @@ export function drainProcessEventsWith(
         session.process = null;
         session.pid = null;
         session.hasRunningSubprocess = false;
+        session.activeAgentProvider = null;
+        session.agentIdentityMisses = 0;
         session.status = "exited";
         session.pendingHistoryControlSequence = "";
         session.pendingProcessEvents = [];
@@ -88,7 +92,7 @@ export function drainProcessEventsWith(
         session.exitSignal = Number.isInteger(nextEvent.event.signal)
           ? nextEvent.event.signal
           : null;
-        session.updatedAt = new Date().toISOString();
+        session.updatedAt = nextTerminalTimestamp(session.updatedAt);
 
         return {
           type: "exit",
@@ -97,6 +101,8 @@ export function drainProcessEventsWith(
           terminalId: session.terminalId,
           exitCode: session.exitCode,
           exitSignal: session.exitSignal,
+          createdAt: session.updatedAt,
+          runtimeGeneration: session.runtimeGeneration,
         } as const;
       });
 
@@ -113,7 +119,7 @@ export function drainProcessEventsWith(
           threadId: action.threadId,
           terminalId: action.terminalId,
           data: action.data,
-          createdAt: new Date().toISOString(),
+          createdAt: action.createdAt,
         });
         continue;
       }
@@ -125,7 +131,8 @@ export function drainProcessEventsWith(
         terminalId: action.terminalId,
         exitCode: action.exitCode,
         exitSignal: action.exitSignal,
-        createdAt: new Date().toISOString(),
+        createdAt: action.createdAt,
+        runtimeGeneration: action.runtimeGeneration,
       });
       yield* ctx.evictInactiveSessionsIfNeeded();
       return;

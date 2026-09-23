@@ -15,6 +15,10 @@ import {
   type ThreadTerminalLaunchContext,
   type ThreadTerminalState,
 } from "./helpers.store";
+import {
+  applyTerminalAgentEvent,
+  type TerminalAgentIdentityState,
+} from "./terminal.store.identity";
 
 interface PanelTerminalStateSlice {
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
@@ -74,7 +78,7 @@ export function ensurePanelTerminalInState(
   };
 }
 
-interface TerminalEventStateSlice extends PanelTerminalStateSlice {
+interface TerminalEventStateSlice extends PanelTerminalStateSlice, TerminalAgentIdentityState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
@@ -90,6 +94,8 @@ export function applyTerminalEventToState(
   let nextTerminalStateByThreadId = state.terminalStateByThreadId;
   let nextPanelTerminalStateByThreadId = state.panelTerminalStateByThreadId;
   let nextTerminalLaunchContextByThreadId = state.terminalLaunchContextByThreadId;
+  const identity = applyTerminalAgentEvent(state, event);
+  if (identity.blocked) return state;
   const drawerTerminalState = selectThreadTerminalState(state.terminalStateByThreadId, threadId);
   const panelTerminalState = state.panelTerminalStateByThreadId[threadId];
   const eventTargetsPanel =
@@ -148,6 +154,7 @@ export function applyTerminalEventToState(
     terminalStateByThreadId: nextTerminalStateByThreadId,
     panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
     terminalLaunchContextByThreadId: nextTerminalLaunchContextByThreadId,
+    ...identity.state,
     ...nextEventState,
   };
 }

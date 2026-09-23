@@ -1,6 +1,7 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 import { increment, terminalSessionsTotal } from "../../observability/Metrics";
 import { PtySpawnError, type PtyProcess } from "../Services/PTY";
@@ -19,6 +20,7 @@ import {
   type ProcessLifecycleContext,
 } from "./Manager.process-lifecycle";
 import { type TerminalSessionState, type TerminalStartInput } from "./Manager.types";
+import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 export { pollSubprocessActivityWith } from "./Manager.process-drain.poll.ts";
 
@@ -121,12 +123,14 @@ export function stopProcessWith(
       session.process = null;
       session.pid = null;
       session.hasRunningSubprocess = false;
+      session.activeAgentProvider = null;
+      session.agentIdentityMisses = 0;
       session.status = "exited";
       session.pendingHistoryControlSequence = "";
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
       session.processEventDrainRunning = false;
-      session.updatedAt = new Date().toISOString();
+      session.updatedAt = nextTerminalTimestamp(session.updatedAt);
       return [undefined, state] as const;
     });
 
@@ -173,11 +177,14 @@ export function startSessionWith(
       session.exitSignal = null;
       session.dropPathMode = defaultTerminalDropPathMode(session.executionTargetId);
       session.hasRunningSubprocess = false;
+      session.activeAgentProvider = null;
+      session.agentIdentityMisses = 0;
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
       session.processEventDrainRunning = false;
       session.runtimeEpoch += 1;
-      session.updatedAt = new Date().toISOString();
+      session.runtimeGeneration = randomUUID();
+      session.updatedAt = nextTerminalTimestamp(session.updatedAt);
       return [undefined, state] as const;
     });
 
@@ -226,7 +233,7 @@ export function startSessionWith(
               session.pid = processPid;
               session.status = "running";
               session.dropPathMode = startedDropPathMode ?? session.dropPathMode;
-              session.updatedAt = new Date().toISOString();
+              session.updatedAt = nextTerminalTimestamp(session.updatedAt);
               session.unsubscribeData = unsubscribeData;
               session.unsubscribeExit = unsubscribeExit;
               return [undefined, state] as const;
@@ -236,7 +243,7 @@ export function startSessionWith(
               type: eventType,
               threadId: session.threadId,
               terminalId: session.terminalId,
-              createdAt: new Date().toISOString(),
+              createdAt: session.updatedAt,
               snapshot: snapshotFn(session),
             });
           }),
@@ -264,7 +271,7 @@ export function startSessionWith(
         session.pendingProcessEvents = [];
         session.pendingProcessEventIndex = 0;
         session.processEventDrainRunning = false;
-        session.updatedAt = new Date().toISOString();
+        session.updatedAt = nextTerminalTimestamp(session.updatedAt);
         return [undefined, state] as const;
       });
 
@@ -275,7 +282,8 @@ export function startSessionWith(
         type: "error",
         threadId: session.threadId,
         terminalId: session.terminalId,
-        createdAt: new Date().toISOString(),
+        createdAt: session.updatedAt,
+        runtimeGeneration: session.runtimeGeneration,
         message,
       });
       yield* Effect.logError("failed to start terminal", {

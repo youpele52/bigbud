@@ -132,6 +132,64 @@ describe("terminalDisplay", () => {
     ).toBe("opencode");
   });
 
+  it("uses live identity over old terminal output and clears it after exit", () => {
+    const started = makeEvent({
+      type: "started",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:00.000Z",
+      snapshot: {
+        threadId: "thread-1",
+        terminalId: "terminal-2",
+        dropPathMode: "posix",
+        cwd: "/tmp",
+        worktreePath: null,
+        status: "running",
+        pid: 123,
+        activeAgentProvider: null,
+        history: "pi v0.80.3\n",
+        exitCode: null,
+        exitSignal: null,
+        updatedAt: "2026-07-05T11:00:00.000Z",
+      },
+    });
+    const pi = makeEvent({
+      type: "agentIdentity",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:01.000Z",
+      provider: "pi",
+    });
+    const opencode = makeEvent({
+      type: "agentIdentity",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:02.000Z",
+      provider: "opencode",
+    });
+    const cleared = makeEvent({
+      type: "agentIdentity",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:03.000Z",
+      provider: null,
+    });
+    const oldOutput = makeEvent({
+      type: "output",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:00.500Z",
+      data: "Cursor Agent and pi\n",
+    });
+
+    expect(resolveTerminalProviderFromEvents([started])).toBeNull();
+    expect(resolveTerminalProviderFromEvents([started, oldOutput, pi])).toBe("pi");
+    expect(resolveTerminalProviderFromEvents([started, oldOutput, pi, opencode])).toBe("opencode");
+    expect(
+      resolveTerminalProviderFromEvents([started, oldOutput, pi, opencode, cleared]),
+    ).toBeNull();
+  });
+
   it("falls back to the base terminal icon when no supported provider is detected", () => {
     expect(
       resolveTerminalProviderFromEvents([

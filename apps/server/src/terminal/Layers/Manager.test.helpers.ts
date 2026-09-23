@@ -27,6 +27,7 @@ import {
   PtySpawnError,
 } from "../Services/PTY";
 import { makeTerminalManagerWithOptions } from "./Manager";
+import type { TerminalAgentDetector } from "./Manager.agentDetection";
 
 export class FakePtyProcess implements PtyProcess {
   readonly writes: string[] = [];
@@ -207,6 +208,7 @@ export function writeFileString(filePath: string, contents: string) {
 export interface CreateManagerOptions {
   shellResolver?: () => string;
   subprocessChecker?: (terminalPid: number) => Effect.Effect<boolean>;
+  agentDetector?: TerminalAgentDetector;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
@@ -243,6 +245,7 @@ export const createManager = (
         ...(options.subprocessChecker !== undefined
           ? { subprocessChecker: options.subprocessChecker }
           : {}),
+        agentDetector: options.agentDetector ?? (() => Effect.succeed(new Map())),
         ...(options.subprocessPollIntervalMs !== undefined
           ? { subprocessPollIntervalMs: options.subprocessPollIntervalMs }
           : {}),

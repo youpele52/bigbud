@@ -5,6 +5,7 @@ import {
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
 import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
+import { ProviderKind } from "../orchestration/orchestration.provider";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -99,6 +100,8 @@ export const TerminalSessionSnapshot = Schema.Struct({
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
   status: TerminalSessionStatus,
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
+  activeAgentProvider: Schema.optional(Schema.NullOr(ProviderKind)),
+  runtimeGeneration: Schema.optional(Schema.String),
   history: Schema.String,
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
@@ -127,6 +130,7 @@ const TerminalOutputEvent = Schema.Struct({
 const TerminalExitedEvent = Schema.Struct({
   ...TerminalEventBaseSchema.fields,
   type: Schema.Literal("exited"),
+  runtimeGeneration: Schema.optional(Schema.String),
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
 });
@@ -134,6 +138,7 @@ const TerminalExitedEvent = Schema.Struct({
 const TerminalErrorEvent = Schema.Struct({
   ...TerminalEventBaseSchema.fields,
   type: Schema.Literal("error"),
+  runtimeGeneration: Schema.optional(Schema.String),
   message: Schema.String.check(Schema.isNonEmpty()),
 });
 
@@ -154,6 +159,13 @@ const TerminalActivityEvent = Schema.Struct({
   hasRunningSubprocess: Schema.Boolean,
 });
 
+const TerminalAgentIdentityEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("agentIdentity"),
+  runtimeGeneration: Schema.optional(Schema.String),
+  provider: Schema.NullOr(ProviderKind),
+});
+
 export const TerminalEvent = Schema.Union([
   TerminalStartedEvent,
   TerminalOutputEvent,
@@ -162,6 +174,7 @@ export const TerminalEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalAgentIdentityEvent,
 ]);
 export type TerminalEvent = typeof TerminalEvent.Type;
 

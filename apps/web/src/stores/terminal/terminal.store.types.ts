@@ -1,10 +1,16 @@
-import { type ThreadId, type TerminalEvent } from "@bigbud/contracts";
+import {
+  type ProviderKind,
+  type ThreadId,
+  type TerminalEvent,
+  type TerminalSessionSnapshot,
+} from "@bigbud/contracts";
 
 import {
   type TerminalEventEntry,
   type ThreadTerminalLaunchContext,
   type ThreadTerminalState,
 } from "./helpers.store";
+import type { TerminalAgentVersion } from "./terminal.store.identity";
 
 export interface TerminalStateStoreState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
@@ -12,6 +18,8 @@ export interface TerminalStateStoreState {
   terminalLabelOverridesByThreadId: Record<ThreadId, Record<string, string>>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
+  terminalAgentProviderByKey: Record<string, ProviderKind | null>;
+  terminalAgentVersionByKey: Record<string, TerminalAgentVersion>;
   terminalEventLastIdsByKey: Record<string, number>;
   nextTerminalEventId: number;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
@@ -48,6 +56,7 @@ export interface TerminalStateStoreState {
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvents: (events: ReadonlyArray<TerminalEvent>) => void;
+  hydrateTerminalAgentFromSnapshot: (snapshot: TerminalSessionSnapshot) => void;
   clearTerminalState: (threadId: ThreadId) => void;
   removeTerminalState: (threadId: ThreadId) => void;
   removeOrphanedTerminalStates: (activeThreadIds: Set<ThreadId>) => void;

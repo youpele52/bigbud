@@ -40,7 +40,7 @@ export function makeApplyTerminalEvent(input: {
       return;
     }
 
-    if (event.type === "activity") {
+    if (event.type === "activity" || event.type === "agentIdentity") {
       return;
     }
 

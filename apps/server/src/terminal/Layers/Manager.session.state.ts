@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { type TerminalSessionState } from "./Manager.types";
 
 export function resetSessionRuntimeState(session: TerminalSessionState): void {
@@ -29,6 +31,7 @@ export function createTerminalSessionState(input: {
     cwd: input.cwd,
     worktreePath: input.worktreePath,
     runtimeEpoch: 0,
+    runtimeGeneration: randomUUID(),
     status: "starting",
     pid: null,
     history: input.history,
@@ -45,6 +48,8 @@ export function createTerminalSessionState(input: {
     unsubscribeData: null,
     unsubscribeExit: null,
     hasRunningSubprocess: false,
+    activeAgentProvider: null,
+    agentIdentityMisses: 0,
     runtimeEnv: input.runtimeEnv,
   };
 }

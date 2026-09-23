@@ -1,6 +1,9 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { type TerminalEvent } from "@bigbud/contracts";
+import { type TerminalAgentDetector } from "./Manager.agentDetection";
 import { Effect, Fiber, Option, type Scope } from "effect";
+
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
 import { type PtyAdapterShape, type PtyProcess } from "../Services/PTY";
 import { TerminalProcessSignalError, type TerminalSubprocessCheckError } from "./Manager.shell";
@@ -35,6 +38,7 @@ export interface ProcessLifecycleContext {
   runFork: <A, E>(effect: Effect.Effect<A, E, never>) => Fiber.Fiber<A, E>;
   // subprocessChecker may fail with TerminalSubprocessCheckError; errors are handled internally
   subprocessChecker: (pid: number) => Effect.Effect<boolean, TerminalSubprocessCheckError>;
+  agentDetector: TerminalAgentDetector;
   subprocessPollIntervalMs: number;
   shellResolver: () => string;
   ptyAdapter: PtyAdapterShape;
@@ -79,6 +83,10 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     worktreePath: session.worktreePath,
     status: session.status,
     pid: session.pid,
+    runtimeGeneration: session.runtimeGeneration,
+    ...(isLocalExecutionTarget(session.executionTargetId)
+      ? { activeAgentProvider: session.activeAgentProvider }
+      : {}),
     history: session.history,
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
