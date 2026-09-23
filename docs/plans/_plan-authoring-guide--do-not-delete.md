@@ -1,6 +1,6 @@
 # DO NOT DELETE THIS FILE
 
-This file is the required guide for agents creating or updating plans in `docs/plan/`.
+This file is the required guide for agents creating or updating plans in `docs/plans/`.
 
 ## Purpose
 
@@ -133,5 +133,5 @@ Use the repository commands defined in `AGENTS.md`. For this project, use `bun r
 ## Protected Files
 
 - Never delete this guide.
-- Never delete `docs/plan/_test-data--do-not-delete.md`.
+- Never delete `docs/plans/_test-data--do-not-delete.md`.
 - Before removing old plans, confirm they are implemented or intentionally superseded and preserve any user-designated exceptions.

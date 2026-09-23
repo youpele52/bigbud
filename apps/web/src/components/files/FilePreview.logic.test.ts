@@ -17,7 +17,7 @@ describe("getFilePreviewWatchRelativePath", () => {
 
   it("watches the parent directory for nested files", () => {
     expect(getFilePreviewWatchRelativePath("docs/CHANGELOG.md")).toBe("docs");
-    expect(getFilePreviewWatchRelativePath("docs/plan/release.md")).toBe("docs/plan");
+    expect(getFilePreviewWatchRelativePath("docs/plans/release.md")).toBe("docs/plans");
   });
 });
 

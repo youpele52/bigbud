@@ -5,16 +5,16 @@
 **Document lifecycle:** Proposed  
 **Owner:** Planning agent; implementation owner unassigned
 
-| Field            | Value                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
-| Created          | 2026-09-10T20:57:02+02:00                                                                        |
-| Last modified    | 2026-09-10T21:08:50+02:00                                                                        |
-| Project root     | `/Users/youpele/DevWorld/bigbud`                                                                 |
-| Inspected branch | `main`                                                                                           |
-| Inspected commit | `75f02a937226129f2ca5e44475a64e546dfd4e3a`                                                       |
-| Initial worktree | Untracked `docs/plan/2026-09-10-rust-coordinated-thread-auto-resume-plan.md`; no tracked changes |
-| Related issue ID | None supplied                                                                                    |
-| Authorization    | Update and save this plan; no implementation, commit, or push                                    |
+| Field            | Value                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Created          | 2026-09-10T20:57:02+02:00                                                                                     |
+| Last modified    | 2026-09-10T21:08:50+02:00                                                                                     |
+| Project root     | `/Users/youpele/DevWorld/bigbud`                                                                              |
+| Inspected branch | `main`                                                                                                        |
+| Inspected commit | `75f02a937226129f2ca5e44475a64e546dfd4e3a`                                                                    |
+| Initial worktree | Untracked plan now at `docs/plans/2026-09-10-rust-coordinated-thread-auto-resume-plan.md`; no tracked changes |
+| Related issue ID | None supplied                                                                                                 |
+| Authorization    | Update and save this plan; no implementation, commit, or push                                                 |
 
 ## Summary
 
@@ -204,7 +204,7 @@ Never run `bun test`. No Rust changes are planned. `bun fmt` is intentionally de
 
 None. The user selected the tall bottom Chats sheet with shadcn Drawer where possible and smooth transitions. Installed Base UI supports the current shadcn drawer architecture, so the preferred implementation is feasible.
 
-Saved-file delivery is settled: the user explicitly requested updating and saving the plan in `docs/plan`.
+Saved-file delivery is settled: the user explicitly requested updating and saving the plan (now in `docs/plans/`).
 
 ## Plan Validity And Handoff
 

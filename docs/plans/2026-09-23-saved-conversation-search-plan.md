@@ -1,6 +1,8 @@
 # Saved conversation search
 
-Status: Implemented and validated
+**Date:** 23 September, 2026
+
+**Status:** Implemented and validated
 
 ## Repository evidence
 

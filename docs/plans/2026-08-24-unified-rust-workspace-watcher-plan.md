@@ -41,7 +41,7 @@ one process per server              one supervisor per remote host
 
 ## Related Work
 
-- [Rust Remote Workspace Agent Plan](/Users/youpele/DevWorld/bigbud/docs/plan/2026-08-22-rust-remote-workspace-agent-plan.md) defines the local-authority and remote-agent boundary this plan extends.
+- [Rust Remote Workspace Agent Plan](2026-08-22-rust-remote-workspace-agent-plan.md) defines the local-authority and remote-agent boundary this plan extends.
 - [Local Authority And Remote Workspace Agent Boundary](/Users/youpele/DevWorld/bigbud/docs/decisions/2026-08-22-rust-remote-workspace-agent-boundary.md) records why canonical state and provider processes remain local.
 - No verified Kanban card, repository issue, or pull request is linked to this plan.
 
@@ -130,7 +130,7 @@ The first version of this plan proposed a new `bigbud-local-workspace-service` b
    - gaps and new generations require rescan;
    - notifications are invalidation hints and require reconciliation;
    - overflow collapses fine-grained paths into one rescan signal.
-3. Confirm the tracked worktree before editing and preserve unrelated changes. The plan file is under an ignored `docs/plan/` directory.
+3. Confirm the tracked worktree before editing and preserve unrelated changes. The plan file is under `docs/plans/`.
 
 **Exit criteria:** Existing remote behavior is green and the invariants are captured by tests rather than only prose.
 
