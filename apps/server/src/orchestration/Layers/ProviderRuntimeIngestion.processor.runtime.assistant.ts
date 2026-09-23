@@ -115,6 +115,12 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
   );
   const existingMessage = thread.messages.find((entry) => entry.id === messageId);
   const fallbackText = event.payload.detail;
+  const authoritativeText =
+    (event.provider === "pi" || event.provider === "copilot") &&
+    fallbackText !== undefined &&
+    fallbackText.length > 0
+      ? fallbackText
+      : undefined;
   if (turnId) {
     yield* input.cacheHelpers.rememberAssistantMessageId(thread.id, turnId, messageId);
   }
@@ -130,6 +136,7 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
     ...(fallbackText !== undefined && (!existingMessage || existingMessage.text.length === 0)
       ? { fallbackText }
       : {}),
+    ...(authoritativeText !== undefined ? { authoritativeText } : {}),
   });
 
   if (turnId) {

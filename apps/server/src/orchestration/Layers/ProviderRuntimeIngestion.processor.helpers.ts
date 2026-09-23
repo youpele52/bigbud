@@ -63,6 +63,7 @@ export function makeProcessorHelpers(
     commandTag: string;
     finalDeltaCommandTag: string;
     fallbackText?: string;
+    authoritativeText?: string;
   }) {
     const bufferedText = yield* takeBufferedAssistantText(input.messageId);
     const text =
@@ -76,12 +77,12 @@ export function makeProcessorHelpers(
     const existingThread = readModel.threads.find((entry) => entry.id === input.threadId);
     const existingMessage = existingThread?.messages.find((entry) => entry.id === input.messageId);
 
-    if (text.length === 0 && !existingMessage) {
+    if (text.length === 0 && !existingMessage && !input.authoritativeText) {
       yield* clearAssistantMessageState(input.messageId);
       return;
     }
 
-    if (text.length > 0) {
+    if (input.authoritativeText === undefined && text.length > 0) {
       yield* orchestrationEngine.dispatch({
         type: "thread.message.assistant.delta",
         commandId: providerCommandId(input.event, input.finalDeltaCommandTag),
@@ -98,6 +99,7 @@ export function makeProcessorHelpers(
       commandId: providerCommandId(input.event, input.commandTag),
       threadId: input.threadId,
       messageId: input.messageId,
+      ...(input.authoritativeText !== undefined ? { text: input.authoritativeText } : {}),
       ...(input.turnId ? { turnId: input.turnId } : {}),
       createdAt: input.createdAt,
     });

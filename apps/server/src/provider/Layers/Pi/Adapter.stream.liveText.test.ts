@@ -227,7 +227,18 @@ describe("PiAdapter stream integration — live text projection", () => {
         assistantMessageEvent: {
           type: "text_delta",
           contentIndex: 0,
-          delta: "Hello Pi",
+          delta: "# Title\n",
+        },
+      }),
+    );
+    await Effect.runPromise(
+      handleStdoutEvent(session, {
+        type: "message_update",
+        message: { role: "assistant" },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "- last\n",
         },
       }),
     );
@@ -235,7 +246,7 @@ describe("PiAdapter stream integration — live text projection", () => {
     const liveThread = await waitForThread(engine, (thread) =>
       thread.messages.some(
         (message: PiRuntimeTestMessage) =>
-          message.role === "assistant" && message.streaming && message.text === "Hello Pi",
+          message.role === "assistant" && message.streaming && message.text === "# Title\n",
       ),
     );
     const liveMessage = liveThread.messages.find(
@@ -249,7 +260,10 @@ describe("PiAdapter stream integration — live text projection", () => {
         type: "message_end",
         message: {
           role: "assistant",
-          content: [{ type: "text", text: "Hello Pi" }],
+          content: [
+            { type: "thinking", thinking: "Private reasoning" },
+            { type: "text", text: "# Title\n- middle\n- last\n" },
+          ],
           usage: { input: 20, output: 5, cacheRead: 2, totalTokens: 27 },
         },
       }),
@@ -258,14 +272,16 @@ describe("PiAdapter stream integration — live text projection", () => {
     const finalThread = await waitForThread(engine, (thread) =>
       thread.messages.some(
         (message: PiRuntimeTestMessage) =>
-          message.role === "assistant" && !message.streaming && message.text === "Hello Pi",
+          message.role === "assistant" &&
+          !message.streaming &&
+          message.text === "# Title\n- middle\n- last\n",
       ),
     );
     const finalMessage = finalThread.messages.find(
       (message: PiRuntimeTestMessage) => message.role === "assistant",
     );
     expect(finalMessage?.streaming).toBe(false);
-    expect(finalMessage?.text).toBe("Hello Pi");
+    expect(finalMessage?.text).toBe("# Title\n- middle\n- last\n");
     expect(provider.emittedEvents.map((event) => event.type)).toContain("item.completed");
     expect(
       provider.emittedEvents.find((event) => event.type === "thread.token-usage.updated"),

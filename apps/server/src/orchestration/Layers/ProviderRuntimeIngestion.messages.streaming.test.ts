@@ -1,5 +1,5 @@
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -178,6 +178,100 @@ describe("ProviderRuntimeIngestion", () => {
     expect(finalMessage?.text).toBe("hello live");
     expect(finalMessage?.streaming).toBe(false);
   });
+
+  it.each([
+    { provider: "pi", finalText: "# Title\n- first\n- middle\n- last\n" },
+    { provider: "copilot", finalText: "# Title\n- first\n- middle\n- last\n" },
+    { provider: "pi", finalText: "# Title\n- first\n- last\n" },
+  ] as const)(
+    "reconciles $provider markdown with a single final event",
+    async ({ provider, finalText }) => {
+      const harness = await createHarness({
+        serverSettings: { enableAssistantStreaming: true },
+        provider,
+      });
+      const now = new Date().toISOString();
+      const itemId = asItemId(`item-${provider}-markdown`);
+      const turnId = asTurnId(`turn-${provider}-markdown`);
+
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.makeUnsafe(`cmd-turn-${provider}-markdown`),
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          message: {
+            messageId: asMessageId(`message-${provider}-markdown`),
+            role: "user",
+            text: "Write markdown",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: now,
+        }),
+      );
+      await harness.drain();
+
+      harness.emit({
+        type: "turn.started",
+        eventId: asEventId(`evt-${provider}-turn`),
+        provider,
+        createdAt: now,
+        threadId: asThreadId("thread-1"),
+        turnId,
+      });
+      await waitForThread(harness.engine, (thread) => thread.session?.activeTurnId === turnId);
+
+      for (const [index, delta] of ["# Title\n", "- first\n", "- last\n"].entries()) {
+        harness.emit({
+          type: "content.delta",
+          eventId: asEventId(`evt-${provider}-delta-${index}`),
+          provider,
+          createdAt: now,
+          threadId: asThreadId("thread-1"),
+          turnId,
+          itemId,
+          payload: { streamKind: "assistant_text", delta },
+        });
+      }
+      const messageId = `assistant:${itemId}`;
+      await waitForThread(harness.engine, (thread) =>
+        thread.messages.some((message) => message.id === messageId && message.streaming),
+      );
+
+      harness.emit({
+        type: "item.completed",
+        eventId: asEventId(`evt-${provider}-complete`),
+        provider,
+        createdAt: now,
+        threadId: asThreadId("thread-1"),
+        turnId,
+        itemId,
+        payload: {
+          itemType: "assistant_message",
+          status: "completed",
+          detail: finalText,
+        },
+      });
+
+      const thread = await waitForThread(harness.engine, (entry) =>
+        entry.messages.some((message) => message.id === messageId && !message.streaming),
+      );
+      expect(thread.messages.find((message) => message.id === messageId)?.text).toBe(finalText);
+      const events = await Effect.runPromise(
+        Stream.runCollect(harness.engine.readEvents(0)).pipe(
+          Effect.map((chunk) => Array.from(chunk)),
+        ),
+      );
+      const assistantEvents = events.filter(
+        (event) => event.type === "thread.message-sent" && event.payload.messageId === messageId,
+      );
+      expect(assistantEvents).toHaveLength(2);
+      expect(assistantEvents[1]).toMatchObject({
+        payload: { text: finalText, replace: true, streaming: false },
+      });
+    },
+  );
 
   it("spills oversized buffered deltas and still finalizes full assistant text", async () => {
     const harness = await createHarness();
