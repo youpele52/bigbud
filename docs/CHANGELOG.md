@@ -6,15 +6,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
 - **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
-- **Know which AI harness is active—and get more complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
+- **Set up your sidebar your way:** Choose which items to show and where they go. bigbud remembers your layout between restarts.
 - **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
-- **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
+- **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
 
 ## v0.2.300 (24 September, 2026)
 
 ### Games in bigbud.app
 
-- **Make the wait part of the fun:** Meet a hand-picked collection of twelve free browser games—from quick puzzles and familiar classics to creative and strategy games—chosen to keep your mind engaged while bigbud works on the longer task.
+- **Make the wait part of the fun:** Meet a hand-picked collection of twelve free browser games—from quick puzzles and familiar classics to creative and strategy games—chosen to keep your mind engaged while bigbud works on the longer task. ![Games in bigbud.app](https://assets.bigbud.app/content/bigbud.app%20games.png)
 - When an AI agent has been working in your chat for more than ten minutes, bigbud offers a one-time nudge to explore Games without interrupting the work.
 - **Curious about the research?** A review of action-game studies explored possible links with attention and other thinking skills. It looks at a specific game genre, so it is not a promise that every game improves your abilities. [Read the meta-analysis](https://doi.org/10.1037/bul0000130).
 
@@ -37,6 +37,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Desktop Release Improvements
 
 - **More reliable desktop releases:** Updated packaging to reduce build failures and keep unnecessary files out of the final app.
+
+### Customizable Sidebar
+
+- **Make the sidebar yours:** Hide, restore, and rearrange items—including Pinned, Chats, local and remote Projects, Plugins, Scheduled, Games, and Usage—from the right-click menu or by dragging them. Your choices are saved across restarts, while New chat and Search stay in place. ![Sidebar reorder menu](https://assets.bigbud.app/content/reorder%20menu.png)
+- **Keep your layout easy to scan:** Sidebar items stay visually grouped as you move them, and you can reset their order whenever you want.
+- **Show Plugins when Git is installed:** Plugins stays hidden when Git is unavailable on your computer. If you try to show it, bigbud explains that Git is needed and links to installation guidance.
 
 ## v0.2.210 (22 September, 2026)
 

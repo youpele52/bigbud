@@ -37,6 +37,7 @@ import {
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
+  WsPluginsGitAvailabilityRpc,
   WsPluginsGetRpc,
   WsPluginsInstallRpc,
   WsPluginsListCatalogRpc,
@@ -147,6 +148,7 @@ export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsPluginsGitAvailabilityRpc,
   WsPluginsListCatalogRpc,
   WsPluginsGetRpc,
   WsPluginsRefreshCatalogRpc,

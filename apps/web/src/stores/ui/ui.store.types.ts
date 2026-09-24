@@ -1,6 +1,9 @@
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
+import type { SidebarActionId } from "../../components/sidebar/Sidebar.actions.logic";
 
 export interface PersistedUiState {
+  sidebarActionOrder?: string[];
+  hiddenSidebarActions?: string[];
   chatsExpanded?: boolean;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
@@ -14,6 +17,8 @@ export interface PersistedUiState {
 }
 
 export interface UiSidebarState {
+  sidebarActionOrder: SidebarActionId[];
+  hiddenSidebarActions: SidebarActionId[];
   chatsExpanded: boolean;
   favouritesExpanded: boolean;
   projectsExpanded: boolean;
@@ -45,6 +50,17 @@ export interface SyncThreadInput {
 }
 
 export const initialState: UiState = {
+  sidebarActionOrder: [
+    "plugins",
+    "scheduled",
+    "games",
+    "usage",
+    "pinned",
+    "chats",
+    "projects",
+    "remote-projects",
+  ],
+  hiddenSidebarActions: [],
   chatsExpanded: true,
   favouritesExpanded: true,
   lastActiveThreadId: null,

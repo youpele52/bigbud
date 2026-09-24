@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+const gitStatus = vi.hoisted(() => ({ value: "available" as "available" | "missing" }));
+const sidebarPreferences = vi.hoisted(() => ({ hidden: [] as string[] }));
+
 vi.mock("../../stores/ui/search.store", () => ({
   useSearchStore: (selector: (state: { toggleSearchOpen: () => void }) => unknown) =>
     selector({ toggleSearchOpen: vi.fn() }),
@@ -8,6 +11,33 @@ vi.mock("../../stores/ui/search.store", () => ({
 
 vi.mock("../../rpc/serverState", () => ({
   useServerKeybindings: () => [],
+}));
+
+vi.mock("./Sidebar.actions.git", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./Sidebar.actions.git")>()),
+  usePluginGitAvailability: () => ({ status: gitStatus.value, check: vi.fn() }),
+}));
+
+vi.mock("../../stores/ui/ui.store", () => ({
+  useUiStateStore: (selector: (state: unknown) => unknown) =>
+    selector({
+      sidebarActionOrder: [
+        "plugins",
+        "scheduled",
+        "games",
+        "usage",
+        "pinned",
+        "chats",
+        "projects",
+        "remote-projects",
+      ],
+      hiddenSidebarActions: sidebarPreferences.hidden,
+      setSidebarActionHidden: vi.fn(),
+      setAllSidebarActionsHidden: vi.fn(),
+      reorderSidebarAction: vi.fn(),
+      moveSidebarActionToEdge: vi.fn(),
+      resetSidebarActionOrder: vi.fn(),
+    }),
 }));
 
 // Tooltip uses portals and Base UI primitives that don't render cleanly with
@@ -36,15 +66,68 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
   return renderToStaticMarkup(
     <SidebarActionsSection
       onNewChat={vi.fn()}
+      newThreadShortcutLabel={newThreadShortcutLabel}
       onOpenAutomations={vi.fn()}
       onOpenUsage={vi.fn()}
       onOpenGames={vi.fn()}
-      newThreadShortcutLabel={newThreadShortcutLabel}
+      sections={{
+        pinned: () => <div>Pinned section</div>,
+        chats: () => <div>Chats section</div>,
+        projects: () => <div>Projects section</div>,
+        "remote-projects": () => <div>Remote Projects section</div>,
+      }}
     />,
   );
 }
 
 describe("SidebarActionsSection", () => {
+  it("renders the two visual groups in order", () => {
+    const html = renderActions();
+    expect(html).toContain('data-sidebar-visual-group="primary"');
+    expect(html).toContain('data-sidebar-visual-group="secondary"');
+    expect(html.indexOf("Usage")).toBeLessThan(
+      html.indexOf('data-sidebar-visual-group="secondary"'),
+    );
+    expect(html.indexOf("Pinned section")).toBeGreaterThan(
+      html.indexOf('data-sidebar-visual-group="secondary"'),
+    );
+  });
+  it("hides every configurable section while New chat and Search remain fixed", () => {
+    sidebarPreferences.hidden = [
+      "plugins",
+      "scheduled",
+      "games",
+      "usage",
+      "pinned",
+      "chats",
+      "projects",
+      "remote-projects",
+    ];
+    try {
+      const html = renderActions();
+      expect(html).toContain('aria-label="New chat"');
+      expect(html).toContain('aria-label="Open search"');
+      expect(html).toContain("Hidden items");
+      expect(html).not.toContain("Pinned section");
+      expect(html).not.toContain("Remote Projects section");
+      expect(html).not.toContain('aria-label="Open usage"');
+    } finally {
+      sidebarPreferences.hidden = [];
+    }
+  });
+  it("keeps fixed actions and recovery visible when Git is missing", () => {
+    gitStatus.value = "missing";
+    try {
+      const html = renderActions();
+      expect(html).toContain('aria-label="New chat"');
+      expect(html).toContain('aria-label="Open search"');
+      expect(html).not.toContain('aria-label="Open plugins"');
+      expect(html).toContain("Hidden items");
+      expect(html).not.toContain("Hidden items (1)");
+    } finally {
+      gitStatus.value = "available";
+    }
+  });
   it("renders the New chat, Search, Scheduled, and Usage actions with icons", () => {
     const html = renderActions();
 
@@ -88,17 +171,19 @@ describe("SidebarActionsSection", () => {
     expect(html).not.toContain('data-slot="kbd"');
   });
 
-  it("stacks the three actions in a tight column with reduced vertical spacing", () => {
+  it("uses the same gap within both visual groups", () => {
     const html = renderActions();
 
-    // The container uses `gap-0.5` and `py-2 px-2` for tight stacking.
-    expect(html).toContain("flex flex-col gap-0.5");
-    expect(html).toContain("px-2 py-2");
+    expect(html).toContain('data-sidebar-visual-group="primary" class="flex flex-col gap-0.5"');
+    expect(html).toContain(
+      'data-sidebar-visual-group="secondary" class="mt-4 flex flex-col gap-0.5"',
+    );
   });
 
-  it("uses py-1 per row for the compact spacing", () => {
+  it("uses a consistent height for fixed and configurable action rows", () => {
     const html = renderActions();
 
-    expect(html).toContain("py-1");
+    expect(html).toContain('class="group flex h-7 w-full items-center');
+    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(6);
   });
 });
