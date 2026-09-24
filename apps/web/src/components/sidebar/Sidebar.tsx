@@ -58,6 +58,10 @@ export default function Sidebar() {
               closeMobileSidebar();
               void navigate({ to: "/plugins" });
             }}
+            onOpenGames={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/games" });
+            }}
             onOpenUsage={() => {
               closeMobileSidebar();
               void navigate({ to: "/usage" });

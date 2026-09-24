@@ -38,6 +38,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
       onNewChat={vi.fn()}
       onOpenAutomations={vi.fn()}
       onOpenUsage={vi.fn()}
+      onOpenGames={vi.fn()}
       newThreadShortcutLabel={newThreadShortcutLabel}
     />,
   );
@@ -49,12 +50,19 @@ describe("SidebarActionsSection", () => {
 
     expect(html).toContain('aria-label="New chat"');
     expect(html).toContain('aria-label="Open search"');
+    expect(html).toContain('aria-label="Open games"');
     expect(html).toContain('aria-label="Open scheduled"');
     expect(html).toContain('aria-label="Open usage"');
     expect(html).toContain("New chat");
     expect(html).toContain("Search");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Usage");
+    expect(html.indexOf('aria-label="Open scheduled"')).toBeLessThan(
+      html.indexOf('aria-label="Open games"'),
+    );
+    expect(html.indexOf('aria-label="Open games"')).toBeLessThan(
+      html.indexOf('aria-label="Open usage"'),
+    );
   });
 
   it("applies the group class so per-row hover reveal works for the kbd hint", () => {

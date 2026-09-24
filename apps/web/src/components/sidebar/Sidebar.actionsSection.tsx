@@ -1,4 +1,11 @@
-import { BarChart3Icon, ClockIcon, PlugIcon, SearchIcon, SquarePenIcon } from "lucide-react";
+import {
+  BarChart3Icon,
+  ClockIcon,
+  Gamepad2,
+  PlugIcon,
+  SearchIcon,
+  SquarePenIcon,
+} from "lucide-react";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
@@ -11,6 +18,7 @@ interface SidebarActionsSectionProps {
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
   onOpenPlugins?: () => void;
+  onOpenGames: () => void;
   newThreadShortcutLabel: string | null | undefined;
 }
 
@@ -19,6 +27,7 @@ export function SidebarActionsSection({
   onOpenAutomations,
   onOpenUsage,
   onOpenPlugins,
+  onOpenGames,
   newThreadShortcutLabel,
 }: SidebarActionsSectionProps) {
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
@@ -115,6 +124,25 @@ export function SidebarActionsSection({
           <span className="flex-1">Scheduled</span>
         </TooltipTrigger>
         <TooltipPopup side="right">Scheduled</TooltipPopup>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Open games"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onOpenGames}
+            />
+          }
+        >
+          <Gamepad2
+            className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+          />
+          <span className="flex-1">Games</span>
+        </TooltipTrigger>
+        <TooltipPopup side="right">Games</TooltipPopup>
       </Tooltip>
 
       <Tooltip>

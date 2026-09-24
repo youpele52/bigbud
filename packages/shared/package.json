@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./games": {
+      "types": "./src/games.ts",
+      "import": "./src/games.ts"
+    },
     "./screenRecording": {
       "types": "./src/screenRecording.ts",
       "import": "./src/screenRecording.ts"

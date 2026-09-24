@@ -22,10 +22,12 @@ import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as SettingsAboutRouteImport } from './routes/settings.about'
 import { Route as ChatUsageRouteImport } from './routes/_chat.usage'
 import { Route as ChatPluginsRouteImport } from './routes/_chat.plugins'
+import { Route as ChatGamesRouteImport } from './routes/_chat.games'
 import { Route as ChatAutomationsRouteImport } from './routes/_chat.automations'
 import { Route as ChatThreadIdRouteImport } from './routes/_chat.$threadId'
 import { Route as ChatUsageIndexRouteImport } from './routes/_chat.usage.index'
 import { Route as ChatPluginsIndexRouteImport } from './routes/_chat.plugins.index'
+import { Route as ChatGamesIndexRouteImport } from './routes/_chat.games.index'
 import { Route as ChatAutomationsIndexRouteImport } from './routes/_chat.automations.index'
 import { Route as ChatPluginsPluginIdRouteImport } from './routes/_chat.plugins.$pluginId'
 import { Route as ChatAutomationsAutomationIdRouteImport } from './routes/_chat.automations.$automationId'
@@ -94,6 +96,11 @@ const ChatPluginsRoute = ChatPluginsRouteImport.update({
   path: '/plugins',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatGamesRoute = ChatGamesRouteImport.update({
+  id: '/games',
+  path: '/games',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatAutomationsRoute = ChatAutomationsRouteImport.update({
   id: '/automations',
   path: '/automations',
@@ -113,6 +120,11 @@ const ChatPluginsIndexRoute = ChatPluginsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatPluginsRoute,
+} as any)
+const ChatGamesIndexRoute = ChatGamesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChatGamesRoute,
 } as any)
 const ChatAutomationsIndexRoute = ChatAutomationsIndexRouteImport.update({
   id: '/',
@@ -136,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRouteWithChildren
   '/$threadId': typeof ChatThreadIdRoute
   '/automations': typeof ChatAutomationsRouteWithChildren
+  '/games': typeof ChatGamesRouteWithChildren
   '/plugins': typeof ChatPluginsRouteWithChildren
   '/usage': typeof ChatUsageRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
@@ -149,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
   '/automations/': typeof ChatAutomationsIndexRoute
+  '/games/': typeof ChatGamesIndexRoute
   '/plugins/': typeof ChatPluginsIndexRoute
   '/usage/': typeof ChatUsageIndexRoute
 }
@@ -167,6 +181,7 @@ export interface FileRoutesByTo {
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
   '/automations': typeof ChatAutomationsIndexRoute
+  '/games': typeof ChatGamesIndexRoute
   '/plugins': typeof ChatPluginsIndexRoute
   '/usage': typeof ChatUsageIndexRoute
 }
@@ -176,6 +191,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRouteWithChildren
   '/_chat/$threadId': typeof ChatThreadIdRoute
   '/_chat/automations': typeof ChatAutomationsRouteWithChildren
+  '/_chat/games': typeof ChatGamesRouteWithChildren
   '/_chat/plugins': typeof ChatPluginsRouteWithChildren
   '/_chat/usage': typeof ChatUsageRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
@@ -190,6 +206,7 @@ export interface FileRoutesById {
   '/_chat/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/_chat/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
   '/_chat/automations/': typeof ChatAutomationsIndexRoute
+  '/_chat/games/': typeof ChatGamesIndexRoute
   '/_chat/plugins/': typeof ChatPluginsIndexRoute
   '/_chat/usage/': typeof ChatUsageIndexRoute
 }
@@ -200,6 +217,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/$threadId'
     | '/automations'
+    | '/games'
     | '/plugins'
     | '/usage'
     | '/settings/about'
@@ -213,6 +231,7 @@ export interface FileRouteTypes {
     | '/automations/$automationId'
     | '/plugins/$pluginId'
     | '/automations/'
+    | '/games/'
     | '/plugins/'
     | '/usage/'
   fileRoutesByTo: FileRoutesByTo
@@ -231,6 +250,7 @@ export interface FileRouteTypes {
     | '/automations/$automationId'
     | '/plugins/$pluginId'
     | '/automations'
+    | '/games'
     | '/plugins'
     | '/usage'
   id:
@@ -239,6 +259,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/_chat/$threadId'
     | '/_chat/automations'
+    | '/_chat/games'
     | '/_chat/plugins'
     | '/_chat/usage'
     | '/settings/about'
@@ -253,6 +274,7 @@ export interface FileRouteTypes {
     | '/_chat/automations/$automationId'
     | '/_chat/plugins/$pluginId'
     | '/_chat/automations/'
+    | '/_chat/games/'
     | '/_chat/plugins/'
     | '/_chat/usage/'
   fileRoutesById: FileRoutesById
@@ -355,6 +377,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatPluginsRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/games': {
+      id: '/_chat/games'
+      path: '/games'
+      fullPath: '/games'
+      preLoaderRoute: typeof ChatGamesRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/automations': {
       id: '/_chat/automations'
       path: '/automations'
@@ -382,6 +411,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/plugins/'
       preLoaderRoute: typeof ChatPluginsIndexRouteImport
       parentRoute: typeof ChatPluginsRoute
+    }
+    '/_chat/games/': {
+      id: '/_chat/games/'
+      path: '/'
+      fullPath: '/games/'
+      preLoaderRoute: typeof ChatGamesIndexRouteImport
+      parentRoute: typeof ChatGamesRoute
     }
     '/_chat/automations/': {
       id: '/_chat/automations/'
@@ -421,6 +457,18 @@ const ChatAutomationsRouteWithChildren = ChatAutomationsRoute._addFileChildren(
   ChatAutomationsRouteChildren,
 )
 
+interface ChatGamesRouteChildren {
+  ChatGamesIndexRoute: typeof ChatGamesIndexRoute
+}
+
+const ChatGamesRouteChildren: ChatGamesRouteChildren = {
+  ChatGamesIndexRoute: ChatGamesIndexRoute,
+}
+
+const ChatGamesRouteWithChildren = ChatGamesRoute._addFileChildren(
+  ChatGamesRouteChildren,
+)
+
 interface ChatPluginsRouteChildren {
   ChatPluginsPluginIdRoute: typeof ChatPluginsPluginIdRoute
   ChatPluginsIndexRoute: typeof ChatPluginsIndexRoute
@@ -450,6 +498,7 @@ const ChatUsageRouteWithChildren = ChatUsageRoute._addFileChildren(
 interface ChatRouteChildren {
   ChatThreadIdRoute: typeof ChatThreadIdRoute
   ChatAutomationsRoute: typeof ChatAutomationsRouteWithChildren
+  ChatGamesRoute: typeof ChatGamesRouteWithChildren
   ChatPluginsRoute: typeof ChatPluginsRouteWithChildren
   ChatUsageRoute: typeof ChatUsageRouteWithChildren
   ChatIndexRoute: typeof ChatIndexRoute
@@ -458,6 +507,7 @@ interface ChatRouteChildren {
 const ChatRouteChildren: ChatRouteChildren = {
   ChatThreadIdRoute: ChatThreadIdRoute,
   ChatAutomationsRoute: ChatAutomationsRouteWithChildren,
+  ChatGamesRoute: ChatGamesRouteWithChildren,
   ChatPluginsRoute: ChatPluginsRouteWithChildren,
   ChatUsageRoute: ChatUsageRouteWithChildren,
   ChatIndexRoute: ChatIndexRoute,

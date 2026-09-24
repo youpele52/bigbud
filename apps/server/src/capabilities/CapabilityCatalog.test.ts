@@ -58,6 +58,8 @@ describe("capability context serialization", () => {
     });
     expect(lp).toContain(`Catalog revision: ${BIGBUD_CAPABILITY_CATALOG.revision}`);
     expect(lp).toContain("bigbud://capabilities/thread.create");
+    expect(lp).toContain("Games catalog in the left sidebar");
+    expect(lp).toContain("do not send unsolicited game suggestions");
     expect(lp).not.toMatch(/\/Users\/|BigBud|Bigbud|bigBud/);
     expect(estimateCapabilityTokens(lp)).toBeLessThanOrEqual(LP_TARGET_TOKEN_LIMIT);
   });
@@ -70,6 +72,7 @@ describe("capability context serialization", () => {
     expect(tokens).toBeLessThanOrEqual(SKIT_HARD_TOKEN_LIMIT);
     expect(skit).toContain("read_capability_guide");
     expect(skit).toContain("self-contained tasks");
+    expect(skit).toContain("Games is in the sidebar");
   });
 
   it("serializes a bounded capability delta", () => {
