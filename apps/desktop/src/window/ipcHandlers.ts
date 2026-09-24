@@ -1,10 +1,8 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, shell } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from "electron";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { MenuItemConstructorOptions } from "electron";
 import type {
-  ContextMenuItem,
   DesktopTailscaleRemoteAccessStatus,
   DesktopTheme,
   DesktopUpdateActionResult,
@@ -18,13 +16,13 @@ import {
   showDesktopNotification,
 } from "./ipcHandlers.notifications";
 import { getSafeExternalUrl } from "./menuManager";
-import { getDestructiveMenuIcon } from "../env/pathResolver";
 import {
   registerComputerUseIpcHandlers,
   type ComputerUseIpcHandlerDeps,
 } from "./ipcHandlers.computerUse";
 import { applyWindowMaterial, getSafeWindowMaterial } from "./windowManager";
 import { registerCertificateChallengeHandlers } from "./ipcHandlers.certificateChallenge";
+import { registerContextMenuIpcHandler } from "./ipcHandlers.contextMenu";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -218,68 +216,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     applyWindowMaterial(window, windowMaterial);
   });
 
-  ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);
-  ipcMain.handle(
-    CONTEXT_MENU_CHANNEL,
-    async (event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
-      const normalizedItems = items
-        .filter((item) => typeof item.id === "string" && typeof item.label === "string")
-        .map((item) => ({
-          id: item.id,
-          label: item.label,
-          destructive: item.destructive === true,
-          disabled: item.disabled === true,
-        }));
-      if (normalizedItems.length === 0) {
-        return null;
-      }
-
-      const popupPosition =
-        position &&
-        Number.isFinite(position.x) &&
-        Number.isFinite(position.y) &&
-        position.x >= 0 &&
-        position.y >= 0
-          ? {
-              x: Math.floor(position.x),
-              y: Math.floor(position.y),
-            }
-          : null;
-
-      const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
-      if (!window) return null;
-
-      return new Promise<string | null>((resolve) => {
-        const template: MenuItemConstructorOptions[] = [];
-        let hasInsertedDestructiveSeparator = false;
-        for (const item of normalizedItems) {
-          if (item.destructive && !hasInsertedDestructiveSeparator && template.length > 0) {
-            template.push({ type: "separator" });
-            hasInsertedDestructiveSeparator = true;
-          }
-          const itemOption: MenuItemConstructorOptions = {
-            label: item.label,
-            enabled: !item.disabled,
-            click: () => resolve(item.id),
-          };
-          if (item.destructive) {
-            const destructiveIcon = getDestructiveMenuIcon();
-            if (destructiveIcon) {
-              itemOption.icon = destructiveIcon;
-            }
-          }
-          template.push(itemOption);
-        }
-
-        const menu = Menu.buildFromTemplate(template);
-        menu.popup({
-          window,
-          ...popupPosition,
-          callback: () => resolve(null),
-        });
-      });
-    },
-  );
+  registerContextMenuIpcHandler(CONTEXT_MENU_CHANNEL, deps.getMainWindow);
 
   ipcMain.removeHandler(OPEN_EXTERNAL_CHANNEL);
   ipcMain.handle(OPEN_EXTERNAL_CHANNEL, async (_event, rawUrl: unknown) => {

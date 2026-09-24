@@ -296,22 +296,6 @@ export function SidebarActionsSection({
           void showActionMenu(null, { x: event.clientX, y: event.clientY });
         }}
       />
-      {effectiveHidden.length > 0 ? (
-        <button
-          type="button"
-          className="mx-2 h-7 rounded-md px-2 text-left text-xs text-muted-foreground hover:bg-accent"
-          onClick={(event) => {
-            const bounds = event.currentTarget.getBoundingClientRect();
-            void showActionMenu(null, { x: bounds.left, y: bounds.bottom });
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            void showActionMenu(null, { x: event.clientX, y: event.clientY });
-          }}
-        >
-          Hidden items
-        </button>
-      ) : null}
       <DndContext
         sensors={sensors}
         collisionDetection={sidebarCollisionDetection}

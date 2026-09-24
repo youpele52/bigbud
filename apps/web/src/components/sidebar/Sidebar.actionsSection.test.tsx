@@ -107,7 +107,7 @@ describe("SidebarActionsSection", () => {
       const html = renderActions();
       expect(html).toContain('aria-label="New chat"');
       expect(html).toContain('aria-label="Open search"');
-      expect(html).toContain("Hidden items");
+      expect(html).not.toContain("Hidden items");
       expect(html).not.toContain("Pinned section");
       expect(html).not.toContain("Remote Projects section");
       expect(html).not.toContain('aria-label="Open usage"');
@@ -115,15 +115,14 @@ describe("SidebarActionsSection", () => {
       sidebarPreferences.hidden = [];
     }
   });
-  it("keeps fixed actions and recovery visible when Git is missing", () => {
+  it("keeps fixed actions visible without a hidden-items row when Git is missing", () => {
     gitStatus.value = "missing";
     try {
       const html = renderActions();
       expect(html).toContain('aria-label="New chat"');
       expect(html).toContain('aria-label="Open search"');
       expect(html).not.toContain('aria-label="Open plugins"');
-      expect(html).toContain("Hidden items");
-      expect(html).not.toContain("Hidden items (1)");
+      expect(html).not.toContain("Hidden items");
     } finally {
       gitStatus.value = "available";
     }
