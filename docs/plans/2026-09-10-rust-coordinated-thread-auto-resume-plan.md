@@ -31,7 +31,7 @@ Restoring a conversation is not the same as restoring a live execution. The inva
 - [Remote project Reconnect](2026-09-07-remote-project-reconnect-plan.md): explicitly disruptive service restart; automatic recovery must not call it or override its deliberate interruption policy.
 - [Mobile recovery correctness](2026-09-09-mobile-recovery-correctness-plan.md): client snapshot/command recovery is adjacent work, not provider execution recovery.
 - Recent commits inspected: `f2ec633ffc` mobile bounded recovery; `81bee484d5` remote reconnect/pending-send recovery; `3a5fa9fbd9` remote restart flow; `71fbf53347` remote-agent recovery hardening.
-- Instructions inspected: root `AGENTS.md`, `crates/AGENTS.md`, `docs/plan/_plan-authoring-guide--do-not-delete.md`, and supplied `docs/CONTEXT.md`. No other nested AGENTS files were found.
+- Instructions inspected: root `AGENTS.md`, `crates/AGENTS.md`, the guide now at `docs/plans/_plan-authoring-guide--do-not-delete.md`, and supplied `docs/CONTEXT.md`. No other nested AGENTS files were found.
 
 ## Problem
 

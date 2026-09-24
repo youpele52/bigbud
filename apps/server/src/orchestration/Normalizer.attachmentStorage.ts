@@ -12,7 +12,7 @@ export const persistSubmissionAttachment = Effect.fn("persistSubmissionAttachmen
     .pipe(
       Effect.flatMap((existing) =>
         Buffer.from(existing).equals(Buffer.from(bytes))
-          ? Effect.void
+          ? Effect.succeed(false)
           : Effect.fail(
               new Error("Stored submission attachment does not match its content identity."),
             ),
@@ -24,6 +24,7 @@ export const persistSubmissionAttachment = Effect.fn("persistSubmissionAttachmen
     (temporary) =>
       fs.writeFile(temporary, bytes).pipe(
         Effect.andThen(fs.link(temporary, destination)),
+        Effect.as(true),
         Effect.catch((error) =>
           error.reason._tag === "AlreadyExists" ? verifyExisting : Effect.fail(error),
         ),

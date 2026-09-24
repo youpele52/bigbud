@@ -139,6 +139,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     updateSettings: vi.fn(),
     previewThreadRetention: vi.fn(),
     startThreadRetention: vi.fn(),
+    getThreadRetentionRun: vi.fn(),
+    listThreadRetentionRuns: vi.fn(),
     setThreadRetentionPolicy: vi.fn(),
     setThreadPinned: vi.fn(),
     readDocumentUrl: vi.fn(),
@@ -167,6 +169,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   orchestration: {
     getSidebarThreadCatalog: vi.fn(),
     getStartupProjectCatalog: vi.fn(),
+    searchConversationMessages: vi.fn(),
     getProjectThreadSummaries: vi.fn(),
     getSelectedThreadDetail: vi.fn(),
     getThreadOwnership: vi.fn(),

@@ -1,5 +1,14 @@
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
+import { getLeftSidebarGapWidth } from "../layout/chatLayout.shared";
+import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
+import { resolveGamesPanelWidth, resolveRightPanelWidth } from "./gamesPanelWidth.logic";
 import {
   getRightPanelMaxWidth,
   useRightPanelWidthStore,
@@ -18,6 +27,23 @@ export function useRightPanelWidth() {
   const resizing = useRightPanelWidthStore((state) => state.resizing);
   const setPanelWidth = useRightPanelWidthStore((state) => state.setPanelWidth);
   const setResizing = useRightPanelWidthStore((state) => state.setResizing);
+  const gamesWidthTabId = useRightPanelTabsStore((state) => state.gamesWidthTabId);
+  const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
+  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
+  const [gamesPanelWidth, setGamesPanelWidth] = useState(() =>
+    resolveGamesPanelWidth({
+      viewportWidth: window.innerWidth,
+      leftSidebarWidth: 0,
+      minimumBrowserWidth: 320,
+    }),
+  );
+  const effectiveWidth = resolveRightPanelWidth({
+    normalWidth: panelWidth,
+    gamesWidth: gamesPanelWidth,
+    gamesTabId: gamesWidthTabId,
+    activeTabId,
+    rightPanelOpen,
+  });
   const startRef = useRef<{ x: number; width: number } | null>(null);
   const transitionTargetsRef = useRef<HTMLElement[]>([]);
 
@@ -25,6 +51,7 @@ export function useRightPanelWidth() {
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (event.button !== 0) return;
       event.preventDefault();
+      useRightPanelTabsStore.getState().clearGamesWidthMode();
 
       const handle = event.currentTarget;
       const container = handle.parentElement;
@@ -37,9 +64,9 @@ export function useRightPanelWidth() {
 
       event.currentTarget.setPointerCapture(event.pointerId);
       setResizing(true);
-      startRef.current = { x: event.clientX, width: panelWidth };
+      startRef.current = { x: event.clientX, width: effectiveWidth };
     },
-    [panelWidth, setResizing],
+    [effectiveWidth, setResizing],
   );
 
   useEffect(() => {
@@ -69,8 +96,38 @@ export function useRightPanelWidth() {
     };
   }, [resizing, setPanelWidth, setResizing]);
 
+  useEffect(() => {
+    if (!gamesWidthTabId) return;
+    if (!rightPanelOpen || activeTabId !== gamesWidthTabId) {
+      useRightPanelTabsStore.getState().setGamesWidthTabId(null);
+      return;
+    }
+    const update = () =>
+      setGamesPanelWidth(
+        resolveGamesPanelWidth({
+          viewportWidth: window.innerWidth,
+          leftSidebarWidth: getLeftSidebarGapWidth(),
+          minimumBrowserWidth: 320,
+        }),
+      );
+    update();
+    const gap = document.querySelector<HTMLElement>(
+      "[data-slot='sidebar'][data-side='left'] [data-slot='sidebar-gap']",
+    );
+    const observer =
+      gap && typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    if (gap) observer?.observe(gap);
+    window.addEventListener("resize", update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [activeTabId, gamesWidthTabId, rightPanelOpen]);
+
+  useEffect(() => () => useRightPanelTabsStore.getState().setGamesWidthTabId(null), []);
+
   return {
     onResizePointerDown,
-    panelWidth,
+    panelWidth: effectiveWidth,
   };
 }

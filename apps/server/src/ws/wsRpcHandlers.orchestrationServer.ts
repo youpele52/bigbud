@@ -7,6 +7,7 @@ import {
   OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetProjectThreadSummariesError,
   OrchestrationGetStartupProjectCatalogError,
+  OrchestrationSearchConversationMessagesError,
   OrchestrationGetSelectedThreadDetailError,
   OrchestrationGetThreadOwnershipError,
   OrchestrationGetTurnDiffError,
@@ -87,6 +88,22 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
           ),
           "rpc.project_catalog.cursor_present": input.cursor !== undefined,
         },
+      ),
+    [ORCHESTRATION_WS_METHODS.searchConversationMessages]: (
+      input: Parameters<WsRpcContext["projectionCatalogQuery"]["searchConversationMessages"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.searchConversationMessages,
+        context.projectionCatalogQuery.searchConversationMessages(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationSearchConversationMessagesError({
+                message: "Failed to search conversation messages",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
       ),
     [ORCHESTRATION_WS_METHODS.getProjectThreadSummaries]: (
       input: Parameters<WsRpcContext["projectionCatalogQuery"]["getProjectThreadSummaries"]>[0],

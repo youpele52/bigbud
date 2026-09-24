@@ -42,8 +42,8 @@ describe("runDirectThreadRetention", () => {
       preview: () =>
         Effect.succeed({
           eligibleCount: 1,
-          oldestEligibleActivityAt: "2026-08-10T00:00:00.000Z",
-          newestEligibleActivityAt: "2026-08-10T00:00:00.000Z",
+          oldestEligibleAgeAt: "2026-08-10T00:00:00.000Z",
+          newestEligibleAgeAt: "2026-08-10T00:00:00.000Z",
           exclusionCounts: [],
           estimatedAttachmentCount: 0,
           estimatedResourceCount: 0,
@@ -140,11 +140,12 @@ describe("runDirectThreadRetention", () => {
     const result = await runtime.runPromise(
       handlers[WS_METHODS.serverStartThreadRetention]({ challengeToken }),
     );
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
     await runtime.dispose();
 
     expect(result.policy).toBe("7-days");
     expect(result.cutoffAt).toBe(issued.challenge.cutoffAt);
-    expect(result.deletedCount).toBe(1);
+    expect(result.runId).toBe(retentionRun.runId);
     expect(consumeChallengeAndCreateRun).toHaveBeenCalledWith({
       token: challengeToken,
       trigger: "manual",

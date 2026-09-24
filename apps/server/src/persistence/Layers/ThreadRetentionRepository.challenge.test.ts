@@ -214,6 +214,8 @@ layer("thread retention consent", (it) => {
         runId: "exact-active",
         trigger: "manual",
         policy: "7-days",
+        selectionMode: "per-thread",
+        ageCriterion: "last-conversation-activity",
         cutoffAt: "2026-08-01T00:00:00.000Z",
         createdAt: "2026-08-04T00:00:01.000Z",
       });

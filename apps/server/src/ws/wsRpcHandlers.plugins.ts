@@ -1,6 +1,7 @@
 import type { WsRpcContext } from "./wsRpcContext";
 
 export const makeWsRpcPluginHandlers = (context: WsRpcContext) => ({
+  "plugins.gitAvailability": () => Effect.promise(() => checkPluginGitAvailability()),
   "plugins.listCatalog": () => context.pluginRegistry.listCatalog,
   "plugins.get": ({ pluginId }: { readonly pluginId: string }) =>
     context.pluginRegistry.get(pluginId),
@@ -29,3 +30,5 @@ export const makeWsRpcPluginHandlers = (context: WsRpcContext) => ({
     readonly revision: string;
   }) => context.pluginRegistry.uninstall({ pluginId, revision }),
 });
+import { Effect } from "effect";
+import { checkPluginGitAvailability } from "../plugins/Layers/PluginRegistry.utils";

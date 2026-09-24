@@ -5,6 +5,7 @@ import { ServerSettings, ServerSettingsPatch } from "./settings";
 import {
   FINITE_THREAD_RETENTION_POLICIES,
   THREAD_RETENTION_POLICIES,
+  ThreadRetentionAgeCriterion,
   ThreadRetentionPolicy,
 } from "./settings.threadRetention";
 import {
@@ -27,6 +28,14 @@ describe("thread retention settings", () => {
     expect(Schema.decodeUnknownSync(ServerSettings)({}).threadRetentionPolicy).toBe("never");
   });
 
+  it("accepts exactly the two supported thread age criteria", () => {
+    for (const criterion of ["created", "last-conversation-activity"]) {
+      expect(Schema.decodeUnknownSync(ThreadRetentionAgeCriterion)(criterion)).toBe(criterion);
+    }
+    expect(() => Schema.decodeUnknownSync(ThreadRetentionAgeCriterion)("updated")).toThrow();
+    expect(() => Schema.decodeUnknownSync(ThreadRetentionAgeCriterion)("last-modified")).toThrow();
+  });
+
   it("does not allow generic settings patches to change retention policy", () => {
     const patch = Schema.decodeUnknownSync(ServerSettingsPatch)({
       threadRetentionPolicy: "7-days",
@@ -46,6 +55,8 @@ describe("thread retention settings", () => {
       token: "single-use-token",
       trigger: "manual",
       policy: "7-days",
+      selectionMode: "per-thread",
+      ageCriterion: "last-conversation-activity",
       cutoffAt: "2026-07-28T00:00:00.000Z",
       expiresAt: "2026-08-04T00:05:00.000Z",
       singleUse: true,

@@ -6,8 +6,10 @@ import type {
   TerminalDropPathMode,
   TerminalSessionStatus,
 } from "@bigbud/contracts";
+import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
+import type { TerminalAgentDetector } from "./Manager.agentDetection";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -34,6 +36,7 @@ export interface TerminalSessionState {
   cwd: string;
   worktreePath: string | null;
   runtimeEpoch: number;
+  runtimeGeneration: string;
   status: TerminalSessionStatus;
   pid: number | null;
   history: string;
@@ -50,6 +53,8 @@ export interface TerminalSessionState {
   unsubscribeData: (() => void) | null;
   unsubscribeExit: (() => void) | null;
   hasRunningSubprocess: boolean;
+  activeAgentProvider: ProviderKind | null;
+  agentIdentityMisses: number;
   runtimeEnv: Record<string, string> | null;
 }
 
@@ -102,6 +107,7 @@ export interface TerminalManagerOptions {
   ptyAdapter: PtyAdapterShape;
   shellResolver?: () => string;
   subprocessChecker?: TerminalSubprocessChecker;
+  agentDetector?: TerminalAgentDetector;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;

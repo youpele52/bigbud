@@ -1,4 +1,4 @@
-import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
@@ -8,6 +8,7 @@ import { useComposerDraftStore } from "../../stores/composer";
 import {
   selectTerminalEventEntries,
   selectThreadTerminalState,
+  terminalEventBufferKey,
   useTerminalStateStore,
 } from "../../stores/terminal";
 import { useDefaultChatCwd } from "../../rpc/serverState";
@@ -15,6 +16,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
+const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
 
 export interface TerminalLaunchContext {
   cwd: string;
@@ -65,6 +67,9 @@ export function useThreadTerminalDrawer(
   );
   const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
   const defaultChatCwd = useDefaultChatCwd();
+  const executionTargetId = resolveTerminalExecutionTargetId({ serverThread, project });
+  const useLegacyOutputDetection =
+    executionTargetId !== undefined && executionTargetId !== LOCAL_EXECUTION_TARGET_ID;
 
   const isPanel = mode === "panel";
   const terminalState = useTerminalStateStore((state) =>
@@ -91,8 +96,13 @@ export function useThreadTerminalDrawer(
   const terminalLabelOverrides = useTerminalStateStore(
     (state) => state.terminalLabelOverridesByThreadId[threadId] ?? EMPTY_TERMINAL_LABEL_OVERRIDES,
   );
-  const terminalEventEntriesByKey = useTerminalStateStore(
-    (state) => state.terminalEventEntriesByKey,
+  const terminalEventEntriesByKey = useTerminalStateStore((state) =>
+    useLegacyOutputDetection
+      ? state.terminalEventEntriesByKey
+      : EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY,
+  );
+  const terminalAgentProviderByKey = useTerminalStateStore(
+    (state) => state.terminalAgentProviderByKey,
   );
   const storeSetTerminalLabelOverride = useTerminalStateStore(
     (state) => state.setTerminalLabelOverride,
@@ -142,6 +152,12 @@ export function useThreadTerminalDrawer(
   const terminalProviderById = useMemo(() => {
     const nextById: Record<string, ProviderKind> = {};
     for (const terminalId of terminalState.terminalIds) {
+      const key = terminalEventBufferKey(threadId, terminalId);
+      if (Object.hasOwn(terminalAgentProviderByKey, key)) {
+        const liveProvider = terminalAgentProviderByKey[key];
+        if (liveProvider) nextById[terminalId] = liveProvider;
+        continue;
+      }
       const eventEntries = selectTerminalEventEntries(
         terminalEventEntriesByKey,
         threadId,
@@ -153,7 +169,7 @@ export function useThreadTerminalDrawer(
       }
     }
     return nextById;
-  }, [terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
+  }, [terminalAgentProviderByKey, terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -236,7 +252,7 @@ export function useThreadTerminalDrawer(
     cwd,
     effectiveWorktreePath,
     runtimeEnv,
-    executionTargetId: resolveTerminalExecutionTargetId({ serverThread, project }),
+    executionTargetId,
     terminalBaseLabel,
     terminalLabelOverrides,
     terminalProviderById,

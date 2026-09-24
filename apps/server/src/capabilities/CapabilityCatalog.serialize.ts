@@ -15,7 +15,7 @@ const assertWithinBudget = (label: string, text: string, limit: number): string 
 };
 
 export const BIGBUD_CAPABILITY_CATALOG_PROTOCOL =
-  "bigbud capability Tracks provide bounded operating guidance. Use search_capabilities to discover relevant capabilities and read_capability_guide to load a Track. Operational tools retain their typed schemas and permission rules. Standalone delegated threads do not inherit the parent transcript, so delegated tasks must be self-contained.";
+  "bigbud capability Tracks provide bounded operating guidance. Use search_capabilities to discover relevant capabilities and read_capability_guide to load a Track. Operational tools retain their typed schemas and permission rules. Standalone delegated threads do not inherit the parent transcript, so delegated tasks must be self-contained. The app has a Games catalog in the left sidebar; do not send unsolicited game suggestions in chat because the app owns its timed Games notification.";
 
 export function serializeCapabilityLp(input: {
   readonly catalog: CapabilityCatalog;
@@ -66,6 +66,7 @@ export function serializeCapabilitySkit(catalogRevision: string): string {
     "<bigbud_capability_skit>",
     `Catalog revision: ${catalogRevision}.`,
     "Tracks remain available: use search_capabilities, then read_capability_guide for bounded guidance.",
+    "Games is in the sidebar. Do not suggest games unsolicited; the app handles that notification.",
     "Standalone delegated threads need self-contained tasks because they do not inherit the parent transcript.",
     "</bigbud_capability_skit>",
   ].join("\n");

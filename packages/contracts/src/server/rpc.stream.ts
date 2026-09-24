@@ -47,6 +47,7 @@ import {
   OrchestrationGetThreadOwnershipError,
 } from "../orchestration/orchestration.rpc";
 import { GetThreadOwnershipInput } from "../orchestration/orchestration.ownership";
+import { OrchestrationSearchConversationMessagesError } from "../orchestration/orchestration.search";
 
 export const WsOrchestrationGetSidebarThreadCatalogRpc = Rpc.make(
   ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog,
@@ -63,6 +64,15 @@ export const WsOrchestrationGetStartupProjectCatalogRpc = Rpc.make(
     payload: GetStartupProjectCatalogInput,
     success: OrchestrationRpcSchemas.getStartupProjectCatalog.output,
     error: OrchestrationGetStartupProjectCatalogError,
+  },
+);
+
+export const WsOrchestrationSearchConversationMessagesRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.searchConversationMessages,
+  {
+    payload: OrchestrationRpcSchemas.searchConversationMessages.input,
+    success: OrchestrationRpcSchemas.searchConversationMessages.output,
+    error: OrchestrationSearchConversationMessagesError,
   },
 );
 

@@ -15,6 +15,8 @@ import {
 import { makeThreadRetentionChallenges } from "./ThreadRetentionRepository.challenges.ts";
 import { makeThreadRetentionAudit } from "./ThreadRetentionRepository.audit.ts";
 import { makeThreadRetentionClaim } from "./ThreadRetentionRepository.claim.ts";
+import { makeRetentionCleanupReader } from "./ThreadRetentionRepository.cleanup.ts";
+import { makeRetentionResourceSummary } from "./ThreadRetentionRepository.resourceSummary.ts";
 import { makeThreadRetentionPages } from "./ThreadRetentionRepository.pages.ts";
 import { makeThreadRetentionPreview } from "./ThreadRetentionRepository.preview.ts";
 import { makeThreadRetentionQueue } from "./ThreadRetentionRepository.queue.ts";
@@ -30,10 +32,13 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
 
   const getRunQuery = (runId: string) =>
     sql<ThreadRetentionRun>`
-      SELECT run_id AS "runId", trigger_kind AS trigger, policy, cutoff_at AS "cutoffAt", status,
+      SELECT run_id AS "runId", trigger_kind AS trigger, policy,
+        selection_mode AS "selectionMode", age_criterion AS "ageCriterion",
+        cutoff_at AS "cutoffAt", status,
         cursor_last_activity_at AS "cursorLastActivityAt", cursor_thread_id AS "cursorThreadId",
         eligible_count AS "eligibleCount", selected_count AS "selectedCount",
         skipped_count AS "skippedCount", requested_count AS "requestedCount",
+        uncertain_count AS "uncertainCount",
         completed_count AS "completedCount", failed_count AS "failedCount",
         estimated_resource_count AS "estimatedResourceCount",
         required_baseline_sequence AS "requiredBaselineSequence", next_attempt_at AS "nextAttemptAt",
@@ -76,6 +81,23 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       completed_at AS "completedAt"
     FROM thread_retention_run_items WHERE run_id = ${runId}
       AND status IN ('selected', 'deletion_requested', 'prepared', 'purging')
+      AND (
+        (SELECT selection_mode FROM thread_retention_runs WHERE run_id = ${runId}) = 'legacy-subtree'
+        OR NOT EXISTS (
+          WITH RECURSIVE descendants(thread_id) AS (
+            SELECT child.thread_id FROM projection_threads AS child
+            WHERE child.parent_thread_id = thread_retention_run_items.thread_id
+            UNION ALL
+            SELECT child.thread_id FROM projection_threads AS child
+            JOIN descendants AS parent ON child.parent_thread_id = parent.thread_id
+          )
+          SELECT 1 FROM descendants
+          JOIN thread_retention_run_items AS dependent
+            ON dependent.thread_id = descendants.thread_id AND dependent.run_id = ${runId}
+          WHERE dependent.status IN ('selected', 'deletion_requested', 'prepared', 'purging')
+          LIMIT 1
+        )
+      )
     ORDER BY expected_last_activity_at ASC, thread_id ASC LIMIT ${clampLimit(limit, 250)}
   `;
   const listDeletionOwnedThreadIds = (threadIds: ReadonlyArray<string>) => {
@@ -124,6 +146,10 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
         const terminal = ["completed", "skipped", "failed"].includes(input.nextStatus);
+        const previous = (yield* sql<{ status: string }>`
+          SELECT status FROM thread_retention_run_items
+          WHERE run_id = ${input.runId} AND thread_id = ${input.threadId}
+        `)[0]?.status;
         const rows = yield* sql`
           UPDATE thread_retention_run_items SET status = ${input.nextStatus},
             purge_job_id = COALESCE(${input.purgeJobId ?? null}, purge_job_id),
@@ -152,6 +178,11 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
             `UPDATE thread_retention_runs SET ${counter} = ${counter} + 1, updated_at = ? WHERE run_id = ? AND active_slot = 1`,
             [input.updatedAt, input.runId],
           );
+        if (terminal && ["deletion_requested", "prepared", "purging"].includes(previous ?? ""))
+          yield* sql`
+            UPDATE thread_retention_runs SET uncertain_count = MAX(0, uncertain_count - 1)
+            WHERE run_id = ${input.runId} AND active_slot = 1
+          `;
         return true;
       }),
     );
@@ -176,10 +207,13 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
   };
 
   const listRuns = (where: "" | "active_slot = 1", limit: number) => sql<ThreadRetentionRun>`
-    SELECT run_id AS "runId", trigger_kind AS trigger, policy, cutoff_at AS "cutoffAt", status,
+    SELECT run_id AS "runId", trigger_kind AS trigger, policy,
+      selection_mode AS "selectionMode", age_criterion AS "ageCriterion",
+      cutoff_at AS "cutoffAt", status,
       cursor_last_activity_at AS "cursorLastActivityAt", cursor_thread_id AS "cursorThreadId",
       eligible_count AS "eligibleCount", selected_count AS "selectedCount", skipped_count AS "skippedCount",
-      requested_count AS "requestedCount", completed_count AS "completedCount", failed_count AS "failedCount",
+      requested_count AS "requestedCount", uncertain_count AS "uncertainCount",
+      completed_count AS "completedCount", failed_count AS "failedCount",
       estimated_resource_count AS "estimatedResourceCount", required_baseline_sequence AS "requiredBaselineSequence",
       next_attempt_at AS "nextAttemptAt", last_error_code AS "lastErrorCode",
       retry_ordinal AS "retryOrdinal", failure_window_started_at AS "failureWindowStartedAt",
@@ -225,9 +259,13 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       )) as ThreadRetentionRepositoryShape["insertSelectedItems"];
 
   return {
+    readResourceSummary: (runId) =>
+      makeRetentionResourceSummary(sql)(runId).pipe(mapPersistenceError("readResourceSummary")),
+    readCleanupState: (commandId) =>
+      makeRetentionCleanupReader(sql)(commandId).pipe(mapPersistenceError("readCleanupState")),
     listDeletionOwnedThreadIds: (threadIds) =>
       listDeletionOwnedThreadIds(threadIds).pipe(mapPersistenceError("listDeletionOwnedThreadIds")),
-    preview: (cutoffAt) => preview(cutoffAt).pipe(mapPersistenceError("preview")),
+    preview: (cutoffAt, options) => preview(cutoffAt, options).pipe(mapPersistenceError("preview")),
     createOrGetActiveRun: (input) =>
       queue.createOrGetActiveRun(input).pipe(mapPersistenceError("createOrGetActiveRun")),
     createQueuedRun: (input) =>
@@ -308,7 +346,8 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       challenges.consumeManualChallenge(input).pipe(mapPersistenceError("consumeManualChallenge")),
     getPolicyAuthority: () =>
       sql<import("../Services/ThreadRetentionRepository.ts").ThreadRetentionPolicyAuthority>`
-        SELECT policy, source, updated_at AS "updatedAt"
+        SELECT policy, source, selection_mode AS "selectionMode",
+          age_criterion AS "ageCriterion", updated_at AS "updatedAt"
         FROM thread_retention_policy_authority WHERE singleton_id = 1
       `.pipe(
         Effect.map((rows) => Option.fromNullishOr(rows[0])),
@@ -316,10 +355,14 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       ),
     setPolicyAuthority: (input) =>
       sql`
-        INSERT INTO thread_retention_policy_authority (singleton_id, policy, source, updated_at)
-        VALUES (1, ${input.policy}, ${input.source}, ${input.updatedAt})
+        INSERT INTO thread_retention_policy_authority (
+          singleton_id, policy, source, selection_mode, age_criterion, updated_at
+        ) VALUES (1, ${input.policy}, ${input.source},
+          ${input.selectionMode ?? "legacy-subtree"},
+          ${input.ageCriterion ?? "last-conversation-activity"}, ${input.updatedAt})
         ON CONFLICT (singleton_id) DO UPDATE SET policy = excluded.policy,
-          source = excluded.source, updated_at = excluded.updated_at
+          source = excluded.source, selection_mode = excluded.selection_mode,
+          age_criterion = excluded.age_criterion, updated_at = excluded.updated_at
       `.pipe(Effect.asVoid, mapPersistenceError("setPolicyAuthority")),
     consumePolicyChallenge: (input) =>
       challenges.consumePolicyChallenge(input).pipe(mapPersistenceError("consumePolicyChallenge")),

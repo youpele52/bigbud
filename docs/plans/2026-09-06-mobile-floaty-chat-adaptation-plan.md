@@ -15,7 +15,7 @@
 | Inspected commit                    | `d0bc58c9ce6b38a0f2ca6fb3d29ed54fded0f187`                          |
 | Related issues                      | None supplied                                                       |
 | Delivery                            | Saved Markdown plan, explicitly requested by the user               |
-| Plan path                           | `docs/plan/2026-09-06-mobile-floaty-chat-adaptation-plan.md`        |
+| Plan path                           | `docs/plans/2026-09-06-mobile-floaty-chat-adaptation-plan.md`       |
 | Changes authorized for this handoff | This plan document only; no application changes, commits, or pushes |
 
 ## Summary
@@ -35,14 +35,14 @@ Implement this as independently reviewable reliability, layout, navigation, and 
 
 **Review limitation:** The requested independent planning/debugging/reviewer agents were unavailable through this session's tools. Direct requirements-coverage and execution-readiness reviews informed the original plan, but an independent challenge has not been performed and cannot be marked complete. That is the remaining plan-readiness gate—not permission to implement or a request to repeat settled requirements.
 
-This document preserves the substantive plan originally returned in chat and reorganizes it to follow `docs/plan/_plan-authoring-guide--do-not-delete.md`. The original Created timestamp is preserved. Saving this document does not imply that tests, runtime reproductions, or independent review have been performed.
+This document preserves the substantive plan originally returned in chat and reorganizes it to follow `docs/plans/_plan-authoring-guide--do-not-delete.md`. The original Created timestamp is preserved. Saving this document does not imply that tests, runtime reproductions, or independent review have been performed.
 
 ## Related Work
 
 - **None identified:** No stable bigbud note, Kanban card, issue, or PR reference was supplied for this task. The source of work is the user's planning request, two preceding read-only research rounds summarized in that request, and the source inspection recorded below. Do not invent IDs or links.
 - Visual references: `apps/web/src/components/floating-assistant/FloatingAssistantShell.tsx`, `FloatingPendingApprovalCard.tsx`, and `apps/web/src/components/chat/side-chat/FloatingSideChat.tsx`.
 - Mobile deployment background: `apps/mobile-web/README.md` describes hosted mobile UI separately from the desktop backend over Tailscale Serve.
-- Repository plan conventions: `docs/plan/_plan-authoring-guide--do-not-delete.md`.
+- Repository plan conventions: `docs/plans/_plan-authoring-guide--do-not-delete.md`.
 - Product terminology: `docs/CONTEXT.md`. Mobile remains **Direct Unmanaged Delivery**; this plan does not move mobile under the **Desktop Delivery Supervisor** or change the TypeScript/SQLite **Canonical Domain Authority**.
 
 ## Problem

@@ -94,7 +94,7 @@ export function makeDirectResourceCleanupReconciliation(
         FROM direct_resource_cleanup_proofs AS proof
         JOIN direct_resource_cleanup_plans AS plan ON plan.operation_id = proof.operation_id
         WHERE proof.aggregate_kind IN ('thread', 'project') AND proof.canonical_pruned_at IS NULL
-          AND plan.state IN ('ready', 'running', 'retry', 'completed')
+          AND plan.state IN ('ready', 'running', 'retry', 'completed', 'blocked')
         ORDER BY proof.event_sequence LIMIT ${Math.max(1, Math.min(100, Math.floor(limit)))}
       `.pipe(Effect.mapError((error) => new Error(String(error)))),
     markCanonicalPruned: (operationId, at, aggregateKind = "thread") =>

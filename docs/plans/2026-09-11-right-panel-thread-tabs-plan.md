@@ -202,7 +202,7 @@ Use `bun run test` if broader validation is justified. Never use `bun test`. Spl
 
 - Preserves the initial user request and researched architecture options.
 - Clearly marks recommendations and unresolved choices.
-- Is saved in `docs/plan` and explicitly **not ready for implementation**.
+- Is saved in `docs/plans` and explicitly **not ready for implementation**.
 - Includes requirements-coverage and execution-readiness review, plus independent review corrections.
 
 ### Future implementation

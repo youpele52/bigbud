@@ -1,6 +1,12 @@
 import { Debouncer } from "@tanstack/react-pacer";
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { create } from "zustand";
+import {
+  reorderSidebarAction,
+  moveSidebarActionToEdge,
+  SIDEBAR_ACTION_IDS,
+  type SidebarActionId,
+} from "../../components/sidebar/Sidebar.actions.logic";
 
 import {
   PERSISTED_STATE_KEY,
@@ -240,6 +246,11 @@ export function setSidebarSectionExpanded(
 }
 
 interface UiStateStore extends UiState {
+  setSidebarActionHidden: (id: SidebarActionId, hidden: boolean) => void;
+  setAllSidebarActionsHidden: (hidden: boolean) => void;
+  reorderSidebarAction: (dragged: SidebarActionId, target: SidebarActionId) => void;
+  moveSidebarActionToEdge: (id: SidebarActionId, edge: "top" | "bottom") => void;
+  resetSidebarActionOrder: () => void;
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
   syncThreads: (threads: readonly SyncThreadInput[]) => void;
   markThreadVisited: (threadId: ThreadId, visitedAt?: string) => void;
@@ -259,6 +270,23 @@ interface UiStateStore extends UiState {
 
 export const useUiStateStore = create<UiStateStore>((set) => ({
   ...readPersistedState(),
+  setSidebarActionHidden: (id, hidden) =>
+    set((state) => ({
+      hiddenSidebarActions: hidden
+        ? [...new Set([...state.hiddenSidebarActions, id])]
+        : state.hiddenSidebarActions.filter((entry) => entry !== id),
+    })),
+  setAllSidebarActionsHidden: (hidden) =>
+    set({ hiddenSidebarActions: hidden ? [...SIDEBAR_ACTION_IDS] : [] }),
+  reorderSidebarAction: (dragged, target) =>
+    set((state) => ({
+      sidebarActionOrder: reorderSidebarAction(state.sidebarActionOrder, dragged, target),
+    })),
+  moveSidebarActionToEdge: (id, edge) =>
+    set((state) => ({
+      sidebarActionOrder: moveSidebarActionToEdge(state.sidebarActionOrder, id, edge),
+    })),
+  resetSidebarActionOrder: () => set({ sidebarActionOrder: [...SIDEBAR_ACTION_IDS] }),
   syncProjects: (projects) => set((state) => syncProjects(state, projects)),
   syncThreads: (threads) => set((state) => syncThreads(state, threads)),
   markThreadVisited: (threadId, visitedAt) =>

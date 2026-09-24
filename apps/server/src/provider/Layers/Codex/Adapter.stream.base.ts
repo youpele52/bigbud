@@ -117,7 +117,12 @@ export function mapItemLifecycle(
     return undefined;
   }
 
-  const detail = itemDetail(source, payload ?? {});
+  const detail =
+    lifecycle === "item.completed" &&
+    itemType === "assistant_message" &&
+    typeof source.text === "string"
+      ? source.text
+      : itemDetail(source, payload ?? {});
   const status =
     lifecycle === "item.started"
       ? "inProgress"

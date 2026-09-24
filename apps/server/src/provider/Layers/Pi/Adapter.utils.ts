@@ -210,9 +210,6 @@ export function extractTextContent(message: unknown): string | undefined {
       if (part.type === "text" && typeof part.text === "string") {
         return [part.text];
       }
-      if (part.type === "thinking" && typeof part.thinking === "string") {
-        return [part.thinking];
-      }
       return [] as string[];
     })
     .filter((part) => part.length > 0);

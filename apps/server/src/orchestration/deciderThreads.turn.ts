@@ -217,8 +217,8 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
       yield* requireThreadReadyForMutation({ thread, command });
       return buildAssistantMessageEvent({
         command,
-        text: "",
-        replace: false,
+        text: command.text ?? "",
+        replace: command.text !== undefined,
         streaming: false,
       });
     }

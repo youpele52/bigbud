@@ -36,16 +36,14 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("Delete confirmation");
     expect(markup).toContain("Automatically delete old threads");
     expect(markup).toContain("The server checks daily");
-    expect(markup).toContain("Eligible root thread subtrees are cleaned up together");
+    expect(markup).toContain("New policies delete eligible threads individually");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
     expect(markup).toContain("Delete now");
-    expect(markup).toContain("Automatic cleanup above is separate");
-    expect(markup).toContain("Choose the cutoff in the confirmation dialog");
+    expect(markup).toContain("Automatic cleanup age rule");
+    expect(markup).toContain("Choose a period and age rule in the confirmation dialog");
     expect(markup).not.toContain("using the one-off period on this row");
-    expect(markup).toContain(
-      "Eligible root thread subtrees and their descendants are cleaned up together",
-    );
+    expect(markup).toContain("surviving children are kept");
   });
 
   it("uses day-based labels for every cleanup threshold", () => {
@@ -96,10 +94,12 @@ describe("ThreadRetentionSettingsSection", () => {
         preview={{
           generatedAt: "2026-08-04T00:00:00.000Z",
           policy: "7-days",
+          selectionMode: "per-thread",
+          ageCriterion: "last-conversation-activity",
           cutoffAt: "2026-07-28T00:00:00.000Z",
           eligibleCount: 3,
-          oldestEligibleActivityAt: null,
-          newestEligibleActivityAt: null,
+          oldestEligibleAgeAt: null,
+          newestEligibleAgeAt: null,
           exclusionCounts: [{ reason: "waiting_for_input", count: 2 }],
           estimatedAttachmentCount: 4,
           estimatedResourceCount: 5,
@@ -113,6 +113,8 @@ describe("ThreadRetentionSettingsSection", () => {
             token: "challenge-1",
             trigger: "manual",
             policy: "7-days",
+            selectionMode: "per-thread",
+            ageCriterion: "last-conversation-activity",
             cutoffAt: "2026-07-28T00:00:00.000Z",
             expiresAt: "2026-08-04T00:05:00.000Z",
             singleUse: true,
@@ -126,13 +128,13 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
     for (const phrase of [
-      "Child threads are deleted with their parent",
+      "Eligible children go first",
       "Pinned",
-      "active or running",
+      "active threads",
       "project folders",
-      "other files",
+      "External worktrees",
       "Provider-remote conversations are not deleted",
-      "canonical history or retained baselines",
+      "ownership cannot be verified",
     ]) {
       expect(markup).toContain(phrase);
     }
@@ -145,10 +147,12 @@ describe("ThreadRetentionSettingsSection", () => {
         preview={{
           generatedAt: "2026-08-04T00:00:00.000Z",
           policy: "7-days",
+          selectionMode: "per-thread",
+          ageCriterion: "last-conversation-activity",
           cutoffAt: "2026-07-28T00:00:00.000Z",
           eligibleCount: 3,
-          oldestEligibleActivityAt: null,
-          newestEligibleActivityAt: null,
+          oldestEligibleAgeAt: null,
+          newestEligibleAgeAt: null,
           exclusionCounts: [],
           estimatedAttachmentCount: 0,
           estimatedResourceCount: 0,
@@ -162,6 +166,8 @@ describe("ThreadRetentionSettingsSection", () => {
             token: "challenge-policy",
             trigger: "policy-change",
             policy: "7-days",
+            selectionMode: "per-thread",
+            ageCriterion: "last-conversation-activity",
             cutoffAt: "2026-07-28T00:00:00.000Z",
             expiresAt: "2026-08-04T00:05:00.000Z",
             singleUse: true,
@@ -171,7 +177,8 @@ describe("ThreadRetentionSettingsSection", () => {
     );
 
     expect(markup).toContain("3");
-    expect(markup).toContain("currently eligible for future cleanup");
+    expect(markup).toContain("currently eligible across all projects by latest user message");
+    expect(markup).toContain("inclusive UTC cutoff 2026-07-28T00:00:00.000Z");
     expect(markup).toContain("Export or back up anything you need");
   });
 

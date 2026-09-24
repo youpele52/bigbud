@@ -1,10 +1,8 @@
-import { CommandId, type OrchestrationThread, ThreadId } from "@bigbud/contracts";
-import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
+import { CommandId } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
 import { finalizeThreadCanonicalHistory } from "../../deletion/Layers/CanonicalThreadCleanup.ts";
-import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
@@ -36,15 +34,7 @@ import {
 import { ServerConfig } from "../../startup/config.ts";
 import { recoverDirectCleanupWorktrees } from "../../deletion/Layers/DirectResourceCleanupRecovery.worktrees.ts";
 import { serializeManagedWorktreeResource } from "../../persistence/Layers/DirectResourceCleanupRepository.worktrees.ts";
-type DeleteRequestedEvent = Extract<OrchestrationEvent, { type: "thread.deletion-requested" }>;
-interface DeletionDeps {
-  readonly resolveThread: (threadId: ThreadId) => Effect.Effect<OrchestrationThread | undefined>;
-  readonly setThreadSession: (input: {
-    readonly threadId: ThreadId;
-    readonly session: import("@bigbud/contracts").OrchestrationSession;
-    readonly createdAt: string;
-  }) => Effect.Effect<void, OrchestrationDispatchError>;
-}
+import type * as DeleteTypes from "./ProviderCommandReactorHandlers.delete.types.ts";
 export const makeProcessDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -63,8 +53,8 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
     ? cleanupRepositoryService.value
     : yield* makeDirectResourceCleanupRepository;
   return Effect.fn("processDeletionRequested")(function* (
-    deps: DeletionDeps,
-    event: DeleteRequestedEvent,
+    deps: DeleteTypes.DeletionDeps,
+    event: DeleteTypes.DeleteRequestedEvent,
   ) {
     const mode = resolveDeletionRequestMode(event.payload.mode);
     const thread = yield* deps.resolveThread(event.payload.threadId);
@@ -175,7 +165,13 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             }
             const files =
               event.payload.origin === "project-cascade"
-                ? { directResources: [], retainedResources: [], worktreeResources: [] }
+                ? {
+                    directResources: [],
+                    retainedResources: [],
+                    worktreeResources: [],
+                    retainedExternalWorktrees: [],
+                    retainedUnverifiedAttachments: [],
+                  }
                 : yield* orchestrationEngine.threadDeletion!.discoverFiles({
                     rootThreadId: thread.id,
                     threadIds,
@@ -206,6 +202,8 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                     finalizeCommand: proposedFinalizeCommand,
                     resources: files.directResources,
                     retainedResources: files.retainedResources,
+                    retainedExternalWorktrees: files.retainedExternalWorktrees,
+                    retainedUnverifiedAttachments: files.retainedUnverifiedAttachments,
                     worktreeResourceDigests: worktrees.map((worktree) => worktree.digest),
                   }),
                 )
@@ -221,6 +219,8 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 expectedPlatform: `${process.platform}/${process.arch}`,
                 resources: files.directResources,
                 retainedResources: files.retainedResources,
+                retainedExternalWorktrees: files.retainedExternalWorktrees,
+                retainedUnverifiedAttachments: files.retainedUnverifiedAttachments,
                 worktreeResources: worktrees.map((worktree) => worktree.resource),
                 createdAt: event.occurredAt,
               });

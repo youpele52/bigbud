@@ -3,7 +3,8 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { ThreadRetentionExclusionReason } from "../Services/ThreadRetentionRepository.ts";
 import {
-  retentionExclusionCase,
+  retentionAgeSql,
+  retentionExclusionCaseSql,
   retentionVisibleActivitySql,
 } from "./ThreadRetentionRepository.eligibility.ts";
 import {
@@ -17,31 +18,45 @@ const CHECKPOINT_LIMIT = 1_000;
 const BYTE_LIMIT = 100 * 1024 * 1024;
 
 export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
-  const exclusion = retentionExclusionCase(sql);
-
-  return Effect.fn("ThreadRetentionRepository.preview")(function* (cutoffAt: string) {
+  return Effect.fn("ThreadRetentionRepository.preview")(function* (
+    cutoffAt: string,
+    options?: {
+      readonly selectionMode: "legacy-subtree" | "per-thread";
+      readonly ageCriterion: "created" | "last-conversation-activity";
+    },
+  ) {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
+        const perThread = options?.selectionMode === "per-thread";
+        const age = retentionAgeSql("t", options?.ageCriterion ?? "last-conversation-activity");
+        const perThreadCandidates = `SELECT t.thread_id, t.worktree_path,
+          ${age} AS last_activity_at FROM projection_threads AS t
+          WHERE t.deleted_at IS NULL AND ${age} <= ?
+            AND (${retentionExclusionCaseSql("t", "per-thread")}) IS NULL`;
         const totals = yield* sql.unsafe<{
           eligibleCount: number;
           oldest: string | null;
           newest: string | null;
         }>(
-          `${retentionSubtreeCteSql}
+          perThread
+            ? `SELECT COUNT(*) AS "eligibleCount", MIN(last_activity_at) AS oldest,
+            MAX(last_activity_at) AS newest FROM (${perThreadCandidates})`
+            : `${retentionSubtreeCteSql}
           SELECT COUNT(*) AS "eligibleCount", MIN(activity.last_activity_at) AS oldest,
             MAX(activity.last_activity_at) AS newest
           ${retentionEligibleRootFromSql}`,
           [cutoffAt],
         );
-        const exclusions = yield* sql<{
+        const exclusions = yield* sql.unsafe<{
           reason: ThreadRetentionExclusionReason;
           count: number;
-        }>`
-          SELECT reason, COUNT(*) AS count FROM (
-            SELECT ${exclusion} AS reason FROM projection_threads AS t
-            WHERE ${sql.unsafe(retentionVisibleActivitySql("t"))} <= ${cutoffAt}
-          ) WHERE reason IS NOT NULL GROUP BY reason ORDER BY reason ASC
-        `;
+        }>(
+          `SELECT reason, COUNT(*) AS count FROM (
+            SELECT ${perThread ? retentionExclusionCaseSql("t", "per-thread") : retentionExclusionCaseSql("t")} AS reason
+            FROM projection_threads AS t WHERE ${perThread ? age : retentionVisibleActivitySql("t")} <= ?
+          ) WHERE reason IS NOT NULL GROUP BY reason ORDER BY reason ASC`,
+          [cutoffAt],
+        );
         const estimates = yield* sql
           .unsafe<{
             attachmentCount: number;
@@ -52,7 +67,38 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
             checkpointBytes: number;
             worktreeCount: number;
           }>(
-            `${retentionSubtreeCteSql},
+            perThread
+              ? `WITH eligible_roots AS (${perThreadCandidates}),
+          candidates AS (
+            SELECT thread_id, worktree_path FROM eligible_roots
+            ORDER BY last_activity_at ASC, thread_id ASC LIMIT ${THREAD_LIMIT}
+          ), attachment_rows AS (
+            SELECT COALESCE(json_extract(attachment.value, '$.sizeBytes'), 0) AS known_bytes
+            FROM projection_thread_messages AS message
+            JOIN candidates ON candidates.thread_id = message.thread_id
+            JOIN json_each(CASE WHEN json_valid(message.attachments_json)
+              THEN message.attachments_json ELSE '[]' END) AS attachment
+            UNION ALL
+            SELECT COALESCE(json_extract(activity.payload_json, '$.data.result.screenshot.sizeBytes'), 0)
+            FROM projection_thread_activities AS activity
+            JOIN candidates ON candidates.thread_id = activity.thread_id
+            WHERE activity.kind = 'tool.completed' AND json_valid(activity.payload_json)
+              AND json_extract(activity.payload_json, '$.title') = 'computer_use'
+              AND json_type(activity.payload_json, '$.data.result.screenshot.attachmentId') = 'text'
+            LIMIT ${ATTACHMENT_LIMIT + 1}
+          ), checkpoints AS (
+            SELECT length(CAST(checkpoint.diff AS BLOB)) AS known_bytes
+            FROM checkpoint_diff_blobs AS checkpoint JOIN candidates ON candidates.thread_id = checkpoint.thread_id
+            LIMIT ${CHECKPOINT_LIMIT + 1}
+          ) SELECT
+            (SELECT MIN(COUNT(*), ${ATTACHMENT_LIMIT}) FROM attachment_rows) AS "attachmentCount",
+            (SELECT COUNT(*) FROM attachment_rows) AS "attachmentRows",
+            COALESCE((SELECT SUM(known_bytes) FROM (SELECT known_bytes FROM attachment_rows LIMIT ${ATTACHMENT_LIMIT})), 0) AS "attachmentBytes",
+            (SELECT MIN(COUNT(*), ${CHECKPOINT_LIMIT}) FROM checkpoints) AS "checkpointCount",
+            (SELECT COUNT(*) FROM checkpoints) AS "checkpointRows",
+            COALESCE((SELECT SUM(known_bytes) FROM (SELECT known_bytes FROM checkpoints LIMIT ${CHECKPOINT_LIMIT})), 0) AS "checkpointBytes",
+            (SELECT COUNT(*) FROM candidates WHERE worktree_path IS NOT NULL) AS "worktreeCount"`
+              : `${retentionSubtreeCteSql},
           eligible_roots AS (
             SELECT t.thread_id AS thread_id, activity.last_activity_at AS last_activity_at
             ${retentionEligibleRootFromSql}
@@ -140,8 +186,8 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
 
         return {
           eligibleCount,
-          oldestEligibleActivityAt: total?.oldest ?? null,
-          newestEligibleActivityAt: total?.newest ?? null,
+          oldestEligibleAgeAt: total?.oldest ?? null,
+          newestEligibleAgeAt: total?.newest ?? null,
           exclusionCounts: exclusions.map((row) => ({ reason: row.reason, count: row.count })),
           estimatedAttachmentCount: attachmentCount,
           estimatedResourceCount:

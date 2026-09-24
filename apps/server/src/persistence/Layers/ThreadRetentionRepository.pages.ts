@@ -9,6 +9,7 @@ import type {
   ThreadRetentionRepositoryShape,
 } from "../Services/ThreadRetentionRepository.ts";
 import {
+  retentionAgeSql,
   retentionExclusionCaseSql,
   retentionVisibleActivitySql,
 } from "./ThreadRetentionRepository.eligibility.ts";
@@ -72,20 +73,33 @@ export const retentionCandidateSelectSql = `
   ORDER BY activity.last_activity_at ASC, t.thread_id ASC LIMIT ?
 `;
 
+export function retentionPerThreadCandidateSelectSql(
+  criterion: "created" | "last-conversation-activity",
+): string {
+  const age = retentionAgeSql("t", criterion);
+  return `SELECT t.thread_id AS "threadId", ${age} AS "lastActivityAt"
+    FROM projection_threads AS t
+    WHERE t.deleted_at IS NULL AND ${age} <= ?
+      AND (${retentionExclusionCaseSql("t", "per-thread")}) IS NULL
+      AND (? IS NULL OR ${age} > ? OR (${age} = ? AND t.thread_id > ?))
+    ORDER BY ${age} ASC, t.thread_id ASC LIMIT ?`;
+}
+
 export function makeThreadRetentionPages(sql: SqlClient.SqlClient) {
+  // The persisted selection_mode is the cursor format boundary: legacy rows
+  // interpret these columns as subtree activity, per-thread rows as selected age.
+  // A run snapshots its mode and criterion, so a policy change cannot reinterpret it.
   const selectNextPage = (
     input: Parameters<ThreadRetentionRepositoryShape["selectNextPage"]>[0],
   ) => {
     const cursorAt = input.cursor?.lastActivityAt ?? null;
     const cursorThreadId = input.cursor?.threadId ?? null;
-    return sql.unsafe<ThreadRetentionCandidate>(retentionCandidateSelectSql, [
-      input.cutoffAt,
-      cursorAt,
-      cursorAt,
-      cursorAt,
-      cursorThreadId,
-      clampLimit(input.limit),
-    ]);
+    return sql.unsafe<ThreadRetentionCandidate>(
+      input.selectionMode === "per-thread"
+        ? retentionPerThreadCandidateSelectSql(input.ageCriterion ?? "last-conversation-activity")
+        : retentionCandidateSelectSql,
+      [input.cutoffAt, cursorAt, cursorAt, cursorAt, cursorThreadId, clampLimit(input.limit)],
+    );
   };
 
   const insertSelectedPage = Effect.fn("ThreadRetentionRepository.insertSelectedPage")(function* (

@@ -1,6 +1,6 @@
 import { CommandId, type ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import type { ServerThreadRetentionResult } from "@bigbud/contracts/server/threadRetention.ts";
-import { Duration, Effect, Option, Ref } from "effect";
+import { Effect, Option } from "effect";
 
 import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
 import type { OrchestrationDispatchError } from "../../orchestration/Errors.ts";
@@ -10,7 +10,7 @@ import type {
   ThreadRetentionRun,
   ThreadRetentionRunItem,
 } from "../../persistence/Services/ThreadRetentionRepository.ts";
-import { waitForReadModelCondition } from "../../orchestration/Layers/readModelSettle.ts";
+import { settleRetentionCleanup, settleRetentionDelete } from "./ThreadRetention.direct.settle.ts";
 
 const SELECTION_PAGE_SIZE = 250;
 const DELETE_SETTLE_TIMEOUT_MS = 120_000;
@@ -20,39 +20,6 @@ const OUTSTANDING_ITEM_STATUSES = [
   "prepared",
   "purging",
 ] as const;
-
-function settleRetentionDelete(input: {
-  readonly threadId: ThreadId;
-  readonly orchestration: OrchestrationEngineShape;
-  readonly timeoutMs: number;
-}) {
-  return Effect.gen(function* () {
-    const seenPending = yield* Ref.make(false);
-    return yield* waitForReadModelCondition({
-      check: input.orchestration.getReadModel().pipe(
-        Effect.flatMap((model) =>
-          Effect.gen(function* () {
-            const thread = model.threads.find((candidate) => candidate.id === input.threadId);
-            if (!thread || thread.deletedAt !== null) {
-              return { done: true as const, value: "deleted" as const };
-            }
-            if (thread.deletingAt !== null) {
-              yield* Ref.set(seenPending, true);
-              return { done: false as const };
-            }
-            if (yield* Ref.get(seenPending)) {
-              return { done: true as const, value: "skipped" as const };
-            }
-            return { done: false as const };
-          }),
-        ),
-      ),
-      events: input.orchestration.streamDomainEvents,
-      timeout: Duration.millis(input.timeoutMs),
-      onTimeout: "pending" as const,
-    });
-  });
-}
 
 type DirectThreadRetentionInput = {
   readonly run: ThreadRetentionRun;
@@ -66,7 +33,13 @@ type DirectThreadRetentionInput = {
     | "getRun"
     | "findItemByDeletionCommandId"
     | "transitionItem"
-  >;
+  > &
+    Partial<
+      Pick<
+        ThreadRetentionRepositoryShape,
+        "readCleanupState" | "readResourceSummary" | "countOutstandingItems"
+      >
+    >;
   readonly orchestration: OrchestrationEngineShape;
   readonly now?: () => number;
   readonly settleTimeoutMs?: number;
@@ -140,15 +113,37 @@ export function runDirectThreadRetentionCoordinated(
         commandId: CommandId.makeUnsafe(item.deletionCommandId),
         threadId: item.threadId,
         runId: input.run.runId,
+        selectionMode: input.run.selectionMode ?? "legacy-subtree",
         expectedLastActivityAt: item.expectedLastActivityAt,
         cutoffAt,
         createdAt: item.createdAt,
       });
-      const settled = yield* settleRetentionDelete({
-        threadId: item.threadId,
-        orchestration: input.orchestration,
-        timeoutMs: settleTimeoutMs,
-      });
+      if (input.run.selectionMode === "per-thread") {
+        const afterDispatch = yield* input.repository.findItemByDeletionCommandId(
+          item.deletionCommandId,
+        );
+        if (
+          Option.isSome(afterDispatch) &&
+          ["completed", "skipped", "failed"].includes(afterDispatch.value.status)
+        )
+          return false;
+      }
+      const settled =
+        input.run.selectionMode === "per-thread"
+          ? yield* settleRetentionCleanup({
+              commandId: item.deletionCommandId,
+              repository: {
+                readCleanupState:
+                  input.repository.readCleanupState ??
+                  (() => Effect.die(new Error("retention cleanup reader unavailable"))),
+              },
+              timeoutMs: settleTimeoutMs,
+            })
+          : yield* settleRetentionDelete({
+              threadId: item.threadId,
+              orchestration: input.orchestration,
+              timeoutMs: settleTimeoutMs,
+            });
       const persistedItem = yield* input.repository.findItemByDeletionCommandId(
         item.deletionCommandId,
       );
@@ -158,7 +153,7 @@ export function runDirectThreadRetentionCoordinated(
       let status = persistedItem.value.status;
       // Eligibility may change (including another deletion) after selection.
       // A persisted terminal outcome takes precedence over the read model.
-      if (["completed", "skipped", "failed"].includes(status)) return;
+      if (["completed", "skipped", "failed"].includes(status)) return false;
       const transition = Effect.fn("ThreadRetention.transitionItemRequired")(function* (
         nextStatus: ThreadRetentionRunItem["status"],
         lastErrorCode: string | null = null,
@@ -182,7 +177,8 @@ export function runDirectThreadRetentionCoordinated(
         status = nextStatus;
       });
 
-      if (settled === "deleted") {
+      if (settled === "pending" && input.run.selectionMode === "per-thread") return true;
+      if (settled === "deleted" || settled === "completed") {
         if (status === "deletion_requested") yield* transition("prepared");
         if (status === "prepared") yield* transition("purging");
         if (status === "purging") yield* transition("completed");
@@ -191,7 +187,7 @@ export function runDirectThreadRetentionCoordinated(
             new Error(`retention deleted item has incompatible persisted status: ${status}`),
           );
         }
-      } else if (settled === "skipped") {
+      } else if (settled === "skipped" || settled === "aborted") {
         if (status === "selected" || status === "deletion_requested") yield* transition("skipped");
         if (status !== "skipped") {
           return yield* Effect.fail(
@@ -209,17 +205,22 @@ export function runDirectThreadRetentionCoordinated(
           );
         }
       }
+      return false;
     });
 
-    while (true) {
-      const outstanding = yield* input.repository.listOutstandingItems(input.run.runId, 250);
-      if (outstanding.length === 0) break;
-      yield* Effect.forEach(outstanding, executeItem, { concurrency: 1, discard: true });
+    if (input.run.selectionMode !== "per-thread") {
+      while (true) {
+        const outstanding = yield* input.repository.listOutstandingItems(input.run.runId, 250);
+        if (outstanding.length === 0) break;
+        yield* Effect.forEach(outstanding, executeItem, { concurrency: 1, discard: true });
+      }
     }
 
     while (true) {
       const candidates = yield* input.repository.selectNextPage({
         cutoffAt,
+        selectionMode: input.run.selectionMode ?? "legacy-subtree",
+        ageCriterion: input.run.ageCriterion ?? "last-conversation-activity",
         ...(cursor ? { cursor } : {}),
         limit: SELECTION_PAGE_SIZE,
       });
@@ -250,7 +251,35 @@ export function runDirectThreadRetentionCoordinated(
       selectedCount += inserted.insertedCount;
       eligibleCount = Math.max(eligibleCount, selectedCount);
       if (yield* input.onSelectionPagePersisted()) return { kind: "yielded" } as const;
-      yield* Effect.forEach(items, executeItem, { concurrency: 1, discard: true });
+      if (input.run.selectionMode !== "per-thread") {
+        yield* Effect.forEach(items, executeItem, { concurrency: 1, discard: true });
+      }
+    }
+
+    if (input.run.selectionMode === "per-thread") {
+      while (true) {
+        const outstanding = yield* input.repository.listOutstandingItems(input.run.runId, 250);
+        if (outstanding.length === 0) break;
+        const pending = yield* Effect.forEach(outstanding, executeItem, { concurrency: 1 });
+        if (pending.includes(true)) {
+          yield* input.repository.transitionRun({
+            runId: input.run.runId,
+            expectedStatuses: ["selecting"],
+            nextStatus: "deferred",
+            updatedAt: new Date(now()).toISOString(),
+            nextAttemptAt: new Date(now() + 30_000).toISOString(),
+            lastErrorCode: "cleanup_pending",
+            releaseActiveSlot: true,
+          });
+          return { kind: "yielded" } as const;
+        }
+      }
+      const stillOutstanding = yield* (
+        input.repository.countOutstandingItems?.(input.run.runId) ?? Effect.succeed(0)
+      );
+      if (stillOutstanding > 0) {
+        return yield* Effect.fail(new Error("retention dependency ordering could not advance"));
+      }
     }
 
     const persistedProgress = yield* input.repository.getRun(input.run.runId);
@@ -259,7 +288,21 @@ export function runDirectThreadRetentionCoordinated(
     }
     const progress = persistedProgress.value;
     const completedAt = new Date(now()).toISOString();
-    const completedWithFailures = progress.skippedCount > 0 || progress.failedCount > 0;
+    const resources =
+      input.run.selectionMode === "per-thread"
+        ? yield* (
+            input.repository.readResourceSummary?.(input.run.runId) ??
+              Effect.fail(new Error("retention resource summary unavailable"))
+          )
+        : null;
+    const completedWithFailures =
+      progress.skippedCount > 0 ||
+      progress.failedCount > 0 ||
+      (progress.uncertainCount ?? 0) > 0 ||
+      (resources?.retainedResourceCount ?? 0) > 0 ||
+      (resources?.blockedResourceCount ?? 0) > 0 ||
+      (resources?.pendingResourceCount ?? 0) > 0 ||
+      (resources?.canonicalPendingCount ?? 0) > 0;
     if (completedWithFailures) {
       const preparing = yield* input.repository.transitionRun({
         runId: input.run.runId,

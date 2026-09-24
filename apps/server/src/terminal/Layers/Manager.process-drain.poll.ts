@@ -1,6 +1,8 @@
 import { Effect, Option } from "effect";
 
 import { toSessionKey } from "./Manager.shell";
+import { pollAgentIdentityWith } from "./Manager.process-drain.identity";
+import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import { type TerminalSessionState } from "./Manager.types";
 
@@ -51,14 +53,14 @@ export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect
           }
 
           liveSession.value.hasRunningSubprocess = hasRunningSubprocess.value;
-          liveSession.value.updatedAt = new Date().toISOString();
+          liveSession.value.updatedAt = nextTerminalTimestamp(liveSession.value.updatedAt);
 
           return [
             Option.some({
               type: "activity" as const,
               threadId: liveSession.value.threadId,
               terminalId: liveSession.value.terminalId,
-              createdAt: new Date().toISOString(),
+              createdAt: liveSession.value.updatedAt,
               hasRunningSubprocess: hasRunningSubprocess.value,
             }),
             managerState,
@@ -70,9 +72,15 @@ export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect
         }
       }).pipe(Effect.withSpan("terminal.checkSubprocessActivity"));
 
-    yield* Effect.forEach(runningSessions, checkSubprocessActivity, {
-      concurrency: "unbounded",
-      discard: true,
-    });
+    yield* Effect.all(
+      [
+        pollAgentIdentityWith(ctx, runningSessions),
+        Effect.forEach(runningSessions, checkSubprocessActivity, {
+          concurrency: "unbounded",
+          discard: true,
+        }),
+      ],
+      { concurrency: 2, discard: true },
+    );
   }).pipe(Effect.withSpan("terminal.pollSubprocessActivity"));
 }

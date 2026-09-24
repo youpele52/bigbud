@@ -1,4 +1,4 @@
-import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -176,6 +176,15 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
         ["message-c", "message-d"],
       );
       assert.equal(second.messageWindow.hasOlder, false);
+      const anchored = yield* query.getSelectedThreadDetail({
+        threadId: ThreadId.makeUnsafe("detail-thread"),
+        messageAnchorId: MessageId.makeUnsafe("message-c"),
+        messageLimit: 1,
+      });
+      assert.deepEqual(
+        anchored.messages.map((message) => message.id),
+        ["message-c"],
+      );
     }),
   );
 

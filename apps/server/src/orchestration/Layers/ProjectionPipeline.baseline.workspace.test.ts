@@ -160,4 +160,139 @@ it.layer(BaseTestLayer)("projection baseline workspace", (it) => {
       if (verified._tag === "Some") assert.equal(verified.value.sequence, 4);
     }),
   );
+
+  it.effect("rebuilds mixed remote and cross-project children after one parent deletion", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const pipeline = yield* OrchestrationProjectionPipeline;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-09-23T00:00:00.000Z";
+      const firstProject = ProjectId.makeUnsafe("retention-rebuild-first");
+      const secondProject = ProjectId.makeUnsafe("retention-rebuild-second");
+      const parent = ThreadId.makeUnsafe("retention-rebuild-parent");
+      const remoteChild = ThreadId.makeUnsafe("retention-rebuild-remote-child");
+      const otherThread = ThreadId.makeUnsafe("retention-rebuild-other-project");
+      for (const projectId of [firstProject, secondProject]) {
+        yield* eventStore.append({
+          type: "project.created",
+          eventId: EventId.makeUnsafe(`${projectId}-created`),
+          aggregateKind: "project",
+          aggregateId: projectId,
+          occurredAt: now,
+          commandId: CommandId.makeUnsafe(`${projectId}-create-command`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            projectId,
+            title: String(projectId),
+            workspaceRoot: null,
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+      }
+      let lastCreatedSequence = 0;
+      for (const [threadId, projectId, parentThread, remote] of [
+        [parent, firstProject, undefined, false],
+        [
+          remoteChild,
+          secondProject,
+          { threadId: parent, title: "Parent", projectId: firstProject },
+          true,
+        ],
+        [otherThread, secondProject, undefined, true],
+      ] as const) {
+        const created = yield* eventStore.append({
+          type: "thread.created",
+          eventId: EventId.makeUnsafe(`${threadId}-created`),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: CommandId.makeUnsafe(`${threadId}-create-command`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            threadId,
+            projectId,
+            title: String(threadId),
+            modelSelection: { provider: "codex", model: "gpt-5.6" },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            ...(remote
+              ? { workspaceExecutionTargetId: "ssh:devbox", executionTargetId: "ssh:devbox" }
+              : {}),
+            ...(parentThread ? { parentThread } : {}),
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        lastCreatedSequence = created.sequence;
+      }
+      yield* pipeline.bootstrap;
+      yield* pipeline.ensureVerifiedBaselineThrough(lastCreatedSequence);
+      const linkedChild = yield* sql<{
+        projectId: string;
+        parentThreadId: string | null;
+        parentThreadProjectId: string | null;
+      }>`
+        SELECT project_id AS "projectId", parent_thread_id AS "parentThreadId",
+          parent_thread_project_id AS "parentThreadProjectId"
+        FROM projection_threads WHERE thread_id = ${remoteChild}
+      `;
+      assert.deepEqual(linkedChild, [
+        {
+          projectId: secondProject,
+          parentThreadId: parent,
+          parentThreadProjectId: firstProject,
+        },
+      ]);
+      const deleted = yield* eventStore.append({
+        type: "thread.deleted",
+        eventId: EventId.makeUnsafe("retention-rebuild-parent-deleted"),
+        aggregateKind: "thread",
+        aggregateId: parent,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("retention-rebuild-delete-command"),
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        payload: { threadId: parent, threadIds: [parent], deletedAt: now },
+      });
+      yield* pipeline.projectEvent(deleted);
+      yield* pipeline.ensureVerifiedBaselineThrough(deleted.sequence);
+      const rows = yield* sql<{
+        threadId: string;
+        projectId: string;
+        parentThreadId: string | null;
+        parentThreadProjectId: string | null;
+        workspaceExecutionTargetId: string;
+      }>`
+        SELECT thread_id AS "threadId", project_id AS "projectId",
+          parent_thread_id AS "parentThreadId",
+          parent_thread_project_id AS "parentThreadProjectId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId"
+        FROM projection_threads ORDER BY thread_id
+      `;
+      assert.deepEqual(
+        rows.map((row) => row.threadId),
+        [otherThread, remoteChild].toSorted(),
+      );
+      assert.equal(rows.find((row) => row.threadId === remoteChild)?.parentThreadId, null);
+      assert.equal(rows.find((row) => row.threadId === remoteChild)?.parentThreadProjectId, null);
+      assert.equal(rows.find((row) => row.threadId === remoteChild)?.projectId, secondProject);
+      assert.equal(
+        rows.find((row) => row.threadId === remoteChild)?.workspaceExecutionTargetId,
+        "ssh:devbox",
+      );
+      assert.equal(rows.find((row) => row.threadId === otherThread)?.projectId, secondProject);
+      const verified = yield* (yield* ProjectionBaselineRepository).latestVerified();
+      assert.equal(verified._tag, "Some");
+      if (verified._tag === "Some") assert.equal(verified.value.sequence, deleted.sequence);
+    }),
+  );
 });

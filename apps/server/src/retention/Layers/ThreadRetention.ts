@@ -1,5 +1,5 @@
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schedule, Schema } from "effect";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
@@ -11,6 +11,7 @@ import { makeSetThreadRetentionPolicy } from "./ThreadRetention.policy.ts";
 import { runThreadRetentionSchedule } from "./ThreadRetention.scheduler.ts";
 import { makeThreadRetentionExecutionCoordinator } from "./ThreadRetention.coordinator.ts";
 import { cutoffForRetentionPolicy } from "./ThreadRetention.logic.ts";
+import { toServerThreadRetentionRun } from "./ThreadRetention.public.ts";
 
 const retentionError = (code: ServerThreadRetentionError["code"], message: string) =>
   new ServerThreadRetentionError({ code, message });
@@ -55,7 +56,16 @@ const makeThreadRetention = Effect.gen(function* () {
           return yield* retentionError("challenge_consumed", "The confirmation was already used.");
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
-      return yield* coordinator.execute(accepted.run.runId);
+      yield* coordinator.drain().pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("thread retention background execution deferred", {
+            runId: accepted.run.runId,
+            detail: String(error),
+          }),
+        ),
+        Effect.forkDetach,
+      );
+      return toServerThreadRetentionRun(accepted.run);
     }).pipe(
       Effect.tapError((error) =>
         Effect.logWarning("thread retention execution failed", { detail: String(error) }),
@@ -72,11 +82,16 @@ const makeThreadRetention = Effect.gen(function* () {
     isDisabled: () => process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1",
     run: (policy) =>
       Effect.gen(function* () {
+        const authority = yield* repository.getPolicyAuthority();
+        const saved = Option.getOrUndefined(authority);
+        if (saved?.policy !== policy) return;
         const createdAt = new Date().toISOString();
         const scheduled = yield* repository.createScheduledQueuedRun({
           runId: crypto.randomUUID(),
           trigger: "scheduled",
           policy,
+          selectionMode: saved.selectionMode ?? "legacy-subtree",
+          ageCriterion: saved.ageCriterion ?? "last-conversation-activity",
           cutoffAt: cutoffForRetentionPolicy(policy, Date.parse(createdAt)),
           createdAt,
         });
@@ -93,20 +108,67 @@ const makeThreadRetention = Effect.gen(function* () {
   return {
     preview,
     enqueue,
+    getRun: ({ runId }) =>
+      Effect.gen(function* () {
+        const run = yield* repository.getRun(runId);
+        if (Option.isNone(run)) {
+          return yield* retentionError("not_found", "Thread cleanup run was not found.");
+        }
+        const resources = yield* repository.readResourceSummary(runId);
+        return toServerThreadRetentionRun(run.value, resources);
+      }).pipe(
+        Effect.mapError((error) =>
+          Schema.is(ServerThreadRetentionError)(error)
+            ? error
+            : retentionError("failed", "Failed to load thread cleanup progress."),
+        ),
+      ),
+    listRecentRuns: ({ limit }) =>
+      repository.listRecentRuns(Math.min(limit ?? 20, 50)).pipe(
+        Effect.flatMap((runs) =>
+          Effect.forEach(runs, (run) =>
+            repository
+              .readResourceSummary(run.runId)
+              .pipe(Effect.map((resources) => toServerThreadRetentionRun(run, resources))),
+          ),
+        ),
+        Effect.flatMap((runs) =>
+          repository.getPolicyAuthority().pipe(
+            Effect.map((authority) => ({
+              runs,
+              availability:
+                process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1"
+                  ? ("disabled" as const)
+                  : ("available" as const),
+              policySelectionMode:
+                Option.getOrUndefined(authority)?.selectionMode ?? ("legacy-subtree" as const),
+              policyAgeCriterion:
+                Option.getOrUndefined(authority)?.ageCriterion ??
+                ("last-conversation-activity" as const),
+            })),
+          ),
+        ),
+        Effect.mapError(() => retentionError("failed", "Failed to list thread cleanup runs.")),
+      ),
     setPolicy: makeSetThreadRetentionPolicy({
       repository,
       settings,
       getPolicy: getAuthoritativePolicy,
     }),
     runScheduledOnce,
-    start: coordinator.drain().pipe(
-      Effect.catch((error) =>
-        Effect.logWarning("thread retention startup recovery deferred", {
-          detail: String(error),
-        }),
-      ),
-      Effect.andThen(runThreadRetentionSchedule(runScheduledOnce)),
-    ),
+    start: Effect.gen(function* () {
+      yield* Effect.repeat(
+        coordinator.drain().pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("thread retention recovery deferred", {
+              detail: String(error),
+            }),
+          ),
+        ),
+        Schedule.fixed("1 minute"),
+      ).pipe(Effect.forkDetach);
+      yield* runThreadRetentionSchedule(runScheduledOnce);
+    }),
   } satisfies ThreadRetentionShape;
 });
 

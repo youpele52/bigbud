@@ -6,6 +6,21 @@ import type { PluginCatalogItem, PluginInstallation, PluginSyncState } from "@bi
 
 const execFileAsync = promisify(execFile);
 
+export type PluginGitAvailability = "available" | "missing" | "unknown";
+
+export async function checkPluginGitAvailability(
+  run: () => Promise<unknown> = () =>
+    execFileAsync("git", ["--version"], { timeout: 3_000, windowsHide: true }),
+): Promise<PluginGitAvailability> {
+  try {
+    await run();
+    return "available";
+  } catch (cause) {
+    const code = cause && typeof cause === "object" && "code" in cause ? cause.code : undefined;
+    return code === "ENOENT" || typeof code === "number" ? "missing" : "unknown";
+  }
+}
+
 export type StoredPluginSnapshot = {
   readonly commit: string;
   readonly items: ReadonlyArray<PluginCatalogItem>;

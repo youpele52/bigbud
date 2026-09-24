@@ -20,6 +20,10 @@ import type {
   OrchestrationThreadPurpose,
 } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import type { ThreadWorkflowStatusLabel } from "../ThreadWorkflowStatus.logic.ts";
+import type {
+  SearchConversationMessagesInput,
+  SearchConversationMessagesResult,
+} from "@bigbud/contracts/orchestration/orchestration.search.ts";
 
 export interface ListCatalogThreadsInput {
   readonly callerThreadId: ThreadId;
@@ -67,6 +71,9 @@ export type ProjectionCatalogQueryError =
   | ProjectionThreadDetailNotFoundError;
 
 export interface ProjectionCatalogQueryShape {
+  readonly searchConversationMessages: (
+    input: SearchConversationMessagesInput,
+  ) => Effect.Effect<SearchConversationMessagesResult, ProjectionRepositoryError>;
   readonly listThreads: (
     input: ListCatalogThreadsInput,
   ) => Effect.Effect<ListCatalogThreadsResult, ProjectionRepositoryError>;

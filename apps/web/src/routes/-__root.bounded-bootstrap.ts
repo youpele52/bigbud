@@ -31,6 +31,7 @@ export function resolveSelectedThreadIdFromPath(
     !/^\/[^/]+$/.test(pathname) ||
     pathname === "/automations" ||
     pathname === "/plugins" ||
+    pathname === "/games" ||
     pathname === "/usage" ||
     pathname === "/settings"
   ) {

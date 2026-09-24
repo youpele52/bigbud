@@ -10,8 +10,8 @@
 - **Inspected branch / HEAD:** `main` / `1d02e44cd090cc0e2bce25a2cca1a88442e4873e` (current v0.2.207).
 - **Legacy source:** v0.2.205 / `461b7865cd28bb2570d9f580405fa53daee7b51f`.
 - **Related work:** user-approved coexistence design in the planning request; [local investigation](remote-agent-0.2.205-upgrade.md); [accepted native boundary](../decisions/2026-08-22-rust-remote-workspace-agent-boundary.md). No issue, note, or Kanban ID supplied or identified; none invented.
-- **Protected working document:** `docs/plan/remote-agent-0.2.205-upgrade.md` must NEVER be staged or committed, including forced staging. It is currently ignored. Do not rewrite it to remove historical evidence.
-- **Permissions:** implement the complete agreed plan. No SSH/VPS access, staging, commits, pushes, tags, releases, production process actions, or broad worktree cleanup. Plans belong only in `docs/plan/` and must never be staged.
+- **Protected working document:** `docs/plans/remote-agent-0.2.205-upgrade.md` must NEVER be staged or committed, including forced staging. Preserve its historical evidence.
+- **Permissions:** implement the complete agreed plan. No SSH/VPS access, staging, commits, pushes, tags, releases, production process actions, or broad worktree cleanup. Plans belong in `docs/plans/`; this plan forbids staging them as part of its code implementation.
 
 ## 2. Goal and definition of done
 
@@ -309,7 +309,7 @@ crates/bigbud-remote-agent/src/operations/journal/inspect.relationships.rs
 
 Tracked diff: six files, 242 insertions / 35 deletions; all nine partial source/test files were inspected. This plan is the only authorized new planning file. The protected investigation is ignored (`git check-ignore` confirmed); do not assume ignored means disposable.
 
-Instructions inspected: supplied global assistant instructions, root `AGENTS.md`, `crates/AGENTS.md`, `docs/plan/_plan-authoring-guide--do-not-delete.md`, and surfaced `docs/CONTEXT.md`; accepted native boundary read. No other repository `AGENTS.md` found. Required plan content is organized under this planner's mandated metadata/goal/evidence/scope/phases/validation/handoff sections, incorporating the repository guide's summary, related work, non-goals, risks, criteria, and questions.
+Instructions inspected: supplied global assistant instructions, root `AGENTS.md`, `crates/AGENTS.md`, and the guide now at `docs/plans/_plan-authoring-guide--do-not-delete.md`, plus surfaced `docs/CONTEXT.md`; accepted native boundary read. No other repository `AGENTS.md` found. Required plan content is organized under this planner's mandated metadata/goal/evidence/scope/phases/validation/handoff sections, incorporating the repository guide's summary, related work, non-goals, risks, criteria, and questions.
 
 Toolchain constraints from `package.json`: Bun 1.3.9, Node ^24.13.1, Vitest ^4, Effect 4.0.0-beta.43, Oxfmt/Oxlint; reuse current lockfiles, no dependency additions planned. External fixture evidence is historical and must be reproduced for acceptance.
 

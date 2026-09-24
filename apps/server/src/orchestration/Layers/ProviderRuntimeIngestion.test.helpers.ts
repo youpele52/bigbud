@@ -99,7 +99,7 @@ function isLegacyTurnCompletedEvent(
   );
 }
 
-function createProviderServiceHarness() {
+function createProviderServiceHarness(providerName: ProviderRuntimeEvent["provider"] = "codex") {
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
   const runtimeSessions: ProviderSession[] = [];
 
@@ -122,7 +122,7 @@ function createProviderServiceHarness() {
     listSessionsForReconciliation: () =>
       Effect.succeed({
         sessions: [...runtimeSessions],
-        availableProviders: new Set(["codex" as const]),
+        availableProviders: new Set([providerName]),
         unavailableProviders: new Set(),
         directoryAvailable: true,
         diagnostics: [],
@@ -185,7 +185,10 @@ export function registerProviderRuntimeIngestionTestCleanup(): void {
   });
 }
 
-export async function createHarness(options?: { serverSettings?: Partial<ServerSettings> }) {
+export async function createHarness(options?: {
+  serverSettings?: Partial<ServerSettings>;
+  provider?: ProviderRuntimeEvent["provider"];
+}) {
   const workspaceRoot = makeTrackedTempDir("t3-provider-project-");
   fs.mkdirSync(path.join(workspaceRoot, ".git"));
 
@@ -206,7 +209,8 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
     runtime = null;
   });
 
-  const provider = createProviderServiceHarness();
+  const providerName = options?.provider ?? "codex";
+  const provider = createProviderServiceHarness(providerName);
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
@@ -239,7 +243,7 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
       title: "Provider Project",
       workspaceRoot,
       defaultModelSelection: {
-        provider: "codex",
+        provider: providerName,
         model: "gpt-5-codex",
       },
       createdAt,
@@ -253,7 +257,7 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
       projectId: asProjectId("project-1"),
       title: "Thread",
       modelSelection: {
-        provider: "codex",
+        provider: providerName,
         model: "gpt-5-codex",
       },
       interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -271,7 +275,7 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
       session: {
         threadId: ThreadId.makeUnsafe("thread-1"),
         status: "ready",
-        providerName: "codex",
+        providerName,
         runtimeMode: "approval-required",
         activeTurnId: null,
         reason: null,
@@ -282,7 +286,7 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
     }),
   );
   provider.setSession({
-    provider: "codex",
+    provider: providerName,
     status: "ready",
     runtimeMode: "approval-required",
     threadId: ThreadId.makeUnsafe("thread-1"),

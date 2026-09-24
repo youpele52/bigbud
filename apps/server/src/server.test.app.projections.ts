@@ -11,6 +11,8 @@ import type { BuildAppUnderTestOptions } from "./server.test.app.types.ts";
 export function makeProjectionTestLayer(options?: BuildAppUnderTestOptions) {
   return Layer.mergeAll(
     Layer.mock(ProjectionCatalogQuery)({
+      searchConversationMessages: () =>
+        Effect.succeed({ status: "ready", projectionSequence: 0, hits: [] }),
       getStartupProjectCatalog: () =>
         Effect.succeed({ projectionSequence: 0, projects: [], remainingCount: 0 }),
       getProjectThreadSummaries: ({ projectId }) =>

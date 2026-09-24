@@ -7,6 +7,12 @@ export function truncate(text: string, maxLength = 50): string {
   return `${trimmed.slice(0, maxLength)}...`;
 }
 
+export function countUnicodeCodePoints(text: string): number {
+  let count = 0;
+  for (const _character of text) count += 1;
+  return count;
+}
+
 export const DEFAULT_THREAD_TITLE = "New thread";
 
 export function fallbackThreadTitleFromPrompt(prompt: string, maxLength = 25): string {

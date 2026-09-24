@@ -8,5 +8,6 @@ describe("bounded bootstrap route selection", () => {
     const fallback = ThreadId.makeUnsafe("selected-thread");
 
     expect(resolveSelectedThreadIdFromPath("/plugins", fallback)).toBe(fallback);
+    expect(resolveSelectedThreadIdFromPath("/games", fallback)).toBe(fallback);
   });
 });

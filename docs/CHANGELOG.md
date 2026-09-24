@@ -5,10 +5,74 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ## What's new?
 
 - **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
-- **Conversation-first mobile redesign:** A new mobile shell puts chats at the center, with clearer navigation, persistent drafts, and recovery for interrupted work.
-- **Never lose a follow-up:** Messages sent while bigbud is busy wait safely and continue automatically.
-- **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
-- **Clearer recovery when something goes wrong:** Remote setup and connection errors now explain what failed and how to recover.
+- **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
+- **Set up your sidebar your way:** Choose which items to show and where they go. bigbud remembers your layout between restarts.
+- **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
+- **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
+
+## v0.2.300 (24 September, 2026)
+
+### Games in bigbud.app
+
+- **Make the wait part of the fun:** Meet a hand-picked collection of twelve free browser games—from quick puzzles and familiar classics to creative and strategy games—chosen to keep your mind engaged while bigbud works on the longer task. ![Games in bigbud.app](https://assets.bigbud.app/content/bigbud.app%20games.png)
+- When an AI agent has been working in your chat for more than ten minutes, bigbud offers a one-time nudge to explore Games without interrupting the work.
+- **Curious about the research?** A review of action-game studies explored possible links with attention and other thinking skills. It looks at a specific game genre, so it is not a promise that every game improves your abilities. [Read the meta-analysis](https://doi.org/10.1037/bul0000130).
+
+### More Reliable Terminal and Provider Updates
+
+- **See which AI harness is active in each local terminal:** Tabs keep its label up to date when work reconnects or switches tools.
+- **Get the full reply:** Fixed an issue that could leave responses from some providers unfinished.
+
+### Safer Thread Retention and Deletion
+
+- **Choose what “old” means:** Set cleanup by when a chat was created or last used, and review what will be removed before you confirm.
+- **Keep important work safe:** Pinned chats are protected, and files shared with other work are less likely to be removed by cleanup.
+- **Pick up safely after an interruption:** Cleanup now gives clearer progress and can recover more reliably if it stops partway through.
+
+### Search Older Conversations
+
+- **Find the message you remember:** Search across past chats, even when they are not open.
+- **Jump right to the moment:** Open a result at the matching message, including older parts of a conversation.
+
+### Desktop Release Improvements
+
+- **More reliable desktop releases:** Updated packaging to reduce build failures and keep unnecessary files out of the final app.
+
+### Customizable Sidebar
+
+- **Make the sidebar yours:** Hide, restore, and rearrange items—including Pinned, Chats, local and remote Projects, Plugins, Scheduled, Games, and Usage—from the right-click menu or by dragging them. Your choices are saved across restarts, while New chat and Search stay in place. ![Sidebar reorder menu](https://assets.bigbud.app/content/reorder%20menu.png)
+- **Keep your layout easy to scan:** Sidebar items stay visually grouped as you move them, and you can reset their order whenever you want.
+- **Show Plugins when Git is installed:** Plugins stays hidden when Git is unavailable on your computer. If you try to show it, bigbud explains that Git is needed and links to installation guidance.
+
+## v0.2.210 (22 September, 2026)
+
+### Automatic Remote-Agent Updates
+
+- New remote connections now refresh the configured release, select the latest verified compatible agent, prepare it when needed, and wait for health confirmation before using it.
+- Preserved each connection's selected runtime across reconnects and retries, preventing stale update selection, silent downgrades, or moving existing work onto a different runtime.
+- Added durable update history with requested versions, actionable failure details, signed artifact verification, and an amber warning when a healthy older agent is used as a fallback.
+- Kept Direct SSH explicit and independent from managed-agent installation, updates, and recovery.
+
+### Safer Remote Workspace Recovery
+
+- Recovered remote-agent capacity by recognizing legitimate legacy files, reclaiming only verified unowned stale payloads, and leaving uncertain installations unchanged.
+- Improved remote workspace watchers and file-preview refreshes so local and remote changes reconcile more reliably after reconnects or missed updates.
+- Preserved the verified agent identity shown for an active connection and improved setup, connection, and fallback messages so the next recovery step is clear.
+- Ensured remote MCP bridges launched from Electron use the correct Node runtime instead of inheriting desktop-shell arguments.
+
+### More Reliable Desktop Startup
+
+- Packaged macOS and Linux builds now create and verify the backend `node_modules` link before signing or sealing the application.
+- Packaged macOS startup validates the signed module layout without modifying the app bundle at runtime; Windows retains its junction-and-copy fallback.
+- Added a specific recovery diagnostic for incomplete or damaged backend modules, directing users to reinstall bigbud when the local installation cannot start.
+
+### Provider and Orchestration Recovery
+
+- Desktop orchestration events now drain in contiguous, bounded batches, reducing acknowledgement overhead while preserving ordering and replay safety.
+- Stabilized MCP invocation identity across orchestration and remote-workspace bridges so concurrent requests, retries, and reconnects do not cross wires or lose cleanup state.
+- Strengthened provider turn lifecycle handling across Codex, Claude, Cursor, Devin, and OpenCode, including idle cleanup, session stamping, attachment routing, and remote execution recovery.
+- OpenCode requests now use bounded deadlines and can recover final output when the provider becomes idle; duplicate settlement is prevented and unrecoverable finalization now fails explicitly.
+- WebSocket subscriptions retry with resettable, capped backoff, and listener failures remain recoverable instead of permanently stopping delivery.
 
 ## v0.2.210 (22 September, 2026)
 

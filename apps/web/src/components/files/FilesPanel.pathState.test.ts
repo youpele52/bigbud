@@ -65,7 +65,7 @@ describe("Files panel path state", () => {
       getVisibleDirectoryPaths(
         {
           docs: true,
-          "docs/plan": true,
+          "docs/plans": true,
           scripts: false,
           missing: true,
         },
@@ -74,12 +74,12 @@ describe("Files panel path state", () => {
             { path: "docs", kind: "directory" },
             { path: "scripts", kind: "directory" },
           ]),
-          docs: state([{ path: "docs/plan", kind: "directory" }]),
-          "docs/plan": state([]),
+          docs: state([{ path: "docs/plans", kind: "directory" }]),
+          "docs/plans": state([]),
           scripts: state([]),
         },
       ),
-    ).toEqual(["", "docs", "docs/plan"]);
+    ).toEqual(["", "docs", "docs/plans"]);
   });
 
   it("keeps the root before it loads and excludes detached expanded state", () => {

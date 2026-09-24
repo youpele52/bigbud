@@ -25,6 +25,27 @@ it.effect("routes the global sidebar catalog RPC to the projection query", () =>
   }),
 );
 
+it.effect("routes bounded saved-message search to the projection query", () =>
+  Effect.gen(function* () {
+    let receivedQuery = "";
+    const context = {
+      projectionCatalogQuery: {
+        searchConversationMessages: (input: { readonly query: string }) => {
+          receivedQuery = input.query;
+          return Effect.succeed({ status: "ready" as const, projectionSequence: 8, hits: [] });
+        },
+      },
+    } as unknown as WsRpcContext;
+    const handlers = makeWsRpcOrchestrationServerHandlers(context);
+    const result = yield* handlers[ORCHESTRATION_WS_METHODS.searchConversationMessages]({
+      query: "DeepSeek",
+      limit: 5,
+    });
+    assert.equal(receivedQuery, "DeepSeek");
+    assert.equal(result.status, "ready");
+  }),
+);
+
 it.effect("routes selected-thread detail RPCs to the catalog query service", () =>
   Effect.gen(function* () {
     const threadId = ThreadId.makeUnsafe("thread-rpc");

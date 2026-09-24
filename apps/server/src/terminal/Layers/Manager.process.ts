@@ -4,6 +4,7 @@ import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker"
 import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";
 
 import { type PtyProcess } from "../Services/PTY";
+import { defaultTerminalAgentDetector } from "./Manager.agentDetection";
 import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
 import {
   drainProcessEventsWith,
@@ -80,6 +81,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const historyLineLimit = options.historyLineLimit ?? DEFAULT_HISTORY_LINE_LIMIT;
     const shellResolver = options.shellResolver ?? defaultShellResolver;
     const subprocessChecker = options.subprocessChecker ?? defaultSubprocessChecker;
+    const agentDetector = options.agentDetector ?? defaultTerminalAgentDetector;
     const subprocessPollIntervalMs =
       options.subprocessPollIntervalMs ?? DEFAULT_SUBPROCESS_POLL_INTERVAL_MS;
     const processKillGraceMs = options.processKillGraceMs ?? DEFAULT_PROCESS_KILL_GRACE_MS;
@@ -253,6 +255,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       workerScope,
       runFork,
       subprocessChecker,
+      agentDetector,
       subprocessPollIntervalMs,
       shellResolver,
       ptyAdapter: options.ptyAdapter,

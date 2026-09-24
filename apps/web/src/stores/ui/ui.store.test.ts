@@ -21,6 +21,17 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    sidebarActionOrder: [
+      "plugins",
+      "scheduled",
+      "games",
+      "usage",
+      "pinned",
+      "chats",
+      "projects",
+      "remote-projects",
+    ],
+    hiddenSidebarActions: [],
     chatsExpanded: true,
     favouritesExpanded: true,
     lastActiveThreadId: null,

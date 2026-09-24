@@ -153,7 +153,7 @@ by making `--prepare-supervisor` safer.
 2. Do not use `git reset`, `git checkout`, or broad cleanup. The worktree is intentionally
    dirty and contains the implementation under review.
 3. Treat `545301f8ee` as an existing local commit. Do not amend it or push it without an
-   explicit request. Do not stage any file under `docs/plan/` for a code commit.
+   explicit request. Do not stage any file under `docs/plans/` for a code commit.
 4. Inspect `git status --short --branch`, `git diff --stat`, and the untracked remote-agent
    files before editing.
 5. Run the focused suites first:

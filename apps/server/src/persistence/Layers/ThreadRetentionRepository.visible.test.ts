@@ -91,7 +91,7 @@ layer("thread retention visible recency", (it) => {
       const repository = yield* ThreadRetentionRepository;
       const preview = yield* repository.preview(cutoffAt);
       assert.equal(preview.eligibleCount, 1);
-      assert.equal(preview.oldestEligibleActivityAt, oldAt);
+      assert.equal(preview.oldestEligibleAgeAt, oldAt);
       assert.deepEqual(yield* repository.selectNextPage({ cutoffAt, limit: 10 }), [
         { threadId: ThreadId.makeUnsafe("stale-chat"), lastActivityAt: oldAt },
       ]);

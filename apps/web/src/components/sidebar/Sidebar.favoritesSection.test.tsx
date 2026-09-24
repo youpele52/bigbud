@@ -129,7 +129,7 @@ describe("SidebarFavoritesSection", () => {
 
     expect(html).toContain("Pinned");
     expect(html).not.toContain("Favourites");
-    expect(html).toContain("No pinned threads yet");
+    expect(html).not.toContain("No pinned threads yet");
   });
 
   it("keeps the empty state hidden when Pinned is collapsed", () => {

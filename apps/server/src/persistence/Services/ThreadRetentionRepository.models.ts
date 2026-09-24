@@ -1,5 +1,7 @@
 import {
   FiniteThreadRetentionPolicy,
+  ThreadRetentionAgeCriterion,
+  ThreadRetentionSelectionMode,
   type ThreadRetentionPolicy,
 } from "@bigbud/contracts/core/settings.threadRetention.ts";
 import { IsoDateTime, NonNegativeInt, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -77,8 +79,8 @@ export const ThreadRetentionExclusionCount = Schema.Struct({
 });
 export const ThreadRetentionPreview = Schema.Struct({
   eligibleCount: NonNegativeInt,
-  oldestEligibleActivityAt: Schema.NullOr(IsoDateTime),
-  newestEligibleActivityAt: Schema.NullOr(IsoDateTime),
+  oldestEligibleAgeAt: Schema.NullOr(IsoDateTime),
+  newestEligibleAgeAt: Schema.NullOr(IsoDateTime),
   exclusionCounts: Schema.Array(ThreadRetentionExclusionCount),
   estimatedAttachmentCount: NonNegativeInt,
   estimatedResourceCount: NonNegativeInt,
@@ -93,6 +95,8 @@ export const ThreadRetentionRun = Schema.Struct({
   runId: Schema.String,
   trigger: ThreadRetentionRunTrigger,
   policy: FiniteThreadRetentionPolicy,
+  selectionMode: Schema.optional(ThreadRetentionSelectionMode),
+  ageCriterion: Schema.optional(ThreadRetentionAgeCriterion),
   cutoffAt: IsoDateTime,
   status: ThreadRetentionRunStatus,
   cursorLastActivityAt: Schema.NullOr(IsoDateTime),
@@ -101,6 +105,7 @@ export const ThreadRetentionRun = Schema.Struct({
   selectedCount: NonNegativeInt,
   skippedCount: NonNegativeInt,
   requestedCount: NonNegativeInt,
+  uncertainCount: Schema.optional(NonNegativeInt),
   completedCount: NonNegativeInt,
   failedCount: NonNegativeInt,
   estimatedResourceCount: NonNegativeInt,
@@ -139,6 +144,8 @@ export type CreateRetentionRunInput = {
   readonly runId: string;
   readonly trigger: ThreadRetentionRunTrigger;
   readonly policy: typeof FiniteThreadRetentionPolicy.Type;
+  readonly selectionMode?: typeof ThreadRetentionSelectionMode.Type | undefined;
+  readonly ageCriterion?: typeof ThreadRetentionAgeCriterion.Type | undefined;
   readonly cutoffAt: string;
   readonly createdAt: string;
 };
@@ -220,6 +227,8 @@ export type IssueRetentionChallengeInput = {
   readonly challengeId: string;
   readonly trigger: "manual" | "policy-change";
   readonly policy: typeof FiniteThreadRetentionPolicy.Type;
+  readonly selectionMode?: typeof ThreadRetentionSelectionMode.Type | undefined;
+  readonly ageCriterion?: typeof ThreadRetentionAgeCriterion.Type | undefined;
   readonly cutoffAt: string;
   readonly issuedAt: string;
   readonly expiresAt: string;
@@ -232,6 +241,8 @@ export type ConsumeRetentionChallengeInput = {
   readonly token: string;
   readonly trigger: "manual" | "policy-change";
   readonly policy: typeof FiniteThreadRetentionPolicy.Type;
+  readonly selectionMode?: typeof ThreadRetentionSelectionMode.Type | undefined;
+  readonly ageCriterion?: typeof ThreadRetentionAgeCriterion.Type | undefined;
   readonly cutoffAt: string;
   readonly consumedAt: string;
 };
@@ -252,6 +263,8 @@ export type ConsumeManualChallengeResult =
   | { readonly consumed: false; readonly result: ConsumeRetentionChallengeResult };
 export type ThreadRetentionPolicyAuthority = {
   readonly policy: ThreadRetentionPolicy;
+  readonly selectionMode?: typeof ThreadRetentionSelectionMode.Type;
+  readonly ageCriterion?: typeof ThreadRetentionAgeCriterion.Type;
   readonly source: "explicit" | "rollout-automatic" | "rollout-protected" | "rollout-staged";
   readonly updatedAt: string;
 };

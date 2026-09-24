@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_THREAD_TITLE, fallbackThreadTitleFromPrompt, truncate } from "./String";
+import {
+  countUnicodeCodePoints,
+  DEFAULT_THREAD_TITLE,
+  fallbackThreadTitleFromPrompt,
+  truncate,
+} from "./String";
+
+it("counts Unicode code points instead of UTF-16 code units", () => {
+  expect(countUnicodeCodePoints("😀a")).toBe(2);
+  expect(countUnicodeCodePoints("😀ab")).toBe(3);
+});
 
 describe("truncate", () => {
   it("trims surrounding whitespace", () => {

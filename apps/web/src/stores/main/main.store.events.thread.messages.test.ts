@@ -80,6 +80,43 @@ describe("incremental orchestration updates", () => {
     expect(next.threads[0]?.messages[0]?.streaming).toBe(true);
   });
 
+  it("repairs an omitted live delta when the final authoritative message arrives", () => {
+    const thread = makeThread();
+    const messageId = MessageId.makeUnsafe("message-reconciled");
+    const turnId = TurnId.makeUnsafe("turn-reconciled");
+    const at = "2026-02-27T00:00:00.000Z";
+    const live = applyOrchestrationEvent(
+      makeState(thread),
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId,
+        role: "assistant",
+        text: "# Title\n- first\n",
+        turnId,
+        streaming: true,
+        createdAt: at,
+        updatedAt: at,
+      }),
+    );
+    const completed = applyOrchestrationEvent(
+      live,
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId,
+        role: "assistant",
+        text: "# Title\n- first\n- middle\n- last\n",
+        turnId,
+        replace: true,
+        streaming: false,
+        createdAt: at,
+        updatedAt: at,
+      }),
+    );
+
+    expect(completed.threads[0]?.messages[0]?.text).toBe("# Title\n- first\n- middle\n- last\n");
+    expect(completed.threads[0]?.messages[0]?.streaming).toBe(false);
+  });
+
   it("stores reply metadata from thread.message-sent events", () => {
     const thread = makeThread();
     const state = makeState(thread);

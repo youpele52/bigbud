@@ -4,7 +4,10 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
-import { retentionCandidateSelectSql } from "./ThreadRetentionRepository.pages.ts";
+import {
+  retentionCandidateSelectSql,
+  retentionPerThreadCandidateSelectSql,
+} from "./ThreadRetentionRepository.pages.ts";
 
 const layer = it.layer(Layer.mergeAll(SqlitePersistenceMemory));
 
@@ -38,17 +41,69 @@ layer("ThreadRetentionRepository query plan", (it) => {
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, NULL, NULL, NULL
         FROM sequence
       `;
+      yield* sql`
+        INSERT INTO projection_projects
+          (project_id, title, workspace_root, scripts_json, created_at, updated_at)
+        VALUES ('project-other', 'Other', '/tmp/other', '[]',
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+      `;
+      yield* sql`
+        INSERT INTO projection_threads
+          (thread_id, project_id, title, model_selection_json, runtime_mode,
+            interaction_mode, created_at, updated_at)
+        VALUES ('other-thread', 'project-other', 'Other',
+          '{"provider":"codex","model":"gpt-5.4"}', 'full-access', 'default',
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+      `;
+      yield* sql`
+        INSERT INTO projection_thread_messages
+          (message_id, thread_id, role, text, attachments_json, is_streaming,
+            created_at, updated_at)
+        VALUES ('other-user', 'other-thread', 'user', 'hello', '[]', 0,
+          '2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z')
+      `;
 
       const plan = yield* sql.unsafe<{ detail: string }>(
         `EXPLAIN QUERY PLAN ${retentionCandidateSelectSql}`,
         ["2026-02-01T00:00:00.000Z", null, null, null, null, 25],
       );
       const details = plan.map((row) => row.detail).join("\n");
-      assert.include(details, "idx_projection_threads_retention_scan");
+      assert.match(details, /idx_projection_threads_retention_(scan|created)/);
       assert.include(details, "idx_automation_schedules_owned_target_thread");
       assert.include(details, "idx_thread_activity_leases_thread");
       assert.include(details, "idx_worktree_runtime_leases_thread");
       assert.notInclude(details, "SCAN lease");
+      const createdPlan = yield* sql.unsafe<{ detail: string }>(
+        `EXPLAIN QUERY PLAN ${retentionPerThreadCandidateSelectSql("created")}`,
+        ["2026-02-01T00:00:00.000Z", null, null, null, null, 25],
+      );
+      assert.include(
+        createdPlan.map((row) => row.detail).join("\n"),
+        "idx_projection_threads_retention_created",
+      );
+      const activityPlan = yield* sql.unsafe<{ detail: string }>(
+        `EXPLAIN QUERY PLAN ${retentionPerThreadCandidateSelectSql("last-conversation-activity")}`,
+        ["2026-02-01T00:00:00.000Z", null, null, null, null, 25],
+      );
+      assert.include(
+        activityPlan.map((row) => row.detail).join("\n"),
+        "idx_projection_thread_messages_latest_user",
+      );
+      const cursorRows = yield* sql.unsafe<{ threadId: string; lastActivityAt: string }>(
+        retentionPerThreadCandidateSelectSql("last-conversation-activity"),
+        [
+          "2026-02-01T00:00:00.000Z",
+          "2026-01-01T00:00:00.000Z",
+          "2026-01-01T00:00:00.000Z",
+          "2026-01-01T00:00:00.000Z",
+          "thread-09999",
+          25,
+        ],
+      );
+      assert.deepEqual(
+        cursorRows.map((row) => row.threadId),
+        ["thread-10000", "other-thread"],
+      );
     }),
   );
 });

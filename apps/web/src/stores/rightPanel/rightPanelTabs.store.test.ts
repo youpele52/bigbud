@@ -13,6 +13,8 @@ describe("rightPanelTabs.store", () => {
       activeTabId: null,
       lastActiveKind: null,
       openTabs: [],
+      browserCreationOrder: [],
+      gamesWidthTabId: null,
       rightPanelOpen: false,
     });
   });
@@ -170,6 +172,35 @@ describe("rightPanelTabs.store", () => {
     expect(state.activeKind).toBe("browser");
     expect(state.activeTabId).toBe(first.tabId);
     expect(countRightPanelTabsByKind(state.openTabs, "browser")).toBe(1);
+  });
+
+  it("restores normal width state when switching tabs, closing the panel, or resizing manually", () => {
+    const game = useRightPanelTabsStore.getState().openBrowserTab();
+    const other = useRightPanelTabsStore.getState().openBrowserTab();
+    expect(game.tabId).not.toBeNull();
+    expect(other.tabId).not.toBeNull();
+
+    useRightPanelTabsStore.getState().setGamesWidthTabId(other.tabId);
+    useRightPanelTabsStore.getState().setActiveTab(game.tabId!);
+    expect(useRightPanelTabsStore.getState().gamesWidthTabId).toBeNull();
+
+    useRightPanelTabsStore.getState().setGamesWidthTabId(game.tabId);
+    useRightPanelTabsStore.getState().closeRightPanel();
+    expect(useRightPanelTabsStore.getState().gamesWidthTabId).toBeNull();
+
+    useRightPanelTabsStore.getState().setGamesWidthTabId(game.tabId);
+    useRightPanelTabsStore.getState().clearGamesWidthMode();
+    expect(useRightPanelTabsStore.getState().gamesWidthTabId).toBeNull();
+  });
+
+  it("clears temporary game sizing when its game tab closes", () => {
+    const game = useRightPanelTabsStore.getState().openBrowserTab();
+    useRightPanelTabsStore.getState().setGamesWidthTabId(game.tabId);
+
+    useRightPanelTabsStore.getState().closeTabById(game.tabId!);
+
+    expect(useRightPanelTabsStore.getState().gamesWidthTabId).toBeNull();
+    expect(useRightPanelTabsStore.getState().rightPanelOpen).toBe(false);
   });
 
   it("shows the launcher without closing existing tabs", () => {

@@ -62,6 +62,7 @@ const ThreadRetentionDeleteCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   runId: TrimmedNonEmptyString,
+  selectionMode: Schema.optional(Schema.Literals(["legacy-subtree", "per-thread"])),
   expectedLastActivityAt: IsoDateTime,
   cutoffAt: IsoDateTime,
   createdAt: IsoDateTime,
@@ -136,6 +137,7 @@ const ThreadMessageAssistantCompleteCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   messageId: MessageId,
+  text: Schema.optional(Schema.String),
   turnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
 });

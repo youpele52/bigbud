@@ -109,7 +109,7 @@ CUA already provides the reliability precedent for an optional runtime: download
 2. Add repeatable artifact-size observability before modifying further payloads:
    - Extend the desktop artifact workflow to emit machine-readable and human-readable reports for apparent and allocated size, top-level resources, top files, file count, source maps, declarations, locale packs, code-signature metadata, and Mach-O architecture slices.
    - Archive reports in CI next to the build artifact and compare them against a committed or release-baseline threshold. Fail only on agreed regressions; initially report deltas rather than inventing a hard budget.
-   - Test report parsing against the protected fixture in `docs/plan/_test-data--do-not-delete.md` if it contains the needed synthetic shape, or add a dedicated test fixture without modifying protected data.
+   - Test report parsing against the protected fixture in `docs/plans/_test-data--do-not-delete.md` if it contains the needed synthetic shape, or add a dedicated test fixture without modifying protected data.
 
 3. Safely prune external server dependency artifacts:
    - Start with `.map` files in the staged server `node_modules` tree after production install and platform-native pruning, reusing `pruneSourceMaps` rather than duplicating filesystem traversal.
