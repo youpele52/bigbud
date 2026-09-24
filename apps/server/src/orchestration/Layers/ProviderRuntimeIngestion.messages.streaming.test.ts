@@ -182,6 +182,9 @@ describe("ProviderRuntimeIngestion", () => {
   it.each([
     { provider: "pi", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "copilot", finalText: "# Title\n- first\n- middle\n- last\n" },
+    { provider: "opencode", finalText: "# Title\n- first\n- middle\n- last\n" },
+    { provider: "kilocode", finalText: "# Title\n- first\n- middle\n- last\n" },
+    { provider: "codex", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "pi", finalText: "# Title\n- first\n- last\n" },
   ] as const)(
     "reconciles $provider markdown with a single final event",
@@ -251,6 +254,7 @@ describe("ProviderRuntimeIngestion", () => {
           itemType: "assistant_message",
           status: "completed",
           detail: finalText,
+          ...(provider === "codex" ? { data: { item: { text: finalText } } } : {}),
         },
       });
 

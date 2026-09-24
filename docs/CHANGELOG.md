@@ -6,7 +6,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
 - **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
-- **Know which AI harness is active—and get more complete replies:** Terminal tabs identify the active AI harness, and a fix addresses Pi and Copilot replies that could arrive incomplete.
+- **Know which AI harness is active—and get more complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
 - **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
 - **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
 
@@ -21,7 +21,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### More Reliable Terminal and Provider Updates
 
 - **See which AI harness is active in each local terminal:** Tabs keep its label up to date when work reconnects or switches tools.
-- **Get the full reply:** Fixed an issue that could leave Pi and Copilot responses unfinished.
+- **Get the full reply:** Fixed an issue that could leave responses from some providers unfinished.
 
 ### Safer Thread Retention and Deletion
 

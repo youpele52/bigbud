@@ -49,6 +49,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
           item: {
             type: "agentMessage",
             id: "msg_1",
+            text: "Complete reply\n",
           },
         },
       };
@@ -67,6 +68,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       assert.equal(firstEvent.value.itemId, "msg_1");
       assert.equal(firstEvent.value.turnId, "turn-1");
       assert.equal(firstEvent.value.payload.itemType, "assistant_message");
+      assert.equal(firstEvent.value.payload.detail, "Complete reply\n");
     }),
   );
 
