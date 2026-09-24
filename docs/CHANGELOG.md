@@ -5,10 +5,38 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ## What's new?
 
 - **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
-- **Conversation-first mobile redesign:** A new mobile shell puts chats at the center, with clearer navigation, persistent drafts, and recovery for interrupted work.
-- **Never lose a follow-up:** Messages sent while bigbud is busy wait safely and continue automatically.
+- **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
+- **Know which AI harness is active—and get more complete replies:** Terminal tabs identify the active AI harness, and a fix addresses Pi and Copilot replies that could arrive incomplete.
+- **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
 - **Choose how you connect remotely:** Use the managed bigbud remote agent or Direct SSH for each project.
-- **Clearer recovery when something goes wrong:** Remote setup and connection errors now explain what failed and how to recover.
+
+## v0.2.300 (24 September, 2026)
+
+### Games in bigbud.app
+
+- **Make the wait part of the fun:** Meet a hand-picked collection of twelve free browser games—from quick puzzles and familiar classics to creative and strategy games—chosen to keep your mind engaged while bigbud works on the longer task.
+- When an AI agent has been working in your chat for more than ten minutes, bigbud offers a one-time nudge to explore Games without interrupting the work.
+- **Curious about the research?** A review of action-game studies explored possible links with attention and other thinking skills. It looks at a specific game genre, so it is not a promise that every game improves your abilities. [Read the meta-analysis](https://doi.org/10.1037/bul0000130).
+
+### More Reliable Terminal and Provider Updates
+
+- **See which AI harness is active in each local terminal:** Tabs keep its label up to date when work reconnects or switches tools.
+- **Get the full reply:** Fixed an issue that could leave Pi and Copilot responses unfinished.
+
+### Safer Thread Retention and Deletion
+
+- **Choose what “old” means:** Set cleanup by when a chat was created or last used, and review what will be removed before you confirm.
+- **Keep important work safe:** Pinned chats are protected, and files shared with other work are less likely to be removed by cleanup.
+- **Pick up safely after an interruption:** Cleanup now gives clearer progress and can recover more reliably if it stops partway through.
+
+### Search Older Conversations
+
+- **Find the message you remember:** Search across past chats, even when they are not open.
+- **Jump right to the moment:** Open a result at the matching message, including older parts of a conversation.
+
+### Desktop Release Improvements
+
+- **More reliable desktop releases:** Updated packaging to reduce build failures and keep unnecessary files out of the final app.
 
 ## v0.2.210 (22 September, 2026)
 
