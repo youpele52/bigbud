@@ -23,6 +23,8 @@ interface RightPanelTabsState {
   activeKind: RightPanelTabKind | null;
   activeTabId: RightPanelTabId | null;
   openTabs: ReadonlyArray<RightPanelTabId>;
+  browserCreationOrder: ReadonlyArray<RightPanelTabId>;
+  gamesWidthTabId: RightPanelTabId | null;
   rightPanelOpen: boolean;
   lastActiveKind: RightPanelTabKind | null;
   closeTab: (kind: RightPanelTabKind) => void;
@@ -36,6 +38,8 @@ interface RightPanelTabsState {
   openTab: (kind: Exclude<RightPanelTabKind, "browser">) => void;
   openBrowserTab: () => OpenBrowserTabResult;
   setActiveTab: (tabId: RightPanelTabId) => void;
+  setGamesWidthTabId: (tabId: RightPanelTabId | null) => void;
+  clearGamesWidthMode: () => void;
   toggleRightPanel: () => void;
   showLauncher: () => void;
   openRightPanel: () => void;
@@ -146,6 +150,8 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
   activeKind: null,
   activeTabId: null,
   openTabs: [],
+  browserCreationOrder: [],
+  gamesWidthTabId: null,
   rightPanelOpen: false,
   lastActiveKind: null,
   closeTab: (kind) =>
@@ -160,6 +166,8 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
 
       return {
         openTabs: nextTabs,
+        browserCreationOrder: kind === "browser" ? [] : state.browserCreationOrder,
+        gamesWidthTabId: kind === "browser" ? null : state.gamesWidthTabId,
         ...buildActiveState(nextActiveTabId),
         lastActiveKind: nextActiveTabId
           ? getRightPanelTabKind(nextActiveTabId)
@@ -179,6 +187,8 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
 
       return {
         openTabs: nextTabs,
+        browserCreationOrder: state.browserCreationOrder.filter((id) => id !== tabId),
+        gamesWidthTabId: state.gamesWidthTabId === tabId ? null : state.gamesWidthTabId,
         ...buildActiveState(nextActiveTabId),
         lastActiveKind: nextActiveTabId
           ? getRightPanelTabKind(nextActiveTabId)
@@ -193,6 +203,7 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
 
       return {
         openTabs: nextTabs,
+        gamesWidthTabId: activeTabId === state.activeTabId ? state.gamesWidthTabId : null,
         ...buildActiveState(activeTabId),
         lastActiveKind: state.lastActiveKind ?? getRightPanelTabKind(activeTabId),
         rightPanelOpen: true,
@@ -206,6 +217,7 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
   openTab: (kind) =>
     set((state) => ({
       openTabs: appendTabIfMissing(state.openTabs, kind),
+      gamesWidthTabId: null,
       ...buildActiveState(kind),
       lastActiveKind: kind,
       rightPanelOpen: true,
@@ -225,6 +237,8 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
 
       return {
         openTabs: [...state.openTabs, tabId],
+        browserCreationOrder: [...state.browserCreationOrder, tabId],
+        gamesWidthTabId: null,
         ...buildActiveState(tabId),
         lastActiveKind: "browser",
         rightPanelOpen: true,
@@ -237,16 +251,19 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
     set((state) =>
       state.openTabs.includes(tabId)
         ? {
+            gamesWidthTabId: tabId === state.activeTabId ? state.gamesWidthTabId : null,
             ...buildActiveState(tabId),
             lastActiveKind: getRightPanelTabKind(tabId),
             rightPanelOpen: true,
           }
         : state,
     ),
+  setGamesWidthTabId: (tabId) => set({ gamesWidthTabId: tabId }),
+  clearGamesWidthMode: () => set({ gamesWidthTabId: null }),
   toggleRightPanel: () =>
     set((state) => {
       if (state.rightPanelOpen) {
-        return { rightPanelOpen: false };
+        return { rightPanelOpen: false, gamesWidthTabId: null };
       }
       // When opening, restore last active tab or stay on launcher (activeKind === null)
       return { rightPanelOpen: true };
@@ -255,9 +272,10 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
     set((state) => ({
       activeKind: null,
       activeTabId: null,
+      gamesWidthTabId: null,
       lastActiveKind: state.lastActiveKind,
       rightPanelOpen: true,
     })),
   openRightPanel: () => set({ rightPanelOpen: true }),
-  closeRightPanel: () => set({ rightPanelOpen: false }),
+  closeRightPanel: () => set({ rightPanelOpen: false, gamesWidthTabId: null }),
 }));

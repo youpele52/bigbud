@@ -5,6 +5,10 @@ import type {
   RecheckAndClaimRetentionItemInput,
   ThreadRetentionExclusionReason,
 } from "../Services/ThreadRetentionRepository.ts";
+import {
+  retentionAgeSql,
+  retentionExclusionCaseSql,
+} from "./ThreadRetentionRepository.eligibility.ts";
 import { retentionSubtreeCteSql } from "./ThreadRetentionRepository.pages.ts";
 
 export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
@@ -13,8 +17,32 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
   ) {
     return yield* sql.withTransaction(
       Effect.gen(function* () {
+        const runRows = yield* sql<{
+          selectionMode: "legacy-subtree" | "per-thread";
+          ageCriterion: "created" | "last-conversation-activity";
+          cutoffAt: string;
+        }>`
+          SELECT selection_mode AS "selectionMode", age_criterion AS "ageCriterion",
+            cutoff_at AS "cutoffAt"
+          FROM thread_retention_runs WHERE run_id = ${input.runId} AND active_slot = 1
+        `;
+        const run = runRows[0];
+        if (!run || run.cutoffAt !== input.cutoffAt)
+          return { claimed: false, reason: "not_selected" } as const;
+        const perThread = run.selectionMode === "per-thread";
+        const cte = perThread ? "" : retentionSubtreeCteSql;
+        const age = perThread
+          ? retentionAgeSql("t", run.ageCriterion)
+          : "activity.last_activity_at";
+        const joins = perThread
+          ? ""
+          : `JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
+          LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = t.thread_id`;
+        const eligible = perThread
+          ? `(${retentionExclusionCaseSql("t", "per-thread")}) IS NULL`
+          : "exclusion.reason IS NULL";
         const claimed = yield* sql.unsafe<{ thread_id: string }>(
-          `${retentionSubtreeCteSql}
+          `${cte}
           UPDATE thread_retention_run_items SET status = 'deletion_requested',
             next_attempt_at = NULL,
             attempt_count = attempt_count + 1, updated_at = ?
@@ -26,12 +54,10 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
             )
             AND EXISTS (
               SELECT 1 FROM projection_threads AS t
-              JOIN subtree_activity AS activity ON activity.root_thread_id = t.thread_id
-              LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = t.thread_id
+              ${joins}
               WHERE t.thread_id = ?
-                AND activity.last_activity_at = ?
-                AND activity.last_activity_at <= ?
-                AND exclusion.reason IS NULL
+                AND ${age} = ? AND ${age} <= ?
+                AND ${eligible}
             )
           RETURNING thread_id`,
           [
@@ -47,6 +73,7 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
         );
         if (claimed.length === 1) {
           yield* sql`UPDATE thread_retention_runs SET requested_count = requested_count + 1,
+            uncertain_count = uncertain_count + 1,
             updated_at = ${input.claimedAt}
             WHERE run_id = ${input.runId} AND active_slot = 1`;
           return { claimed: true } as const;
@@ -55,15 +82,19 @@ export function makeThreadRetentionClaim(sql: SqlClient.SqlClient) {
           itemStatus: string;
           reason: ThreadRetentionExclusionReason | null;
         }>(
-          `${retentionSubtreeCteSql}
+          `${cte}
           SELECT item.status AS "itemStatus",
-            CASE WHEN t.thread_id IS NULL OR activity.last_activity_at <> ?
-              OR activity.last_activity_at > ? THEN 'activity_changed'
-              ELSE exclusion.reason END AS reason
+            CASE WHEN t.thread_id IS NULL OR ${age} <> ?
+              OR ${age} > ? THEN 'activity_changed'
+              ELSE ${perThread ? retentionExclusionCaseSql("t", "per-thread") : "exclusion.reason"} END AS reason
           FROM thread_retention_run_items AS item
           LEFT JOIN projection_threads AS t ON t.thread_id = item.thread_id
-          LEFT JOIN subtree_activity AS activity ON activity.root_thread_id = item.thread_id
-          LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = item.thread_id
+          ${
+            perThread
+              ? ""
+              : `LEFT JOIN subtree_activity AS activity ON activity.root_thread_id = item.thread_id
+          LEFT JOIN subtree_exclusions AS exclusion ON exclusion.root_thread_id = item.thread_id`
+          }
           WHERE item.run_id = ? AND item.thread_id = ?`,
           [input.expectedLastActivityAt, input.cutoffAt, input.runId, input.threadId],
         );

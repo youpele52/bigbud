@@ -25,6 +25,10 @@ export function ThreadRetentionConfirmationContent({
   const maintenanceMessage = preview
     ? getRetentionMaintenanceMessage(preview.maintenanceState)
     : null;
+  const ageLabel =
+    preview?.ageCriterion === "created"
+      ? "creation time"
+      : "latest user message, or creation when there is no user message";
 
   return (
     <div className="space-y-3">
@@ -39,8 +43,9 @@ export function ThreadRetentionConfirmationContent({
               <p>
                 This preview found{" "}
                 <strong className="text-foreground">{preview.eligibleCount}</strong> threads
-                currently eligible for future cleanup. This setting change does not delete anything
-                now; daily checks recheck every safety rule.
+                currently eligible across all projects by {ageLabel} on or before the inclusive UTC
+                cutoff {formatRetentionCutoff(preview.cutoffAt)}. This setting change does not
+                delete anything now; daily checks recheck every safety rule.
               </p>
               <p className="font-medium text-foreground">
                 Export or back up anything you need before enabling automatic thread cleanup.
@@ -48,21 +53,19 @@ export function ThreadRetentionConfirmationContent({
             </>
           ) : (
             <p>
-              <strong className="text-foreground">{preview.eligibleCount}</strong> root thread
-              subtrees last had a user message on or before{" "}
-              {formatRetentionCutoff(preview.cutoffAt)} and are currently eligible for deletion.
-              Before deleting, bigbud checks each subtree again for safety, so a later safety check
-              may skip a subtree that became active.
+              <strong className="text-foreground">{preview.eligibleCount}</strong> threads are
+              currently eligible across all projects by {ageLabel} on or before the inclusive UTC
+              cutoff {formatRetentionCutoff(preview.cutoffAt)}. bigbud rechecks each thread before
+              deleting it, so an active or changed thread may be skipped.
             </p>
           )}
           {maintenanceMessage ? <p>{maintenanceMessage}</p> : null}
           <div>
             <p className="font-medium text-foreground">Deletion includes</p>
             <p>
-              bigbud removes each selected thread subtree from its current local views and cleans up
-              associated bigbud-managed local resources, including attachments, checkpoints and
-              diffs, terminal and provider logs, and managed worktrees. Child threads are deleted
-              with their parent.
+              bigbud removes each eligible thread and cleans up verified bigbud-managed local
+              resources. Eligible children go first; pinned, newer, or active children survive and
+              are detached safely from a deleted parent.
             </p>
           </div>
           <div>
@@ -71,8 +74,8 @@ export function ThreadRetentionConfirmationContent({
               Always preserved
             </p>
             <p>
-              Pinned and active or running thread subtrees are never deleted. Your project folders,
-              source files, and other files outside bigbud-managed storage are also kept.
+              Pinned and active threads are never deleted. Your project folders, source files,
+              remote worktrees, and worktrees outside bigbud-managed storage are kept.
             </p>
           </div>
           <div aria-label="Preview estimates">
@@ -103,8 +106,8 @@ export function ThreadRetentionConfirmationContent({
           <div>
             <p className="font-medium text-foreground">Not included in this cleanup</p>
             <p>
-              Provider-remote conversations are not deleted. Cleanup also does not claim to erase
-              all local canonical history or retained baselines.
+              Provider-remote conversations are not deleted. External worktrees and files whose
+              ownership cannot be verified remain on disk and are reported after cleanup.
             </p>
             {preview.exclusionCounts.length > 0 ? (
               <ul className="list-disc pl-5">
@@ -137,8 +140,8 @@ export function ThreadRetentionConfirmationContent({
       <p className="flex items-start gap-2 font-medium text-destructive">
         <AlertTriangleIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {trigger === "policy-change"
-          ? "Future cleanup removes eligible local thread subtrees and managed resources. Export or back up anything you need first."
-          : "This cleanup removes the listed local thread subtrees and managed resources. Export or back up anything you need first."}
+          ? "Future cleanup removes eligible threads and verified managed resources. Export or back up anything you need first."
+          : "This cleanup removes eligible threads and verified managed resources. Export or back up anything you need first."}
       </p>
     </div>
   );

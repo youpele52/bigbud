@@ -9,7 +9,10 @@ import {
   ServerStartThreadRetentionInput,
   ServerThreadRetentionError,
   ServerThreadRetentionPreview,
-  ServerThreadRetentionResult,
+  ServerThreadRetentionRun,
+  ServerGetThreadRetentionRunInput,
+  ServerListThreadRetentionRunsInput,
+  ServerListThreadRetentionRunsResult,
 } from "./threadRetention";
 
 export class ThreadRetentionMutationAuthorization extends RpcMiddleware.Service<ThreadRetentionMutationAuthorization>()(
@@ -25,9 +28,24 @@ export const WsServerPreviewThreadRetentionRpc = Rpc.make(WS_METHODS.serverPrevi
 
 export const WsServerStartThreadRetentionRpc = Rpc.make(WS_METHODS.serverStartThreadRetention, {
   payload: ServerStartThreadRetentionInput,
-  success: ServerThreadRetentionResult,
+  success: ServerThreadRetentionRun,
   error: ServerThreadRetentionError,
 }).middleware(ThreadRetentionMutationAuthorization);
+
+export const WsServerGetThreadRetentionRunRpc = Rpc.make(WS_METHODS.serverGetThreadRetentionRun, {
+  payload: ServerGetThreadRetentionRunInput,
+  success: ServerThreadRetentionRun,
+  error: ServerThreadRetentionError,
+}).middleware(ThreadRetentionMutationAuthorization);
+
+export const WsServerListThreadRetentionRunsRpc = Rpc.make(
+  WS_METHODS.serverListThreadRetentionRuns,
+  {
+    payload: ServerListThreadRetentionRunsInput,
+    success: ServerListThreadRetentionRunsResult,
+    error: ServerThreadRetentionError,
+  },
+).middleware(ThreadRetentionMutationAuthorization);
 
 export const WsServerSetThreadRetentionPolicyRpc = Rpc.make(
   WS_METHODS.serverSetThreadRetentionPolicy,

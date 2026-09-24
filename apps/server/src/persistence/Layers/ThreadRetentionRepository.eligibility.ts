@@ -1,4 +1,8 @@
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type {
+  ThreadRetentionAgeCriterion,
+  ThreadRetentionSelectionMode,
+} from "@bigbud/contracts/core/settings.threadRetention.ts";
 
 /** Sidebar-visible recency: latest user message, else thread created_at. */
 export function retentionVisibleActivitySql(threadAlias: string): string {
@@ -9,7 +13,19 @@ export function retentionVisibleActivitySql(threadAlias: string): string {
     ), ${threadAlias}.created_at)`;
 }
 
-export function retentionExclusionCaseSql(threadAlias: string): string {
+export function retentionAgeSql(
+  threadAlias: string,
+  criterion: ThreadRetentionAgeCriterion,
+): string {
+  return criterion === "created"
+    ? `${threadAlias}.created_at`
+    : retentionVisibleActivitySql(threadAlias);
+}
+
+export function retentionExclusionCaseSql(
+  threadAlias: string,
+  mode: ThreadRetentionSelectionMode = "legacy-subtree",
+): string {
   return `
     CASE
       WHEN ${threadAlias}.deleted_at IS NOT NULL THEN 'already_deleted'
@@ -23,9 +39,13 @@ export function retentionExclusionCaseSql(threadAlias: string): string {
         SELECT 1 FROM projection_projects AS project
         WHERE project.project_id = ${threadAlias}.project_id AND project.deleting_at IS NOT NULL
       ) THEN 'project_deleting'
-      WHEN ${threadAlias}.provider_runtime_execution_target_id <> 'local'
+      ${
+        mode === "legacy-subtree"
+          ? `WHEN ${threadAlias}.provider_runtime_execution_target_id <> 'local'
         OR ${threadAlias}.workspace_execution_target_id <> 'local'
-        OR ${threadAlias}.execution_target_id <> 'local' THEN 'remote_cleanup_unavailable'
+        OR ${threadAlias}.execution_target_id <> 'local' THEN 'remote_cleanup_unavailable'`
+          : ""
+      }
       WHEN EXISTS (
         SELECT 1 FROM projection_thread_sessions AS session
         WHERE session.thread_id = ${threadAlias}.thread_id AND session.status IN ('starting', 'running')

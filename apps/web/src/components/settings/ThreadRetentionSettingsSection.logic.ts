@@ -79,9 +79,7 @@ export function formatRetentionExclusionReason(reason: string): string {
 }
 
 export function formatRetentionCutoff(cutoffAt: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(cutoffAt),
-  );
+  return new Date(cutoffAt).toISOString();
 }
 
 export function getRetentionCleanupLoadingToast(): { readonly title: string } {

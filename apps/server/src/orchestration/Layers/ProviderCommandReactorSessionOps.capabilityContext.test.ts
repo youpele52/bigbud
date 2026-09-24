@@ -32,6 +32,26 @@ const buildInput = (
   });
 
 describe("provider capability context", () => {
+  it.each(["codex", "claude", "copilot", "opencode"])(
+    "makes Games available in the shared %s provider context",
+    (provider) => {
+      const providerThread = {
+        ...thread,
+        modelSelection: { provider, model: "test" },
+      } as OrchestrationThread;
+      const result = buildCapabilityAwareProviderInput({
+        providerInputText: "Continue",
+        catalog: BIGBUD_CAPABILITY_CATALOG,
+        thread: providerThread,
+        memoryContext: "",
+        agentBrowserPreference: "bigbud",
+        contextRole: "main",
+        state: createProviderCapabilityContextState(),
+      });
+      expect(result).toContain("Games catalog in the left sidebar");
+      expect(result).toContain("do not send unsolicited game suggestions");
+    },
+  );
   it("injects bigbud browser default and explicit override semantics", () => {
     const result = buildInput(createProviderCapabilityContextState());
 

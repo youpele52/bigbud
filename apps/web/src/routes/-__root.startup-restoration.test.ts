@@ -66,6 +66,7 @@ describe("startup context restoration", () => {
 
   it("treats Plugins as an explicit non-thread route", () => {
     expect(resolveStartupRouteIntent("/plugins")).toEqual({ kind: "non-thread" });
+    expect(resolveStartupRouteIntent("/games")).toEqual({ kind: "non-thread" });
     expect(resolveStartupRouteIntent("/plugins/installed")).toEqual({ kind: "non-thread" });
   });
 

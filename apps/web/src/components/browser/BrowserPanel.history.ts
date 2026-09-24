@@ -4,9 +4,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorag
 
 const BROWSER_HISTORY_STORAGE_KEY = "bigbud:browser-history:v2";
 const LEGACY_BROWSER_HISTORY_STORAGE_KEY = "bigbud:browser-history:v1";
-const BROWSER_BOOKMARKS_STORAGE_KEY = "bigbud:browser-bookmarks:v1";
 const BROWSER_HISTORY_VERSION = 2;
-const BROWSER_BOOKMARKS_VERSION = 1;
 const MAX_BROWSER_HISTORY_ITEMS = 20;
 const MAX_BROWSER_HISTORY_SUGGESTIONS = 5;
 const browserDataListeners = new Set<() => void>();
@@ -20,8 +18,7 @@ export function subscribeBrowserData(listener: () => void): () => void {
   const handleStorage = (event: StorageEvent) => {
     if (
       event.key === BROWSER_HISTORY_STORAGE_KEY ||
-      event.key === LEGACY_BROWSER_HISTORY_STORAGE_KEY ||
-      event.key === BROWSER_BOOKMARKS_STORAGE_KEY
+      event.key === LEGACY_BROWSER_HISTORY_STORAGE_KEY
     ) {
       listener();
     }
@@ -39,13 +36,6 @@ export interface BrowserVisitRecord {
   readonly origin: string;
   readonly visitedAt: string;
   readonly visitCount: number;
-}
-
-export interface BrowserBookmark {
-  readonly url: string;
-  readonly title: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
 }
 
 function normalizeBrowserUrl(url: string): { normalizedUrl: string; origin: string } | null {
@@ -205,67 +195,5 @@ export function updateBrowserHistoryVisitTitle(url: string, title: string): Brow
   const updated = [...history];
   updated[index] = { ...existing, title: title.trim() };
   writeBrowserHistory(updated);
-  return updated;
-}
-
-function readBookmarks(): BrowserBookmark[] {
-  const raw = getLocalStorageItem(BROWSER_BOOKMARKS_STORAGE_KEY, Schema.Unknown);
-  if (
-    !raw ||
-    typeof raw !== "object" ||
-    (raw as { version?: unknown }).version !== BROWSER_BOOKMARKS_VERSION
-  ) {
-    return [];
-  }
-  const bookmarks = (raw as { bookmarks?: unknown }).bookmarks;
-  if (!Array.isArray(bookmarks)) return [];
-  return bookmarks.filter(
-    (bookmark): bookmark is BrowserBookmark =>
-      Boolean(bookmark) &&
-      typeof bookmark === "object" &&
-      typeof (bookmark as BrowserBookmark).url === "string" &&
-      typeof (bookmark as BrowserBookmark).title === "string" &&
-      typeof (bookmark as BrowserBookmark).createdAt === "string" &&
-      typeof (bookmark as BrowserBookmark).updatedAt === "string",
-  );
-}
-
-function writeBookmarks(bookmarks: BrowserBookmark[]): void {
-  setLocalStorageItem(
-    BROWSER_BOOKMARKS_STORAGE_KEY,
-    { version: BROWSER_BOOKMARKS_VERSION, bookmarks },
-    Schema.Unknown,
-  );
-  emitBrowserDataChange();
-}
-
-export function getBrowserBookmarks(): BrowserBookmark[] {
-  return readBookmarks();
-}
-
-export function isBrowserBookmarked(bookmarks: BrowserBookmark[], url: string): boolean {
-  const normalized = normalizeBrowserUrl(url);
-  return normalized
-    ? bookmarks.some((bookmark) => bookmark.url === normalized.normalizedUrl)
-    : false;
-}
-
-export function toggleBrowserBookmark(input: { url: string; title: string }): BrowserBookmark[] {
-  const normalized = normalizeBrowserUrl(input.url);
-  if (!normalized) return readBookmarks();
-  const bookmarks = readBookmarks();
-  const existing = bookmarks.find((bookmark) => bookmark.url === normalized.normalizedUrl);
-  const updated = existing
-    ? bookmarks.filter((bookmark) => bookmark.url !== normalized.normalizedUrl)
-    : [
-        ...bookmarks,
-        {
-          url: normalized.normalizedUrl,
-          title: input.title.trim(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-  writeBookmarks(updated);
   return updated;
 }

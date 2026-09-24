@@ -6,6 +6,8 @@ import { makeTerminalSessionControls } from "./Manager.session.controls.ts";
 import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
 import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state.ts";
+import { nextTerminalTimestamp } from "./Manager.session.timestamp";
+import { subscribeToTerminalEvents } from "./Manager.session.subscription.ts";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
 import { type TerminalSessionState } from "./Manager.types";
 import { makeAssertExecutionTargetReady } from "./Manager.session.execution.ts";
@@ -181,7 +183,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         if (liveSession.cols !== targetCols || liveSession.rows !== targetRows) {
           liveSession.cols = targetCols;
           liveSession.rows = targetRows;
-          liveSession.updatedAt = new Date().toISOString();
+          liveSession.updatedAt = nextTerminalTimestamp(liveSession.updatedAt);
           liveSession.process.resize(targetCols, targetRows);
         }
 
@@ -199,13 +201,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const session = yield* requireSession(input.threadId, terminalId);
         yield* flushPtyOutput(input.threadId, terminalId);
         resetSessionRuntimeState(session);
-        session.updatedAt = new Date().toISOString();
+        session.updatedAt = nextTerminalTimestamp(session.updatedAt);
         yield* persistHistory(input.threadId, terminalId, session.history);
         yield* publishEvent({
           type: "cleared",
           threadId: input.threadId,
           terminalId,
-          createdAt: new Date().toISOString(),
+          createdAt: session.updatedAt,
         });
       }),
     );
@@ -370,11 +372,6 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     restart,
     close,
     subscribe: (listener) =>
-      Effect.sync(() => {
-        terminalEventListeners.add(listener);
-        return () => {
-          terminalEventListeners.delete(listener);
-        };
-      }),
+      subscribeToTerminalEvents({ modifyManagerState, terminalEventListeners }, listener),
   };
 }

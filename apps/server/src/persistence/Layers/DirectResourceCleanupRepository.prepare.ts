@@ -233,6 +233,26 @@ export function makeDirectResourceCleanupPreparation(
               { concurrency: 1, discard: true },
             );
             yield* Effect.forEach(
+              input.retainedExternalWorktrees ?? [],
+              (resource) => sql`
+                INSERT INTO direct_resource_cleanup_retained_external (
+                  operation_id, resource_id, recorded_path, classified_at
+                ) VALUES (${input.operationId}, ${resource.resourceId},
+                  ${resource.recordedPath}, ${input.createdAt})
+              `,
+              { concurrency: 1, discard: true },
+            );
+            yield* Effect.forEach(
+              input.retainedUnverifiedAttachments ?? [],
+              (resource) => sql`
+                INSERT INTO direct_resource_cleanup_retained_unverified (
+                  operation_id, resource_id, relative_path, reason, classified_at
+                ) VALUES (${input.operationId}, ${resource.resourceId},
+                  ${resource.relativePath}, ${resource.reason}, ${input.createdAt})
+              `,
+              { concurrency: 1, discard: true },
+            );
+            yield* Effect.forEach(
               worktrees,
               (worktree, originalIndex) =>
                 sql`

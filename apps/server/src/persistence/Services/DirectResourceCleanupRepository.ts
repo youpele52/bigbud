@@ -21,6 +21,15 @@ export interface DirectCleanupPlanInput {
     readonly relativePath: string;
   }>;
   readonly worktreeResources?: ReadonlyArray<PurgeResource>;
+  readonly retainedExternalWorktrees?: ReadonlyArray<{
+    readonly resourceId: string;
+    readonly recordedPath: string;
+  }>;
+  readonly retainedUnverifiedAttachments?: ReadonlyArray<{
+    readonly resourceId: string;
+    readonly relativePath: string;
+    readonly reason: string;
+  }>;
   readonly createdAt: string;
 }
 

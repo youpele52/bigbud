@@ -108,8 +108,24 @@ export function resolveTerminalProviderFromEvents(
     return null;
   }
 
+  let legacyStartIndex = 0;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]?.event;
+    if (!event) continue;
+    if (event.type === "agentIdentity") return event.provider;
+    if (event.type === "exited" || event.type === "error") return null;
+    if (event.type === "started" || event.type === "restarted") {
+      if (event.snapshot.activeAgentProvider !== undefined) {
+        return event.snapshot.activeAgentProvider;
+      }
+      legacyStartIndex = index;
+      break;
+    }
+  }
+
   const normalizedText = stripTerminalAnsi(
     events
+      .slice(legacyStartIndex)
       .map((entry) => readTerminalEventText(entry.event))
       .join("\n")
       .toLowerCase(),

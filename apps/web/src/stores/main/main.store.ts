@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.store";
 import { syncServerReadModel } from "./helpers.snapshot.store";
+import { mergeSearchMessageDetail } from "./helpers.searchMessage.store";
 import {
   setThreadHydration,
   appendProjectCatalogPage,
@@ -127,6 +128,7 @@ interface AppStore extends AppState {
   ) => void;
   syncSidebarCatalog: (sidebarCatalog: GetSidebarThreadCatalogResult) => void;
   syncSelectedThreadDetail: (detail: GetSelectedThreadDetailResult, loadingOlder: boolean) => void;
+  mergeSearchMessageDetail: (detail: GetSelectedThreadDetailResult) => void;
   appendProjectThreadSummaries: (page: GetProjectThreadSummariesResult) => void;
   appendProjectCatalogPage: (
     scope: ProjectCatalogScope,
@@ -165,6 +167,7 @@ export const useStore = create<AppStore>((set) => ({
   syncSidebarCatalog: (sidebarCatalog) => set((state) => syncSidebarCatalog(state, sidebarCatalog)),
   syncSelectedThreadDetail: (detail, loadingOlder) =>
     set((state) => syncSelectedThreadDetail(state, detail, loadingOlder)),
+  mergeSearchMessageDetail: (detail) => set((state) => mergeSearchMessageDetail(state, detail)),
   appendProjectThreadSummaries: (page) => set((state) => appendProjectThreadSummaries(state, page)),
   appendProjectCatalogPage: (scope, page, generation, loading) =>
     set((state) => appendProjectCatalogPage(state, scope, page, generation, loading)),

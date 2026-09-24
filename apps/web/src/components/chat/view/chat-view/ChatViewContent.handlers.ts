@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { useSearchStore } from "~/stores/ui";
+import { readNativeApi } from "~/rpc/nativeApi";
+import { useStore } from "~/stores/main";
+import { toastManager } from "~/components/ui/toast";
 
 import { deriveUserTurnAnchorsFromThreadMessages } from "../../scroller/chatScroll.timelineRows";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -89,9 +92,54 @@ export function useChatViewContentHandlers({
     if (!searchFocusRequest || searchFocusRequest.threadId !== base.activeThread?.id) {
       return;
     }
-    handleOpenReplySource(searchFocusRequest.messageId);
-    clearSearchFocusRequest(searchFocusRequest.requestId);
-  }, [base.activeThread?.id, clearSearchFocusRequest, handleOpenReplySource, searchFocusRequest]);
+    if (base.activeThread.messages.some((message) => message.id === searchFocusRequest.messageId)) {
+      handleOpenReplySource(searchFocusRequest.messageId);
+      clearSearchFocusRequest(searchFocusRequest.requestId);
+    }
+  }, [
+    base.activeThread?.id,
+    base.activeThread?.messages,
+    clearSearchFocusRequest,
+    handleOpenReplySource,
+    searchFocusRequest,
+  ]);
+
+  const focusMessageLoaded =
+    searchFocusRequest?.threadId === base.activeThread?.id &&
+    (base.activeThread?.messages.some((message) => message.id === searchFocusRequest?.messageId) ??
+      false);
+  useEffect(() => {
+    if (!searchFocusRequest || searchFocusRequest.threadId !== base.activeThread?.id) return;
+    if (focusMessageLoaded) return;
+    const api = readNativeApi();
+    if (!api) return;
+    let disposed = false;
+    void api.orchestration
+      .getSelectedThreadDetail({
+        threadId: searchFocusRequest.threadId,
+        messageAnchorId: searchFocusRequest.messageId,
+        messageLimit: 20,
+      })
+      .then((detail) => {
+        if (disposed) return;
+        if (!detail.messages.some((message) => message.id === searchFocusRequest.messageId)) {
+          throw new Error("The saved message is no longer available.");
+        }
+        useStore.getState().mergeSearchMessageDetail(detail);
+      })
+      .catch((error) => {
+        if (disposed) return;
+        clearSearchFocusRequest(searchFocusRequest.requestId);
+        toastManager.add({
+          type: "warning",
+          title: "Could not open saved message",
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [base.activeThread?.id, clearSearchFocusRequest, focusMessageLoaded, searchFocusRequest]);
 
   const handleClosePlanCard = useCallback(() => {
     base.setPlanCardOpen(false);

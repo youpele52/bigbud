@@ -279,6 +279,7 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
     ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
   });
   if (input.disposed()) return true;
+  useTerminalStateStore.getState().hydrateTerminalAgentFromSnapshot(snapshot);
   input.dropPathModeRef.current = snapshot.dropPathMode;
   input.writeBatcher.flush();
   writeTerminalSnapshot(activeTerminal, snapshot);

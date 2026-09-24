@@ -2,6 +2,7 @@ import { DEFAULT_TERMINAL_ID } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { TerminalNotRunningError } from "../Services/Manager.ts";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types.ts";
+import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 
 export function makeTerminalSessionControls(requireSession: SessionApiContext["requireSession"]) {
   const write: TerminalManagerShape["write"] = Effect.fn("terminal.write")(function* (input) {
@@ -22,7 +23,7 @@ export function makeTerminalSessionControls(requireSession: SessionApiContext["r
       return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
     session.cols = input.cols;
     session.rows = input.rows;
-    session.updatedAt = new Date().toISOString();
+    session.updatedAt = nextTerminalTimestamp(session.updatedAt);
     yield* Effect.sync(() => proc.resize(input.cols, input.rows));
   });
   return { write, resize };

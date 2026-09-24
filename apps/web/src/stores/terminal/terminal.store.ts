@@ -20,7 +20,6 @@ import {
   setThreadTerminalActivity,
   setThreadTerminalHeight,
   setThreadTerminalOpen,
-  closeThreadTerminal,
   splitThreadTerminal,
   updateTerminalStateByThreadId,
   type TerminalEventEntry,
@@ -32,6 +31,9 @@ import {
   applyTerminalEventsToState,
   ensurePanelTerminalInState,
 } from "./terminal.store.panel";
+import { removeTerminalTransientState } from "./terminal.store.cleanup";
+import { closeTerminalPaneInState } from "./terminal.store.close";
+import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.identity";
 import {
   clearTerminalLabelOverrideByThreadId,
   removeOrphanedTerminalLabelOverrides,
@@ -105,6 +107,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         terminalLabelOverridesByThreadId: {},
         terminalLaunchContextByThreadId: {},
         terminalEventEntriesByKey: {},
+        terminalAgentProviderByKey: {},
+        terminalAgentVersionByKey: {},
         terminalEventLastIdsByKey: {},
         nextTerminalEventId: 1,
         setTerminalOpen: (threadId, open) =>
@@ -143,7 +147,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         setActiveTerminal: (threadId, terminalId) =>
           updateTerminal(threadId, (state) => setThreadActiveTerminal(state, terminalId)),
         closeTerminal: (threadId, terminalId) =>
-          updateTerminal(threadId, (state) => closeThreadTerminal(state, terminalId)),
+          set((state) => closeTerminalPaneInState(state, threadId, terminalId, false)),
         setTerminalLabelOverride: (threadId, terminalId, label) =>
           set((state) => {
             const nextOverrides = setTerminalLabelOverrideByThreadId(
@@ -182,7 +186,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         setPanelActiveTerminal: (threadId, terminalId) =>
           updatePanelTerminal(threadId, (state) => setThreadActiveTerminal(state, terminalId)),
         closePanelTerminal: (threadId, terminalId) =>
-          updatePanelTerminal(threadId, (state) => closeThreadTerminal(state, terminalId)),
+          set((state) => closeTerminalPaneInState(state, threadId, terminalId, true)),
         setTerminalLaunchContext: (threadId, context) =>
           set((state) => ({
             terminalLaunchContextByThreadId: {
@@ -213,6 +217,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           ),
         applyTerminalEvent: (event) => set((state) => applyTerminalEventToState(state, event)),
         applyTerminalEvents: (events) => set((state) => applyTerminalEventsToState(state, events)),
+        hydrateTerminalAgentFromSnapshot: (snapshot) =>
+          set((state) => hydrateTerminalAgentFromSnapshot(state, snapshot)),
         clearTerminalState: (threadId) =>
           set((state) => {
             const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
@@ -234,22 +240,15 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               state.terminalLabelOverridesByThreadId,
               threadId,
             );
-            const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
-            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
-            let removedEventEntries = false;
-            for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
-              if (key.startsWith(`${threadId}\u0000`)) {
-                delete nextTerminalEventEntriesByKey[key];
-                delete nextTerminalEventLastIdsByKey[key];
-                removedEventEntries = true;
-              }
-            }
+            const transient = removeTerminalTransientState(state, (key) =>
+              key.startsWith(`${threadId}\u0000`),
+            );
             if (
               nextTerminalStateByThreadId === state.terminalStateByThreadId &&
               nextPanelTerminalStateByThreadId === state.panelTerminalStateByThreadId &&
               !hadLaunchContext &&
               !hadLabelOverrides &&
-              !removedEventEntries
+              !transient.removed
             ) {
               return state;
             }
@@ -258,8 +257,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
               terminalLabelOverridesByThreadId: remainingLabelOverrides,
               terminalLaunchContextByThreadId: remainingLaunchContexts,
-              terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
-              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
+              ...transient.state,
             };
           }),
         removeTerminalState: (threadId) =>
@@ -270,22 +268,15 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const hadLabelOverrides =
               state.terminalLabelOverridesByThreadId[threadId] !== undefined;
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
-            const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
-            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
-            let removedEventEntries = false;
-            for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
-              if (key.startsWith(`${threadId}\u0000`)) {
-                delete nextTerminalEventEntriesByKey[key];
-                delete nextTerminalEventLastIdsByKey[key];
-                removedEventEntries = true;
-              }
-            }
+            const transient = removeTerminalTransientState(state, (key) =>
+              key.startsWith(`${threadId}\u0000`),
+            );
             if (
               !hadTerminalState &&
               !hadPanelTerminalState &&
               !hadLabelOverrides &&
               !hadLaunchContext &&
-              !removedEventEntries
+              !transient.removed
             ) {
               return state;
             }
@@ -304,8 +295,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
               terminalLabelOverridesByThreadId: nextLabelOverridesByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
-              terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
-              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
+              ...transient.state,
             };
           }),
         removeOrphanedTerminalStates: (activeThreadIds) =>
@@ -324,23 +314,16 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
                 state.terminalLabelOverridesByThreadId,
                 activeThreadIds,
               );
-            const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
-            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
-            let removedEventEntries = false;
-            for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
+            const transient = removeTerminalTransientState(state, (key) => {
               const [threadId] = key.split("\u0000");
-              if (threadId && !activeThreadIds.has(threadId as ThreadId)) {
-                delete nextTerminalEventEntriesByKey[key];
-                delete nextTerminalEventLastIdsByKey[key];
-                removedEventEntries = true;
-              }
-            }
+              return Boolean(threadId && !activeThreadIds.has(threadId as ThreadId));
+            });
             if (
               orphanedIds.length === 0 &&
               orphanedPanelIds.length === 0 &&
               orphanedLabelOverrideIds.length === 0 &&
               orphanedLaunchContextIds.length === 0 &&
-              !removedEventEntries
+              !transient.removed
             ) {
               return state;
             }
@@ -361,8 +344,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanel,
               terminalLabelOverridesByThreadId: nextOverridesByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
-              terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
-              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
+              ...transient.state,
             };
           }),
       };

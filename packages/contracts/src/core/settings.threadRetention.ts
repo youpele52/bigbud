@@ -38,6 +38,15 @@ export type ThreadRetentionPolicy = typeof ThreadRetentionPolicy.Type;
 export const FiniteThreadRetentionPolicy = Schema.Literals(FINITE_THREAD_RETENTION_POLICIES);
 export type FiniteThreadRetentionPolicy = typeof FiniteThreadRetentionPolicy.Type;
 
+export const ThreadRetentionAgeCriterion = Schema.Literals([
+  "created",
+  "last-conversation-activity",
+]);
+export type ThreadRetentionAgeCriterion = typeof ThreadRetentionAgeCriterion.Type;
+
+export const ThreadRetentionSelectionMode = Schema.Literals(["legacy-subtree", "per-thread"]);
+export type ThreadRetentionSelectionMode = typeof ThreadRetentionSelectionMode.Type;
+
 export const THREAD_RETENTION_POLICY_DURATIONS_MS = {
   "1-day": 1 * 24 * 60 * 60 * 1_000,
   "2-days": 2 * 24 * 60 * 60 * 1_000,

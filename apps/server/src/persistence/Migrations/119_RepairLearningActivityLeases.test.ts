@@ -55,8 +55,10 @@ for (const allowed of [
           ),
         );
       }
-      assert.deepEqual(yield* runMigrations(), [[119, "RepairLearningActivityLeases"]]);
-      assert.deepEqual(yield* runMigrations(), []);
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 119 }), [
+        [119, "RepairLearningActivityLeases"],
+      ]);
+      assert.deepEqual(yield* runMigrations({ toMigrationInclusive: 119 }), []);
       assert.deepEqual(yield* sql`SELECT * FROM thread_activity_leases`, [
         {
           lease_id: "existing",

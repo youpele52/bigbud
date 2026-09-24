@@ -6,6 +6,7 @@ import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { ChatSortMenu } from "./SidebarChatSortMenu";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
+import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 import {
   SidebarGroup,
   SidebarMenu,
@@ -21,6 +22,7 @@ import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sideb
 export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 4;
 
 interface SidebarChatsSectionProps {
+  headerProps?: SidebarTopLevelHeaderProps;
   renderedChats: SidebarRenderedThreadEntry[];
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
@@ -39,6 +41,7 @@ interface SidebarChatsSectionProps {
 }
 
 export function SidebarChatsSection({
+  headerProps,
   renderedChats,
   isExpanded,
   onExpandedChange,
@@ -80,8 +83,9 @@ export function SidebarChatsSection({
   const visibleChats = preview.visibleItems;
 
   return (
-    <SidebarGroup className="px-2 py-2">
+    <SidebarGroup className="px-2 py-0">
       <SidebarSectionLabel
+        {...headerProps}
         isExpanded={isExpanded}
         onExpandedChange={onExpandedChange}
         actions={
@@ -125,7 +129,7 @@ export function SidebarChatsSection({
       </SidebarSectionLabel>
 
       <div ref={attachChatsContentRef}>
-        {isExpanded ? (
+        {isExpanded && (renderedChats.length > 0 || hasHiddenChats) ? (
           <SidebarMenu className="ml-1 mr-1 gap-0.5 overflow-hidden pl-1 pr-1">
             <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-foreground/90">
               <HugeiconsIcon

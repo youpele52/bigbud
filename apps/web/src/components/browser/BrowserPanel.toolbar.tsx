@@ -1,7 +1,6 @@
 import { memo, useCallback, useState } from "react";
 import {
   ArrowUpRightIcon,
-  BookmarkIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   MousePointer2Icon,
@@ -34,13 +33,11 @@ export interface BrowserToolbarProps {
   onStopLoading: () => void;
   onOpenInExternalBrowser: () => void;
   onAnnotate: () => void;
-  onToggleBookmark?: (() => void) | undefined;
   annotationActive?: boolean;
   pageMetadata: BrowserPageMetadata;
   historyUrls: BrowserVisitRecord[];
   annotationDisabled?: boolean;
   agentControlled?: boolean;
-  bookmarked?: boolean;
   loading?: boolean;
   canStopLoading?: boolean;
 }
@@ -68,13 +65,11 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   onStopLoading,
   onOpenInExternalBrowser,
   onAnnotate,
-  onToggleBookmark,
   annotationActive = false,
   pageMetadata,
   historyUrls,
   annotationDisabled = false,
   agentControlled = false,
-  bookmarked = false,
   loading = false,
   canStopLoading = true,
 }: BrowserToolbarProps) {
@@ -209,26 +204,6 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           />
           <TooltipPopup side="bottom">
             {annotationActive ? "Exit annotation mode" : annotateTooltip}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="xs"
-                className="shrink-0 px-1.5"
-                onClick={onToggleBookmark}
-                disabled={!onToggleBookmark || agentControlled}
-                aria-label={bookmarked ? "Remove bookmark" : "Add bookmark"}
-                data-pressed={bookmarked ? "true" : undefined}
-              >
-                <BookmarkIcon className="size-4" fill={bookmarked ? "currentColor" : "none"} />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {bookmarked ? "Remove bookmark" : "Add bookmark"}
           </TooltipPopup>
         </Tooltip>
       </div>

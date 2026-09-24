@@ -37,6 +37,7 @@ import {
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
+  WsPluginsGitAvailabilityRpc,
   WsPluginsGetRpc,
   WsPluginsInstallRpc,
   WsPluginsListCatalogRpc,
@@ -48,6 +49,8 @@ import {
   WsServerPreviewThreadRetentionRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerStartThreadRetentionRpc,
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
 } from "./rpc.retention";
 import {
   WsGitCheckoutRpc,
@@ -114,6 +117,7 @@ import {
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
+  WsOrchestrationSearchConversationMessagesRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
   WsOrchestrationGetThreadOwnershipRpc,
@@ -144,6 +148,7 @@ export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsPluginsGitAvailabilityRpc,
   WsPluginsListCatalogRpc,
   WsPluginsGetRpc,
   WsPluginsRefreshCatalogRpc,
@@ -167,6 +172,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerPreviewThreadRetentionRpc,
   WsServerStartThreadRetentionRpc,
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerSetThreadPinnedRpc,
   WsServerReadDocumentUrlRpc,
@@ -248,6 +255,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
+  WsOrchestrationSearchConversationMessagesRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
   WsOrchestrationGetThreadOwnershipRpc,

@@ -27,6 +27,7 @@ import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
 import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
 import { PluginUpdateToastCoordinator } from "../components/plugins/PluginUpdateToastCoordinator";
+import { GamesWorkToastCoordinator } from "../components/games/GamesWorkToastCoordinator";
 import { ProviderRecoveryToastCoordinator } from "../components/ProviderRecoveryToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
@@ -128,6 +129,7 @@ export function RootRouteView() {
         <SlowRpcAckToastCoordinator />
         <DesktopBackendStartupCoordinator />
         <PluginUpdateToastCoordinator />
+        <GamesWorkToastCoordinator />
         <ProviderRecoveryToastCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />

@@ -17,8 +17,8 @@ it.effect("allows manual previews to choose any finite policy independently", ()
       preview: () =>
         Effect.succeed({
           eligibleCount: 1,
-          oldestEligibleActivityAt: "2026-01-01T00:00:00.000Z",
-          newestEligibleActivityAt: "2026-01-02T00:00:00.000Z",
+          oldestEligibleAgeAt: "2026-01-01T00:00:00.000Z",
+          newestEligibleAgeAt: "2026-01-02T00:00:00.000Z",
           exclusionCounts: [],
           estimatedAttachmentCount: 0,
           estimatedResourceCount: 0,

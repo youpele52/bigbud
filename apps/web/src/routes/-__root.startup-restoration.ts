@@ -29,7 +29,13 @@ export type StartupRestorationOutcome =
   | "unavailable"
   | "cancelled";
 
-const NON_THREAD_ROUTE_PREFIXES = ["/automations", "/plugins", "/settings", "/usage"] as const;
+const NON_THREAD_ROUTE_PREFIXES = [
+  "/automations",
+  "/games",
+  "/plugins",
+  "/settings",
+  "/usage",
+] as const;
 
 export function resolveStartupRouteIntent(pathname: string): StartupRouteIntent {
   if (pathname === "/") {

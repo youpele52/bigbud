@@ -28,6 +28,7 @@ export type { NativeApi } from "./ipc.nativeApi";
 export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
+  separator?: boolean;
   destructive?: boolean;
   disabled?: boolean;
 }

@@ -7,11 +7,14 @@ import { attachmentRelativePath } from "../../attachments/attachmentStore.ts";
 const decodeAttachments = decodeJsonResult(Schema.Array(ChatAttachment));
 
 export interface ThreadAssetRow {
+  readonly sourceId?: string | null;
   readonly activityKind: string | null;
   readonly activityPayloadJson: string | null;
   readonly attachmentsJson: string | null;
   readonly worktreePath: string | null;
   readonly workspaceRoot: string | null;
+  readonly workspaceExecutionTargetId?: string | null;
+  readonly executionTargetId?: string | null;
 }
 
 export function safeEntitySegment(entityId: string): string | null {

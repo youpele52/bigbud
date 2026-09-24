@@ -280,6 +280,8 @@ export function createWsNativeApi(): NativeApi {
       updateSettings: rpcClient.server.updateSettings,
       previewThreadRetention: rpcClient.server.previewThreadRetention,
       startThreadRetention: rpcClient.server.startThreadRetention,
+      getThreadRetentionRun: rpcClient.server.getThreadRetentionRun,
+      listThreadRetentionRuns: rpcClient.server.listThreadRetentionRuns,
       setThreadRetentionPolicy: rpcClient.server.setThreadRetentionPolicy,
       setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
@@ -306,6 +308,7 @@ export function createWsNativeApi(): NativeApi {
     orchestration: {
       getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
+      searchConversationMessages: rpcClient.orchestration.searchConversationMessages,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
       resolveThreadOwnership: async (input) => {

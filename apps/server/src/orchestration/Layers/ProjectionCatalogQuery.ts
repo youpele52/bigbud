@@ -25,6 +25,7 @@ import {
 import { makeGetSelectedThreadDetail } from "./ProjectionCatalogQuery.detail.ts";
 import { makeGetSidebarThreadCatalog } from "./ProjectionCatalogQuery.sidebar.ts";
 import { makeListThreads } from "./ProjectionCatalogQuery.listThreads.ts";
+import { makeSearchConversationMessages } from "./ProjectionCatalogQuery.search.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
   scope: Schema.Literals(["local", "remote"]),
@@ -358,6 +359,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   const listThreads = makeListThreads(sql);
 
   return {
+    searchConversationMessages: makeSearchConversationMessages(sql),
     listThreads,
     getSidebarThreadCatalog,
     getStartupProjectCatalog,

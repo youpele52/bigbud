@@ -40,7 +40,11 @@ export function makeThreadRetentionPreview(input: {
       const generatedAtMs = Date.now();
       const generatedAt = new Date(generatedAtMs).toISOString();
       const cutoffAt = cutoffForRetentionPolicy(request.policy, generatedAtMs);
-      const result = yield* input.repository.preview(cutoffAt);
+      const ageCriterion = request.ageCriterion ?? "last-conversation-activity";
+      const result = yield* input.repository.preview(cutoffAt, {
+        selectionMode: "per-thread",
+        ageCriterion,
+      });
       yield* increment(
         threadRetentionEligibilityTotal,
         threadRetentionEligibilityMetricAttributes("eligible"),
@@ -62,6 +66,8 @@ export function makeThreadRetentionPreview(input: {
         challengeId: crypto.randomUUID(),
         trigger: request.trigger,
         policy: request.policy,
+        selectionMode: "per-thread",
+        ageCriterion,
         cutoffAt,
         issuedAt: generatedAt,
         expiresAt: new Date(generatedAtMs + CHALLENGE_TTL_MS).toISOString(),
@@ -69,6 +75,8 @@ export function makeThreadRetentionPreview(input: {
       return {
         generatedAt,
         policy: request.policy,
+        selectionMode: "per-thread" as const,
+        ageCriterion,
         cutoffAt,
         ...result,
         maintenanceState: deriveThreadRetentionMaintenanceState(),
@@ -77,6 +85,8 @@ export function makeThreadRetentionPreview(input: {
           token: challenge.token,
           trigger: challenge.trigger,
           policy: challenge.policy,
+          selectionMode: "per-thread" as const,
+          ageCriterion,
           cutoffAt: challenge.cutoffAt,
           expiresAt: challenge.expiresAt,
           singleUse: true as const,

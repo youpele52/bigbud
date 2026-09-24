@@ -2,6 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { CloudIcon } from "@hugeicons/core-free-icons";
 import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
 import { type RefObject } from "react";
+import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 import {
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
@@ -28,6 +29,8 @@ interface DesktopUpdateButtonProps {
 }
 
 interface SidebarProjectsSectionProps {
+  scope: "local" | "remote";
+  headerProps?: SidebarTopLevelHeaderProps;
   // ARM64 warning banner
   showArm64IntelBuildWarning: boolean;
   arm64IntelBuildWarningDescription: string | null;
@@ -68,6 +71,8 @@ interface SidebarProjectsSectionProps {
 
 /** The main projects panel in the sidebar: warning banner, sort controls, add-project flow, and the project list. */
 export function SidebarProjectsSection({
+  scope,
+  headerProps,
   showArm64IntelBuildWarning,
   arm64IntelBuildWarningDescription,
   desktopUpdateButton,
@@ -110,7 +115,7 @@ export function SidebarProjectsSection({
 
   return (
     <>
-      {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
+      {scope === "local" && showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup className="px-2 pt-2 pb-0">
           <StatusBanner
             variant="warning"
@@ -135,93 +140,100 @@ export function SidebarProjectsSection({
           />
         </SidebarGroup>
       ) : null}
-      <SidebarGroup className="px-2 py-2">
-        <SidebarSectionLabel
-          isExpanded={isExpanded}
-          onExpandedChange={onExpandedChange}
-          actions={
-            <>
-              <ProjectSortMenu
-                projectSortOrder={appSettingsSidebarProjectSortOrder}
-                threadSortOrder={appSettingsSidebarThreadSortOrder}
-                onProjectSortOrderChange={onProjectSortOrderChange}
-                onThreadSortOrderChange={onThreadSortOrderChange}
-              />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label={shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
-                      aria-pressed={shouldShowProjectPathEntry}
-                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                      onClick={() => {
-                        onCloseMobileSidebar();
-                        handleStartAddProject();
-                      }}
-                    />
-                  }
-                >
-                  <PlusIcon
-                    className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} transition-transform duration-150 ${
-                      shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                    }`}
-                  />
-                </TooltipTrigger>
-                <TooltipPopup side="right">
-                  {shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
-                </TooltipPopup>
-              </Tooltip>
-            </>
-          }
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <LaptopMinimalIcon aria-hidden="true" className={SIDEBAR_ICON_SIZE_CLASS} />
-            Projects
-          </span>
-        </SidebarSectionLabel>
-
-        <div>
-          {isExpanded && shouldShowProjectPathEntry && (
-            <SidebarNewProjectFlow
-              isElectron={isElectron}
-              newCwd={newCwd}
-              isPickingFolder={isPickingFolder}
-              isAddingProject={isAddingProject}
-              addProjectError={addProjectError}
-              addProjectInputRef={addProjectInputRef}
-              onCwdChange={onCwdChange}
-              onClearError={onClearError}
-              onPickFolder={onPickFolder}
-              onAdd={onAdd}
-              onCancel={onCancelAdd}
-            />
-          )}
-
-          {isExpanded ? (
-            <SidebarProjectList
-              renderedProjects={localProjects as unknown as RenderedProject[]}
-              isManualSorting={isManualProjectSorting}
-              hasProjects={localProjects.length > 0}
-              showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
-              showLoadMore
-              catalogScope="local"
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onDragCancel={onDragCancel}
-              renderProjectItem={(rp, dragHandleProps) => (
-                <SidebarRenderedProjectItem
-                  {...sharedProjectItemProps}
-                  {...(rp as unknown as RenderedProjectData)}
-                  dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
-                />
-              )}
-            />
-          ) : null}
-        </div>
-
-        <div className="mt-3">
+      {scope === "local" ? (
+        <SidebarGroup className="px-2 py-0">
           <SidebarSectionLabel
+            {...headerProps}
+            isExpanded={isExpanded}
+            onExpandedChange={onExpandedChange}
+            actions={
+              <>
+                <ProjectSortMenu
+                  projectSortOrder={appSettingsSidebarProjectSortOrder}
+                  threadSortOrder={appSettingsSidebarThreadSortOrder}
+                  onProjectSortOrderChange={onProjectSortOrderChange}
+                  onThreadSortOrderChange={onThreadSortOrderChange}
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={
+                          shouldShowProjectPathEntry ? "Cancel new project" : "New project"
+                        }
+                        aria-pressed={shouldShowProjectPathEntry}
+                        className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                        onClick={() => {
+                          onCloseMobileSidebar();
+                          handleStartAddProject();
+                        }}
+                      />
+                    }
+                  >
+                    <PlusIcon
+                      className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} transition-transform duration-150 ${
+                        shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                      }`}
+                    />
+                  </TooltipTrigger>
+                  <TooltipPopup side="right">
+                    {shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
+                  </TooltipPopup>
+                </Tooltip>
+              </>
+            }
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <LaptopMinimalIcon aria-hidden="true" className={SIDEBAR_ICON_SIZE_CLASS} />
+              Projects
+            </span>
+          </SidebarSectionLabel>
+
+          <div>
+            {isExpanded && shouldShowProjectPathEntry && (
+              <SidebarNewProjectFlow
+                isElectron={isElectron}
+                newCwd={newCwd}
+                isPickingFolder={isPickingFolder}
+                isAddingProject={isAddingProject}
+                addProjectError={addProjectError}
+                addProjectInputRef={addProjectInputRef}
+                onCwdChange={onCwdChange}
+                onClearError={onClearError}
+                onPickFolder={onPickFolder}
+                onAdd={onAdd}
+                onCancel={onCancelAdd}
+              />
+            )}
+
+            {isExpanded ? (
+              <SidebarProjectList
+                renderedProjects={localProjects as unknown as RenderedProject[]}
+                isManualSorting={isManualProjectSorting}
+                hasProjects={localProjects.length > 0}
+                showEmptyState={false}
+                showLoadMore
+                catalogScope="local"
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragCancel={onDragCancel}
+                renderProjectItem={(rp, dragHandleProps) => (
+                  <SidebarRenderedProjectItem
+                    {...sharedProjectItemProps}
+                    {...(rp as unknown as RenderedProjectData)}
+                    dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+                  />
+                )}
+              />
+            ) : null}
+          </div>
+        </SidebarGroup>
+      ) : null}
+      {scope === "remote" ? (
+        <SidebarGroup className="px-2 py-0">
+          <SidebarSectionLabel
+            {...headerProps}
             isExpanded={isRemoteProjectsExpanded}
             onExpandedChange={onRemoteProjectsExpandedChange}
             actions={
@@ -286,17 +298,9 @@ export function SidebarProjectsSection({
                 )}
               />
             ) : null}
-
-            {isRemoteProjectsExpanded &&
-            remoteProjects.length === 0 &&
-            (localProjects.length > 0 || shouldShowProjectPathEntry) ? (
-              <div className="px-4 py-2 text-xs text-muted-foreground/60">
-                No remote projects yet
-              </div>
-            ) : null}
           </div>
-        </div>
-      </SidebarGroup>
+        </SidebarGroup>
+      ) : null}
     </>
   );
 }

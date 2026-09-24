@@ -1,12 +1,17 @@
 import { type MessageId, type ProjectFileContentMatch, type ThreadId } from "@bigbud/contracts";
+import {
+  CONVERSATION_SEARCH_MAX_QUERY_LENGTH,
+  CONVERSATION_SEARCH_MIN_QUERY_LENGTH,
+} from "@bigbud/contracts/orchestration/orchestration.search";
+import { countUnicodeCodePoints } from "@bigbud/shared/String";
 import { FileIcon, MessageSquareIcon } from "lucide-react";
 
-import { highlightMatch } from "./SearchPalette.logic";
 import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
 import { cn } from "~/lib/utils";
 import { ProjectSearchResultGroup, type ProjectSearchResult } from "./SearchPalette.projectResults";
 import { SearchPaletteCurrentFileResults } from "./SearchPalette.currentFileResults";
+import { SearchPaletteMessageResults } from "./SearchPalette.messageResults";
 import type { FileSearchMatch } from "./SearchPalette.logic";
 
 export interface ThreadSearchResult {
@@ -39,10 +44,6 @@ export interface FileSearchResult {
   type: "file";
 }
 
-export function getMessageItemValue(result: MessageSearchResult): string {
-  return `${result.text} ${result.snippet}`.toLowerCase();
-}
-
 export function getThreadItemValue(result: ThreadSearchResult): string {
   return `${result.title} ${result.projectName} ${result.matchedMessageText}`.toLowerCase();
 }
@@ -70,6 +71,8 @@ interface SearchPaletteResultsProps {
   isSearchPending: boolean;
   isFileSearchPending: boolean;
   isProjectSearchPending: boolean;
+  isMessageSearchPending?: boolean;
+  messageSearchStatus?: "ready" | "stale" | "unavailable" | undefined;
   currentFilePath: string | null;
   currentFileMatches: readonly FileSearchMatch[];
   visibleCurrentFileMatches: readonly FileSearchMatch[];
@@ -79,6 +82,8 @@ interface SearchPaletteResultsProps {
   visibleOtherThreadMessageResults: MessageSearchResult[];
   visibleOtherMessageCount: number;
   setVisibleOtherMessageCount: React.Dispatch<React.SetStateAction<number>>;
+  hasMoreMessagePages?: boolean;
+  onShowMoreMessages?: () => void;
   threadResults: ThreadSearchResult[];
   visibleThreadResults: ThreadSearchResult[];
   setVisibleThreadCount: React.Dispatch<React.SetStateAction<number>>;
@@ -106,6 +111,8 @@ export function SearchPaletteResults({
   isSearchPending,
   isFileSearchPending,
   isProjectSearchPending,
+  isMessageSearchPending = false,
+  messageSearchStatus,
   currentFilePath,
   currentFileMatches,
   visibleCurrentFileMatches,
@@ -114,6 +121,8 @@ export function SearchPaletteResults({
   otherThreadMessageResults,
   visibleOtherThreadMessageResults,
   setVisibleOtherMessageCount,
+  hasMoreMessagePages = false,
+  onShowMoreMessages,
   threadResults,
   visibleThreadResults,
   setVisibleThreadCount,
@@ -135,6 +144,7 @@ export function SearchPaletteResults({
   initialVisibleResultCount,
 }: SearchPaletteResultsProps) {
   const hasResults = hasMessageResults || hasProjectResults || hasThreadResults || hasFileResults;
+  const messageQueryLength = countUnicodeCodePoints(query.trim());
 
   return (
     <>
@@ -151,13 +161,40 @@ export function SearchPaletteResults({
         />
       ) : null}
 
-      {(isSearchPending || isFileSearchPending || isProjectSearchPending) && normalizedQuery && (
-        <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
+      {(isSearchPending ||
+        isFileSearchPending ||
+        isProjectSearchPending ||
+        isMessageSearchPending) &&
+        normalizedQuery && (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
+        )}
+
+      {!isSearchPending && messageQueryLength < CONVERSATION_SEARCH_MIN_QUERY_LENGTH && (
+        <div className="px-4 py-2 text-xs text-muted-foreground">
+          Enter at least 3 characters to search saved messages.
+        </div>
+      )}
+      {!isSearchPending && messageQueryLength > CONVERSATION_SEARCH_MAX_QUERY_LENGTH && (
+        <div className="px-4 py-2 text-xs text-muted-foreground">
+          Shorten your query to 160 characters to search saved messages.
+        </div>
+      )}
+      {messageSearchStatus === "stale" && (
+        <div className="px-4 py-2 text-xs text-amber-600">
+          Saved messages are still catching up.
+        </div>
+      )}
+      {messageSearchStatus === "unavailable" && (
+        <div className="px-4 py-2 text-xs text-amber-600">
+          Saved message search is temporarily unavailable.
+        </div>
       )}
 
       {!isSearchPending &&
         !isFileSearchPending &&
         !isProjectSearchPending &&
+        !isMessageSearchPending &&
+        messageSearchStatus !== "unavailable" &&
         !hasResults &&
         !currentFilePath &&
         normalizedQuery && (
@@ -166,101 +203,19 @@ export function SearchPaletteResults({
           </div>
         )}
 
-      {!isSearchPending && inThreadMessageResults.length > 0 && (
-        <CommandGroup>
-          <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-            In this thread
-          </CommandGroupLabel>
-          {inThreadMessageResults.map((result) => (
-            <CommandItem
-              key={result.id}
-              value={getMessageItemValue(result)}
-              className="min-h-11 rounded-xl px-3 py-2"
-              onSelect={() => onSelectMessage(result.threadId, result.messageId)}
-              onClick={() => onSelectMessage(result.threadId, result.messageId)}
-            >
-              <div className="mr-3 text-muted-foreground/70">
-                <MessageSquareIcon className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-muted-foreground text-sm leading-6">
-                  {(() => {
-                    const highlight = highlightMatch(result.snippet, query);
-                    return highlight.hasMatch ? (
-                      <>
-                        {highlight.before}
-                        <mark className="rounded-sm bg-primary/20 px-0.5 font-medium text-foreground">
-                          {highlight.match}
-                        </mark>
-                        {highlight.after}
-                      </>
-                    ) : (
-                      result.snippet
-                    );
-                  })()}
-                </div>
-              </div>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      )}
-
-      {!isSearchPending && otherThreadMessageResults.length > 0 && (
-        <CommandGroup className={cn(inThreadMessageResults.length > 0 ? "mt-2" : undefined)}>
-          <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-            Messages in other threads
-          </CommandGroupLabel>
-          {visibleOtherThreadMessageResults.map((result) => (
-            <CommandItem
-              key={result.id}
-              value={getMessageItemValue(result)}
-              className="min-h-11 rounded-xl px-3 py-2"
-              onSelect={() => onSelectMessage(result.threadId, result.messageId)}
-              onClick={() => onSelectMessage(result.threadId, result.messageId)}
-            >
-              <div className="mr-3 text-muted-foreground/70">
-                <MessageSquareIcon className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-muted-foreground text-sm leading-6">
-                  {(() => {
-                    const highlight = highlightMatch(result.snippet, query);
-                    return highlight.hasMatch ? (
-                      <>
-                        {highlight.before}
-                        <mark className="rounded-sm bg-primary/20 px-0.5 font-medium text-foreground">
-                          {highlight.match}
-                        </mark>
-                        {highlight.after}
-                      </>
-                    ) : (
-                      result.snippet
-                    );
-                  })()}
-                </div>
-                <div className="truncate text-muted-foreground text-xs leading-5">
-                  {result.projectName} &gt; {result.threadTitle}
-                </div>
-              </div>
-            </CommandItem>
-          ))}
-          {otherThreadMessageResults.length > visibleOtherThreadMessageResults.length ? (
-            <SidebarMenuSubItem className="w-full px-2 pt-1 pl-9">
-              <SidebarMenuSubButton
-                render={<button type="button" />}
-                size="sm"
-                className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                onClick={() =>
-                  setVisibleOtherMessageCount((current) => current + initialVisibleResultCount)
-                }
-              >
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <span>{`See more (${otherThreadMessageResults.length - visibleOtherThreadMessageResults.length})`}</span>
-                </span>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ) : null}
-        </CommandGroup>
+      {!isSearchPending && (
+        <SearchPaletteMessageResults
+          query={query}
+          inThreadResults={inThreadMessageResults}
+          otherThreadResults={otherThreadMessageResults}
+          visibleOtherThreadResults={visibleOtherThreadMessageResults}
+          hasMorePages={hasMoreMessagePages}
+          onSelect={onSelectMessage}
+          onShowMore={
+            onShowMoreMessages ??
+            (() => setVisibleOtherMessageCount((current) => current + initialVisibleResultCount))
+          }
+        />
       )}
 
       {!isSearchPending && !isProjectSearchPending ? (

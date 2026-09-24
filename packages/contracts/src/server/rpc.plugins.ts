@@ -5,6 +5,10 @@ import { PluginCatalog, PluginCatalogItem, PluginError, PluginId } from "./plugi
 
 const PluginRevisionInput = Schema.Struct({ pluginId: PluginId, revision: Schema.String });
 
+export const WsPluginsGitAvailabilityRpc = Rpc.make("plugins.gitAvailability", {
+  success: Schema.Literals(["available", "missing", "unknown"]),
+});
+
 export const WsPluginsListCatalogRpc = Rpc.make("plugins.listCatalog", {
   success: PluginCatalog,
   error: PluginError,

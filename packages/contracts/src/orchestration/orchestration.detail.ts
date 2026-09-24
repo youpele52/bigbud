@@ -102,6 +102,7 @@ export const GetSelectedThreadDetailInput = Schema.Struct({
   taskLimit: Schema.optional(PositiveInt),
   checkpointLimit: Schema.optional(PositiveInt),
   messageCursor: Schema.optional(ThreadMessageCursor),
+  messageAnchorId: Schema.optional(MessageId),
 });
 export type GetSelectedThreadDetailInput = typeof GetSelectedThreadDetailInput.Type;
 

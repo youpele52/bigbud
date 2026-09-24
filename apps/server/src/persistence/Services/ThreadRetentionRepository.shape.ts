@@ -1,4 +1,7 @@
-import { FiniteThreadRetentionPolicy } from "@bigbud/contracts/core/settings.threadRetention.ts";
+import {
+  FiniteThreadRetentionPolicy,
+  type ThreadRetentionAgeCriterion,
+} from "@bigbud/contracts/core/settings.threadRetention.ts";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
@@ -33,8 +36,21 @@ import type {
 } from "./ThreadRetentionRepository.models.ts";
 
 export interface ThreadRetentionRepositoryShape {
+  readonly readResourceSummary: (
+    runId: string,
+  ) => Effect.Effect<
+    import("../Layers/ThreadRetentionRepository.resourceSummary.ts").RetentionResourceSummary,
+    ProjectionRepositoryError
+  >;
+  readonly readCleanupState: (
+    deletionCommandId: string,
+  ) => Effect.Effect<"pending" | "completed" | "blocked" | "aborted", ProjectionRepositoryError>;
   readonly preview: (
     cutoffAt: string,
+    options?: {
+      readonly selectionMode: "legacy-subtree" | "per-thread";
+      readonly ageCriterion: ThreadRetentionAgeCriterion;
+    },
   ) => Effect.Effect<ThreadRetentionPreview, ProjectionRepositoryError>;
   readonly listDeletionOwnedThreadIds: (
     threadIds: ReadonlyArray<string>,
@@ -68,6 +84,8 @@ export interface ThreadRetentionRepositoryShape {
   readonly selectNextPage: (input: {
     readonly cutoffAt: string;
     readonly cursor?: ThreadRetentionCursor;
+    readonly selectionMode?: "legacy-subtree" | "per-thread";
+    readonly ageCriterion?: ThreadRetentionAgeCriterion;
     readonly limit: number;
   }) => Effect.Effect<ReadonlyArray<ThreadRetentionCandidate>, ProjectionRepositoryError>;
   readonly insertSelectedItems: {
@@ -182,6 +200,7 @@ export interface ThreadRetentionRepositoryShape {
   readonly consumePolicyChallenge: (input: {
     readonly token: string;
     readonly policy: typeof FiniteThreadRetentionPolicy.Type;
+    readonly ageCriterion?: ThreadRetentionAgeCriterion;
     readonly consumedAt: string;
   }) => Effect.Effect<ConsumeRetentionChallengeResult, ProjectionRepositoryError>;
 }

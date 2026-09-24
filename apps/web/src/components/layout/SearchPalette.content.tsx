@@ -1,12 +1,16 @@
 import { type MessageId, type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { cn } from "~/lib/utils";
 import { projectCatalogSearchQueryOptions } from "~/lib/projectCatalogSearchQuery";
+import {
+  conversationSearchQueryOptions,
+  isConversationSearchQueryValid,
+} from "~/lib/conversationSearchQuery";
 import { projectSearchFileContentsQueryOptions } from "~/lib/projectReactQuery";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "~/hooks/useRemoteExecutionAccessGate";
@@ -26,7 +30,6 @@ import {
 } from "../ui/command";
 import { joinWorkspaceEntryPath } from "../files/filesPanel.dnd";
 import {
-  findMessageSearchMatches,
   findFileSearchMatches,
   findThreadSearchMatch,
   normalizeQuery,
@@ -87,6 +90,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   );
   const normalizedQuery = normalizeQuery(query);
   const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
+  const debouncedMessageQuery = debouncedQuery.trim();
   const workspaceRoot =
     activeThread?.worktreePath ?? selectedProject?.cwd ?? defaultChatCwd ?? null;
   const workspaceExecutionTargetId = activeThread?.worktreePath
@@ -121,29 +125,27 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
       }),
     ),
   });
+  const conversationSearch = useInfiniteQuery(
+    conversationSearchQueryOptions({ query: debouncedMessageQuery, enabled: open }),
+  );
 
   const messageResults = useMemo<MessageSearchResult[]>(() => {
-    if (!debouncedNormalizedQuery) return [];
-
-    return threads
-      .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
-      .flatMap((thread) => {
-        const project = projects.find((p) => p.id === thread.projectId);
-        const projectName =
-          project?.name ?? (isBuiltInChatsProject(thread.projectId) ? "Chats" : "Project");
-        return findMessageSearchMatches(thread, debouncedNormalizedQuery).map((match) => ({
-          id: `message:${thread.id}:${match.messageId}`,
-          threadId: thread.id,
-          messageId: match.messageId,
-          threadTitle: thread.title,
-          projectName,
-          text: match.text,
-          snippet: match.snippet,
-          matchIndex: match.matchIndex,
-          type: "message" as const,
-        }));
-      });
-  }, [debouncedNormalizedQuery, projects, threads]);
+    if (!isConversationSearchQueryValid(debouncedMessageQuery) || conversationSearch.isError)
+      return [];
+    return (conversationSearch.data?.pages ?? []).flatMap((page) =>
+      page.hits.map((hit) => ({
+        id: `message:${hit.threadId}:${hit.messageId}`,
+        threadId: hit.threadId,
+        messageId: hit.messageId,
+        threadTitle: hit.threadTitle,
+        projectName: hit.projectName,
+        text: hit.snippet,
+        snippet: hit.snippet,
+        matchIndex: hit.snippet.toLowerCase().indexOf(debouncedMessageQuery.toLowerCase()),
+        type: "message" as const,
+      })),
+    );
+  }, [conversationSearch.data, conversationSearch.isError, debouncedMessageQuery]);
 
   const threadResults = useMemo<ThreadSearchResult[]>(() => {
     if (!debouncedNormalizedQuery) return [];
@@ -254,6 +256,17 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const visibleFileResults = fileResults.slice(0, visibleFileCount);
   const visibleCurrentFileMatches = currentFileMatches.slice(0, visibleCurrentFileMatchCount);
 
+  const showMoreMessages = () => {
+    if (
+      visibleOtherMessageCount >= otherThreadMessageResults.length &&
+      conversationSearch.hasNextPage &&
+      !conversationSearch.isError
+    ) {
+      void conversationSearch.fetchNextPage();
+    }
+    setVisibleOtherMessageCount((current) => current + INITIAL_VISIBLE_RESULT_COUNT);
+  };
+
   const handleSelectCurrentFileMatch = (line: number) => {
     if (!activeFileSearchContext) return;
     activeFileSearchContext.onSelectMatch(line);
@@ -295,6 +308,12 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       isSearchPending={isSearchPending}
                       isFileSearchPending={isFileSearchPending}
                       isProjectSearchPending={isProjectSearchPending}
+                      isMessageSearchPending={conversationSearch.isFetching}
+                      messageSearchStatus={
+                        conversationSearch.isError
+                          ? "unavailable"
+                          : conversationSearch.data?.pages[0]?.status
+                      }
                       currentFilePath={activeFileSearchContext?.path ?? null}
                       currentFileMatches={currentFileMatches}
                       visibleCurrentFileMatches={visibleCurrentFileMatches}
@@ -304,6 +323,10 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       visibleOtherThreadMessageResults={visibleOtherThreadMessageResults}
                       visibleOtherMessageCount={visibleOtherMessageCount}
                       setVisibleOtherMessageCount={setVisibleOtherMessageCount}
+                      hasMoreMessagePages={
+                        conversationSearch.hasNextPage && !conversationSearch.isError
+                      }
+                      onShowMoreMessages={showMoreMessages}
                       threadResults={threadResults}
                       visibleThreadResults={visibleThreadResults}
                       setVisibleThreadCount={setVisibleThreadCount}

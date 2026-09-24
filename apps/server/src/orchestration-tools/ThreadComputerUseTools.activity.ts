@@ -2,7 +2,9 @@ import { ATTACHMENTS_ROUTE_PREFIX } from "../attachments/attachmentPaths.ts";
 import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore.ts";
 import type { ComputerUseResult, ThreadId } from "@bigbud/contracts";
 import { CommandId, EventId } from "@bigbud/contracts";
-import { Effect, type FileSystem, type Path } from "effect";
+import { Effect, FileSystem, Path } from "effect";
+import { persistManagedAttachment } from "../attachments/managedAttachmentOwnership.ts";
+import { persistSubmissionAttachment } from "../orchestration/Normalizer.attachmentStorage.ts";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 
@@ -84,7 +86,20 @@ export const persistComputerUseScreenshot = (input: {
     const writeResult = yield* input.fileSystem
       .makeDirectory(input.path.dirname(attachmentPath), { recursive: true })
       .pipe(
-        Effect.andThen(input.fileSystem.writeFile(attachmentPath, bytes)),
+        Effect.andThen(
+          persistManagedAttachment({
+            attachmentsDir: input.attachmentsDir,
+            attachmentId,
+            creatorThreadId: input.threadId,
+            destination: attachmentPath,
+            bytes,
+            write: persistSubmissionAttachment(attachmentPath, bytes).pipe(
+              Effect.map((created) => created === true),
+              Effect.provideService(FileSystem.FileSystem, input.fileSystem),
+              Effect.provideService(Path.Path, input.path),
+            ),
+          }),
+        ),
         Effect.match({
           onFailure: (error) => ({ ok: false as const, error }),
           onSuccess: () => ({ ok: true as const }),
