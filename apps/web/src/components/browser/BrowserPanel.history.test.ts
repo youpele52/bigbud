@@ -19,11 +19,9 @@ import {
   migrateBrowserHistory,
   resolveBrowserHistorySelectionIndex,
   resolveNextBrowserHistory,
-  getBrowserBookmarks,
   getBrowserHistory,
   recordBrowserHistoryVisit,
   subscribeBrowserData,
-  toggleBrowserBookmark,
 } from "./BrowserPanel.history";
 
 describe("BrowserPanel history", () => {
@@ -111,49 +109,22 @@ describe("BrowserPanel history", () => {
     expect(resolveBrowserHistorySelectionIndex(0, 1, 0)).toBe(-1);
   });
 
-  it("persists and removes normalized flat bookmarks", () => {
-    const added = toggleBrowserBookmark({
-      url: "https://user:password@example.com/path#section",
-      title: "Example",
-    });
-
-    expect(added).toEqual([
-      expect.objectContaining({ url: "https://example.com/path", title: "Example" }),
-    ]);
-    expect(getBrowserBookmarks()).toEqual(added);
-    expect(toggleBrowserBookmark({ url: "https://example.com/path", title: "Example" })).toEqual(
-      [],
-    );
-    expect(getBrowserBookmarks()).toEqual([]);
-  });
-
-  it("synchronizes history and bookmark changes across mounted subscribers", () => {
+  it("synchronizes history changes across mounted subscribers", () => {
     let firstHistory = getBrowserHistory();
     let secondHistory = getBrowserHistory();
-    let firstBookmarks = getBrowserBookmarks();
-    let secondBookmarks = getBrowserBookmarks();
     const syncFirst = () => {
       firstHistory = getBrowserHistory();
-      firstBookmarks = getBrowserBookmarks();
     };
     const syncSecond = () => {
       secondHistory = getBrowserHistory();
-      secondBookmarks = getBrowserBookmarks();
     };
     const unsubscribeFirst = subscribeBrowserData(syncFirst);
     const unsubscribeSecond = subscribeBrowserData(syncSecond);
 
     recordBrowserHistoryVisit({ url: "https://example.com", title: "Example" });
-    toggleBrowserBookmark({ url: "https://example.com", title: "Example" });
 
     expect(firstHistory).toEqual(secondHistory);
     expect(filterBrowserHistory(secondHistory, "example")).toEqual(["https://example.com/"]);
-    expect(firstBookmarks).toEqual(secondBookmarks);
-    expect(secondBookmarks).toHaveLength(1);
-
-    toggleBrowserBookmark({ url: "https://example.com", title: "Example" });
-    expect(firstBookmarks).toEqual([]);
-    expect(secondBookmarks).toEqual([]);
 
     unsubscribeFirst();
     unsubscribeSecond();

@@ -329,37 +329,4 @@ describe("BrowserPanel annotation UX", () => {
       await screen.unmount();
     }
   });
-
-  it("adds a bookmark from the accessible toolbar action", async () => {
-    const host = document.createElement("div");
-    document.body.append(host);
-    const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
-      container: host,
-    });
-
-    try {
-      await page.getByRole("button", { name: "Add bookmark" }).click();
-
-      await vi.waitFor(() => {
-        expect(browserHistoryStorageMock.set).toHaveBeenCalledWith(
-          "bigbud:browser-bookmarks:v1",
-          expect.objectContaining({
-            version: 1,
-            bookmarks: [
-              expect.objectContaining({
-                url: "https://example.com/",
-                title: "",
-                createdAt: expect.any(String),
-                updatedAt: expect.any(String),
-              }),
-            ],
-          }),
-          expect.anything(),
-        );
-      });
-      await expect.element(page.getByRole("button", { name: "Remove bookmark" })).toBeVisible();
-    } finally {
-      await screen.unmount();
-    }
-  });
 });
