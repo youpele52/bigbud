@@ -24,12 +24,9 @@ import {
   registerBrowserTabAgentHandler,
 } from "./browserAgentControl";
 import {
-  getBrowserBookmarks,
   getBrowserHistory,
-  isBrowserBookmarked,
   recordBrowserHistoryVisit,
   subscribeBrowserData,
-  toggleBrowserBookmark,
   updateBrowserHistoryVisitTitle,
 } from "./BrowserPanel.history";
 import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
@@ -76,7 +73,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     viewportRef,
   });
   const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
-  const [bookmarks, setBookmarks] = useState(() => getBrowserBookmarks());
   const contextMenu = useBrowserContextMenu(visible && Boolean(url.trim()));
   const closeContextMenu = contextMenu.close;
   const toggleContextMenuCentered = contextMenu.toggleCentered;
@@ -88,7 +84,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     () =>
       subscribeBrowserData(() => {
         setBrowserHistory(getBrowserHistory());
-        setBookmarks(getBrowserBookmarks());
       }),
     [],
   );
@@ -191,11 +186,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     },
     [],
   );
-
-  const bookmarked = isBrowserBookmarked(bookmarks, url);
-  const handleToggleBookmark = useCallback(() => {
-    setBookmarks(toggleBrowserBookmark({ url, title: pageMetadata.title }));
-  }, [pageMetadata.title, url]);
 
   const handleClose = useCallback(() => {
     if (annotationActive) {
@@ -317,10 +307,8 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         historyUrls={browserHistory}
         annotationDisabled={!isElectron || !url.trim()}
         agentControlled={isAgentControlled}
-        bookmarked={bookmarked}
         loading={loading}
         canStopLoading={isWebviewTagSupported()}
-        onToggleBookmark={url.trim() ? handleToggleBookmark : undefined}
       />
       <BrowserAgentStatus tabId={tabId} controlled={isAgentControlled} handoff={agentHandoff} />
       <div

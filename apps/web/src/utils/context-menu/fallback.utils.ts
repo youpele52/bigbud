@@ -40,6 +40,13 @@ export function showContextMenuFallback<T extends string>(
     document.addEventListener("keydown", onKeyDown);
 
     for (const item of items) {
+      if (item.separator) {
+        const separator = document.createElement("div");
+        separator.className = "my-1 border-t border-border";
+        separator.setAttribute("role", "separator");
+        menu.appendChild(separator);
+        continue;
+      }
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = item.label;

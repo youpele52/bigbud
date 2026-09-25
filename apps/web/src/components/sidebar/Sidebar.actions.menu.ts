@@ -7,8 +7,11 @@ import {
 interface SidebarMenuItem {
   id: string;
   label: string;
+  separator?: boolean;
   disabled?: boolean;
 }
+
+const separator = (): SidebarMenuItem => ({ id: "", label: "", separator: true });
 
 export function buildSidebarItemMenuItems(input: {
   id: SidebarActionId | null;
@@ -22,18 +25,22 @@ export function buildSidebarItemMenuItems(input: {
     ...(id
       ? [
           { id: "hide", label: `Hide ${SIDEBAR_ACTION_LABELS[id]}` },
+          separator(),
           { id: "move-up", label: "Move up", disabled: index <= 0 },
           { id: "move-down", label: "Move down", disabled: index >= visible.length - 1 },
           { id: "move-top", label: "Move to top", disabled: index <= 0 },
           { id: "move-bottom", label: "Move to bottom", disabled: index >= visible.length - 1 },
+          separator(),
         ]
       : []),
     ...hidden.map((entry) => ({
       id: `show:${entry}`,
       label: `Show ${SIDEBAR_ACTION_LABELS[entry]}`,
     })),
-    { id: "show-all", label: "Show all", disabled: hidden.length === 0 },
+    ...(hidden.length > 0 ? [separator()] : []),
     { id: "hide-all", label: "Hide all", disabled: visible.length === 0 },
+    { id: "show-all", label: "Show all", disabled: hidden.length === 0 },
+    separator(),
     {
       id: "reset-order",
       label: "Reset order",

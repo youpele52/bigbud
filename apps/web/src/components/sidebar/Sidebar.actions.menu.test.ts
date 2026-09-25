@@ -15,6 +15,21 @@ describe("sidebar item context menu", () => {
     expect(items).toContainEqual({ id: "move-bottom", label: "Move to bottom", disabled: false });
     expect(items).toContainEqual({ id: "show:chats", label: "Show Chats" });
     expect(items).toContainEqual({ id: "reset-order", label: "Reset order", disabled: false });
+    expect(items.map((item) => item.id)).toEqual([
+      "hide",
+      "",
+      "move-up",
+      "move-down",
+      "move-top",
+      "move-bottom",
+      "",
+      "show:chats",
+      "",
+      "hide-all",
+      "show-all",
+      "",
+      "reset-order",
+    ]);
   });
 
   it("disables moves beyond visible list edges and keeps recovery available", () => {
@@ -34,5 +49,18 @@ describe("sidebar item context menu", () => {
       hidden: ["plugins", "pinned", "chats", "projects", "remote-projects"],
     });
     expect(recovery.some((item) => item.id === "show-all" && !item.disabled)).toBe(true);
+    expect(recovery[0]?.id).toBe("show:plugins");
+    expect(recovery.at(-1)?.id).toBe("reset-order");
+    expect(recovery.filter((item) => item.separator)).toHaveLength(2);
+  });
+
+  it("omits empty hidden-item groups from the menu", () => {
+    const items = buildSidebarItemMenuItems({
+      id: null,
+      order: SIDEBAR_ACTION_IDS,
+      visible: SIDEBAR_ACTION_IDS,
+      hidden: [],
+    });
+    expect(items.map((item) => item.id)).toEqual(["hide-all", "show-all", "", "reset-order"]);
   });
 });
