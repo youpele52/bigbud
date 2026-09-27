@@ -57,6 +57,23 @@ const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" }
 const allowDevelopmentDiagnostics = process.defaultApp === true;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  systemMonitorSubscribe: (demand) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorSubscribe, demand),
+  systemMonitorUpdate: (id, demand) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorUpdate, id, demand),
+  systemMonitorUnsubscribe: (id) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorUnsubscribe, id),
+  systemMonitorAck: (id, epoch, sequence) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorAck, id, epoch, sequence),
+  systemMonitorQuery: (query) => ipcRenderer.invoke(desktopIpcChannels.systemMonitorQuery, query),
+  systemMonitorRetry: () => ipcRenderer.invoke(desktopIpcChannels.systemMonitorRetry),
+  onSystemMonitorEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (value && typeof value === "object") listener(value as Parameters<typeof listener>[0]);
+    };
+    ipcRenderer.on(desktopIpcChannels.systemMonitorEvent, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.systemMonitorEvent, handler);
+  },
   getWindowRole: () => {
     const result = ipcRenderer.sendSync(GET_WINDOW_ROLE_CHANNEL);
     return result === "main" || result === "mascot" || result === "compact-chat" ? result : null;

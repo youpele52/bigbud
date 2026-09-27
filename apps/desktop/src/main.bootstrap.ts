@@ -1,4 +1,6 @@
 import * as Crypto from "node:crypto";
+import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
 import type { BrowserWindow, WebContents } from "electron";
 
@@ -59,6 +61,7 @@ import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
 
 interface BootstrapDesktopOptions {
   readonly baseDir: string;
+  readonly systemMonitor: SystemMonitorBridge;
   readonly channels: typeof desktopIpcChannels;
   readonly cuaDriverHostBundleId: string;
   readonly desktopPreferences: DesktopPreferencesStore;
@@ -83,6 +86,7 @@ interface BootstrapDesktopOptions {
 export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promise<void> {
   const {
     baseDir,
+    systemMonitor,
     channels,
     cuaDriverHostBundleId,
     desktopPreferences,
@@ -221,6 +225,10 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       return status;
     },
   });
+  registerSystemMonitorIpc(
+    systemMonitor,
+    (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
+  );
   registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");
   setMainWindow(makeWindow());

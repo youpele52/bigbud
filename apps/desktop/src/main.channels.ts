@@ -1,4 +1,11 @@
 export const desktopIpcChannels = {
+  systemMonitorSubscribe: "desktop:system-monitor-subscribe",
+  systemMonitorUpdate: "desktop:system-monitor-update",
+  systemMonitorUnsubscribe: "desktop:system-monitor-unsubscribe",
+  systemMonitorAck: "desktop:system-monitor-ack",
+  systemMonitorQuery: "desktop:system-monitor-query",
+  systemMonitorRetry: "desktop:system-monitor-retry",
+  systemMonitorEvent: "desktop:system-monitor-event",
   pickFolder: "desktop:pick-folder",
   confirm: "desktop:confirm",
   setTheme: "desktop:set-theme",

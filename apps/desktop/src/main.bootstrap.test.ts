@@ -95,6 +95,7 @@ vi.mock("./updater/autoUpdater", () => ({
   updaterConfigured: false,
 }));
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
+vi.mock("./system-monitor/ipc", () => ({ registerSystemMonitorIpc: vi.fn() }));
 vi.mock("./window/browserSession", () => ({
   initializeBrowserSession: mocks.initializeBrowserSession,
 }));
@@ -125,6 +126,7 @@ const originalPlatform = process.platform;
 function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
   return {
     baseDir: "/base",
+    systemMonitor: {} as never,
     channels: {} as never,
     cuaDriverHostBundleId: "bundle-id",
     desktopPreferences: { get: () => ({ floatingAssistantEnabled: false }) } as never,
