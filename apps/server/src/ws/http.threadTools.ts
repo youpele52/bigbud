@@ -88,6 +88,19 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
 
+    if (body.action === "get_system_resources") {
+      const result = dispatcher.getSystemResources
+        ? yield* dispatcher
+            .getSystemResources()
+            .pipe(
+              Effect.catch(() =>
+                Effect.succeed({ available: false, reason: "desktop monitor unavailable" }),
+              ),
+            )
+        : { available: false, reason: "desktop monitor unavailable" };
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
+
     if (body.action === "remote_workspace_process") {
       const result = yield* runRemoteWorkspaceProcess({ callerThreadId: threadId, request: body });
       return yield* HttpServerResponse.json({ ok: true, result });

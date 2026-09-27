@@ -1,5 +1,6 @@
 import * as Crypto from "node:crypto";
 import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
 import type { BrowserWindow, WebContents } from "electron";
@@ -229,6 +230,9 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     systemMonitor,
     (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
   );
+  await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
+    logHeader("system monitor agent bridge unavailable");
+  });
   registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");
   setMainWindow(makeWindow());

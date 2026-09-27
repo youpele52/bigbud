@@ -14,6 +14,7 @@ import {
   COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -44,6 +45,12 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
       name: "read_capability_guide",
       description: READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
       inputSchema: READ_CAPABILITY_GUIDE_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "get_system_resources",
+      description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+      inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

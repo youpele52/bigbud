@@ -32,6 +32,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
     const tools = makeTools();
 
     expect(tools.map((tool) => tool.name)).toEqual([
+      "get_system_resources",
       "rename_thread",
       "archive_thread",
       "create_thread",

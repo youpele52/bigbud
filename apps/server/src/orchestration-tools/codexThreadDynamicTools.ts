@@ -90,6 +90,12 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     }
 
     switch (tool) {
+      case "get_system_resources": {
+        const result = dispatcher.getSystemResources
+          ? await Effect.runPromise(dispatcher.getSystemResources())
+          : { available: false, reason: "desktop monitor unavailable" };
+        return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+      }
       case "search_capabilities": {
         const argRecord =
           args && typeof args === "object" ? (args as Record<string, unknown>) : null;

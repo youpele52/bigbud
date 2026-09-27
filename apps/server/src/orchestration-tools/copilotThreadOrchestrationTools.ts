@@ -12,6 +12,7 @@ import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -56,6 +57,7 @@ function failureResult(message: string): ToolResultObject {
 }
 
 export function createCopilotThreadOrchestrationTools(input: {
+  readonly getSystemResources?: () => Promise<Record<string, unknown>>;
   readonly workspace?: (
     tool: AgentWorkspaceToolName,
     args: Record<string, unknown>,
@@ -92,6 +94,23 @@ export function createCopilotThreadOrchestrationTools(input: {
   const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
   return [
     ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
+    {
+      name: "get_system_resources",
+      description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+      handler: async () => {
+        try {
+          const result = input.getSystemResources
+            ? await input.getSystemResources()
+            : { available: false, reason: "desktop monitor unavailable" };
+          return successResult(JSON.stringify(result, null, 2));
+        } catch {
+          return successResult(
+            JSON.stringify({ available: false, reason: "desktop monitor unavailable" }),
+          );
+        }
+      },
+    },
     {
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,

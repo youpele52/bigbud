@@ -36,6 +36,10 @@ describe("codexThreadDynamicTools", () => {
         }),
         expect.objectContaining({
           namespace: "bigbud_orchestration",
+          name: "get_system_resources",
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
           name: "send_thread_message",
           inputSchema: expect.objectContaining({
             required: ["threadId", "message"],
@@ -87,6 +91,8 @@ describe("codexThreadDynamicTools", () => {
   it("routes dynamic tool calls through the thread tool dispatcher", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const dispatcher: ThreadOrchestrationToolDispatcherShape = {
+      getSystemResources: () =>
+        Effect.succeed({ available: false, reason: "desktop monitor unavailable" }),
       rename: (input) => {
         calls.push({ kind: "rename", ...input });
         return Effect.succeed({ title: input.title });
@@ -177,6 +183,18 @@ describe("codexThreadDynamicTools", () => {
     try {
       const threadId = ThreadId.makeUnsafe("thread-codex-dynamic");
       const handler = createCodexThreadOrchestrationDynamicToolHandler(threadId);
+      const resources = await handler({
+        namespace: "bigbud_orchestration",
+        tool: "get_system_resources",
+        requestId: 16,
+        arguments: {},
+      });
+      expect(resources.contentItems[0]).toEqual(
+        expect.objectContaining({
+          type: "inputText",
+          text: expect.stringContaining('"available": false'),
+        }),
+      );
 
       const createResult = await handler({
         namespace: "bigbud_orchestration",

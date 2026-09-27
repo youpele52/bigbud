@@ -2,7 +2,6 @@ import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
 import { app } from "electron";
 import {
-  backendChildEnv,
   captureBackendOutput,
   type LogSink,
   writeBackendLifecycleEvent,
@@ -32,13 +31,17 @@ import {
   reportBackendModulesStartupFailure,
 } from "./backendModulesStartup";
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
-import { withBackendNodeOptions } from "./backendEnv";
+import { buildBackendChildEnvironment } from "./backendEnv";
 import {
   createBackendStartupDiagnostics,
   createDevelopmentBackendDiagnostics,
 } from "./backendStartupDiagnostics";
 import { resolveComputerUseRuntimeEnv } from "./backendRuntimeEnv";
 import * as ProcessQuiescence from "./installedProcessQuiescence";
+import {
+  revokeSystemMonitorAgentToken,
+  rotateSystemMonitorAgentToken,
+} from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
@@ -162,45 +165,28 @@ export async function startBackend(): Promise<void> {
   const packagedDesktopSupervisorBinary = resolvePackagedDesktopSupervisorBinary();
   const backendLauncherPath = resolveBackendLauncherPath();
   const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
+  const monitorAgentAccess = rotateSystemMonitorAgentToken();
   let child: ChildProcess.ChildProcess;
   try {
     child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
       cwd: resolveBackendCwd(_deps.rootDir),
-      env: withBackendNodeOptions(
-        {
-          ...backendChildEnv(),
-          ...(packagedOpencodeBinDir
-            ? {
-                PATH: [packagedOpencodeBinDir, process.env.PATH]
-                  .filter((entry): entry is string => Boolean(entry && entry.length > 0))
-                  .join(process.platform === "win32" ? ";" : ":"),
-              }
-            : {}),
-          ...(packagedBundledSkillsDir
-            ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
-            : {}),
-          ...(packagedBundledAgentsDir
-            ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
-            : {}),
-          ...(packagedWorkspaceAgentBinary
-            ? { BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY: packagedWorkspaceAgentBinary }
-            : {}),
-          ...(packagedDesktopSupervisorBinary
-            ? { BIGBUD_DESKTOP_SUPERVISOR_BINARY: packagedDesktopSupervisorBinary }
-            : {}),
-          ...computerUseRuntimeEnv,
-          BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
-          BIGBUD_DESKTOP_PACKAGED: app.isPackaged ? "1" : "0",
-          ELECTRON_RUN_AS_NODE: "1",
-          BIGBUD_STARTUP_STATUS_FD: "4",
-        },
-        _deps.backendMaxOldSpaceMb,
-      ),
+      env: buildBackendChildEnvironment({
+        packagedOpencodeBinDir,
+        packagedBundledSkillsDir,
+        packagedBundledAgentsDir,
+        packagedWorkspaceAgentBinary,
+        packagedDesktopSupervisorBinary,
+        computerUseRuntimeEnv,
+        backendNodeExecutable,
+        isPackaged: app.isPackaged,
+        backendMaxOldSpaceMb: _deps.backendMaxOldSpaceMb,
+      }),
       stdio: captureBackendLogs
         ? ["ignore", "pipe", "pipe", "pipe", "pipe"]
         : ["ignore", "inherit", "pipe", "pipe", "pipe"],
     });
   } catch (error) {
+    revokeSystemMonitorAgentToken();
     logBackendLifecycle(
       "child_spawn_threw",
       `generation=${startupGeneration} error=${String(error)}`,
@@ -274,6 +260,7 @@ export async function startBackend(): Promise<void> {
         host: backendHost,
         t3Home: _deps.baseDir,
         authToken: backendAuthToken,
+        ...(monitorAgentAccess ? { systemMonitorAgentAccess: monitorAgentAccess } : {}),
         ...(backendObservabilitySettings.otlpTracesUrl
           ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
           : {}),
@@ -284,6 +271,7 @@ export async function startBackend(): Promise<void> {
     );
     bootstrapStream.end();
   } else {
+    revokeSystemMonitorAgentToken();
     logBackendLifecycle("bootstrap_pipe_missing", `generation=${startupGeneration}`);
     recordBackendStartupFailure(
       startupGeneration,
@@ -307,6 +295,7 @@ export async function startBackend(): Promise<void> {
   );
   captureBackendOutput(child, backendLogSink);
   child.on("error", (error) => {
+    if (backendProcess === child) revokeSystemMonitorAgentToken();
     logBackendLifecycle(
       "child_error",
       `generation=${startupGeneration} pid=${child.pid ?? "unknown"} error=${error.stack ?? error.message} stderr=${stderrTail}`,
@@ -340,6 +329,7 @@ export async function startBackend(): Promise<void> {
     scheduleBackendRestart(error.message);
   });
   child.on("exit", (code, signal) => {
+    if (backendProcess === child) revokeSystemMonitorAgentToken();
     logBackendLifecycle(
       "child_exit",
       `generation=${startupGeneration} pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"} stderr=${stderrTail}`,
@@ -377,6 +367,7 @@ export async function startBackend(): Promise<void> {
   });
 }
 export function stopBackend(): void {
+  revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
@@ -388,6 +379,7 @@ export function stopBackend(): void {
 }
 
 export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
+  revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;

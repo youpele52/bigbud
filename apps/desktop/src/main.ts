@@ -1,5 +1,6 @@
 import * as Crypto from "node:crypto";
 import { SystemMonitorBridge } from "./system-monitor/bridge";
+import { stopSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 
 import { app, BrowserWindow, dialog } from "electron";
 
@@ -279,6 +280,7 @@ function prepareForAppQuit(reason: string): void {
   quitTeardownComplete = true;
   isQuitting = true;
   systemMonitor.stop();
+  stopSystemMonitorAgentBridge();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();

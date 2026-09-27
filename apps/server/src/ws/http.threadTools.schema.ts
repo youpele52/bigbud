@@ -18,6 +18,7 @@ export const ThreadToolRequest = Schema.Struct({
     "read_capability_guide",
     "workspace",
     "remote_workspace_process",
+    "get_system_resources",
   ]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),

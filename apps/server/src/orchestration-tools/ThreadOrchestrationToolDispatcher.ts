@@ -24,6 +24,7 @@ import type {
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
+  readonly getSystemResources?: () => Effect.Effect<Record<string, unknown>, Error>;
   readonly workspace?: (
     input: AgentWorkspaceToolInput,
   ) => Effect.Effect<Record<string, unknown>, Error>;

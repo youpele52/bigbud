@@ -4,6 +4,7 @@ import {
   COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -55,6 +56,23 @@ const threadToolTrack = (input: {
 });
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
+  threadToolTrack({
+    id: "system.resources",
+    displayName: "Desktop system resources",
+    description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+    summary:
+      "Read current desktop CPU, memory, network, and disk usage with host identity, freshness, and metric availability from the Rust monitor.",
+    triggers: [
+      "A task needs current CPU, memory, network, or disk status of the desktop app's computer.",
+    ],
+    risk: "read-only",
+    workflow:
+      "Call get_system_resources when current desktop system state is relevant; inspect sampledAtMs and each metric status before interpreting values.",
+    permissions:
+      "Read-only. Available only while the desktop app and Rust monitor can answer. No process list, control actions, or proactive alerts.",
+    examples: ["Check current memory pressure on the desktop computer."],
+    antiPatterns: ["Do not treat unavailable or stale metrics as current observations."],
+  }),
   ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) =>
     threadToolTrack({
       id: `workspace.${spec.name.replaceAll("_", ".")}`,

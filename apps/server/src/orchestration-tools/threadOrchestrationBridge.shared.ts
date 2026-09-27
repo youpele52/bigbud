@@ -57,6 +57,9 @@ export const BROWSER_TOOL_DESCRIPTION =
 export const COMPUTER_USE_TOOL_DESCRIPTION =
   'Automate native desktop apps via the `computer_use` tool. Use `surface: "desktop"` for native macOS automation such as launching or focusing apps, reading Calendar or Reminders, capturing screens, and interacting through the accessibility tree. Desktop `navigate` opens the URL in the OS default browser; use it when the user explicitly requests an external/system browser or capability context says that browser is preferred. Opening does not by itself confirm that the browser is controllable. Use the separate `browser` tool for bigbud\'s built-in browser. Do not assume CLI tools or direct app APIs are unavailable before trying this tool. Read-only actions (capture, list_windows, list_apps, check_permissions, doctor, get_accessibility_tree) work in any runtime mode. Mutating actions require full-access runtime mode.';
 
+export const GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION =
+  "Read a current, bounded snapshot of the desktop app's machine resources from bigbud's Rust monitor. Returns host identity, sample time, freshness, metric availability, CPU, memory, network, and disk summary. Returns unavailable when the desktop monitor is absent. Read-only; call when system state is relevant.";
+
 export function resolveOrchestrationBridgeHost(host: string | undefined): string {
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
     return "127.0.0.1";

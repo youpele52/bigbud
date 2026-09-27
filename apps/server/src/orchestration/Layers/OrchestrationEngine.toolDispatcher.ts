@@ -21,6 +21,7 @@ import {
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
+import { getSystemResources } from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import type { ProjectionKanbanRepositoryShape } from "../../persistence/Services/ProjectionKanban.ts";
 import type { ProjectionNoteRepositoryShape } from "../../persistence/Services/ProjectionNotes.ts";
@@ -49,6 +50,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
   readonly visibleBrowser: VisibleBrowserControlShape;
 }) {
   setThreadOrchestrationToolDispatcher({
+    getSystemResources,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({
