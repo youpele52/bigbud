@@ -6,6 +6,7 @@ import {
   GlobeIcon,
   NotebookTextIcon,
   TerminalIcon,
+  ActivityIcon,
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
@@ -19,6 +20,7 @@ export type LauncherToolKind =
   | "git"
   | "kanban"
   | "notes"
+  | "system"
   | "terminal";
 
 interface LauncherCardProps {
@@ -90,6 +92,7 @@ interface RightPanelLauncherProps {
   onToggleGit: () => void;
   onToggleKanban: () => void;
   onToggleNotes: () => void;
+  onToggleSystem: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -110,6 +113,7 @@ export function RightPanelLauncher({
   onToggleGit,
   onToggleKanban,
   onToggleNotes,
+  onToggleSystem,
   onToggleTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -149,6 +153,14 @@ export function RightPanelLauncher({
           label="Kanban"
           onSelect={onToggleKanban}
           shortcutLabel={kanbanShortcutLabel ?? null}
+        />
+        <LauncherCard
+          description="See this computer's resources"
+          icon={ActivityIcon}
+          kind="system"
+          label="System"
+          onSelect={onToggleSystem}
+          shortcutLabel={null}
         />
         <LauncherCard
           description="Start an interactive shell"

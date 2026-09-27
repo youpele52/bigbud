@@ -9,6 +9,7 @@ export type RightPanelTabKind =
   | "git"
   | "kanban"
   | "notes"
+  | "system"
   | "terminal";
 export type RightPanelTabId = RightPanelTabKind | `browser:${string}`;
 

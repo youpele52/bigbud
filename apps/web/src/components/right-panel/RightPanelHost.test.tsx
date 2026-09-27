@@ -7,11 +7,11 @@ const browserPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<stri
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
-    activeKind: "browser" | "diff" | "files" | "git" | "notes" | "terminal" | null;
+    activeKind: "browser" | "diff" | "files" | "git" | "notes" | "system" | "terminal" | null;
     activeTabId: string | null;
     openTabs: ReadonlyArray<string>;
     rightPanelOpen: boolean;
-    lastActiveKind: "browser" | "diff" | "files" | "git" | "notes" | "terminal" | null;
+    lastActiveKind: "browser" | "diff" | "files" | "git" | "notes" | "system" | "terminal" | null;
   };
 
   let state: RightPanelTabsState = {
@@ -111,6 +111,12 @@ vi.mock("../terminal/TerminalPanel", () => ({
 
 vi.mock("../notes/NotesPanel", () => ({
   NotesPanelContent: () => <div data-testid="notes-panel">notes</div>,
+}));
+
+vi.mock("../resource-monitor/SystemPanel", () => ({
+  SystemPanel: ({ visible }: { visible: boolean }) => (
+    <div data-testid="system-panel">{String(visible)}</div>
+  ),
 }));
 
 vi.mock("../diff/DiffPanel", () => ({
@@ -235,5 +241,17 @@ describe("RightPanelHost", () => {
 
     expect(launcherPropsMock.props).not.toBeNull();
     expect(launcherPropsMock.props?.onToggleBrowser).toBe(openNewBrowserTabMock);
+  });
+
+  it("renders System without an active thread", () => {
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "system",
+      activeTabId: "system",
+      openTabs: ["system"],
+      rightPanelOpen: true,
+      lastActiveKind: "system",
+    });
+    const markup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(markup).toContain('data-testid="system-panel">true');
   });
 });

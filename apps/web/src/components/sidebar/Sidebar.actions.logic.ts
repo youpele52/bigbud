@@ -3,19 +3,21 @@ export const SIDEBAR_ACTION_IDS = [
   "scheduled",
   "games",
   "usage",
+  "resource-monitor",
   "pinned",
   "chats",
   "projects",
   "remote-projects",
 ] as const;
 export type SidebarActionId = (typeof SIDEBAR_ACTION_IDS)[number];
-export const SIDEBAR_PRIMARY_GROUP_SIZE = 4;
+export const SIDEBAR_PRIMARY_GROUP_SIZE = 5;
 
 export const SIDEBAR_ACTION_LABELS: Record<SidebarActionId, string> = {
   plugins: "Plugins",
   scheduled: "Scheduled",
   games: "Games",
   usage: "Usage",
+  "resource-monitor": "Resource monitor",
   pinned: "Pinned",
   chats: "Chats",
   projects: "Projects",
@@ -28,7 +30,20 @@ export function isSidebarActionId(value: unknown): value is SidebarActionId {
 
 export function sanitizeSidebarActionOrder(value: unknown): SidebarActionId[] {
   const saved = Array.isArray(value) ? value.filter(isSidebarActionId) : [];
-  return [...new Set(saved), ...SIDEBAR_ACTION_IDS.filter((id) => !saved.includes(id))];
+  const order = [...new Set(saved)];
+  for (const id of SIDEBAR_ACTION_IDS) {
+    if (order.includes(id)) continue;
+    if (id === "resource-monitor") {
+      // Existing saved orders predate this item; keep it beside Usage on upgrade.
+      const usageIndex = order.indexOf("usage");
+      if (usageIndex >= 0) {
+        order.splice(usageIndex + 1, 0, id);
+        continue;
+      }
+    }
+    order.push(id);
+  }
+  return order;
 }
 
 export function sanitizeHiddenSidebarActions(value: unknown): SidebarActionId[] {

@@ -32,6 +32,7 @@ import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { RightPanelShell } from "./RightPanelShell";
 import { RightPanelTabs } from "./RightPanelTabs";
+import { SystemPanel } from "../resource-monitor/SystemPanel";
 import { useRightPanelWidth } from "./useRightPanelWidth";
 
 interface RightPanelHostProps {
@@ -65,6 +66,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
+  const openSystem = () => useRightPanelTabsStore.getState().openTab("system");
+  const closeSystem = () => useRightPanelTabsStore.getState().closeTab("system");
 
   return (
     <RightPanelShell
@@ -89,6 +92,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onCloseGit={closeGitPanel}
         onCloseKanban={closeKanbanPanel}
         onCloseNotes={closeNotesPanel}
+        onCloseSystem={closeSystem}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
@@ -96,6 +100,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onOpenGit={openGitPanel}
         onOpenKanban={openKanbanPanel}
         onOpenNotes={openNotesPanel}
+        onOpenSystem={openSystem}
         onOpenTerminal={openTerminalPanel}
         notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
@@ -120,6 +125,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   onToggleGit={openGitPanel}
                   onToggleKanban={openKanbanPanel}
                   onToggleNotes={openNotesPanel}
+                  onToggleSystem={openSystem}
                   onToggleTerminal={openTerminalPanel}
                   notesShortcutLabel={notesShortcutLabel}
                   terminalAvailable={Boolean(workspaceRoot)}
@@ -130,6 +136,21 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
             {openTabs.map((tabId) => {
               const kind = getRightPanelTabKind(tabId);
               const isActive = activeTabId === tabId && rightPanelOpen;
+
+              if (kind === "system") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-col overflow-auto",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    inert={!isActive ? true : undefined}
+                  >
+                    <SystemPanel visible={isActive} />
+                  </div>
+                );
+              }
 
               if (kind === "browser") {
                 return (

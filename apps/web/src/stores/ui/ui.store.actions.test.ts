@@ -39,6 +39,7 @@ describe("sidebar action persistence", () => {
         ...initialState,
         sidebarActionOrder: [
           "usage",
+          "resource-monitor",
           "games",
           "scheduled",
           "plugins",
@@ -52,6 +53,7 @@ describe("sidebar action persistence", () => {
       expect(readPersistedState()).toMatchObject({
         sidebarActionOrder: [
           "usage",
+          "resource-monitor",
           "games",
           "scheduled",
           "plugins",

@@ -5,6 +5,7 @@ import {
   PlugIcon,
   SearchIcon,
   SquarePenIcon,
+  ActivityIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -48,6 +49,7 @@ interface SidebarActionsSectionProps {
   newThreadShortcutLabel: string | null | undefined;
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
+  onOpenResourceMonitor: () => void;
   onOpenPlugins?: () => void;
   onOpenGames: () => void;
   sections: Partial<
@@ -55,7 +57,13 @@ interface SidebarActionsSectionProps {
   >;
 }
 
-const ICONS = { plugins: PlugIcon, scheduled: ClockIcon, games: Gamepad2, usage: BarChart3Icon };
+const ICONS = {
+  plugins: PlugIcon,
+  scheduled: ClockIcon,
+  games: Gamepad2,
+  usage: BarChart3Icon,
+  "resource-monitor": ActivityIcon,
+};
 const ROW_CLASS =
   "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const sidebarCollisionDetection: CollisionDetection = (args) => {
@@ -165,6 +173,7 @@ export function SidebarActionsSection({
   newThreadShortcutLabel,
   onOpenAutomations,
   onOpenUsage,
+  onOpenResourceMonitor,
   onOpenPlugins,
   onOpenGames,
   sections,
@@ -184,6 +193,7 @@ export function SidebarActionsSection({
     scheduled: onOpenAutomations,
     games: onOpenGames,
     usage: onOpenUsage,
+    "resource-monitor": onOpenResourceMonitor,
   };
 
   const showMissingGitPrompt = () => {

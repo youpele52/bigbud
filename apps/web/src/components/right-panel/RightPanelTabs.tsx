@@ -7,6 +7,7 @@ import {
   GlobeIcon,
   NotebookTextIcon,
   PlusIcon,
+  ActivityIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
@@ -33,6 +34,7 @@ const TAB_LABELS: Record<RightPanelTabKind, string> = {
   git: "Git",
   kanban: "Kanban",
   notes: "Notes",
+  system: "System",
   terminal: "Terminal",
 };
 
@@ -43,6 +45,7 @@ const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: str
   git: GitBranchIcon,
   kanban: Columns3Icon,
   notes: NotebookTextIcon,
+  system: ActivityIcon,
   terminal: TerminalIcon,
 };
 
@@ -61,6 +64,7 @@ interface RightPanelTabsProps {
   onCloseGit?: () => void;
   onCloseKanban?: () => void;
   onCloseNotes?: () => void;
+  onCloseSystem: () => void;
   onCloseTerminal: () => void;
   onOpenNewBrowserTab: () => void;
   onOpenDiff?: () => void;
@@ -68,6 +72,7 @@ interface RightPanelTabsProps {
   onOpenGit?: () => void;
   onOpenKanban?: () => void;
   onOpenNotes?: () => void;
+  onOpenSystem: () => void;
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -149,6 +154,7 @@ export function RightPanelTabs({
   onCloseGit,
   onCloseKanban,
   onCloseNotes,
+  onCloseSystem,
   onCloseTerminal,
   onOpenNewBrowserTab,
   onOpenDiff,
@@ -156,6 +162,7 @@ export function RightPanelTabs({
   onOpenGit,
   onOpenKanban,
   onOpenNotes,
+  onOpenSystem,
   onOpenTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -198,6 +205,9 @@ export function RightPanelTabs({
         break;
       case "notes":
         onCloseNotes?.();
+        break;
+      case "system":
+        onCloseSystem();
         break;
       case "terminal":
         onCloseTerminal();
@@ -367,6 +377,7 @@ export function RightPanelTabs({
             onSelect={onOpenTerminal}
             shortcutLabel={terminalShortcutLabel}
           />
+          <TabMenuItem kind="system" onSelect={onOpenSystem} shortcutLabel={null} />
           {onOpenGit && isGitRepo ? (
             <MenuItem onClick={onOpenGit}>
               <GitBranchIcon className="size-3.5" />

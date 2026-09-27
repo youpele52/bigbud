@@ -21,11 +21,13 @@ import { Route as SettingsArchivedRouteImport } from './routes/settings.archived
 import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as SettingsAboutRouteImport } from './routes/settings.about'
 import { Route as ChatUsageRouteImport } from './routes/_chat.usage'
+import { Route as ChatResourceMonitorRouteImport } from './routes/_chat.resource-monitor'
 import { Route as ChatPluginsRouteImport } from './routes/_chat.plugins'
 import { Route as ChatGamesRouteImport } from './routes/_chat.games'
 import { Route as ChatAutomationsRouteImport } from './routes/_chat.automations'
 import { Route as ChatThreadIdRouteImport } from './routes/_chat.$threadId'
 import { Route as ChatUsageIndexRouteImport } from './routes/_chat.usage.index'
+import { Route as ChatResourceMonitorIndexRouteImport } from './routes/_chat.resource-monitor.index'
 import { Route as ChatPluginsIndexRouteImport } from './routes/_chat.plugins.index'
 import { Route as ChatGamesIndexRouteImport } from './routes/_chat.games.index'
 import { Route as ChatAutomationsIndexRouteImport } from './routes/_chat.automations.index'
@@ -91,6 +93,11 @@ const ChatUsageRoute = ChatUsageRouteImport.update({
   path: '/usage',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatResourceMonitorRoute = ChatResourceMonitorRouteImport.update({
+  id: '/resource-monitor',
+  path: '/resource-monitor',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatPluginsRoute = ChatPluginsRouteImport.update({
   id: '/plugins',
   path: '/plugins',
@@ -116,6 +123,12 @@ const ChatUsageIndexRoute = ChatUsageIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatUsageRoute,
 } as any)
+const ChatResourceMonitorIndexRoute =
+  ChatResourceMonitorIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ChatResourceMonitorRoute,
+  } as any)
 const ChatPluginsIndexRoute = ChatPluginsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -150,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/automations': typeof ChatAutomationsRouteWithChildren
   '/games': typeof ChatGamesRouteWithChildren
   '/plugins': typeof ChatPluginsRouteWithChildren
+  '/resource-monitor': typeof ChatResourceMonitorRouteWithChildren
   '/usage': typeof ChatUsageRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
   '/settings/ai': typeof SettingsAiRoute
@@ -164,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/automations/': typeof ChatAutomationsIndexRoute
   '/games/': typeof ChatGamesIndexRoute
   '/plugins/': typeof ChatPluginsIndexRoute
+  '/resource-monitor/': typeof ChatResourceMonitorIndexRoute
   '/usage/': typeof ChatUsageIndexRoute
 }
 export interface FileRoutesByTo {
@@ -183,6 +198,7 @@ export interface FileRoutesByTo {
   '/automations': typeof ChatAutomationsIndexRoute
   '/games': typeof ChatGamesIndexRoute
   '/plugins': typeof ChatPluginsIndexRoute
+  '/resource-monitor': typeof ChatResourceMonitorIndexRoute
   '/usage': typeof ChatUsageIndexRoute
 }
 export interface FileRoutesById {
@@ -193,6 +209,7 @@ export interface FileRoutesById {
   '/_chat/automations': typeof ChatAutomationsRouteWithChildren
   '/_chat/games': typeof ChatGamesRouteWithChildren
   '/_chat/plugins': typeof ChatPluginsRouteWithChildren
+  '/_chat/resource-monitor': typeof ChatResourceMonitorRouteWithChildren
   '/_chat/usage': typeof ChatUsageRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
   '/settings/ai': typeof SettingsAiRoute
@@ -208,6 +225,7 @@ export interface FileRoutesById {
   '/_chat/automations/': typeof ChatAutomationsIndexRoute
   '/_chat/games/': typeof ChatGamesIndexRoute
   '/_chat/plugins/': typeof ChatPluginsIndexRoute
+  '/_chat/resource-monitor/': typeof ChatResourceMonitorIndexRoute
   '/_chat/usage/': typeof ChatUsageIndexRoute
 }
 export interface FileRouteTypes {
@@ -219,6 +237,7 @@ export interface FileRouteTypes {
     | '/automations'
     | '/games'
     | '/plugins'
+    | '/resource-monitor'
     | '/usage'
     | '/settings/about'
     | '/settings/ai'
@@ -233,6 +252,7 @@ export interface FileRouteTypes {
     | '/automations/'
     | '/games/'
     | '/plugins/'
+    | '/resource-monitor/'
     | '/usage/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -252,6 +272,7 @@ export interface FileRouteTypes {
     | '/automations'
     | '/games'
     | '/plugins'
+    | '/resource-monitor'
     | '/usage'
   id:
     | '__root__'
@@ -261,6 +282,7 @@ export interface FileRouteTypes {
     | '/_chat/automations'
     | '/_chat/games'
     | '/_chat/plugins'
+    | '/_chat/resource-monitor'
     | '/_chat/usage'
     | '/settings/about'
     | '/settings/ai'
@@ -276,6 +298,7 @@ export interface FileRouteTypes {
     | '/_chat/automations/'
     | '/_chat/games/'
     | '/_chat/plugins/'
+    | '/_chat/resource-monitor/'
     | '/_chat/usage/'
   fileRoutesById: FileRoutesById
 }
@@ -370,6 +393,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatUsageRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/resource-monitor': {
+      id: '/_chat/resource-monitor'
+      path: '/resource-monitor'
+      fullPath: '/resource-monitor'
+      preLoaderRoute: typeof ChatResourceMonitorRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/plugins': {
       id: '/_chat/plugins'
       path: '/plugins'
@@ -404,6 +434,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/usage/'
       preLoaderRoute: typeof ChatUsageIndexRouteImport
       parentRoute: typeof ChatUsageRoute
+    }
+    '/_chat/resource-monitor/': {
+      id: '/_chat/resource-monitor/'
+      path: '/'
+      fullPath: '/resource-monitor/'
+      preLoaderRoute: typeof ChatResourceMonitorIndexRouteImport
+      parentRoute: typeof ChatResourceMonitorRoute
     }
     '/_chat/plugins/': {
       id: '/_chat/plugins/'
@@ -483,6 +520,17 @@ const ChatPluginsRouteWithChildren = ChatPluginsRoute._addFileChildren(
   ChatPluginsRouteChildren,
 )
 
+interface ChatResourceMonitorRouteChildren {
+  ChatResourceMonitorIndexRoute: typeof ChatResourceMonitorIndexRoute
+}
+
+const ChatResourceMonitorRouteChildren: ChatResourceMonitorRouteChildren = {
+  ChatResourceMonitorIndexRoute: ChatResourceMonitorIndexRoute,
+}
+
+const ChatResourceMonitorRouteWithChildren =
+  ChatResourceMonitorRoute._addFileChildren(ChatResourceMonitorRouteChildren)
+
 interface ChatUsageRouteChildren {
   ChatUsageIndexRoute: typeof ChatUsageIndexRoute
 }
@@ -500,6 +548,7 @@ interface ChatRouteChildren {
   ChatAutomationsRoute: typeof ChatAutomationsRouteWithChildren
   ChatGamesRoute: typeof ChatGamesRouteWithChildren
   ChatPluginsRoute: typeof ChatPluginsRouteWithChildren
+  ChatResourceMonitorRoute: typeof ChatResourceMonitorRouteWithChildren
   ChatUsageRoute: typeof ChatUsageRouteWithChildren
   ChatIndexRoute: typeof ChatIndexRoute
 }
@@ -509,6 +558,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatAutomationsRoute: ChatAutomationsRouteWithChildren,
   ChatGamesRoute: ChatGamesRouteWithChildren,
   ChatPluginsRoute: ChatPluginsRouteWithChildren,
+  ChatResourceMonitorRoute: ChatResourceMonitorRouteWithChildren,
   ChatUsageRoute: ChatUsageRouteWithChildren,
   ChatIndexRoute: ChatIndexRoute,
 }

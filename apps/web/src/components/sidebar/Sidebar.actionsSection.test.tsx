@@ -26,6 +26,7 @@ vi.mock("../../stores/ui/ui.store", () => ({
         "scheduled",
         "games",
         "usage",
+        "resource-monitor",
         "pinned",
         "chats",
         "projects",
@@ -69,6 +70,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
       newThreadShortcutLabel={newThreadShortcutLabel}
       onOpenAutomations={vi.fn()}
       onOpenUsage={vi.fn()}
+      onOpenResourceMonitor={vi.fn()}
       onOpenGames={vi.fn()}
       sections={{
         pinned: () => <div>Pinned section</div>,
@@ -85,7 +87,8 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
     expect(html).toContain('data-sidebar-visual-group="primary"');
     expect(html).toContain('data-sidebar-visual-group="secondary"');
-    expect(html.indexOf("Usage")).toBeLessThan(
+    expect(html.indexOf("Usage")).toBeLessThan(html.indexOf("Resource monitor"));
+    expect(html.indexOf("Resource monitor")).toBeLessThan(
       html.indexOf('data-sidebar-visual-group="secondary"'),
     );
     expect(html.indexOf("Pinned section")).toBeGreaterThan(
@@ -139,6 +142,7 @@ describe("SidebarActionsSection", () => {
     expect(html).toContain("Search");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Usage");
+    expect(html).toContain("Resource monitor");
     expect(html.indexOf('aria-label="Open scheduled"')).toBeLessThan(
       html.indexOf('aria-label="Open games"'),
     );
@@ -183,6 +187,6 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
 
     expect(html).toContain('class="group flex h-7 w-full items-center');
-    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(6);
+    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(7);
   });
 });

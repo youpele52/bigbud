@@ -10,7 +10,17 @@ import {
 describe("sidebar action preferences", () => {
   it("restores a valid saved order and appends new actions", () => {
     expect(sanitizeSidebarActionOrder(["usage", "plugins", "usage", "new-chat", "search"])).toEqual(
-      ["usage", "plugins", "scheduled", "games", "pinned", "chats", "projects", "remote-projects"],
+      [
+        "usage",
+        "resource-monitor",
+        "plugins",
+        "scheduled",
+        "games",
+        "pinned",
+        "chats",
+        "projects",
+        "remote-projects",
+      ],
     );
   });
 
@@ -21,6 +31,7 @@ describe("sidebar action preferences", () => {
         "scheduled",
         "games",
         "usage",
+        "resource-monitor",
         "pinned",
         "chats",
         "projects",
@@ -33,6 +44,7 @@ describe("sidebar action preferences", () => {
       "scheduled",
       "games",
       "usage",
+      "resource-monitor",
       "pinned",
       "chats",
       "projects",
@@ -58,10 +70,10 @@ describe("sidebar action preferences", () => {
     ).toEqual(["plugins", "usage", "scheduled", "games"]);
   });
 
-  it("keeps four ordered slots in each visual group when items move or hide", () => {
+  it("keeps Resource monitor in the default first group after Usage", () => {
     const initial = sanitizeSidebarActionOrder([]);
     expect(sidebarVisualGroups(initial, initial)).toEqual({
-      primary: ["plugins", "scheduled", "games", "usage"],
+      primary: ["plugins", "scheduled", "games", "usage", "resource-monitor"],
       secondary: ["pinned", "chats", "projects", "remote-projects"],
     });
     const moved = reorderSidebarAction(initial, "pinned", "scheduled");
@@ -70,13 +82,14 @@ describe("sidebar action preferences", () => {
       "pinned",
       "scheduled",
       "games",
+      "usage",
     ]);
-    expect(sidebarVisualGroups(moved, moved).secondary[0]).toBe("usage");
+    expect(sidebarVisualGroups(moved, moved).secondary[0]).toBe("resource-monitor");
     expect(
       sidebarVisualGroups(
         moved,
         moved.filter((id) => id !== "scheduled"),
       ).primary,
-    ).toEqual(["plugins", "pinned", "games"]);
+    ).toEqual(["plugins", "pinned", "games", "usage"]);
   });
 });
