@@ -50,6 +50,16 @@ describe("system monitor IPC authorization", () => {
     expect(() =>
       handler({ sender }, { name: "x".repeat(257), sort: "cpu", descending: true, limit: 100 }),
     ).toThrow("filter");
+    expect(() =>
+      handler({ sender }, { search: "🔥".repeat(65), sort: "cpu", descending: true, limit: 100 }),
+    ).toThrow("filter");
     expect(bridge.query).not.toHaveBeenCalled();
+    handler({ sender }, { search: "run", sort: "cpu", descending: true, limit: 100 });
+    expect(bridge.query).toHaveBeenCalledWith({
+      search: "run",
+      sort: "cpu",
+      descending: true,
+      limit: 100,
+    });
   });
 });

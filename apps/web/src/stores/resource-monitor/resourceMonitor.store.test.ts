@@ -21,6 +21,8 @@ const base: MonitorSnapshot = {
   sensorsTruncated: false,
   cpuPercent: { value: 25, status: "ready", sampledAtMs: 1000 },
   perCorePercent: [],
+  networkReceivedBytesPerSecond: { value: 1024, status: "ready", sampledAtMs: 1000 },
+  networkTransmittedBytesPerSecond: { value: 512, status: "ready", sampledAtMs: 1000 },
   temperaturesCelsius: [],
   processStatus: "warming",
   summaryStatus: "ready",
@@ -117,6 +119,10 @@ describe("resource monitor subscription", () => {
     expect(useResourceMonitorStore.getState().collectionStatus?.state).toBe("healthy");
     listener?.({ type: "snapshot", snapshot: { ...base, sequence: 2, baseline: false } });
     expect(useResourceMonitorStore.getState().history.cpu).toHaveLength(2);
+    expect(useResourceMonitorStore.getState().history.network).toMatchObject([
+      { sequence: 1, value: 1024, sentValue: -512 },
+      { sequence: 2, value: 1024, sentValue: -512 },
+    ]);
     listener?.({
       type: "snapshot",
       snapshot: { ...base, sequence: 3, baseline: false, summaryStatus: "stale" },

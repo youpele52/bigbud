@@ -17,7 +17,7 @@ describe("ResourceHostExtras", () => {
     const markup = renderToStaticMarkup(<ResourceHostExtras snapshot={snapshot} />);
     expect(markup).toContain("Darwin 25");
     expect(markup).toContain("Example CPU");
-    expect(markup).toContain("3200 MHz");
+    expect(markup).toContain("3200.00 MHz");
     expect(markup).toContain("1.25 / unsupported / unsupported");
     expect(markup).toContain("Physical cores: unavailable");
   });

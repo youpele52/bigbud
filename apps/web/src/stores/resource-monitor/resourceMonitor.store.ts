@@ -8,7 +8,8 @@ import { create } from "zustand";
 
 export interface HistoryPoint {
   sequence: number;
-  value: number;
+  value: number | null;
+  sentValue?: number | null;
 }
 export interface MonitorState {
   snapshot: MonitorSnapshot | null;
@@ -64,6 +65,27 @@ function append(
   return [...points.slice(-299), { sequence, value }];
 }
 
+function appendNetwork(
+  points: HistoryPoint[],
+  received: number | undefined,
+  transmitted: number | undefined,
+  sequence: number,
+): HistoryPoint[] {
+  const safeReceived = received !== undefined && Number.isFinite(received) ? received : undefined;
+  const safeTransmitted =
+    transmitted !== undefined && Number.isFinite(transmitted) ? transmitted : undefined;
+  if (safeReceived === undefined && safeTransmitted === undefined) return points;
+  return [
+    ...points.slice(-299),
+    {
+      sequence,
+      value: safeReceived ?? null,
+      // Negative sent values plot below the chart's zero baseline.
+      sentValue: safeTransmitted === undefined ? null : -safeTransmitted,
+    },
+  ];
+}
+
 function acceptSnapshot(snapshot: MonitorSnapshot) {
   if (subscriptionId === null) {
     if (consumers.size > 0) pendingSnapshot = snapshot;
@@ -81,7 +103,8 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
       snapshot.summaryStatus !== "stale" &&
       snapshot.cpuPercent?.status !== "stale" &&
       snapshot.memoryUsedBytes?.status !== "stale" &&
-      snapshot.networkReceivedBytesPerSecond?.status !== "stale";
+      snapshot.networkReceivedBytesPerSecond?.status !== "stale" &&
+      snapshot.networkTransmittedBytesPerSecond?.status !== "stale";
     const history = continuous ? state.history : EMPTY_HISTORY;
     return {
       snapshot,
@@ -98,10 +121,13 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
           snapshot.memoryUsedBytes?.status === "ready" ? snapshot.memoryUsedBytes.value : undefined,
           snapshot.sequence,
         ),
-        network: append(
+        network: appendNetwork(
           history.network,
           snapshot.networkReceivedBytesPerSecond?.status === "ready"
             ? snapshot.networkReceivedBytesPerSecond.value
+            : undefined,
+          snapshot.networkTransmittedBytesPerSecond?.status === "ready"
+            ? snapshot.networkTransmittedBytesPerSecond.value
             : undefined,
           snapshot.sequence,
         ),

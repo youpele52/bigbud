@@ -5,7 +5,7 @@ import type {
 } from "@bigbud/contracts/system-monitor/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { formatBytes } from "./resourceMonitor.format";
+import { formatBytes, formatDecimal } from "./resourceMonitor.format";
 
 function showMetric(metric: MonitorMetric | undefined, format: (value: number) => string): string {
   return metric?.status === "ready" ? format(metric.value) : (metric?.status ?? "unavailable");
@@ -32,7 +32,7 @@ export function ResourceNetworkInterfaces({
               <p className="truncate font-medium">{item.name}</p>
               <p className="text-xs text-muted-foreground">
                 Link: {showLinkState(item.linkState)} · MTU:{" "}
-                {showMetric(item.mtuBytes, (value) => `${value} B`)}
+                {showMetric(item.mtuBytes, (value) => `${formatDecimal(value)} B`)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Received{" "}

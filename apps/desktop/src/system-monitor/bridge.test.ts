@@ -12,7 +12,7 @@ vi.mock("../env/pathResolver", () => ({
 }));
 import { SystemMonitorBridge } from "./bridge";
 
-function fakeChild() {
+function fakeChild(minor = 2) {
   const child = new EventEmitter() as EventEmitter & {
     stdin: { writable: boolean; write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
     stdout: EventEmitter;
@@ -34,7 +34,7 @@ function fakeChild() {
         queueMicrotask(() =>
           child.stdout.emit(
             "data",
-            Buffer.from([0, 0, 0, 12, 18, 10, 8, 1, 24, 128, 128, 8, 32, 2, 40, 1]),
+            Buffer.from([0, 0, 0, 14, 18, 12, 8, 1, 16, minor, 24, 128, 128, 8, 32, 2, 40, 1]),
           ),
         );
       } else if (bytes[4] === 82) {
@@ -76,6 +76,14 @@ describe("SystemMonitorBridge", () => {
       ["--system-monitor"],
       expect.any(Object),
     );
+    bridge.stop();
+  });
+  it.each([0, 1])("rejects protocol 1.%i and terminates the incompatible child", async (minor) => {
+    const child = fakeChild(minor);
+    mocks.spawn.mockReturnValue(child);
+    const bridge = new SystemMonitorBridge(true);
+    await expect(bridge.retry()).rejects.toThrow("monitor protocol mismatch");
+    expect(child.kill).toHaveBeenCalledOnce();
     bridge.stop();
   });
   it("handshakes in the dedicated mode and tears down on process exit", async () => {

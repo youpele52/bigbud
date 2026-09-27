@@ -14,7 +14,9 @@ describe("ResourceDetailPreferences", () => {
   it("uses labeled native checkboxes for keyboard-accessible detail controls", () => {
     const markup = renderToStaticMarkup(<ResourceDetailPreferences />);
     expect(markup).toContain('aria-label="Customize resource details"');
-    expect(markup.match(/type="checkbox"/g)).toHaveLength(7);
+    expect(markup.match(/type="checkbox"/g)).toHaveLength(9);
+    expect(markup).toContain("IP address");
+    expect(markup).toContain("Host details");
     expect(markup).toContain("Disk details");
     expect(markup).toContain("Temperatures");
     expect(markup).toContain("Processes");

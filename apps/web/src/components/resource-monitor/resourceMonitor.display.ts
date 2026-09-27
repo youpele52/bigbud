@@ -36,6 +36,7 @@ export function displayWidget(
         label: "CPU",
         value: show(snapshot.cpuPercent, formatPercent),
         status: status(snapshot.cpuPercent),
+        historyValueFormatter: formatPercent,
         ...(snapshot.perCorePercent.length
           ? { detail: `${snapshot.perCorePercent.length} logical cores` }
           : {}),
@@ -45,6 +46,7 @@ export function displayWidget(
         label: "Memory",
         value: show(snapshot.memoryUsedBytes, formatBytes),
         status: status(snapshot.memoryUsedBytes),
+        historyValueFormatter: formatBytes,
         detail: `${show(snapshot.memoryTotalBytes, formatBytes)} total · ${show(snapshot.swapUsedBytes, formatBytes)} swap used`,
       };
     case "disk": {
@@ -67,10 +69,11 @@ export function displayWidget(
       return {
         label: "Network",
         value: `↓ ${show(snapshot.networkReceivedBytesPerSecond, formatRate)} · ↑ ${show(snapshot.networkTransmittedBytesPerSecond, formatRate)}`,
+        historyValueFormatter: formatRate,
+        historyStyle: "network",
         status:
-          snapshot.networkReceivedBytesPerSecond?.status === "ready" &&
-          snapshot.networkTransmittedBytesPerSecond?.status === "ready"
-            ? "ready"
+          snapshot.networkReceivedBytesPerSecond?.status === "ready"
+            ? status(snapshot.networkTransmittedBytesPerSecond)
             : status(snapshot.networkReceivedBytesPerSecond),
       };
     case "temperature": {

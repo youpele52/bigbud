@@ -8,6 +8,7 @@ import type {
   MonitorEvent,
   MonitorProcessPage,
   MonitorProcessQuery,
+  MonitorSnapshot,
 } from "@bigbud/contracts/system-monitor/types";
 import { resolvePackagedDesktopSupervisorBinary } from "../env/pathResolver";
 import { decodeEvent, encodeCommand, frameBytes, MAX_FRAME_BYTES } from "./wire";
@@ -33,6 +34,11 @@ export class SystemMonitorBridge {
   private ready = false;
   private closing = false;
   private subscribers = new Set<WebContents>();
+  private snapshotWaiters = new Map<
+    number,
+    { resolve: (snapshot: MonitorSnapshot) => void; reject: (error: Error) => void }
+  >();
+  private earlySnapshots = new Map<number, MonitorSnapshot>();
 
   constructor(private readonly packaged: boolean) {}
 
@@ -91,6 +97,7 @@ export class SystemMonitorBridge {
     if (
       event.type !== "helloAck" ||
       event.major !== 1 ||
+      event.minor < 2 ||
       event.maximumFrameBytes !== MAX_FRAME_BYTES
     ) {
       this.fail("monitor protocol mismatch");
@@ -123,6 +130,17 @@ export class SystemMonitorBridge {
     }
   }
   private onEvent(event: MonitorEvent): void {
+    if (event.type === "snapshot") {
+      const waiter = this.snapshotWaiters.get(event.snapshot.subscriptionId);
+      if (waiter) waiter.resolve(event.snapshot);
+      else {
+        this.earlySnapshots.delete(event.snapshot.subscriptionId);
+        this.earlySnapshots.set(event.snapshot.subscriptionId, event.snapshot);
+        if (this.earlySnapshots.size > MAX_IN_FLIGHT) {
+          this.earlySnapshots.delete(this.earlySnapshots.keys().next().value!);
+        }
+      }
+    }
     const id =
       event.type === "subscribeAck" || event.type === "retryAck"
         ? event.requestId
@@ -183,10 +201,49 @@ export class SystemMonitorBridge {
     if (event.type !== "subscribeAck") throw new Error("monitor subscribe failed");
     return event.subscriptionId;
   }
+  async readSnapshot(): Promise<MonitorSnapshot> {
+    const subscriptionId = await this.subscribe({ processes: false, disks: false, sensors: false });
+    try {
+      const early = this.earlySnapshots.get(subscriptionId);
+      if (early) {
+        this.ack(subscriptionId, early.epoch, early.sequence);
+        return early;
+      }
+      const snapshot = await new Promise<MonitorSnapshot>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.snapshotWaiters.delete(subscriptionId);
+          reject(new Error("monitor snapshot timeout"));
+        }, 3_000);
+        this.snapshotWaiters.set(subscriptionId, {
+          resolve: (value) => {
+            clearTimeout(timeout);
+            this.snapshotWaiters.delete(subscriptionId);
+            resolve(value);
+          },
+          reject: (error) => {
+            clearTimeout(timeout);
+            this.snapshotWaiters.delete(subscriptionId);
+            reject(error);
+          },
+        });
+      });
+      this.ack(subscriptionId, snapshot.epoch, snapshot.sequence);
+      return snapshot;
+    } finally {
+      this.snapshotWaiters.delete(subscriptionId);
+      this.earlySnapshots.delete(subscriptionId);
+      try {
+        this.unsubscribe(subscriptionId);
+      } catch {
+        // A disconnected child has already released its subscriptions.
+      }
+    }
+  }
   update(subscriptionId: number, demand: MonitorDemand): void {
     this.send({ type: "update", subscriptionId, demand });
   }
   unsubscribe(subscriptionId: number): void {
+    this.earlySnapshots.delete(subscriptionId);
     this.send({ type: "unsubscribe", subscriptionId });
   }
   ack(subscriptionId: number, epoch: number, sequence: number): void {
@@ -226,6 +283,9 @@ export class SystemMonitorBridge {
       pending.reject(new Error(reason));
     }
     this.pending.clear();
+    for (const waiter of this.snapshotWaiters.values()) waiter.reject(new Error(reason));
+    this.snapshotWaiters.clear();
+    this.earlySnapshots.clear();
     if (child && !child.killed) child.kill();
     if (!this.closing) this.emit({ type: "unavailable", reason });
   }
@@ -253,6 +313,9 @@ export class SystemMonitorBridge {
       pending.reject(new Error("monitor stopped"));
     }
     this.pending.clear();
+    for (const waiter of this.snapshotWaiters.values()) waiter.reject(new Error("monitor stopped"));
+    this.snapshotWaiters.clear();
+    this.earlySnapshots.clear();
     this.subscribers.clear();
   }
 }

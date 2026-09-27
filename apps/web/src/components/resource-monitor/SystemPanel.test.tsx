@@ -6,6 +6,7 @@ import { SystemPanel } from "./SystemPanel";
 import { useResourceMonitor } from "./useResourceMonitor";
 
 const mockPreferences = vi.hoisted(() => ({ visible: ["cpu", "memory"] }));
+const mockDetails = vi.hoisted(() => ({ visible: ["ipAddress"] as string[] }));
 
 vi.mock("~/stores/resource-monitor/resourceMonitorPreferences.store", () => ({
   RESOURCE_WIDGETS: ["cpu", "memory", "disk", "network", "temperature"],
@@ -25,6 +26,10 @@ vi.mock("./useResourceMonitor", () => ({
     collectionStatus: null,
   })),
 }));
+vi.mock("~/stores/resource-monitor/resourceMonitorDetails.store", () => ({
+  useResourceDetailPreferences: (selector: (state: { visible: string[] }) => unknown) =>
+    selector(mockDetails),
+}));
 
 describe("SystemPanel", () => {
   it("requests sensors only when its Temperature widget is visible", () => {
@@ -37,5 +42,17 @@ describe("SystemPanel", () => {
     mockPreferences.visible = ["temperature"];
     renderToStaticMarkup(<SystemPanel visible />);
     expect(useResourceMonitor).toHaveBeenLastCalledWith(true, false, true);
+  });
+
+  it("hides the host address line when its detail preference is disabled", () => {
+    const visible = mockDetails.visible;
+    mockDetails.visible = [];
+
+    try {
+      const markup = renderToStaticMarkup(<SystemPanel visible />);
+      expect(markup).not.toContain("Desktop computer · desktop host");
+    } finally {
+      mockDetails.visible = visible;
+    }
   });
 });

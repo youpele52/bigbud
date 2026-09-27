@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 export const RESOURCE_DETAILS = [
+  "ipAddress",
+  "hostDetails",
   "hostExtras",
   "disks",
   "interfaces",
@@ -11,8 +13,12 @@ export const RESOURCE_DETAILS = [
 ] as const;
 export type ResourceDetail = (typeof RESOURCE_DETAILS)[number];
 
-const STORAGE_KEY = "bigbud:resource-monitor-details:v1";
+const STORAGE_KEY = "bigbud:resource-monitor-details:v3";
+const LEGACY_V2_STORAGE_KEY = "bigbud:resource-monitor-details:v2";
+const LEGACY_V1_STORAGE_KEY = "bigbud:resource-monitor-details:v1";
 const DEFAULT_VISIBLE: readonly ResourceDetail[] = [
+  "ipAddress",
+  "hostDetails",
   "hostExtras",
   "disks",
   "interfaces",
@@ -42,10 +48,39 @@ export function parseDetailPreferences(raw: string | null): ResourceDetail[] {
   }
 }
 
+export function migrateLegacyDetailPreferences(raw: string | null): ResourceDetail[] {
+  const details: ResourceDetail[] = ["ipAddress", "hostDetails", ...parseDetailPreferences(raw)];
+  return [...new Set(details)];
+}
+
+export function migrateV2DetailPreferences(raw: string | null): ResourceDetail[] {
+  const details: ResourceDetail[] = ["hostDetails", ...parseDetailPreferences(raw)];
+  return [...new Set(details)];
+}
+
+function persistMigratedPreferences(details: ResourceDetail[]): ResourceDetail[] {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(details));
+  } catch {
+    // Keep migrated preferences available in memory when storage is unavailable.
+  }
+  return details;
+}
+
 function load(): ResourceDetail[] {
   if (typeof window === "undefined") return [...DEFAULT_VISIBLE];
   try {
-    return parseDetailPreferences(window.localStorage.getItem(STORAGE_KEY));
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) return parseDetailPreferences(stored);
+
+    const legacyV2 = window.localStorage.getItem(LEGACY_V2_STORAGE_KEY);
+    if (legacyV2 !== null) return persistMigratedPreferences(migrateV2DetailPreferences(legacyV2));
+
+    const legacyV1 = window.localStorage.getItem(LEGACY_V1_STORAGE_KEY);
+    if (legacyV1 !== null)
+      return persistMigratedPreferences(migrateLegacyDetailPreferences(legacyV1));
+
+    return [...DEFAULT_VISIBLE];
   } catch {
     return [...DEFAULT_VISIBLE];
   }

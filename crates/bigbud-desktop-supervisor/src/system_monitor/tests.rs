@@ -3,7 +3,7 @@ use super::*;
 use v1::frame::Payload;
 
 fn hello() -> v1::Frame {
-    wrap(Payload::Hello(v1::Hello { major: 1, minor: 1 }))
+    wrap(Payload::Hello(v1::Hello { major: 1, minor: 2 }))
 }
 fn subscribe(request_id: u64) -> v1::Frame {
     wrap(Payload::Subscribe(v1::Subscribe {
@@ -23,7 +23,7 @@ fn handshake_subscription_and_ack_deadline() {
     assert!(state.handle(subscribe(1), now).1);
     assert!(matches!(
         state.handle(hello(), now).0[0].payload,
-        Some(Payload::HelloAck(ref ack)) if ack.minor == 1 && ack.architecture.as_deref().is_some_and(|arch| !arch.is_empty())
+        Some(Payload::HelloAck(ref ack)) if ack.minor == 2 && ack.architecture.as_deref().is_some_and(|arch| !arch.is_empty())
     ));
     let response = state.handle(subscribe(1), now).0;
     let id = match &response[0].payload {
@@ -87,6 +87,7 @@ fn subscription_lease_and_query_validation() {
         cursor_generation: 0,
         cursor_digest: 0,
         cursor_offset: 0,
+        search: String::new(),
     };
     let response = state.handle(wrap(Payload::ProcessQuery(query)), now).0;
     assert!(matches!(&response[0].payload, Some(Payload::Error(error)) if error.code == "invalid"));

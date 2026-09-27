@@ -9,6 +9,7 @@ use std::time::Instant;
 pub(super) fn query(service: &mut Service, request: v1::ProcessQuery, now: Instant) -> v1::Frame {
     if request.name.len() > 256
         || request.status.len() > 256
+        || request.search.len() > 256
         || request.limit == 0
         || request.limit > 100
     {
@@ -25,6 +26,7 @@ pub(super) fn query(service: &mut Service, request: v1::ProcessQuery, now: Insta
         name: (!request.name.is_empty()).then_some(request.name),
         pid: request.pid,
         status: (!request.status.is_empty()).then_some(request.status),
+        search: (!request.search.is_empty()).then_some(request.search),
         sort,
         descending: request.descending,
         limit: request.limit as usize,

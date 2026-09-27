@@ -168,6 +168,7 @@ fn monitor_mode_streams_a_snapshot_and_answers_process_query() -> Result<(), Box
                 cursor_generation: 0,
                 cursor_digest: 0,
                 cursor_offset: 0,
+                search: String::new(),
             })),
         },
     )?;

@@ -64,7 +64,7 @@ impl State {
                 return (vec![error(0, 0, "version", "incompatible protocol")], true);
             }
             self.greeted = true;
-            let minor = hello.minor.min(1);
+            let minor = hello.minor.min(2);
             let identity = (minor >= 1).then(host_identity);
             return (
                 vec![

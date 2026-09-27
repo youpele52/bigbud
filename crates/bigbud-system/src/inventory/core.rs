@@ -109,6 +109,7 @@ pub struct Query {
     pub name: Option<String>,
     pub pid: Option<u32>,
     pub status: Option<String>,
+    pub search: Option<String>,
     pub sort: SortKey,
     pub descending: bool,
     pub limit: usize,
@@ -120,6 +121,7 @@ impl Default for Query {
             name: None,
             pid: None,
             status: None,
+            search: None,
             sort: SortKey::Cpu,
             descending: true,
             limit: MAX_PAGE_ROWS,
@@ -297,6 +299,7 @@ fn validate(query: &Query) -> Result<(), QueryError> {
         || query.limit > MAX_PAGE_ROWS
         || query.name.as_ref().is_some_and(|s| s.len() > 256)
         || query.status.as_ref().is_some_and(|s| s.len() > 256)
+        || query.search.as_ref().is_some_and(|s| s.len() > 256)
     {
         Err(QueryError::Invalid)
     } else {
@@ -320,6 +323,12 @@ fn matches_query(row: &ProcessRecord, query: &Query) -> bool {
             .status
             .as_ref()
             .is_none_or(|status| row.status.eq_ignore_ascii_case(status))
+        && query.search.as_ref().is_none_or(|search| {
+            let text = search.to_lowercase();
+            row.name.to_lowercase().contains(&text)
+                || row.status.to_lowercase().contains(&text)
+                || search.parse::<u32>().is_ok_and(|pid| row.pid == pid)
+        })
 }
 
 fn compare(a: &ProcessRecord, b: &ProcessRecord, query: &Query) -> Ordering {

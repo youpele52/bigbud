@@ -72,7 +72,7 @@ export function encodeCommand(
   switch (command.type) {
     case "hello":
       writer.uint(1, 1);
-      writer.uint(2, 1);
+      writer.uint(2, 2);
       field = 1;
       break;
     case "subscribe":
@@ -107,6 +107,7 @@ export function encodeCommand(
       writer.uint(8, q.cursor?.generation ?? 0);
       if (q.cursor) writer.bigint(9, q.cursor.digest);
       writer.uint(10, q.cursor?.offset ?? 0);
+      writer.string(11, q.search ?? "");
       field = 8;
       break;
     }

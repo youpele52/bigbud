@@ -11,11 +11,17 @@ import { StandalonePageContent } from "../standalone/StandalonePageContent";
 import { ProcessTable, type DisplayProcess } from "./ProcessTable";
 import { ResourceMetricCard } from "./ResourceMetricCard";
 import { ResourceCollectionStatus } from "./ResourceCollectionStatus";
+import { ResourceListLimitWarning } from "./ResourceListLimitWarning";
 import { ResourceHostExtras } from "./ResourceHostExtras";
 import { ResourceDetailPreferences } from "./ResourceDetailPreferences";
 import { ResourceNetworkInterfaces } from "./ResourceNetworkInterfaces";
 import { displayWidget } from "./resourceMonitor.display";
-import { formatBytes, formatPercent, formatTemperature } from "./resourceMonitor.format";
+import {
+  formatBytes,
+  formatDecimal,
+  formatPercent,
+  formatTemperature,
+} from "./resourceMonitor.format";
 import { useProcessPage } from "./useProcessPage";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
@@ -52,7 +58,7 @@ export function ResourceMonitorPage() {
         details: [
           ["Started", new Date(row.startTimeSeconds * 1000).toLocaleString()],
           ["Parent PID", row.parentPid === undefined ? "—" : String(row.parentPid)],
-          ["Runtime", `${row.runTimeSeconds} s`],
+          ["Runtime", `${formatDecimal(row.runTimeSeconds)} s`],
           ["Virtual memory", formatBytes(row.virtualBytes)],
           ["Disk read", formatBytes(row.diskReadBytes)],
           ["Disk written", formatBytes(row.diskWrittenBytes)],
@@ -76,12 +82,14 @@ export function ResourceMonitorPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">Resource monitor</h1>
-            <p
-              className="max-w-full truncate text-sm text-muted-foreground"
-              title={snapshot?.hostname || undefined}
-            >
-              {snapshot?.hostname || "Desktop computer"} · desktop host
-            </p>
+            {show("ipAddress") ? (
+              <p
+                className="max-w-full truncate text-sm text-muted-foreground"
+                title={snapshot?.hostname || undefined}
+              >
+                {snapshot?.hostname || "Desktop computer"} · desktop host
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               {[snapshot?.osName, snapshot?.osVersion, snapshot?.architecture]
                 .filter(Boolean)
@@ -125,9 +133,7 @@ export function ResourceMonitorPage() {
           snapshot.disksTruncated ||
           snapshot.interfacesTruncated ||
           snapshot.sensorsTruncated) ? (
-          <p role="status" className="text-xs text-amber-600">
-            Some resource lists were capped by the monitor. Values shown below are partial.
-          </p>
+          <ResourceListLimitWarning />
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <ResourceMetricCard metric={cpu} large />
@@ -135,30 +141,32 @@ export function ResourceMonitorPage() {
           <ResourceMetricCard metric={disk} large />
           <ResourceMetricCard metric={network} large />
         </div>
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm">Host details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 px-4 text-sm sm:grid-cols-2">
-            <p>
-              OS:{" "}
-              {[snapshot?.osName, snapshot?.osVersion].filter(Boolean).join(" ") || "Unavailable"}
-            </p>
-            <p>Architecture: {snapshot?.architecture || "Unavailable"}</p>
-            <p>
-              Logical cores:{" "}
-              {snapshot?.logicalCores?.status === "ready"
-                ? snapshot.logicalCores.value
-                : (snapshot?.logicalCores?.status ?? "Unavailable")}
-            </p>
-            <p>
-              Uptime:{" "}
-              {snapshot?.uptimeSeconds?.status === "ready"
-                ? `${Math.floor(snapshot.uptimeSeconds.value / 3600)} hours`
-                : (snapshot?.uptimeSeconds?.status ?? "Unavailable")}
-            </p>
-          </CardContent>
-        </Card>
+        {show("hostDetails") ? (
+          <Card className="gap-2 py-4">
+            <CardHeader className="px-4">
+              <CardTitle className="text-sm">Host details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 px-4 text-sm sm:grid-cols-2">
+              <p>
+                OS:{" "}
+                {[snapshot?.osName, snapshot?.osVersion].filter(Boolean).join(" ") || "Unavailable"}
+              </p>
+              <p>Architecture: {snapshot?.architecture || "Unavailable"}</p>
+              <p>
+                Logical cores:{" "}
+                {snapshot?.logicalCores?.status === "ready"
+                  ? snapshot.logicalCores.value
+                  : (snapshot?.logicalCores?.status ?? "Unavailable")}
+              </p>
+              <p>
+                Uptime:{" "}
+                {snapshot?.uptimeSeconds?.status === "ready"
+                  ? `${formatDecimal(snapshot.uptimeSeconds.value / 3600)} hours`
+                  : (snapshot?.uptimeSeconds?.status ?? "Unavailable")}
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
         {show("hostExtras") ? <ResourceHostExtras snapshot={snapshot} /> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {show("disks") ? (

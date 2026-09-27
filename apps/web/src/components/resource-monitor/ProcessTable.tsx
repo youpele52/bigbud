@@ -1,3 +1,4 @@
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "../ui/button";
@@ -16,7 +17,6 @@ export interface DisplayProcess {
 
 export interface ProcessQueryControls {
   search: string;
-  status: string;
   sort: "cpu" | "memory" | "name" | "pid";
   descending: boolean;
 }
@@ -51,26 +51,18 @@ export function ProcessTable({
         <CardTitle className="text-sm">Processes</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 px-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
-            aria-label="Search processes by name or PID"
-            placeholder="Search name or PID"
+            aria-label="Search processes by name, PID, or status"
+            placeholder="Search name, PID, or status"
             value={controls.search}
             maxLength={256}
             onChange={(event) => onControlsChange({ ...controls, search: event.target.value })}
-            className="min-w-44 flex-1"
-          />
-          <Input
-            aria-label="Filter process status"
-            placeholder="Status"
-            value={controls.status}
-            maxLength={256}
-            onChange={(event) => onControlsChange({ ...controls, status: event.target.value })}
-            className="w-28"
+            className="w-48 max-w-full"
           />
           <select
             aria-label="Sort processes"
-            className="h-9 rounded-md border bg-background px-2 text-sm"
+            className="h-9 rounded-md border bg-background pl-2 pr-2.5 text-sm"
             value={controls.sort}
             onChange={(event) =>
               onControlsChange({
@@ -85,12 +77,19 @@ export function ProcessTable({
             <option value="pid">PID</option>
           </select>
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={() => onControlsChange({ ...controls, descending: !controls.descending })}
             aria-label={controls.descending ? "Sort ascending" : "Sort descending"}
+            title={
+              controls.descending ? "Descending — sort ascending" : "Ascending — sort descending"
+            }
           >
-            {controls.descending ? "Descending" : "Ascending"}
+            {controls.descending ? (
+              <ArrowDownIcon className="size-4" />
+            ) : (
+              <ArrowUpIcon className="size-4" />
+            )}
           </Button>
         </div>
         {status !== "ready" ? (

@@ -20,11 +20,8 @@ export function buildProcessQuery(
   cursor?: MonitorProcessQuery["cursor"],
 ): MonitorProcessQuery {
   const search = boundedUtf8(controls.search);
-  const pid = /^\d+$/.test(search) ? Number(search) : NaN;
-  const isPid = Number.isSafeInteger(pid) && pid <= 0xffffffff;
   return {
-    ...(isPid ? { pid } : { name: search }),
-    status: boundedUtf8(controls.status),
+    search,
     sort: controls.sort,
     descending: controls.descending,
     limit: 100,

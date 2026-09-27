@@ -9,9 +9,13 @@ import { displayWidget, hasTemperature } from "./resourceMonitor.display";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
 import { useResourceWidgetPreferences } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
+import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
 
 export function SystemPanel({ visible }: { visible: boolean }) {
   const widgets = useResourceWidgetPreferences((state) => state.visible);
+  const showIpAddress = useResourceDetailPreferences((state) =>
+    state.visible.includes("ipAddress"),
+  );
   const { snapshot, history, connection, reason, collectionStatus } = useResourceMonitor(
     visible,
     false,
@@ -21,13 +25,15 @@ export function SystemPanel({ visible }: { visible: boolean }) {
   const hostname = snapshot?.hostname || "Desktop computer";
 
   return (
-    <div className="space-y-4 p-4 text-sm">
+    <div className="@container space-y-4 p-4 text-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">System</h2>
-          <p className="truncate text-xs text-muted-foreground" title={hostname}>
-            {hostname} · desktop host
-          </p>
+          {showIpAddress ? (
+            <p className="truncate text-xs text-muted-foreground" title={hostname}>
+              {hostname} · desktop host
+            </p>
+          ) : null}
           {snapshot?.osName || snapshot?.architecture ? (
             <p className="truncate text-xs text-muted-foreground">
               {[snapshot.osName, snapshot.osVersion, snapshot.architecture]
@@ -71,7 +77,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
           Resource summary: {snapshot.summaryStatus.replaceAll("_", " ")}
         </p>
       ) : null}
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
         {widgets
           .filter((widget) => widget !== "temperature" || temperatureSupported || !snapshot)
           .map((widget) => {

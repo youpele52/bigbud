@@ -9,7 +9,6 @@ import { buildProcessQuery } from "./processQuery.logic";
 
 const INITIAL_CONTROLS: ProcessQueryControls = {
   search: "",
-  status: "",
   sort: "cpu",
   descending: true,
 };

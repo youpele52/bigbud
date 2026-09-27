@@ -33,7 +33,7 @@ function query(value: unknown): MonitorProcessQuery {
     input.limit > 100
   )
     throw new Error("invalid monitor query");
-  for (const key of ["name", "status"] as const)
+  for (const key of ["name", "status", "search"] as const)
     if (
       input[key] !== undefined &&
       (typeof input[key] !== "string" || Buffer.byteLength(input[key]) > 256)
@@ -70,6 +70,7 @@ function query(value: unknown): MonitorProcessQuery {
     limit: input.limit,
     ...(input.name === undefined ? {} : { name: input.name as string }),
     ...(input.status === undefined ? {} : { status: input.status as string }),
+    ...(input.search === undefined ? {} : { search: input.search as string }),
     ...(input.pid === undefined ? {} : { pid: input.pid as number }),
     ...(cursor === undefined ? {} : { cursor }),
   };

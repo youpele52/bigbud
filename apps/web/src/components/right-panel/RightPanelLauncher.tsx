@@ -155,14 +155,6 @@ export function RightPanelLauncher({
           shortcutLabel={kanbanShortcutLabel ?? null}
         />
         <LauncherCard
-          description="See this computer's resources"
-          icon={ActivityIcon}
-          kind="system"
-          label="System"
-          onSelect={onToggleSystem}
-          shortcutLabel={null}
-        />
-        <LauncherCard
           description="Start an interactive shell"
           disabled={!terminalAvailable}
           icon={TerminalIcon}
@@ -188,6 +180,14 @@ export function RightPanelLauncher({
           label="Diff"
           onSelect={onToggleDiff}
           shortcutLabel={diffShortcutLabel}
+        />
+        <LauncherCard
+          description="See this computer's resources"
+          icon={ActivityIcon}
+          kind="system"
+          label="System"
+          onSelect={onToggleSystem}
+          shortcutLabel={null}
         />
       </div>
     </div>

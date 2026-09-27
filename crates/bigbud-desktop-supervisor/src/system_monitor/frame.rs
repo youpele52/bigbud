@@ -56,12 +56,12 @@ mod tests {
     fn hello_matches_typescript_fixture() {
         let frame = Frame {
             payload: Some(crate::monitor_v1::frame::Payload::Hello(
-                crate::monitor_v1::Hello { major: 1, minor: 1 },
+                crate::monitor_v1::Hello { major: 1, minor: 2 },
             )),
         };
         let mut bytes = Vec::new();
         write_frame(&mut bytes, &frame).expect("encode hello");
-        assert_eq!(bytes, [0, 0, 0, 6, 10, 4, 8, 1, 16, 1]);
+        assert_eq!(bytes, [0, 0, 0, 6, 10, 4, 8, 1, 16, 2]);
     }
 
     #[test]

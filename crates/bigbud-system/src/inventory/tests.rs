@@ -93,3 +93,38 @@ fn byte_cap_truncates_large_sanitized_rows() {
     assert!(inventory.len() < MAX_RECORDS);
     assert!(inventory.truncated);
 }
+
+#[test]
+fn search_matches_name_pid_or_status_before_paginating() {
+    let at = Instant::now();
+    let mut named = row(12);
+    named.name = "Running Board".into();
+    named.status = "Sleep".into();
+    let mut status = row(21);
+    status.name = "Other".into();
+    status.status = "Run".into();
+    let mut store = InventoryStore::default();
+    store.replace(Inventory::from_records(1, at, [named, status]), at);
+    let query = Query {
+        search: Some("run".into()),
+        limit: 1,
+        ..Query::default()
+    };
+    let first = store.query(&query, None, at).unwrap();
+    assert_eq!(first.rows[0].pid, 21);
+    assert_eq!(
+        store.query(&query, first.next.as_ref(), at).unwrap().rows[0].pid,
+        12
+    );
+    let pid_query = Query {
+        search: Some("12".into()),
+        ..Query::default()
+    };
+    assert_eq!(store.query(&pid_query, None, at).unwrap().rows[0].pid, 12);
+    assert_eq!(
+        store
+            .query(&pid_query, first.next.as_ref(), at)
+            .unwrap_err(),
+        QueryError::StaleQuery
+    );
+}

@@ -15,7 +15,7 @@ describe("ResourceNetworkInterfaces", () => {
     ];
     const markup = renderToStaticMarkup(<ResourceNetworkInterfaces interfaces={interfaces} />);
     expect(markup).toContain("Link: up");
-    expect(markup).toContain("MTU: 1500 B");
+    expect(markup).toContain("MTU: 1500.00 B");
   });
 
   it("shows field availability without treating absent values as zero", () => {
@@ -31,6 +31,6 @@ describe("ResourceNetworkInterfaces", () => {
     expect(markup).toContain("Link: denied");
     expect(markup).toContain("MTU: warming");
     expect(markup).toContain("Link: unavailable");
-    expect(markup).not.toContain("MTU: 0 B");
+    expect(markup).not.toContain("MTU: 0.00 B");
   });
 });

@@ -1,6 +1,7 @@
 import type { MonitorMetric, MonitorSnapshot } from "@bigbud/contracts/system-monitor/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { formatDecimal } from "./resourceMonitor.format";
 
 function value(metric: MonitorMetric | undefined, format: (number: number) => string): string {
   return metric?.status === "ready" ? format(metric.value) : (metric?.status ?? "unavailable");
@@ -20,13 +21,15 @@ export function ResourceHostExtras({ snapshot }: { snapshot: MonitorSnapshot | n
         </p>
         <p>Physical cores: {value(snapshot?.physicalCores, String)}</p>
         <p>CPU: {snapshot?.cpuBrand || "unavailable"}</p>
-        <p>CPU frequency: {value(snapshot?.cpuFrequencyMhz, (mhz) => `${mhz} MHz`)}</p>
+        <p>
+          CPU frequency: {value(snapshot?.cpuFrequencyMhz, (mhz) => `${formatDecimal(mhz)} MHz`)}
+        </p>
         <p>
           Load average (1 / 5 / 15 min):{" "}
           {[
-            value(snapshot?.loadAverageOne, (amount) => amount.toFixed(2)),
-            value(snapshot?.loadAverageFive, (amount) => amount.toFixed(2)),
-            value(snapshot?.loadAverageFifteen, (amount) => amount.toFixed(2)),
+            value(snapshot?.loadAverageOne, formatDecimal),
+            value(snapshot?.loadAverageFive, formatDecimal),
+            value(snapshot?.loadAverageFifteen, formatDecimal),
           ].join(" / ")}
         </p>
       </CardContent>

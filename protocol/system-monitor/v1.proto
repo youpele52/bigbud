@@ -124,6 +124,7 @@ message ProcessQuery {
   uint64 cursor_generation = 8;
   uint64 cursor_digest = 9;
   uint32 cursor_offset = 10;
+  string search = 11;
 }
 message ProcessRow {
   uint32 pid = 1;

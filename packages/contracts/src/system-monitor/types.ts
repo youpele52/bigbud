@@ -90,6 +90,7 @@ export interface MonitorSnapshot {
   sensorsTruncated: boolean;
 }
 export interface MonitorProcessQuery {
+  search?: string;
   name?: string;
   pid?: number;
   status?: string;
