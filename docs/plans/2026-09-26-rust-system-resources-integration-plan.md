@@ -1,353 +1,157 @@
-# Rust-owned system resources integration plan
+# Rust-owned desktop resource monitor plan
 
-**Date:** 26 September, 2026
-**Status:** Proposed — rough plan requiring refinement before implementation
-**Owner:** Planning agent
-**Target branch:** `dev`
+**Created:** 2026-09-26, Africa/Johannesburg
+**Last modified:** 2026-09-27, 00:46 SAST
+**Status:** Phase 0 dependency approved; Rust resource core implemented, desktop integration pending
+**Project root:** /Users/youpele/DevWorld/bigbud
+**Inspected branch and commit:** dev at 6de834d9da1cdeffca1c297797f56915aea7ef60
+**Initial worktree:** this plan was already modified from prior planning; unrelated untracked docs/plans/2026-09-26-project-main-and-child-threads-plan.md must be preserved.
+**Related issue ID:** none supplied.
 
-## Summary
+## Goal and definition of done
 
-This is intentionally a rough first plan. It captures the desired ownership boundary and phased direction, but needs smoothing, code-path validation, dependency review, protocol design, UX refinement, and platform-specific investigation before implementation.
+The first release monitors **the machine running the bigbud desktop app**. Rust is the sole OS-resource observer. The existing right panel gets a compact System tab with up to five hideable resource widgets and a link to a full Resource Monitor page in the sidebar, using the same standalone-page geometry as Usage and Games. Both views consume one Rust-owned resource service and sampler. The full page gives useful coverage of the released sysinfo API, with explicit unsupported, unavailable, denied, warming-up, and stale states. Phase 1 is read-only. GPU usage is deferred because sysinfo 0.39.6 has no released GPU API.
 
-The core rule is:
+Phase 0 is complete for handoff when the dependency is approved, this plan's protocol and access contract is reflected in implementation tasks, and no unresolved product or architecture decision remains. Phase 1 is done when packaged macOS, Windows, and Linux desktop builds satisfy the acceptance and performance criteria below. Cross-platform smoke results are an implementation validation gate, not a reason to defer the design to a future planner.
 
-> **Rust owns system resource truth and system actions. Electron/TypeScript owns presentation and user intent.**
+Later process control, agent resource tools, and remote monitoring remain separate milestones. They do not block the local viewer.
 
-Phase 1 is read-only: Rust talks to the OS, samples and normalizes resource data, reports capabilities, and streams typed snapshots. Electron/React renders graphs, tables, filtering, sorting, and drill-down.
+## Authoritative Rust/TypeScript boundary
 
-Phase 2 adds explicit resource-control commands. Electron and, later, agents may request actions, but Rust validates and performs the actual OS operation. Agent mutations use the same typed command path as human mutations and remain subject to approval/policy.
+The Rust system layer is the sole authority for system resource observation and control.
+It communicates directly with operating-system facilities and provides a platform-neutral resource model.
+The Electron/TypeScript layer must not independently query, calculate, modify, or infer operating-system resource state. It consumes structured resource data from Rust and is responsible for presentation, interaction and communicating user intent.
+Resource mutations are performed exclusively by Rust through explicit typed commands. Agent-initiated mutations use the same command interface as human-initiated mutations and require the applicable approval policy.
 
-The likely portable observation foundation is the Rust `sysinfo` crate, supplemented by platform-native APIs where sysinfo is insufficient.
+Rust owns the resource service: collector lifecycle, consumer subscriptions, sampling cadence, authoritative snapshot retention, capabilities, freshness, rates, recovery of collection, and future command validation/execution. TypeScript conveys subscriptions, requests, approval outcomes, and Rust responses. Display formatting, arranging widgets, and retaining bounded copies for chart presentation are UI responsibilities; deriving resource totals, percentages, rates, capabilities, or resource status is not.
 
-## Related Work
-
-- Source: product/architecture discussion that requested this plan. No stable bigbud note, Kanban card, issue, or PR was supplied.
-- `crates/AGENTS.md`: Rust native components own close-to-the-metal platform operations and a native supervisor may own native resource monitoring behind a narrow, versioned contract.
-- `crates/bigbud-desktop-supervisor`: current local native sidecar.
-- `crates/bigbud-remote-agent`: potential later consumer for remote resource monitoring/control.
-- `crates/bigbud-protocol` and `protocol/`: existing Rust protocol infrastructure.
-- `packages/contracts`: TypeScript schema boundary.
-- README "Desktop Event Delivery": existing Rust/TypeScript sidecar boundary.
-- Repository: https://github.com/youpele52/bigbud
+The Electron shell still has to launch/connect to the native executable and close its connection when the app exits. That is application bootstrap and transport plumbing, not ownership of the resource service. It may report a broken connection, but must not turn transport failure into an inferred OS-resource state. Future agent bridges convey typed requests through this same Rust boundary rather than gain a separate monitoring/control implementation.
 
-Create/link a tracking issue or stable bigbud planning item if this advances toward implementation.
+## Settled product decisions and scope
 
-## Problem
+- Observe the desktop host only. Display hostname or human-readable machine name plus OS/architecture so users know which machine is shown. Never infer that a remote server host is the desktop host.
+- The System right-panel tab is compact and works without an active thread or project. Default widgets: CPU, memory, disk, network. Temperature is the optional fifth widget only where a reliable component value is available; users can hide/reorder any widget, including hiding all five. “3–5” refers to compact resource widgets, not a process-count cap.
+- The full Resource Monitor is a sidebar-accessible standalone page with broader graphs, process search/sort/filter/details, and optional metrics. The panel links to it. Navigating to the page closes the right panel using the Usage/Games route pattern.
+- A visible panel and page never create independent samplers. Store only UI preferences persistently; samples and graph history are ephemeral.
+- GPU, fan speeds, privileged process actions, agent tools, remote machines, browser-only and standalone-server access, native PSI/cgroups/Job Objects/PDH/ETW, and vendor GPU APIs are out of Phase 1.
+- Preserve chat/provider delivery, computer use, existing right-panel behavior, and main desktop launch when the monitor is missing or fails. Do not query OS resource metrics through Electron/Node or shell fallback.
 
-bigbud does not currently expose a first-class cross-platform resource model that can be displayed consistently and later reused for safe resource-management actions.
+## Evidence and dependency decision
 
-Querying OS state independently from Electron/Node, shell commands, agents, and Rust would create competing sources of truth, duplicate platform behavior, leak Windows/macOS/Linux differences into UI code, and complicate future control operations.
+Repository instructions: root AGENTS.md defines package roles, the 400-line authored-code limit, and required checks. crates/AGENTS.md permits native resource monitoring behind a narrow versioned contract, requires bounded lifecycle/protocol behavior, and **requires engineering approval before adding a Rust dependency**. The user explicitly approved implementation after the dependency review on 2026-09-27, including adding the reviewed sysinfo dependency. The dependency is now pinned in the workspace and lockfile.
 
-The desired boundary is stronger:
-
-- Rust communicates with the OS and owns collection.
-- Rust owns normalization, sampling, capability detection, and later mutation.
-- Electron/TypeScript does not independently infer authoritative resource state.
-- Electron/React presents state and captures user intent.
-- Agents eventually consume the same typed observation/command capabilities rather than gaining a separate privileged path.
-
-The first milestone should validate observation, transport, cross-platform coverage, performance, and UI before destructive capabilities are introduced.
-
-## Goals
-
-- Establish Rust as the sole authority for system resource observation and future control.
-- Define bigbud-owned resource types instead of exposing sysinfo types outside Rust.
-- Support macOS, Windows, and Linux with explicit capability reporting.
-- Use sysinfo where appropriate and isolate native extensions behind focused Rust modules.
-- Stream bounded typed snapshots; do not make Electron poll the OS directly.
-- Add an easy-to-digest System UI with graphs, summaries, process tables, filtering, sorting, and drill-down.
-- Keep Phase 1 read-only and independently useful.
-- Route Phase 2 human and agent mutations through the same typed Rust command interface.
-- Preserve explicit approval/policy boundaries for destructive agent actions.
-- Leave a path to reuse the Rust implementation for managed remote agents.
-
-## Non-Goals
-
-- Resource-control operations in Phase 1.
-- Direct agent access to sysinfo/native OS APIs.
-- A second Electron/Node OS-monitoring implementation.
-- Pretending every metric/control is identical across all OSes.
-- Fake zero values for unsupported metrics.
-- Requiring GPU, fan, or temperature telemetry for the first shippable milestone.
-- Adding cgroups, Job Objects, ETW/PDH, IOKit/Mach, or similar native integrations before a concrete requirement.
-- Changing existing provider/computer-use behavior merely to support this feature.
-- Requiring remote monitoring in the first local milestone.
-
-## Current State
-
-Revalidate exact paths/line numbers before implementation; this rough plan was written against an active `dev` branch.
-
-### Existing boundary
-
-- Root `AGENTS.md` assigns server logic to `apps/server`, UI to `apps/web`, the Electron shell to `apps/desktop`, and schemas to `packages/contracts`.
-- `crates/AGENTS.md` defines Rust as the home for close-to-the-metal services and explicitly permits native resource monitoring.
-- The Rust workspace currently contains `bigbud-desktop-supervisor`, `bigbud-protocol`, `bigbud-remote-agent`, and `bigbud-workspace-watch`.
-- `bigbud-remote-agent` already demonstrates cfg/target-specific Rust dependencies.
-- The desktop supervisor already communicates with TypeScript over framed stdio.
-- `apps/web` already depends on Recharts, so Phase 1 should first evaluate reuse rather than add another chart dependency.
-
-### Proposed ownership
-
-| Responsibility | Owner |
-| --- | --- |
-| Read CPU/memory/process/disk/network/sensors | Rust |
-| Sample counters and calculate authoritative rates/deltas | Rust |
-| Normalize OS-specific values | Rust |
-| Detect supported capabilities | Rust |
-| Apply process/resource mutations | Rust, Phase 2 |
-| Talk directly to sysinfo/native APIs | Rust only |
-| Transport typed state/commands | Versioned Rust/TypeScript contract |
-| Graphs/tables/search/filter/sort/drill-down | Electron/React |
-| Capture human intent | Electron/React |
-| Approve agent mutation | Existing app approval/policy layer |
-| Execute approved mutation | Rust |
-
-### Candidate Rust shape
-
-Do not create a new crate until Phase 0 validates the boundary. A likely reusable shape is:
-
-```text
-crates/bigbud-system/
-  src/
-    observation/
-      cpu.rs
-      memory.rs
-      process.rs
-      disk.rs
-      network.rs
-      sensors.rs
-    capabilities/
-    platform/
-      linux/
-      windows/
-      macos/
-    control/       # Phase 2
-```
-
-Potential consumers are `bigbud-desktop-supervisor` locally and `bigbud-remote-agent` later. If only the supervisor is proven during Phase 1, first consider a clean internal supervisor module instead of prematurely creating a shared crate.
-
-### Candidate resource model
-
-The wire/public contract should use bigbud-owned types such as `SystemSnapshot`, `CpuSnapshot`, `MemorySnapshot`, `DiskSnapshot`, `NetworkSnapshot`, `ProcessSnapshot`, and `SystemCapabilities`.
-
-Capabilities should be explicit rather than inferred from OS names, for example:
-
-```text
-cpu.read
-cpu.perCore
-cpu.limit
-memory.read
-memory.perProcess
-memory.limit
-process.list
-process.kill
-process.suspend
-process.priority
-disk.usage
-disk.io
-disk.limit
-network.throughput
-network.connections
-pressure.cpu
-pressure.memory
-sensors.temperature
-gpu.metrics
-```
+The selected dependency is **sysinfo 0.39.6**, pinned exactly for initial implementation, with default features disabled and only system, disk, network, and component enabled. Omit user, multithread, linux-netdevs, linux-tmpfs, serde, and other unneeded features. The [published manifest](https://docs.rs/crate/sysinfo/0.39.6/source/Cargo.toml.orig) states MIT and Rust 1.95, matching the workspace toolchain; [published API](https://docs.rs/sysinfo/0.39.6/sysinfo/all.html) covers host/CPU/memory/process/disk/network/components but no GPU. The [crate guidance](https://docs.rs/sysinfo/0.39.6/sysinfo/) recommends retained instances and selective refreshes; its multithread feature can raise memory use on macOS. This crate contains platform FFI and unsafe internals, so the implementation review must inspect the selected call paths and release notes rather than claim it is fully audited. No upstream Git or unreleased GPU dependency is proposed.
 
-UI code should ask capabilities rather than scatter platform-name checks throughout React.
+A disposable external Cargo probe with that feature set built on macOS in 11.42 s. Its isolated release binary was 538,096 bytes; an independently built current supervisor binary was 676,608 bytes. These are **not** an incremental packaged-size measurement. On one Mac with 10 logical CPUs and about 1,330 processes, five runs at one-second spacing measured process refresh at 18–42 ms, disk at 22–52 ms, components at 58–109 ms, and CPU/memory/network at 0–1 ms at millisecond resolution. This supports staggered refreshes and on-demand components, but cannot establish Windows/Linux performance or shipped-binary cost. Measure those during implementation. Probe artifacts are outside the repository.
 
-## Phases
+The selected feature set pulls target-specific platform bindings rather than a GPU library: libc/memchr/objc2 bindings on macOS, libc/memchr on Linux, and ntapi/windows bindings on Windows. Confirm the actual Cargo.lock diff, duplicate crates, release-size delta, and relevant unsafe/FFI call paths after approved addition. The latest user decision creates a dedicated `crates/bigbud-system` library. It owns the resource model, collector, rates, bounded process inventory/query, and demand lifecycle. The supervisor will consume this library in a later integration step. This explicit decision supersedes the original no-new-crate conclusion.
 
-### Phase 0 — Smooth the rough plan and prove boundaries
+## Repository findings and chosen ownership boundary
 
-**Goal:** make this implementation-ready before adding production dependencies/protocol surface.
+- crates/bigbud-desktop-supervisor is already a platform-native executable packaged at server/delivery-supervisor/bin/bigbud-desktop-supervisor (with .exe on Windows). apps/desktop/src/env/pathResolver.ts resolves it in packaged builds. Build, verification, signing, and packaging scripts already account for this artifact.
+- The current supervisor handles canonical delivery over framed stdio. crates/bigbud-desktop-supervisor/src/main.rs has a shared synchronous stdout writer; apps/server/src/desktop-supervisor/desktopSupervisorConnection.ts also has a bounded unmatched-frame queue. High-volume telemetry on that process could delay ACK/watchdog traffic. **Run a separate instance of the same executable with a new --system-monitor mode**. Its Rust resource service owns monitoring; Electron only bootstraps the executable and relays messages. Do not add resource frames to the chat-delivery instance or change its default launch/protocol. This gives OS/process isolation while reusing one packaged artifact.
+- Phase 1 resource traffic stays local: monitor Rust child ⇄ Electron main over its own length-prefixed versioned protobuf stdio ⇄ trusted desktop preload IPC ⇄ React. apps/server and its WebSocket/canonical event channel are outside the Phase 1 data path. This makes the desktop-host identity unambiguous and avoids a new server authorization surface.
+- apps/desktop/src/window/DesktopWindowRegistry.ts registers the main window and gives a trustworthy webContents role. Resource IPC handlers must require getRole(event.sender) === "main"; isTrusted alone also includes mascot and compact-chat. Renderer URL, user-agent, or a JS claim is not authorization.
+- packages/contracts/src/server/ipc.ts defines DesktopBridge; apps/desktop/src/preload.ts exposes its methods. apps/desktop/src/main.channels.ts and apps/desktop/src/window/ipcHandlers.ts own IPC channel registration. Wire-facing DTOs belong in a direct contracts subpath such as packages/contracts/src/system-monitor/types.ts; no runtime collection logic belongs in contracts.
+- apps/web/src/stores/rightPanel/rightPanelTabs.store.ts, RightPanelHost.tsx, RightPanelTabs.tsx, and RightPanelLauncher.tsx own right-panel integration. apps/web/src/routes/\_chat.usage.tsx and \_chat.games.tsx show standalone navigation/close-panel behavior; StandalonePageContent gives the shared page geometry. Sidebar.actions.logic.ts, Sidebar.actionsSection.tsx, and Sidebar.navigation.tsx own sidebar entry/navigation. Recharts is already installed.
+- apps/web/src/stores/rightPanel/rightPanelWidth.store.ts demonstrates validated localStorage-backed UI state. Use the same helpers for widget visibility/order. Split new UI/desktop/Rust files by concern and keep every materially edited authored code file at or under 400 lines.
 
-1. Reinspect current desktop-supervisor ownership, framed stdio protocol, TypeScript codecs/contracts, right-panel UI, and remote-agent protocol.
-2. Review the exact sysinfo version: maintenance, license, targets, transitive dependencies, unsafe surface, binary/build cost, and default features. Obtain dependency approval required by `crates/AGENTS.md`.
-3. Build a macOS/Windows/Linux metric coverage matrix. Mark metrics portable, platform-specific, unavailable, expensive, or permission-dependent.
-4. Decide whether Phase 1 lives inside `bigbud-desktop-supervisor` or immediately warrants `bigbud-system`.
-5. Define request/response versus streaming, subscription lifecycle, cadence, sequence semantics, stale-data behavior, reconnects, and backpressure.
-6. Define Rust-derived versus UI-derived values. Default: Rust owns sampling and authoritative rates/deltas; UI owns presentation formatting/history.
-7. Decide whether resource telemetry belongs in the existing supervisor protocol or a focused channel/protocol.
-8. Produce initial schemas and payload/CPU estimates.
+## Phase 0 — pre-implementation steps
 
-**Exit criterion:** dependency, ownership, transport, schemas, cadence, and Phase 1 metrics are reviewed rather than rough assumptions.
+1. Engineering approval for the reviewed sysinfo 0.39.6 dependency and feature selection was granted in the latest user instruction. Add it to the Rust workspace using repository dependency conventions, update Cargo.lock, and inspect the resolved dependency graph.
+2. Freeze protocol/system-monitor/v1.proto as a **separate schema** with package bigbud.system_monitor.v1, generated by crates/bigbud-desktop-supervisor/build.rs. Keep the delivery schema and default binary mode unchanged. Use the existing 4-byte big-endian frame length pattern, with a 128 KiB hard frame maximum checked before allocation. Handshake negotiates major/minor version, max frame length, host identity, and capabilities before requests. Rust and Electron reject malformed, truncated, incompatible, or oversized frames with typed errors. Preserve released field/enum numbers; add compatibility fixtures.
+3. Implement the local access policy: only Electron main's trusted main-window role can call monitor IPC; there is no browser/server route in Phase 1. In development, resolve an explicitly configured monitor binary path (BIGBUD_SYSTEM_MONITOR_BINARY) or report unavailable; packaged builds use the existing verified binary resolver. Never silently switch to Node/OS APIs or a server-host collector.
+4. Fix the following resource contract before UI coding: normalized units/statuses, cadence, frame sizes, process query limits, sequence/epoch rules, and the release budgets in this document. Technical implementation details may vary, but changing a product-visible field, privacy exclusion, or the ownership boundary requires plan revalidation. Run the Rust↔Electron golden-wire and fake-child lifecycle tests early.
+5. Record baseline package measurements with and without sysinfo and keep a per-OS feature/availability log. The macOS probe is preliminary evidence only; Windows/Linux results are required by the Phase 1 release gate.
 
-### Phase 1 — Read-only Rust observation and Electron display
+Phase 0's research, architecture, numeric limits, and field inventory are now in this plan. **The pre-code dependency gate is satisfied.** The remaining probes are explicit implementation/validation work, not open design questions.
 
-**Goal:** ship a useful cross-platform viewer with no resource mutations.
+## Rust core handoff (2026-09-27)
 
-Rust responsibilities:
+`crates/bigbud-system` is the dedicated Rust library. Its `lifecycle::Service` is the single owner of retained sysinfo state, subscription leases, sampling cadence, and bounded process inventory. The supervisor integration calls `subscribe`, `renew`, `unsubscribe`, and `tick` on one service instance; construction starts no thread or collection. `tick` returns a complete latest snapshot when a sample is due. `summary_availability` and `process_availability` are Rust-owned freshness results. `collector::Demand` selects optional process, sensor, and disk work. `inventory::{Query, Cursor, Page}` provides bounded process pagination; a changed or expired cursor returns `StaleQuery`. `model::Field<T>` carries value, availability, and sample time. Process rows expose `cpu_status` and `disk_io_status` alongside their values; the Rust wire mapper should use these statuses directly. A missing optional disk or sensor section means it was not demanded; a demanded section carries its own availability status. Rates are computed from retained cumulative counters, with warm-up/reset represented explicitly.
 
-- Retain collector state across samples when metrics depend on deltas.
-- Collect agreed CPU, memory, process, disk, network, host, and supported sensor data.
-- Normalize units/semantics into bigbud-owned types.
-- Calculate authoritative rates/deltas in Rust.
-- Report capabilities/unavailable fields explicitly.
-- Bound sampling work, memory, queues, and process payloads.
-- Give sampler tasks explicit lifecycle/cancellation.
-- Reduce/stop expensive sampling when no consumer needs it where practical.
-- Return typed diagnostics for permissions/unavailable data.
-- Keep platform code behind small cfg-gated modules.
+This handoff covers only the library and dependency. The versioned supervisor protocol, worker/transport recovery, Electron bridge, web views, packaging, and cross-platform smoke and performance gates remain in the following implementation steps.
 
-Transport responsibilities:
+The library now owns bounded collector recovery. `Service::collection_state()` reports `Healthy`, `Retrying { attempts, next_retry_at, reason }`, or `Failed { reason }`; `CollectionError` distinguishes missing required CPU and memory observations. `tick` keeps its existing return type and publishes no new snapshot during retry delay or terminal failure. Three failed collection attempts inside 60 seconds end automatic retries. `Service::retry_collection()` clears that failure budget and starts a new baseline while retaining subscriptions. The supervisor's `RetryCollection` handler must call this method and expose the Rust failure state as a typed protocol error; its separate epoch/transport reset remains supervisor-owned.
 
-- Use a narrow, versioned contract.
-- Consider separating lightweight summaries from full process data.
-- Treat ~1 Hz summary sampling as a starting hypothesis, not a committed constant.
-- Avoid resending static process metadata every tick if measurement justifies a delta/split model.
-- Detect sequence gaps/stale streams and recover with an explicit fresh snapshot.
-- Ensure telemetry cannot starve existing orchestration delivery.
+The pinned sysinfo 0.39.6 API also supplies interface operational state and MTU. `NetworkInterface.link_state: Field<LinkState>` and `mtu_bytes: Field<u64>` expose those optional observations; `LinkState::as_str()` supplies normalized wire labels. An unrecognized/unsupported state or zero MTU is unavailable rather than a fabricated value. The transport mapper should carry both fields through protobuf and TypeScript DTOs.
 
-Electron/React responsibilities:
+## Phase 1 data contract and field disposition
 
-- Add a System surface; a right-panel tab is the current candidate, subject to UX review.
-- Display CPU total/per-core, memory/swap, disk capacity/I/O, network throughput, and processes where supported.
-- Add process search/filter/sort.
-- Add short rolling history graphs for useful summaries.
-- Show unsupported/unavailable states clearly rather than fake zeros.
-- Show enough machine/platform identity to know which host is observed.
-- Use capability-aware UI.
-- Keep chart/display state in UI; do not make React the authoritative sampler.
+Rust owns all sampling, normalization, rate/delta calculations, field availability, and authoritative timestamps. A metric is a value plus unit, sample time, and one of ready, warming, unsupported, denied, unavailable, or stale. Missing/NaN/overflow/first-delta values never become a fabricated zero. Static host identity is sent at handshake and each fresh baseline. Every update carries monitor epoch (new for each child launch), monotonic sequence, and sample time; the renderer resets chart continuity on epoch change or a gap.
 
-Measure 1 Hz/faster refresh cost, process-count scaling, sysinfo refresh overhead, IPC bandwidth, chart-history memory, closed-panel behavior, suspend/wake, supervisor restart, and slow-renderer backpressure.
+| sysinfo category                                                         | Phase 1 disposition                                                                                                                                      | Cross-platform meaning and limits                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host identity and system                                                 | Default: hostname/display label, OS name/version, architecture, uptime; optional: kernel/version, boot time, CPU brand/frequency, physical/logical cores | No machine serial or user identity. Optional values remain absent where sysinfo cannot provide them.                                                                                                                                    |
+| CPU                                                                      | Default: total and per-core utilization, short history                                                                                                   | Percent 0–100 per core; CPU needs a valid interval before the first rate. [System API](https://docs.rs/sysinfo/0.39.6/sysinfo/struct.System.html).                                                                                      |
+| Memory                                                                   | Default: total/used/available RAM and swap                                                                                                               | Bytes, with labels that distinguish RAM from swap. Windows swap refresh may need a slower cadence; report age.                                                                                                                          |
+| Disks                                                                    | Default: per-disk capacity/free/used and aggregate capacity; optional: filesystem, mount, removable/read-only, per-disk read/write rates                 | Do not sum duplicate mount entries as physical capacity. Linux network mounts and tmpfs excluded initially; disk I/O is capability-gated. [Disk API](https://docs.rs/sysinfo/0.39.6/sysinfo/struct.Disk.html).                          |
+| Networks                                                                 | Default: aggregate receive/transmit bytes/s; optional: interface counters, packets/errors, link state/MTU                                                | Rates derived from retained counters; document reset/wrap. MAC/IP and connection endpoints excluded for privacy. [Network API](https://docs.rs/sysinfo/0.39.6/sysinfo/struct.NetworkData.html).                                         |
+| Processes                                                                | Default full page: PID, name, start time, CPU, resident memory, status; optional details: parent PID, runtime, virtual memory, disk read/write           | Inventory/query is bounded and only sent when requested. No command line, environment, executable/cwd path, UID/user, or open-file inventory in Phase 1. PID plus start time is display identity, not authorization for future control. |
+| Components/sensors                                                       | Optional full page: label, current/critical temperature when reliable                                                                                    | Linux may return NaN and macOS/Windows coverage differs; show unavailable rather than zero. No fan API in released sysinfo 0.39.6. [Component API](https://docs.rs/sysinfo/0.39.6/sysinfo/struct.Component.html).                       |
+| Load average                                                             | Optional full page on macOS/Linux                                                                                                                        | Unsupported on Windows per System API; do not show as CPU percentage.                                                                                                                                                                   |
+| Users/groups, motherboard serial, GPU, pressure, limits, direct controls | Excluded                                                                                                                                                 | Sensitive or outside read-only portable first release. GPU lacks a released sysinfo 0.39.6 API.                                                                                                                                         |
 
-**Exit criterion:** macOS, Windows, and Linux display the agreed baseline through the Rust-owned path with bounded overhead and no OS querying in Electron/Node.
+The phrase “most of what sysinfo offers” means all useful non-sensitive observation groups above are either in the default viewer or optional full-page sections. The exclusions are explicit. Capability/status is per field or section, not inferred from platform name alone. Windows/Linux field-specific smoke results may narrow a field to optional/unavailable, but cannot silently drop the baseline.
 
-### Phase 2 — Explicit Rust resource-control commands
+## Phase 1 transport and lifecycle
 
-**Dependency:** Phase 1 contracts/capabilities are stable.
-
-Candidate operations, introduced individually only after semantics are understood:
-
-- terminate process;
-- suspend/resume process;
-- change priority;
-- later CPU, memory, and I/O limits.
-
-Use typed commands/results. Do not rely on PID alone for destructive operations if PID reuse could target a different process; investigate process start time or native identity checks.
-
-Rust must validate arguments, revalidate target identity, verify capability, perform the native operation, and return typed outcomes such as succeeded, denied, unsupported, stale-target, or failed. Request acceptance alone is not success.
-
-Electron captures intent and renders confirmations/results. It must not fall back to shell commands or a second control path when Rust reports unsupported/denied.
-
-**Exit criterion:** selected human controls execute through one typed Rust path with stale-target protection, capability checks, clear results, and tests.
-
-### Phase 3 — Agent access through the same model
-
-**Dependency:** Phase 2 control and approval semantics are proven for humans.
-
-Read-only tools may expose system status, process list/details, disk status, and network status. Large inventories need bounded/filterable responses.
-
-Mutations converge on the same command path:
-
-```text
-human UI ---------\
-                   > resource command -> approval/policy -> Rust -> OS
-agent request -----/
-```
-
-Agents never call sysinfo/native APIs directly and do not receive an alternate shell-based mutation path for convenience. Rust revalidates targets after approval because system state may change while approval is pending. Provider bridges should expose the same semantic tools rather than provider-specific resource behavior.
-
-**Exit criterion:** agents can explain observed usage and, when explicitly approved, request supported mutations through the same Rust boundary as humans.
-
-### Phase 4 — Remote resources and deeper native capabilities
-
-**Dependency:** local observation/control is stable and remote protocol cost is justified.
-
-Potential work:
-
-- reuse the implementation from `bigbud-remote-agent`;
-- select local/remote machine in System UI;
-- add remote capability negotiation;
-- add Linux PSI/cgroup v2 where required;
-- add Windows Job Objects/PDH/ETW/native process APIs where required;
-- add macOS Mach/IOKit/public native facilities where required;
-- investigate GPU/vendor APIs separately.
-
-Preserve remote-agent bounded journal/reconnect/security invariants and do not broaden remote authority implicitly.
-
-## Risks And Decision Gates
-
-- **Roughness:** Phase 0 is mandatory; this file is not implementation-ready merely because it is committed.
-- **sysinfo coverage:** validate exact-version behavior per OS before promising metrics.
-- **Dependency approval:** adding sysinfo requires the review/approval specified in `crates/AGENTS.md`.
-- **Crate boundary:** do not create `bigbud-system` until reuse/deployment boundaries justify it.
-- **Protocol interference:** telemetry must not weaken desktop-supervisor orchestration delivery.
-- **Sampling overhead:** process-heavy hosts may make naive full refresh/serialization expensive.
-- **Semantic mismatch:** memory, CPU, disk, sensors, pressure, and limits differ across OSes; document normalized semantics.
-- **Permissions:** process details/control may be denied. Treat this as capability/diagnostic state.
-- **PID reuse:** destructive commands need stale-target protection.
-- **Agent safety:** agent control is gated behind proven human control and approval semantics.
-- **Sensitive data:** process command lines, paths, usernames, network endpoints, and similar fields may be sensitive; include only what the UI/tool needs.
-- **Remote expansion:** local success does not automatically justify extending remote authority/protocol.
-
-## Testing And Validation
-
-Before implementation, name exact tests after finalizing the protocol/modules. At minimum plan for:
-
-- Rust unit tests for normalization, capabilities, rate calculations, stale identity, unsupported fields, and typed errors.
-- Rust lifecycle/backpressure tests for sampler cancellation, bounded queues, slow consumers, and reconnect/resubscribe.
-- Protocol compatibility tests for snapshots, capabilities, commands, unknown fields/versions, malformed frames, and size limits.
-- Server/Electron integration tests proving resource traffic cannot break orchestration delivery.
-- React tests for graphs/tables, unsupported states, sorting/filtering, reconnect/stale state, and accessibility.
-- Cross-platform manual/smoke validation on macOS, Windows, and Linux.
-- Phase 2 real-process tests using safe spawned test processes rather than arbitrary host processes.
-- Phase 3 approval tests proving agents cannot bypass mutation policy.
-
-Required repository checks for implementation changes:
-
-```sh
-bun fmt
-bun lint
-bun typecheck
-bun run test
-cargo fmt --all --check
-cargo clippy --locked --workspace --all-targets -- -D warnings
-cargo test --locked --workspace
-```
-
-Do not use `bun test`.
-
-## Acceptance Criteria
-
-### Phase 1
-
-- Rust is the sole OS-resource observation authority.
-- Electron/Node does not independently query authoritative system metrics.
-- Baseline macOS/Windows/Linux metrics render through a versioned Rust contract.
-- Unsupported metrics are explicit.
-- Sampling/transport are bounded and measured.
-- UI presents useful graphs/tables without owning sampling logic.
-- Restart/reconnect/stale-stream behavior is predictable.
-
-### Phase 2
-
-- Resource mutations execute only in Rust.
-- Human commands use typed contracts/results and capability checks.
-- Destructive process actions protect against stale/reused targets.
-- Unsupported/denied actions do not silently fall back to another path.
-
-### Phase 3
-
-- Agents use the same observation and mutation model as humans.
-- Agent mutations pass through applicable approval/policy.
-- No agent-specific privileged OS-control implementation exists.
-
-## Open Questions
-
-- Should Phase 1 start inside `bigbud-desktop-supervisor` or create `bigbud-system` immediately?
-- Should telemetry share the desktop-supervisor framed protocol or use a focused channel?
-- Which exact metrics form the minimum Phase 1 cross-platform baseline?
-- What default sampling cadence is acceptable after measurement?
-- Should process metadata and live process stats use separate streams?
-- How much chart history belongs only in renderer memory versus Rust?
-- Which process fields are necessary without exposing sensitive command lines/paths?
-- Is a right-panel System tab the desired UX, or should System become a larger standalone workspace?
-- When should remote monitoring enter scope?
-- Which Phase 2 controls are valuable enough to justify native per-OS implementations?
-- What exact stable process identity should destructive commands use on each OS?
-- Which read-only resource tools should agents receive before any mutation tools?
-- Should capability reporting distinguish unsupported, unavailable, permission-denied, and temporarily-unobservable states?
-
-Update this plan as those questions are answered. The immediate next step is **plan refinement and technical validation, not implementation**.
+- **Rust process mode:** crates/bigbud-desktop-supervisor/src/main.rs dispatches --system-monitor to focused system_monitor modules; without the flag, delivery behavior remains unchanged. `bigbud-system` retains sysinfo System, Disks, Networks, Components and owns collector demand, sampling, and the latest authoritative snapshot; the Rust supervisor owns mode startup, shutdown, and transport recovery. Separate sampling from framed I/O with bounded latest-value state. Stop all workers on Shutdown/EOF. The shell provides a 2 s forced process cleanup fallback during app exit; ordinary monitoring start/stop decisions belong to Rust.
+- **Wire messages:** Hello/HelloAck, Subscribe, UpdateSubscription, Unsubscribe, Snapshot, SnapshotAck, ProcessQuery, ProcessPage, RetryCollection, Error, Shutdown. Rust owns subscription IDs scoped to the connected client and combines requested fields into one collector demand set. Views send visibility/field intent through TypeScript; Rust validates demand and selects cadence. Every subscription is renewed every 5 s and expires after 15 s without renewal, preventing a crashed renderer from keeping collection active. Detach immediately when a view closes or the renderer is destroyed. No mutation messages in Phase 1.
+- **Streaming and bounds:** Rust pushes structured complete snapshots. Allow one unacknowledged snapshot per subscription and one replaceable latest pending snapshot, with at most two subscriptions for the desktop views. The bridge forwards without calculating or modifying resource data; the renderer acknowledges receipt after copying the snapshot to bounded presentation state. Rust coalesces newer samples while an ACK is pending. Missing ACK for 5 s closes that subscription with a transport error; the view can resubscribe for a fresh baseline. Epoch/sequence and explicit fresh-baseline markers come from Rust. A new subscription receives a baseline, with warming values until valid deltas exist. No Electron snapshot polling/cache service.
+- **Cadence:** Rust schedules CPU/RAM/network every 1 s with active demand; process inventory every 5 s when requested; disk capacity/I/O every 10 s; temperatures every 15 s only when requested. Host/static fields accompany handshake and baseline. Rust staggers expensive refreshes, reports each field's freshness, and slows expensive work under load rather than overlap it or grow queues. Ten seconds after final demand ends, Rust stops sampling and releases inventory/collector state; the service remains dormant for later subscriptions. Both views share this service.
+- **Process query:** Rust holds at most 20,000 sanitized process records or 8 MiB per inventory, whichever comes first, and marks truncation. Keep the current inventory plus one query-pinned generation for up to 30 s, with a 16 MiB total inventory cap, so paging remains stable during refresh. A new query may evict the old pin and return stale-query for its cursor. Filter by name/PID/status; sort by CPU (default descending, PID tie-break), memory, name, or PID against one inventory generation. Return at most 100 rows and 128 KiB per page; a cursor contains inventory generation, query digest, and offset. An expired/changed cursor returns stale-query so the UI restarts from page one. No whole-inventory broadcast. Limit process names and component labels to 256 UTF-8 bytes, search/filter text to 256 bytes, and concurrent queries to two; reject excess requests with a typed busy/invalid result. Use a 3 s query deadline.
+- **Electron/TypeScript bridge:** a focused apps/desktop/src/system-monitor bridge performs native executable bootstrap, frame validation, trusted IPC routing, bounded request correlation, and transport teardown. It conveys subscribe/unsubscribe/renewal/ACK/query/retry messages and forwards Rust-produced data unchanged. It does not schedule samples, aggregate metrics, maintain authoritative resource state, or decide resource availability. React keeps bounded presentation copies only; both views use the same bridge.
+- **Recovery:** Rust reports summary freshness (stale after 5 s) and process inventory freshness (stale after 10 s), validates its collection workers, handles counter resets and suspend/wake, and emits a new baseline when continuity is lost. Rust handles recoverable collector failures with bounded retries, at most three attempts in 60 s, then emits a typed failure awaiting RetryCollection. A native-process crash or invalid connection is a transport failure: the UI displays connection unavailable and freezes its last sample, without inferring current resource state. The shell may re-establish the native connection on explicit Retry; Rust then produces a new epoch/baseline. Handshake deadline is 3 s and monitor launch cannot block main app startup. Shutdown/EOF tears down Rust workers. BIGBUD_SYSTEM_MONITOR_ENABLED=0 disables native bootstrap without affecting chat.
+- **Security/privacy:** only registered main-window webContents can invoke IPC, including Retry; validate argument sizes, sort keys, filters, cursors, and request count in Electron and Rust. No arbitrary command execution or PID mutation. Do not log process names, command lines, network addresses, or secrets. A child path must be the packaged verified artifact or an explicit development path; no search of PATH.
+
+## Implementation order and exact handoff
+
+1. **Dependency and Rust model:** add pinned sysinfo features to Cargo workspace/lockfile. Add the dedicated `crates/bigbud-system` library for models, collector, rates, process inventory/query, capability/status mapping, and demand lifecycle. The later supervisor mode composes this library and keeps main.rs limited to dispatch. Use targeted refresh APIs and cfg-gated handling only where sysinfo behavior differs.
+2. **Protocol and fixtures:** add protocol/system-monitor/v1.proto; extend supervisor build.rs with deterministic generation and rerun declarations. Add focused Rust frame/golden tests and a TypeScript codec with cross-language fixtures. Reuse/extract generic protobuf wire primitives from apps/server/src/remote-agent/remoteAgentProtocol.codec.wire.ts into an appropriate packages/shared subpath if that avoids duplicate parsing without coupling desktop to server; retain explicit size checks and typed decode failures. Do not modify the existing desktop-delivery schema merely to carry telemetry.
+3. **Electron transport bridge and IPC:** add apps/desktop/src/system-monitor/\* for binary resolution/bootstrap, framing, bounded message forwarding, request correlation, trusted IPC, and transport teardown. Keep subscription aggregation, sampling lifecycle, latest-value retention, freshness, and collector recovery inside Rust. Extend pathResolver.ts only for the development override as needed; packaged path remains the existing resolver. Register main-role-gated channels in main.channels.ts, window/ipcHandlers.ts or focused registration, main.bootstrap.ts, preload.ts, and DesktopBridge plus contracts system-monitor subpath. Hook main.ts quit/fatal cleanup. Keep the main desktop app running if monitor startup fails.
+4. **Shared web state and two views:** add one resource-monitor store/hook that conveys subscribe/unsubscribe intent and renewals for a visible panel/page, keeps at most 300 history points per plotted series, clears continuity on epoch/gap/staleness, and requests optional metrics only when shown. Add System tab and launcher integration through rightPanelTabs.store.ts, RightPanelHost.tsx, RightPanelTabs.tsx, RightPanelLauncher.tsx; show four default widgets plus optional temperature where supported, an accessible visibility/order control, host label, status, and full-page link. Add \_chat.resource-monitor.tsx and index route using StandalonePageContent, sidebar action/navigation, full graphs, process table/detail, optional metrics, and unsupported states. Use existing shadcn primitives and default 14px UI text; do not hand-edit routeTree.gen.ts.
+5. **Package and cross-platform validation:** the same existing supervisor binary must contain the new mode in macOS/Windows/Linux packages. Extend package smoke verification to invoke a version-only monitor handshake in the staged binary, without requiring OS metrics during packaging. Test actual packaged desktop on all three OS families; inspect sysinfo field availability and performance and adjust only implementation-level cadence/capability mapping within these bounds.
+
+## Quantitative budgets and validation
+
+Initial release budgets, chosen from the macOS probe and transport constraints; they are engineering targets to validate on all three OS families, not measured universal facts:
+
+| Concern             | Gate                                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Summary frame       | at most 32 KiB; monitor protocol frame at most 128 KiB                                                                            |
+| Process data        | at most 100 rows/page, 20,000 sanitized records or 8 MiB per inventory, 16 MiB total; explicit truncation                         |
+| Telemetry transport | at most 256 KiB/s sustained child→Electron main; overwrite old summary instead of queueing                                        |
+| Renderer history    | at most 300 points/series, no disk-persisted samples                                                                              |
+| Visible overhead    | monitor child averages under 5% of one logical CPU over 5 min at about 1,000 processes; RSS under 120 MiB on that fixture         |
+| Inactive overhead   | Rust stops OS sampling within 10 s of last unsubscribe (25 s after a vanished client); dormant service CPU under 0.1% of one core |
+| Freshness           | summary under 3 s old normally, stale at 5 s; process inventory under 10 s while needed                                           |
+| Isolation           | no resource frame/lock/write on delivery-supervisor instance; canonical ACK/watchdog tests stay green                             |
+| Resilience          | handshake within 3 s or explicit unavailable; bounded restart/kill/reap; no UI hang on 128 KiB invalid/truncated frame            |
+
+If a platform misses the CPU/RSS budget on a 1,000-process fixture, optimize targeted refresh/query serialization or lengthen only the expensive optional cadence, preserving 1 s CPU/RAM/network and correct freshness labels; report any budget change for review. Do not hide a failure by silently dropping an agreed baseline.
+
+Tests to add or extend:
+
+- Rust unit tests for rate warm-up, counter reset/wrap, units, NaN/missing values, capability mapping, inventory truncation/cursor generation, and query validation; real-child tests for handshake, partial/oversized frames, EOF, Shutdown, cancellation, Rust-owned subscription demand/lease expiry, idle suspension, collector retries, snapshot ACK/coalescing, and 20,000-process synthetic input.
+- Cross-language golden fixtures for v1 Hello, Snapshot, ProcessQuery/Page and Error; unknown minor fields accepted, incompatible major rejected. Prove existing delivery supervisor fixtures and ack_watchdog.rs still pass unchanged.
+- Electron tests with a fake monitor child: main-role IPC accepted, mascot/compact/browser denied, missing/mismatched binary unavailable, dev override, one native connection for two views, unchanged forwarding of resource payloads, subscription/ACK/renewal relay, connection failure/Retry, slow renderer, timeout, quit cleanup, and bounded in-flight messages.
+- Web tests for four defaults/up-to-five and hide/reorder persistence, panel-to-page navigation, page closing panel, shared native connection and subscription teardown, unsupported/denied/warming/stale states, epoch reset, process pagination/filter/sort, long host names, keyboard/accessibility, and no project/thread requirement.
+- macOS/Windows/Linux packaged smoke: actual desktop host identity, CPU/per-core, memory/swap, disks/network/processes, optional capability visibility, staged binary launch, suspend/wake, lost child, high process count, and unavailable mode. Record any OS-specific omissions and permissions.
+- Benchmark at 100 and 1,000+ processes with panel only, full page, both views, hidden views, slow renderer, and an active chat-delivery load. Capture refresh time per category, child CPU/RSS, frame bytes/s, process page latency, summary age, and canonical ACK latency.
+
+Run repository-required implementation checks: bun fmt, bun lint, bun typecheck, bun run test, cargo fmt --all --check, cargo clippy --locked --workspace --all-targets -- -D warnings, and cargo test --locked --workspace. **Never run bun test.** For this plan-only revision, run documentation formatting and repository-required lint/typecheck checks; runtime tests apply when implementing.
+
+## Risks, rollout, rollback, and validity
+
+- Adding the feature to the existing binary increases its size and adds sysinfo's native platform dependencies. Confirm exact packaged size and signing/verification still pass. A separate mode means monitor failure does not share the delivery instance's queue or ACK writer; preserve default-mode protocol and launch tests.
+- Process/device APIs differ by OS and permission. Field-level statuses and sample ages prevent plausible-looking false zeros. Optional temperatures and disk I/O may be unavailable. Do not promise GPU until a released, reviewed cross-platform source is selected.
+- One host can have far more processes than the bounded inventory. Show truncation and support filtering/query pages; never make serialization or rendering unbounded.
+- The runtime kill switch and missing-child unavailable state are the rollback path without disabling chat or deleting data. No database migration or telemetry persistence is planned. Remove the new UI route/channels/mode in rollback; existing delivery path continues independently.
+- This plan is based on dev at 6de834d9da1cdeffca1c297797f56915aea7ef60 and the worktree noted above. Revalidate if branch/commit, Electron trust roles, supervisor packaging/protocol, right-panel routing, sysinfo release/version, or Rust target toolchain changes. Preserve the unrelated untracked plan and all existing work.
+
+## Handoff status and later phases
+
+**Phase 0/1 design is actionable, and dependency approval is recorded above.** The implementing agent can follow the ordered steps without deciding host scope, UI location, Rust/TypeScript ownership, transport, default fields, privacy exclusions, cadence, or budgets. Cross-platform validation and dependency lockfile inspection remain implementation checks with explicit outcomes. Do not reopen the desktop-host, two-view, up-to-five-widget, one-sampler, or GPU-deferral decisions without new evidence.
+
+Phase 2, separately planned after the read-only contract stabilizes, introduces typed Rust resource-control commands with PID/start-time revalidation, capability checks, explicit results, and no shell fallback. Phase 3 may expose bounded read-only observations to agents; mutations additionally require Phase 2 and the existing approval/policy path. Phase 4 may reuse the `bigbud-system` observation library in the remote agent and investigate deeper native/GPU sources. None of those later phases is authorized by this Phase 1 implementation handoff.
