@@ -13,14 +13,14 @@ export function ChatViewComposerHeader({ thread, interactions }: ChatViewCompose
   return (
     <>
       {thread.activePendingApproval ? (
-        <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+        <div className="rounded-t-[calc(var(--card-surface-radius)-1px)] border-b border-border/65 bg-muted/20">
           <ComposerPendingApprovalPanel
             approval={thread.activePendingApproval}
             pendingCount={thread.pendingApprovals.length}
           />
         </div>
       ) : thread.showPlanFollowUpPrompt && thread.activeProposedPlan ? (
-        <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+        <div className="rounded-t-[calc(var(--card-surface-radius)-1px)] border-b border-border/65 bg-muted/20">
           <ComposerPlanFollowUpBanner
             key={thread.activeProposedPlan.id}
             planTitle={interactions.planTitle}

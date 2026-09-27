@@ -1,12 +1,8 @@
 import "~/index.css";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 vi.mock("@tanstack/react-router", () => ({ useParams: () => null }));
-import { ToastProvider, toastManager } from "./toast";
-
-afterEach(() => {
-  document.body.innerHTML = "";
-});
+import { AnchoredToastProvider, anchoredToastManager, ToastProvider, toastManager } from "./toast";
 
 it("renders a leading amber Wi-Fi icon with neutral text and restores the severity icon on update", async () => {
   const screen = await render(<ToastProvider />);
@@ -32,4 +28,38 @@ it("renders a leading amber Wi-Fi icon with neutral text and restores the severi
   expect(document.querySelector(".lucide-wifi")).toBeNull();
   expect(document.querySelector(".lucide-circle-check")).not.toBeNull();
   toastManager.close(id);
+});
+
+it("lets the shared close control dismiss every toast type", async () => {
+  const screen = await render(<ToastProvider />);
+
+  for (const type of ["error", "info", "loading", "success", "warning"] as const) {
+    const title = `${type} notification`;
+    toastManager.add({ title, type, timeout: 0 });
+
+    await expect.element(screen.getByText(title)).toBeVisible();
+    await screen.getByRole("button", { name: "Close notification" }).click();
+    await expect.element(screen.getByText(title)).not.toBeInTheDocument();
+  }
+});
+
+it("lets the shared close control dismiss anchored notifications", async () => {
+  const screen = await render(
+    <>
+      <button data-testid="toast-anchor" type="button">
+        Anchor
+      </button>
+      <AnchoredToastProvider />
+    </>,
+  );
+  anchoredToastManager.add({
+    title: "Anchored notification",
+    type: "info",
+    timeout: 0,
+    positionerProps: { anchor: document.querySelector('[data-testid="toast-anchor"]') },
+  });
+
+  await expect.element(screen.getByText("Anchored notification")).toBeVisible();
+  await screen.getByRole("button", { name: "Close notification" }).click();
+  await expect.element(screen.getByText("Anchored notification")).not.toBeInTheDocument();
 });

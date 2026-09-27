@@ -22,7 +22,13 @@ function CopyErrorButton({ text }: { text: string }) {
   );
 }
 
-export function ToastCloseButton({ className }: { className?: string }) {
+export function ToastCloseButton({
+  className,
+  exposeToAccessibility = false,
+}: {
+  className?: string;
+  exposeToAccessibility?: boolean;
+}) {
   return (
     <Toast.Close
       aria-label="Close notification"
@@ -30,6 +36,7 @@ export function ToastCloseButton({ className }: { className?: string }) {
         "shrink-0 rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className,
       )}
+      {...(exposeToAccessibility ? { "aria-hidden": false } : {})}
     >
       <XIcon className="size-3.5" />
     </Toast.Close>

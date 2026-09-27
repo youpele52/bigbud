@@ -31,7 +31,7 @@ export function ProviderSwitchBranchModal({
         className="absolute inset-0 bg-background/60 backdrop-blur-[1px]"
         onClick={onCancel}
       />
-      <Card className="relative w-full max-w-sm border-border/80 bg-background/96 p-5 shadow-lg/10">
+      <Card className="relative w-full max-w-sm border-border/80 p-5 shadow-lg/10">
         <div className="space-y-4">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">Start a new {targetLabel} branch?</h2>
