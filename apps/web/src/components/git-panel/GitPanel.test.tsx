@@ -167,7 +167,9 @@ describe("GitPanelContent", () => {
     const markup = renderToStaticMarkup(<GitPanelContent activeThreadId={null} />);
 
     expect(markup).toContain("No Git repository at");
-    expect(markup).toContain("/repo/project");
+    expect(markup).toContain("&quot;/repo/project&quot;");
+    expect(markup).toContain("font-light");
+    expect(markup).not.toContain("<code");
     expect(markup).toContain("not the terminal&#x27;s current directory");
   });
 

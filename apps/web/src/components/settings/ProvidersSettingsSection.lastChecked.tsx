@@ -19,7 +19,7 @@ export function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string |
 
   return (
     <span className="text-[11px] text-muted-foreground/60">
-      Checked <span className="font-mono tabular-nums">{lastCheckedRelative.value}</span>
+      Checked <span className="tabular-nums">{lastCheckedRelative.value}</span>
     </span>
   );
 }

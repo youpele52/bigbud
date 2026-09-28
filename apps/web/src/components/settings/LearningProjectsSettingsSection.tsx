@@ -64,7 +64,7 @@ export function LearningProjectsSettingsSection() {
             onClick={() => void openPath(learningRootPath)}
           >
             <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-xs">{learningRootPath}</span>
+            <span className="truncate text-sm font-light">{learningRootPath}</span>
           </Button>
         }
       />
@@ -98,7 +98,7 @@ export function LearningProjectsSettingsSection() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{formatProjectLabel(project)}</p>
-                  <p className="truncate font-mono text-xs text-muted-foreground">
+                  <p className="truncate text-sm font-light text-muted-foreground">
                     {project.absolutePath}
                   </p>
                 </div>

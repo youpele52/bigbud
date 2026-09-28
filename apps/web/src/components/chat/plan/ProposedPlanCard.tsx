@@ -206,7 +206,8 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
           <DialogHeader>
             <DialogTitle>Save plan to workspace</DialogTitle>
             <DialogDescription>
-              Enter a path relative to <code>{workspaceRoot ?? "the workspace"}</code>.
+              Enter a path relative to{" "}
+              <span className="font-light">&quot;{workspaceRoot ?? "the workspace"}&quot;</span>.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-3">

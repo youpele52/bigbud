@@ -179,15 +179,21 @@ export default function Sidebar() {
             description={
               s.remoteProjectUnlockMode === "password" ? (
                 <>
-                  bigbud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
+                  bigbud needs the SSH password for{" "}
+                  <span className="break-all font-light">
+                    &quot;{s.remoteProjectUnlockKeyPath}&quot;
+                  </span>{" "}
                   before it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"}{" "}
                   this remote project.
                 </>
               ) : (
                 <>
-                  bigbud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
-                  it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"} this
-                  remote project.
+                  bigbud needs the passphrase for{" "}
+                  <span className="break-all font-light">
+                    &quot;{s.remoteProjectUnlockKeyPath}&quot;
+                  </span>{" "}
+                  before it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"}{" "}
+                  this remote project.
                 </>
               )
             }
@@ -232,14 +238,18 @@ export default function Sidebar() {
               remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
                 <>
                   bigbud needs the SSH password for{" "}
-                  <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
-                  access this remote project.
+                  <span className="break-all font-light">
+                    &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
+                  </span>{" "}
+                  before it can access this remote project.
                 </>
               ) : (
                 <>
                   bigbud needs the passphrase for{" "}
-                  <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
-                  access this remote project.
+                  <span className="break-all font-light">
+                    &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
+                  </span>{" "}
+                  before it can access this remote project.
                 </>
               )
             }

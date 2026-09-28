@@ -111,7 +111,7 @@ export function GitPanelChanges({
                 >
                   <span
                     data-git-file-path
-                    className="truncate text-sm font-medium underline-offset-2 hover:underline"
+                    className="truncate text-sm font-light underline-offset-2 hover:underline"
                   >
                     {file.path}
                   </span>

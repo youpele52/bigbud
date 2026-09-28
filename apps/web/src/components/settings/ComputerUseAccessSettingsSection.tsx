@@ -258,7 +258,7 @@ export function ComputerUseAccessSettingsSection() {
                 {permissions.source.hostBundleId ? (
                   <div className="flex min-w-0 gap-1.5">
                     <dt className="shrink-0 text-muted-foreground">Host bundle:</dt>
-                    <dd className="break-all font-mono text-[11px] text-foreground">
+                    <dd className="break-all text-sm font-light text-foreground">
                       {permissions.source.hostBundleId}
                     </dd>
                   </div>

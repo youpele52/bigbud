@@ -96,7 +96,9 @@ export function ProviderCard({
               <span className={cn("size-2 shrink-0 rounded-full", card.statusStyle.dot)} />
               <h3 className="text-sm font-medium text-foreground">{providerDisplayName}</h3>
               {card.versionLabel ? (
-                <code className="text-xs text-muted-foreground">{card.versionLabel}</code>
+                <span className="text-sm font-light text-muted-foreground">
+                  {card.versionLabel}
+                </span>
               ) : null}
               <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 {card.isDirty ? (
@@ -248,9 +250,9 @@ export function ProviderCard({
                           </TooltipTrigger>
                           <TooltipPopup side="top" className="max-w-56">
                             <div className="space-y-1">
-                              <code className="block text-[11px] text-foreground">
+                              <span className="block break-all text-sm font-light text-foreground">
                                 {model.slug}
-                              </code>
+                              </span>
                               {capLabels.length > 0 ? (
                                 <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                                   {capLabels.map((label) => (

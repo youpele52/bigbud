@@ -136,7 +136,7 @@ export function AboutSettingsSection() {
         description={diagnosticsDescription}
         status={
           <>
-            <span className="block break-all font-mono text-[11px] text-foreground">
+            <span className="block break-all text-sm font-light text-foreground">
               {logsDirectoryPath ?? "Resolving logs directory..."}
             </span>
             {openDiagnosticsError ? (

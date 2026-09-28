@@ -292,8 +292,9 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
           keyPath={sshKeyPath}
           description={
             <>
-              bigbud needs the passphrase for <code>{sshKeyPath}</code> before it can start provider
-              sessions on this remote target.
+              bigbud needs the passphrase for{" "}
+              <span className="break-all font-light">&quot;{sshKeyPath}&quot;</span> before it can
+              start provider sessions on this remote target.
             </>
           }
           secret={sshKeyPassphrase}
@@ -394,7 +395,7 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           {workEntry.changedFiles?.slice(0, 4).map((filePath: string) => (
             <span
               key={`${workEntry.id}:${filePath}`}
-              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
+              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 text-xs font-light text-muted-foreground/75"
               title={filePath}
             >
               {filePath}

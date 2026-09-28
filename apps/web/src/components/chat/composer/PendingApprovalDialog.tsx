@@ -133,7 +133,7 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
               {workingDirectory ? (
                 <>
                   <dt className="text-muted-foreground">Directory</dt>
-                  <dd className="break-all font-mono text-xs text-foreground">
+                  <dd className="break-all text-sm font-light text-foreground">
                     {workingDirectory}
                   </dd>
                 </>

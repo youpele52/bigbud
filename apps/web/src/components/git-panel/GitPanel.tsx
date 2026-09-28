@@ -135,7 +135,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
     return (
       <div className="space-y-2 p-4 text-sm text-muted-foreground">
         <p>
-          No Git repository at <code className="break-all text-foreground">{cwd}</code>.
+          No Git repository at <span className="break-all font-light">&quot;{cwd}&quot;</span>.
         </p>
         <p>
           Git uses the project workspace root, not the terminal&apos;s current directory. Edit the

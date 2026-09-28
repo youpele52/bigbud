@@ -64,7 +64,7 @@ export function StructuredAnnotationPreviews(props: StructuredAnnotationPreviews
                     {item.badge}
                   </div>
                   <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>
-                  <div className="truncate font-mono text-[11px] text-muted-foreground/80">
+                  <div className="truncate text-sm font-light text-muted-foreground/80">
                     {item.detail}
                   </div>
                 </div>
