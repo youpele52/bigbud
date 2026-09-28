@@ -10,11 +10,14 @@ export function coalesceOrchestrationUiEvents(
   const coalesced: OrchestrationEvent[] = [];
   for (const event of events) {
     const previous = coalesced.at(-1);
+    // Empty completions carry no authoritative text. Keep them separate so the
+    // preceding streaming text remains an append delta before completion is applied.
     if (
       previous?.type === "thread.message-sent" &&
       event.type === "thread.message-sent" &&
       previous.payload.threadId === event.payload.threadId &&
-      previous.payload.messageId === event.payload.messageId
+      previous.payload.messageId === event.payload.messageId &&
+      !(previous.payload.streaming && !event.payload.streaming && event.payload.text.length === 0)
     ) {
       coalesced[coalesced.length - 1] = {
         ...event,
