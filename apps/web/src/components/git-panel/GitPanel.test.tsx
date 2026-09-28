@@ -128,6 +128,10 @@ vi.mock("./GitPatchViewer", () => ({
   GitPatchViewer: () => <div data-testid="git-patch-viewer" />,
 }));
 
+vi.mock("./GitPanelSyncControl", () => ({
+  GitPanelSyncControl: () => <span>Up to date</span>,
+}));
+
 import { GitPanelContent } from "./GitPanel";
 import { GitPanelHistory } from "./GitPanelHistory";
 

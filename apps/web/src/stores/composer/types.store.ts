@@ -263,6 +263,7 @@ export interface ComposerDraftStoreState {
   clearDraftThread: (threadId: ThreadId) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadId: ThreadId, prompt: string) => void;
+  appendPrompt: (threadId: ThreadId, prompt: string) => void;
   setShellMode: (threadId: ThreadId, shellMode: boolean) => void;
   setTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
   setModelSelection: (

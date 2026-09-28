@@ -44,6 +44,25 @@ export function createComposerContentActions(
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
+    appendPrompt: (threadId: ThreadId, prompt: string) => {
+      if (threadId.length === 0 || prompt.trim().length === 0) {
+        return;
+      }
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
+        const nextPrompt =
+          existing.prompt.trimEnd().length > 0
+            ? `${existing.prompt.trimEnd()}\n\n${prompt.trim()}`
+            : prompt.trim();
+        const nextDraft: ComposerThreadDraftState = { ...existing, prompt: nextPrompt };
+        return {
+          draftsByThreadId: {
+            ...state.draftsByThreadId,
+            [threadId]: nextDraft,
+          },
+        };
+      });
+    },
     setShellMode: (threadId: ThreadId, shellMode: boolean) => {
       if (threadId.length === 0) {
         return;
