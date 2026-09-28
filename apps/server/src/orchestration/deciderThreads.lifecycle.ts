@@ -23,6 +23,7 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import { noteThreadTitleCommand } from "../orchestration-tools/ThreadTitleLock.ts";
+import { seedMessageEvent } from "./deciderThreads.lifecycle.seed.ts";
 import { decideThreadPinCommand } from "./deciderThreads.pin.ts";
 import { makeThreadDeletedPayload } from "./deciderThreads.lifecycle.delete.ts";
 
@@ -136,28 +137,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
       }
       return [
         createdEvent,
-        ...command.seedMessages.map(
-          (message): Omit<OrchestrationEvent, "sequence"> => ({
-            ...withEventBase({
-              aggregateKind: "thread",
-              aggregateId: command.threadId,
-              occurredAt: message.updatedAt,
-              commandId: command.commandId,
-            }),
-            type: "thread.message-sent" as const,
-            payload: {
-              threadId: command.threadId,
-              messageId: message.id,
-              role: message.role,
-              text: message.text,
-              ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
-              turnId: message.turnId,
-              streaming: message.streaming,
-              createdAt: message.createdAt,
-              updatedAt: message.updatedAt,
-            },
-          }),
-        ),
+        ...command.seedMessages.map((message) => seedMessageEvent({ command, message, readModel })),
       ];
     }
 

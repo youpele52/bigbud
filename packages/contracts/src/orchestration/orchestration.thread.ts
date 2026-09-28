@@ -23,6 +23,7 @@ import {
 import { ChatAttachment } from "./orchestration.attachments";
 import { ModelSelection } from "./orchestration.provider";
 import { OrchestrationProject } from "./orchestration.project";
+import { MessageOriginSegment } from "./orchestration.messageOrigin";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -50,6 +51,7 @@ export const OrchestrationMessage = Schema.Struct({
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   replyTo: Schema.optional(OrchestrationMessageReply),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -179,6 +181,10 @@ export const OrchestrationTaskSource = Schema.Literals([
 ]);
 export type OrchestrationTaskSource = typeof OrchestrationTaskSource.Type;
 
+/** Explicit classification. Legacy and ambiguous records remain ordinary tasks. */
+export const OrchestrationTaskKind = Schema.Literals(["task", "providerSubagent"]);
+export type OrchestrationTaskKind = typeof OrchestrationTaskKind.Type;
+
 /** Additive ordering data; legacy snapshots decode into the deterministic legacy epoch. */
 export const OrchestrationTaskFreshness = Schema.Struct({
   sessionEpoch: Schema.String.pipe(Schema.withDecodingDefault(() => "legacy")),
@@ -202,6 +208,9 @@ export type OrchestrationTaskMembership = typeof OrchestrationTaskMembership.Typ
 
 export const OrchestrationTask = Schema.Struct({
   id: RuntimeTaskId,
+  kind: Schema.optional(OrchestrationTaskKind),
+  nativeId: Schema.optional(TrimmedNonEmptyString),
+  activityFresh: Schema.optional(Schema.Boolean),
   status: OrchestrationTaskStatus,
   subject: TrimmedNonEmptyString,
   description: Schema.optional(TrimmedNonEmptyString),
@@ -267,6 +276,7 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   interactionMode: Schema.optional(ProviderInteractionMode),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 

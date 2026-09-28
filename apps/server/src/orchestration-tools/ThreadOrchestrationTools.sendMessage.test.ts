@@ -12,6 +12,7 @@ const projectId = ProjectId.makeUnsafe("project");
 
 const thread = (id: ThreadId, overrides = {}) => ({
   id,
+  title: id === callerId ? "Caller" : "Target",
   projectId,
   archivedAt: null,
   deletingAt: null,
@@ -96,6 +97,17 @@ describe("sendThreadMessageViaOrchestration", () => {
     await expect(send(value)).resolves.toEqual({ delivery: "queued", queuePosition: 3 });
     const commands = value.dispatch.mock.calls.map(([command]) => command);
     expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      originSegments: [
+        {
+          kind: "crossThreadAgent",
+          actor: "agent",
+          text: "Follow up",
+          sourceThreads: [{ threadId: callerId, title: "Caller" }],
+          verified: true,
+        },
+      ],
+    });
     expect(value.readEventsByCommandId).toHaveBeenCalledTimes(3);
     expect(value.readEvents).not.toHaveBeenCalled();
   });

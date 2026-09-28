@@ -1,4 +1,4 @@
-import { Button, textButtonTypography } from "../../ui/button";
+import { CompactActivityGroup } from "../common/CompactActivityGroup";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES, type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
 import type { ExecutionTargetId } from "@bigbud/contracts";
@@ -33,24 +33,20 @@ export function MessagesTimelineWorkGroup({
 
   return (
     <div className="group/work-log flex flex-col items-start gap-1">
-      <div className="w-full rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-        {showHeader && (
-          <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-            <p className={textButtonTypography}>
-              {groupLabel} ({groupedEntries.length})
-            </p>
-            {hasOverflow && (
-              <Button
-                size="xs"
-                variant="text"
-                type="button"
-                onClick={() => onToggleWorkGroup(row.id)}
-              >
-                {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-              </Button>
-            )}
-          </div>
-        )}
+      <CompactActivityGroup
+        label={groupLabel}
+        count={groupedEntries.length}
+        showHeader={showHeader}
+        overflow={
+          hasOverflow
+            ? {
+                expanded: isExpanded,
+                hiddenCount,
+                onToggle: () => onToggleWorkGroup(row.id),
+              }
+            : undefined
+        }
+      >
         <div className="space-y-0.5">
           {visibleEntries.map((workEntry) => (
             <SimpleWorkEntryRow
@@ -61,7 +57,7 @@ export function MessagesTimelineWorkGroup({
             />
           ))}
         </div>
-      </div>
+      </CompactActivityGroup>
       {singleVisibleEntry ? (
         <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100">
           <WorkEntryActionButtons

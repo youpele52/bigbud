@@ -221,6 +221,16 @@ export function mergeThreadDetail(
     latestTurn,
     activities: loadingOlder ? thread.activities : activities,
     proposedPlans: loadingOlder ? thread.proposedPlans : proposedPlans,
+    providerAgents: loadingOlder
+      ? (thread.providerAgents ?? [])
+      : [...(thread.providerAgents ?? []), ...(detail.recentAgents ?? [])]
+          .filter(
+            (agent, index, all) => all.findLastIndex((entry) => entry.id === agent.id) === index,
+          )
+          .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    delegatedChildren: loadingOlder
+      ? (thread.delegatedChildren ?? [])
+      : [...(detail.delegatedChildren ?? [])],
     turnDiffSummaries: loadingOlder ? thread.turnDiffSummaries : turnDiffSummaries,
   };
 }

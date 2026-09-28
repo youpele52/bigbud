@@ -140,6 +140,10 @@ export function makeQueuedPrompt(input: {
       );
     }
     const references = yield* resolvePromptReferences(input);
+    const originSegments =
+      command.type === "thread.message.submit"
+        ? command.originSegments
+        : command.message.originSegments;
     return {
       id: command.message.messageId,
       text: command.message.text.trim(),
@@ -158,6 +162,7 @@ export function makeQueuedPrompt(input: {
       ...(references.sourceProposedPlan !== undefined
         ? { sourceProposedPlan: references.sourceProposedPlan }
         : {}),
+      ...(originSegments !== undefined ? { originSegments } : {}),
     };
   });
 }
@@ -208,6 +213,12 @@ export function queuedPromptMatchesCommand(
     prompt.interactionMode === command.interactionMode &&
     prompt.bootstrapSourceThreadId === command.bootstrapSourceThreadId &&
     Equal.equals(prompt.sourceProposedPlan, command.sourceProposedPlan) &&
+    Equal.equals(
+      prompt.originSegments,
+      command.type === "thread.message.submit"
+        ? command.originSegments
+        : command.message.originSegments,
+    ) &&
     command.bootstrap === undefined
   );
 }
@@ -219,6 +230,7 @@ export function queuedPromptToTurnStartCommand(input: {
   readonly createdAt: ThreadTurnStartCommand["createdAt"];
   readonly messageId?: ThreadTurnStartCommand["message"]["messageId"];
   readonly text?: string;
+  readonly originSegments?: ThreadTurnStartCommand["message"]["originSegments"];
 }): ThreadTurnStartCommand {
   const { prompt, thread } = input;
   return {
@@ -231,6 +243,9 @@ export function queuedPromptToTurnStartCommand(input: {
       text: input.text ?? prompt.text,
       attachments: prompt.attachments ?? [],
       ...(prompt.replyTo !== undefined ? { replyToMessageId: prompt.replyTo.messageId } : {}),
+      ...((input.originSegments ?? prompt.originSegments) !== undefined
+        ? { originSegments: input.originSegments ?? prompt.originSegments }
+        : {}),
     },
     ...(prompt.modelSelection !== undefined ? { modelSelection: prompt.modelSelection } : {}),
     ...(prompt.titleSeed !== undefined ? { titleSeed: prompt.titleSeed } : {}),

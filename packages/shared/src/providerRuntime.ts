@@ -51,15 +51,20 @@ function compareRevision(
  * over a prior epoch.
  */
 export function compareTaskFreshness(left: TaskFreshness, right: TaskFreshness): number {
-  const stableOrder =
-    compareOptionalString(left.sessionEpoch, right.sessionEpoch) ||
+  const sameEpoch = left.sessionEpoch === right.sessionEpoch;
+  if (!sameEpoch) {
+    // Session epoch strings are identities, not ordered generations. Only a provider
+    // timestamp can safely order observations from unrelated stream incarnations.
+    return compareOptionalString(left.providerTimestamp, right.providerTimestamp);
+  }
+  return (
     compareRevision(left.providerRevision, right.providerRevision) ||
     compareOptionalString(left.providerTimestamp, right.providerTimestamp) ||
     compareOptionalNumber(left.observedOrdinal, right.observedOrdinal) ||
     compareOptionalNumber(left.snapshotGeneration, right.snapshotGeneration) ||
     compareOptionalNumber(left.sourcePriority, right.sourcePriority) ||
-    compareOptionalString(left.providerMessageId, right.providerMessageId);
-  return stableOrder;
+    compareOptionalString(left.providerMessageId, right.providerMessageId)
+  );
 }
 
 export function isTaskFreshnessNewer(candidate: TaskFreshness, existing: TaskFreshness): boolean {

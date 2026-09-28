@@ -1,9 +1,3 @@
-/**
- * SQL query definitions for the ProjectionSnapshotQuery layer.
- *
- * All SqlSchema-based query builders are defined here and consumed by
- * ProjectionSnapshotQueryAssembly to build the full read model.
- */
 import { Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -135,6 +129,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           text,
           attachments_json AS "attachments",
           reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"

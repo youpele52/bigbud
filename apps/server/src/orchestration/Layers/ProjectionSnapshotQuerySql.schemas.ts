@@ -16,6 +16,7 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
+import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -40,6 +41,7 @@ export const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFie
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
     replyTo: Schema.NullOr(Schema.fromJsonString(OrchestrationMessageReply)),
+    originSegments: Schema.NullOr(Schema.fromJsonString(Schema.Array(MessageOriginSegment))),
   }),
 );
 

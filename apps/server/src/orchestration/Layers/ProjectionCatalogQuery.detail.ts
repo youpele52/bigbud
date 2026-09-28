@@ -29,6 +29,14 @@ import {
   type ProjectionCatalogQueryShape,
 } from "../Services/ProjectionCatalogQuery.ts";
 import {
+  makeReadDelegatedChildren,
+  normalizeDelegatedChildren,
+} from "./ProjectionCatalogQuery.detail.delegations.ts";
+import {
+  makeThreadDetailTaskReaders,
+  normalizeRecentAgents,
+} from "./ProjectionCatalogQuery.detail.tasks.ts";
+import {
   ThreadDetailActivityDbRow,
   ThreadDetailCheckpointDbRow,
   ThreadDetailIdentityDbRow,
@@ -36,7 +44,6 @@ import {
   ThreadDetailPendingApprovalDbRow,
   ThreadDetailPendingUserInputDbRow,
   ThreadDetailPlanDbRow,
-  ThreadDetailTaskDbRow,
 } from "./ProjectionCatalogQuery.schemas.ts";
 
 const ThreadIdentityRequest = Schema.Struct({ threadId: Schema.String });
@@ -64,6 +71,7 @@ function normalizeMessage(row: ThreadDetailMessageDbRow): ThreadDetailMessage {
     attachments: attachments.slice(0, THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT),
     attachmentsTruncated: attachments.length > THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT,
     ...(row.replyTo !== null ? { replyTo: row.replyTo } : {}),
+    ...(row.originSegments !== null ? { originSegments: row.originSegments } : {}),
     turnId: row.turnId,
     streaming: row.isStreaming === 1,
     createdAt: row.createdAt,
@@ -113,6 +121,7 @@ export function makeGetSelectedThreadDetail(
         text,
         attachments_json AS "attachments",
         reply_to_json AS "replyTo",
+        origin_segments_json AS "originSegments",
         is_streaming AS "isStreaming",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
@@ -206,18 +215,8 @@ export function makeGetSelectedThreadDetail(
     `,
   });
 
-  const readActiveTasks = SqlSchema.findAll({
-    Request: ThreadPageRequest,
-    Result: ThreadDetailTaskDbRow,
-    execute: ({ threadId, limit }) => sql`
-      SELECT task_json AS task
-      FROM projection_thread_tasks
-      WHERE thread_id = ${threadId}
-        AND json_extract(task_json, '$.status') IN ('pending', 'inProgress')
-      ORDER BY created_at ASC, task_id ASC
-      LIMIT ${limit}
-    `,
-  });
+  const { readActiveTasks, readRecentAgents } = makeThreadDetailTaskReaders(sql);
+  const readDelegatedChildren = makeReadDelegatedChildren(sql);
 
   const readCheckpoints = SqlSchema.findAll({
     Request: ThreadPageRequest,
@@ -251,6 +250,10 @@ export function makeGetSelectedThreadDetail(
       maximum: THREAD_DETAIL_APPROVAL_MAX_LIMIT,
     });
     const taskLimit = clamp(input.taskLimit ?? THREAD_DETAIL_TASK_DEFAULT_LIMIT, {
+      minimum: 1,
+      maximum: THREAD_DETAIL_TASK_MAX_LIMIT,
+    });
+    const agentLimit = clamp(input.agentLimit ?? THREAD_DETAIL_TASK_DEFAULT_LIMIT, {
       minimum: 1,
       maximum: THREAD_DETAIL_TASK_MAX_LIMIT,
     });
@@ -302,6 +305,14 @@ export function makeGetSelectedThreadDetail(
               activeTasks: readActiveTasks({
                 threadId: input.threadId,
                 limit: taskLimit + 1,
+              }),
+              recentAgents: readRecentAgents({
+                threadId: input.threadId,
+                limit: agentLimit + 1,
+              }),
+              delegatedChildren: readDelegatedChildren({
+                threadId: input.threadId,
+                limit: agentLimit,
               }),
               checkpoints: readCheckpoints({
                 threadId: input.threadId,
@@ -366,6 +377,9 @@ export function makeGetSelectedThreadDetail(
               .map((row) => row.task)
               .toSorted(compareTaskOrder),
             activeTasksTruncated: rows.activeTasks.length > taskLimit,
+            recentAgents: normalizeRecentAgents(rows.recentAgents, agentLimit),
+            recentAgentsTruncated: rows.recentAgents.length > agentLimit,
+            delegatedChildren: normalizeDelegatedChildren(rows.delegatedChildren),
             checkpoints: rows.checkpoints.slice(0, checkpointLimit),
             checkpointsTruncated: rows.checkpoints.length > checkpointLimit,
           };

@@ -113,6 +113,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           m.text,
           m.attachments_json AS "attachments",
           m.reply_to_json AS "replyTo",
+          m.origin_segments_json AS "originSegments",
           m.is_streaming AS "isStreaming",
           m.created_at AS "createdAt",
           m.updated_at AS "updatedAt",
@@ -133,7 +134,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           )
       )
       SELECT
-        "messageId", "threadId", "turnId", role, text, attachments, "replyTo",
+        "messageId", "threadId", "turnId", role, text, attachments, "replyTo", "originSegments",
         "isStreaming", "createdAt", "updatedAt"
       FROM ranked
       WHERE row_number <= ${STARTUP_OPERATIONAL_MESSAGE_LIMIT}

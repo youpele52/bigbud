@@ -18,6 +18,9 @@ import type {
   ProviderInteractionMode,
   RuntimeMode,
 } from "@bigbud/contracts";
+import type { ThreadDetailDelegatedChild } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
+import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
+import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import {
   DEFAULT_RUNTIME_MODE as _DEFAULT_RUNTIME_MODE,
   DEFAULT_PROVIDER_INTERACTION_MODE as _DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -104,6 +107,7 @@ export interface ChatMessage {
   text: string;
   attachments?: ChatAttachment[];
   replyTo?: ChatMessageReplyTarget;
+  originSegments?: ReadonlyArray<MessageOriginSegment>;
   turnId?: TurnId | null;
   createdAt: string;
   completedAt?: string | undefined;
@@ -173,6 +177,8 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  providerAgents?: OrchestrationTask[];
+  delegatedChildren?: ThreadDetailDelegatedChild[];
   queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;
   queueHold?: boolean;
@@ -221,6 +227,7 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  providerAgents?: OrchestrationTask[];
 }
 
 export type ThreadSessionProvider = ProviderKind | "unknown";

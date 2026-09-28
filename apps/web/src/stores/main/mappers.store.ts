@@ -136,6 +136,7 @@ export function mapMessage(message: OrchestrationMessage): ChatMessage {
     role: message.role,
     text: message.text,
     ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
+    ...(message.originSegments !== undefined ? { originSegments: message.originSegments } : {}),
     turnId: message.turnId,
     createdAt: message.createdAt,
     streaming: message.streaming,
@@ -201,6 +202,8 @@ export function mapThread(thread: OrchestrationThread): Thread {
     session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
+    providerAgents: (thread.tasks ?? []).filter((task) => task.kind === "providerSubagent"),
+    delegatedChildren: [],
     queuedPrompts: [...(thread.queuedPrompts ?? [])],
     pendingTurnControlOperation: thread.pendingTurnControlOperation ?? null,
     queueHold: thread.queueHold ?? false,
@@ -294,6 +297,7 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
     hasActionableProposedPlan: hasActionableProposedPlan(
       findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
     ),
+    ...(thread.providerAgents ? { providerAgents: thread.providerAgents } : {}),
   };
 }
 

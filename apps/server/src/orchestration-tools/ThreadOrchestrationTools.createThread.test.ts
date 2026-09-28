@@ -114,7 +114,7 @@ describe("createThreadViaOrchestration", () => {
       task: "Do the work",
       watchForCompletion: false,
     });
-    expect(system.dispatch).toHaveBeenCalledTimes(2);
+    expect(system.dispatch).toHaveBeenCalledTimes(3);
     expect(system.dispatch.mock.calls[0]?.[0]).toMatchObject({
       type: "thread.create",
       projectId: callerProjectId,
@@ -124,6 +124,14 @@ describe("createThreadViaOrchestration", () => {
       executionTargetId: "execution-target",
     });
     expect(system.dispatch.mock.calls[1]?.[0]).toMatchObject({
+      type: "thread.activity.append",
+      threadId: callerThreadId,
+      activity: {
+        kind: "delegation.child-linked",
+        payload: { childProjectId: callerProjectId, childTitle: "Child" },
+      },
+    });
+    expect(system.dispatch.mock.calls[2]?.[0]).toMatchObject({
       type: "thread.turn.start",
       message: { text: expect.stringContaining("delegated standalone thread") },
     });

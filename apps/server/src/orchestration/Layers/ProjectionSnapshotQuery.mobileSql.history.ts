@@ -49,6 +49,7 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
           messages.text,
           messages.attachments_json AS "attachments",
           messages.reply_to_json AS "replyTo",
+          messages.origin_segments_json AS "originSegments",
           messages.is_streaming AS "isStreaming",
           messages.created_at AS "createdAt",
           messages.updated_at AS "updatedAt"

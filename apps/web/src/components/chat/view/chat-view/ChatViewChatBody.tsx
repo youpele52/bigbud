@@ -8,6 +8,9 @@ import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
+import { DelegatedChildrenCard } from "../../agents/DelegatedChildrenCard";
+import { ChatAgentActivityFeed } from "../../agents/ChatAgentActivityFeed";
+import { isFreshActiveProviderAgent } from "../../agents/agentActivity.presentation";
 import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
@@ -21,6 +24,7 @@ import type { ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
+import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.logic";
 
 interface ChatViewChatBodyProps {
   readonly base: ChatViewBaseState;
@@ -46,6 +50,13 @@ export function ChatViewChatBody({
   onOpenOrchestra,
 }: ChatViewChatBodyProps) {
   const { branchThread } = useThreadActions();
+  const mainActivityVisible =
+    thread.isWorking || thread.isCompacting || thread.showMemoryReviewStatus;
+  const activityPresentation = resolveAgentActivityPresentation({
+    mainActive: mainActivityVisible,
+    mainVerb: thread.showMemoryReviewStatus ? "Reviewing memory" : thread.workingVerb,
+    agents: base.activeThread?.providerAgents ?? [],
+  });
   const {
     focusMessageId,
     handleClosePlanCard,
@@ -124,6 +135,7 @@ export function ChatViewChatBody({
                     ))}
                   </div>
                 ) : null}
+                <DelegatedChildrenCard items={base.activeThread!.delegatedChildren ?? []} />
                 <MessagesTimeline
                   key={base.activeThread!.id}
                   isWorking={thread.isWorking}
@@ -131,6 +143,9 @@ export function ChatViewChatBody({
                   activeTurnStartedAt={thread.activeWorkStartedAt}
                   scrollContainer={runtime.scrollBehavior.messagesScrollElement}
                   timelineEntries={timeline.timelineEntries}
+                  historicalAgents={(base.activeThread!.providerAgents ?? []).filter(
+                    (agent) => !isFreshActiveProviderAgent(agent),
+                  )}
                   completionDividerBeforeEntryId={timeline.completionDividerBeforeEntryId}
                   completionSummary={thread.completionSummary}
                   turnDiffSummaryByAssistantMessageId={timeline.turnDiffSummaryByAssistantMessageId}
@@ -164,6 +179,7 @@ export function ChatViewChatBody({
                   }}
                   onReaderPositionChange={runtime.scrollBehavior.updateReaderPosition}
                 />
+                <ChatAgentActivityFeed agents={base.activeThread!.providerAgents ?? []} />
               </div>
 
               <div className="pointer-events-none absolute top-1/2 right-2 z-20 flex h-[75%] w-10 -translate-y-1/2 items-center justify-end sm:right-2 sm:w-10">
@@ -211,12 +227,18 @@ export function ChatViewChatBody({
                 onScrollToBottom={() => runtime.scrollBehavior.scrollMessagesToBottom("auto")}
               />
             ) : null}
-            {thread.isWorking || thread.isCompacting || thread.showMemoryReviewStatus ? (
+            {activityPresentation.visible ? (
               <ActivityStatusIndicator
-                verb={thread.showMemoryReviewStatus ? "Reviewing memory" : thread.workingVerb}
-                isCompacting={thread.showMemoryReviewStatus ? false : thread.isCompacting}
+                verb={activityPresentation.verb}
+                isCompacting={
+                  mainActivityVisible && !thread.showMemoryReviewStatus
+                    ? thread.isCompacting
+                    : false
+                }
                 activeWorkStartedAt={
-                  thread.showMemoryReviewStatus ? null : thread.activeWorkStartedAt
+                  mainActivityVisible && !thread.showMemoryReviewStatus
+                    ? thread.activeWorkStartedAt
+                    : null
                 }
                 nowIso={thread.nowIso}
               />

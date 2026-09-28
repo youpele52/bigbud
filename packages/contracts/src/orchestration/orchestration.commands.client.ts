@@ -30,6 +30,7 @@ import {
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+import * as MessageOrigin from "./orchestration.messageOrigin";
 import {
   ClientThreadMessageSubmitCommand,
   ThreadMessageSubmitCommand,
@@ -179,6 +180,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
     text: Schema.String,
     attachments: Schema.Array(ChatAttachment),
     replyToMessageId: Schema.optional(MessageId),
+    originSegments: Schema.optional(Schema.Array(MessageOrigin.MessageOriginSegment)),
   }),
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
@@ -237,6 +239,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
     text: Schema.String,
     attachments: Schema.Array(UploadChatAttachment),
     replyToMessageId: Schema.optional(MessageId),
+    originSegments: Schema.optional(Schema.Array(MessageOrigin.ClientOrchestraAssignmentOrigin)),
   }),
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),

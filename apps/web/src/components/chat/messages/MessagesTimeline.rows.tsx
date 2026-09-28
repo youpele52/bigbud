@@ -5,6 +5,7 @@ import type {
   ChatImageAttachment,
   ChatPathAttachment,
 } from "../../../models/types/app.types";
+import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
@@ -13,6 +14,7 @@ import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { MessagesTimelineWorkGroup } from "./MessagesTimeline.workGroup";
 import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
 import { MessagesTimelineDelegatedProvenance } from "./MessagesTimeline.delegatedProvenance";
+import { MessagesTimelineOrigins } from "./MessagesTimeline.origins";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
@@ -68,6 +70,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
+      {row.kind === "subagents-history" ? <SubagentsCard agents={row.agents} /> : null}
       {row.kind === "work" && (
         <MessagesTimelineWorkGroup
           row={row}
@@ -110,7 +113,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             >
               <div
                 className={cn(
-                  "max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",
+                  "max-w-[min(80%,48rem)] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",
                   focusedMessageId === row.message.id ? "border-primary/70 bg-secondary/85" : "",
                 )}
               >
@@ -179,6 +182,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     ))}
                   </div>
                 )}
+                <MessagesTimelineOrigins segments={row.message.originSegments} />
                 <UserFileReferenceChips
                   files={userFileReferences}
                   markdownCwd={markdownCwd}

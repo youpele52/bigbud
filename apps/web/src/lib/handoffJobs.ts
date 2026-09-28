@@ -51,7 +51,7 @@ export async function createHandoffSeedMessage(input: {
 }): Promise<ReturnType<typeof buildHandoffSeedMessage>> {
   const started = await startHandoffJob(input);
   const completed = await waitForHandoffJob(started.jobId);
-  return buildHandoffSeedMessage(completed.outputPath);
+  return buildHandoffSeedMessage(completed.outputPath, input.threadId);
 }
 
 export interface HandoffBranchInput {

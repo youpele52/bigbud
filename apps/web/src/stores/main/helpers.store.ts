@@ -1,5 +1,6 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
+import { syncDelegatedChildSummaries } from "./helpers.delegatedChildren.store";
 import { type AppState } from "./main.store";
 import {
   type ChatMessage,
@@ -284,14 +285,13 @@ export function updateThreadState(
   updater: (thread: Thread) => Thread,
   options: { readonly preserveLatestUserMessageAt?: boolean } = {},
 ): AppState {
-  const threads = updateThread(state.threads, threadId, (thread) => {
+  let threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
     return nextThread;
   });
   const updatedThread = threads.find((thread) => thread.id === threadId);
-  if (threads === state.threads || !updatedThread) {
-    return state;
-  }
+  if (threads === state.threads || !updatedThread) return state;
+  threads = syncDelegatedChildSummaries(threads, updatedThread);
   if (updatedThread.purpose === "side-chat") {
     return { ...state, threads };
   }

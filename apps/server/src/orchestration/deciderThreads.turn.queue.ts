@@ -2,6 +2,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationQueuedPrompt,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -37,6 +38,20 @@ type QueueCommand = Extract<
 
 const queuedFollowUpText = (texts: ReadonlyArray<string>): string =>
   ["Additional instructions:", ...texts.map((text) => `- ${text.trim()}`)].join("\n");
+
+export function attributedSegments(prompt: OrchestrationQueuedPrompt) {
+  return (
+    prompt.originSegments ?? [
+      {
+        kind: "ordinaryUser" as const,
+        actor: "user" as const,
+        text: prompt.text,
+        sourceThreads: [],
+        verified: true,
+      },
+    ]
+  );
+}
 
 function makeTurnStartCommand(
   command: Extract<QueueCommand, { type: "thread.message.submit" }>,
@@ -88,6 +103,7 @@ function buildQueuedFlushTurnStart(input: {
       : {
           messageId: input.messageId ?? input.prompt.id,
           text: queuedFollowUpText(input.prompts.map((prompt) => prompt.text)),
+          originSegments: input.prompts.flatMap(attributedSegments),
         }),
   });
 }
@@ -167,6 +183,9 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
           attachments: command.message.attachments ?? [],
           ...(command.message.replyToMessageId !== undefined
             ? { replyToMessageId: command.message.replyToMessageId }
+            : {}),
+          ...(command.originSegments !== undefined
+            ? { originSegments: command.originSegments }
             : {}),
         }),
       });

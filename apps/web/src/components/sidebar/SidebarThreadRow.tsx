@@ -24,6 +24,7 @@ import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import {
+  isProviderIconWorking,
   mergeRunningTerminalIds,
   prStatusIndicator,
   providerIconPresentationClass,
@@ -115,7 +116,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     return null;
   }
 
-  const isWorkingPresentation = threadStatus?.label === "Working";
+  const isWorkingPresentation = isProviderIconWorking(threadStatus);
   const connectingStartedAt =
     thread.session?.orchestrationStatus === "starting" ? thread.session.updatedAt : null;
   const isConnectingPresentation = shouldShowThreadConnectingPresentation(

@@ -76,6 +76,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         SELECT
           message_id AS "messageId", thread_id AS "threadId", turn_id AS "turnId", role, text,
           attachments_json AS attachments, reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming", created_at AS "createdAt", updated_at AS "updatedAt"
         FROM projection_thread_messages
         WHERE thread_id = ${threadId}
@@ -93,6 +94,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
       SELECT
         message_id AS "messageId", thread_id AS "threadId", turn_id AS "turnId", role, text,
         attachments_json AS attachments, reply_to_json AS "replyTo",
+        origin_segments_json AS "originSegments",
         is_streaming AS "isStreaming", created_at AS "createdAt", updated_at AS "updatedAt"
       FROM projection_thread_messages
       WHERE thread_id = ${threadId}

@@ -21,6 +21,7 @@ import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import type { BootstrapWorktreeIdentity } from "./wsBootstrap.ts";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
 import { findMatchingBootstrapSubmissionRecipe } from "./wsBootstrap.submissionRecipe.ts";
+import { stripPublicProvenance } from "./wsRpcContext.commandProvenance.ts";
 
 type PublicDispatchSource = Extract<CommandGatewaySource, "desktop" | "mobile" | "automation">;
 type DispatchSource = PublicDispatchSource | "internal";
@@ -87,12 +88,13 @@ export function makeWsRpcCommandDispatch(input: {
   );
 
   const dispatchNormalizedCommand = (
-    normalizedCommand: OrchestrationCommand,
+    command: OrchestrationCommand,
     source: DispatchSource = "desktop",
   ): Effect.Effect<
     { readonly sequence: number },
     OrchestrationDispatchCommandError | ServerRuntimeStartupError | CommandAdmissionError
   > => {
+    const normalizedCommand = source === "internal" ? command : stripPublicProvenance(command);
     const dispatchEffect =
       (normalizedCommand.type === "thread.turn.start" ||
         normalizedCommand.type === "thread.message.submit") &&

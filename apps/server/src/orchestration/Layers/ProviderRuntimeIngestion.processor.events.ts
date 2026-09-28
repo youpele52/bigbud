@@ -16,6 +16,7 @@ import { mergeTaskPatch } from "@bigbud/shared/providerRuntime";
 import { Effect } from "effect";
 
 import { isThinkingActivity } from "./ProviderRuntimeIngestion.processor.thinking.ts";
+import { resolveRuntimeTaskIdentity } from "./ProviderRuntimeIngestion.tasks.identity.ts";
 import { toTurnId } from "./ProviderRuntimeIngestion.helpers.ts";
 import type { RuntimeProcessorServices } from "./ProviderRuntimeIngestion.processor.ts";
 import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
@@ -126,7 +127,19 @@ export function makeRuntimeProcessorEventHelpers(input: {
       (yield* input.orchestrationEngine.getReadModel()).threads.find(
         (thread) => thread.id === deps.threadId,
       )?.tasks ?? [];
-    const previous = currentTasks.find((task) => task.id === deps.event.payload.taskId);
+    const identity = resolveRuntimeTaskIdentity({
+      threadId: deps.threadId,
+      ...(deps.event.sessionEpoch !== undefined ? { sessionEpoch: deps.event.sessionEpoch } : {}),
+      incomingTaskId: deps.event.payload.taskId,
+      ...(deps.event.type === "task.updated" && deps.event.payload.kind !== undefined
+        ? { incomingKind: deps.event.payload.kind }
+        : {}),
+      ...(deps.event.type === "task.updated" && deps.event.payload.nativeId !== undefined
+        ? { incomingNativeId: deps.event.payload.nativeId }
+        : {}),
+      currentTasks,
+    });
+    const { id: taskId, kind: taskKind, nativeId: incomingNativeId, previous } = identity;
     const lifecycleStatus =
       deps.event.type === "task.completed"
         ? deps.event.payload.status === "completed"
@@ -140,7 +153,14 @@ export function makeRuntimeProcessorEventHelpers(input: {
     const task: OrchestrationTask =
       deps.event.type === "task.updated"
         ? {
-            id: deps.event.payload.taskId,
+            id: taskId,
+            kind: taskKind,
+            ...(taskKind === "providerSubagent"
+              ? { nativeId: incomingNativeId }
+              : deps.event.payload.nativeId
+                ? { nativeId: deps.event.payload.nativeId }
+                : {}),
+            activityFresh: deps.event.payload.activityFresh ?? previous?.activityFresh ?? false,
             status: deps.event.payload.status,
             subject: deps.event.payload.subject,
             ...(deps.event.payload.description
@@ -206,7 +226,9 @@ export function makeRuntimeProcessorEventHelpers(input: {
           }
         : {
             ...previous,
-            id: deps.event.payload.taskId,
+            id: taskId,
+            kind: previous?.kind ?? "task",
+            activityFresh: previous?.activityFresh ?? false,
             status: lifecycleStatus,
             subject:
               deps.event.type === "task.progress"

@@ -2,7 +2,6 @@ import { type OrchestrationEvent } from "@bigbud/contracts";
 
 import { mapMessage, mapProposedPlan, mapSession, mapTurnDiffSummary } from "./mappers.store";
 import { type AppState } from "./main.store";
-import { type Thread } from "../../models/types";
 import {
   applyThreadReverted,
   buildLatestTurn,
@@ -10,7 +9,6 @@ import {
   compareActivities,
   MAX_THREAD_ACTIVITIES,
   MAX_THREAD_CHECKPOINTS,
-  MAX_THREAD_MESSAGES,
   MAX_THREAD_PROPOSED_PLANS,
   rebindTurnDiffSummariesForAssistantMessage,
   updateThreadState,
@@ -19,13 +17,38 @@ import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
 import { isStaleRunningSessionUpdate } from "./events.store.threads.runtime.logic";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 import { PROVIDER_CHECKING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
+import { applyDelegationLinkedActivity } from "./events.store.delegations";
+import { applyDelegatedChildRuntimeEvent } from "./events.store.delegatedRuntime";
+import { demoteProviderAgentsForSession } from "./events.store.providerAgents";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
+import {
+  buildThreadMessageLatestTurn,
+  getProviderTurnStartFailureDetail,
+  upsertThreadMessage,
+} from "./events.store.threads.runtime.messages";
 
 export function applyThreadRuntimeEvent(
   state: AppState,
   event: OrchestrationEvent,
 ): AppState | undefined {
+  state = applyDelegatedChildRuntimeEvent(state, event);
   switch (event.type) {
+    case "thread.task-upserted":
+      if (event.payload.task.kind !== "providerSubagent") return state;
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        providerAgents: [
+          ...(thread.providerAgents ?? []).filter((agent) => agent.id !== event.payload.task.id),
+          event.payload.task,
+        ],
+      }));
+    case "thread.task-removed":
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        providerAgents: (thread.providerAgents ?? []).filter(
+          (agent) => agent.id !== event.payload.taskId,
+        ),
+      }));
     case "thread.message-sent": {
       const nextState = updateThreadState(state, event.payload.threadId, (thread) => {
         const message = mapMessage({
@@ -36,6 +59,9 @@ export function applyThreadRuntimeEvent(
             ? { attachments: event.payload.attachments }
             : {}),
           ...(event.payload.replyTo !== undefined ? { replyTo: event.payload.replyTo } : {}),
+          ...(event.payload.originSegments !== undefined
+            ? { originSegments: event.payload.originSegments }
+            : {}),
           turnId: event.payload.turnId,
           streaming: event.payload.streaming,
           createdAt: event.payload.createdAt,
@@ -120,10 +146,16 @@ export function applyThreadRuntimeEvent(
           : incomingSession;
 
         const session = mapSession(normalizedSession);
+        const providerAgents = demoteProviderAgentsForSession(
+          thread.providerAgents,
+          thread.session,
+          normalizedSession,
+        );
 
         return {
           ...thread,
           session,
+          ...(providerAgents !== undefined ? { providerAgents } : {}),
           error: sanitizeThreadErrorMessage(incomingSession.lastError),
           latestTurn:
             normalizedSession.status === "running" && incomingActiveTurnId !== null
@@ -302,109 +334,19 @@ export function applyThreadRuntimeEvent(
           .toSorted(compareActivities)
           .slice(-MAX_THREAD_ACTIVITIES);
         const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
-        return {
-          ...thread,
-          activities,
-          error: providerTurnStartError ?? thread.error,
-          updatedAt: event.occurredAt,
-        };
+        return applyDelegationLinkedActivity(
+          {
+            ...thread,
+            activities,
+            error: providerTurnStartError ?? thread.error,
+            updatedAt: event.occurredAt,
+          },
+          event.payload.activity,
+        );
       });
     }
 
     default:
       return undefined;
   }
-}
-
-function getProviderTurnStartFailureDetail(activity: Thread["activities"][number]): string | null {
-  if (activity.kind !== "provider.turn.start.failed") {
-    return null;
-  }
-  const detail =
-    typeof activity.payload === "object" &&
-    activity.payload !== null &&
-    "detail" in activity.payload &&
-    typeof activity.payload.detail === "string"
-      ? activity.payload.detail
-      : activity.summary;
-  return sanitizeThreadErrorMessage(detail) ?? activity.summary;
-}
-
-function upsertThreadMessage(
-  thread: Thread,
-  message: Thread["messages"][number],
-  event: Extract<OrchestrationEvent, { type: "thread.message-sent" }>,
-): Thread["messages"] {
-  const existingMessage = thread.messages.find((entry) => entry.id === message.id);
-  const messages = existingMessage
-    ? thread.messages.map((entry) =>
-        entry.id !== message.id
-          ? entry
-          : {
-              ...entry,
-              text:
-                event.payload.replace === true
-                  ? message.text
-                  : message.streaming
-                    ? `${entry.text}${message.text}`
-                    : message.text.length > 0
-                      ? message.text
-                      : entry.text,
-              streaming: message.streaming,
-              ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
-              ...(message.streaming
-                ? entry.completedAt !== undefined
-                  ? { completedAt: entry.completedAt }
-                  : {}
-                : message.completedAt !== undefined
-                  ? { completedAt: message.completedAt }
-                  : {}),
-              ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
-              ...(message.replyTo !== undefined
-                ? { replyTo: message.replyTo }
-                : entry.replyTo !== undefined
-                  ? { replyTo: entry.replyTo }
-                  : {}),
-            },
-      )
-    : [...thread.messages, message];
-  return messages.slice(-MAX_THREAD_MESSAGES);
-}
-
-function buildThreadMessageLatestTurn(
-  thread: Thread,
-  event: Extract<OrchestrationEvent, { type: "thread.message-sent" }>,
-): Thread["latestTurn"] {
-  if (event.payload.role !== "assistant" || event.payload.turnId === null) {
-    return thread.latestTurn;
-  }
-  if (thread.latestTurn !== null && thread.latestTurn.turnId !== event.payload.turnId) {
-    return thread.latestTurn;
-  }
-  return buildLatestTurn({
-    previous: thread.latestTurn,
-    turnId: event.payload.turnId,
-    state: event.payload.streaming
-      ? "running"
-      : thread.latestTurn?.state === "interrupted"
-        ? "interrupted"
-        : thread.latestTurn?.state === "error"
-          ? "error"
-          : "completed",
-    requestedAt:
-      thread.latestTurn?.turnId === event.payload.turnId
-        ? thread.latestTurn.requestedAt
-        : event.payload.createdAt,
-    startedAt:
-      thread.latestTurn?.turnId === event.payload.turnId
-        ? (thread.latestTurn.startedAt ?? event.payload.createdAt)
-        : event.payload.createdAt,
-    sourceProposedPlan: thread.pendingSourceProposedPlan,
-    completedAt: event.payload.streaming
-      ? thread.latestTurn?.turnId === event.payload.turnId
-        ? (thread.latestTurn.completedAt ?? null)
-        : null
-      : event.payload.updatedAt,
-    assistantMessageId: event.payload.messageId,
-  });
 }

@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
-import { stableThreadToolId } from "./ThreadOrchestrationTools.ts";
+import { stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
 type SendThreadMessageOutcome =
   | { readonly delivery: "started" }
@@ -76,6 +76,15 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
       commandId,
       threadId: target.id,
       message: { messageId, text: message },
+      originSegments: [
+        {
+          kind: "crossThreadAgent",
+          actor: "agent",
+          text: message,
+          sourceThreads: [{ threadId: caller.id, title: caller.title }],
+          verified: true,
+        },
+      ],
       delivery: input.delivery,
       createdAt: new Date().toISOString(),
     });

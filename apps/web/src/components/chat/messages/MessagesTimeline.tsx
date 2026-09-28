@@ -18,6 +18,7 @@ import {
   getMessagesTimelineRowMeasurementKey,
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
+import { useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -26,6 +27,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   activeTurnStartedAt,
   scrollContainer,
   timelineEntries,
+  historicalAgents = [],
   completionDividerBeforeEntryId,
   completionSummary,
   turnDiffSummaryByAssistantMessageId,
@@ -52,35 +54,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onVirtualizerSnapshot,
   onReaderPositionChange,
 }: MessagesTimelineProps) {
-  const timelineRootRef = useRef<HTMLDivElement | null>(null);
-  const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
+  const { timelineRootRef, timelineWidthPx } = useTimelineWidth();
   const [focusedMessageId, setFocusedMessageId] = useState<MessageId | null>(null);
   const lastProcessedFocusMessageIdRef = useRef<MessageId | null>(null);
-
-  useLayoutEffect(() => {
-    const timelineRoot = timelineRootRef.current;
-    if (!timelineRoot) return;
-
-    const updateWidth = (nextWidth: number) => {
-      setTimelineWidthPx((previousWidth) => {
-        if (previousWidth !== null && Math.abs(previousWidth - nextWidth) < 0.5) {
-          return previousWidth;
-        }
-        return nextWidth;
-      });
-    };
-
-    updateWidth(timelineRoot.getBoundingClientRect().width);
-
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      updateWidth(timelineRoot.getBoundingClientRect().width);
-    });
-    observer.observe(timelineRoot);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   const rows = useMemo(
     () =>
@@ -89,8 +65,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         completionDividerBeforeEntryId,
         isWorking,
         activeTurnStartedAt,
+        historicalAgents,
       }),
-    [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt],
+    [
+      timelineEntries,
+      completionDividerBeforeEntryId,
+      isWorking,
+      activeTurnStartedAt,
+      historicalAgents,
+    ],
   );
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
@@ -329,7 +312,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     <div
       ref={timelineRootRef}
       data-timeline-root="true"
-      className="mx-auto w-full min-w-0 max-w-3xl overflow-x-hidden"
+      className="mx-auto w-full min-w-0 max-w-3xl overflow-x-hidden lg:max-w-5xl"
     >
       {virtualizedRowCount > 0 && (
         <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>

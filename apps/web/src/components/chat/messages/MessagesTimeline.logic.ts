@@ -1,4 +1,4 @@
-import { type MessageId } from "@bigbud/contracts";
+import { type MessageId, type OrchestrationTask } from "@bigbud/contracts";
 import { type TimelineEntry, type PendingUserInput } from "../../../logic/session";
 import { type WorkLogEntry } from "../../../logic/session";
 import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../../lib/turnDiffTree";
@@ -44,6 +44,12 @@ export type MessagesTimelineRow =
       proposedPlan: ProposedPlan;
     }
   | {
+      kind: "subagents-history";
+      id: string;
+      createdAt: string;
+      agents: OrchestrationTask[];
+    }
+  | {
       kind: "user-input-question";
       id: string;
       createdAt: string;
@@ -79,6 +85,7 @@ export function deriveMessagesTimelineRows(input: {
   completionDividerBeforeEntryId: string | null;
   isWorking: boolean;
   activeTurnStartedAt: string | null;
+  historicalAgents?: ReadonlyArray<OrchestrationTask>;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
   const activeTurnStartedAtMs =
@@ -180,6 +187,8 @@ export function deriveMessagesTimelineRows(input: {
     });
   }
 
+  insertHistoricalSubagentRows(nextRows, input.historicalAgents ?? []);
+
   if (input.isWorking) {
     nextRows.push({
       kind: "working",
@@ -189,6 +198,41 @@ export function deriveMessagesTimelineRows(input: {
   }
 
   return nextRows;
+}
+
+export function insertHistoricalSubagentRows(
+  rows: MessagesTimelineRow[],
+  agents: ReadonlyArray<OrchestrationTask>,
+): void {
+  const groups = new Map<string, OrchestrationTask[]>();
+  for (const agent of agents) {
+    const key = agent.turnId ? `turn:${agent.turnId}` : `time:${agent.updatedAt}`;
+    groups.set(key, [...(groups.get(key) ?? []), agent]);
+  }
+  const historyRows = [...groups.entries()]
+    .map(([key, groupedAgents]) => ({
+      kind: "subagents-history" as const,
+      id: `subagents-history:${key}`,
+      createdAt: groupedAgents.reduce(
+        (latest, agent) => (agent.updatedAt > latest ? agent.updatedAt : latest),
+        groupedAgents[0]!.updatedAt,
+      ),
+      agents: groupedAgents,
+      turnId: groupedAgents[0]?.turnId,
+    }))
+    .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt));
+  for (const history of historyRows) {
+    const turnIndex = history.turnId
+      ? rows.findLastIndex((row) => row.kind === "message" && row.message.turnId === history.turnId)
+      : -1;
+    const timestampIndex = rows.findIndex(
+      (row) => typeof row.createdAt === "string" && row.createdAt > history.createdAt,
+    );
+    const index =
+      turnIndex >= 0 ? turnIndex + 1 : timestampIndex >= 0 ? timestampIndex : rows.length;
+    const { turnId: _turnId, ...row } = history;
+    rows.splice(index, 0, row);
+  }
 }
 
 export function estimateMessagesTimelineRowHeight(
@@ -214,6 +258,8 @@ export function estimateMessagesTimelineRowHeight(
       );
     case "proposed-plan":
       return estimateTimelineProposedPlanHeight(row.proposedPlan);
+    case "subagents-history":
+      return 52 + Math.min(row.agents.length, 4) * 32;
     case "user-input-question":
       return estimateUserInputQuestionRowHeight(row.pendingUserInput);
     case "working":

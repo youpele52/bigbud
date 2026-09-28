@@ -6,7 +6,6 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
-import { createHash } from "node:crypto";
 import { Effect, Option } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -14,16 +13,17 @@ import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStat
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
 import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
+import {
+  buildInitialDelegationPrompt,
+  delegationError,
+  initialDelegationOrigin,
+  notifyDelegationLinked,
+  stableThreadToolId,
+} from "./ThreadOrchestrationTools.origins.ts";
 import { lockThreadTitle } from "./ThreadTitleLock.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`agent:${tag}:${crypto.randomUUID()}`);
-
-export const stableThreadToolId = (prefix: string, value: string): string =>
-  `${prefix}:${createHash("sha256").update(value).digest("hex")}`;
-
-const delegationError = (error: unknown): Error =>
-  error instanceof Error ? error : new Error(String(error));
 
 export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestration")(
   function* (input: {
@@ -118,16 +118,15 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       title: callerThread.title,
       projectId: callerThread.projectId,
     } as const;
-    const provenance = [
-      "<delegated_thread_provenance>",
-      `Parent thread: ${parentThread.title} (${parentThread.threadId})`,
-      `Parent project: ${parentThread.projectId}`,
-      `Delegation: ${delegation.delegationId}`,
-      "This is a delegated standalone thread. Complete the task below and report actionable results.",
-      "</delegated_thread_provenance>",
-      "",
+    const provenance = buildInitialDelegationPrompt({
+      parent: {
+        id: callerThread.id,
+        title: callerThread.title,
+        projectId: callerThread.projectId,
+      },
+      delegationId: delegation.delegationId,
       task,
-    ].join("\n");
+    });
 
     const updateState = (
       state: Parameters<ThreadDelegationRepositoryShape["updateState"]>[0]["state"],
@@ -168,6 +167,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       })
       .pipe(Effect.mapError(delegationError));
     yield* updateState("thread_accepted");
+    yield* notifyDelegationLinked(input, delegation, targetProjectId, title, now);
     const turnResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.turn.start",
@@ -178,6 +178,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
           role: "user",
           text: provenance,
           attachments: [],
+          originSegments: [initialDelegationOrigin({ parent: callerThread, task })],
         },
         modelSelection: callerThread.modelSelection,
         runtimeMode: callerThread.runtimeMode,

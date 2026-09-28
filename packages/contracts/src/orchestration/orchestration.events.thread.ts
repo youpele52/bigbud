@@ -14,6 +14,7 @@ import {
   TurnId,
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
+import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -159,6 +160,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   replyTo: Schema.optional(OrchestrationMessageReply),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
   turnId: Schema.NullOr(TurnId),
   replace: Schema.optional(Schema.Boolean),
   streaming: Schema.Boolean,
