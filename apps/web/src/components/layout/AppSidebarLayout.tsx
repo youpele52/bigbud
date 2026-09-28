@@ -1,7 +1,8 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useRightPanelCloseTabShortcut } from "~/stores/rightPanel/useRightPanelCloseTabShortcut";
+import { useStore } from "~/stores/main";
 
 import ThreadSidebar from "../sidebar/Sidebar";
 import {
@@ -9,6 +10,7 @@ import {
   THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
 } from "./chatLayout.shared";
 import { Sidebar, SidebarProvider, SidebarRail } from "../ui/sidebar";
+import { isThreadNavigationAvailable, parseOpenThreadAction } from "./AppSidebarLayout.logic";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
@@ -16,6 +18,10 @@ const THREAD_SIDEBAR_MAX_WIDTH = 30 * 16;
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const bootstrapComplete = useStore((state) => state.bootstrapComplete);
+  const threads = useStore((state) => state.threads);
+  const sidebarThreadsById = useStore((state) => state.sidebarThreadsById);
+  const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   useRightPanelCloseTabShortcut();
 
   useEffect(() => {
@@ -30,11 +36,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         void navigate({ to: "/settings" });
         return;
       }
-      if (action.startsWith("open-thread:")) {
-        const threadId = action.slice("open-thread:".length);
-        if (threadId.length > 0) {
-          void navigate({ to: "/$threadId", params: { threadId } });
-        }
+      const threadId = parseOpenThreadAction(action);
+      if (threadId) {
+        setPendingThreadId(threadId);
       }
     });
 
@@ -42,6 +46,16 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!pendingThreadId || !bootstrapComplete) return;
+
+    const threadId = pendingThreadId;
+    setPendingThreadId(null);
+    if (!isThreadNavigationAvailable(threadId, { threads, sidebarThreadsById })) return;
+
+    void navigate({ to: "/$threadId", params: { threadId } });
+  }, [bootstrapComplete, navigate, pendingThreadId, sidebarThreadsById, threads]);
 
   return (
     <SidebarProvider defaultOpen>

@@ -348,6 +348,7 @@ app
       floatingAssistantWindows,
       getIsQuitting: () => isQuitting,
       getMainWindow: () => mainWindow,
+      openMainWindow,
       isDevelopment,
       isPackaged: app.isPackaged,
       logHeader,

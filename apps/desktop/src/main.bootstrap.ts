@@ -70,6 +70,7 @@ interface BootstrapDesktopOptions {
   readonly floatingAssistantWindows: FloatingAssistantWindows;
   readonly getIsQuitting: () => boolean;
   readonly getMainWindow: () => BrowserWindow | null;
+  readonly openMainWindow: (threadId?: string) => BrowserWindow;
   readonly isDevelopment: boolean;
   readonly isPackaged: boolean;
   readonly logHeader: (message: string) => void;
@@ -95,6 +96,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     floatingAssistantWindows,
     getIsQuitting,
     getMainWindow,
+    openMainWindow,
     isDevelopment,
     isPackaged,
     logHeader,
@@ -179,6 +181,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     BACKEND_STARTUP_STATE_CHANNEL: channels.backendStartupState,
     BACKEND_STARTUP_GET_STATE_CHANNEL: channels.backendStartupGetState,
     getMainWindow,
+    openMainWindow,
     isTrustedRenderer: (webContents: WebContents) => windowRegistry.isTrusted(webContents),
     getBackendWsUrl: () => backendWsUrl,
     getIsQuitting,

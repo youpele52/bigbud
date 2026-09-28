@@ -69,6 +69,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
 
   // State/action accessors
   readonly getMainWindow: () => BrowserWindow | null;
+  readonly openMainWindow: (threadId?: string) => BrowserWindow;
   readonly isTrustedRenderer?: (webContents: Electron.WebContents) => boolean;
   readonly getBackendWsUrl: () => string;
   readonly getMobileBackendBaseUrl: () => string;
@@ -286,15 +287,19 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     if (typeof input !== "object" || input === null) {
       return false;
     }
-    const { title, body, silent } = input as Record<string, unknown>;
+    const { title, body, silent, threadId } = input as Record<string, unknown>;
     return showDesktopNotification(
       {
         title: typeof title === "string" ? title : "",
         ...(typeof body === "string" ? { body } : {}),
         ...(silent === true ? { silent: true } : {}),
+        ...(typeof threadId === "string" && threadId.trim().length > 0
+          ? { threadId: threadId.trim() }
+          : {}),
       },
       deps.resolveIconPath,
       deps.getMainWindow,
+      deps.openMainWindow,
     );
   });
 

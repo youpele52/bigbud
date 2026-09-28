@@ -9,6 +9,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
 import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
+import { isThreadNavigationAvailable } from "../components/layout/AppSidebarLayout.logic";
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
@@ -26,6 +27,7 @@ import {
  */
 export async function showSystemTaskCompletionNotification(
   candidate: CompletedThreadCandidate,
+  navigate?: ReturnType<typeof useNavigate>,
 ): Promise<boolean> {
   const { title, body } = buildTaskCompletionCopy(candidate);
 
@@ -33,9 +35,11 @@ export async function showSystemTaskCompletionNotification(
   const bridge = window.desktopBridge;
   if (bridge?.notifications) {
     try {
-      const shown = await bridge.notifications.show({ title, body });
-      if (shown) announceMascotAttention();
-      return shown;
+      const shown = await bridge.notifications.show({ title, body, threadId: candidate.threadId });
+      if (shown) {
+        announceMascotAttention();
+        return true;
+      }
     } catch {
       // Fall through to web Notification API
     }
@@ -58,6 +62,29 @@ export async function showSystemTaskCompletionNotification(
   }
 
   const notification = new Notification(title, { body });
+  notification.addEventListener(
+    "click",
+    () => {
+      window.focus();
+      const threadAvailable = isThreadNavigationAvailable(candidate.threadId, useStore.getState());
+      if (!threadAvailable) {
+        if (typeof bridge?.openMainWindow === "function") {
+          void bridge.openMainWindow();
+        }
+        return;
+      }
+      if (navigate) {
+        void navigate({ to: "/$threadId", params: { threadId: candidate.threadId } });
+        return;
+      }
+      if (typeof window.desktopBridge?.openMainWindow === "function") {
+        void window.desktopBridge.openMainWindow(candidate.threadId);
+        return;
+      }
+      window.location.assign(`/${encodeURIComponent(candidate.threadId)}`);
+    },
+    { once: true },
+  );
   void notification;
   announceMascotAttention();
   return true;
@@ -157,7 +184,7 @@ export function TaskCompletionNotifications() {
       }
 
       if (appIsHidden && currentSettings.enableSystemTaskCompletionNotifications) {
-        void showSystemTaskCompletionNotification(candidate);
+        void showSystemTaskCompletionNotification(candidate, currentNavigate);
       }
     }
   }, [threads]);

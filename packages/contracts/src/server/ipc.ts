@@ -56,6 +56,7 @@ export interface DesktopNotificationInput {
   title: string;
   body?: string;
   silent?: boolean;
+  threadId?: string;
 }
 
 export interface DesktopTailscaleRemoteAccessStatus {

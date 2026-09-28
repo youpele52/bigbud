@@ -134,6 +134,7 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     floatingAssistantWindows: { ensureMascot: vi.fn() } as never,
     getIsQuitting: () => false,
     getMainWindow: () => null,
+    openMainWindow: vi.fn() as never,
     isDevelopment: false,
     isPackaged: true,
     logHeader: vi.fn(),
