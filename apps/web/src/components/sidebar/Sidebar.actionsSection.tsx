@@ -149,7 +149,7 @@ export function SidebarFixedActions({
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
   const keybindings = useServerKeybindings();
   return (
-    <div className="sticky top-0 z-20 flex flex-col gap-0.5 bg-sidebar px-2 pt-2">
+    <div className="flex flex-col gap-0.5 px-2 pt-2">
       <ActionRow
         label="New chat"
         icon={SquarePenIcon}
