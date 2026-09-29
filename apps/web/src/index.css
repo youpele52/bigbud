@@ -566,7 +566,7 @@ label:has(> select#reasoning-effort) select {
 }
 
 .chat-markdown-table-dialog {
-  width: min(66.666vw, calc(100vw - 2rem));
+  width: min(75vw, calc(100vw - 2rem));
   height: min(66.666dvh, calc(100dvh - 2rem));
   max-width: calc(100vw - 2rem);
   max-height: calc(100dvh - 2rem);

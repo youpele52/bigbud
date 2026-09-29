@@ -70,6 +70,10 @@ describe("BaseMarkdown anchor delegation", () => {
       await expect.element(dialog).toBeVisible();
       await expect.element(dialog).toHaveClass("chat-markdown-table-dialog");
       expect(dialog.element().textContent).toContain("In progress");
+      expect(Number.parseFloat(getComputedStyle(dialog.element()).width)).toBeCloseTo(
+        Math.min(window.innerWidth * 0.75, window.innerWidth - 32),
+        0,
+      );
 
       const expandedScroller = dialog
         .element()
