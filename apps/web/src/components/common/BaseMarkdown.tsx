@@ -310,6 +310,18 @@ export const BaseMarkdown = memo(function BaseMarkdown({
           </MarkdownCodeBlock>
         );
       },
+      table({ node: _node, children, ...props }) {
+        return (
+          <div
+            className="chat-markdown-table-scroll"
+            role="region"
+            aria-label="Scrollable table"
+            tabIndex={0}
+          >
+            <table {...props}>{children}</table>
+          </div>
+        );
+      },
     }),
     [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],
   );

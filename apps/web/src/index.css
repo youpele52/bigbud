@@ -550,8 +550,16 @@ label:has(> select#reasoning-effort) select {
   line-height: 1.25rem;
 }
 
+.chat-markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
 .chat-markdown table {
-  width: 100%;
+  width: max(100%, 56rem);
+  min-width: 56rem;
   border-collapse: collapse;
 }
 
@@ -560,6 +568,14 @@ label:has(> select#reasoning-effort) select {
   border: 1px solid var(--border);
   padding: 0.35rem 0.45rem;
   text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.chat-markdown th {
+  background: color-mix(in srgb, var(--muted) 52%, transparent);
+  font-weight: 600;
 }
 
 /* File preview markdown rendering */

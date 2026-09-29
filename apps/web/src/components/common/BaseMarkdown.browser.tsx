@@ -28,4 +28,19 @@ describe("BaseMarkdown anchor delegation", () => {
       await mounted.unmount();
     }
   });
+
+  it("wraps GFM tables in a responsive scrolling surface", async () => {
+    const mounted = await render(
+      <BaseMarkdown
+        text={"| Status | Details |\n| --- | --- |\n| Partial | In progress |"}
+        cwd="/workspace"
+      />,
+    );
+
+    try {
+      expect(document.querySelector(".chat-markdown-table-scroll table")).not.toBeNull();
+    } finally {
+      await mounted.unmount();
+    }
+  });
 });

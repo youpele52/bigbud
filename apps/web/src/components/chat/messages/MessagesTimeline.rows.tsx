@@ -113,7 +113,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             >
               <div
                 className={cn(
-                  "max-w-[min(80%,48rem)] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",
+                  "max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",
                   focusedMessageId === row.message.id ? "border-primary/70 bg-secondary/85" : "",
                 )}
               >
