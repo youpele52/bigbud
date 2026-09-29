@@ -321,8 +321,12 @@ export const BaseMarkdown = memo(function BaseMarkdown({
       tbody({ node: _node, children, ...props }) {
         return <TableBody {...props}>{children}</TableBody>;
       },
-      tr({ node: _node, children, ...props }) {
-        return <TableRow {...props}>{children}</TableRow>;
+      tr({ node: _node, children, className: rowClassName, ...props }) {
+        return (
+          <TableRow {...props} className={cn(rowClassName, "transition-none hover:bg-transparent")}>
+            {children}
+          </TableRow>
+        );
       },
       th({ node: _node, children, ...props }) {
         return <TableHead {...props}>{children}</TableHead>;

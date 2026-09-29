@@ -71,6 +71,33 @@ describe("BaseMarkdown anchor delegation", () => {
       await expect.element(dialog).toHaveClass("chat-markdown-table-dialog");
       expect(dialog.element().textContent).toContain("In progress");
 
+      const expandedScroller = dialog
+        .element()
+        .querySelector<HTMLElement>(".chat-markdown-table-expanded");
+      const backdrop = document.querySelector<HTMLElement>("[data-slot='dialog-backdrop']");
+      expect(expandedScroller).toBeInstanceOf(HTMLElement);
+      expect(backdrop).toBeInstanceOf(HTMLElement);
+      if (!(expandedScroller instanceof HTMLElement) || !(backdrop instanceof HTMLElement)) {
+        throw new Error("Expanded table surfaces were not rendered");
+      }
+
+      const expandedRow = expandedScroller.querySelector("tr");
+      const expandedScrollerParent = expandedScroller.parentElement;
+      expect(expandedRow).toBeInstanceOf(HTMLTableRowElement);
+      expect(expandedScrollerParent).toBeInstanceOf(HTMLElement);
+      if (!(expandedRow instanceof HTMLTableRowElement) || !expandedScrollerParent) {
+        throw new Error("Expanded table structure was not rendered");
+      }
+
+      expect(getComputedStyle(expandedScrollerParent).overflowX).toBe("visible");
+      expect(getComputedStyle(expandedRow).transitionDuration).toBe("0s");
+      expect(getComputedStyle(backdrop).backdropFilter).toBe("none");
+      expect(getComputedStyle(dialog.element()).willChange).toBe("auto");
+      expect(expandedScroller.scrollWidth).toBeGreaterThan(expandedScroller.clientWidth);
+
+      expandedScroller.scrollLeft = 100;
+      await expect.poll(() => expandedScroller.scrollLeft).toBeGreaterThan(0);
+
       await page.getByRole("button", { name: "Close" }).click();
       await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
     } finally {

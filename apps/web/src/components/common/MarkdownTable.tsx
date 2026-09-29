@@ -152,15 +152,16 @@ export function MarkdownTable({ children }: MarkdownTableProps) {
       <Table className="chat-markdown-table-scroll">{children}</Table>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="chat-markdown-table-dialog gap-0 overflow-hidden p-0"
+          className="chat-markdown-table-dialog gap-0 overflow-hidden p-0 will-change-auto"
+          backdropClassName="backdrop-blur-none"
           bottomStickOnMobile={false}
         >
-          <div className="flex h-full min-h-0 flex-1 flex-col p-6 sm:p-8">
-            <DialogTitle className="pr-8">Table</DialogTitle>
+          <div className="chat-markdown flex h-full min-h-0 flex-1 flex-col p-6 sm:p-8">
+            <DialogTitle className="sr-only">Expanded table</DialogTitle>
             <DialogDescription className="sr-only">Expanded markdown table</DialogDescription>
-            <div className="mt-5 min-h-0 flex-1 overflow-auto">
-              <Table className="chat-markdown-table-expanded">{children}</Table>
-            </div>
+            <Table className="chat-markdown-table-scroll chat-markdown-table-expanded min-h-0 flex-1">
+              {children}
+            </Table>
           </div>
         </DialogContent>
       </Dialog>
