@@ -17,7 +17,7 @@ export const SIDEBAR_ACTION_LABELS: Record<SidebarActionId, string> = {
   scheduled: "Scheduled",
   games: "Games",
   usage: "Usage",
-  "resource-monitor": "Resource monitor",
+  "resource-monitor": "System Monitor",
   pinned: "Pinned",
   chats: "Chats",
   projects: "Projects",

@@ -31,7 +31,6 @@ function load(): ResourceWidget[] {
 interface WidgetPreferences {
   visible: ResourceWidget[];
   toggle: (widget: ResourceWidget) => void;
-  move: (widget: ResourceWidget, direction: -1 | 1) => void;
 }
 
 export const useResourceWidgetPreferences = create<WidgetPreferences>((set) => ({
@@ -42,15 +41,6 @@ export const useResourceWidgetPreferences = create<WidgetPreferences>((set) => (
         ? state.visible.filter((entry) => entry !== widget)
         : [...state.visible, widget],
     })),
-  move: (widget, direction) =>
-    set((state) => {
-      const from = state.visible.indexOf(widget);
-      const to = from + direction;
-      if (from < 0 || to < 0 || to >= state.visible.length) return state;
-      const visible = [...state.visible];
-      [visible[from], visible[to]] = [visible[to]!, visible[from]!];
-      return { visible };
-    }),
 }));
 
 useResourceWidgetPreferences.subscribe((state) => {

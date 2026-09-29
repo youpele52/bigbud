@@ -8,11 +8,15 @@ import { WidgetPreferences } from "./WidgetPreferences";
 import { displayWidget, hasTemperature } from "./resourceMonitor.display";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
-import { useResourceWidgetPreferences } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
+import {
+  RESOURCE_WIDGETS,
+  useResourceWidgetPreferences,
+} from "~/stores/resource-monitor/resourceMonitorPreferences.store";
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
 
 export function SystemPanel({ visible }: { visible: boolean }) {
   const widgets = useResourceWidgetPreferences((state) => state.visible);
+  const orderedWidgets = RESOURCE_WIDGETS.filter((widget) => widgets.includes(widget));
   const showIpAddress = useResourceDetailPreferences((state) =>
     state.visible.includes("ipAddress"),
   );
@@ -51,8 +55,8 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         >
           <p>
             {connection === "connecting"
-              ? "Connecting to this computer’s Resource monitor…"
-              : `Resource monitor unavailable${reason ? `: ${reason}` : ""}`}
+              ? "Connecting to this computer’s System Monitor…"
+              : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
           </p>
           {connection === "unavailable" ? (
             <Button
@@ -78,7 +82,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         </p>
       ) : null}
       <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
-        {widgets
+        {orderedWidgets
           .filter((widget) => widget !== "temperature" || temperatureSupported || !snapshot)
           .map((widget) => {
             const metric = displayWidget(snapshot, widget);
@@ -87,7 +91,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
             if (widget === "network") metric.history = history.network;
             return <ResourceMetricCard key={widget} metric={metric} />;
           })}
-        {widgets.length === 0 ? (
+        {orderedWidgets.length === 0 ? (
           <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
             No widgets selected. Use Customize System widgets to add one.
           </p>
@@ -99,10 +103,10 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         ) : null}
       </div>
       <Link
-        to="/resource-monitor"
+        to="/system-monitor"
         className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
       >
-        Open Resource monitor <ArrowRightIcon className="size-3.5" />
+        Open System Monitor <ArrowRightIcon className="size-3.5" />
       </Link>
     </div>
   );

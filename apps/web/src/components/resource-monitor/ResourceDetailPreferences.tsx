@@ -37,7 +37,7 @@ export function ResourceDetailPreferences() {
         <div className="space-y-3">
           <p className="text-sm font-medium">Resource details</p>
           <p className="text-xs text-muted-foreground">
-            Choose which details appear in the resource monitor.
+            Choose which details appear in System Monitor.
           </p>
         </div>
         <div className="mt-4 space-y-2">

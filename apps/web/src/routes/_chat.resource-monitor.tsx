@@ -1,13 +1,7 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
-
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
-
-function ResourceMonitorRouteLayout() {
-  useEffect(() => useRightPanelTabsStore.getState().closeRightPanel(), []);
-  return <Outlet />;
-}
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_chat/resource-monitor")({
-  component: ResourceMonitorRouteLayout,
+  beforeLoad: () => {
+    throw redirect({ to: "/system-monitor", replace: true });
+  },
 });

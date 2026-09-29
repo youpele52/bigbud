@@ -70,7 +70,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
       newThreadShortcutLabel={newThreadShortcutLabel}
       onOpenAutomations={vi.fn()}
       onOpenUsage={vi.fn()}
-      onOpenResourceMonitor={vi.fn()}
+      onOpenSystemMonitor={vi.fn()}
       onOpenGames={vi.fn()}
       sections={{
         pinned: () => <div>Pinned section</div>,
@@ -87,8 +87,8 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
     expect(html).toContain('data-sidebar-visual-group="primary"');
     expect(html).toContain('data-sidebar-visual-group="secondary"');
-    expect(html.indexOf("Usage")).toBeLessThan(html.indexOf("Resource monitor"));
-    expect(html.indexOf("Resource monitor")).toBeLessThan(
+    expect(html.indexOf("Usage")).toBeLessThan(html.indexOf("System Monitor"));
+    expect(html.indexOf("System Monitor")).toBeLessThan(
       html.indexOf('data-sidebar-visual-group="secondary"'),
     );
     expect(html.indexOf("Pinned section")).toBeGreaterThan(
@@ -142,7 +142,7 @@ describe("SidebarActionsSection", () => {
     expect(html).toContain("Search");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Usage");
-    expect(html).toContain("Resource monitor");
+    expect(html).toContain("System Monitor");
     expect(html.indexOf('aria-label="Open scheduled"')).toBeLessThan(
       html.indexOf('aria-label="Open games"'),
     );

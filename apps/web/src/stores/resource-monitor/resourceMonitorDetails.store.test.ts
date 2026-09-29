@@ -10,7 +10,7 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("resource monitor detail preferences", () => {
+describe("system monitor detail preferences", () => {
   it("defaults absent and invalid stored data to useful details", () => {
     expect(readDetailPreferences(undefined)).toContain("processes");
     expect(readDetailPreferences("invalid")).toContain("disks");

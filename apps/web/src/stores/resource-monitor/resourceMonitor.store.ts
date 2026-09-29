@@ -42,7 +42,7 @@ function bridge() {
 function markTransportUnavailable() {
   useResourceMonitorStore.setState({
     connection: "unavailable",
-    reason: "Resource monitor connection lost",
+    reason: "System Monitor connection lost",
     collectionStatus: null,
   });
 }
@@ -174,7 +174,7 @@ async function start() {
   if (!api?.systemMonitorSubscribe || !api.onSystemMonitorEvent) {
     useResourceMonitorStore.setState({
       connection: "unavailable",
-      reason: "Resource monitor is available in the desktop app",
+      reason: "System Monitor is available in the desktop app",
     });
     return;
   }
@@ -201,7 +201,7 @@ async function start() {
   } catch (error) {
     useResourceMonitorStore.setState({
       connection: "unavailable",
-      reason: error instanceof Error ? error.message : "Resource monitor could not start",
+      reason: error instanceof Error ? error.message : "System Monitor could not start",
       collectionStatus: null,
     });
   }
@@ -247,7 +247,7 @@ export async function retryResourceMonitor() {
     if (!wasConnected)
       useResourceMonitorStore.setState({
         connection: "unavailable",
-        reason: error instanceof Error ? error.message : "Resource monitor retry failed",
+        reason: error instanceof Error ? error.message : "System Monitor retry failed",
         collectionStatus: null,
       });
     return false;

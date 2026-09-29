@@ -34,7 +34,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("resource monitor subscription", () => {
+describe("system monitor subscription", () => {
   it("updates union demand when temperature and process details are hidden", async () => {
     const subscribe = vi.fn(async () => 7);
     const update = vi.fn(async () => undefined);

@@ -58,13 +58,16 @@ export function ResourceMetricCard({
       </CardHeader>
       <CardContent className="space-y-2 px-4">
         {metric.diskUsage ? (
-          <ResourceDiskUsage usage={metric.diskUsage} />
+          <ResourceDiskUsage
+            usage={metric.diskUsage}
+            {...(metric.detail ? { detail: metric.detail } : {})}
+          />
         ) : (
           <div className="truncate text-xl font-semibold tabular-nums" title={metric.value}>
             {metric.value}
           </div>
         )}
-        {metric.detail ? (
+        {metric.detail && !metric.diskUsage ? (
           <p className="truncate text-xs text-muted-foreground" title={metric.detail}>
             {metric.detail}
           </p>

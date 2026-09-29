@@ -32,8 +32,8 @@ function criticalTemperature(snapshot: MonitorSnapshot, name: string): string | 
   return metric.status === "ready" ? formatTemperature(metric.value) : metric.status;
 }
 
-export function ResourceMonitorPage() {
-  usePageTitle("Resource monitor");
+export function SystemMonitorPage() {
+  usePageTitle("System Monitor");
   const details = useResourceDetailPreferences((state) => state.visible);
   const show = (detail: (typeof details)[number]) => details.includes(detail);
   const { snapshot, history, connection, reason, collectionStatus } = useResourceMonitor(
@@ -77,11 +77,11 @@ export function ResourceMonitorPage() {
   const temperature = displayWidget(snapshot, "temperature");
 
   return (
-    <StandaloneChatPageShell header={<StandaloneChatPageHeader title="Resource monitor" />}>
+    <StandaloneChatPageShell header={<StandaloneChatPageHeader title="System Monitor" />}>
       <StandalonePageContent contentClassName="space-y-5 pb-10">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold">Resource monitor</h1>
+            <h1 className="text-xl font-semibold">System Monitor</h1>
             {show("ipAddress") ? (
               <p
                 className="max-w-full truncate text-sm text-muted-foreground"
@@ -102,8 +102,8 @@ export function ResourceMonitorPage() {
           <div role="status" className="rounded-md border bg-muted/30 p-4 text-sm">
             <p>
               {connection === "connecting"
-                ? "Connecting to this computer’s Resource monitor…"
-                : `Resource monitor unavailable${reason ? `: ${reason}` : ""}`}
+                ? "Connecting to this computer’s System Monitor…"
+                : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
             </p>
             {connection === "unavailable" ? (
               <Button

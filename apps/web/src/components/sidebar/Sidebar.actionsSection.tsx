@@ -49,7 +49,7 @@ interface SidebarActionsSectionProps {
   newThreadShortcutLabel: string | null | undefined;
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
-  onOpenResourceMonitor: () => void;
+  onOpenSystemMonitor: () => void;
   onOpenPlugins?: () => void;
   onOpenGames: () => void;
   sections: Partial<
@@ -173,7 +173,7 @@ export function SidebarActionsSection({
   newThreadShortcutLabel,
   onOpenAutomations,
   onOpenUsage,
-  onOpenResourceMonitor,
+  onOpenSystemMonitor,
   onOpenPlugins,
   onOpenGames,
   sections,
@@ -193,7 +193,7 @@ export function SidebarActionsSection({
     scheduled: onOpenAutomations,
     games: onOpenGames,
     usage: onOpenUsage,
-    "resource-monitor": onOpenResourceMonitor,
+    "resource-monitor": onOpenSystemMonitor,
   };
 
   const showMissingGitPrompt = () => {

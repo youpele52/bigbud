@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, SlidersHorizontalIcon } from "lucide-react";
+import { SlidersHorizontalIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -19,7 +19,6 @@ const LABELS: Record<ResourceWidget, string> = {
 export function WidgetPreferences() {
   const visible = useResourceWidgetPreferences((state) => state.visible);
   const toggle = useResourceWidgetPreferences((state) => state.toggle);
-  const move = useResourceWidgetPreferences((state) => state.move);
   return (
     <Popover>
       <PopoverTrigger
@@ -31,9 +30,7 @@ export function WidgetPreferences() {
       />
       <PopoverContent align="end" className="w-64 space-y-2 p-3">
         <p className="text-sm font-medium">System widgets</p>
-        <p className="text-xs text-muted-foreground">
-          Choose what appears in the panel and move visible widgets.
-        </p>
+        <p className="text-xs text-muted-foreground">Choose which widgets appear in the panel.</p>
         {RESOURCE_WIDGETS.map((widget) => {
           const index = visible.indexOf(widget);
           return (
@@ -47,24 +44,6 @@ export function WidgetPreferences() {
                 />
                 <span>{LABELS[widget]}</span>
               </label>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Move ${LABELS[widget]} up`}
-                disabled={index <= 0}
-                onClick={() => move(widget, -1)}
-              >
-                <ArrowUpIcon className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Move ${LABELS[widget]} down`}
-                disabled={index < 0 || index === visible.length - 1}
-                onClick={() => move(widget, 1)}
-              >
-                <ArrowDownIcon className="size-3.5" />
-              </Button>
             </div>
           );
         })}

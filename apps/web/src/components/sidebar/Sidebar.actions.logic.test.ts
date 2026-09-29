@@ -70,7 +70,7 @@ describe("sidebar action preferences", () => {
     ).toEqual(["plugins", "usage", "scheduled", "games"]);
   });
 
-  it("keeps Resource monitor in the default first group after Usage", () => {
+  it("keeps System Monitor in the default first group after Usage", () => {
     const initial = sanitizeSidebarActionOrder([]);
     expect(sidebarVisualGroups(initial, initial)).toEqual({
       primary: ["plugins", "scheduled", "games", "usage", "resource-monitor"],
