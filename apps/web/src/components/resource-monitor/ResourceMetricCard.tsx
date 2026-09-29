@@ -2,6 +2,7 @@ import { Area, AreaChart, ReferenceLine, ResponsiveContainer, XAxis, YAxis } fro
 
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ChartTooltip, ChartTooltipContent } from "../ui/chart";
+import { ResourceDiskUsage, type DiskUsage } from "./ResourceDiskUsage";
 
 export interface DisplayPoint {
   sequence: number;
@@ -17,6 +18,7 @@ export interface DisplayMetric {
   history?: readonly DisplayPoint[];
   historyValueFormatter?: (value: number) => string;
   historyStyle?: "network";
+  diskUsage?: DiskUsage;
 }
 
 export function formatHistoryTooltipValue(
@@ -55,9 +57,13 @@ export function ResourceMetricCard({
         <CardTitle className="text-sm font-medium">{metric.label}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 px-4">
-        <div className="truncate text-xl font-semibold tabular-nums" title={metric.value}>
-          {metric.value}
-        </div>
+        {metric.diskUsage ? (
+          <ResourceDiskUsage usage={metric.diskUsage} />
+        ) : (
+          <div className="truncate text-xl font-semibold tabular-nums" title={metric.value}>
+            {metric.value}
+          </div>
+        )}
         {metric.detail ? (
           <p className="truncate text-xs text-muted-foreground" title={metric.detail}>
             {metric.detail}

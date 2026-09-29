@@ -180,6 +180,23 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
             .join("\n")
         : "";
       if (summary.length > 0) {
+        const childTask = Array.from(context.taskState.tasks.values()).find(
+          (task) =>
+            task.subagentType === "agent" &&
+            (task.sourceToolUseId === message.parent_tool_use_id ||
+              task.parentToolUseId === message.parent_tool_use_id),
+        );
+        if (childTask && context.providerSubagentsSupported) {
+          yield* updateClaudeTaskPlan({
+            context,
+            toolUseId: message.parent_tool_use_id,
+            toolName: "task_updated",
+            input: { task_id: childTask.id, progress_summary: summary.slice(0, 500) },
+            now: yield* nowIso,
+            makeEventStamp,
+            offerRuntimeEvent,
+          });
+        }
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent(context, {
           type: "tool.progress",

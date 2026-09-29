@@ -79,7 +79,10 @@ describe("compact Subagents presentation", () => {
     expect(workLog).toContain("Show 1 more");
     expect(subagents).toContain("items-center justify-between");
     expect(workLog).toContain("items-center justify-between");
-    expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(subagents).toContain("text-[9px]");
+    expect(subagents).toContain("sm:text-[9px]");
+    expect(subagents).toContain('class="shrink-0 text-xs capitalize text-muted-foreground"');
   });
 
   it("anchors completion to its turn before later user and assistant messages", () => {

@@ -535,6 +535,43 @@ label:has(> select#reasoning-effort) select {
   border-color: color-mix(in srgb, var(--border) 70%, var(--foreground));
 }
 
+.chat-markdown .chat-markdown-table-actions {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 1;
+  display: inline-flex;
+  gap: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 10%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.chat-markdown .chat-markdown-table:hover .chat-markdown-table-actions,
+.chat-markdown .chat-markdown-table:focus-within .chat-markdown-table-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-markdown .chat-markdown-table-actions button {
+  color: var(--muted-foreground);
+}
+
+.chat-markdown .chat-markdown-table-actions button:hover {
+  color: var(--foreground);
+}
+
+.chat-markdown-table-dialog {
+  width: min(66.666vw, calc(100vw - 2rem));
+  height: min(66.666dvh, calc(100dvh - 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+}
+
 .chat-markdown .chat-markdown-shiki .shiki {
   background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
 }

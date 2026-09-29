@@ -92,7 +92,7 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
       createdAt: stamp.createdAt,
       threadId: deps.context.session.threadId,
       ...(turnId ? { turnId } : {}),
-      payload: task,
+      payload: deps.context.providerSubagentsSupported ? task : { ...task, kind: "task" },
       providerRefs: nativeProviderRefs(deps.context, { providerItemId: deps.toolUseId }),
     });
   }

@@ -8,6 +8,7 @@ import {
   normalizeBigbudPlanTrackingPayload,
 } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import type { ActivePiSession, PiEmitEvents } from "./Adapter.types.ts";
+import { mapPiSubagentResults } from "./Adapter.stream.subagents.ts";
 import {
   classifyToolItemType,
   eventBase,
@@ -159,6 +160,20 @@ export const handleToolExecutionUpdate = Effect.fn("handleToolExecutionUpdate")(
     readonly partialResult?: import("./RpcProcess.ts").PiRpcToolResult;
   };
 }) {
+  const subagentEvents = mapPiSubagentResults({
+    session: deps.session,
+    toolCallId: deps.message.toolCallId,
+    toolName: deps.session.currentToolInfoById.get(deps.message.toolCallId)?.toolName,
+    result: deps.message.partialResult,
+    final: false,
+    createdAt: deps.stamp.createdAt,
+  });
+  if (subagentEvents.length > 0) {
+    yield* emitWithTurnAppend({ emit: deps.emit, session: deps.session, events: subagentEvents });
+    return;
+  }
+  if (deps.session.currentToolInfoById.get(deps.message.toolCallId)?.toolName === "subagent")
+    return;
   const partialResult = extractToolResultText(deps.message.partialResult);
   if (!partialResult) {
     return;
@@ -209,13 +224,27 @@ export const handleToolExecutionEnd = Effect.fn("handleToolExecutionEnd")(functi
   };
 }) {
   const toolInfo = deps.session.currentToolInfoById.get(deps.message.toolCallId);
+  const isSubagentTool = toolInfo?.toolName === "subagent";
+  const subagentEvents = mapPiSubagentResults({
+    session: deps.session,
+    toolCallId: deps.message.toolCallId,
+    toolName: toolInfo?.toolName,
+    result: deps.message.result,
+    final: true,
+    ...(deps.message.isError !== undefined ? { isError: deps.message.isError } : {}),
+    createdAt: deps.stamp.createdAt,
+  });
+  if (subagentEvents.length > 0)
+    yield* emitWithTurnAppend({ emit: deps.emit, session: deps.session, events: subagentEvents });
   deps.session.currentToolInfoById.delete(deps.message.toolCallId);
   deps.session.currentToolOutputById.delete(deps.message.toolCallId);
-  const detail = normalizeString(
-    typeof deps.message.result === "string"
-      ? deps.message.result
-      : JSON.stringify(deps.message.result),
-  );
+  const detail = isSubagentTool
+    ? `${subagentEvents.length} subagent result(s)`
+    : normalizeString(
+        typeof deps.message.result === "string"
+          ? deps.message.result
+          : JSON.stringify(deps.message.result),
+      );
   yield* emitWithTurnAppend({
     emit: deps.emit,
     session: deps.session,
@@ -228,7 +257,13 @@ export const handleToolExecutionEnd = Effect.fn("handleToolExecutionEnd")(functi
           sessionEpoch: deps.session.sessionEpoch,
           ...(deps.session.activeTurnId ? { turnId: deps.session.activeTurnId } : {}),
           itemId: deps.message.toolCallId,
-          raw: deps.raw,
+          raw: isSubagentTool
+            ? {
+                source: "pi.rpc.event",
+                messageType: "tool_execution_end",
+                payload: { toolCallId: deps.message.toolCallId },
+              }
+            : deps.raw,
         }),
         type: "item.completed",
         payload: {
@@ -236,7 +271,9 @@ export const handleToolExecutionEnd = Effect.fn("handleToolExecutionEnd")(functi
           status: deps.message.isError ? "failed" : "completed",
           title: toolInfo?.title ?? titleForTool("dynamic_tool_call"),
           ...(detail ? { detail } : {}),
-          ...(deps.message.result !== undefined ? { data: deps.message.result } : {}),
+          ...(!isSubagentTool && deps.message.result !== undefined
+            ? { data: deps.message.result }
+            : {}),
         },
       },
     ],

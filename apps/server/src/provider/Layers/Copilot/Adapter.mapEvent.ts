@@ -17,6 +17,7 @@ import {
 } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import { type ActiveCopilotSession, eventBase, normalizeUsage } from "./Adapter.types.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { mapCopilotSubagentEvent } from "./Adapter.mapEvent.subagents.ts";
 
 /** Dependencies threaded into mapEvent as plain values. */
 export interface MapEventDeps {
@@ -24,7 +25,6 @@ export interface MapEventDeps {
   readonly nextEventId: Effect.Effect<EventId>;
   readonly emit: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>;
 }
-
 /**
  * Maps a raw Copilot SDK `SessionEvent` to zero or more `ProviderRuntimeEvent`s.
  * Pure with respect to the adapter factory — depends only on `session`, `event`,
@@ -43,6 +43,9 @@ export const mapEvent = (
       method: event.type,
       payload: event,
     };
+
+    const subagentEvents = mapCopilotSubagentEvent(session, event, stamp.eventId);
+    if (subagentEvents) return subagentEvents;
 
     switch (event.type) {
       case "assistant.turn_start": {

@@ -161,6 +161,15 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           type: "task.started",
           payload: { taskId: RuntimeTaskId.makeUnsafe(task.taskId), description: task.description },
         });
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: task.toolUseId ?? task.taskId,
+          toolName: "task_updated",
+          input: { task_id: task.taskId, description: task.description, status: "running" },
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
         return;
       }
       case "task_progress": {
@@ -197,6 +206,20 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             ...(task.usage ? { usage: task.usage } : {}),
             ...(task.lastToolName ? { lastToolName: task.lastToolName } : {}),
           },
+        });
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: task.toolUseId ?? task.taskId,
+          toolName: "task_updated",
+          input: {
+            task_id: task.taskId,
+            description: task.description,
+            ...(task.summary ? { progress_summary: task.summary } : {}),
+            ...(task.lastToolName ? { last_tool_name: task.lastToolName } : {}),
+          },
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
         });
         return;
       }

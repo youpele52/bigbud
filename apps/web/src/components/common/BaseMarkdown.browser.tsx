@@ -43,4 +43,38 @@ describe("BaseMarkdown anchor delegation", () => {
       await mounted.unmount();
     }
   });
+
+  it("copies tables as markdown and opens them in a dialog", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const mounted = await render(
+      <BaseMarkdown
+        text={"| Status | Details |\n| --- | --- |\n| Partial | In progress |"}
+        cwd="/workspace"
+      />,
+    );
+
+    try {
+      const table = page.getByRole("region", { name: "Scrollable table" });
+      await table.hover();
+      await page.getByRole("button", { name: "Copy table" }).click();
+      expect(writeText).toHaveBeenCalledWith(
+        "| Status | Details |\n| --- | --- |\n| Partial | In progress |",
+      );
+
+      await page.getByRole("button", { name: "Open table" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect.element(dialog).toBeVisible();
+      await expect.element(dialog).toHaveClass("chat-markdown-table-dialog");
+      expect(dialog.element().textContent).toContain("In progress");
+
+      await page.getByRole("button", { name: "Close" }).click();
+      await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+    } finally {
+      await mounted.unmount();
+    }
+  });
 });

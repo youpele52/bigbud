@@ -50,19 +50,43 @@ export function displayWidget(
         detail: `${show(snapshot.memoryTotalBytes, formatBytes)} total · ${show(snapshot.swapUsedBytes, formatBytes)} swap used`,
       };
     case "disk": {
-      const singleDisk = snapshot.disks.length === 1 ? snapshot.disks[0] : undefined;
-      const capacity =
-        snapshot.diskCapacityBytes?.status === "ready"
-          ? snapshot.diskCapacityBytes
-          : singleDisk?.totalBytes;
+      // Show one named volume: mounted volumes may share backing storage, so
+      // neither their free space nor their capacities are safe to sum here.
+      const disk =
+        snapshot.disks.find((item) => item.mount === "/") ??
+        snapshot.disks.toSorted((a, b) => {
+          const left = `${a.mount}\0${a.name}`;
+          const right = `${b.mount}\0${b.name}`;
+          return left < right ? -1 : left > right ? 1 : 0;
+        })[0];
+      if (!disk) {
+        return {
+          label: "Disk",
+          value: "— free",
+          status: "unavailable",
+          detail: `${show(snapshot.diskCapacityBytes, formatBytes)} total · Free space unavailable`,
+        };
+      }
+      const volume = snapshot.disks.length > 1 ? `${disk.name} (${disk.mount})` : disk.name;
+      const total = disk.totalBytes;
+      const free = disk.freeBytes;
+      const diskUsage =
+        total?.status === "ready" &&
+        free?.status === "ready" &&
+        Number.isFinite(total.value) &&
+        Number.isFinite(free.value) &&
+        total.value > 0 &&
+        free.value >= 0 &&
+        free.value <= total.value
+          ? { totalBytes: total.value, freeBytes: free.value }
+          : undefined;
       return {
         label: "Disk",
-        value: show(capacity, formatBytes),
-        status: status(capacity ?? snapshot.diskCapacityBytes),
-        detail:
-          singleDisk && capacity === singleDisk.totalBytes
-            ? `${singleDisk.name} capacity`
-            : "Combined capacity",
+        value: `${show(disk.freeBytes, formatBytes)} free`,
+        status:
+          disk.freeBytes?.status === "ready" ? status(disk.totalBytes) : status(disk.freeBytes),
+        detail: `${show(disk.totalBytes, formatBytes)} total · ${volume}`,
+        ...(diskUsage ? { diskUsage } : {}),
       };
     }
     case "network":

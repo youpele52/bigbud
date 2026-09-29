@@ -327,6 +327,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
         ...(remoteWorkspaceBridge ? ["bigbud_remote_workspace"] : []),
       ]),
       modernTaskExposure: claudeSettings.rollout.modernTaskExposure,
+      providerSubagentsSupported: deps.resolveHarness === undefined,
       mcpControlsEnabled: claudeSettings.rollout.mcpControls,
       refreshMcpStatuses: undefined,
       recoverStream: undefined,

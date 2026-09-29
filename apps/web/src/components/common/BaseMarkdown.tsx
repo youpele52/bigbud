@@ -25,7 +25,9 @@ import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../..
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { createSourcePositionPlugin, sourcePositionProps } from "./BaseMarkdown.sourcePositions";
+import { MarkdownTable } from "./MarkdownTable";
 
 export interface MarkdownAnchorClick {
   href: string;
@@ -310,17 +312,23 @@ export const BaseMarkdown = memo(function BaseMarkdown({
           </MarkdownCodeBlock>
         );
       },
-      table({ node: _node, children, ...props }) {
-        return (
-          <div
-            className="chat-markdown-table-scroll"
-            role="region"
-            aria-label="Scrollable table"
-            tabIndex={0}
-          >
-            <table {...props}>{children}</table>
-          </div>
-        );
+      table({ node: _node, children }) {
+        return <MarkdownTable>{children}</MarkdownTable>;
+      },
+      thead({ node: _node, children, ...props }) {
+        return <TableHeader {...props}>{children}</TableHeader>;
+      },
+      tbody({ node: _node, children, ...props }) {
+        return <TableBody {...props}>{children}</TableBody>;
+      },
+      tr({ node: _node, children, ...props }) {
+        return <TableRow {...props}>{children}</TableRow>;
+      },
+      th({ node: _node, children, ...props }) {
+        return <TableHead {...props}>{children}</TableHead>;
+      },
+      td({ node: _node, children, ...props }) {
+        return <TableCell {...props}>{children}</TableCell>;
       },
     }),
     [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],

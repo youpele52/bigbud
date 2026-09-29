@@ -22,7 +22,7 @@ describe("Claude SDK normalized message routing", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
-      const eventsFiber = yield* Stream.take(adapter.streamEvents, 16).pipe(
+      const eventsFiber = yield* Stream.take(adapter.streamEvents, 19).pipe(
         Stream.runCollect,
         Effect.forkChild,
       );
@@ -52,9 +52,12 @@ describe("Claude SDK normalized message routing", () => {
           "session.state.changed",
           "thread.started",
           "task.started",
+          "task.updated",
           "thread.token-usage.updated",
           "task.progress",
+          "task.updated",
           "task.completed",
+          "task.updated",
           "hook.started",
           "hook.progress",
           "hook.completed",

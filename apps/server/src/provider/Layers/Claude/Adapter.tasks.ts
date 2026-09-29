@@ -84,6 +84,9 @@ export function claudeTaskRuntimeUpdates(state: ClaudeTaskState, taskIds?: Reado
     .toSorted(compareTaskOrder)
     .map((task) => ({
       taskId: RuntimeTaskId.makeUnsafe(task.id),
+      kind: task.subagentType === "agent" ? ("providerSubagent" as const) : ("task" as const),
+      nativeId: task.id,
+      activityFresh: true,
       status: runtimeStatus(task),
       subject: task.subject,
       ...(task.description ? { description: task.description } : {}),

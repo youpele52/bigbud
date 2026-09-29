@@ -152,6 +152,8 @@ export interface ClaudeSessionContext {
   mcpStatuses: Array<McpServerStatusEntry>;
   readonly requiredMcpServerNames: ReadonlySet<string>;
   readonly modernTaskExposure: boolean;
+  /** Resolved alternate harnesses (CLIProxyAPI) have no verified child event contract. */
+  readonly providerSubagentsSupported: boolean;
   readonly mcpControlsEnabled: boolean;
   refreshMcpStatuses: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
   recoverStream: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
