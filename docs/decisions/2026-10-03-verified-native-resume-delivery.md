@@ -1,0 +1,32 @@
+# Verified native resume — parent durable-receipt trust adopted
+
+ParentSOURCECOMPAT durable-receipttrustADOPTED, no mandatoryhistoricalredecision:
+source commandProcessing133–144 storedreceipt beforedecider/outcome17–43storedreason.
+Earlier digestonlyblocker introduced strongerrequirement beyond0036 WITHDRAWN. No
+newcommandtable/journal/crypto/originversion/adoption/migration; plausiblecoherent
+same-usernoeventreceipteditmayundetect explicittrustlimitnotcrypto guarantee.
+FreshNEWproductionintegrationsecurityAPPROVED previous5STATICCLOSED.
+
+ActualV5 completeimplemented: privateVerifiedRecovery ownsSAMEexistingGuardedConnection
+admittedactualv2Record/custody +independentSAMEprojector boundedorderedhistory rawbytes
+HASH/Chats/all11cursorseal/fullSnapshot/assoc. RecoveredState consumesproof newUUIDRev,
+onecanonicalworkerready settingsactualexistingcapturedpollbaseline noinit/rewrite and
+RuntimeOwnersresumeprincipalweakport onlythenCLIlistener. ALLboundedreceiptsowningread
+plusworkflowvalidator acceptederrorreason/projectthreadAlreadycontradictionsrefuse,
+legitnoeventnoops/rejectstored outcomes accepted pendingunknownNONretry/norefund.
+NoCREATE/seed/chmod/migrate/recreateLock/domainrepair; SQLitehousekeepallowed; unsafe
+WALSHMjournalpreflightregularuid600nlink1canon beforeSQLiteFDlocks; no reopen/closeafter.
+
+ActualSTANDARD release22cmd18events22receipt freshstop SAMEv2--resume-db fullsnapshots/
+outcomeall22retryZERO changedUUIDrevision18 thenNEWmutation19/23receipts; settingsauth
+atomreplacementfalse persistsoriginimmutable.16prelistenerrefusals+pendingpositive.
+SeparateTEST-INSTRUMENTEDactualRELEASE(notRustTESTEXE) compileonlyack-stagehooks kill
+beforecommit/aftercommitBEFORERESPONSE/duringreplay stable retryexactstate no listener
+beforeproof; no PUBLICproductionfaultflag/feature standardartifactmarkerABSENT.
+OrderedSTABLEworkspacefmt/clippy/tests688/releasePASS +explicitnormalrelease2proofs/
+instrumentedreleasecrash1proof/source21/17--checkPASS. CodegreenYES; PlanNO onlyNEWWHOLEV5
+materialsecurity/requirementsreviewdepthblocked1. PriorfreshapprovalNOTV5approval,
+no broaderPhase4/providers/terminal/retention/importcompletion claim. No deps/stage/
+commit/push/originalprofiles/HOME runtime; originalwritesonlyauthorizeddecisionlink.
+
+[Exact actual whole-V5 evidence / V1–V8 / final review gate](../../../bigbud-x-ghostex-x-unknown/docs/reports/2026-10-03-verified-native-resume-delivery.md)
