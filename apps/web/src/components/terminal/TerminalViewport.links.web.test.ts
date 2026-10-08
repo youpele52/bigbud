@@ -85,6 +85,7 @@ describe("terminal web links", () => {
     const terminal = {
       buffer: {
         active: {
+          length: 1,
           getLine: (lineNumber: number) =>
             lineNumber === 0
               ? {

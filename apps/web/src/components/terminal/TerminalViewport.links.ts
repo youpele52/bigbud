@@ -30,7 +30,17 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
         return;
       }
 
-      const line = activeTerminal.buffer.active.getLine(bufferLineNumber - 1);
+      const buffer = activeTerminal.buffer.active;
+      const bufferLength = buffer.length;
+      if (
+        !Number.isInteger(bufferLineNumber) ||
+        bufferLineNumber < 1 ||
+        bufferLineNumber > bufferLength
+      ) {
+        callback(undefined);
+        return;
+      }
+      const line = buffer.getLine(bufferLineNumber - 1);
       if (!line) {
         callback(undefined);
         return;
@@ -38,10 +48,9 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
 
       let logicalStartLineNumber = bufferLineNumber;
       while (logicalStartLineNumber > 1) {
-        const previousLine = activeTerminal.buffer.active.getLine(logicalStartLineNumber - 2) as
-          | { isWrapped?: boolean }
-          | undefined;
-        if (!previousLine?.isWrapped) {
+        // isWrapped describes this row's continuation from the previous row.
+        const currentLine = buffer.getLine(logicalStartLineNumber - 1);
+        if (!currentLine?.isWrapped) {
           break;
         }
         logicalStartLineNumber -= 1;
@@ -49,10 +58,9 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
 
       const fragments: Array<{ lineNumber: number; text: string }> = [];
       let currentLineNumber = logicalStartLineNumber;
-      while (true) {
-        const currentLine = activeTerminal.buffer.active.getLine(currentLineNumber - 1) as
-          | { isWrapped?: boolean; translateToString(trimRight?: boolean): string }
-          | undefined;
+      // Never probe past length: circular backing storage can alias earlier rows there.
+      while (currentLineNumber <= bufferLength) {
+        const currentLine = buffer.getLine(currentLineNumber - 1);
         if (!currentLine) {
           break;
         }
@@ -60,9 +68,10 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
           lineNumber: currentLineNumber,
           text: currentLine.translateToString(true),
         });
-        const nextLine = activeTerminal.buffer.active.getLine(currentLineNumber) as
-          | { isWrapped?: boolean }
-          | undefined;
+        if (currentLineNumber === bufferLength) {
+          break;
+        }
+        const nextLine = buffer.getLine(currentLineNumber);
         if (!nextLine?.isWrapped) {
           break;
         }
