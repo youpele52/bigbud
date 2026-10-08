@@ -44,6 +44,75 @@ describe("BaseMarkdown anchor delegation", () => {
     }
   });
 
+  it.each(["light", "dark"])(
+    "uses app scrollbar styling on both table axes in %s mode",
+    async (theme) => {
+      const wasDark = document.documentElement.classList.contains("dark");
+      const rows = Array.from({ length: 60 }, (_, index) => `| ${index} | In progress |`);
+      const mounted = await render(
+        <BaseMarkdown
+          text={["| Status | Details |", "| --- | --- |", ...rows].join("\n")}
+          cwd="/workspace"
+        />,
+      );
+
+      document.documentElement.classList.toggle("dark", theme === "dark");
+
+      const expectAppScrollbar = (scroller: HTMLElement) => {
+        expect(getComputedStyle(scroller).scrollbarWidth).toBe("auto");
+        const scrollbar = getComputedStyle(scroller, "::-webkit-scrollbar");
+        expect(scrollbar.width).toBe("6px");
+        expect(scrollbar.height).toBe("6px");
+        for (const part of ["track", "corner"]) {
+          expect(getComputedStyle(scroller, `::-webkit-scrollbar-${part}`).backgroundColor).toBe(
+            "rgba(0, 0, 0, 0)",
+          );
+        }
+        const thumb = getComputedStyle(scroller, "::-webkit-scrollbar-thumb");
+        expect(thumb.borderRadius).toBe("3px");
+        const thumbColors =
+          theme === "dark"
+            ? ["rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.18)"]
+            : ["rgba(0, 0, 0, 0.15)", "rgba(0, 0, 0, 0.25)"];
+        expect(thumbColors).toContain(thumb.backgroundColor);
+      };
+
+      try {
+        const inlineScroller = document.querySelector<HTMLElement>(".chat-markdown-table-scroll");
+        expect(inlineScroller).toBeInstanceOf(HTMLElement);
+        if (!inlineScroller) {
+          throw new Error("Inline table scroller was not rendered");
+        }
+        expectAppScrollbar(inlineScroller);
+        expect(inlineScroller.scrollWidth).toBeGreaterThan(inlineScroller.clientWidth);
+        inlineScroller.scrollLeft = 100;
+        await expect.poll(() => inlineScroller.scrollLeft).toBeGreaterThan(0);
+
+        await page.getByRole("region", { name: "Scrollable table" }).hover();
+        await page.getByRole("button", { name: "Open table" }).click();
+        const dialog = page.getByRole("dialog");
+        await expect.element(dialog).toBeVisible();
+        const expandedScroller = dialog
+          .element()
+          .querySelector<HTMLElement>(".chat-markdown-table-expanded");
+        expect(expandedScroller).toBeInstanceOf(HTMLElement);
+        if (!expandedScroller) {
+          throw new Error("Expanded table scroller was not rendered");
+        }
+        expectAppScrollbar(expandedScroller);
+        expect(expandedScroller.scrollWidth).toBeGreaterThan(expandedScroller.clientWidth);
+        expect(expandedScroller.scrollHeight).toBeGreaterThan(expandedScroller.clientHeight);
+        expandedScroller.scrollLeft = 100;
+        expandedScroller.scrollTop = 100;
+        await expect.poll(() => expandedScroller.scrollLeft).toBeGreaterThan(0);
+        await expect.poll(() => expandedScroller.scrollTop).toBeGreaterThan(0);
+      } finally {
+        await mounted.unmount();
+        document.documentElement.classList.toggle("dark", wasDark);
+      }
+    },
+  );
+
   it("copies tables as markdown and opens them in a dialog", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
