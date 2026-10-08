@@ -25,6 +25,7 @@ export interface PendingApprovalLedgerEntry extends NativeRequestIdentity {
   readonly detail?: string;
   readonly suggestions?: ReadonlyArray<unknown>;
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
+  readonly completion: Deferred.Deferred<void>;
   uiDecision?: ProviderApprovalDecision;
 }
 
@@ -49,6 +50,7 @@ export interface PendingUserInputLedgerEntry extends NativeRequestIdentity {
   readonly createdAt: string;
   readonly questions: ReadonlyArray<UserInputQuestion>;
   readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  readonly completion: Deferred.Deferred<void>;
   cancelled: boolean;
   readonly sensitive?: boolean;
   uiAnswers?: ProviderUserInputAnswers;
@@ -66,10 +68,20 @@ export interface ResolvedUserInputLedgerEntry extends NativeRequestIdentity {
   readonly sensitive?: boolean;
 }
 
+export type ResolvingClaudeRequestLedgerEntry = (
+  | Omit<PendingApprovalLedgerEntry, "state">
+  | Omit<PendingUserInputLedgerEntry, "state">
+) & { readonly state: "resolving"; cancelled: boolean };
+
+export type ResolvedClaudeRequestLedgerEntry =
+  | ResolvedApprovalLedgerEntry
+  | ResolvedUserInputLedgerEntry;
+
 export type ClaudeRequestLedgerEntry =
   | PendingApprovalLedgerEntry
   | ResolvedApprovalLedgerEntry
   | PendingUserInputLedgerEntry
+  | ResolvingClaudeRequestLedgerEntry
   | ResolvedUserInputLedgerEntry;
 
 export type ClaudeRequestLedger = Map<ApprovalRequestId, ClaudeRequestLedgerEntry>;

@@ -40,6 +40,7 @@ import {
 } from "./ProviderAuth";
 import { makeClaudeInitialSnapshot } from "./Provider.initialSnapshot";
 import { makeClaudeUsageLimitsUnavailable } from "./Provider.usageLimits";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 
 const PROVIDER = "claudeAgent" as const;
 export { getClaudeModelCapabilities } from "./Provider.capabilities";
@@ -106,7 +107,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: unavailableUsageLimits,
@@ -135,7 +136,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: unavailableUsageLimits,
@@ -160,7 +161,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: unavailableUsageLimits,
@@ -187,7 +188,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: unavailableUsageLimits,
@@ -266,7 +267,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,
@@ -293,7 +294,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
         status: "unavailable",
         source: "fallback",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 0,
       },
       usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,
@@ -318,7 +319,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
       status: "unavailable",
       source: "fallback",
-      version: "0.3.219",
+      version: CLAUDE_AGENT_SDK_VERSION,
       durationMs: 0,
     },
     usageLimits: runtimeCapabilities?.usageLimits ?? unavailableUsageLimits,

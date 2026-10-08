@@ -17,6 +17,7 @@ import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnCompletionHandlers } from "./Adapter.stream.turn.complete.ts";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 
 export interface TurnHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{
@@ -153,7 +154,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
       raw: {
         source: input.rawSource,
         method: input.rawMethod,
-        payload: { sdkVersion: "0.3.219" },
+        payload: { sdkVersion: CLAUDE_AGENT_SDK_VERSION },
       },
     });
   });

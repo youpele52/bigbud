@@ -330,9 +330,6 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       providerSubagentsSupported: deps.resolveHarness === undefined,
       mcpControlsEnabled: claudeSettings.rollout.mcpControls,
       refreshMcpStatuses: undefined,
-      recoverStream: undefined,
-      recoveryInFlight: undefined,
-      recoveryAttempts: 0,
       stopped: false,
     };
     yield* Ref.set(contextRef, context);

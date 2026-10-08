@@ -88,7 +88,6 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
     Parameters<ClaudeQueryRuntime["setMaxThinkingTokens"]>
   > = [];
   public closeCalls = 0;
-  public reopenOnReinitialize = false;
   public mcpConnectedAfterIteration = false;
   public iterationStarted = false;
 
@@ -171,10 +170,7 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   readonly reinitialize: ClaudeQueryRuntime["reinitialize"] = async () => {
     this.reinitializeCalls.push(undefined);
     this.throwControlFailure("reinitialize");
-    if (this.reopenOnReinitialize) {
-      this.done = false;
-      this.failure = undefined;
-    }
+    if (this.done) throw new Error("Claude query is closed.");
     if (!this.initializationResponse) {
       throw new Error("Fake Claude query reinitialization response was not configured.");
     }

@@ -92,7 +92,7 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
       pathToClaudeCodeExecutable: input.claudeBinaryPath,
       settingSources: [...(input.settingSources ?? CLAUDE_SETTING_SOURCES)],
       ...(effectiveEffort ? { effort: effectiveEffort } : {}),
-      ...(permissionMode ? { permissionMode } : {}),
+      permissionMode,
       ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
       ...(input.existingResumeSessionId ? { resume: input.existingResumeSessionId } : {}),

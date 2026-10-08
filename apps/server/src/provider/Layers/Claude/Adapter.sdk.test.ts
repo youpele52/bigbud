@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import serverPackage from "../../../../package.json";
 
 import { FakeClaudeQuery } from "./Adapter.test.helpers.ts";
 import {
@@ -100,7 +101,9 @@ describe("Claude SDK compatibility boundary", () => {
   });
 
   it("builds safe SDK message discriminators", () => {
-    expect(CLAUDE_AGENT_SDK_VERSION).toBe("0.3.219");
+    expect(CLAUDE_AGENT_SDK_VERSION).toBe(
+      serverPackage.dependencies["@anthropic-ai/claude-agent-sdk"],
+    );
     expect(claudeSdkMessageDiscriminator({ type: "system", subtype: "task_updated" })).toEqual({
       type: "system",
       subtype: "task_updated",

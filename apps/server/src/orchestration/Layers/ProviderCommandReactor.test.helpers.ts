@@ -313,12 +313,19 @@ export async function createHarness(input?: {
   const runtime = ManagedRuntime.make(layer);
 
   let scope: Scope.Closeable | null = null;
-  cleanupTasks.add(async () => {
+  let drainWork = Effect.void;
+  const drain = () => Effect.runPromise(drainWork);
+  const cleanup = async () => {
     if (scope) {
       await Effect.runPromise(Scope.close(scope, Exit.void));
     }
+    // Stop intake, then finish native writes before interrupting runtime workers.
+    // Fiber interruption alone cannot cancel an already-started filesystem call.
+    await drain();
     await runtime.dispose();
-  });
+    cleanupTasks.delete(cleanup);
+  };
+  cleanupTasks.add(cleanup);
 
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
   registerLiveSessionSettler(engine, settleLiveSession);
@@ -329,7 +336,7 @@ export async function createHarness(input?: {
   const sql = await runtime.runPromise(Effect.service(SqlClient.SqlClient));
   scope = await Effect.runPromise(Scope.make("sequential"));
   await Effect.runPromise(reactor.start().pipe(Scope.provide(scope)));
-  const drain = () => Effect.runPromise(reactor.drain);
+  drainWork = reactor.drain;
 
   await Effect.runPromise(
     engine.dispatch({
@@ -377,5 +384,6 @@ export async function createHarness(input?: {
     terminalClose,
     stateDir,
     drain,
+    cleanup,
   };
 }

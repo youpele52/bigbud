@@ -1,22 +1,12 @@
 import { type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type EventId, type ThreadId } from "@bigbud/contracts";
-import { Deferred, Effect, Fiber, Stream, type Exit } from "effect";
-
-import { ProviderAdapterProcessError } from "../../Errors.ts";
-import {
-  claudeModernizationEventsTotal,
-  claudeModernizationMetricAttributes,
-  increment,
-} from "../../../observability/Metrics.ts";
+import { Effect, Fiber, Stream, type Exit } from "effect";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { toError } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
-import { rehydrateRequestLedger } from "./Adapter.requestLedger.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
-
-const RECOVERY_RETRY_DELAYS_MS = [0, 100] as const;
 
 export interface SessionRuntimeDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -153,82 +143,6 @@ export const startSessionRuntimeStream =
           }
         });
       };
-
-      input.context.recoverStream = () =>
-        Effect.gen(function* () {
-          if (input.context.recoveryInFlight) {
-            return yield* Effect.tryPromise({
-              try: () => input.context.recoveryInFlight!,
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: PROVIDER,
-                  threadId: input.context.session.threadId,
-                  detail: toError(cause, "Claude runtime recovery failed.").message,
-                  cause,
-                }),
-            }).pipe(Effect.asVoid);
-          }
-
-          rehydrateRequestLedger(input.context.requestLedger);
-          input.context.taskState.sessionEpoch = crypto.randomUUID();
-          input.context.taskState.nextObservedOrdinal = 0;
-          for (const pending of input.context.pendingApprovals.values()) {
-            yield* Deferred.succeed(pending.decision, "cancel");
-          }
-          input.context.pendingApprovals.clear();
-          for (const [requestId, pending] of input.context.pendingUserInputs) {
-            pending.cancelled = true;
-            input.context.resolvedUserInputs.set(requestId, {});
-            yield* Deferred.succeed(pending.answers, {});
-          }
-          input.context.pendingUserInputs.clear();
-
-          const recovery = (async () => {
-            for (let attempt = 0; attempt < RECOVERY_RETRY_DELAYS_MS.length; attempt += 1) {
-              input.context.recoveryAttempts = attempt + 1;
-              const delayMs = RECOVERY_RETRY_DELAYS_MS[attempt] ?? 0;
-              if (delayMs > 0) {
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-              }
-              try {
-                await input.context.query.reinitialize();
-                input.context.recoveryAttempts = 0;
-                if (!input.context.stopped) {
-                  startStream();
-                  if (input.context.refreshMcpStatuses) {
-                    input.runFork(input.context.refreshMcpStatuses().pipe(Effect.ignore));
-                  }
-                }
-                return;
-              } catch (cause) {
-                if (attempt === RECOVERY_RETRY_DELAYS_MS.length - 1) throw cause;
-              }
-            }
-            throw new Error("Claude runtime stream recovery retry budget exhausted.");
-          })().finally(() => {
-            input.context.recoveryInFlight = undefined;
-          });
-          input.context.recoveryInFlight = recovery;
-          yield* Effect.tryPromise({
-            try: () => recovery,
-            catch: (cause) =>
-              new ProviderAdapterProcessError({
-                provider: PROVIDER,
-                threadId: input.context.session.threadId,
-                detail: toError(cause, "Claude runtime recovery failed.").message,
-                cause,
-              }),
-          });
-          yield* increment(
-            claudeModernizationEventsTotal,
-            claudeModernizationMetricAttributes({
-              event: "reinitialize",
-              provider: "claudeAgent",
-              outcome: "success",
-              source: "recovery",
-            }),
-          );
-        }).pipe(Effect.asVoid);
 
       startStream();
     });

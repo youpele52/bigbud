@@ -26,7 +26,7 @@
     "benchmark:mobile-recovery-memory": "bun scripts/mobileRecoveryMemoryBenchmark.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.219",
+    "@anthropic-ai/claude-agent-sdk": "0.3.293",
     "@anthropic-ai/sdk": "0.115.0",
     "@earendil-works/pi-coding-agent": "^0.80.3",
     "@effect/platform-bun": "catalog:",

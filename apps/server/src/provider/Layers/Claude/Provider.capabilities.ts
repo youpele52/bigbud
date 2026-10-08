@@ -9,6 +9,7 @@ import {
   type SlashCommand as ClaudeSlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 import { withEffortProvenance } from "@bigbud/shared/model";
 
 import { readClaudeUsageLimits } from "./Provider.usageLimits";
@@ -275,7 +276,7 @@ export function resolveClaudeModelDiscovery(input: {
     modelDiscovery: classifyClaudeModelDiscovery({
       models: classifiedModels,
       durationMs: input.durationMs,
-      version: "0.3.219",
+      version: CLAUDE_AGENT_SDK_VERSION,
     }),
   };
 }

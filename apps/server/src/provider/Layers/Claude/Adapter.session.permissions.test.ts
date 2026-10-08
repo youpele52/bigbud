@@ -5,8 +5,12 @@ import { Effect, Fiber, Random, Stream } from "effect";
 
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import { makeDeterministicRandomService, makeHarness, THREAD_ID } from "./Adapter.test.helpers.ts";
+import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
 
 describe("ClaudeAdapter permission modes", () => {
+  it("uses manual approvals for an omitted runtime mode", () => {
+    assert.equal(resolveBasePermissionMode(undefined), "default");
+  });
   it.effect.each<{
     runtimeMode: RuntimeMode;
     expectedPermissionMode: string | undefined;
@@ -14,7 +18,7 @@ describe("ClaudeAdapter permission modes", () => {
   }>([
     {
       runtimeMode: "approval-required",
-      expectedPermissionMode: undefined,
+      expectedPermissionMode: "default",
       expectedDangerousBypass: undefined,
     },
     {

@@ -156,9 +156,6 @@ export interface ClaudeSessionContext {
   readonly providerSubagentsSupported: boolean;
   readonly mcpControlsEnabled: boolean;
   refreshMcpStatuses: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
-  recoverStream: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
-  recoveryInFlight: Promise<void> | undefined;
-  recoveryAttempts: number;
   stopped: boolean;
 }
 

@@ -59,7 +59,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(session.cwd, "/srv/project");
       assert.equal(session.providerRuntimeExecutionTargetId, "local");
       assert.equal(session.workspaceExecutionTargetId, "ssh:host=devbox&user=root&port=22");
-      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.permissionMode, "default");
       assert.equal(createInput?.options.cwd?.includes("bigbud-claude-remote-workspace-"), true);
       assert.deepEqual(createInput?.options.tools, [
         "AskUserQuestion",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 
 import {
   classifyClaudeModelDiscovery,
@@ -69,7 +70,7 @@ describe("Claude model discovery", () => {
       modelDiscovery: {
         status: "invalid",
         source: "sdk",
-        version: "0.3.219",
+        version: CLAUDE_AGENT_SDK_VERSION,
         durationMs: 12,
       },
     });
