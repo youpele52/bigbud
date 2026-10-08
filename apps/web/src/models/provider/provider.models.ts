@@ -35,7 +35,8 @@ export function isProviderEnabled(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,
 ): boolean {
-  return getProviderSnapshot(providers, provider)?.enabled ?? true;
+  const snapshot = getProviderSnapshot(providers, provider);
+  return snapshot?.enabled ?? provider !== "opencodeV2";
 }
 
 export function resolveSelectableProvider(
@@ -48,7 +49,9 @@ export function resolveSelectableProvider(
     return provider;
   }
   // Only fall back when no provider was explicitly selected.
-  const fromSnapshot = providers.find((candidate) => candidate.enabled)?.provider;
+  const fromSnapshot = providers.find(
+    (candidate) => candidate.provider !== "opencodeV2" && candidate.enabled,
+  )?.provider;
   if (fromSnapshot) return fromSnapshot;
   return PROVIDER_KINDS[0];
 }
@@ -62,6 +65,7 @@ export function resolveStartupSelectableProvider(
   provider: ProviderKind,
 ): ProviderKind {
   const selected = getProviderSnapshot(providers, provider);
+  if (provider === "opencodeV2") return provider;
   const launchRecovery =
     selected?.initialProbeComplete === false ||
     selected?.recovery?.trigger === "startup" ||
@@ -109,7 +113,7 @@ export function getDefaultServerModel(
 export function getFirstReadyProvider(
   providers: ReadonlyArray<ServerProvider>,
 ): ServerProvider | undefined {
-  return providers.find((p) => p.enabled && p.status === "ready");
+  return providers.find((p) => p.provider !== "opencodeV2" && p.enabled && p.status === "ready");
 }
 
 /**
@@ -127,7 +131,7 @@ export function getDefaultModelSelection(providers: ReadonlyArray<ServerProvider
     const model = firstModel?.slug ?? DEFAULT_MODEL_BY_PROVIDER[ready.provider];
     return buildModelSelection(ready.provider, model, firstModel?.subProviderID);
   }
-  const firstEnabled = providers.find((p) => p.enabled);
+  const firstEnabled = providers.find((p) => p.provider !== "opencodeV2" && p.enabled);
   if (firstEnabled) {
     const firstModel = firstEnabled.models[0];
     const model = firstModel?.slug ?? DEFAULT_MODEL_BY_PROVIDER[firstEnabled.provider];
@@ -143,7 +147,13 @@ function buildModelSelection(
   model: string,
   subProviderID: string | undefined,
 ): ModelSelection {
-  if ((provider === "pi" || provider === "opencode" || provider === "kilocode") && subProviderID) {
+  if (
+    (provider === "pi" ||
+      provider === "opencode" ||
+      provider === "opencodeV2" ||
+      provider === "kilocode") &&
+    subProviderID
+  ) {
     return { provider, model, subProviderID } as ModelSelection;
   }
   return { provider, model };

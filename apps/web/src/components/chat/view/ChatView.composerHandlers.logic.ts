@@ -239,6 +239,7 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
             [activePendingQuestion.id]: setPendingUserInputCustomAnswer(
               existing[activePendingUserInput.requestId]?.[activePendingQuestion.id],
               next.text,
+              activePendingQuestion,
             ),
           },
         }));
@@ -342,6 +343,7 @@ export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersIn
           [questionId]: setPendingUserInputCustomAnswer(
             existing[activePendingUserInput.requestId]?.[questionId],
             value,
+            activePendingUserInput.questions.find((question) => question.id === questionId),
           ),
         },
       }));

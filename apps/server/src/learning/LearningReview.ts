@@ -6,6 +6,9 @@ import type { ProviderServiceShape } from "../provider/Services/ProviderService.
 import type { ServerConfigShape } from "../startup/config.ts";
 import type { MemoryStoreShape } from "./Services/MemoryStore.ts";
 import { validateMemoryReplacement } from "./LearningValidation.ts";
+import type { LearningMemoryDocuments } from "../persistence/Services/LearningJobs.memory.ts";
+import type { MemoryScope, MemoryStoreError, MemoryConflictError } from "./Services/MemoryStore.ts";
+import type { PersistenceSqlError, PersistenceDecodeError } from "../persistence/Errors.ts";
 
 const MAX_TRANSCRIPT_CHARS = 24_000;
 const MAX_MEMORY_CHARS = 8_000;
@@ -156,8 +159,25 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
   readonly sourceUserMessage: string;
   readonly memoryReviewEnabled: boolean;
   readonly skillContext?: SkillReviewContext;
+  readonly durableMemory?: {
+    readonly snapshot: (
+      documents: LearningMemoryDocuments,
+    ) => Effect.Effect<LearningMemoryDocuments, PersistenceSqlError | PersistenceDecodeError>;
+    readonly apply: (input: {
+      scope: MemoryScope;
+      document: LearningMemoryDocuments["user"];
+      content: string;
+    }) => Effect.Effect<
+      void,
+      | PersistenceSqlError
+      | PersistenceDecodeError
+      | MemoryStoreError
+      | MemoryConflictError
+      | LearningReviewOutputError
+    >;
+  };
 }) {
-  const memoryDocuments = input.memoryReviewEnabled
+  let memoryDocuments = input.memoryReviewEnabled
     ? {
         user: yield* input.memoryStore.read({ scope: "user", projectId: null }),
         global: yield* input.memoryStore.read({ scope: "global", projectId: null }),
@@ -167,6 +187,13 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
         }),
       }
     : null;
+  if (memoryDocuments && input.durableMemory)
+    memoryDocuments = yield* input.durableMemory.snapshot(memoryDocuments);
+  if (
+    memoryDocuments?.project.projectId !== undefined &&
+    memoryDocuments.project.projectId !== input.thread.projectId
+  )
+    return yield* Effect.fail(new LearningReviewOutputError("Learning project ownership changed."));
   const prompt = [
     input.memoryReviewEnabled
       ? "Review the completed conversation and update persistent memory only when durable facts or preferences were confirmed."
@@ -266,12 +293,15 @@ export const reviewAndUpdateMemory = Effect.fn("reviewAndUpdateMemory")(function
       !validateMemoryReplacement(update.document.content, update.content)
     )
       continue;
-    yield* input.memoryStore.write({
-      scope: update.scope,
-      projectId: update.scope === "project" ? input.thread.projectId : null,
-      content: update.content,
-      expectedContent: update.document.content,
-    });
+    if (input.durableMemory)
+      yield* input.durableMemory.apply({ ...update, content: update.content });
+    else
+      yield* input.memoryStore.write({
+        scope: update.scope,
+        projectId: update.scope === "project" ? input.thread.projectId : null,
+        content: update.content,
+        expectedContent: update.document.content,
+      });
     changed.push(update.scope);
   }
   return { changed, skillPatch: result.skillPatch };

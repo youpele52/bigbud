@@ -21,6 +21,40 @@ afterEach(() => {
 });
 
 describe("LearningReactor processor", () => {
+  it.each([false, true])(
+    "processes V2 jobs only under the explicit durable-hook gate (%s)",
+    async (durable) => {
+      const f = processorFixture();
+      Object.assign(f.job, {
+        provider: "opencodeV2",
+        modelSelection: { provider: "opencodeV2", subProviderID: "synthetic", model: "test-model" },
+      });
+      Object.assign(f.thread, { modelSelection: f.job.modelSelection });
+      f.getCapabilities.mockImplementation(() =>
+        Effect.succeed({ sessionModelSwitch: "unsupported", durableLearningReview: durable }),
+      );
+      await f.run();
+      if (durable) {
+        expect(f.operations).toEqual(["claim", "acquire", "review", "write", "release"]);
+        expect(f.runBackgroundReview).toHaveBeenCalledWith(
+          expect.objectContaining({ modelSelection: f.job.modelSelection }),
+        );
+        expect(f.setState).toHaveBeenCalledWith(
+          expect.objectContaining({ state: "completed", outcome: "updated" }),
+        );
+      } else {
+        expect(f.acquireLease).not.toHaveBeenCalled();
+        expect(f.runBackgroundReview).not.toHaveBeenCalled();
+        expect(f.write).not.toHaveBeenCalled();
+        expect(f.setState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            state: "requires-reselection",
+            outcome: "unsupported-provider",
+          }),
+        );
+      }
+    },
+  );
   it("claims first, reads persisted source with a cold engine, and holds the lease through writes", async () => {
     const f = processorFixture();
     await f.run();

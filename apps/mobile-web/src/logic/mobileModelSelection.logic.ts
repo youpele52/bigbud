@@ -12,7 +12,7 @@ import { normalizeModelSlug } from "@bigbud/shared/model";
 
 import type { MobileDraftThread } from "../lib/mobileDraftThread";
 
-const SUB_PROVIDER_PROVIDERS = new Set<ProviderKind>(["pi", "opencode", "kilocode"]);
+const SUB_PROVIDER_PROVIDERS = new Set<ProviderKind>(["pi", "opencode", "opencodeV2", "kilocode"]);
 
 export interface MobileModelSelectionContext {
   readonly thread: OrchestrationThread | null;
@@ -24,6 +24,11 @@ export interface MobileModelSelectionContext {
 
 function isProviderUsable(provider: ServerProvider | undefined): boolean {
   if (!provider) return false;
+  if (
+    provider.provider === "opencodeV2" &&
+    (provider.status !== "ready" || provider.models.length === 0)
+  )
+    return false;
   if (!provider.enabled) return false;
   if (!provider.installed) return false;
   if (provider.auth.status === "unauthenticated") return false;
@@ -32,11 +37,16 @@ function isProviderUsable(provider: ServerProvider | undefined): boolean {
 }
 
 function findReadyProvider(providers: ReadonlyArray<ServerProvider>): ServerProvider | undefined {
-  return providers.find((provider) => provider.enabled && provider.status === "ready");
+  return providers.find(
+    (provider) =>
+      provider.provider !== "opencodeV2" && provider.enabled && provider.status === "ready",
+  );
 }
 
 function firstUsableProvider(providers: ReadonlyArray<ServerProvider>): ServerProvider | undefined {
-  return providers.find(isProviderUsable);
+  return providers.find(
+    (provider) => provider.provider !== "opencodeV2" && isProviderUsable(provider),
+  );
 }
 
 function defaultModelSelectionFor(providers: ReadonlyArray<ServerProvider>): ModelSelection {

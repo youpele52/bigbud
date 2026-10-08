@@ -79,6 +79,7 @@ export function normalizeTextGenerationModelSelection(
       };
     case "copilot":
     case "devin":
+    case "opencodeV2":
       return {
         provider: "codex",
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,

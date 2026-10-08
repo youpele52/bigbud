@@ -1,6 +1,8 @@
 import { Option, Schema } from "effect";
+import { ApprovalExecutionIntent } from "./approvalIntent";
 
 import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+import { UserInputField } from "./providerRuntime.forms";
 export { McpOauthCompletedPayload, McpStatusUpdatedPayload } from "./providerRuntime.payloads.mcp";
 export {
   TaskCompletedPayload,
@@ -201,6 +203,7 @@ export const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
+  executionIntent: Schema.optional(ApprovalExecutionIntent),
   autoApproveAfterMs: Schema.optional(NonNegativeInt),
   sessionApprovalAvailable: Schema.optional(Schema.Boolean),
   sessionApprovalLabel: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -222,6 +225,7 @@ const UserInputQuestionOption = Schema.Struct({
 export type UserInputQuestionOption = typeof UserInputQuestionOption.Type;
 
 export const UserInputQuestion = Schema.Struct({
+  field: Schema.optional(UserInputField),
   id: TrimmedNonEmptyStringSchema,
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,

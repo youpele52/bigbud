@@ -274,6 +274,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
+      requestMessageId: event.payload.messageId,
       messageText: message.text,
       providerInputText,
       capabilityCatalog: effectiveCapabilityCatalog,

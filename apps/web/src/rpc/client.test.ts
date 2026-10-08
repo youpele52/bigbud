@@ -140,6 +140,7 @@ describe("WsRpcAtomClient", () => {
         devin: DEFAULT_SERVER_SETTINGS.providers.devin,
         kilocode: DEFAULT_SERVER_SETTINGS.providers.kilocode,
         opencode: DEFAULT_SERVER_SETTINGS.providers.opencode,
+        opencodeV2: DEFAULT_SERVER_SETTINGS.providers.opencodeV2,
         pi: DEFAULT_SERVER_SETTINGS.providers.pi,
       },
     };
@@ -197,6 +198,7 @@ describe("WsRpcAtomClient", () => {
         devin: DEFAULT_SERVER_SETTINGS.providers.devin,
         kilocode: DEFAULT_SERVER_SETTINGS.providers.kilocode,
         opencode: DEFAULT_SERVER_SETTINGS.providers.opencode,
+        opencodeV2: DEFAULT_SERVER_SETTINGS.providers.opencodeV2,
         pi: DEFAULT_SERVER_SETTINGS.providers.pi,
       },
     };

@@ -27,7 +27,11 @@ const callerThread = {
   deletingAt: null,
 };
 
-function makeSystem() {
+function makeSystem(
+  parent: Omit<typeof callerThread, "modelSelection"> & {
+    modelSelection: { provider: string; model: string; subProviderID?: string };
+  } = callerThread,
+) {
   const dispatch = vi.fn((_command: unknown) => Effect.succeed({ sequence: 1 }));
   const engine = {
     getReadModel: () =>
@@ -36,7 +40,7 @@ function makeSystem() {
           { id: callerProjectId, deletedAt: null, deletingAt: null },
           { id: targetProjectId, deletedAt: null, deletingAt: null },
         ],
-        threads: [callerThread],
+        threads: [parent],
       }),
     dispatch,
   } as unknown as OrchestrationEngineShape;
@@ -101,6 +105,57 @@ const run = (input: Parameters<typeof createThreadViaOrchestration>[0]) =>
   Effect.runPromise(createThreadViaOrchestration(input));
 
 describe("createThreadViaOrchestration", () => {
+  it("preserves V2 identity/supervised targets for canonical background children and cached delegation never dispatches again", async () => {
+    const modelSelection = {
+      provider: "opencodeV2",
+      model: "synthetic-model",
+      subProviderID: "synthetic-provider",
+    };
+    const system = makeSystem({
+      ...callerThread,
+      modelSelection,
+      runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
+    });
+    const input = {
+      orchestrationEngine: system.engine,
+      threadDelegationRepository: system.repository,
+      projectionThreadWatchRepository: system.projectionThreadWatchRepository,
+      callerThreadId,
+      sourceMessageId,
+      invocationId: "v2-tool:stable-native-call",
+      title: "V2 background child",
+      task: "Actual independent canonical work",
+      watchForCompletion: true,
+    };
+    await run(input);
+    expect(system.dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "thread.create",
+      modelSelection,
+      runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+    });
+    expect(system.dispatch.mock.calls[2]?.[0]).toMatchObject({
+      type: "thread.turn.start",
+      threadId: system.delegation.childThreadId,
+      modelSelection,
+    });
+    expect(system.addActiveWatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        watcherThreadId: callerThreadId,
+        watchedThreadId: system.delegation.childThreadId,
+        sourceMessageId,
+      }),
+    );
+    system.setGetByInvocation(() =>
+      Effect.succeed(Option.some({ ...system.delegation, state: "completed" as const })),
+    );
+    await run(input);
+    expect(system.dispatch).toHaveBeenCalledTimes(3);
+  });
   it("creates a child in the caller's project by default", async () => {
     const system = makeSystem();
     await run({

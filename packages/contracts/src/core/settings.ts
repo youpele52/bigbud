@@ -16,6 +16,7 @@ import {
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import {
   AgentBrowserPreference,
   ComputerUseActionTimeoutMs,
@@ -245,6 +246,7 @@ export const ServerSettings = Schema.Struct({
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    opencodeV2: OpencodeV2DevelopmentSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),

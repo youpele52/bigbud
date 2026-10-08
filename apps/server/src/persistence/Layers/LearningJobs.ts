@@ -4,6 +4,7 @@ import { Effect, Layer, Schema } from "effect";
 
 import { PersistedModelSelection } from "@bigbud/contracts";
 import { makeLearningJobQueries } from "./LearningJobs.queries.ts";
+import { makeLearningMemoryQueries } from "./LearningJobs.memory.ts";
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import {
   LearningJob,
@@ -144,6 +145,7 @@ const makeLearningJobRepository = Effect.gen(function* () {
   );
 
   return {
+    ...makeLearningMemoryQueries(sql),
     ...queries,
     claim,
     createIfAbsent,

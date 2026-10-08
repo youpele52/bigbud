@@ -168,6 +168,8 @@ export type CliProxyDiagnostic = typeof CliProxyDiagnostic.Type;
 
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
+  /** Explicit isolated development composition, never a public-release availability flag. */
+  developmentOnly: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,
   installed: Schema.Boolean,
   version: Schema.NullOr(TrimmedNonEmptyString),

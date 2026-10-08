@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { makeProviderCapabilitiesResolver } from "./providerCapabilities.ts";
 import { CLIPROXY_PROVIDER_CAPABILITIES } from "./Layers/CliProxy/Composition.ts";
+import { V2_APPLICATION_CAPABILITIES } from "./Layers/OpencodeV2/Application.capabilities.ts";
 import {
   getProviderRemoteWorkspaceConformance,
   providerAdvertisesRemoteWorkspaceSupport,
@@ -24,6 +25,7 @@ describe("provider remote workspace conformance matrix", () => {
   it("never claims a capability for an unsupported backend", () => {
     const resolveCapabilities = makeProviderCapabilitiesResolver([
       { provider: "cliProxy", capabilities: CLIPROXY_PROVIDER_CAPABILITIES },
+      { provider: "opencodeV2", capabilities: V2_APPLICATION_CAPABILITIES },
     ]);
     for (const provider of PROVIDER_KINDS) {
       const conformance = getProviderRemoteWorkspaceConformance(provider);
@@ -47,7 +49,7 @@ describe("provider remote workspace conformance matrix", () => {
           providerRuntimeExecutionTargetId: "local",
           workspaceExecutionTargetId: "ssh:devbox",
         }),
-      ).toBe(false);
+      ).toBe(!getProviderRemoteWorkspaceConformance(provider).supportsLocalRuntimeRemoteWorkspace);
     }
     expect(
       isUnsupportedProviderLocalRuntimeRemoteWorkspace({

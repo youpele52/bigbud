@@ -9,6 +9,7 @@ const labels: Record<ServerProvider["provider"], string> = {
   devin: "Devin",
   kilocode: "KiloCode",
   opencode: "OpenCode",
+  opencodeV2: "OpenCode v2 (Preview)",
   pi: "Pi",
 };
 

@@ -47,6 +47,13 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
           yield* OpencodeAdapter,
           yield* PiAdapter,
         ];
+  return makeAdapterLookup(adapters);
+});
+
+/** Shared routing seam for normal application composition and explicit adapter fixtures. */
+export function makeAdapterLookup(
+  adapters: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>,
+): ProviderAdapterRegistryShape {
   const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
 
   const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) => {
@@ -64,7 +71,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
     getByProvider,
     listProviders,
   } satisfies ProviderAdapterRegistryShape;
-});
+}
 
 export function makeProviderAdapterRegistryLive(options?: ProviderAdapterRegistryLiveOptions) {
   return Layer.effect(ProviderAdapterRegistry, makeProviderAdapterRegistry(options));

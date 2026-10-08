@@ -4,6 +4,7 @@ import {
   ApprovalRequestId,
   EventId,
   IsoDateTime,
+  MessageId,
   ProviderItemId,
   ThreadId,
   TurnId,
@@ -68,6 +69,11 @@ export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 
 export const ProviderSendTurnInput = Schema.Struct({
   threadId: ThreadId,
+  requestMessageId: Schema.optional(MessageId),
+  /** Durable background ownership; never inferred from a process-local review ID. */
+  learningJob: Schema.optional(
+    Schema.Struct({ ownerThreadId: ThreadId, jobId: TrimmedNonEmptyString }),
+  ),
   input: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
   ),

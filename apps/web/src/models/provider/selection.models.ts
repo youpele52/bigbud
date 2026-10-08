@@ -203,7 +203,10 @@ export function resolveAppModelSelectionState(
 
   if (provider === selection.provider) {
     const baseSelection = createModelSelection(provider, model, modelOptionsForDispatch);
-    return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
+    return (provider === "opencode" ||
+      provider === "opencodeV2" ||
+      provider === "kilocode" ||
+      provider === "pi") &&
       "subProviderID" in selection &&
       selection.subProviderID
       ? cloneModelSelection(baseSelection, {

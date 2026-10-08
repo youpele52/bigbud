@@ -1,11 +1,12 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts/orchestration/providerRuntime.events.ts";
-import { Deferred, Effect, Option } from "effect";
+import { Deferred, Effect, Option, Schema } from "effect";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import type { ProviderAdapterError } from "../Errors.ts";
 import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterRegistryShape } from "../Services/ProviderAdapterRegistry.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
+import { ProviderAdapterValidationError } from "../Errors.ts";
 import { supportsProviderWorkload } from "../providerWorkloadSupport.ts";
 import {
   prepareProviderSession,
@@ -13,6 +14,10 @@ import {
 } from "./ProviderService.prepareSession.ts";
 import { toValidationError } from "./ProviderServiceHelpers.ts";
 import { makeBackgroundReviewResponse } from "./ProviderService.backgroundReview.response.ts";
+import {
+  learningAdmissionIdentity,
+  isDurableLearningThread,
+} from "./OpencodeV2/Admission.identity.ts";
 
 const REVIEW_TIMEOUT = "3 minutes";
 const RESPONSE_LIMIT = 24_000;
@@ -25,14 +30,42 @@ export function makeBackgroundReviews(
 ) {
   const prefix = `learning-${crypto.randomUUID()}-`;
   const handlers = new Map<ThreadId, (event: ProviderRuntimeEvent) => Effect.Effect<void>>();
-  const isBackground = (threadId: ThreadId) => threadId.startsWith(prefix);
+  const isBackground = (threadId: ThreadId) =>
+    threadId.startsWith(prefix) || isDurableLearningThread(threadId);
   const process = (event: ProviderRuntimeEvent) =>
     handlers.get(event.threadId)?.(event) ?? Effect.void;
   const run: ProviderServiceShape["runBackgroundReview"] = Effect.fn("runBackgroundReview")(
     function* (request) {
-      const threadId = ThreadId.makeUnsafe(`${prefix}${crypto.randomUUID()}`);
+      const durableReview =
+        request.modelSelection.provider === "opencodeV2"
+          ? learningAdmissionIdentity(request.ownerThreadId, request.jobId)
+          : undefined;
+      const threadId =
+        durableReview?.threadId ?? ThreadId.makeUnsafe(`${prefix}${crypto.randomUUID()}`);
       const fail = (detail: string) =>
         toValidationError("ProviderService.runBackgroundReview", detail);
+      if (durableReview) {
+        const adapter = yield* input.registry.getByProvider("opencodeV2");
+        if (adapter.runBackgroundReview) {
+          return yield* adapter
+            .runBackgroundReview(request)
+            .pipe(
+              Effect.mapError((error) =>
+                toValidationError(
+                  Schema.is(ProviderAdapterValidationError)(error) &&
+                    error.operation === "ProviderService.runBackgroundReview.cleanup"
+                    ? "ProviderService.runBackgroundReview.cleanup"
+                    : "ProviderService.runBackgroundReview",
+                  Schema.is(ProviderAdapterValidationError)(error) &&
+                    error.operation === "ProviderService.runBackgroundReview.cleanup"
+                    ? "V2 review cleanup remains unconfirmed; retain owner lease and do not retry."
+                    : "Isolated V2 durable review failed or remains unconfirmed.",
+                  error,
+                ),
+              ),
+            );
+        }
+      }
       if (!supportsProviderWorkload(request.modelSelection.provider, "learning")) {
         return yield* fail(
           `Provider '${request.modelSelection.provider}' does not support learning.`,
@@ -123,6 +156,12 @@ export function makeBackgroundReviews(
               }
               yield* adapter.sendTurn({
                 threadId,
+                ...(durableReview
+                  ? {
+                      requestMessageId: durableReview.identity.requestMessageId,
+                      learningJob: { ownerThreadId: request.ownerThreadId, jobId: request.jobId },
+                    }
+                  : {}),
                 input: request.input,
                 modelSelection: request.modelSelection,
               });

@@ -84,6 +84,7 @@ describe("OrchestraPlayerComposer.menu", () => {
       {
         codex: [{ slug: "gpt-5.4", name: "GPT-5.4" }],
         claudeAgent: [{ slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" }],
+        opencodeV2: [],
         cliProxy: [],
         copilot: [],
         opencode: [],

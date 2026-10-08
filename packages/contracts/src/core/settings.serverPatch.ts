@@ -86,6 +86,11 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(OpencodeModelOptionsPatch),
   }),
   Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("opencodeV2")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(Schema.Struct({ variant: Schema.optional(TrimmedNonEmptyString) })),
+  }),
+  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("kilocode")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(KilocodeModelOptionsPatch),
@@ -165,6 +170,13 @@ export const ServerSettingsPatch = Schema.Struct({
       copilot: Schema.optionalKey(ProviderSettingsPatch),
       kilocode: Schema.optionalKey(ProviderSettingsPatch),
       opencode: Schema.optionalKey(ProviderSettingsPatch),
+      opencodeV2: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          binaryPath: Schema.optionalKey(Schema.String),
+          profileRoot: Schema.optionalKey(Schema.String),
+        }),
+      ),
       pi: Schema.optionalKey(ProviderSettingsPatch),
       cursor: Schema.optionalKey(
         Schema.Struct({

@@ -231,6 +231,7 @@ describe("PROVIDER_OPTIONS", () => {
       { value: "devin", label: "Devin", available: true },
       { value: "kilocode", label: "KiloCode", available: true },
       { value: "opencode", label: "OpenCode", available: true },
+      { value: "opencodeV2", label: "OpenCode v2 (Preview)", available: true },
       { value: "pi", label: "Pi", available: true },
     ]);
     expect(claude).toEqual({

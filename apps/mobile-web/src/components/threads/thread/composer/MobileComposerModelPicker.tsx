@@ -72,7 +72,10 @@ export function MobileComposerModelPicker({
       onProviderModelChange={(provider, model, subProviderID) => {
         if (
           subProviderID &&
-          (provider === "opencode" || provider === "kilocode" || provider === "pi")
+          (provider === "opencode" ||
+            provider === "opencodeV2" ||
+            provider === "kilocode" ||
+            provider === "pi")
         ) {
           onChange({ provider, model, subProviderID } as ModelSelection);
           return;

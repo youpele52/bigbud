@@ -41,6 +41,11 @@ export default defineConfig({
   entry: ["src/bin.ts"],
   format: ["esm"],
   outDir: "dist",
+  // import.meta.url resolves beside the bundled server, not the original source tree.
+  copy: [
+    { from: "src/provider/Layers/OpencodeV2/ServerManager.ssh.bootstrap.mjs", to: "dist" },
+    { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.mjs", to: "dist" },
+  ],
   sourcemap: true,
   clean: shouldCleanOutDir(),
   // Bundle ALL dependencies into the output except the explicitly external ones.

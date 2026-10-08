@@ -16,7 +16,7 @@ import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/Provi
 import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/ProviderTurnLiveness";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
-import { CliProxyCompositionLive } from "./provider/Layers/CliProxy/Composition";
+import { OptionalProviderCompositionLive } from "./provider/Layers/OptionalProviderComposition.ts";
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
@@ -256,7 +256,7 @@ const ProviderInfrastructureLayerLive = Layer.unwrap(
       }),
     );
   }),
-).pipe(Layer.provide(CliProxyCompositionLive));
+).pipe(Layer.provide(OptionalProviderCompositionLive));
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 

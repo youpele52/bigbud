@@ -3,6 +3,7 @@ import { assertFailure } from "@effect/vitest/utils";
 
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { MessageId } from "@bigbud/contracts/core/baseSchemas";
 
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderAdapterProcessError, ProviderValidationError } from "../Errors.ts";
@@ -33,14 +34,20 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(routing.cliProxy.startSession.mock.calls.length, priorCliProxyStarts + 1);
       assert.equal(routing.codex.startSession.mock.calls.length, priorCodexStarts);
 
+      const requestMessageId = MessageId.makeUnsafe("provider-service-request-message");
       yield* provider.sendTurn({
         threadId: session.threadId,
+        requestMessageId,
         input: "follow-up",
         attachments: [],
         modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
       });
 
       assert.equal(routing.cliProxy.sendTurn.mock.calls.length, priorCliProxyTurns + 1);
+      assert.equal(
+        routing.cliProxy.sendTurn.mock.calls.at(-1)?.[0].requestMessageId,
+        requestMessageId,
+      );
       assert.equal(routing.codex.sendTurn.mock.calls.length, priorCodexTurns);
       yield* provider.stopSession({ threadId: session.threadId });
     }),

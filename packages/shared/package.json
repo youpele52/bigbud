@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./providerApproval": {
+      "types": "./src/providerApproval.ts",
+      "import": "./src/providerApproval.ts"
+    },
+    "./providerUserInput": {
+      "types": "./src/providerUserInput.ts",
+      "import": "./src/providerUserInput.ts"
+    },
     "./games": {
       "types": "./src/games.ts",
       "import": "./src/games.ts"

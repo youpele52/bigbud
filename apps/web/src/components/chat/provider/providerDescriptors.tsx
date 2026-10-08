@@ -48,7 +48,7 @@ export interface ProviderDescriptor {
   readonly settings: {
     readonly path: ProviderSettingsPath;
     readonly home?: {
-      readonly key: "codexHomePath";
+      readonly key: "codexHomePath" | "opencodeV2ProfileRoot";
       readonly placeholder: string;
       readonly description: ReactNode;
     };
@@ -75,6 +75,29 @@ const customModels = (
 });
 
 const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
+  opencodeV2: {
+    provider: "opencodeV2",
+    label: PROVIDER_DISPLAY_NAMES.opencodeV2,
+    icon: OpenCodeIcon,
+    pickerAvailable: true,
+    isVisible: visible,
+    supportsSubProviderID: true,
+    catalogAuthoritative: true,
+    settings: {
+      path: binary(
+        "Separate V2 executable path",
+        "Absolute path to your separately installed OpenCode 2.0.19 executable. No V1 fallback. Restart after binary/profile changes. Supervised asks before actions; Auto-accept edits permits bounded canonical edits only (without the helper, native edits still ask). Explicit Full access trusts native tools with host-user filesystem/process/network access, not a sandbox. External-directory requests still ask; synthetic remote workspaces deny native file/shell tools.",
+      ),
+      home: {
+        key: "opencodeV2ProfileRoot",
+        placeholder: "/absolute/path/to/new-bigbud-v2-profile",
+        description:
+          "Dedicated private storage outside every workspace/repository/worktree and separate from your normal OpenCode profile. Choose a new directory under an existing parent; bigbud creates it on enable. Configure models in config/opencode/opencode.jsonc, then refresh. Existing unowned or overlapping storage is rejected, never moved. Credentials and project configuration are not imported.",
+      },
+    },
+    customModels: null,
+    traitsEnabled: false,
+  },
   codex: {
     provider: "codex",
     label: PROVIDER_DISPLAY_NAMES.codex,
@@ -214,8 +237,9 @@ export const PROVIDER_DESCRIPTORS = PROVIDER_KINDS.map(
 );
 
 export const PROVIDER_DESCRIPTOR_BY_KIND = DESCRIPTORS_BY_PROVIDER;
+export const PUBLIC_PROVIDER_DESCRIPTORS = PROVIDER_DESCRIPTORS;
 export type ProviderPickerKind = ProviderKind;
-export const PROVIDER_OPTIONS = PROVIDER_DESCRIPTORS.map((descriptor) => ({
+export const PROVIDER_OPTIONS = PUBLIC_PROVIDER_DESCRIPTORS.map((descriptor) => ({
   value: descriptor.provider,
   label: descriptor.label,
   available: descriptor.pickerAvailable,

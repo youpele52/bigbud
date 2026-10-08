@@ -154,6 +154,9 @@ describe("makeLifecycleQueuedPromptFlushCommand", () => {
     });
     expect(first?.commandId).toBe(duplicate?.commandId);
     expect(first?.commandId).not.toBe(changed?.commandId);
+    expect(first?.type === "thread.queued-prompt.flush" ? first.messageId : undefined).toBe(
+      duplicate?.type === "thread.queued-prompt.flush" ? duplicate.messageId : undefined,
+    );
     expect(first?.type).toBe("thread.queued-prompt.flush");
     expect(changed?.type).toBe("thread.queued-prompt.flush");
     if (first?.type === "thread.queued-prompt.flush" && changed?.type === first.type) {

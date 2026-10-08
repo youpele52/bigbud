@@ -3,6 +3,8 @@ import { IsoDateTime, ThreadId, TrimmedNonEmptyString, TurnId } from "@bigbud/co
 import { Schema, ServiceMap } from "effect";
 import type { OrchestrationMessage } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import type { Effect } from "effect";
+import type { LearningMemoryDocuments } from "./LearningJobs.memory.ts";
+import type { MemoryScope } from "../../learning/Services/MemoryStore.ts";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../Errors.ts";
 
@@ -39,6 +41,7 @@ export const LearningJobAttempt = Schema.Struct({
   turnId: LearningJob.fields.turnId,
   memoryUserMessageCount: LearningJob.fields.memoryUserMessageCount,
   attemptCount: LearningJob.fields.attemptCount,
+  cleanupUnconfirmed: Schema.optional(Schema.Boolean),
 });
 export type LearningJobAttempt = typeof LearningJobAttempt.Type;
 
@@ -64,6 +67,25 @@ export const GetLatestMemoryUserMessageCountInput = Schema.Struct({
 export type GetLatestMemoryUserMessageCountInput = typeof GetLatestMemoryUserMessageCountInput.Type;
 
 export interface LearningJobRepositoryShape {
+  readonly memorySnapshot: (input: {
+    jobId: string;
+    attemptCount: number;
+    documents: LearningMemoryDocuments;
+  }) => Effect.Effect<LearningMemoryDocuments, PersistenceSqlError | PersistenceDecodeError>;
+  readonly beginMemoryApplication: (input: {
+    jobId: string;
+    attemptCount: number;
+    scope: MemoryScope;
+    content: string;
+  }) => Effect.Effect<
+    "execute" | "completed" | "uncertain" | "conflict",
+    PersistenceSqlError | PersistenceDecodeError
+  >;
+  readonly completeMemoryApplication: (input: {
+    jobId: string;
+    scope: MemoryScope;
+    content: string;
+  }) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;
   readonly claim: (input: {
     jobId: string;
     now: string;

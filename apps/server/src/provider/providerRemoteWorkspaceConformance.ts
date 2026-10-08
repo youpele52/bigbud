@@ -11,6 +11,13 @@ export interface ProviderRemoteWorkspaceConformance {
 }
 
 const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
+  opencodeV2: {
+    provider: "opencodeV2",
+    backend: "agent-runtime",
+    supportsLocalRuntimeRemoteWorkspace: true,
+    reason:
+      "OpenCode v2 routes once-approved bounded remote file tools through the existing agent workspace root; native local filesystem/shell tools remain denied. Raw SSH workspace shell and absent-file CAS are not exposed.",
+  },
   claudeAgent: {
     provider: "claudeAgent",
     backend: "agent-runtime",

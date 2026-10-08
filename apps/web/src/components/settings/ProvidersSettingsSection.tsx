@@ -179,7 +179,11 @@ export function ProvidersSettingsSection({
             key={card.provider}
             card={card}
             isOpen={openProviderDetails[card.provider]}
-            codexHomePath={codexHomePath}
+            codexHomePath={
+              card.provider === "opencodeV2"
+                ? settings.providers.opencodeV2.profileRoot
+                : codexHomePath
+            }
             customModelInput={customModelInputByProvider[card.provider]}
             customModelError={customModelErrorByProvider[card.provider] ?? null}
             modelListRef={modelListRef}
@@ -255,7 +259,9 @@ export function ProvidersSettingsSection({
               updateSettings({
                 providers: {
                   ...settings.providers,
-                  codex: { ...settings.providers.codex, homePath: value },
+                  ...(card.provider === "opencodeV2"
+                    ? { opencodeV2: { ...settings.providers.opencodeV2, profileRoot: value } }
+                    : { codex: { ...settings.providers.codex, homePath: value } }),
                 },
               })
             }

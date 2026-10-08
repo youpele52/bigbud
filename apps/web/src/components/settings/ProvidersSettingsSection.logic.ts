@@ -10,7 +10,10 @@ import { Equal } from "effect";
 import { MAX_CUSTOM_MODEL_LENGTH, resolveAppModelSelectionState } from "../../models/provider";
 import { formatRelativeTime } from "../../utils/timestamp";
 import type { ProviderCardData } from "./ProviderCard";
-import { PROVIDER_DESCRIPTORS } from "../chat/provider/providerDescriptors";
+import {
+  PROVIDER_DESCRIPTORS,
+  PUBLIC_PROVIDER_DESCRIPTORS,
+} from "../chat/provider/providerDescriptors";
 
 export type InstallProviderSettings = {
   provider: ProviderKind;
@@ -18,7 +21,7 @@ export type InstallProviderSettings = {
   binaryPlaceholder: string;
   binaryDescription: ReactNode;
   configPath?: boolean;
-  homePathKey?: "codexHomePath";
+  homePathKey?: "codexHomePath" | "opencodeV2ProfileRoot";
   homePlaceholder?: string;
   homeDescription?: ReactNode;
   setupUrl?: string;
@@ -26,25 +29,28 @@ export type InstallProviderSettings = {
   customModelPlaceholder?: string;
 };
 
-export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = PROVIDER_DESCRIPTORS.map(
-  (descriptor) => ({
-    provider: descriptor.provider,
-    title: descriptor.label,
-    binaryPlaceholder: descriptor.settings.path.placeholder,
-    binaryDescription: descriptor.settings.path.description,
-    ...(descriptor.settings.path.kind === "config" ? { configPath: true } : {}),
-    ...(descriptor.settings.home
-      ? {
-          homePathKey: descriptor.settings.home.key,
-          homePlaceholder: descriptor.settings.home.placeholder,
-          homeDescription: descriptor.settings.home.description,
-        }
-      : {}),
-    ...(descriptor.settings.setupUrl ? { setupUrl: descriptor.settings.setupUrl } : {}),
-    supportsCustomModels: descriptor.customModels !== null,
-    ...(descriptor.customModels ? { customModelPlaceholder: descriptor.customModels.example } : {}),
-  }),
-);
+const descriptorSettings = (
+  descriptor: (typeof PROVIDER_DESCRIPTORS)[number],
+): InstallProviderSettings => ({
+  provider: descriptor.provider,
+  title: descriptor.label,
+  binaryPlaceholder: descriptor.settings.path.placeholder,
+  binaryDescription: descriptor.settings.path.description,
+  ...(descriptor.settings.path.kind === "config" ? { configPath: true } : {}),
+  ...(descriptor.settings.home
+    ? {
+        homePathKey: descriptor.settings.home.key,
+        homePlaceholder: descriptor.settings.home.placeholder,
+        homeDescription: descriptor.settings.home.description,
+      }
+    : {}),
+  ...(descriptor.settings.setupUrl ? { setupUrl: descriptor.settings.setupUrl } : {}),
+  supportsCustomModels: descriptor.customModels !== null,
+  ...(descriptor.customModels ? { customModelPlaceholder: descriptor.customModels.example } : {}),
+});
+
+export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] =
+  PUBLIC_PROVIDER_DESCRIPTORS.map(descriptorSettings);
 
 export const PROVIDER_STATUS_STYLES = {
   disabled: { dot: "bg-amber-400" },
@@ -155,6 +161,7 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
     cliProxy: "",
     copilot: "",
     opencode: "",
+    opencodeV2: "",
     kilocode: "",
     pi: "",
     cursor: "",

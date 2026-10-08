@@ -24,6 +24,7 @@ import type {
 } from "@bigbud/contracts";
 import type { Effect } from "effect";
 import type { Stream } from "effect";
+import type { ProviderServiceShape } from "./ProviderService.ts";
 
 export interface ProviderMcpOperations<TError> {
   readonly refresh: (
@@ -57,6 +58,8 @@ export interface ProviderTurnControlCapabilities {
 }
 
 export interface ProviderAdapterCapabilities {
+  /** Explicit durable job hook; not inferred from generic workload support or public availability. */
+  readonly durableLearningReview?: boolean;
   /**
    * Declares whether changing the model on an existing session is supported.
    */
@@ -91,6 +94,10 @@ export interface ProviderAdapterShape<TError> {
   readonly capabilities: ProviderAdapterCapabilities;
   /** Provider-neutral MCP controls; omitted when the provider cannot support them. */
   readonly mcp?: ProviderMcpOperations<TError>;
+  /** Isolated durable job path; production workload availability remains separately gated. */
+  readonly runBackgroundReview?: (
+    input: Parameters<ProviderServiceShape["runBackgroundReview"]>[0],
+  ) => Effect.Effect<string, TError>;
 
   /**
    * Start a provider-backed session.

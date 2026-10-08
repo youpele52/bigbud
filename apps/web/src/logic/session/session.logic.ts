@@ -14,6 +14,7 @@ import {
 } from "@bigbud/contracts/constants/providerRuntime.constant";
 
 import type { ChatMessage, ProposedPlan, ThreadSession } from "../../models/types";
+import type { ApprovalExecutionIntent } from "@bigbud/contracts/orchestration/approvalIntent.ts";
 import {
   PROVIDER_OPTIONS as DESCRIPTOR_PROVIDER_OPTIONS,
   type ProviderPickerKind,
@@ -57,6 +58,7 @@ export interface PendingApproval {
   autoApproveAfterMs?: number;
   sessionApprovalAvailable?: boolean;
   sessionApprovalLabel?: string;
+  executionIntent?: ApprovalExecutionIntent;
 }
 
 export interface PendingUserInput {

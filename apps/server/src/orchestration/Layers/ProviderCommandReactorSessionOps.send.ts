@@ -169,6 +169,7 @@ export const sendTurnAttempt = (
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
+      ...(input.requestMessageId !== undefined ? { requestMessageId: input.requestMessageId } : {}),
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
       modelSelection: modelForTurn,

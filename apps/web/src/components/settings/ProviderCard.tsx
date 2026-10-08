@@ -26,7 +26,7 @@ export type ProviderCardData = {
   binaryPlaceholder: string;
   binaryDescription: ReactNode;
   configPath?: boolean | undefined;
-  homePathKey?: "codexHomePath" | undefined;
+  homePathKey?: "codexHomePath" | "opencodeV2ProfileRoot" | undefined;
   homePlaceholder?: string | undefined;
   homeDescription?: ReactNode | undefined;
   setupUrl?: string | undefined;
@@ -193,7 +193,11 @@ export function ProviderCard({
             {card.homePathKey ? (
               <div className="border-t border-border/60 px-4 py-3 sm:px-5">
                 <label htmlFor={`provider-install-${card.homePathKey}`} className="block">
-                  <span className="text-xs font-medium text-foreground">CODEX_HOME path</span>
+                  <span className="text-xs font-medium text-foreground">
+                    {card.provider === "opencodeV2"
+                      ? "Dedicated V2 profile path"
+                      : "CODEX_HOME path"}
+                  </span>
                   <Input
                     id={`provider-install-${card.homePathKey}`}
                     className="mt-1.5"

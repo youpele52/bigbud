@@ -31,6 +31,12 @@ export type ProviderWorkloadResolution = {
  * health is relevant so a fallback is only selected from ready providers.
  */
 const PROVIDER_WORKLOAD_SUPPORT = {
+  opencodeV2: {
+    interactive: true,
+    unattendedTextGeneration: false,
+    learning: false,
+    usageAccounting: true,
+  },
   codex: {
     interactive: true,
     unattendedTextGeneration: true,
@@ -110,6 +116,17 @@ export function supportsProviderWorkload(
   return providerWorkloadSupport(provider)[workload];
 }
 
+/** Only the explicitly composed durable V2 adapter may bypass its public workload exclusion. */
+export function supportsScheduledLearning(
+  provider: ProviderKind,
+  durableLearningReview = false,
+): boolean {
+  return (
+    supportsProviderWorkload(provider, "learning") ||
+    (provider === "opencodeV2" && durableLearningReview)
+  );
+}
+
 function isReadyProvider(provider: ServerProvider): boolean {
   return provider.enabled && provider.status === "ready";
 }
@@ -134,6 +151,14 @@ export function resolveProviderWorkload(input: {
   readonly fallbackOrder?: ReadonlyArray<ProviderKind>;
 }): ProviderWorkloadResolution {
   const { requested, workload } = input;
+  if (requested.provider === "opencodeV2" && workload === "learning") {
+    return {
+      requested,
+      actual: null,
+      action: "reject",
+      reason: "OpenCode v2 learning is gated; a job must not migrate to another provider.",
+    };
+  }
   const selectedSupport = supportsProviderWorkload(requested.provider, workload);
   const selectedSnapshot = input.availableProviders?.find(
     (provider) => provider.provider === requested.provider,
@@ -149,7 +174,10 @@ export function resolveProviderWorkload(input: {
     return { requested, actual: requested, action: "use-requested", reason: null };
   }
 
-  if (workload === "interactive") {
+  if (
+    workload === "interactive" ||
+    (requested.provider === "opencodeV2" && workload === "usageAccounting")
+  ) {
     return {
       requested,
       actual: null,

@@ -15,6 +15,7 @@ const UNSORTED_PROVIDER_KINDS = [
   "devin",
   "kilocode",
   "opencode",
+  "opencodeV2",
   "pi",
 ] as const;
 
@@ -25,6 +26,7 @@ export const PROVIDER_DISPLAY_NAMES = {
   copilot: "Copilot",
   kilocode: "KiloCode",
   opencode: "OpenCode",
+  opencodeV2: "OpenCode v2 (Preview)",
   pi: "Pi",
   cursor: "Cursor",
   devin: "Devin",

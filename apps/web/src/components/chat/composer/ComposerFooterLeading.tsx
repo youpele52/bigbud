@@ -98,6 +98,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           planCardOpen={planCardOpen}
           planCardLabel={planCardLabel}
           runtimeMode={runtimeMode}
+          opencodeV2Access={selectedProvider === "opencodeV2"}
           traitsMenuContent={providerTraitsMenuContent}
           onOpenOrchestra={onOpenOrchestra}
           onOpenSideChat={onOpenSideChat}

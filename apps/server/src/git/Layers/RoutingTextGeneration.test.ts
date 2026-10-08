@@ -6,6 +6,15 @@ import {
 } from "./RoutingTextGeneration.ts";
 
 describe("normalizeGitTextGenerationModelSelection", () => {
+  it("uses the separate supported text fallback for V2 rather than invoking V1 native helpers", () => {
+    expect(
+      normalizeGitTextGenerationModelSelection({
+        provider: "opencodeV2",
+        subProviderID: "synthetic",
+        model: "synthetic",
+      }),
+    ).toEqual({ provider: "codex", model: "gpt-5.4-mini" });
+  });
   it("keeps supported codex selections unchanged", () => {
     expect(
       normalizeGitTextGenerationModelSelection({

@@ -35,6 +35,7 @@ import { useCliProxyActivation } from "../../../hooks/useCliProxyActivation";
 import { useSettings } from "../../../hooks/useSettings";
 import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
+import { developmentProviderOptions } from "./ProviderModelPicker.models";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
@@ -45,7 +46,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
   const hiddenComposerProviders = useSettings((settings) => settings.hiddenComposerProviders);
   const visibleProviderOptions = useMemo(
     () =>
-      AVAILABLE_PROVIDER_OPTIONS.filter(
+      developmentProviderOptions(props.providers).filter(
         (option) =>
           getVisibleComposerProviders(hiddenComposerProviders).includes(option.value) &&
           getProviderDescriptor(option.value).isVisible(props.providers),

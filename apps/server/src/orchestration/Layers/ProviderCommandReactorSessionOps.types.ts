@@ -6,6 +6,7 @@ import type {
   RuntimeMode,
   ThreadId,
 } from "@bigbud/contracts";
+import type { MessageId } from "@bigbud/contracts/core/baseSchemas";
 import { Effect } from "effect";
 
 import type { CapabilityCatalog } from "../../capabilities/CapabilityCatalog.ts";
@@ -44,6 +45,7 @@ export interface SessionOpServices {
 
 export type SendTurnForThreadInput = {
   readonly threadId: ThreadId;
+  readonly requestMessageId?: MessageId;
   readonly messageText: string;
   readonly providerInputText?: string;
   readonly capabilityCatalog?: CapabilityCatalog;

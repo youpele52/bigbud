@@ -69,6 +69,8 @@ function normalizeProviderOptions(
     input.subProviderID,
   );
   switch (input.provider) {
+    case "opencodeV2":
+      return input.modelOptions?.opencodeV2;
     case "codex":
       return normalizeCodexModelOptionsWithCapabilities(caps, input.modelOptions?.codex);
     case "claudeAgent":

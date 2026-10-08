@@ -4,9 +4,52 @@ import {
   providerWorkloadSupport,
   resolveProviderWorkload,
   supportsProviderWorkload,
+  supportsScheduledLearning,
 } from "./providerWorkloadSupport.ts";
 
 describe("providerWorkloadSupport", () => {
+  it("declares restricted V2 interactive/accounting support without claiming unattended coding or migrating accounting", () => {
+    expect(providerWorkloadSupport("opencodeV2")).toEqual({
+      interactive: true,
+      usageAccounting: true,
+      learning: false,
+      unattendedTextGeneration: false,
+    });
+    const requested = {
+      provider: "opencodeV2",
+      subProviderID: "synthetic",
+      model: "synthetic",
+    } as const;
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "interactive",
+        availableProviderKinds: ["opencodeV2"],
+      }).actual,
+    ).toEqual(requested);
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "usageAccounting",
+        availableProviderKinds: ["codex"],
+      }).action,
+    ).toBe("reject");
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds: ["codex"],
+      }),
+    ).toMatchObject({ requested, actual: { provider: "codex" }, action: "fallback" });
+  });
+  it("schedules V2 learning only with an explicit durable adapter hook, without changing public workload or other providers", () => {
+    expect(supportsScheduledLearning("opencodeV2")).toBe(false);
+    expect(supportsScheduledLearning("opencodeV2", true)).toBe(true);
+    expect(supportsScheduledLearning("cliProxy", true)).toBe(false);
+    expect(supportsScheduledLearning("codex")).toBe(true);
+    expect(supportsProviderWorkload("opencodeV2", "learning")).toBe(false);
+    expect(supportsProviderWorkload("opencodeV2", "unattendedTextGeneration")).toBe(false);
+  });
   it.each([
     ["codex", true, true, true, true],
     ["claudeAgent", true, true, true, true],

@@ -21,7 +21,9 @@ export function getComposerProviderFallback(
   providers: ReadonlyArray<ServerProvider>,
   hiddenProviders: ReadonlyArray<ProviderKind>,
 ): ProviderKind | null {
-  const visibleProviders = getVisibleComposerProviders(hiddenProviders);
+  const visibleProviders = getVisibleComposerProviders(hiddenProviders).filter(
+    (provider) => provider !== "opencodeV2",
+  );
   if (visibleProviders.length === 0) return null;
 
   const providerByKind = new Map(providers.map((provider) => [provider.provider, provider]));

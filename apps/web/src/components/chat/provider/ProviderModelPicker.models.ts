@@ -25,6 +25,10 @@ export const PROVIDER_ICON_BY_PROVIDER = Object.fromEntries(
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 export const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
+/** Visibility is independent of readiness; unavailable providers explain their status. */
+export function developmentProviderOptions(_providers: ReadonlyArray<ServerProvider> | undefined) {
+  return AVAILABLE_PROVIDER_OPTIONS;
+}
 export type { ProviderPickerKind } from "./providerDescriptors";
 
 const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;

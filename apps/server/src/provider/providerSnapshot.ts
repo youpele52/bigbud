@@ -205,12 +205,12 @@ export function buildServerProvider(input: {
     skills: [...(input.skills ?? [])],
     // App-level steering is universal; providers without native steering use
     // the explicit interrupt-and-continue strategy.
-    supportsSteer: true,
+    supportsSteer: input.provider !== "opencodeV2",
     turnControl: {
       nativeSteer,
       interruptTarget: input.provider === "codex" ? "exact-turn" : "current-session",
       activeTurnInspection: "unavailable",
-      continuation: true,
+      continuation: input.provider !== "opencodeV2",
     },
   };
 }

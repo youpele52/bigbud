@@ -28,6 +28,26 @@ function makeThread(): OrchestrationThread {
 }
 
 describe("mobile existing-thread command builder", () => {
+  it.each(["approval-required", "auto-accept-edits", "full-access"] as const)(
+    "V2 submission preserves explicit %s and native model/subprovider identity without mobile trust escalation",
+    (runtimeMode) => {
+      const modelSelection = {
+        provider: "opencodeV2",
+        model: "synthetic-model",
+        subProviderID: "synthetic-provider",
+      } as const;
+      const command = buildMobileExistingThreadMessageSubmitCommand({
+        commandId: CommandId.makeUnsafe("v2-command"),
+        messageId: MessageId.makeUnsafe("v2-message"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        modelSelection,
+        text: "Explicit V2 action",
+        thread: { ...makeThread(), modelSelection, runtimeMode, interactionMode: "default" },
+        threadId,
+      });
+      expect(command).toMatchObject({ type: "thread.message.submit", modelSelection, runtimeMode });
+    },
+  );
   it("uses the admission submission and preserves thread modes", () => {
     const command = buildMobileExistingThreadMessageSubmitCommand({
       commandId: CommandId.makeUnsafe("command-1"),
