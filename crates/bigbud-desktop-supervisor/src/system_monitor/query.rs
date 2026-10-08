@@ -1,4 +1,7 @@
-use super::{error, mapping, wrap};
+use super::{
+    frame::{error, wrap},
+    mapping,
+};
 use crate::monitor_v1 as v1;
 use bigbud_system::{
     inventory::{Cursor, Query, QueryError, SortKey},

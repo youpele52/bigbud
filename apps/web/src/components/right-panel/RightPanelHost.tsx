@@ -142,7 +142,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   <div
                     key={tabId}
                     className={cn(
-                      "absolute inset-0 flex min-h-0 flex-col overflow-auto",
+                      "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
                     inert={!isActive ? true : undefined}

@@ -1,5 +1,6 @@
 import * as Crypto from "node:crypto";
 import { SystemMonitorBridge } from "./system-monitor/bridge";
+import { getDesktopMonitorRoots } from "./system-monitor/ownership";
 import { stopSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 
 import { app, BrowserWindow, dialog } from "electron";
@@ -85,7 +86,7 @@ let desktopLogSink: QueuedLogSink | null = null;
 let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 const windowRegistry = new DesktopWindowRegistry();
-const systemMonitor = new SystemMonitorBridge(app.isPackaged);
+const systemMonitor = new SystemMonitorBridge(app.isPackaged, getDesktopMonitorRoots);
 let desktopPreferences: DesktopPreferencesStore;
 let floatingAssistantWindows: FloatingAssistantWindows;
 

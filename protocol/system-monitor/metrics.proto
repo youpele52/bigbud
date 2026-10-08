@@ -1,0 +1,8 @@
+syntax = "proto3";
+package bigbud.system_monitor.metrics.v1;
+
+message Metric {
+  double value = 1;
+  string status = 2;
+  uint64 sampled_at_ms = 3;
+}

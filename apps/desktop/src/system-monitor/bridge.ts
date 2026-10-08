@@ -9,6 +9,7 @@ import type {
   MonitorProcessPage,
   MonitorProcessQuery,
   MonitorSnapshot,
+  MonitorProcessRoot,
 } from "@bigbud/contracts/system-monitor/types";
 import { resolvePackagedDesktopSupervisorBinary } from "../env/pathResolver";
 import { decodeEvent, encodeCommand, frameBytes, MAX_FRAME_BYTES } from "./wire";
@@ -32,6 +33,7 @@ export class SystemMonitorBridge {
   private activeQueries = 0;
   private connecting: Promise<void> | null = null;
   private ready = false;
+  private appResourcesSupported = false;
   private closing = false;
   private subscribers = new Set<WebContents>();
   private snapshotWaiters = new Map<
@@ -40,7 +42,12 @@ export class SystemMonitorBridge {
   >();
   private earlySnapshots = new Map<number, MonitorSnapshot>();
 
-  constructor(private readonly packaged: boolean) {}
+  constructor(
+    private readonly packaged: boolean,
+    private readonly getRoots: (
+      child: ChildProcessByStdio<Writable, Readable, null> | null,
+    ) => MonitorProcessRoot[] = () => [],
+  ) {}
 
   addRenderer(sender: WebContents): void {
     if (this.subscribers.has(sender)) return;
@@ -104,6 +111,7 @@ export class SystemMonitorBridge {
       throw new Error("monitor protocol mismatch");
     }
     this.ready = true;
+    this.appResourcesSupported = event.minor >= 3 && event.capabilities.includes("app-resources");
     this.emit(event);
   }
   private onData(chunk: Buffer): void {
@@ -197,7 +205,8 @@ export class SystemMonitorBridge {
   async subscribe(demand: MonitorDemand): Promise<number> {
     await this.connect();
     const requestId = this.nextId();
-    const event = await this.request({ type: "subscribe", requestId, demand }, requestId);
+    const roots = this.appRoots(demand);
+    const event = await this.request({ type: "subscribe", requestId, demand, roots }, requestId);
     if (event.type !== "subscribeAck") throw new Error("monitor subscribe failed");
     return event.subscriptionId;
   }
@@ -240,7 +249,15 @@ export class SystemMonitorBridge {
     }
   }
   update(subscriptionId: number, demand: MonitorDemand): void {
-    this.send({ type: "update", subscriptionId, demand });
+    this.send({ type: "update", subscriptionId, demand, roots: this.appRoots(demand) });
+  }
+  private appRoots(demand: MonitorDemand): MonitorProcessRoot[] {
+    if (!demand.appResources) return [];
+    if (!this.appResourcesSupported)
+      throw new Error(
+        "bigbud monitoring requires monitor protocol 1.3; rebuild the desktop supervisor",
+      );
+    return this.getRoots(this.child);
   }
   unsubscribe(subscriptionId: number): void {
     this.earlySnapshots.delete(subscriptionId);

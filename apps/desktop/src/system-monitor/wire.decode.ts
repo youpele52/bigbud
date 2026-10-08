@@ -14,26 +14,8 @@ import { MAX_FRAME_BYTES } from "./wire.constants";
 import { fields, requireKind } from "./wire.reader";
 import { decodeHelloAck } from "./wire.hello";
 import { decodeCollectionStatus } from "./wire.status";
-function decodeMetric(bytes: Uint8Array): MonitorMetric {
-  const metric: MonitorMetric = { value: 0, status: "unavailable", sampledAtMs: 0 };
-  fields(bytes, (field, kind, reader) => {
-    if (field === 1) {
-      requireKind(kind, 1);
-      metric.value = reader.double();
-    } else if (field === 2) {
-      requireKind(kind, 2);
-      metric.status = reader.string() as MonitorMetric["status"];
-    } else if (field === 3) {
-      requireKind(kind, 0);
-      metric.sampledAtMs = reader.uint();
-    } else reader.skip(kind);
-  });
-  if (
-    !["ready", "warming", "unsupported", "denied", "unavailable", "stale"].includes(metric.status)
-  )
-    throw new Error("invalid metric status");
-  return metric;
-}
+import { decodeMetric } from "./wire.metric";
+import { decodeAppResources } from "./wire.app";
 function decodeFlag(bytes: Uint8Array): MonitorFlag {
   const flag: MonitorFlag = { value: false, status: "unavailable", sampledAtMs: 0 };
   fields(bytes, (field, kind, reader) => {
@@ -186,7 +168,10 @@ function decodeSnapshot(bytes: Uint8Array): MonitorSnapshot {
     39: "loadAverageFifteen",
   };
   fields(bytes, (field, kind, reader) => {
-    if ([26, 27, 28, 29].includes(field)) {
+    if (field === 41) {
+      requireKind(kind, 2);
+      value.appResources = decodeAppResources(reader.data());
+    } else if ([26, 27, 28, 29].includes(field)) {
       requireKind(kind, 0);
       const truncated = reader.uint() !== 0;
       if (field === 26) value.perCoreTruncated = truncated;

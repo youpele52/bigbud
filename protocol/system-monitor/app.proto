@@ -1,0 +1,26 @@
+syntax = "proto3";
+package bigbud.system_monitor.app.v1;
+import "system-monitor/metrics.proto";
+
+message AppProcessRoot {
+  uint32 pid = 1;
+  string identity = 2;
+  optional uint64 start_time_seconds = 3;
+  string role = 4;
+}
+message AppGroup {
+  string role = 1;
+  uint32 process_count = 2;
+  bigbud.system_monitor.metrics.v1.Metric cpu_percent = 3;
+  bigbud.system_monitor.metrics.v1.Metric resident_bytes = 4;
+  bigbud.system_monitor.metrics.v1.Metric read_bytes_per_second = 5;
+  bigbud.system_monitor.metrics.v1.Metric written_bytes_per_second = 6;
+}
+message AppResources {
+  uint64 generation = 1;
+  uint64 sampled_at_ms = 2;
+  bool incomplete = 3;
+  AppGroup core = 4;
+  AppGroup inclusive = 5;
+  repeated AppGroup groups = 6;
+}

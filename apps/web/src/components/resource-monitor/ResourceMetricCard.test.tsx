@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatHistoryTooltipValue } from "./ResourceMetricCard";
+import { formatHistoryTooltipValue } from "./ResourceMetricHistory.logic";
 
 describe("resource metric history tooltip values", () => {
   it("keeps missing samples unavailable instead of displaying them as zero", () => {

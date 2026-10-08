@@ -5,7 +5,7 @@ import { decodeEvent, encodeCommand, frameBytes } from "./wire";
 describe("system monitor wire", () => {
   it("encodes v1 Hello in the same bytes as prost", () => {
     expect([...frameBytes(encodeCommand({ type: "hello" }))]).toEqual([
-      0, 0, 0, 6, 10, 4, 8, 1, 16, 2,
+      0, 0, 0, 6, 10, 4, 8, 1, 16, 3,
     ]);
   });
   it("rejects malformed and oversized output", () => {
@@ -169,7 +169,7 @@ describe("system monitor wire", () => {
       return decodeEvent(bytes.subarray(4));
     };
     expect(
-      [...frameBytes(encodeCommand({ type: "hello" }))]
+      [...frameBytes(encodeCommand({ type: "hello", minor: 2 }))]
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join(""),
     ).toBe(fixtures.hello);

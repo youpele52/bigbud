@@ -31,10 +31,12 @@ function fakeChild(minor = 2) {
     writable: true,
     write: vi.fn((bytes: Uint8Array) => {
       if (bytes[4] === 10) {
+        const capabilities = minor >= 3 ? [50, 13, ...Buffer.from("app-resources")] : [];
+        const payload = [8, 1, 16, minor, 24, 128, 128, 8, 32, 2, 40, 1, ...capabilities];
         queueMicrotask(() =>
           child.stdout.emit(
             "data",
-            Buffer.from([0, 0, 0, 14, 18, 12, 8, 1, 16, minor, 24, 128, 128, 8, 32, 2, 40, 1]),
+            Buffer.from([0, 0, 0, payload.length + 2, 18, payload.length, ...payload]),
           ),
         );
       } else if (bytes[4] === 82) {
@@ -54,6 +56,42 @@ function fakeChild(minor = 2) {
 }
 
 describe("SystemMonitorBridge", () => {
+  it("keeps legacy System monitoring usable but explicitly rejects app demand", async () => {
+    const child = fakeChild(2);
+    mocks.spawn.mockReturnValue(child);
+    const bridge = new SystemMonitorBridge(true);
+    try {
+      await expect(
+        bridge.subscribe({ processes: false, disks: false, sensors: false, appResources: true }),
+      ).rejects.toThrow("protocol 1.3");
+      await expect(
+        bridge.subscribe({ processes: false, disks: false, sensors: false }),
+      ).resolves.toBe(1);
+    } finally {
+      bridge.stop();
+    }
+  });
+  it("uses the trusted root provider only for app subscriptions and updates", async () => {
+    const child = fakeChild(3);
+    mocks.spawn.mockReturnValue(child);
+    const roots = vi.fn(() => [{ pid: 42, identity: "backend-handle", role: "backend" as const }]);
+    const bridge = new SystemMonitorBridge(true, roots);
+    try {
+      await bridge.subscribe({ processes: false, disks: false, sensors: false });
+      expect(roots).not.toHaveBeenCalled();
+      await bridge.subscribe({
+        processes: false,
+        disks: false,
+        sensors: false,
+        appResources: true,
+      });
+      bridge.update(1, { processes: false, disks: false, sensors: false, appResources: true });
+      expect(roots).toHaveBeenCalledTimes(2);
+      expect(roots).toHaveBeenLastCalledWith(child);
+    } finally {
+      bridge.stop();
+    }
+  });
   afterEach(() => {
     vi.useRealTimers();
     delete process.env.BIGBUD_SYSTEM_MONITOR_BINARY;

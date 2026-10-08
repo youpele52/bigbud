@@ -3,12 +3,15 @@ mod host;
 pub use host::identity as host_identity;
 #[path = "network.rs"]
 mod network;
+#[path = "processes.rs"]
+mod processes;
 #[path = "recovery.rs"]
 mod recovery;
 pub use recovery::CollectionError;
 
 use crate::{
-    inventory::{Inventory, ProcessRecord, truncate_utf8},
+    app_resources::{AppTracker, Root},
+    inventory::{Inventory, truncate_utf8},
     model::{
         Availability, Cpu, Disk, DiskObservation, Field, Memory, NetworkInterface,
         NetworkObservation, Sensor, Snapshot, finite, optional,
@@ -26,6 +29,7 @@ pub struct Demand {
     pub processes: bool,
     pub sensors: bool,
     pub disks: bool,
+    pub app_resources: bool,
 }
 
 #[derive(Default)]
@@ -50,6 +54,8 @@ pub struct Collector {
     last_sensors: Option<Instant>,
     latest_sensors: Option<Vec<Sensor>>,
     last_processes: Option<Instant>,
+    last_app: Option<Instant>,
+    app: AppTracker,
     generation: u64,
 }
 
@@ -69,6 +75,8 @@ impl Default for Collector {
             last_sensors: None,
             latest_sensors: None,
             last_processes: None,
+            last_app: None,
+            app: AppTracker::default(),
             generation: 0,
         }
     }
@@ -93,11 +101,27 @@ impl Collector {
         self.last_sensors = None;
         self.latest_sensors = None;
         self.last_processes = None;
+        self.last_app = None;
+        self.app.reset();
+    }
+
+    pub fn set_app_roots(&mut self, roots: Vec<Root>) -> bool {
+        let changed = self.app.set_roots(roots);
+        if changed {
+            self.last_app = None;
+        }
+        changed
+    }
+
+    pub fn release_app_resources(&mut self) {
+        if self.last_app.take().is_some() {
+            self.app.reset();
+        }
     }
 
     /// Releases sysinfo's retained process table when no consumer requests it.
     pub fn release_processes(&mut self) {
-        if self.last_processes.is_some() {
+        if !self.system.processes().is_empty() {
             self.system = System::new();
             self.last_cpu = None;
             self.last_processes = None;
@@ -163,6 +187,11 @@ impl Collector {
         } else {
             None
         };
+        if demand.app_resources && due(self.last_app, now, Duration::from_secs(5)) {
+            self.app
+                .sample(&mut self.system, inventory.is_some(), now, at);
+            self.last_app = Some(now);
+        }
         let cpu_status = if self.system.cpus().is_empty() {
             Availability::Unavailable
         } else if cpu_ready {
@@ -203,6 +232,7 @@ impl Collector {
         let host = host::host(&self.system, at);
         (
             Snapshot {
+                app_resources: demand.app_resources.then(|| self.app.latest()).flatten(),
                 host,
                 cpu,
                 memory,
@@ -327,42 +357,6 @@ impl Collector {
                 critical_celsius: finite(component.critical(), at),
             })
             .collect()
-    }
-
-    fn inventory(&self, at: Instant, cpu_ready: bool) -> Inventory {
-        Inventory::from_records(
-            self.generation,
-            at,
-            self.system.processes().iter().map(|(pid, process)| {
-                let usage = process.disk_usage();
-                ProcessRecord {
-                    pid: pid.as_u32(),
-                    parent_pid: process.parent().map(|pid| pid.as_u32()),
-                    name: process.name().to_string_lossy().into_owned(),
-                    status: format!("{:?}", process.status()),
-                    start_time_seconds: process.start_time(),
-                    run_time_seconds: process.run_time(),
-                    cpu_percent: (cpu_ready && process.cpu_usage().is_finite())
-                        .then_some(process.cpu_usage()),
-                    cpu_status: if !cpu_ready {
-                        Availability::Warming
-                    } else if process.cpu_usage().is_finite() {
-                        Availability::Ready
-                    } else {
-                        Availability::Unavailable
-                    },
-                    resident_bytes: process.memory(),
-                    virtual_bytes: process.virtual_memory(),
-                    disk_read_bytes: usage.total_read_bytes,
-                    disk_written_bytes: usage.total_written_bytes,
-                    disk_io_status: if usage.total_read_bytes > 0 || usage.total_written_bytes > 0 {
-                        Availability::Ready
-                    } else {
-                        Availability::Unavailable
-                    },
-                }
-            }),
-        )
     }
 }
 

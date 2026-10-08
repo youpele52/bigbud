@@ -2,6 +2,29 @@ export interface MonitorDemand {
   processes: boolean;
   disks: boolean;
   sensors: boolean;
+  appResources?: boolean;
+}
+export interface MonitorProcessRoot {
+  pid: number;
+  identity: string;
+  startTimeSeconds?: number;
+  role: "desktop" | "backend" | "native";
+}
+export interface MonitorAppGroup {
+  role: "desktop" | "backend" | "native" | "tools";
+  processCount: number;
+  cpuPercent?: MonitorMetric;
+  residentBytes?: MonitorMetric;
+  readBytesPerSecond?: MonitorMetric;
+  writtenBytesPerSecond?: MonitorMetric;
+}
+export interface MonitorAppResources {
+  generation: number;
+  sampledAtMs: number;
+  incomplete: boolean;
+  core: MonitorAppGroup;
+  inclusive: MonitorAppGroup;
+  groups: MonitorAppGroup[];
 }
 export interface MonitorMetric {
   value: number;
@@ -48,6 +71,7 @@ export interface MonitorNetworkInterface {
   mtuBytes?: MonitorMetric;
 }
 export interface MonitorSnapshot {
+  appResources?: MonitorAppResources;
   subscriptionId: number;
   epoch: number;
   sequence: number;

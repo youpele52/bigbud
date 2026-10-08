@@ -49,6 +49,28 @@ pub fn write_frame(writer: &mut impl Write, frame: &Frame) -> io::Result<()> {
     writer.write_all(&data)
 }
 
+pub(super) fn wrap(payload: crate::monitor_v1::frame::Payload) -> crate::monitor_v1::Frame {
+    crate::monitor_v1::Frame {
+        payload: Some(payload),
+    }
+}
+
+pub(super) fn error(
+    request_id: u64,
+    subscription_id: u64,
+    code: &str,
+    message: &str,
+) -> crate::monitor_v1::Frame {
+    wrap(crate::monitor_v1::frame::Payload::Error(
+        crate::monitor_v1::Error {
+            request_id,
+            subscription_id,
+            code: code.into(),
+            message: message.into(),
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

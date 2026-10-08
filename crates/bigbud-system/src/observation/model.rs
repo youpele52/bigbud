@@ -151,6 +151,7 @@ pub struct Sensor {
 
 #[derive(Clone, Debug)]
 pub struct Snapshot {
+    pub app_resources: Option<crate::app_resources::AppResources>,
     pub host: Host,
     pub cpu: Cpu,
     pub memory: Memory,

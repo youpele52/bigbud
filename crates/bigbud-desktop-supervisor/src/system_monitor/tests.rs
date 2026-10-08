@@ -5,6 +5,62 @@ use v1::frame::Payload;
 fn hello() -> v1::Frame {
     wrap(Payload::Hello(v1::Hello { major: 1, minor: 2 }))
 }
+
+fn app_subscribe(request_id: u64, pid: u32) -> v1::Frame {
+    wrap(Payload::Subscribe(v1::Subscribe {
+        request_id,
+        demand: Some(v1::Demand {
+            app_resources: true,
+            app_roots: vec![v1::AppProcessRoot {
+                pid,
+                identity: "owned-test".into(),
+                role: "native".into(),
+                start_time_seconds: None,
+            }],
+            ..Default::default()
+        }),
+    }))
+}
+
+#[test]
+fn app_resources_handshake_and_owned_summary() {
+    let now = Instant::now();
+    let mut state = State::new();
+    let (frames, _) = state.handle(wrap(Payload::Hello(v1::Hello { major: 1, minor: 3 })), now);
+    assert!(
+        matches!(&frames[0].payload,Some(Payload::HelloAck(ack)) if ack.minor==3 && ack.capabilities.iter().any(|c| c=="app-resources"))
+    );
+    assert!(matches!(
+        &state.handle(app_subscribe(1, std::process::id()), now).0[0].payload,
+        Some(Payload::SubscribeAck(_))
+    ));
+    let frames = state.tick(now);
+    assert!(
+        matches!(&frames[0].payload,Some(Payload::Snapshot(snapshot)) if snapshot.app_resources.as_ref().is_some_and(|app| !app.incomplete && app.core.as_ref().is_some_and(|g| g.process_count>=1)))
+    );
+}
+
+#[test]
+fn invalid_or_busy_app_registry_does_not_replace_live_ownership() {
+    let now = Instant::now();
+    let mut state = State::new();
+    let _ = state.handle(wrap(Payload::Hello(v1::Hello { major: 1, minor: 3 })), now);
+    let invalid = state.handle(app_subscribe(1, 0), now).0;
+    assert!(matches!(&invalid[0].payload,Some(Payload::Error(error)) if error.code=="invalid"));
+    assert_eq!(state.service.subscription_count(), 0);
+    let _ = state.handle(app_subscribe(2, std::process::id()), now);
+    let _ = state.handle(subscribe(3), now);
+    let rejected = state.handle(app_subscribe(4, u32::MAX), now).0;
+    assert!(matches!(&rejected[0].payload,Some(Payload::Error(error)) if error.code=="busy"));
+    let _ = state.tick(now);
+    assert!(
+        state
+            .service
+            .latest()
+            .and_then(|s| s.app_resources.as_ref())
+            .is_some_and(|app| !app.incomplete)
+    );
+}
 fn subscribe(request_id: u64) -> v1::Frame {
     wrap(Payload::Subscribe(v1::Subscribe {
         request_id,
@@ -12,6 +68,7 @@ fn subscribe(request_id: u64) -> v1::Frame {
             processes: false,
             disks: false,
             sensors: false,
+            ..Default::default()
         }),
     }))
 }
@@ -66,6 +123,21 @@ fn old_minor_client_negotiates_without_new_identity_fields() {
     assert!(
         matches!(&frames[0].payload, Some(Payload::HelloAck(ack)) if ack.minor == 0 && ack.hostname.is_none() && ack.architecture.is_none())
     );
+}
+
+#[test]
+fn app_resources_require_the_negotiated_minor() {
+    let now = Instant::now();
+    let mut state = State::new();
+    let frames = state.handle(hello(), now).0;
+    assert!(
+        matches!(&frames[0].payload, Some(Payload::HelloAck(ack)) if !ack.capabilities.iter().any(|c| c == "app-resources"))
+    );
+    let frames = state.handle(app_subscribe(1, std::process::id()), now).0;
+    assert!(
+        matches!(&frames[0].payload, Some(Payload::Error(error)) if error.message.contains("protocol 1.3"))
+    );
+    assert_eq!(state.service.subscription_count(), 0);
 }
 
 #[test]

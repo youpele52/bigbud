@@ -1,4 +1,8 @@
-import type { MonitorDemand, MonitorProcessQuery } from "@bigbud/contracts/system-monitor/types";
+import type {
+  MonitorDemand,
+  MonitorProcessQuery,
+  MonitorProcessRoot,
+} from "@bigbud/contracts/system-monitor/types";
 import { MAX_FRAME_BYTES } from "./wire.constants";
 export { MAX_FRAME_BYTES } from "./wire.constants";
 export { decodeEvent } from "./wire.decode";
@@ -58,9 +62,14 @@ function message(bytes: Uint8Array, field: number): Uint8Array {
 }
 export function encodeCommand(
   command:
-    | { type: "hello" }
-    | { type: "subscribe"; requestId: number; demand: MonitorDemand }
-    | { type: "update"; subscriptionId: number; demand: MonitorDemand }
+    | { type: "hello"; minor?: number }
+    | { type: "subscribe"; requestId: number; demand: MonitorDemand; roots?: MonitorProcessRoot[] }
+    | {
+        type: "update";
+        subscriptionId: number;
+        demand: MonitorDemand;
+        roots?: MonitorProcessRoot[];
+      }
     | { type: "unsubscribe"; subscriptionId: number }
     | { type: "ack"; subscriptionId: number; epoch: number; sequence: number }
     | { type: "query"; requestId: number; query: MonitorProcessQuery }
@@ -72,17 +81,17 @@ export function encodeCommand(
   switch (command.type) {
     case "hello":
       writer.uint(1, 1);
-      writer.uint(2, 2);
+      writer.uint(2, command.minor ?? 3);
       field = 1;
       break;
     case "subscribe":
       writer.uint(1, command.requestId);
-      writer.data(2, encodeDemand(command.demand));
+      writer.data(2, encodeDemand(command.demand, command.roots));
       field = 3;
       break;
     case "update":
       writer.uint(1, command.subscriptionId);
-      writer.data(2, encodeDemand(command.demand));
+      writer.data(2, encodeDemand(command.demand, command.roots));
       field = 4;
       break;
     case "unsubscribe":
@@ -121,11 +130,21 @@ export function encodeCommand(
   }
   return message(writer.finish(), field);
 }
-function encodeDemand(value: MonitorDemand): Uint8Array {
+function encodeDemand(value: MonitorDemand, roots: MonitorProcessRoot[] = []): Uint8Array {
   const writer = new Writer();
   writer.bool(1, value.processes);
   writer.bool(2, value.disks);
   writer.bool(3, value.sensors);
+  writer.bool(4, value.appResources ?? false);
+  if (roots.length > 128) throw new Error("too many app process roots");
+  for (const root of roots) {
+    const entry = new Writer();
+    entry.uint(1, root.pid);
+    entry.string(2, root.identity);
+    entry.optionalUint(3, root.startTimeSeconds);
+    entry.string(4, root.role);
+    writer.data(5, entry.finish());
+  }
   return writer.finish();
 }
 export function frameBytes(payload: Uint8Array): Uint8Array {

@@ -131,6 +131,7 @@ fn monitor_mode_streams_a_snapshot_and_answers_process_query() -> Result<(), Box
                     processes: true,
                     disks: true,
                     sensors: false,
+                    ..Default::default()
                 }),
             })),
         },

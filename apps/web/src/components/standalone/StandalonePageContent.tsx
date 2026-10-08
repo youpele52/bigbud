@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 export const STANDALONE_PAGE_SCROLL_CLASS = "min-h-0 flex-1 overflow-y-auto overscroll-y-contain";
-export const STANDALONE_PAGE_CONTAINER_CLASS = "mx-auto w-full max-w-[56rem] px-16 py-7 sm:px-18";
+export const STANDALONE_PAGE_WIDTH_CLASS = "mx-auto w-full max-w-[56rem]";
+export const STANDALONE_PAGE_CONTAINER_CLASS = `${STANDALONE_PAGE_WIDTH_CLASS} px-16 py-7 sm:px-18`;
 
 export function StandalonePageContent(props: {
   readonly children: ReactNode;

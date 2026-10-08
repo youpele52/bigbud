@@ -22,3 +22,26 @@ fn disk_observation_is_retained_between_refreshes() {
     assert!(first.disks.is_some());
     assert!(second.disks.is_some());
 }
+
+#[test]
+fn app_only_process_state_is_released_when_host_only_demand_remains() {
+    let mut collector = Collector::new();
+    assert!(collector.set_app_roots(vec![crate::app_resources::Root {
+        pid: std::process::id(),
+        identity: "test-owner".into(),
+        start_time_seconds: None,
+        role: crate::app_resources::Role::Desktop,
+    }]));
+    let _sample = collector.sample(
+        Demand {
+            app_resources: true,
+            ..Default::default()
+        },
+        Instant::now(),
+    );
+    assert!(!collector.system.processes().is_empty());
+    collector.release_app_resources();
+    collector.release_processes();
+    assert!(collector.system.processes().is_empty());
+    assert!(collector.app.latest().is_none());
+}

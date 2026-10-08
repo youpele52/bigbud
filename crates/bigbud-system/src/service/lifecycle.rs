@@ -105,6 +105,13 @@ impl Service {
     pub fn latest(&self) -> Option<&Snapshot> {
         self.latest.as_ref()
     }
+    pub fn set_app_roots(&mut self, roots: Vec<crate::app_resources::Root>) {
+        if self.collector.set_app_roots(roots)
+            && let Some(latest) = self.latest.as_mut()
+        {
+            latest.app_resources = None;
+        }
+    }
     pub fn subscription_count(&self) -> usize {
         self.subscriptions.len()
     }
@@ -168,10 +175,16 @@ impl Service {
             processes: self.subscriptions.values().any(|s| s.demand.processes),
             sensors: self.subscriptions.values().any(|s| s.demand.sensors),
             disks: self.subscriptions.values().any(|s| s.demand.disks),
+            app_resources: self.subscriptions.values().any(|s| s.demand.app_resources),
         };
+        if !demand.app_resources {
+            self.collector.release_app_resources();
+        }
         if !demand.processes {
             self.inventories.clear();
-            self.collector.release_processes();
+            if !demand.app_resources {
+                self.collector.release_processes();
+            }
         }
         if !self.recovery.can_sample(now) {
             return None;

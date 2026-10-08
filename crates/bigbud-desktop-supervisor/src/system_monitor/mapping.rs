@@ -22,14 +22,14 @@ fn at<T>(field: &Field<T>) -> u64 {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
 }
-fn metric<T: Copy + Into<f64>>(field: &Field<T>) -> v1::Metric {
+pub(super) fn metric<T: Copy + Into<f64>>(field: &Field<T>) -> v1::Metric {
     v1::Metric {
         value: field.value.map_or(0.0, Into::into),
         status: status(field.status).into(),
         sampled_at_ms: at(field),
     }
 }
-fn bytes(field: &Field<u64>) -> v1::Metric {
+pub(super) fn bytes(field: &Field<u64>) -> v1::Metric {
     v1::Metric {
         value: field.value.map_or(0.0, |v| v as f64),
         status: status(field.status).into(),
@@ -71,6 +71,10 @@ pub fn snapshot(
     summary_status: Availability,
 ) -> v1::Snapshot {
     v1::Snapshot {
+        app_resources: value
+            .app_resources
+            .as_ref()
+            .map(super::app_resources::snapshot),
         subscription_id,
         epoch,
         sequence,

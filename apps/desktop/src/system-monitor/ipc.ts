@@ -9,10 +9,16 @@ function demand(value: unknown): MonitorDemand {
   if (
     typeof input.processes !== "boolean" ||
     typeof input.disks !== "boolean" ||
-    typeof input.sensors !== "boolean"
+    typeof input.sensors !== "boolean" ||
+    (input.appResources !== undefined && typeof input.appResources !== "boolean")
   )
     throw new Error("invalid monitor demand");
-  return { processes: input.processes, disks: input.disks, sensors: input.sensors };
+  return {
+    processes: input.processes,
+    disks: input.disks,
+    sensors: input.sensors,
+    ...(input.appResources === undefined ? {} : { appResources: input.appResources as boolean }),
+  };
 }
 function id(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1)

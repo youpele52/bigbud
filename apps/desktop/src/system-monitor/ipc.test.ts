@@ -11,6 +11,31 @@ import { registerSystemMonitorIpc } from "./ipc";
 
 describe("system monitor IPC authorization", () => {
   beforeEach(() => handlers.clear());
+  it("allows app demand but never accepts renderer ownership roots", async () => {
+    const bridge = { subscribe: vi.fn(async () => 7), addRenderer: vi.fn() };
+    registerSystemMonitorIpc(bridge as never, () => true);
+    const handler = handlers.get(desktopIpcChannels.systemMonitorSubscribe)!;
+    const sender = { id: 1, isDestroyed: () => false, once: vi.fn() };
+    await handler(
+      { sender },
+      {
+        processes: false,
+        disks: false,
+        sensors: false,
+        appResources: true,
+        app_roots: [{ pid: 1, role: "desktop" }],
+      },
+    );
+    expect(bridge.subscribe).toHaveBeenCalledWith({
+      processes: false,
+      disks: false,
+      sensors: false,
+      appResources: true,
+    });
+    await expect(
+      handler({ sender }, { processes: false, disks: false, sensors: false, appResources: "yes" }),
+    ).rejects.toThrow("demand");
+  });
   it("denies unregistered and non-main renderers before native calls", async () => {
     const bridge = { subscribe: vi.fn(), addRenderer: vi.fn() };
     registerSystemMonitorIpc(bridge as never, (sender) => sender.id === 1);

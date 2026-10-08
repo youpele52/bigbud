@@ -5,6 +5,7 @@ import type {
   MonitorSnapshot,
 } from "@bigbud/contracts/system-monitor/types";
 import { create } from "zustand";
+import { EMPTY_APP_HISTORY, nextAppHistory, type AppHistory } from "./resourceMonitor.appHistory";
 
 export interface HistoryPoint {
   sequence: number;
@@ -12,6 +13,8 @@ export interface HistoryPoint {
   sentValue?: number | null;
 }
 export interface MonitorState {
+  appReason: string | null;
+  appHistory: AppHistory;
   snapshot: MonitorSnapshot | null;
   history: Record<"cpu" | "memory" | "network", HistoryPoint[]>;
   connection: "connecting" | "connected" | "unavailable";
@@ -21,6 +24,8 @@ export interface MonitorState {
 
 const EMPTY_HISTORY = { cpu: [], memory: [], network: [] };
 export const useResourceMonitorStore = create<MonitorState>(() => ({
+  appReason: null,
+  appHistory: EMPTY_APP_HISTORY,
   snapshot: null,
   history: EMPTY_HISTORY,
   connection: "connecting",
@@ -34,6 +39,10 @@ let unsubscribeEvent: (() => void) | null = null;
 let renewalTimer: ReturnType<typeof setInterval> | null = null;
 let pendingSnapshot: MonitorSnapshot | null = null;
 let generation = 0;
+let demandVersion = 0;
+let missingAppSince: number | null = null;
+const MISSING_APP_REASON =
+  "No bigbud samples received. Restart the desktop app (in development, restart the desktop dev command) to load the updated monitor bridge; if this persists, retry monitoring.";
 
 function bridge() {
   return typeof window === "undefined" ? undefined : window.desktopBridge;
@@ -44,6 +53,7 @@ function markTransportUnavailable() {
     connection: "unavailable",
     reason: "System Monitor connection lost",
     collectionStatus: null,
+    appHistory: EMPTY_APP_HISTORY,
   });
 }
 
@@ -53,7 +63,64 @@ function demand(): MonitorDemand {
     processes: values.some((value) => value.processes),
     disks: values.some((value) => value.disks),
     sensors: values.some((value) => value.sensors),
+    ...(values.some((value) => value.appResources) ? { appResources: true } : {}),
   };
+}
+
+function hostDemand(value: MonitorDemand): MonitorDemand {
+  return { processes: value.processes, disks: value.disks, sensors: value.sensors };
+}
+
+function appDemandError(error: unknown, next: MonitorDemand): string | null {
+  return next.appResources && error instanceof Error && error.message.includes("bigbud")
+    ? error.message
+    : null;
+}
+
+/** Detects old desktop bridges that accept demand but silently omit app-resource fields. */
+function checkAppSample(next: MonitorDemand) {
+  const { snapshot, appReason } = useResourceMonitorStore.getState();
+  const app = snapshot?.appResources;
+  const fresh =
+    snapshot?.summaryStatus === "ready" &&
+    app !== undefined &&
+    snapshot.sampledAtMs - app.sampledAtMs <= 10_000;
+  if (!next.appResources || fresh) {
+    missingAppSince = null;
+    useResourceMonitorStore.setState({ appReason: null });
+    return;
+  }
+  missingAppSince ??= Date.now();
+  if (Date.now() - missingAppSince >= 15_000 && (!appReason || appReason === MISSING_APP_REASON))
+    useResourceMonitorStore.setState({
+      appReason: MISSING_APP_REASON,
+      appHistory: EMPTY_APP_HISTORY,
+    });
+}
+
+function updateDemand() {
+  const version = ++demandVersion;
+  const id = subscriptionId;
+  if (id === null) return;
+  const next = demand();
+  void bridge()
+    ?.systemMonitorUpdate?.(id, next)
+    .then(() => {
+      if (id === subscriptionId && version === demandVersion) checkAppSample(next);
+    })
+    .catch((error: unknown) => {
+      if (id !== subscriptionId || version !== demandVersion) return;
+      const message = appDemandError(error, next);
+      if (message) {
+        useResourceMonitorStore.setState({ appReason: message, appHistory: EMPTY_APP_HISTORY });
+        // A rejected app request must not let the existing System subscription's lease expire.
+        void bridge()
+          ?.systemMonitorUpdate?.(id, hostDemand(next))
+          .catch(() => {
+            if (id === subscriptionId && version === demandVersion) markTransportUnavailable();
+          });
+      } else markTransportUnavailable();
+    });
 }
 
 function append(
@@ -108,6 +175,7 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
     const history = continuous ? state.history : EMPTY_HISTORY;
     return {
       snapshot,
+      appHistory: nextAppHistory(previous, snapshot, state.appHistory, continuous),
       connection: "connected",
       reason: null,
       history: {
@@ -134,6 +202,7 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
       },
     };
   });
+  if (useResourceMonitorStore.getState().appReason === MISSING_APP_REASON) checkAppSample(demand());
   void bridge()
     ?.systemMonitorAck?.(snapshot.subscriptionId, snapshot.epoch, snapshot.sequence)
     .catch(() => {
@@ -148,11 +217,15 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
 function onEvent(event: MonitorEvent) {
   if (event.type === "snapshot") acceptSnapshot(event.snapshot);
   if (event.type === "collectionStatus" && consumers.size > 0)
-    useResourceMonitorStore.setState({ collectionStatus: event.status });
+    useResourceMonitorStore.setState({
+      collectionStatus: event.status,
+      ...(event.status.state !== "healthy" ? { appHistory: EMPTY_APP_HISTORY } : {}),
+    });
   if (event.type === "unavailable")
     useResourceMonitorStore.setState({
       connection: "unavailable",
       reason: event.reason,
+      appHistory: EMPTY_APP_HISTORY,
       collectionStatus: null,
     });
   if (
@@ -170,6 +243,7 @@ function onEvent(event: MonitorEvent) {
 
 async function start() {
   const token = ++generation;
+  missingAppSince = null;
   const api = bridge();
   if (!api?.systemMonitorSubscribe || !api.onSystemMonitorEvent) {
     useResourceMonitorStore.setState({
@@ -182,23 +256,33 @@ async function start() {
   useResourceMonitorStore.setState({
     connection: "connecting",
     reason: null,
+    appReason: null,
     collectionStatus: null,
   });
   try {
-    const id = await api.systemMonitorSubscribe(demand());
+    const next = demand();
+    let id: number;
+    try {
+      id = await api.systemMonitorSubscribe(next);
+    } catch (error) {
+      const message = appDemandError(error, next);
+      if (!message || token !== generation) throw error;
+      useResourceMonitorStore.setState({ appReason: message, appHistory: EMPTY_APP_HISTORY });
+      id = await api.systemMonitorSubscribe(hostDemand(next));
+    }
     if (token !== generation) {
       void api.systemMonitorUnsubscribe?.(id).catch(() => undefined);
       return;
     }
     subscriptionId = id;
-    void api.systemMonitorUpdate?.(id, demand()).catch(markTransportUnavailable);
+    updateDemand();
     if (pendingSnapshot?.subscriptionId === id) acceptSnapshot(pendingSnapshot);
     pendingSnapshot = null;
     renewalTimer = setInterval(() => {
-      if (subscriptionId !== null)
-        void api.systemMonitorUpdate?.(subscriptionId, demand()).catch(markTransportUnavailable);
+      updateDemand();
     }, 5_000);
   } catch (error) {
+    if (token !== generation) return;
     useResourceMonitorStore.setState({
       connection: "unavailable",
       reason: error instanceof Error ? error.message : "System Monitor could not start",
@@ -211,6 +295,7 @@ export function setResourceMonitorConsumer(id: string, next: MonitorDemand | nul
   if (next) consumers.set(id, next);
   else consumers.delete(id);
   if (consumers.size === 0) {
+    missingAppSince = null;
     generation += 1;
     if (renewalTimer) clearInterval(renewalTimer);
     renewalTimer = null;
@@ -224,13 +309,15 @@ export function setResourceMonitorConsumer(id: string, next: MonitorDemand | nul
     subscriptionId = null;
     useResourceMonitorStore.setState({
       snapshot: null,
+      appReason: null,
+      appHistory: EMPTY_APP_HISTORY,
       history: EMPTY_HISTORY,
       connection: "connecting",
       reason: null,
       collectionStatus: null,
     });
   } else if (subscriptionId !== null) {
-    void bridge()?.systemMonitorUpdate?.(subscriptionId, demand()).catch(markTransportUnavailable);
+    updateDemand();
   } else if (!unsubscribeEvent) {
     void start();
   }
