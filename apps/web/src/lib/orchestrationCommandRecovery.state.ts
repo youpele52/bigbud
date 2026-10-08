@@ -67,6 +67,8 @@ function updateAttempt(
 ) {
   const current = ledger.attemptsByCommandId[commandId];
   if (!current) return { ledger, result: false };
+  const next = update(current);
+  if (next === current) return { ledger, result: true };
   return {
     ledger: {
       ...ledger,
@@ -74,7 +76,7 @@ function updateAttempt(
       lastMutationId: mutationId,
       attemptsByCommandId: {
         ...ledger.attemptsByCommandId,
-        [commandId]: update(current),
+        [commandId]: next,
       },
     },
     result: true,
@@ -124,12 +126,17 @@ export async function setAttemptStatus(
 ): Promise<boolean> {
   if (!storageFrom(options)) return true;
   return mutateLedger(options, (ledger, mutationId) =>
-    updateAttempt(ledger, mutationId, commandId, (attempt) => ({
-      ...attempt,
-      status,
-      acceptedSequence,
-      dispatchStartedAt,
-    })),
+    updateAttempt(ledger, mutationId, commandId, (attempt) => {
+      // Repeated recovery observations must not notify other windows and
+      // make them reconcile and publish the same status again.
+      if (
+        attempt.status === status &&
+        attempt.acceptedSequence === acceptedSequence &&
+        attempt.dispatchStartedAt === dispatchStartedAt
+      )
+        return attempt;
+      return { ...attempt, status, acceptedSequence, dispatchStartedAt };
+    }),
   );
 }
 

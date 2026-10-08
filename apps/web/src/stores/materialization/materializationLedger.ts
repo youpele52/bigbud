@@ -106,10 +106,12 @@ export async function setMaterializationAttemptStatus(
   return mutate(options, (ledger, mutationId) => {
     const attempt = ledger.attemptsByThreadId[threadId];
     if (!attempt || attempt.generation !== generation) {
-      return {
-        ledger: { ...ledger, revision: ledger.revision + 1, lastMutationId: mutationId },
-        result: false,
-      };
+      return { ledger, result: false };
+    }
+    // Recovery listeners read and reconcile this ledger in every window.
+    // An unchanged observation must not start another cross-window recovery pass.
+    if (attempt.status === status && attempt.acceptedSequence === acceptedSequence) {
+      return { ledger, result: true };
     }
     return {
       ledger: {
@@ -134,10 +136,7 @@ export async function clearMaterializationAttempt(
   return mutate(options, (ledger, mutationId) => {
     const attempt = ledger.attemptsByThreadId[threadId];
     if (!attempt || attempt.generation !== generation) {
-      return {
-        ledger: { ...ledger, revision: ledger.revision + 1, lastMutationId: mutationId },
-        result: false,
-      };
+      return { ledger, result: false };
     }
     const attemptsByThreadId = { ...ledger.attemptsByThreadId };
     delete attemptsByThreadId[threadId];
