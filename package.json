@@ -69,7 +69,7 @@
     "@types/node": "catalog:",
     "oxfmt": "^0.40.0",
     "oxlint": "^1.55.0",
-    "turbo": "^2.3.3",
+    "turbo": "2.11.5",
     "vitest": "catalog:"
   },
   "overrides": {
