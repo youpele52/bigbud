@@ -253,6 +253,7 @@ const makeProviderRegistryLayer = (
         get streamChanges() {
           return Stream.fromPubSub(changesPubSub);
         },
+        openChanges: PubSub.subscribe(changesPubSub).pipe(Effect.map(Stream.fromSubscription)),
         awaitFirstReadyProvider: Deferred.await(firstReadyDeferred).pipe(
           Effect.timeoutOption(10_000),
         ),

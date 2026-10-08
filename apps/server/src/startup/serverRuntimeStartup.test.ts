@@ -110,6 +110,7 @@ const startupLayer = (
           refresh: () => Effect.succeed([]),
           streamChanges: Stream.empty,
           awaitFirstReadyProvider: Effect.succeed(Option.none()),
+          openChanges: Effect.succeed(Stream.empty),
         }),
         Layer.succeed(Open, {
           openBrowser: () => Effect.void,

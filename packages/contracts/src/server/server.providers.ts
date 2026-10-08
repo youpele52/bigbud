@@ -177,6 +177,7 @@ export const ServerProvider = Schema.Struct({
   initialProbeComplete: Schema.optional(Schema.Boolean),
   message: Schema.optional(TrimmedNonEmptyString),
   recovery: Schema.optional(ServerProviderRecovery),
+  modelRecovery: Schema.optional(ServerProviderRecovery),
   failure: Schema.optional(ServerProviderFailure),
   cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
   models: Schema.Array(ServerProviderModel),

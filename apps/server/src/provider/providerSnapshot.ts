@@ -181,6 +181,7 @@ export function buildServerProvider(input: {
   supportsSteer?: boolean;
   probe: ProviderProbeResult;
 }): ServerProvider {
+  const message = nonEmptyTrimmed(input.probe.message);
   const nativeSteer =
     input.provider === "pi" ||
     (input.provider === "codex" &&
@@ -195,7 +196,7 @@ export function buildServerProvider(input: {
     auth: input.probe.auth,
     checkedAt: input.checkedAt,
     initialProbeComplete: true,
-    ...(input.probe.message ? { message: input.probe.message } : {}),
+    ...(message ? { message } : {}),
     ...(classifyProviderFailure(input) ? { failure: classifyProviderFailure(input) } : {}),
     models: input.models,
     ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),

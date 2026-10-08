@@ -65,6 +65,9 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
           getProviders: Effect.succeed([]),
           refresh: () => Effect.succeed([]),
           streamChanges: Stream.empty,
+          openChanges: Effect.succeed(
+            options?.layers?.providerRegistry?.streamChanges ?? Stream.empty,
+          ),
           ...options?.layers?.providerRegistry,
         }),
       ),

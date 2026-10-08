@@ -282,6 +282,7 @@ export const DevinProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialDevinProviderSnapshot,
       checkProvider,
+      recoverModelDiscovery: true,
       enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {
         if (
           !settings.enabled ||

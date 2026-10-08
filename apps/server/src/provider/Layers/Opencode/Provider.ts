@@ -12,7 +12,7 @@ import {
 import { spawnAndCollect } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
 import {
-  enrichManagedServerCatalog,
+  discoverManagedServerCatalog,
   resolveManagedServerCatalog,
 } from "../../managedServerCatalog";
 import {
@@ -196,7 +196,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
                 models: builtInModels,
                 message: "OpenCode is installed and ready.",
                 modelDiscovery: {
-                  status: "live",
+                  status: "unavailable",
                   source: options?.fallbackSource ?? "bundled-fallback",
                   durationMs: 0,
                 },
@@ -236,7 +236,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
                 checkedAt,
                 models: catalog.models,
                 modelDiscovery: {
-                  status: "live",
+                  status: catalog.configured ? "live" : "unavailable",
                   source: "opencode-provider-catalog",
                   durationMs: 0,
                 },
@@ -288,9 +288,6 @@ export const OpencodeProviderLive = Layer.effect(
     const path = yield* Path.Path;
     const serverManager = yield* OpencodeServerManager;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const initialSettings = yield* serverSettings.getSettings.pipe(
-      Effect.map((settings) => settings.providers.opencode),
-    );
     const fallback = yield* loadManagedServerFallbackModels(PROVIDER);
     const withCache = (snapshot: ServerProvider, generation: number, persist: boolean) =>
       serverSettings.getSettings.pipe(
@@ -341,10 +338,11 @@ export const OpencodeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      recoverModelDiscovery: true,
       checkProviderAtStartup: checkProvider,
-      enrichSnapshot: ({ snapshot, generation, publishSnapshot }) =>
+      discoverSnapshot: ({ snapshot, generation, publishSnapshot }) =>
         snapshot.enabled && snapshot.status === "ready"
-          ? enrichManagedServerCatalog({
+          ? discoverManagedServerCatalog({
               provider: PROVIDER,
               baseSnapshot: snapshot,
               catalogSnapshot: catalogProviderCheck.pipe(
@@ -354,7 +352,7 @@ export const OpencodeProviderLive = Layer.effect(
             })
           : Effect.void,
       preserveEnrichedSnapshot: true,
-      initialSnapshot: makeInitialOpencodeSnapshot(initialSettings),
+      initialSnapshot: makeInitialOpencodeSnapshot,
     });
   }),
 );

@@ -6,14 +6,13 @@ import type {
 } from "@bigbud/contracts";
 import {
   type ModelInfo as ClaudeModelInfo,
-  query as claudeQuery,
-  type SDKUserMessage,
   type SlashCommand as ClaudeSlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { withEffortProvenance } from "@bigbud/shared/model";
 
 import { readClaudeUsageLimits } from "./Provider.usageLimits";
+import { withClaudeProbeRuntime } from "./Provider.probeRuntime";
 
 export const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = withEffortProvenance(
   {
@@ -80,9 +79,15 @@ function resolveClaudeCapabilitySlug(model: string | null | undefined): string |
 }
 
 export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
+  // Explicit model IDs from Claude Code's model configuration docs, 2026-09-30.
+  ...[
+    ["claude-sonnet-5-5", "Claude Sonnet 5.5"],
+    ["claude-opus-5-5", "Claude Opus 5.5"],
+    ["claude-fable-5-1", "Claude Fable 5.1"],
+  ].map(([slug, name]) => ({ slug: slug!, name: name!, isCustom: false, capabilities: null })),
   {
     slug: "default",
-    name: "Claude Sonnet 4.6",
+    name: "Claude Default (account)",
     isCustom: false,
     capabilities: withEffortProvenance(
       {
@@ -105,7 +110,7 @@ export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   },
   {
     slug: "opus",
-    name: "Claude Opus 4.6",
+    name: "Claude Opus (latest)",
     isCustom: false,
     capabilities: withEffortProvenance(
       {
@@ -342,53 +347,24 @@ function parseClaudeInitializationCommands(
   );
 }
 
-function waitForAbortSignal(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    signal.addEventListener("abort", () => resolve(), { once: true });
-  });
-}
-
 export const probeClaudeCapabilities = (binaryPath: string) =>
-  Effect.tryPromise(async () => {
-    const abortController = new AbortController();
-    const queryRuntime = claudeQuery({
-      // oxlint-disable-next-line require-yield
-      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
-        await waitForAbortSignal(abortController.signal);
-      })(),
-      options: {
-        pathToClaudeCodeExecutable: binaryPath,
-        abortController,
-        settingSources: ["user", "project", "local"],
-        allowedTools: [],
-        stderr: () => {},
-      },
+  withClaudeProbeRuntime(binaryPath, async (queryRuntime) => {
+    const discoveryStartedAt = Date.now();
+    const init = await queryRuntime.initializationResult();
+    const modelDiscovery = resolveClaudeModelDiscovery({
+      models: init.models,
+      durationMs: Date.now() - discoveryStartedAt,
     });
-
-    try {
-      const discoveryStartedAt = Date.now();
-      const init = await queryRuntime.initializationResult();
-      const modelDiscovery = resolveClaudeModelDiscovery({
-        models: init.models,
-        durationMs: Date.now() - discoveryStartedAt,
-      });
-      const usageLimits = await Effect.runPromise(
-        readClaudeUsageLimits(
-          () => queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
-          Math.max(1, CAPABILITIES_PROBE_TIMEOUT_MS - (Date.now() - discoveryStartedAt) - 100),
-        ),
-      );
-      return {
-        subscriptionType: init.account?.subscriptionType,
-        slashCommands: parseClaudeInitializationCommands(init.commands),
-        usageLimits,
-        ...modelDiscovery,
-      };
-    } finally {
-      abortController.abort();
-      queryRuntime.close();
-    }
+    const usageLimits = await Effect.runPromise(
+      readClaudeUsageLimits(
+        () => queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+        Math.max(1, CAPABILITIES_PROBE_TIMEOUT_MS - (Date.now() - discoveryStartedAt) - 100),
+      ),
+    );
+    return {
+      subscriptionType: init.account?.subscriptionType,
+      slashCommands: parseClaudeInitializationCommands(init.commands),
+      usageLimits,
+      ...modelDiscovery,
+    };
   }).pipe(Effect.timeout(CAPABILITIES_PROBE_TIMEOUT_MS));

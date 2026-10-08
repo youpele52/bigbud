@@ -155,7 +155,7 @@ export function makeServerConfigUpdateStream(input: {
     }>;
   };
   readonly providerRegistry: {
-    streamChanges: Stream.Stream<ReadonlyArray<ServerProvider>>;
+    openChanges: Effect.Effect<Stream.Stream<ReadonlyArray<ServerProvider>>, never, Scope.Scope>;
     getProviders: Effect.Effect<ReadonlyArray<ServerProvider>>;
   };
   readonly discoveryRegistry: {
@@ -166,6 +166,8 @@ export function makeServerConfigUpdateStream(input: {
   };
 }) {
   return Effect.gen(function* () {
+    // Acquire before loading the snapshot, not when the returned stream is consumed.
+    const providerChanges = yield* input.providerRegistry.openChanges;
     const keybindingsUpdates = input.keybindings.streamChanges.pipe(
       Stream.map((event) => ({
         version: 1 as const,
@@ -173,7 +175,9 @@ export function makeServerConfigUpdateStream(input: {
         payload: { issues: event.issues },
       })),
     );
-    const providerStatuses = input.providerRegistry.streamChanges.pipe(
+    const providerStatuses = providerChanges.pipe(
+      // Buffered payloads may predate the snapshot. Read authoritative state instead.
+      Stream.mapEffect(() => input.providerRegistry.getProviders),
       Stream.map((providers) => ({
         version: 1 as const,
         type: "providerStatuses" as const,

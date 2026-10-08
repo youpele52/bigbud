@@ -115,8 +115,11 @@ export async function probeCodexDiscovery(input: {
     let account: CodexAccountSnapshot | undefined;
     let skills: ReadonlyArray<ServerProviderSkill> | undefined;
     let models: ReadonlyArray<ServerProviderModel> | undefined;
+    let enrichmentTimer: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
+      clearTimeout(enrichmentTimer);
+      input.signal?.removeEventListener("abort", onAbort);
       output.removeAllListeners();
       output.close();
       child.removeAllListeners();
@@ -153,13 +156,21 @@ export async function probeCodexDiscovery(input: {
       );
     };
 
+    const resolveAvailableModels = () => {
+      if (models === undefined) return;
+      account ??= readCodexAccountSnapshot(undefined);
+      skills ??= [];
+      maybeResolve();
+    };
+    const onAbort = () => fail(new Error("Codex discovery probe aborted."));
+
     if (input.signal?.aborted) {
       fail(new Error("Codex discovery probe aborted."));
       return;
     }
-    input.signal?.addEventListener("abort", () =>
-      fail(new Error("Codex discovery probe aborted.")),
-    );
+    input.signal?.addEventListener("abort", onAbort, { once: true });
+    // Drain diagnostics so a noisy subprocess cannot block its JSON-RPC output.
+    child.stderr.resume();
 
     const writeMessage = (message: unknown) => {
       if (!child.stdin.writable) {
@@ -211,6 +222,7 @@ export async function probeCodexDiscovery(input: {
           return;
         }
         maybeResolve();
+        if (!completed) enrichmentTimer = setTimeout(resolveAvailableModels, 500);
         return;
       }
 
@@ -224,7 +236,8 @@ export async function probeCodexDiscovery(input: {
       if (response.id === 4) {
         const errorMessage = readErrorMessage(response);
         if (errorMessage) {
-          fail(new Error(`account/read failed: ${errorMessage}`));
+          account = readCodexAccountSnapshot(undefined);
+          maybeResolve();
           return;
         }
 
@@ -236,6 +249,10 @@ export async function probeCodexDiscovery(input: {
     child.once("error", fail);
     child.once("exit", (code, signal) => {
       if (completed) return;
+      if (models !== undefined) {
+        resolveAvailableModels();
+        return;
+      }
       fail(
         new Error(
           `codex app-server exited before probe completed (code=${code ?? "null"}, signal=${signal ?? "null"}).`,

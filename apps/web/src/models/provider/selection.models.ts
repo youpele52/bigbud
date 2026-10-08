@@ -105,7 +105,9 @@ export function getAppModelOptions(
   // persisted model into a synthetic custom option. The user must reselect
   // from the current server catalog instead.
   if (!descriptor.catalogAuthoritative) {
-    const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
+    // Catalog refresh must not reinterpret a persisted model ID as a legacy alias.
+    // Alias normalization belongs to explicit selection, not discovery updates.
+    const normalizedSelectedModel = selectedModel?.trim() || null;
     const selectedModelMatchesExistingName =
       typeof trimmedSelectedModel === "string" &&
       options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);

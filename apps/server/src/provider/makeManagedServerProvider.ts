@@ -1,5 +1,5 @@
 import type { ServerProvider } from "@bigbud/contracts";
-import { Duration, Effect, Option, PubSub, Ref, Scope, Stream } from "effect";
+import { Deferred, Duration, Effect, Option, PubSub, Ref, Scope, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
 import type { ServerProviderRecoveryOptions, ServerProviderShape } from "./Services/ServerProvider";
@@ -9,6 +9,11 @@ import { runCoordinatedProviderProbe } from "./providerProbeCoordinator.ts";
 import { DEFAULT_PERIODIC_HEALTH_INTERVAL, withProviderRecovery } from "./managedProviderRecovery";
 import { preserveEnrichedProviderSnapshot } from "./managedProviderSnapshot";
 import { runManagedProviderStartupRecovery } from "./makeManagedServerProvider.startup.ts";
+import { makeModelDiscoveryRecovery } from "./modelDiscoveryRecovery.ts";
+import {
+  makeManagedProviderEnrichment,
+  type ProviderSnapshotEnrichment,
+} from "./managedProviderEnrichment.ts";
 export { PROVIDER_PROBE_CONCURRENCY } from "./providerProbeCoordinator.ts";
 
 export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(function* <
@@ -22,20 +27,22 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly initialSnapshot: ServerProvider | ((settings: Settings) => ServerProvider);
   readonly probeTimeout?: Duration.Input;
   readonly refreshInterval?: Duration.Input;
-  readonly enrichSnapshot?: (opts: {
-    readonly settings: Settings;
-    readonly snapshot: ServerProvider;
-    readonly generation: number;
-    readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
-  }) => Effect.Effect<void, ServerSettingsError>;
+  /** Required source discovery, included in each bounded model recovery attempt. */
+  readonly discoverSnapshot?: ProviderSnapshotEnrichment<Settings>;
+  /** Optional capabilities, published after the core catalog without delaying readiness. */
+  readonly enrichSnapshot?: ProviderSnapshotEnrichment<Settings>;
+  readonly enrichmentTimeout?: Duration.Input;
   readonly decorateSnapshot?: (opts: {
     readonly settings: Settings;
     readonly snapshot: ServerProvider;
     readonly generation: number;
   }) => Effect.Effect<ServerProvider, ServerSettingsError>;
   readonly preserveEnrichedSnapshot?: boolean;
+  readonly recoverModelDiscovery?: boolean;
 }): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
   const refreshSemaphore = yield* Semaphore.make(1);
+  const recoverModels = yield* makeModelDiscoveryRecovery();
+  const enrichment = yield* makeManagedProviderEnrichment();
   const generationRef = yield* Ref.make(0);
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerProvider>(),
@@ -48,6 +55,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       : input.initialSnapshot;
   const snapshotRef = yield* Ref.make<ServerProvider>({
     ...initialSnapshot,
+    ...(input.recoverModelDiscovery && initialSnapshot.enabled ? { models: [] } : {}),
     initialProbeComplete: !initialSnapshot.enabled,
   });
   const settingsRef = yield* Ref.make(initialSettings);
@@ -69,6 +77,39 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     }
 
     const generation = options?.generation ?? (yield* Ref.get(generationRef));
+    if (generation !== (yield* Ref.get(generationRef))) return yield* Ref.get(snapshotRef);
+    yield* enrichment.cancel;
+    const isCurrent = Ref.get(generationRef).pipe(Effect.map((value) => value === generation));
+    const enrich = (snapshot: ServerProvider) => {
+      if (
+        !input.enrichSnapshot ||
+        !snapshot.enabled ||
+        snapshot.status !== "ready" ||
+        (input.recoverModelDiscovery && snapshot.modelDiscovery?.status !== "live")
+      ) {
+        return Effect.void;
+      }
+      return enrichment.start({
+        snapshot,
+        generation,
+        isCurrent,
+        ...(input.enrichmentTimeout === undefined ? {} : { timeout: input.enrichmentTimeout }),
+        enrich: (publishSnapshot) =>
+          input.enrichSnapshot!({
+            settings: nextSettings,
+            snapshot,
+            generation,
+            publishSnapshot,
+          }),
+        publish: (enriched) =>
+          Effect.gen(function* () {
+            if (!(yield* isCurrent)) return;
+            if (areProviderSnapshotsEqual(yield* Ref.get(snapshotRef), enriched)) return;
+            yield* Ref.set(snapshotRef, enriched);
+            yield* PubSub.publish(changesPubSub, enriched);
+          }),
+      });
+    };
     yield* Effect.logDebug("provider probe attempt", {
       provider: initialSnapshot.provider,
       generation,
@@ -79,22 +120,97 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       options?.probeMode === "startup" && input.checkProviderAtStartup
         ? input.checkProviderAtStartup
         : input.checkProvider;
-    const probeResult = yield* runCoordinatedProviderProbe(probe, input.probeTimeout);
     const currentSnapshot = yield* Ref.get(snapshotRef);
-    const probedSnapshot = Option.match(probeResult, {
-      onNone: () => {
-        const { failure: _failure, recovery: _recovery, ...base } = currentSnapshot;
-        return {
-          ...base,
-          status: "error" as const,
-          checkedAt: new Date().toISOString(),
-          initialProbeComplete: true,
-          failure: { classification: "retryable" as const, reason: "startup-timeout" as const },
-          message: `${initialSnapshot.provider} provider check timed out.`,
+    const fallbackSnapshot =
+      typeof input.initialSnapshot === "function"
+        ? input.initialSnapshot(nextSettings)
+        : input.initialSnapshot;
+    const foregroundPublished = yield* Deferred.make<void>();
+    const probeOnce = Effect.gen(function* () {
+      const sourceProbe = probe.pipe(
+        Effect.flatMap((base) =>
+          Effect.gen(function* () {
+            let snapshot = base;
+            if (input.discoverSnapshot) {
+              yield* input.discoverSnapshot({
+                settings: nextSettings,
+                snapshot,
+                generation,
+                publishSnapshot: (discovered) =>
+                  Effect.sync(() => {
+                    snapshot = discovered;
+                  }),
+              });
+            }
+            return snapshot;
+          }),
+        ),
+      );
+      const probeResult = yield* runCoordinatedProviderProbe(sourceProbe, input.probeTimeout);
+      let snapshot: ServerProvider = Option.match(probeResult, {
+        onNone: () => {
+          const {
+            failure: _failure,
+            recovery: _recovery,
+            ...base
+          } = input.recoverModelDiscovery ? fallbackSnapshot : currentSnapshot;
+          return {
+            ...base,
+            status: "error" as const,
+            checkedAt: new Date().toISOString(),
+            initialProbeComplete: true,
+            failure: { classification: "retryable" as const, reason: "startup-timeout" as const },
+            message: `${initialSnapshot.provider} provider check timed out.`,
+          };
+        },
+        onSome: (snapshot) => ({ ...snapshot, initialProbeComplete: true }),
+      });
+      if (input.recoverModelDiscovery && (Option.isNone(probeResult) || !snapshot.modelDiscovery)) {
+        snapshot = {
+          ...snapshot,
+          modelDiscovery: { status: "unavailable", source: "fallback", durationMs: 0 },
         };
-      },
-      onSome: (snapshot) => ({ ...snapshot, initialProbeComplete: true }),
+      }
+      return snapshot;
     });
+    const probedSnapshot = input.recoverModelDiscovery
+      ? yield* recoverModels({
+          identity: JSON.stringify(nextSettings),
+          generation,
+          probe: probeOnce.pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("provider model discovery probe failed", {
+                provider: initialSnapshot.provider,
+                cause,
+              }).pipe(
+                Effect.as({
+                  ...fallbackSnapshot,
+                  initialProbeComplete: true,
+                  modelDiscovery: {
+                    status: "unavailable" as const,
+                    source: "fallback",
+                    durationMs: 0,
+                  },
+                }),
+              ),
+            ),
+          ),
+          awaitPublished: Deferred.await(foregroundPublished),
+          isCurrent: Ref.get(generationRef).pipe(Effect.map((value) => value === generation)),
+          publish: (snapshot) =>
+            Effect.gen(function* () {
+              const decorated = input.decorateSnapshot
+                ? yield* input.decorateSnapshot({ settings: nextSettings, snapshot, generation })
+                : snapshot;
+              if (generation !== (yield* Ref.get(generationRef))) return;
+              if (!areProviderSnapshotsEqual(yield* Ref.get(snapshotRef), decorated)) {
+                yield* Ref.set(snapshotRef, decorated);
+                yield* PubSub.publish(changesPubSub, decorated);
+              }
+              yield* enrich(decorated);
+            }).pipe(Effect.ignoreCause({ log: true })),
+        })
+      : yield* probeOnce;
     if (generation !== (yield* Ref.get(generationRef))) {
       yield* Effect.logInfo("provider probe superseded", {
         provider: initialSnapshot.provider,
@@ -114,10 +230,13 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
             ),
           )
       : probedSnapshot;
+    if (generation !== (yield* Ref.get(generationRef))) {
+      return yield* Ref.get(snapshotRef);
+    }
     const checkedSnapshot = preserveEnrichedProviderSnapshot(
       decoratedSnapshot,
       currentSnapshot,
-      input.preserveEnrichedSnapshot === true,
+      input.preserveEnrichedSnapshot === true && !input.recoverModelDiscovery,
     );
     const nextSnapshot =
       options?.recovery === undefined
@@ -125,27 +244,8 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         : withProviderRecovery(checkedSnapshot, options.recovery, generation);
     const previousSnapshot = yield* Ref.get(snapshotRef);
     const snapshotChanged = !areProviderSnapshotsEqual(previousSnapshot, nextSnapshot);
-    const deferCorePublish =
-      input.enrichSnapshot !== undefined && options?.recovery?.trigger === "manual";
     yield* Ref.set(settingsRef, nextSettings);
-    if (snapshotChanged && !deferCorePublish) yield* Ref.set(snapshotRef, nextSnapshot);
-
-    const publishProviderSnapshot = Effect.fn("publishProviderSnapshot")(function* (
-      snapshot: ServerProvider,
-    ) {
-      if (generation !== (yield* Ref.get(generationRef))) {
-        yield* Effect.logInfo("provider enrichment superseded", {
-          provider: initialSnapshot.provider,
-          generation,
-        });
-        return false;
-      }
-      const previous = yield* Ref.get(snapshotRef);
-      if (areProviderSnapshotsEqual(previous, snapshot)) return false;
-      yield* Ref.set(snapshotRef, snapshot);
-      yield* PubSub.publish(changesPubSub, snapshot);
-      return true;
-    });
+    if (snapshotChanged) yield* Ref.set(snapshotRef, nextSnapshot);
 
     yield* Effect.logDebug("provider probe result", {
       provider: nextSnapshot.provider,
@@ -154,45 +254,14 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       reason: nextSnapshot.failure?.reason ?? "none",
     });
 
-    if (snapshotChanged && !deferCorePublish) {
-      yield* PubSub.publish(changesPubSub, nextSnapshot);
-    }
-
-    if (input.enrichSnapshot !== undefined) {
-      let enrichmentPublished = false;
-      const publishSnapshot = (enriched: ServerProvider) => {
-        const resolved =
-          options?.recovery === undefined
-            ? enriched
-            : withProviderRecovery(enriched, options.recovery, generation);
-        return publishProviderSnapshot(resolved).pipe(
-          Effect.tap((published) => Effect.sync(() => (enrichmentPublished ||= published))),
-          Effect.asVoid,
-        );
-      };
-      const enrichment = input
-        .enrichSnapshot({
-          settings: nextSettings,
-          snapshot: nextSnapshot,
-          generation,
-          publishSnapshot,
-        })
-        .pipe(Effect.ignoreCause({ log: true }));
-      if (deferCorePublish) {
-        yield* enrichment;
-        if (
-          snapshotChanged &&
-          !enrichmentPublished &&
-          generation === (yield* Ref.get(generationRef))
-        ) {
-          yield* Ref.set(snapshotRef, nextSnapshot);
-          yield* PubSub.publish(changesPubSub, nextSnapshot);
-        }
-      } else {
-        yield* enrichment;
+    if (snapshotChanged) {
+      if (generation === (yield* Ref.get(generationRef))) {
+        yield* PubSub.publish(changesPubSub, nextSnapshot);
       }
     }
 
+    yield* enrich(nextSnapshot);
+    yield* Deferred.succeed(foregroundPublished, undefined);
     return yield* Ref.get(snapshotRef);
   });
   const applySnapshot = (
@@ -221,7 +290,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     startupGeneration,
     generationRef,
     hasStartupProbe: input.checkProviderAtStartup !== undefined,
-    hasEnrichment: input.enrichSnapshot !== undefined,
+    hasEnrichment: input.enrichSnapshot !== undefined || input.discoverSnapshot !== undefined,
     refreshSnapshot,
   }).pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
@@ -238,6 +307,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         generationRef,
         (currentGeneration) => currentGeneration + 1,
       );
+      yield* enrichment.cancel;
       yield* applySnapshot(nextSettings, { generation }).pipe(Effect.ignoreCause({ log: true }));
     }),
   ).pipe(Effect.forkScoped);
@@ -267,11 +337,19 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         return yield* Ref.get(snapshotRef);
       }
 
-      return yield* applySnapshot(nextSettings);
+      const generation = yield* Ref.updateAndGet(generationRef, (value) => value + 1);
+      yield* enrichment.cancel;
+      return yield* applySnapshot(nextSettings, { generation });
     }).pipe(Effect.tapError(Effect.logError), Effect.orDie),
-    refresh: refreshSnapshot().pipe(Effect.tapError(Effect.logError), Effect.orDie),
+    refresh: Ref.updateAndGet(generationRef, (value) => value + 1).pipe(
+      Effect.tap(() => enrichment.cancel),
+      Effect.flatMap((generation) => refreshSnapshot({ generation })),
+      Effect.tapError(Effect.logError),
+      Effect.orDie,
+    ),
     refreshWithRecovery: (options) =>
       Ref.updateAndGet(generationRef, (generation) => generation + 1).pipe(
+        Effect.tap(() => enrichment.cancel),
         Effect.tap((generation) =>
           Effect.logInfo("provider recovery operation started", {
             provider: initialSnapshot.provider,

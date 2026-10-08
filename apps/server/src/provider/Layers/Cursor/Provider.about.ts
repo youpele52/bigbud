@@ -52,6 +52,11 @@ export function buildCursorProviderSnapshot(input: {
     provider: PROVIDER,
     enabled: input.cursorSettings.enabled,
     checkedAt: input.checkedAt,
+    modelDiscovery: {
+      status: input.discoveredModels?.length ? "live" : "unavailable",
+      source: "cursor-acp",
+      durationMs: 0,
+    },
     models: providerModelsFromSettings(
       input.discoveredModels ?? [],
       PROVIDER,

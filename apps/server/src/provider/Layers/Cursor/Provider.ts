@@ -266,6 +266,7 @@ export const CursorProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialCursorProviderSnapshot,
       checkProvider,
+      recoverModelDiscovery: true,
       decorateSnapshot,
       enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {
         if (
