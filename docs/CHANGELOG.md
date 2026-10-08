@@ -10,6 +10,46 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
 - **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
 
+## v0.3.0 (xx October, 2026)
+
+### New Desktop System Monitor
+
+- **See what’s keeping your computer busy:** Check CPU, memory, storage, and network activity without leaving the desktop app. Open the compact System panel for a quick glance, or the full System Monitor for more detail.
+- **Find resource-heavy processes faster:** Search running processes by name or status, sort them by CPU or memory use, and inspect individual process details.
+- **Choose the details that matter to you:** Show or hide monitoring widgets and extra information, including temperature readings where supported. Your preferences are remembered between visits.
+- **Give bigbud more context when your computer feels slow:** In the desktop app, your agent can read current system-resource information to help investigate, without changing anything on your computer. Missing readings are clearly marked as unavailable.
+
+### Clearer Git Synchronization
+
+- **Keep your repository in sync with clearer guidance:** The Git panel offers Pull, Push, or Fetch based on your branch’s status and checks the latest state before proceeding. Blocked operations explain what needs attention rather than leaving you guessing.
+- **Get help when Git gets complicated:** Prepare a troubleshooting prompt for a blocked operation, review it in your chat, and decide when to send it—without replacing your existing draft.
+
+### Follow Supporting Agents
+
+- **See what your AI’s helpers are doing:** For supported providers, activity cards show helper progress, status, and expandable details directly in your chat.
+- **Understand who’s doing what:** Related agents are grouped where supported to make their working relationships easier to follow.
+- **Follow work across chats:** Open linked child chats and see whether delegated work is running, idle, failed, or unavailable, so you can follow the wider task.
+- **Know where an instruction came from:** Messages from other chats, assignments, handoffs, and automated follow-ups show their source, with links back to verified source conversations.
+
+### Easier-to-Read Chat Tables
+
+- **Read wide tables without squeezing the columns:** Scroll tables horizontally within your chat to see the information that would otherwise be cut off.
+- **Give larger tables more room:** Open an expanded view when you want to read a table more comfortably.
+- **Take tables with you:** Copy a table as Markdown to reuse in your notes or documents.
+- **Enjoy steadier scrolling on desktop:** Fixed a flicker that could appear when scrolling expanded chat tables in the desktop app.
+
+### More Reliable Replies and Notifications
+
+- **Keep the beginning of your reply:** Fixed an issue that could make the opening text of an assistant’s response disappear while the rest was arriving.
+- **Go straight back to the finished work:** Clicking a task-completion notification now opens its chat in the right app window or browser tab.
+
+### Everyday Interface Improvements
+
+- **Scroll your sidebar as one list:** New chat and Search now move with the rest of the navigation instead of staying fixed at the top.
+- **Dismiss notifications more easily:** Notification close buttons are now available to accessibility tools.
+- **Scan paths and settings more comfortably:** File names, version labels, and other interface details use lighter, more consistent text, alongside refined styling for cards and dialogs.
+- **A simpler browser toolbar:** Removed unfinished bookmark controls from the built-in browser.
+
 ## v0.2.300 (24 September, 2026)
 
 ### Games in bigbud.app
