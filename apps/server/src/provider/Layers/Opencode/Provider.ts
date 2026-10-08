@@ -28,6 +28,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { listConnectedManagedServerProviders } from "../../managedServerProviderDiscovery.ts";
 import { isVersionAtLeast } from "./Provider.version";
 import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
+import { withHttpUsageLimits } from "../../providerUsageLimits.http.ts";
+import { readOpencodeGoUsageLimits } from "./Provider.usageLimits.ts";
 
 const PROVIDER = "opencode" as const;
 const MINIMUM_OPENCODE_VERSION = "1.14.19";
@@ -316,6 +318,7 @@ export const OpencodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withHttpUsageLimits(snapshot, readOpencodeGoUsageLimits)),
       Effect.flatMap((snapshot) => withCache(snapshot, 0, false)),
     );
     const catalogProviderCheck = checkOpencodeProviderStatus({
@@ -326,6 +329,7 @@ export const OpencodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withHttpUsageLimits(snapshot, readOpencodeGoUsageLimits)),
     );
 
     return yield* makeManagedServerProvider<OpencodeSettings>({

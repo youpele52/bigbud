@@ -7,6 +7,9 @@ import type {
 import { readCodexAccountSnapshot, type CodexAccountSnapshot } from "./codexAccount";
 import { parseCodexModelsResult } from "./codexAppServer.models";
 import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
+import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
+import { normalizeCodexUsageLimits } from "./Layers/Codex/Provider.usageLimits.ts";
+import { usageLimitsStatus } from "./providerUsageLimits.ts";
 
 interface JsonRpcProbeResponse {
   readonly id?: unknown;
@@ -20,6 +23,7 @@ export interface CodexDiscoverySnapshot {
   readonly account: CodexAccountSnapshot;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
   readonly models: ReadonlyArray<ServerProviderModel>;
+  readonly usageLimits?: ServerProviderUsageLimits;
 }
 
 function readErrorMessage(response: JsonRpcProbeResponse): string | undefined {
@@ -99,6 +103,7 @@ export async function probeCodexDiscovery(input: {
   readonly homePath?: string;
   readonly cwd: string;
   readonly signal?: AbortSignal;
+  readonly includeUsageLimits?: boolean;
 }): Promise<CodexDiscoverySnapshot> {
   return await new Promise((resolve, reject) => {
     const child = spawn(input.binaryPath, ["app-server"], {
@@ -116,9 +121,13 @@ export async function probeCodexDiscovery(input: {
     let skills: ReadonlyArray<ServerProviderSkill> | undefined;
     let models: ReadonlyArray<ServerProviderModel> | undefined;
     let enrichmentTimer: ReturnType<typeof setTimeout> | undefined;
+    let usageTimer: ReturnType<typeof setTimeout> | undefined;
+    let usageComplete = !input.includeUsageLimits;
+    let usageLimits: ServerProviderUsageLimits | undefined;
 
     const cleanup = () => {
       clearTimeout(enrichmentTimer);
+      clearTimeout(usageTimer);
       input.signal?.removeEventListener("abort", onAbort);
       output.removeAllListeners();
       output.close();
@@ -145,14 +154,19 @@ export async function probeCodexDiscovery(input: {
       );
 
     const maybeResolve = () => {
-      if (!account || skills === undefined || models === undefined) {
+      if (!account || skills === undefined || models === undefined || !usageComplete) {
         return;
       }
       const resolvedAccount = account;
       const resolvedSkills = skills;
       const resolvedModels = models;
       finish(() =>
-        resolve({ account: resolvedAccount, skills: resolvedSkills, models: resolvedModels }),
+        resolve({
+          account: resolvedAccount,
+          skills: resolvedSkills,
+          models: resolvedModels,
+          ...(usageLimits ? { usageLimits } : {}),
+        }),
       );
     };
 
@@ -160,6 +174,14 @@ export async function probeCodexDiscovery(input: {
       if (models === undefined) return;
       account ??= readCodexAccountSnapshot(undefined);
       skills ??= [];
+      if (!usageComplete && account.type !== "chatgpt") {
+        usageComplete = true;
+        usageLimits = usageLimitsStatus(
+          "codex-app-server",
+          new Date().toISOString(),
+          "unavailable",
+        );
+      }
       maybeResolve();
     };
     const onAbort = () => fail(new Error("Codex discovery probe aborted."));
@@ -237,11 +259,55 @@ export async function probeCodexDiscovery(input: {
         const errorMessage = readErrorMessage(response);
         if (errorMessage) {
           account = readCodexAccountSnapshot(undefined);
+          usageComplete = true;
+          if (input.includeUsageLimits)
+            usageLimits = usageLimitsStatus(
+              "codex-app-server",
+              new Date().toISOString(),
+              "unavailable",
+            );
           maybeResolve();
           return;
         }
 
         account = readCodexAccountSnapshot(response.result);
+        if (input.includeUsageLimits && account.type === "chatgpt") {
+          writeMessage({ id: 5, method: "account/rateLimits/read" });
+          usageTimer = setTimeout(() => {
+            usageComplete = true;
+            usageLimits = usageLimitsStatus("codex-app-server", new Date().toISOString(), "error");
+            maybeResolve();
+          }, 2_000);
+        } else {
+          usageComplete = true;
+          if (input.includeUsageLimits)
+            usageLimits = usageLimitsStatus(
+              "codex-app-server",
+              new Date().toISOString(),
+              "unavailable",
+            );
+        }
+        maybeResolve();
+        return;
+      }
+
+      if (response.id === 5 && input.includeUsageLimits) {
+        clearTimeout(usageTimer);
+        usageComplete = true;
+        const checkedAt = new Date().toISOString();
+        try {
+          usageLimits = response.error
+            ? usageLimitsStatus(
+                "codex-app-server",
+                checkedAt,
+                /authentication required|method not found/i.test(readErrorMessage(response) ?? "")
+                  ? "unavailable"
+                  : "error",
+              )
+            : normalizeCodexUsageLimits(response.result, checkedAt);
+        } catch {
+          usageLimits = usageLimitsStatus("codex-app-server", checkedAt, "error");
+        }
         maybeResolve();
       }
     });
@@ -250,6 +316,10 @@ export async function probeCodexDiscovery(input: {
     child.once("exit", (code, signal) => {
       if (completed) return;
       if (models !== undefined) {
+        if (!usageComplete) {
+          usageComplete = true;
+          usageLimits = usageLimitsStatus("codex-app-server", new Date().toISOString(), "error");
+        }
         resolveAvailableModels();
         return;
       }

@@ -49,7 +49,9 @@ const probeCodexCapabilities = (input: {
   readonly homePath?: string;
   readonly cwd: string;
 }) =>
-  Effect.tryPromise((signal) => probeCodexDiscovery({ ...input, signal })).pipe(
+  Effect.tryPromise((signal) =>
+    probeCodexDiscovery({ ...input, signal, includeUsageLimits: true }),
+  ).pipe(
     Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS),
     Effect.tap((result) =>
       Option.isNone(result)
@@ -311,6 +313,9 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     models: resolvedModels,
     modelDiscovery,
     skills,
+    ...(parsed.auth.status === "authenticated" && discovery?.usageLimits
+      ? { usageLimits: discovery.usageLimits }
+      : {}),
     probe: {
       installed: true,
       version: parsedVersion,

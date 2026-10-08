@@ -36,6 +36,16 @@ const failed: ServerProvider = {
 };
 
 describe("preserveEnrichedProviderSnapshot usage limits", () => {
+  it.each(["codex-app-server", "cursor-dashboard", "opencode-go-api"] as const)(
+    "never inherits quota from an unidentified former %s account",
+    (source) => {
+      const previous = { ...available, usageLimits: { ...available.usageLimits!, source } };
+      const next = { ...failed, usageLimits: { ...failed.usageLimits!, source } };
+      expect(preserveEnrichedProviderSnapshot(next, previous, false).usageLimits).toEqual(
+        next.usageLimits,
+      );
+    },
+  );
   it("retains last-good values as stale after a transient quota failure", () => {
     expect(preserveEnrichedProviderSnapshot(failed, available, false).usageLimits).toEqual({
       ...available.usageLimits,

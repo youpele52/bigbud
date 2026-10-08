@@ -18,6 +18,8 @@ export const ServerProviderUsageLimitWindowKind = Schema.Literals([
   "seven-day-opus",
   "seven-day-sonnet",
   "model-scoped",
+  "rolling",
+  "monthly",
 ]);
 export type ServerProviderUsageLimitWindowKind = typeof ServerProviderUsageLimitWindowKind.Type;
 
@@ -46,7 +48,12 @@ export type ServerProviderExtraUsage = typeof ServerProviderExtraUsage.Type;
 
 export const ServerProviderUsageLimits = Schema.Struct({
   status: ServerProviderUsageLimitStatus,
-  source: Schema.Literal("claude-agent-sdk"),
+  source: Schema.Literals([
+    "claude-agent-sdk",
+    "codex-app-server",
+    "cursor-dashboard",
+    "opencode-go-api",
+  ]),
   checkedAt: IsoDateTime,
   lastSuccessfulAt: Schema.optional(IsoDateTime),
   subscriptionType: Schema.optional(TrimmedNonEmptyString),

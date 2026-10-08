@@ -28,6 +28,23 @@ const available = {
 } as const;
 
 describe("ServerProviderUsageLimits", () => {
+  it.each(["codex-app-server", "cursor-dashboard", "opencode-go-api"])(
+    "decodes %s without exposing raw credentials",
+    (source) => {
+      const decoded = Schema.decodeUnknownSync(ServerProviderUsageLimits)({
+        ...available,
+        source,
+        windows: [
+          { ...available.windows[0], kind: source === "codex-app-server" ? "rolling" : "monthly" },
+        ],
+        accessToken: "private-session",
+        headers: { Authorization: "private-key" },
+      });
+      expect(decoded.source).toBe(source);
+      expect(decoded).not.toHaveProperty("accessToken");
+      expect(decoded).not.toHaveProperty("headers");
+    },
+  );
   it("decodes a normalized available snapshot", () => {
     expect(Schema.decodeUnknownSync(ServerProviderUsageLimits)(available)).toEqual(available);
   });
