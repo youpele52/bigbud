@@ -22,6 +22,19 @@ describe("StatusBanner", () => {
     await expect.element(page.getByRole("button")).not.toBeInTheDocument();
   });
 
+  it("supports nonurgent status semantics without changing the default alert role", async () => {
+    const screen = await render(<StatusBanner role="status" description="Nonurgent information" />);
+    await expect.element(page.getByRole("status")).toHaveClass("bg-transparent");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+
+    await screen.rerender(<StatusBanner variant="warning" description="Actual warning" />);
+    await expect.element(page.getByRole("alert")).toHaveClass("bg-warning/4");
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+
+    await screen.rerender(<StatusBanner variant="error" description="Actual error" />);
+    await expect.element(page.getByRole("alert")).toHaveClass("bg-destructive/4");
+  });
+
   it("renders an explicit icon, optional title, action, and default dismiss label", async () => {
     const onDismiss = vi.fn();
     await render(

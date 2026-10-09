@@ -7,6 +7,7 @@ import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBan
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
+import { AccessModeInfoBanner } from "../../common/AccessModeInfoBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { DelegatedChildrenCard } from "../../agents/DelegatedChildrenCard";
 import { ChatAgentActivityFeed } from "../../agents/ChatAgentActivityFeed";
@@ -85,6 +86,12 @@ export function ChatViewChatBody({
       <ThreadErrorBanner
         error={base.activeThread!.error}
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
+      />
+      <AccessModeInfoBanner
+        threadId={base.threadId}
+        provider={composer.selectedProvider}
+        runtimeMode={base.runtimeMode}
+        connectionMode={base.settings.providers.opencodeV2.connectionMode ?? "shared"}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1">

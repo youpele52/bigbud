@@ -7,6 +7,7 @@ type StatusBannerVariant = NonNullable<ComponentProps<typeof Alert>["variant"]>;
 
 interface StatusBannerProps {
   readonly variant?: StatusBannerVariant;
+  readonly role?: ComponentProps<typeof Alert>["role"];
   readonly icon?: ReactNode;
   readonly title?: ReactNode;
   readonly description: ReactNode;
@@ -18,6 +19,7 @@ interface StatusBannerProps {
 
 export function StatusBanner({
   variant = "default",
+  role = "alert",
   icon,
   title,
   description,
@@ -34,7 +36,7 @@ export function StatusBanner({
         : "text-muted-foreground/60 hover:text-muted-foreground";
 
   return (
-    <Alert className={className} variant={variant}>
+    <Alert className={className} variant={variant} role={role}>
       {icon}
       {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
       <AlertDescription>{description}</AlertDescription>

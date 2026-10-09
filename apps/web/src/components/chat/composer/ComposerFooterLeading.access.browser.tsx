@@ -65,12 +65,11 @@ for (const provider of ["opencodeV2", "codex"] as const satisfies readonly Provi
           await expect
             .element(page.getByRole("menuitemradio", { name, exact: true }))
             .not.toHaveAttribute("aria-disabled", "true");
-        if (provider === "opencodeV2")
-          await expect
-            .element(
-              page.getByText(/Synthetic remote workspaces never gain native file or shell access/),
-            )
-            .toBeVisible();
+        await expect
+          .element(
+            page.getByText(/Synthetic remote workspaces never gain native file or shell access/),
+          )
+          .not.toBeInTheDocument();
         const next = selected === "full-access" ? "approval-required" : "full-access";
         await page.getByRole("menuitemradio", { name: names[next], exact: true }).click();
         expect(changes).toEqual([{ modelSelection: selection, runtimeMode: next }]);

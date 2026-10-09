@@ -128,7 +128,6 @@ async function mountMenu(props?: {
       planCardOpen={false}
       planCardLabel="Plan"
       runtimeMode="approval-required"
-      opencodeV2Access={provider === "opencodeV2"}
       traitsMenuContent={
         <TraitsMenuContent
           provider={provider}
@@ -162,11 +161,14 @@ async function mountMenu(props?: {
 }
 
 describe("CompactComposerControlsMenu", () => {
-  it("V2 exposes all explicit access choices and explains their actual trust boundary", async () => {
+  it("V2 exposes all explicit access choices without the long access explanation", async () => {
     await using _ = await mountMenu({
       modelSelection: { provider: "opencodeV2", subProviderID: "synthetic", model: "synthetic" },
     });
     await page.getByLabelText("More composer controls").click();
+    await expect
+      .element(page.getByRole("menuitemradio", { name: "Supervised" }))
+      .toHaveAttribute("aria-checked", "true");
     await expect
       .element(page.getByRole("menuitemradio", { name: "Auto-accept edits" }))
       .not.toHaveAttribute("aria-disabled", "true");
@@ -175,7 +177,10 @@ describe("CompactComposerControlsMenu", () => {
       .not.toHaveAttribute("aria-disabled", "true");
     await expect
       .element(page.getByText(/Full access trusts native tools with host-user/))
-      .toBeVisible();
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText(/Synthetic remote workspaces never gain native file or shell access/))
+      .not.toBeInTheDocument();
   });
   afterEach(() => {
     document.body.innerHTML = "";

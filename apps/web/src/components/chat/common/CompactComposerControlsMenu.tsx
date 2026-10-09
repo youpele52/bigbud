@@ -19,7 +19,6 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   planCardOpen: boolean;
   planCardLabel: string;
   runtimeMode: RuntimeMode;
-  opencodeV2Access?: boolean;
   traitsMenuContent?: ReactNode;
   onOpenOrchestra: () => void;
   onOpenSideChat?: (() => void) | undefined;
@@ -91,14 +90,6 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
-        {props.opencodeV2Access ? (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            Supervised asks before actions. Auto-accept edits permits only bounded canonical edits;
-            without the helper, native edits still ask. Full access trusts native tools with
-            host-user filesystem, process and network access—not a sandbox. External-directory
-            requests still ask. Synthetic remote workspaces never gain native file or shell access.
-          </div>
-        ) : null}
         <MenuDivider />
         <MenuItem onClick={props.onTogglePlanCard}>
           <ListTodoIcon className="size-4 shrink-0" />
