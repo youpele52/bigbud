@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ResourceDiskUsage, type DiskUsage } from "./ResourceDiskUsage";
 import { ResourceMetricHistory } from "./ResourceMetricHistory";
+import { ResourceNetworkRates, type NetworkRates } from "./ResourceNetworkRates";
 
 export interface DisplayPoint {
   sequence: number;
@@ -17,6 +18,7 @@ export interface DisplayMetric {
   historyValueFormatter?: (value: number) => string;
   historyStyle?: "network";
   diskUsage?: DiskUsage;
+  networkRates?: NetworkRates;
 }
 
 export function ResourceMetricCard({
@@ -37,6 +39,8 @@ export function ResourceMetricCard({
             usage={metric.diskUsage}
             {...(metric.detail ? { detail: metric.detail } : {})}
           />
+        ) : metric.networkRates ? (
+          <ResourceNetworkRates rates={metric.networkRates} />
         ) : (
           <div className="truncate text-xl font-semibold tabular-nums" title={metric.value}>
             {metric.value}

@@ -28,6 +28,7 @@ describe("network resource widget", () => {
       value: "↓ 1.03 MiB/s · ↑ 1.02 MiB/s",
       status: "ready",
       historyStyle: "network",
+      networkRates: { download: "1.03 MiB/s", upload: "1.02 MiB/s" },
     });
   });
 
@@ -37,6 +38,17 @@ describe("network resource widget", () => {
       networkTransmittedBytesPerSecond: { value: 0, status: "warming", sampledAtMs: 1 },
     } as unknown as MonitorSnapshot;
 
-    expect(displayWidget(snapshot, "network").status).toBe("warming");
+    expect(displayWidget(snapshot, "network")).toMatchObject({
+      status: "warming",
+      networkRates: { download: "1.00 KiB/s", upload: "—" },
+    });
+  });
+
+  it("keeps both directions labeled before the first snapshot", () => {
+    expect(displayWidget(null, "network")).toMatchObject({
+      status: "warming",
+      networkRates: { download: "—", upload: "—" },
+      historyStyle: "network",
+    });
   });
 });

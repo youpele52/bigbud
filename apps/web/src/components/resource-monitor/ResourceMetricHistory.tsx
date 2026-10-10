@@ -24,7 +24,7 @@ export function ResourceMetricHistory({
                   formatHistoryTooltipValue(
                     value,
                     metric.historyValueFormatter,
-                    metric.historyStyle === "network" && name === "Sent",
+                    metric.historyStyle === "network" && name === "Upload",
                   )
                 }
               />
@@ -37,7 +37,7 @@ export function ResourceMetricHistory({
               <Area
                 type="monotone"
                 dataKey="value"
-                name="Received"
+                name="Download"
                 baseValue={0}
                 stroke="var(--chart-2)"
                 fill="var(--chart-2)"
@@ -47,7 +47,7 @@ export function ResourceMetricHistory({
               <Area
                 type="monotone"
                 dataKey="sentValue"
-                name="Sent"
+                name="Upload"
                 baseValue={0}
                 stroke="var(--chart-4)"
                 fill="var(--chart-4)"

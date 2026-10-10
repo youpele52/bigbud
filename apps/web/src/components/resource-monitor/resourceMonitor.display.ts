@@ -29,7 +29,16 @@ export function displayWidget(
   snapshot: MonitorSnapshot | null,
   widget: ResourceWidget,
 ): DisplayMetric {
-  if (!snapshot) return { label: WIDGET_LABELS[widget], value: "—", status: "warming" };
+  if (!snapshot) {
+    return {
+      label: WIDGET_LABELS[widget],
+      value: "—",
+      status: "warming",
+      ...(widget === "network"
+        ? { networkRates: { download: "—", upload: "—" }, historyStyle: "network" as const }
+        : {}),
+    };
+  }
   switch (widget) {
     case "cpu":
       return {
@@ -93,6 +102,10 @@ export function displayWidget(
       return {
         label: "Network",
         value: `↓ ${show(snapshot.networkReceivedBytesPerSecond, formatRate)} · ↑ ${show(snapshot.networkTransmittedBytesPerSecond, formatRate)}`,
+        networkRates: {
+          download: show(snapshot.networkReceivedBytesPerSecond, formatRate),
+          upload: show(snapshot.networkTransmittedBytesPerSecond, formatRate),
+        },
         historyValueFormatter: formatRate,
         historyStyle: "network",
         status:

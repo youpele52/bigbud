@@ -33,4 +33,23 @@ describe("ResourceNetworkInterfaces", () => {
     expect(markup).toContain("Link: unavailable");
     expect(markup).not.toContain("MTU: 0.00 B");
   });
+
+  it("uses Download and Upload for interface speeds", () => {
+    const markup = renderToStaticMarkup(
+      <ResourceNetworkInterfaces
+        interfaces={[
+          {
+            name: "en0",
+            receivedBytesPerSecond: { value: 1_024, status: "ready", sampledAtMs: 1 },
+            transmittedBytesPerSecond: { value: 2_048, status: "ready", sampledAtMs: 1 },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Download 1.00 KiB/s");
+    expect(markup).toContain("Upload 2.00 KiB/s");
+    expect(markup).not.toContain("Received");
+    expect(markup).not.toContain("Sent");
+  });
 });

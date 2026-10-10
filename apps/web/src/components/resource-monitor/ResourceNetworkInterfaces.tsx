@@ -35,9 +35,9 @@ export function ResourceNetworkInterfaces({
                 {showMetric(item.mtuBytes, (value) => `${formatDecimal(value)} B`)}
               </p>
               <p className="text-xs text-muted-foreground">
-                Received{" "}
+                Download{" "}
                 {showMetric(item.receivedBytesPerSecond, (value) => `${formatBytes(value)}/s`)} ·
-                Sent{" "}
+                Upload{" "}
                 {showMetric(item.transmittedBytesPerSecond, (value) => `${formatBytes(value)}/s`)}
               </p>
               <p className="text-xs text-muted-foreground">
