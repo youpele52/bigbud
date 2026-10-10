@@ -51,6 +51,8 @@ export const ServerProviderModel = Schema.Struct({
   group: Schema.optional(TrimmedNonEmptyString),
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Used by the adapter to send the correct providerID in API calls. */
   subProviderID: Schema.optional(TrimmedNonEmptyString),
+  /** Catalog browsing is not credential proof; only native discovery establishes selectability. */
+  availability: Schema.optional(Schema.Literals(["available", "requires-setup"])),
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 
@@ -175,6 +177,16 @@ export const ServerProvider = Schema.Struct({
   version: Schema.NullOr(TrimmedNonEmptyString),
   status: ServerProviderState,
   auth: ServerProviderAuth,
+  runtimeUpdateRecommended: Schema.optional(TrimmedNonEmptyString),
+  nativeAgents: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: TrimmedNonEmptyString,
+        name: TrimmedNonEmptyString,
+        description: Schema.optional(Schema.String),
+      }),
+    ),
+  ),
   checkedAt: IsoDateTime,
   initialProbeComplete: Schema.optional(Schema.Boolean),
   message: Schema.optional(TrimmedNonEmptyString),
@@ -189,6 +201,7 @@ export const ServerProvider = Schema.Struct({
   skills: ServerProviderSkills,
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
   supportsSteer: Schema.optional(Schema.Boolean),
+  supportsAttachments: Schema.optional(Schema.Boolean),
   turnControl: Schema.optional(
     Schema.Struct({
       nativeSteer: Schema.Boolean,

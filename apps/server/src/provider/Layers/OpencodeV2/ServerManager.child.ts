@@ -9,6 +9,7 @@ import { assertDevelopmentVersion, validateOwnedEndpoint } from "./Compatibility
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
 
 export interface V2ProcessConfig {
+  readonly sharedService?: import("./SharedService.storage.ts").V2SharedStorage;
   readonly binaryPath: string;
   readonly profileRoot: string;
   readonly runtimeTargetId: string;
@@ -17,6 +18,7 @@ export interface V2ProcessConfig {
 }
 
 export interface OwnedV2Process {
+  readonly ownership?: "borrowed";
   readonly client: OpencodeV2Client;
   readonly isRunning: () => boolean;
   /** Physical generation-exit proof, not a logical stopping/transport-health flag. */

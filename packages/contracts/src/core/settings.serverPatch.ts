@@ -175,6 +175,8 @@ export const ServerSettingsPatch = Schema.Struct({
           enabled: Schema.optionalKey(Schema.Boolean),
           binaryPath: Schema.optionalKey(Schema.String),
           profileRoot: Schema.optionalKey(Schema.String),
+          connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),
+          serviceFile: Schema.optionalKey(Schema.String),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

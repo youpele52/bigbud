@@ -77,7 +77,11 @@ export class OpencodeV2ServerManager {
 
   private forgetSettled(key: string, entry: Entry) {
     if (
-      (!entry.process || v2ProcessExited(entry.process)) &&
+      (!entry.process ||
+        v2ProcessExited(entry.process) ||
+        (entry.process.ownership === "borrowed" &&
+          entry.closing &&
+          (this.closed || entry.references === 0))) &&
       entry.startupSettled &&
       this.entries.get(key) === entry
     ) {
@@ -93,7 +97,7 @@ export class OpencodeV2ServerManager {
       config.runtimeTargetId,
       resolvePath(config.binaryPath),
       resolvePath(config.profileRoot),
-      config.workspaceRoot ?? null,
+      config.sharedService ? "shared" : (config.workspaceRoot ?? null),
     ]);
     let entry = this.entries.get(key);
     if (!entry) {
@@ -188,6 +192,10 @@ export class OpencodeV2ServerManager {
       process,
       hub: owned.hub!,
       claimExclusive: () => {
+        if (process.ownership === "borrowed")
+          throw new Error(
+            "Shared native service cannot be exclusively owned or globally mutated by bigbud.",
+          );
         if (released || owned.references !== 1 || !process.isRunning())
           throw new Error("OpenCode v2 process is not exclusively owned.");
         owned.exclusive = true;

@@ -6,9 +6,7 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import { runtimePromptFingerprint } from "./Runtime.admission.ts";
 import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { createHash } from "node:crypto";
-import { realpath } from "node:fs/promises";
-import path from "node:path";
-import { v2StorageIdentity } from "./Runtime.sessions.ts";
+import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
 
 /** Durable job identity reuses terminal results, never retries uncertain execution or applies memory. */
@@ -25,33 +23,45 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
           "V2 learning execution is failed/unconfirmed; durable admission retained. No resend or result application.",
       });
     const read = () => runtime.options.journal.find(owned.identity);
+    const startInput = {
+      threadId: owned.threadId,
+      provider: "opencodeV2" as const,
+      cwd: request.cwd,
+      modelSelection: request.modelSelection,
+      runtimeMode: "approval-required" as const,
+      ...(request.providerRuntimeExecutionTargetId
+        ? { providerRuntimeExecutionTargetId: request.providerRuntimeExecutionTargetId }
+        : {}),
+      ...(request.workspaceExecutionTargetId
+        ? { workspaceExecutionTargetId: request.workspaceExecutionTargetId }
+        : {}),
+    };
     yield* runtime.options.journal
       .assertOwnerAvailable(request.ownerThreadId)
       .pipe(Effect.mapError(() => fail("runBackgroundReview")));
     const result = yield* read().pipe(Effect.mapError(() => fail("runBackgroundReview")));
     if (result?.state === "terminal") {
-      const runtimeTarget =
-        request.providerRuntimeExecutionTargetId ?? runtime.options.config.runtimeTargetId;
-      const workspaceTarget = request.workspaceExecutionTargetId ?? runtimeTarget;
       const binding = yield* Effect.tryPromise({
-        try: async () => ({
-          root:
-            runtimeTarget === "local"
-              ? await realpath(runtime.options.config.profileRoot)
-              : path.posix.resolve(runtime.options.config.profileRoot),
-          directory:
-            runtimeTarget === "local"
-              ? await realpath(request.cwd)
-              : path.posix.resolve(request.cwd),
-        }),
+        try: async (signal) => {
+          const prepared = await runtime.options.prepareSession?.(startInput, signal, true);
+          try {
+            return await resolveV2RuntimeBinding(
+              prepared?.options ?? runtime.options,
+              prepared?.input ?? startInput,
+            );
+          } finally {
+            await prepared?.resources.cleanup();
+          }
+        },
         catch: () => fail("runBackgroundReview"),
       });
       if (
-        runtimeTarget !== runtime.options.config.runtimeTargetId ||
         result.binding.location !== binding.directory ||
-        result.binding.storageIdentity !== v2StorageIdentity(runtimeTarget, binding.root) ||
-        result.binding.runtimeTargetId !== runtimeTarget ||
-        result.binding.workspaceTargetId !== workspaceTarget
+        result.binding.storageIdentity !== binding.storageIdentity ||
+        result.binding.nativeSessionId !== binding.nativeSessionId ||
+        result.binding.threadId !== owned.threadId ||
+        result.binding.runtimeTargetId !== binding.runtimeTarget ||
+        result.binding.workspaceTargetId !== binding.workspaceTarget
       )
         return yield* fail("runBackgroundReview");
       const selection = request.modelSelection;
@@ -82,24 +92,7 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
     const attempt = new V2StartAttempt();
     const run = Effect.gen(function* () {
       yield* Effect.tryPromise({
-        try: () =>
-          runtime.start(
-            {
-              threadId: owned.threadId,
-              provider: "opencodeV2",
-              cwd: request.cwd,
-              modelSelection: request.modelSelection,
-              runtimeMode: "approval-required",
-              ...(request.providerRuntimeExecutionTargetId
-                ? { providerRuntimeExecutionTargetId: request.providerRuntimeExecutionTargetId }
-                : {}),
-              ...(request.workspaceExecutionTargetId
-                ? { workspaceExecutionTargetId: request.workspaceExecutionTargetId }
-                : {}),
-            },
-            attempt,
-            true,
-          ),
+        try: () => runtime.start(startInput, attempt, true),
         catch: () => fail("runBackgroundReview"),
       });
       yield* Effect.tryPromise({
