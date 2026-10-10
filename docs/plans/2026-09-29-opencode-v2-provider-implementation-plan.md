@@ -1,10 +1,12 @@
 # OpenCode v2 Side-by-Side Provider Implementation Plan
 
+> **Current execution index — 8 October 2026:** Use [OpenCode V2 Preview Completion Plan](./2026-10-08-opencode-v2-preview-completion-plan.md) for the audited implementation matrix, current official documentation and remaining phases. This file is the historical design/checkpoint ledger. Its dormant-provider, supervised-only, scheduled-work prohibition and 1 MiB media descriptions were superseded by committed implementation. Original identity/ownership/no-resend invariants and AC1–AC8/D1–D8 remain applicable unless explicitly amended. Old parent-session pauses and temporary handoffs are not current task instructions.
+
 ## 1. Metadata and Readiness
 
-- **Status:** Ready for implementation of strictly opt-in isolated development execution — latest user steering requires useful bigbud routing rather than an unconditionally dormant composition. Public preview remains blocked by Phase 0 and §4 evidence/approval gates.
+- **Status:** In progress — substantial side-by-side Preview implementation committed; remaining work is tracked in the 8 October completion plan. Full-scope release conformance remains incomplete.
 - **Created:** 2026-09-29T23:17:50+02:00 (this rewrite; the original document recorded only 29 September 2026).
-- **Last modified:** 2026-09-30T01:51:36+02:00.
+- **Last reviewed:** 2026-10-08. Historical checkpoint dates below are retained.
 - **Project root:** `/Users/youpele/DevWorld/bigbud`.
 - **Inspected branch:** `dev`.
 - **Inspected commit:** `7142d10c6a9d3ccfb13c9dcb844b3916f33d8e5c`.

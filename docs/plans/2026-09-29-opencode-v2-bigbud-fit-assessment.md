@@ -2,7 +2,9 @@
 
 **Date:** 29 September, 2026
 
-**Status:** Proposed
+**Status:** Historical assessment — implementation in progress
+
+> **8 October 2026:** The separate provider is now integrated. Use the [current completion plan](./2026-10-08-opencode-v2-preview-completion-plan.md) for code status, documentation changes and remaining implementation. Findings below describe the September 2.0.19 research baseline; they are not fresh claims about latest 2.0.26 behavior. The questions below were subsequently addressed in the original implementation plan's D1–D8; do not restart those decisions from this assessment.
 
 **Owner:** bigbud
 

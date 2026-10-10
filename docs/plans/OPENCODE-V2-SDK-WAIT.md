@@ -8,6 +8,8 @@
 
 **Owner:** bigbud
 
+> **8 October 2026 update:** Waiting for SDK publication is obsolete, and a separate V2 provider already exists alongside V1/Kilo. Follow the [current preview completion plan](./2026-10-08-opencode-v2-preview-completion-plan.md). This document preserves the September research snapshot: its `latest: 2.0.19`, release-age and “no split adapter yet” statements are historical. npm currently reports client 2.0.26; bigbud still pins 2.0.19. V2 form calls in the installed implementation use `session.form.*`, not the historical `session.forms.*` shorthand below.
+
 ## Verdict
 
 The issue raised in the original note was real, but its central upstream blocker is no longer an issue:
