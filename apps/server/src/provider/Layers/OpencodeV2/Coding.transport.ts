@@ -6,6 +6,7 @@ import path from "node:path";
 import { V2CodingBridge } from "./Coding.bridge.ts";
 import { renderV2CodingPlugin } from "./Coding.plugin.ts";
 import { renderV2LegacyCodingPlugin } from "./Coding.plugin.legacy.ts";
+import { renderV2PreviousCodingPlugin } from "./Coding.plugin.previous.ts";
 import { resolveV2OptionalFilePython } from "./Coding.files.owner.ts";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
 
@@ -110,7 +111,8 @@ export async function makeV2CodingTransport(profile: string) {
           throw new Error("V2 owned coding plugin upgrade rejected: invalid callback metadata.");
         if (
           prior !== renderV2CodingPlugin(metadata.url, metadata.token) &&
-          prior !== renderV2LegacyCodingPlugin(metadata.url, metadata.token)
+          prior !== renderV2LegacyCodingPlugin(metadata.url, metadata.token) &&
+          prior !== renderV2PreviousCodingPlugin(metadata.url, metadata.token)
         )
           throw new Error(
             "V2 owned coding plugin upgrade rejected: content differs from exact supported templates.",

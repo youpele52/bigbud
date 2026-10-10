@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 if (process.argv.includes("--version")) {
-  console.log("opencode v2.0.19");
+  console.log("opencode v2.0.26");
   process.exit(0);
 }
 
@@ -24,7 +24,7 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify(data));
   };
   if (request.url === "/api/info") {
-    respond({ version: "2.0.19", pid: process.pid, urls: [], paths: { tmp: process.env.HOME } });
+    respond({ version: "2.0.26", pid: process.pid, urls: [], paths: { tmp: process.env.HOME } });
     return;
   }
   if (request.url === "/api/event") {

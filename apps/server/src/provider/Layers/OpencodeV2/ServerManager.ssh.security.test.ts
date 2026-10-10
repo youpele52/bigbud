@@ -25,7 +25,7 @@ for (const unsafe of ["root", "config"] as const)
       );
       await writeFile(
         binaryPath,
-        `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(launched)}, 'unsafe launch');console.log('2.0.19');`,
+        `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(launched)}, 'unsafe launch');console.log('2.0.26');`,
         { mode: 0o700 },
       );
       await chmod(unsafe === "root" ? root : config, 0o770);

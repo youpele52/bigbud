@@ -40,7 +40,7 @@ process.on("SIGINT", stop);
 process.stdin.on("data", async (chunk) => {
   if (started || stopping) return;
   buffered += chunk.toString("utf8");
-  if (Buffer.byteLength(buffered) > 16384) {
+  if (Buffer.byteLength(buffered) > 32768) {
     process.exitCode = 1;
     process.stdin.destroy();
     return;
@@ -159,7 +159,11 @@ process.stdin.on("data", async (chunk) => {
             .replace(JSON.stringify(`Bearer ${previous.token}`), () =>
               JSON.stringify(`Bearer ${metadata.token}`),
             );
-          if (translated !== input.pluginSource && translated !== input.previousPluginSource)
+          if (
+            translated !== input.pluginSource &&
+            translated !== input.previousPluginSource &&
+            translated !== input.previousNativePluginSource
+          )
             throw new Error("owned coding plugin upgrade rejected: unsupported exact template");
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
@@ -198,7 +202,7 @@ process.stdin.on("data", async (chunk) => {
       timeout: 5000,
       maxBuffer: 1024,
     });
-    if (version.status !== 0 || !/^(?:opencode v)?2\.0\.19\s*$/.test(String(version.stdout)))
+    if (version.status !== 0 || !/^(?:opencode v)?2\.0\.26\s*$/.test(String(version.stdout)))
       throw new Error("version rejected");
     if (stopping) throw new Error("lease ended");
     child = spawn(input.binaryPath, ["serve", "--stdio", "--hostname=127.0.0.1", "--port=0"], {

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, writeFile, readFile, rm } from "node:fs/promi
 import os from "node:os";
 import path from "node:path";
 import { Effect, Layer, Stream } from "effect";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   MessageId,
@@ -24,6 +24,11 @@ import { readV2ApplicationConfig } from "./Application.config.ts";
 import { ServerConfig, type ServerConfigShape } from "../../../startup/config.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Composition fixtures never read a public network catalog.
+vi.mock("./Catalog.public.ts", async (original) => ({
+  ...(await original<typeof import("./Catalog.public.ts")>()),
+  makeV2PublicCatalogLoader: () => async () => ({ models: [], stale: false }),
+}));
 it.skipIf(!binary).each([false, true])(
   "routes V2 through real composition, journal and canonical stream (application=%s)",
   async (application) => {
@@ -67,22 +72,6 @@ it.skipIf(!binary).each([false, true])(
     await mkdir(workspace);
     const attachmentsDir = path.join(root, "uploads");
     await mkdir(attachmentsDir, { mode: 0o700 });
-    await writeFile(
-      path.join(attachmentsDir, "synthetic-upload.txt"),
-      "Synthetic managed attachment",
-      { mode: 0o600 },
-    );
-    const attachments = application
-      ? [
-          {
-            type: "file" as const,
-            id: "synthetic-upload",
-            name: "upload.txt",
-            mimeType: "text/plain",
-            sizeBytes: 28,
-          },
-        ]
-      : [];
     await mkdir(path.join(profileRoot, "config", "opencode"), { recursive: true });
     await writeFile(
       path.join(profileRoot, V2_DEVELOPMENT_MARKER),
@@ -116,7 +105,12 @@ it.skipIf(!binary).each([false, true])(
       ...DEFAULT_SERVER_SETTINGS,
       providers: {
         ...DEFAULT_SERVER_SETTINGS.providers,
-        opencodeV2: { enabled: true, binaryPath: binary!, profileRoot },
+        opencodeV2: {
+          enabled: true,
+          binaryPath: binary!,
+          profileRoot,
+          connectionMode: "isolated" as const,
+        },
       },
     };
     const settingsService = {
@@ -190,7 +184,6 @@ it.skipIf(!binary).each([false, true])(
               threadId,
               requestMessageId: MessageId.makeUnsafe("composed-request"),
               input: "Synthetic output, no tools",
-              attachments,
               modelSelection,
             });
             yield* Effect.promise(async () => {
@@ -222,7 +215,7 @@ it.skipIf(!binary).each([false, true])(
             const snapshot = yield* registration.providerService.refresh;
             expect(snapshot.developmentOnly).toBe(application ? undefined : true);
             expect(snapshot.enabled).toBe(true);
-            expect(snapshot.version).toBe("2.0.19");
+            expect(snapshot.version).toBe("2.0.26");
             expect(snapshot.auth.status).toBe("unknown");
             expect(
               snapshot.models.some(
@@ -245,7 +238,6 @@ it.skipIf(!binary).each([false, true])(
               threadId,
               requestMessageId: MessageId.makeUnsafe("composed-request"),
               input: "Synthetic output, no tools",
-              attachments,
               modelSelection,
             });
             expect(requests).toBe(before);

@@ -45,6 +45,7 @@ export default defineConfig({
   copy: [
     { from: "src/provider/Layers/OpencodeV2/ServerManager.ssh.bootstrap.mjs", to: "dist" },
     { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.mjs", to: "dist" },
+    { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.windows.mjs", to: "dist" },
   ],
   sourcemap: true,
   clean: shouldCleanOutDir(),

@@ -13,7 +13,7 @@ import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
 it.skipIf(!binary)(
-  "pinned 2.0.19 plugin performs actual once-approved file write/edit/read/check and rejects declined writes",
+  "pinned 2.0.26 plugin performs actual once-approved file write/edit/read/check and rejects declined writes",
   async () => {
     const fixture = await makeV2CodingNativeFixture();
     const coding = await makeV2CodingTransport(fixture.profile);
@@ -130,7 +130,9 @@ it.skipIf(!binary)(
                   readFile(path.join(fixture.workspace, "declined.py")),
                 ).rejects.toThrow();
                 expect(fixture.state.advertised.has("bigbud_write")).toBe(true);
-                for (const tool of ["write", "edit", "read", "shell", "skill"])
+                for (const tool of ["read", "shell", "skill"])
+                  expect(fixture.state.advertised.has(tool)).toBe(true);
+                for (const tool of ["subagent"])
                   expect(fixture.state.advertised.has(tool)).toBe(false);
               } finally {
                 await runtime.close();

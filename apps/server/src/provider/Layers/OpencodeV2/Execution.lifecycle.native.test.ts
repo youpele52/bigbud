@@ -38,7 +38,12 @@ for (const action of ["interrupt", "stop", "disable"] as const) {
         ...DEFAULT_SERVER_SETTINGS,
         providers: {
           ...DEFAULT_SERVER_SETTINGS.providers,
-          opencodeV2: { enabled: true, binaryPath: binary!, profileRoot: fixture.profile },
+          opencodeV2: {
+            enabled: true,
+            binaryPath: binary!,
+            profileRoot: fixture.profile,
+            connectionMode: "isolated" as const,
+          },
         },
       };
       try {

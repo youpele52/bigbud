@@ -49,7 +49,7 @@ describe.skipIf(process.platform === "win32")(
       const process = await startOwnedV2Process(input);
       processes.push(process);
       expect(process.isRunning()).toBe(true);
-      expect((await process.client.server.info()).version).toBe("2.0.19");
+      expect((await process.client.server.info()).version).toBe("2.0.26");
       await process.close();
       expect(process.isRunning()).toBe(false);
       expect(await readFile(path.join(input.profileRoot, "synthetic-history"), "utf8")).toBe(

@@ -20,7 +20,7 @@ import { makeV2RemoteAgentFixture } from "./Remote.fixture.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
 it.skipIf(!binary)(
-  "normal application routes local native execution to remote-agent files with mediated tools and staged references",
+  "normal text-only application routes local native execution to remote-agent files with mediated tools",
   async () => {
     const fixture = await makeV2CodingNativeFixture();
     await writeFile(
@@ -43,7 +43,12 @@ it.skipIf(!binary)(
       ...DEFAULT_SERVER_SETTINGS,
       providers: {
         ...DEFAULT_SERVER_SETTINGS.providers,
-        opencodeV2: { enabled: true, binaryPath: binary!, profileRoot: fixture.profile },
+        opencodeV2: {
+          enabled: true,
+          binaryPath: binary!,
+          profileRoot: fixture.profile,
+          connectionMode: "isolated" as const,
+        },
       },
     };
     try {
@@ -82,17 +87,6 @@ it.skipIf(!binary)(
               modelSelection,
               requestMessageId: MessageId.makeUnsafe("native-remote-application-message"),
               input: "synthetic actual remote coding",
-              attachments: [
-                {
-                  type: "path",
-                  id: "remote-source",
-                  path: path.join(fixture.workspace, "code.txt"),
-                  name: "code.txt",
-                  entryKind: "file",
-                  mimeType: "text/plain",
-                  sizeBytes: 0,
-                },
-              ],
             });
             yield* Effect.promise(() =>
               expect

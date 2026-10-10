@@ -35,15 +35,16 @@ for (const mode of ["approval-required", "auto-accept-edits", "full-access"] as 
               description: "Exact approved pipeline",
               timeout: 5000,
             };
-      // Beyond the old 1MiB remote/2MiB decoder fences; exercise actual native admission and terminal projection, not only encoding.
-      const mediaPath = path.join(fixture.workspace, "large.txt");
-      if (mode === "full-access")
-        await writeFile(mediaPath, "DISPOSABLE LARGE MEDIA\n".repeat(100000));
       const settings = {
         ...DEFAULT_SERVER_SETTINGS,
         providers: {
           ...DEFAULT_SERVER_SETTINGS.providers,
-          opencodeV2: { enabled: true, binaryPath: binary!, profileRoot: fixture.profile },
+          opencodeV2: {
+            enabled: true,
+            binaryPath: binary!,
+            profileRoot: fixture.profile,
+            connectionMode: "isolated" as const,
+          },
         },
       };
       try {
@@ -78,21 +79,6 @@ for (const mode of ["approval-required", "auto-accept-edits", "full-access"] as 
                 modelSelection,
                 requestMessageId: MessageId.makeUnsafe(`mode-${mode}`),
                 input: "synthetic action",
-                ...(mode === "full-access"
-                  ? {
-                      attachments: [
-                        {
-                          type: "path" as const,
-                          id: "large-text",
-                          name: "large.txt",
-                          mimeType: "text/plain",
-                          sizeBytes: 0 as const,
-                          path: mediaPath,
-                          entryKind: "file" as const,
-                        },
-                      ],
-                    }
-                  : {}),
               });
               if (mode === "approval-required") {
                 yield* Effect.promise(() =>

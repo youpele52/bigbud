@@ -58,7 +58,7 @@ it.skipIf(process.platform === "win32")(
       const client = makeOwnedClient({ endpoint: endpoint.url, password });
       const info = await client.server.info();
       expect(info.pid).toBe(endpoint.pid);
-      expect(info.version).toBe("2.0.19");
+      expect(info.version).toBe("2.0.26");
       expect(endpoint.url).not.toContain(password);
       await closeOwnedChild(child);
       expect(await readFile(path.join(root, "synthetic-history"), "utf8")).toBe("retained");

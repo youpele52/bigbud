@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { renderV2LegacyCodingPlugin } from "./Coding.plugin.legacy.ts";
 import { renderV2CodingPlugin } from "./Coding.plugin.ts";
+import { renderV2PreviousCodingPlugin } from "./Coding.plugin.previous.ts";
 import { v2SshBootstrapProgram } from "./ServerManager.ssh.ts";
 import { closeOwnedChild } from "./ServerManager.child.ts";
 
@@ -49,6 +50,8 @@ it.skipIf(process.platform === "win32")(
       for (const template of [
         prior,
         renderV2CodingPlugin(priorUrl, priorToken),
+        renderV2PreviousCodingPlugin(priorUrl, priorToken),
+        renderV2PreviousCodingPlugin(priorUrl, priorToken) + "\n// impostor",
         prior + "\n// impostor",
         "hardlink",
         "symlink",
@@ -76,9 +79,16 @@ it.skipIf(process.platform === "win32")(
               password: "a".repeat(43),
               pluginSource: source,
               previousPluginSource: renderV2LegacyCodingPlugin(url, token),
+              previousNativePluginSource: renderV2PreviousCodingPlugin(url, token),
             }) + "\n",
           );
-          if (template === prior || template === renderV2CodingPlugin(priorUrl, priorToken)) {
+          if (
+            [
+              prior,
+              renderV2CodingPlugin(priorUrl, priorToken),
+              renderV2PreviousCodingPlugin(priorUrl, priorToken),
+            ].includes(template)
+          ) {
             await expect.poll(() => output.includes('"url"'), { timeout: 10000 }).toBe(true);
             expect(await readFile(filename, "utf8")).toBe(source);
             await closeOwnedChild(child);

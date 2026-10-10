@@ -21,7 +21,7 @@ import { readThreadOrchestrationToolAuth } from "../../../orchestration-tools/Th
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
 it.skipIf(!binary || process.platform !== "darwin")(
-  "normal pinned-native application executes approved contained shell then exposes canonical background/tool route, never native unsafe tools",
+  "normal pinned-native application executes approved contained shell and independent canonical child with truthful supervised tools",
   async () => {
     const fixture = await makeV2CodingNativeFixture();
     await writeFile(
@@ -34,7 +34,12 @@ it.skipIf(!binary || process.platform !== "darwin")(
       ...DEFAULT_SERVER_SETTINGS,
       providers: {
         ...DEFAULT_SERVER_SETTINGS.providers,
-        opencodeV2: { enabled: true, binaryPath: binary!, profileRoot: fixture.profile },
+        opencodeV2: {
+          enabled: true,
+          binaryPath: binary!,
+          profileRoot: fixture.profile,
+          connectionMode: "isolated" as const,
+        },
       },
     };
     try {
@@ -220,8 +225,10 @@ it.skipIf(!binary || process.platform !== "darwin")(
                 .toBe(true),
             );
             expect(yield* journal.listBound(child.id, 10)).toHaveLength(2);
-            for (const builtin of ["shell", "read", "write", "edit", "skill", "subagent"])
-              expect(fixture.state.advertised.has(builtin)).toBe(false);
+            // Co-located Supervised native tools are available behind explicit approvals, not hidden/contained.
+            for (const builtin of ["shell", "read", "write", "edit", "skill"])
+              expect(fixture.state.advertised.has(builtin)).toBe(true);
+            expect(fixture.state.advertised.has("subagent")).toBe(false);
             expect(fixture.state.advertised.has("bigbud_shell")).toBe(true);
             expect(fixture.state.advertised.has("bigbud_orchestration")).toBe(true);
             yield* adapter.stopAll();

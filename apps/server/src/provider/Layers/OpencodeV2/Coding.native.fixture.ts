@@ -10,6 +10,7 @@ export async function makeV2CodingNativeFixture(contextTokens = 32000) {
     input: { path: "main.py", content: "value = 1\n" } as Record<string, unknown>,
     round: 0,
     modelRequests: 0,
+    requests: [] as Record<string, unknown>[],
     advertised: new Set<string>(),
     textOnlyDelegated: false,
   };
@@ -22,6 +23,7 @@ export async function makeV2CodingNativeFixture(contextTokens = 32000) {
     }
     const input = JSON.parse(body) as { tools?: { function: { name: string } }[] };
     state.modelRequests++;
+    state.requests.push(JSON.parse(body));
     for (const item of input.tools ?? []) state.advertised.add(item.function.name);
     const delegated = state.textOnlyDelegated && body.includes("delegated_thread_provenance");
     const call = !delegated && Boolean(input.tools?.length) && state.round++ % 2 === 0;

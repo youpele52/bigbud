@@ -18,7 +18,7 @@ import { makeV2TargetPreparation } from "./Application.targets.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
 it.skipIf(!binary)(
-  "protected fake SSH forwards actual pinned-native coding/attachments and proves only exact native child exit",
+  "protected fake SSH forwards actual pinned-native text-only coding and proves only exact native child exit",
   async () => {
     const fixture = await makeV2CodingNativeFixture();
     await writeFile(
@@ -114,17 +114,6 @@ it.skipIf(!binary)(
                   modelSelection,
                   requestMessageId: MessageId.makeUnsafe("ssh-media"),
                   input: "synthetic SSH action",
-                  attachments: [
-                    {
-                      type: "path",
-                      id: "ssh-media",
-                      path: path.join(fixture.workspace, "media.txt"),
-                      entryKind: "file",
-                      name: "media.txt",
-                      mimeType: "text/plain",
-                      sizeBytes: 0,
-                    },
-                  ],
                 });
                 await expect
                   .poll(

@@ -14,6 +14,7 @@ import {
 import { observeV2SshBootstrap } from "./ServerManager.ssh.protocol.ts";
 import { renderV2CodingPlugin } from "./Coding.plugin.ts";
 import { renderV2LegacyCodingPlugin } from "./Coding.plugin.legacy.ts";
+import { renderV2PreviousCodingPlugin } from "./Coding.plugin.previous.ts";
 import { V2UnconfirmedProcessStartup } from "./ServerManager.lifecycle.ts";
 
 export async function v2SshBootstrapInvocation(targetId: string) {
@@ -169,6 +170,10 @@ export async function startOwnedV2SshProcess(
                 config.codingEndpoint.token,
               ),
               previousPluginSource: renderV2LegacyCodingPlugin(
+                `http://127.0.0.1:${codingPort}/invoke`,
+                config.codingEndpoint.token,
+              ),
+              previousNativePluginSource: renderV2PreviousCodingPlugin(
                 `http://127.0.0.1:${codingPort}/invoke`,
                 config.codingEndpoint.token,
               ),

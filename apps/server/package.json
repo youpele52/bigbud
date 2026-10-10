@@ -35,7 +35,7 @@
     "@github/copilot": "1.0.73",
     "@github/copilot-sdk": "1.0.7",
     "@opencode-ai/sdk": "^1.17.13",
-    "@opencode/client": "2.0.19",
+    "@opencode/client": "2.0.26",
     "@pierre/diffs": "^1.2.12",
     "effect": "catalog:",
     "effect-acp": "workspace:*",

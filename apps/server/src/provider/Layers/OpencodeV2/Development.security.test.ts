@@ -47,7 +47,7 @@ it.skipIf(process.platform === "win32")(
       const launches = path.join(root, "launches");
       await writeFile(
         binary,
-        `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(launches)}, 'unsafe launch');console.log('2.0.19');`,
+        `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(launches)}, 'unsafe launch');console.log('2.0.26');`,
         { mode: 0o700 },
       );
       const environment = {
