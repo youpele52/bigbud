@@ -90,7 +90,11 @@ it("does not refresh again when a registry listener reads a configuration failur
           ...current,
           providers: {
             ...current.providers,
-            opencodeV2: { ...current.providers.opencodeV2, enabled: true },
+            opencodeV2: {
+              ...current.providers.opencodeV2,
+              enabled: true,
+              connectionMode: "isolated",
+            },
           },
         };
         const snapshot = yield* registration!.providerService.refresh;

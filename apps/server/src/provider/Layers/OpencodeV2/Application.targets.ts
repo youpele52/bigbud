@@ -24,6 +24,10 @@ export function makeV2TargetPreparation(
     });
     const runtimeTarget = context.providerRuntimeTarget.executionTargetId;
     const workspaceTarget = context.workspaceTarget.executionTargetId;
+    if (options.config.sharedService && (runtimeTarget !== "local" || workspaceTarget !== "local"))
+      throw new Error(
+        "Shared OpenCode v2 currently supports local workspaces only. Select explicit isolated mode for a separately qualified remote target; no local fallback was attempted.",
+      );
     if (runtimeTarget !== "local" && runtimeTarget !== workspaceTarget)
       throw new Error(
         "V2 SSH runtime must use its own remote workspace target; no mixed-host path guessing.",
@@ -33,7 +37,7 @@ export function makeV2TargetPreparation(
     await options.authorizeExecution?.();
     signal.throwIfAborted();
     const prepareTools = () =>
-      !disableTools && httpPort
+      !options.config.sharedService && !disableTools && httpPort
         ? prepareV2Orchestration(stateDir, input.threadId, httpPort)
         : Promise.resolve(undefined);
     if (workspaceTarget === "local") {
@@ -83,8 +87,10 @@ export function makeV2TargetPreparation(
       const resources = {
         ...(orchestration ? { orchestration: orchestration.httpConfig } : {}),
         codingFiles: remote,
-        media: (turn: Parameters<typeof prepareV2RemoteMedia>[0]) =>
-          prepareV2RemoteMedia(turn, remote, options.attachmentsDir),
+        media: (
+          turn: Parameters<typeof prepareV2RemoteMedia>[0],
+          mediaOptions?: Parameters<typeof prepareV2RemoteMedia>[3],
+        ) => prepareV2RemoteMedia(turn, remote, options.attachmentsDir, mediaOptions),
         cleanup: () => {
           remote.close();
           return (cleanup ??= Promise.all([bridge?.cleanup(), orchestration?.cleanup()]).then(

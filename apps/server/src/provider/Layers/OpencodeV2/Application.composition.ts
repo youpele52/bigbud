@@ -20,9 +20,26 @@ import { makeV2TargetPreparation } from "./Application.targets.ts";
 import { startOwnedV2SshProcess } from "./ServerManager.ssh.ts";
 import { startOwnedV2Process } from "./ServerManager.child.ts";
 import { V2_APPLICATION_CAPABILITIES } from "./Application.capabilities.ts";
+import { readV2SharedApplicationConfig } from "./Application.shared.ts";
+import { borrowV2SharedService } from "./SharedService.connection.ts";
+import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { Schedule } from "effect";
+import path from "node:path";
+import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
+import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
 
-const keyOf = (value: { binaryPath: string; profileRoot: string }) =>
-  JSON.stringify([value.binaryPath, value.profileRoot]);
+const keyOf = (value: {
+  binaryPath: string;
+  profileRoot: string;
+  connectionMode?: "shared" | "isolated";
+  serviceFile?: string;
+}) =>
+  JSON.stringify([
+    resolveOpencodeV2ConnectionMode(value),
+    value.binaryPath,
+    value.profileRoot,
+    value.serviceFile ?? "",
+  ]);
 
 /** Settings-driven local preview. Harness authorization never leaks into application routing. */
 export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistration")(
@@ -43,6 +60,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       Effect.map((value) => value.providers.opencodeV2),
       Effect.mapError(() => failure("V2 settings are unavailable.")),
     );
+    let lastFailureVersion: string | undefined;
     let initialized:
       | {
           key: string;
@@ -63,14 +81,24 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             );
           return initialized;
         }
+        lastFailureVersion = undefined;
         const config = yield* Effect.tryPromise({
-          try: () => readV2ApplicationConfig(value),
-          catch: (error) =>
-            failure(
-              error instanceof Error && error.message.startsWith("V2 ")
+          try: () =>
+            resolveOpencodeV2ConnectionMode(value) === "isolated"
+              ? readV2ApplicationConfig(value)
+              : readV2SharedApplicationConfig(
+                  value,
+                  Option.isSome(serverConfig) ? serverConfig.value.cwd : process.cwd(),
+                ),
+          catch: (error) => {
+            if (error instanceof V2SharedServiceError) lastFailureVersion = error.version;
+            return failure(
+              error instanceof V2SharedServiceError ||
+                (error instanceof Error && error.message.startsWith("V2 "))
                 ? error.message
                 : "V2 profile could not be initialized. Choose a new dedicated directory with an existing private parent, or an existing bigbud-owned V2 profile.",
-            ),
+            );
+          },
         });
         yield* inspectV2Admissions(journal).pipe(
           Effect.mapError(() =>
@@ -78,7 +106,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           ),
         );
         const coding = yield* Effect.tryPromise({
-          try: () => makeV2CodingTransport(config.process.profileRoot),
+          try: () =>
+            config.process.sharedService
+              ? Promise.resolve(undefined)
+              : makeV2CodingTransport(config.process.profileRoot),
           catch: (error) =>
             failure(
               error instanceof Error && error.message.includes("plugin")
@@ -86,15 +117,17 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
                 : "V2 bounded coding bridge requires Unix/Python 3 and private app storage.",
             ),
         });
-        yield* Effect.addFinalizer(() => Effect.promise(() => coding.close())).pipe(
-          Scope.provide(scope),
-        );
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(() => coding?.close() ?? Promise.resolve()),
+        ).pipe(Scope.provide(scope));
         const manager = new OpencodeV2ServerManager({
           maxProcesses: 26,
           start: (config) =>
-            config.runtimeTargetId === "local"
-              ? startOwnedV2Process(config)
-              : startOwnedV2SshProcess(config, { protectedBootstrapConformance: true }),
+            config.sharedService
+              ? borrowV2SharedService(config.sharedService)
+              : config.runtimeTargetId === "local"
+                ? startOwnedV2Process(config)
+                : startOwnedV2SshProcess(config, { protectedBootstrapConformance: true }),
           maxOwners: 32,
           maxQueuedEvents: 256,
           maxEventBytes: 2000000,
@@ -103,12 +136,18 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         const executionOptions = {
           manager,
           journal,
-          config: { ...config.process, codingEndpoint: coding.endpoint },
-          codingBridge: coding.bridge,
+          config: { ...config.process, ...(coding ? { codingEndpoint: coding.endpoint } : {}) },
+          ...(coding ? { codingBridge: coding.bridge } : {}),
           allowLocalWorkspace: true,
           enableLocalTools: true,
           ...(Option.isSome(serverConfig)
-            ? { attachmentsDir: serverConfig.value.attachmentsDir }
+            ? {
+                attachmentsDir: serverConfig.value.attachmentsDir,
+                attachmentAdmissionsDir: path.join(
+                  serverConfig.value.stateDir,
+                  "opencode-v2-attachment-admissions",
+                ),
+              }
             : {}),
           authorizeExecution: async () => {
             const current = await Effect.runPromise(configuration);
@@ -150,15 +189,15 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         checkedAt: new Date().toISOString(),
         models: [],
         probe: {
-          installed: false,
-          version: null,
+          installed: lastFailureVersion !== undefined,
+          version: lastFailureVersion ?? null,
           status: "warning",
           auth: { status: "unknown" },
           message,
         },
       });
     const disabledMessage =
-      "OpenCode v2 (Preview) is disabled. Choose a separate binary/private owned profile outside workspaces. Co-located native tools follow explicit approval/Full access host-user trust (not a sandbox); Auto edits use bounded canonical files. Synthetic remote Locations deny native file/shell tools. Canonical delegated threads and contained macOS commands remain available; remote absent-create/handle-close require agent protocol support.";
+      "OpenCode v2 is disabled. Enable to connect to your existing native TUI service. Isolated storage is optional in advanced settings.";
     const initialSnapshot = yield* configuration.pipe(
       Effect.match({
         onFailure: () => unavailable(false, "V2 settings are unavailable."),
@@ -204,16 +243,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
     const dormant = makeDormantOpencodeV2Adapter();
     const adapter: OpencodeV2AdapterShape = {
       ...dormant,
-      capabilities: {
-        ...dormant.capabilities,
-        durableLearningReview: true,
-        turnControl: {
-          nativeSteer: false,
-          interruptTarget: "current-session",
-          activeTurnInspection: "best-effort",
-          continuation: false,
-        },
-      },
+      capabilities: V2_EXECUTION_CAPABILITIES,
       runBackgroundReview: (input) => invoke((active) => active.runBackgroundReview!(input)),
       startSession: (input) => invoke((active) => active.startSession(input)),
       sendTurn: (input) => invoke((active) => active.sendTurn(input)),
@@ -240,6 +270,16 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       Effect.forkScoped,
     );
     if (initialSnapshot.enabled) yield* refresh.pipe(Effect.forkScoped);
+    yield* Effect.repeat(
+      configuration.pipe(
+        Effect.flatMap((value) =>
+          value.enabled && resolveOpencodeV2ConnectionMode(value) === "shared"
+            ? refresh
+            : Effect.void,
+        ),
+      ),
+      Schedule.fixed("15 seconds"),
+    ).pipe(Effect.forkScoped);
     return {
       provider: "opencodeV2",
       adapterService: adapter,
@@ -249,7 +289,17 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         refreshWithRecovery: () => refresh,
         streamChanges: snapshots.streamChanges,
       },
-      capabilities: V2_APPLICATION_CAPABILITIES,
+      capabilities: (yield* configuration.pipe(
+        Effect.map((value) => resolveOpencodeV2ConnectionMode(value) === "isolated"),
+        Effect.orElseSucceed(() => false),
+      ))
+        ? V2_APPLICATION_CAPABILITIES
+        : {
+            ...V2_APPLICATION_CAPABILITIES,
+            supportsRemoteProviderRuntime: false,
+            supportsLocalRuntimeRemoteWorkspace: false,
+            needsBuiltinsDisabled: false,
+          },
     } satisfies OptionalProviderRegistration;
   },
 );

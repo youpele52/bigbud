@@ -27,9 +27,31 @@ describe("V2 independent model catalog normalization", () => {
       "/synthetic",
     );
     expect(result.map((entry) => entry.subProviderID)).toEqual(["provider-one", "provider-two"]);
+    expect(result[0]?.group).toBe("Provider One");
     expect(result[0]?.capabilities?.reasoningEffortLevels).toEqual([
       { value: "high", label: "high" },
     ]);
+  });
+  it("takes native provider display metadata without copying private settings", () => {
+    const result = normalizeV2Catalog(
+      { location: { directory: "/synthetic" }, data: [model] },
+      "/synthetic",
+      {
+        location: { directory: "/synthetic" },
+        data: [
+          {
+            id: model.providerID,
+            name: "Company AI Gateway",
+            activation: "auto",
+            package: "synthetic",
+            settings: { apiKey: "never-publish" },
+          },
+        ],
+      },
+    );
+    expect(result[0]?.group).toBe("Company AI Gateway");
+    expect(result[0]?.availability).toBe("available");
+    expect(JSON.stringify(result)).not.toContain("never-publish");
   });
   it("rejects ambiguous ownership/identity and never marks disabled models available", () => {
     expect(() =>

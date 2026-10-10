@@ -22,6 +22,7 @@ import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
 import { PluginRegistry } from "../../plugins/Services/PluginRegistry";
 import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/DiscoveryRegistry";
+import { ProviderRegistry } from "../Services/ProviderRegistry";
 import {
   buildDiscoveryConfigDescriptors,
   buildDiscoveryFileDescriptors,
@@ -132,6 +133,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
   const pluginRegistry = yield* Effect.serviceOption(PluginRegistry);
+  const providerRegistry = yield* Effect.serviceOption(ProviderRegistry);
   const fallbackRescanInterval = resolveDiscoveryFallbackRescanInterval();
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerDiscoveryCatalog>(),
@@ -271,6 +273,29 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       for (const entries of discoveredConfigAgents) {
         agentEntries.push(...entries);
       }
+      if (Option.isSome(providerRegistry)) {
+        const providers = yield* providerRegistry.value.getProviders;
+        const native = providers.find(
+          (provider) => provider.provider === "opencodeV2" && provider.enabled,
+        );
+        for (const agent of native?.nativeAgents ?? [])
+          agentEntries.push({
+            id: `opencodeV2:native:${agent.id}`,
+            provider: "opencodeV2",
+            name: agent.name,
+            source: "config",
+            ...(agent.description ? { description: agent.description } : {}),
+          });
+        for (const skill of native?.skills ?? [])
+          skillEntries.push({
+            id: `opencodeV2:native:${skill.path}`,
+            provider: "opencodeV2",
+            name: skill.name,
+            source: "config",
+            sourcePath: skill.path,
+            ...(skill.description ? { description: skill.description } : {}),
+          });
+      }
 
       const catalog = {
         agents: mergeEntries(agentEntries),
@@ -313,6 +338,10 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
     );
   }
   const watchTargets = yield* resolveWatchTargets();
+  if (Option.isSome(providerRegistry))
+    yield* Stream.runForEach(providerRegistry.value.streamChanges, () => syncCatalog()).pipe(
+      Effect.forkScoped,
+    );
   yield* Effect.logInfo(
     `[DiscoveryRegistry] watching ${watchTargets.length} roots for auto-discovery changes`,
   );

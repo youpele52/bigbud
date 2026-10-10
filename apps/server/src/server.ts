@@ -305,11 +305,11 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ThreadRetentionLayerLive),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
+  Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
-  Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(

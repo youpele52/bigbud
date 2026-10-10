@@ -21,9 +21,9 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
             const settings = yield* ServerSettingsService;
             const registrations = yield* composeOptionalProviders([], {});
             const registration = registrations[0]!;
-            expect(registration.capabilities.needsBuiltinsDisabled).toBe(true);
-            expect(registration.capabilities.supportsRemoteProviderRuntime).toBe(true);
-            expect(registration.capabilities.supportsLocalRuntimeRemoteWorkspace).toBe(true);
+            expect(registration.capabilities.needsBuiltinsDisabled).toBe(false);
+            expect(registration.capabilities.supportsRemoteProviderRuntime).toBe(false);
+            expect(registration.capabilities.supportsLocalRuntimeRemoteWorkspace).toBe(false);
             const disabled = yield* registration.providerService.getSnapshot;
             expect(disabled).toMatchObject({ provider: "opencodeV2", enabled: false, models: [] });
             expect(disabled.developmentOnly).toBeUndefined();
@@ -31,6 +31,7 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
               providers: {
                 opencodeV2: {
                   enabled: true,
+                  connectionMode: "isolated",
                   binaryPath,
                   profileRoot: path.join(
                     parent,
@@ -46,7 +47,7 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
               status: "warning",
               models: [],
             });
-            expect(snapshot.message).toContain("2.0.19");
+            expect(snapshot.message).toContain("2.0.26");
             const started = yield* registration.adapterService
               .startSession({
                 threadId: ThreadId.makeUnsafe("not-ready"),
@@ -110,6 +111,7 @@ it("publishes readiness changes when saved V2 settings change without manual ref
               ...current.providers,
               opencodeV2: {
                 enabled: true,
+                connectionMode: "isolated",
                 binaryPath: "",
                 profileRoot: "",
               },
