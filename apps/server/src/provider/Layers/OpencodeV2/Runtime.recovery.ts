@@ -13,6 +13,7 @@ import { v2Request } from "./Client.ts";
 import { flushV2FinalEvents, queueV2FinalEvents } from "./Runtime.finalization.ts";
 import { v2RuntimeStatus } from "./Runtime.status.ts";
 import { isV2AssistantSettled } from "./Projection.ts";
+import { v2NativeFailureMessage } from "./Runtime.failure.ts";
 
 /** Invalidate pending interaction and output ownership immediately on owned process exit. */
 export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
@@ -214,7 +215,7 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
         type: "turn.completed",
         payload: {
           state: outcome,
-          ...(outcome === "failed" ? { errorMessage: "OpenCode v2 native execution failed." } : {}),
+          ...(outcome === "failed" ? { errorMessage: v2NativeFailureMessage(last) } : {}),
           totalCostUsd: projection.assistants.reduce(
             (sum, message) => sum + (message.cost ?? 0),
             0,
