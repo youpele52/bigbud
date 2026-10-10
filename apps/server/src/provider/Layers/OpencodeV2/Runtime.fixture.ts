@@ -1,7 +1,11 @@
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import type {
+  ModelRef,
+  ModelInfo,
+  InstructionEntryInfo,
   SessionInfo,
   SessionMessageInfo,
   SessionInboxUser,
@@ -23,9 +27,33 @@ export class V2RuntimeHttpFixture {
   readonly sessions = new Map<string, SessionInfo>();
   readonly messages = new Map<string, SessionMessageInfo[]>();
   readonly inbox = new Map<string, SessionInboxUser[]>();
+  readonly instructions = new Map<string, InstructionEntryInfo[]>();
   readonly forms = new Map<string, FormDetail[]>();
   readonly permissions = new Map<string, PermissionRequest[]>();
-  readonly calls: { method: string; pathname: string; body: Record<string, unknown> }[] = [];
+  /** Independent configured inventory; a saved session never makes an unavailable model selectable. */
+  readonly models: ModelInfo[] = [
+    { providerID: "synthetic-provider", id: "synthetic-model" },
+    { providerID: "synthetic-provider", id: "second-model" },
+    { providerID: "synthetic", id: "model" },
+  ].map(({ providerID, id }) => ({
+    providerID,
+    id,
+    modelID: id,
+    name: id,
+    enabled: true,
+    status: "active" as const,
+    variants: [{ id: "high" }, { id: "low" }, { id: "precise" }],
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    time: { released: 1 },
+    cost: [],
+    limit: { context: 1000, output: 100 },
+  }));
+  readonly calls: {
+    method: string;
+    pathname: string;
+    search: string;
+    body: Record<string, unknown>;
+  }[] = [];
   readonly source = new FixtureEvents();
   readonly deaths = new Set<() => void>();
   running = true;
@@ -33,6 +61,8 @@ export class V2RuntimeHttpFixture {
   autoComplete = true;
   fail = false;
   hideAdmission = false;
+  modelUnavailable = false;
+  readonly modelHttpFailures = new Map<string, number>();
   failInterrupt = false;
   readonly client = makeOwnedClient({
     endpoint: "http://127.0.0.1:45991",
@@ -54,11 +84,32 @@ export class V2RuntimeHttpFixture {
     const method = init?.method ?? "GET";
     const body: Record<string, unknown> =
       typeof init?.body === "string" ? JSON.parse(init.body) : {};
-    this.calls.push({ method, pathname, body });
+    this.calls.push({ method, pathname, search: new URL(url).search, body });
     if (pathname.includes("experimental/mcp")) return new Response(null, { status: 204 });
-    const sessionId = pathname.split("/")[3] ?? "";
+    const parts = pathname.split("/");
+    const sessionId = parts[parts.indexOf("session") + 1] ?? "";
     const response = (data: unknown) =>
       new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
+    if (pathname === "/api/permission/saved") return response({ data: [] });
+    if (pathname === "/api/model") {
+      const location = { directory: new URL(url).searchParams.get("location[directory]")! };
+      const status = this.modelHttpFailures.get(location.directory);
+      if (status !== undefined) return new Response(null, { status });
+      return response({
+        location,
+        data: this.modelUnavailable ? [] : this.models,
+      });
+    }
+    if (pathname.includes("/instructions/entries")) {
+      const entries = this.instructions.get(sessionId) ?? [];
+      if (method === "GET") return response({ data: entries });
+      const key = decodeURIComponent(parts.at(-1)!);
+      this.instructions.set(sessionId, [
+        ...entries.filter((entry) => entry.key !== key),
+        ...(method === "PUT" ? [{ key, value: body.value as InstructionEntryInfo["value"] }] : []),
+      ]);
+      return new Response(null, { status: 204 });
+    }
     if (pathname === "/api/session" && method === "GET")
       return response({ data: [...this.sessions.values()], cursor: {} });
     if (pathname === "/api/session" && method === "POST") {
@@ -79,6 +130,11 @@ export class V2RuntimeHttpFixture {
       return response({ data: native });
     }
     if (pathname === "/api/session/active") return response({ data: {} });
+    if (pathname.endsWith("/model") && method === "POST") {
+      const native = this.sessions.get(sessionId)!;
+      this.sessions.set(sessionId, { ...native, model: body.model as ModelRef });
+      return new Response(null, { status: 204 });
+    }
     if (pathname.endsWith("/prompt")) {
       const nativeId = String(body.id);
       const admitted: SessionInboxUser = {
@@ -95,11 +151,28 @@ export class V2RuntimeHttpFixture {
       if (!this.hideAdmission) {
         this.inbox.set(sessionId, [admitted]);
         const messages = this.messages.get(sessionId)!;
+        const files = await Promise.all(
+          ((body.files ?? []) as { uri: string; name: string }[]).map(async (file) => ({
+            data: file.uri.startsWith("file:")
+              ? (await readFile(fileURLToPath(file.uri))).toString("base64")
+              : file.uri.split(",")[1]!,
+            mime: file.uri.startsWith("file:")
+              ? "image/png"
+              : file.uri.slice(5, file.uri.indexOf(";")),
+            source: { type: "inline" as const },
+            name: file.name,
+          })),
+        );
         messages.push({
           id: nativeId,
           type: "user",
           text: String(body.text),
           time: { created: 2 },
+          ...(body.files
+            ? {
+                files,
+              }
+            : {}),
           ...(admitted.payload.metadata ? { metadata: admitted.payload.metadata } : {}),
         });
         if (this.autoComplete) this.complete(sessionId);
@@ -107,8 +180,17 @@ export class V2RuntimeHttpFixture {
       if (this.loseAck) throw new Error("synthetic lost acknowledgement");
       return response({ data: admitted });
     }
-    if (pathname.endsWith("/message"))
-      return response({ data: this.messages.get(sessionId) ?? [], cursor: {} });
+    if (pathname.endsWith("/message")) {
+      const search = new URL(url).searchParams;
+      const start = Number(search.get("cursor") ?? 0);
+      const limit = Number(search.get("limit") ?? 100);
+      const messages = this.messages.get(sessionId) ?? [];
+      const data = messages.slice(start, start + limit);
+      return response({
+        data,
+        cursor: start + data.length < messages.length ? { next: String(start + data.length) } : {},
+      });
+    }
     if (pathname.endsWith("/inbox")) return response({ data: this.inbox.get(sessionId) ?? [] });
     if (pathname.endsWith("/permission"))
       return response({ data: this.permissions.get(sessionId) ?? [] });
@@ -124,6 +206,12 @@ export class V2RuntimeHttpFixture {
       return response({
         data: this.forms.get(sessionId)?.find((item) => item.id === pathname.split("/")[5]),
       });
+    if (pathname.includes("/form/") && method === "DELETE") {
+      const form = this.forms.get(sessionId)?.find((item) => item.id === pathname.split("/")[5]);
+      if (!form || form.state.status !== "pending") throw new Error("Form already settled.");
+      form.state = { status: "cancelled" };
+      return new Response(null, { status: 204 });
+    }
     if (pathname.includes("/form/") && pathname.endsWith("/reply")) {
       const form = this.forms.get(sessionId)?.find((item) => item.id === pathname.split("/")[5]);
       if (!form || form.state.status !== "pending") return response({ error: "settled" });

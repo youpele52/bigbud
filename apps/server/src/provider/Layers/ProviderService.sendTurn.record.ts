@@ -11,6 +11,7 @@ import type { ProviderTurnLivenessRepositoryShape } from "../../persistence/Serv
 import { isLiveProviderSessionIdle } from "../liveProviderSessionIdle.ts";
 import type { ProviderSessionDirectoryShape } from "../Services/ProviderSessionDirectory.ts";
 import { startAcceptedTurnLiveness } from "./ProviderService.turnLiveness.ts";
+import { readV2CursorSelection } from "./ProviderService.modelSelection.v2.ts";
 
 type LivenessOption = Option.Option<ProviderTurnLivenessRepositoryShape>;
 
@@ -28,6 +29,13 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
   readonly modelSelection?: ModelSelection;
 }) {
   const observedAt = new Date().toISOString();
+  const modelSelection =
+    input.adapter.provider === "opencodeV2" &&
+    input.resumeCursor !== null &&
+    typeof input.resumeCursor === "object" &&
+    "model" in input.resumeCursor
+      ? ((yield* readV2CursorSelection(input.resumeCursor)) ?? input.modelSelection)
+      : input.modelSelection;
   const liveSessions = yield* input.adapter.listSessions();
   const live = liveSessions.find((session) => session.threadId === input.threadId);
   if (isLiveProviderSessionIdle(live)) {
@@ -56,7 +64,7 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
       status: "running",
       ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
       runtimePayload: {
-        ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+        ...(modelSelection !== undefined ? { modelSelection } : {}),
         activeTurnId: null,
         lastRuntimeEvent: "provider.sendTurn",
         lastRuntimeEventAt: observedAt,
@@ -78,7 +86,7 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
     status: "running",
     ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
     runtimePayload: {
-      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(modelSelection !== undefined ? { modelSelection } : {}),
       activeTurnId: input.turnId,
       lastRuntimeEvent: "provider.sendTurn",
       lastRuntimeEventAt: observedAt,

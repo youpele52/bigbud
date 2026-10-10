@@ -96,11 +96,19 @@ export async function pendingV2Interactions(
   }
   for (const form of forms) {
     if (form.sessionID !== session.native.id) throw new Error("V2 form ownership mismatch.");
+    let questions;
+    try {
+      questions = formQuestions(form);
+    } catch (error) {
+      if (!session.cancelUnsupportedForm) throw error;
+      await session.cancelUnsupportedForm(form);
+      continue;
+    }
     events.push({
       ...runtimeEventBase(session, `form:${form.id}`),
       requestId: RuntimeRequestId.makeUnsafe(form.id),
       type: "user-input.requested",
-      payload: { questions: formQuestions(form) },
+      payload: { questions },
     });
   }
   if (session.stopped || !session.lease.process.isRunning()) return [];

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import { Effect } from "effect";
 import type { ProviderSendTurnInput } from "@bigbud/contracts";
 import type { ModelRef } from "@opencode/client";
@@ -10,22 +11,28 @@ import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTu
 import { admitV2Turn, V2AdmissionUnconfirmed } from "./Admission.ts";
 import { learningAdmissionIdentity } from "./Admission.identity.ts";
 import { v2Request } from "./Client.ts";
-import { prepareV2Media } from "./Runtime.media.ts";
 import { readV2Messages } from "./Runtime.projection.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
 import { assertV2Model } from "./Runtime.sessions.ts";
+import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
+import { v2TurnModel } from "./Runtime.model.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
 import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
+import { validateV2TurnInput } from "./Runtime.input.ts";
+import type { V2PreparedAttachments } from "./Runtime.attachments.ts";
+import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import {
-  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
-} from "@bigbud/contracts/orchestration/orchestration.provider.ts";
+  v2InstructionEntries,
+  v2InstructionRevision,
+  syncV2Instructions,
+} from "./Runtime.instructions.ts";
 
 export function runtimePromptFingerprint(
   text: string,
   model: ModelRef,
   mediaDigest: string,
   toolPolicy = v2ExecutionPolicy(),
+  instructionRevision?: string,
 ) {
   return createHash("sha256")
     .update(
@@ -36,6 +43,7 @@ export function runtimePromptFingerprint(
         model.variant ?? null,
         mediaDigest,
         toolPolicy,
+        ...(instructionRevision ? [instructionRevision] : []),
       ]),
     )
     .digest("hex");
@@ -94,54 +102,85 @@ export async function dispatchV2Turn(
   options: V2IsolatedRuntimeOptions,
   session: V2RuntimeSession,
   input: ProviderSendTurnInput,
+  mutations: V2RuntimeMutations,
+  beforeDispatch: () => Promise<() => void>,
+  prepared?: V2PreparedAttachments,
 ) {
+  const attachmentIssue = providerAttachmentIssue("opencodeV2", input.attachments);
+  if (attachmentIssue) throw new Error(attachmentIssue);
   const identity = runtimeAdmissionIdentity(input);
   const native = await v2Request("session.get", (signal) =>
     session.lease.process.client.session.get({ sessionID: session.native.id }, { signal }),
   );
   assertV2Model(native.model, session.model);
-  let text = input.input ?? "";
-  if (
-    !text.trim() ||
-    text.length > PROVIDER_SEND_TURN_MAX_INPUT_CHARS ||
-    (input.attachments?.length ?? 0) > PROVIDER_SEND_TURN_MAX_ATTACHMENTS
-  )
-    throw new Error("V2 prompt bounds rejected.");
-  if (input.interactionMode && input.interactionMode !== "default")
-    throw new Error("V2 non-default interaction mode is not verified.");
-  if (input.sessionEpoch !== undefined && input.sessionEpoch !== session.epoch)
-    throw new Error("V2 epoch fence rejected.");
-  if (
-    input.modelSelection &&
-    (input.modelSelection.provider !== "opencodeV2" ||
-      input.modelSelection.model !== session.model.id ||
-      input.modelSelection.subProviderID !== session.model.providerID ||
-      input.modelSelection.options?.variant !== session.model.variant)
-  )
-    throw new Error("V2 model switch requires a separate owned session.");
-  if (
-    (input.attachments?.length ?? 0) &&
-    session.session.providerRuntimeExecutionTargetId !== "local" &&
-    !session.resources?.media
-  )
-    throw new Error(
-      "V2 remote media requires an authorized staging transport; no local path fallback.",
+  let text = validateV2TurnInput(session, input);
+  // Replays fingerprint their original requested selection, never the session's later model.
+  let requestedModel = v2TurnModel(session, input);
+  const existing = await Effect.runPromise(options.journal.find(identity));
+  if (!existing)
+    await assertV2ModelAvailable(
+      session.lease.process.client,
+      session.native.location.directory,
+      requestedModel,
     );
-  const media = session.resources?.media
-    ? await session.resources.media(input)
-    : await prepareV2Media(
-        input,
-        options.allowLocalWorkspace
-          ? session.native.location.directory
-          : options.config.profileRoot,
-        options.attachmentsDir,
-      );
-  if (media.references)
-    text += `\n\nbigbud workspace attachment references (target-bound metadata):\n${media.references}`;
-  if (text.length > 120000) throw new Error("V2 prompt plus attachment references exceeds bound.");
+  const entries = v2InstructionEntries(session);
+  let instructionRevision = v2InstructionRevision(entries);
+  if (existing) {
+    // Replays must not refresh context or reinterpret historical pre-instruction admissions.
+    const originalMessages = await readV2Messages(session);
+    const original = originalMessages.find((message) => message.id === existing.nativeAdmissionId);
+    const inbox = original
+      ? undefined
+      : (
+          await v2Request("session.inbox.list", (signal) =>
+            session.lease.process.client.session.inbox.list(
+              { sessionID: session.native.id },
+              { signal },
+            ),
+          )
+        ).find((item) => item.id === existing.nativeAdmissionId);
+    const metadata =
+      original?.type === "user"
+        ? original.metadata
+        : inbox?.type === "user"
+          ? inbox.payload.metadata
+          : undefined;
+    if (metadata?.bigbud_fingerprint === existing.fingerprint)
+      instructionRevision =
+        typeof metadata.bigbud_instruction_revision === "string"
+          ? metadata.bigbud_instruction_revision
+          : undefined;
+    if (!input.modelSelection && original?.type === "user") {
+      const index = originalMessages.indexOf(original);
+      for (const message of originalMessages.slice(index + 1)) {
+        if (message.type === "user" || message.type === "idle") break;
+        if (message.type === "assistant") {
+          requestedModel = message.model;
+          break;
+        }
+      }
+    }
+  }
+  // Prepared remote sessions historically fingerprinted an empty reference list too.
+  // Preserve that text-only replay material without invoking an attachment reader/stager.
+  const references =
+    prepared?.references ??
+    (session.resources?.media && !input.attachments?.length ? "[]" : undefined);
+  const media = prepared ?? {
+    files: [],
+    digest: createHash("sha256")
+      .update(references ? "[[],[]]" : "[]")
+      .digest("hex"),
+  };
+  if (input.attachments?.length && !prepared)
+    throw new Error("V2 attachments require immutable preparation before admission.");
+  if (prepared) text = prepared.text;
+  if (references)
+    text += `\n\nbigbud workspace attachment references (target-bound metadata):\n${references}`;
+  if (text.length > 120000) throw new Error("V2 prompt plus context exceeds bound.");
   const fingerprint = runtimePromptFingerprint(
     text,
-    session.model,
+    requestedModel,
     media.digest,
     session.executionPolicy ??
       v2ExecutionPolicy(
@@ -154,6 +193,7 @@ export async function dispatchV2Turn(
             Boolean(session.coding),
           ),
       ),
+    instructionRevision,
   );
   const isCurrent = () => !session.stopped && session.lease.process.isRunning();
   const failure = () =>
@@ -178,8 +218,12 @@ export async function dispatchV2Turn(
         Effect.tryPromise({
           try: async () => {
             session.row = row;
-            const ack = await v2Request("session.prompt", (signal) =>
-              session.lease.process.client.session.prompt(
+            await syncV2Instructions(session, mutations, entries, beforeDispatch);
+            const validate = await beforeDispatch();
+            if (!isCurrent()) throw failure();
+            const ack = await v2Request("session.prompt", (signal) => {
+              validate();
+              return session.lease.process.client.session.prompt(
                 {
                   sessionID: session.native.id,
                   id: row.nativeAdmissionId,
@@ -187,14 +231,17 @@ export async function dispatchV2Turn(
                   files: media.files,
                   metadata: {
                     bigbud_fingerprint: fingerprint,
-                    ...(media.references ? { bigbud_attachment_references: media.references } : {}),
+                    ...(instructionRevision
+                      ? { bigbud_instruction_revision: instructionRevision }
+                      : {}),
+                    ...(references ? { bigbud_attachment_references: references } : {}),
                   },
                   delivery: "queue",
                   resume: true,
                 },
                 { signal },
-              ),
-            );
+              );
+            });
             return (
               ack.type === "user" &&
               ack.id === row.nativeAdmissionId &&

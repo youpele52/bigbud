@@ -8,9 +8,7 @@ import type {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
-import { v2ResumeCursor } from "./Runtime.sessions.ts";
 import { prepareV2RuntimeSession, releaseV2PreparedSession } from "./Runtime.preparation.ts";
-import { dispatchV2Turn, runtimeAdmissionIdentity } from "./Runtime.admission.ts";
 import { correlatedProjection, readV2Messages, runtimeEventBase } from "./Runtime.projection.ts";
 import { pendingV2Interactions, replyV2Permission, replyV2Form } from "./Runtime.interactions.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
@@ -31,8 +29,10 @@ import { emitV2RuntimeEvent } from "./Runtime.events.ts";
 import { needsV2FinalRepair } from "./Runtime.finalization.ts";
 import { V2RuntimeTeardown } from "./Runtime.teardown.ts";
 import { V2RuntimeMutations } from "./Runtime.mutations.ts";
+import { sendV2Turn } from "./Runtime.send.ts";
+import { installV2UnsupportedFormCanceller } from "./Runtime.forms.unsupported.ts";
 
-/** Executing adapter engine, available only to explicitly isolated development harnesses. */
+/** Owned preview execution engine shared by application routing and disposable conformance harnesses. */
 export class OpencodeV2Runtime {
   readonly sessions = new Map<ThreadId, V2RuntimeSession>();
   private readonly starting = new Map<ThreadId, V2StartAttempt>();
@@ -153,6 +153,7 @@ export class OpencodeV2Runtime {
       session = owner;
       this.sessions.set(input.threadId, owner);
       installV2UnsafePermissionRejector(this, owner);
+      installV2UnsupportedFormCanceller(this, owner);
       await this.options.codingBridge?.attach(owner, this);
       attempt.owner = owner;
       // Startup repair participates in the same queue as hub/poll/user operations.
@@ -201,68 +202,7 @@ export class OpencodeV2Runtime {
   }
 
   async send(input: ProviderSendTurnInput) {
-    const session = this.get(input.threadId);
-    return this.exclusive(session, async () => {
-      await this.options.authorizeExecution?.();
-      this.mutations.assertSafe();
-      if (session.executionBlocked) throw new Error(session.executionBlocked);
-      if (session.stopped || !session.lease.process.isRunning())
-        throw new Error("V2 process ownership lost.");
-      const identity = runtimeAdmissionIdentity(input);
-      const existing = await Effect.runPromise(this.options.journal.find(identity));
-      if (
-        session.row &&
-        !session.terminalDelivered &&
-        session.row.requestMessageId !== identity.requestMessageId
-      )
-        throw new Error("V2 previous admission is unresolved; new work may duplicate execution.");
-      const active = await v2Request("session.active", (signal) =>
-        session.lease.process.client.session.active({ signal }),
-      );
-      if (!existing && active[session.native.id])
-        throw new Error("V2 native execution is already active; no queued duplicate work.");
-      if (!existing) {
-        session.messages.clear();
-        session.terminalDelivered = false;
-      }
-      try {
-        session.row = await dispatchV2Turn(this.options, session, input);
-      } catch (error) {
-        session.row = await Effect.runPromise(this.options.journal.find(identity));
-        await v2RuntimeStatus(
-          this,
-          session,
-          "error",
-          "Admission unconfirmed. No automatic resend; new work may duplicate execution.",
-        );
-        throw error;
-      }
-      if (session.row.state === "terminal") {
-        await this.reconcile(session);
-        return {
-          threadId: input.threadId,
-          turnId: session.row.turnId,
-          resumeCursor: v2ResumeCursor(session),
-        };
-      }
-      session.session = {
-        ...session.session,
-        status: "running",
-        activeTurnId: session.row.turnId,
-        updatedAt: new Date().toISOString(),
-      };
-      await this.emit(session, {
-        ...runtimeEventBase(session, `started:${session.row.turnId}`),
-        type: "turn.started",
-        payload: { model: session.model.id },
-      });
-      await this.reconcile(session);
-      return {
-        threadId: input.threadId,
-        turnId: session.row.turnId,
-        resumeCursor: v2ResumeCursor(session),
-      };
-    });
+    return sendV2Turn(this, input);
   }
 
   private async onEvent(session: V2RuntimeSession, event: OpenCodeEvent) {

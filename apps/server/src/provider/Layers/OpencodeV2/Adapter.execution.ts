@@ -1,4 +1,5 @@
 import { Effect, PubSub, Stream, Schema, Exit } from "effect";
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts/orchestration/providerRuntime.events.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.ts";
@@ -9,6 +10,7 @@ import { V2IsolatedMcp } from "./Runtime.mcp.ts";
 import { V2AdmissionUnconfirmed } from "./Admission.ts";
 import { ProviderTurnAdmissionConflict } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
+import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
 
 /** Real local adapter factory. Explicit isolated harness inputs, not preview enablement. */
 export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Adapter")(function* (
@@ -41,7 +43,8 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
               ? error.detail
               : error instanceof Error &&
                   error.name === "Error" &&
-                  /^(V2 |OpenCode v2 )/.test(error.message)
+                  (/^(V2 |OpenCode v2 )/.test(error.message) ||
+                    error.message === providerAttachmentPolicy("opencodeV2").unavailableReason)
                 ? error.message.slice(0, 512)
                 : "Isolated V2 operation failed or remains unconfirmed; no automatic resend or provider fallback.",
           cause: { name: error instanceof Error ? error.name : "UnknownFailure" },
@@ -63,20 +66,7 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
           },
         }
       : {}),
-    capabilities: {
-      durableLearningReview: true,
-      sessionModelSwitch: "unsupported",
-      sessionRecovery: "unsupported",
-      conversationRewind: "unsupported",
-      conversationFork: "unsupported",
-      supportsSteer: false,
-      turnControl: {
-        nativeSteer: false,
-        interruptTarget: "current-session",
-        activeTurnInspection: "best-effort",
-        continuation: false,
-      },
-    },
+    capabilities: V2_EXECUTION_CAPABILITIES,
     startSession: (input) =>
       Effect.suspend(() => {
         const attempt = new V2StartAttempt();

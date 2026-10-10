@@ -20,7 +20,7 @@ export interface V2RuntimeSession {
   readonly threadId: ThreadId;
   readonly native: SessionInfo;
   readonly lease: V2ProcessLease;
-  readonly model: ModelRef;
+  model: ModelRef;
   readonly epoch: number;
   readonly storageIdentity: string;
   readonly unregister: () => void;
@@ -37,6 +37,7 @@ export interface V2RuntimeSession {
   rejectUnsafePermission?: (
     id: string,
   ) => Promise<Extract<ProviderRuntimeEvent, { type: "request.resolved" }>>;
+  cancelUnsupportedForm?: (form: import("@opencode/client").FormInfo) => Promise<void>;
   dirtyGeneration: number;
   repairQueued: boolean;
   terminalDelivered: boolean;
@@ -60,10 +61,12 @@ export interface V2SessionResources {
   readonly codingFiles?: import("./Coding.files.ts").V2CodingTarget;
   readonly media?: (
     input: import("@bigbud/contracts/orchestration/provider.ts").ProviderSendTurnInput,
+    options?: import("./Runtime.media.content.ts").V2MediaOptions,
   ) => Promise<{
     files: NonNullable<import("@opencode/client").SessionPromptInput["files"]>;
     digest: string;
     references?: string;
+    text?: string;
   }>;
 }
 
@@ -86,6 +89,7 @@ export interface V2IsolatedRuntimeOptions {
   readonly maxSessions?: number;
   readonly pollIntervalMs?: number;
   readonly attachmentsDir?: string;
+  readonly attachmentAdmissionsDir?: string;
   /** App-owned profile with project config discovery disabled. Local Locations only. */
   readonly allowLocalWorkspace?: boolean;
   /** Application-only local builtin tools. Hidden learning and isolated harnesses remain deny-all. */

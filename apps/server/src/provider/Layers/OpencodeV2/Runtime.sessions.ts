@@ -1,14 +1,14 @@
-import { createHash } from "node:crypto";
-import { realpath } from "node:fs/promises";
-import path from "node:path";
 import type { ModelRef, SessionInfo } from "@opencode/client";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { v2Request } from "./Client.ts";
+import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession, V2StartInput } from "./Runtime.types.ts";
 import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
 import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
-import { assertV2WorkspaceStorageSeparate } from "./Runtime.workspaceBoundary.ts";
+import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
+import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
+import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
 
 const Cursor = Schema.Struct({
   provider: Schema.Literal("opencodeV2"),
@@ -27,22 +27,19 @@ export function assertV2Model(actual: ModelRef | undefined, requested: ModelRef)
     throw new Error("V2 native model/variant rebind is unsupported; existing history retained.");
 }
 
-export function v2ResumeCursor(session: V2RuntimeSession) {
+export function v2ResumeCursor(
+  session: Pick<V2RuntimeSession, "native" | "storageIdentity" | "model">,
+) {
   return {
     provider: "opencodeV2",
     nativeSessionId: session.native.id,
     storageIdentity: session.storageIdentity,
     directory: session.native.location.directory,
+    model: { ...session.model },
   } as const;
 }
 
-export function v2StorageIdentity(runtimeTargetId: string, root: string) {
-  return createHash("sha256")
-    .update(JSON.stringify([runtimeTargetId, root]))
-    .digest("hex");
-}
-
-/** Owned isolated workspace only; real/remote workspaces require a separate conformance gate. */
+/** Create/rebind only the exact app-prepared owned workspace and storage identity. */
 export async function createRuntimeSession(
   options: V2IsolatedRuntimeOptions,
   input: V2StartInput,
@@ -53,24 +50,20 @@ export async function createRuntimeSession(
   const requests = cancellation ? { signal: cancellation } : {};
   if (input.provider !== undefined && input.provider !== "opencodeV2")
     throw new Error("V2 provider mismatch.");
-  const runtimeTarget =
-    input.providerRuntimeExecutionTargetId ??
-    input.executionTargetId ??
-    options.config.runtimeTargetId;
-  const workspaceTarget =
-    input.workspaceExecutionTargetId ?? input.executionTargetId ?? runtimeTarget;
-  const remote = runtimeTarget !== "local" || workspaceTarget !== "local";
-  const authorization = options.remoteSessionConformance;
+  const { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId } =
+    await resolveV2RuntimeBinding(options, input);
+  const retained = await Effect.runPromise(options.journal.latestBound(input.threadId));
   if (
-    runtimeTarget !== options.config.runtimeTargetId ||
-    (remote &&
-      (!authorization ||
-        authorization.providerRuntimeTargetId !== runtimeTarget ||
-        authorization.workspaceTargetId !== workspaceTarget ||
-        authorization.profileRoot !== options.config.profileRoot ||
-        authorization.syntheticDirectory !== input.cwd))
+    retained &&
+    (retained.binding.storageIdentity !== storageIdentity ||
+      retained.binding.nativeSessionId !== nativeSessionId ||
+      retained.binding.location !== directory ||
+      retained.binding.runtimeTargetId !== runtimeTarget ||
+      retained.binding.workspaceTargetId !== workspaceTarget)
   )
-    throw new Error("V2 remote runtime/workspace is not verified.");
+    throw new Error(
+      "V2 retained admission belongs to another native storage/target. Reopen its original connection mode or start a new chat; no session was created or history rebound.",
+    );
   const selection = input.modelSelection;
   if (
     !selection ||
@@ -80,19 +73,6 @@ export async function createRuntimeSession(
   ) {
     throw new Error("V2 requires an explicit native provider/model.");
   }
-  if (!input.cwd) throw new Error("V2 requires an isolated workspace.");
-  const remoteFilesystem = runtimeTarget !== "local";
-  const root = remoteFilesystem
-    ? path.posix.resolve(options.config.profileRoot)
-    : await realpath(options.config.profileRoot);
-  const directory = remoteFilesystem ? path.posix.resolve(input.cwd) : await realpath(input.cwd);
-  if (!remote) {
-    await assertV2WorkspaceStorageSeparate(root, directory);
-  }
-  const storageIdentity = v2StorageIdentity(options.config.runtimeTargetId, root);
-  const nativeSessionId = `ses_bigbud_${createHash("sha256")
-    .update(JSON.stringify([storageIdentity, input.threadId]))
-    .digest("hex")}`;
   if (input.resumeCursor !== undefined) {
     const cursor = Schema.decodeUnknownSync(Cursor)(input.resumeCursor);
     if (
@@ -109,19 +89,16 @@ export async function createRuntimeSession(
     ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
   };
   const localTools = options.enableLocalTools === true && !disableTools;
-  const permissions = v2LocalToolPolicy(
-    input.runtimeMode,
-    localTools,
-    Boolean(options.codingBridge),
-    {
-      nativeWorkspace: runtimeTarget === workspaceTarget,
-      profileRoot: root,
-      boundedFiles:
-        runtimeTarget !== "local" ||
-        workspaceTarget !== "local" ||
-        Boolean(options.codingBridge?.supportsLocalFiles),
-    },
-  );
+  const permissions = options.config.sharedService
+    ? v2SharedToolPolicy(input.runtimeMode, options.config.sharedService.databasePath, localTools)
+    : v2LocalToolPolicy(input.runtimeMode, localTools, Boolean(options.codingBridge), {
+        nativeWorkspace: runtimeTarget === workspaceTarget,
+        profileRoot: root,
+        boundedFiles:
+          runtimeTarget !== "local" ||
+          workspaceTarget !== "local" ||
+          Boolean(options.codingBridge?.supportsLocalFiles),
+      });
   cancellation?.throwIfAborted();
   await options.authorizeExecution?.();
   cancellation?.throwIfAborted();
@@ -180,6 +157,12 @@ export async function createRuntimeSession(
         // A resume must never manufacture new native history. A deterministic creation ID
         // prevents a lost creation acknowledgement from silently creating a second session.
         if (input.resumeCursor !== undefined) throw new Error("V2 bound session unavailable.");
+        // Existing history/replay can rebind without current availability; only fresh history needs preflight.
+        await assertV2ModelAvailable(lease.process.client, directory, model, cancellation);
+        await options.authorizeExecution?.();
+        cancellation?.throwIfAborted();
+        mutations.assertSafe();
+        if (!lease.process.isRunning()) throw new Error("V2 startup process is unavailable.");
         native = await mutate("session.create", (signal) =>
           lease.process.client.session.create(
             {
@@ -208,6 +191,7 @@ export async function createRuntimeSession(
         throw new Error("V2 native session ownership rejected.");
       }
       assertV2Model(native.model, model);
+      if (localTools) await assertV2NoSavedGrants(lease.process.client, native);
       // Reset only this owned session's permissions. Never trust persisted broad approvals.
       mutations?.assertSafe();
       cancellation?.throwIfAborted();
@@ -242,7 +226,7 @@ export async function createRuntimeSession(
           createdAt: now,
           updatedAt: now,
           sessionEpoch: input.sessionEpoch ?? 0,
-          resumeCursor: { provider: "opencodeV2", nativeSessionId, storageIdentity, directory },
+          resumeCursor: v2ResumeCursor({ native, storageIdentity, model }),
         },
         stopped: false,
         localTools,
