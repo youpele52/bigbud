@@ -6,10 +6,12 @@ import { useServerProviders } from "../rpc/serverState";
 import { toastManager } from "./ui/toast";
 import { getProviderToastDecision } from "./ProviderRecoveryToastCoordinator.logic";
 import { useModelDiscoveryToasts } from "./useModelDiscoveryToasts";
+import { useOpencodeV2UpdateToast } from "./useOpencodeV2UpdateToast";
 
 export function ProviderRecoveryToastCoordinator() {
   const providers = useServerProviders();
   useModelDiscoveryToasts(providers);
+  useOpencodeV2UpdateToast(providers);
   const navigate = useNavigate();
   const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const sawRecoveryRef = useRef(false);

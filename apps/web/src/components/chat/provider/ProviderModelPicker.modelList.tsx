@@ -5,7 +5,6 @@ import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
 import { Button } from "../../ui/button";
-import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
@@ -23,8 +22,6 @@ export function ModelList({
   options,
   recentOptions,
   loading = false,
-  unavailableMessage,
-  activationAction,
   onSelect,
   onBack,
   searchbarClassName,
@@ -78,9 +75,7 @@ export function ModelList({
   const hasVisibleModels = grouped.length > 0;
   const hasNamedGroups = grouped.some((group) => group.kind === "named");
   const showLoadingState = loading && options.length === 0;
-  const showUnavailableState = !loading && Boolean(unavailableMessage) && options.length === 0;
-  const showEmptyState =
-    !showLoadingState && !showUnavailableState && !hasVisibleModels && !showRecentOptions;
+  const showEmptyState = !showLoadingState && !hasVisibleModels && !showRecentOptions;
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -129,23 +124,6 @@ export function ModelList({
               <span>Loading models...</span>
             </div>
           ) : null}
-          {showUnavailableState ? (
-            <div className="flex flex-col items-center gap-2 px-3 py-4 text-center text-sm text-muted-foreground/70">
-              <span>{unavailableMessage}</span>
-              {activationAction ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  disabled={activationAction.busy}
-                  onClick={activationAction.onClick}
-                >
-                  {activationAction.busy ? <LoaderIcon className="size-3 animate-spin" /> : null}
-                  {activationAction.busy ? "Starting..." : "Start / retry"}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
           {showRecentOptions && recentOptions ? (
             <MenuGroup>
               <MenuGroupLabel className={groupLabelClassName}>Recently used</MenuGroupLabel>
@@ -156,6 +134,11 @@ export function ModelList({
                   value={modelOptionValue(modelOption)}
                 >
                   <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
+                  {modelOption.availability === "requires-setup" ? (
+                    <span className="ms-auto text-xs text-muted-foreground">
+                      Provider not connected
+                    </span>
+                  ) : null}
                 </MenuRadioItem>
               ))}
             </MenuGroup>
@@ -177,6 +160,11 @@ export function ModelList({
                     value={modelOptionValue(modelOption)}
                   >
                     <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
+                    {modelOption.availability === "requires-setup" ? (
+                      <span className="ms-auto text-xs text-muted-foreground">
+                        Provider not connected
+                      </span>
+                    ) : null}
                   </MenuRadioItem>
                 ))}
               </MenuGroup>
@@ -190,6 +178,11 @@ export function ModelList({
                   value={modelOptionValue(modelOption)}
                 >
                   <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
+                  {modelOption.availability === "requires-setup" ? (
+                    <span className="ms-auto text-xs text-muted-foreground">
+                      Provider not connected
+                    </span>
+                  ) : null}
                 </MenuRadioItem>
               ))}
             </MenuGroup>

@@ -27,6 +27,7 @@ export interface AppModelOption {
   group?: string | undefined;
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Passed through from the server snapshot. */
   subProviderID?: string | undefined;
+  availability?: "available" | "requires-setup" | undefined;
 }
 
 export function normalizeCustomModelSlugs(
@@ -65,10 +66,11 @@ export function getAppModelOptions(
   selectedModel?: string | null,
 ): AppModelOption[] {
   const options: AppModelOption[] = getProviderModels(providers, provider).map(
-    ({ slug, name, isCustom, group, subProviderID }) => {
+    ({ slug, name, isCustom, group, subProviderID, availability }) => {
       const option: AppModelOption = { slug, name, isCustom };
       if (group !== undefined) option.group = group;
       if (subProviderID !== undefined) option.subProviderID = subProviderID;
+      if (availability !== undefined) option.availability = availability;
       return option;
     },
   );
@@ -161,6 +163,7 @@ export function getCustomModelOptionsByProvider(
     name: string;
     group?: string | undefined;
     subProviderID?: string | undefined;
+    availability?: "available" | "requires-setup" | undefined;
   }>
 > {
   return Object.fromEntries(

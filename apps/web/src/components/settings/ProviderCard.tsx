@@ -1,11 +1,4 @@
-import {
-  ArrowUpRightIcon,
-  ChevronDownIcon,
-  InfoIcon,
-  LoaderIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
+import { ArrowUpRightIcon, ChevronDownIcon, LoaderIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, type RefObject } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
@@ -17,8 +10,8 @@ import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingResetButton } from "./settingsLayout";
+import { ProviderModelList } from "./ProviderCard.modelList";
 
 export type ProviderCardData = {
   provider: ProviderKind;
@@ -59,6 +52,8 @@ type ProviderCardProps = {
   onConfigPathChange: (value: string) => void;
   onOpenSetupGuide: () => void;
   onHomePathChange: (value: string) => void;
+  connectionMode?: "shared" | "isolated";
+  onConnectionModeChange?: (mode: "shared" | "isolated") => void;
   onCustomModelInputChange: (value: string) => void;
   onAddCustomModel: () => void;
   onRemoveCustomModel: (slug: string) => void;
@@ -81,6 +76,8 @@ export function ProviderCard({
   onConfigPathChange,
   onOpenSetupGuide,
   onHomePathChange,
+  connectionMode = "shared",
+  onConnectionModeChange,
   onCustomModelInputChange,
   onAddCustomModel,
   onRemoveCustomModel,
@@ -155,6 +152,22 @@ export function ProviderCard({
       <Collapsible open={isOpen} onOpenChange={onOpenChange}>
         <CollapsibleContent>
           <div className="space-y-0">
+            {card.provider === "opencodeV2" ? (
+              <label className="block border-t border-border/60 px-4 py-3 text-xs sm:px-5">
+                Connection mode
+                <select
+                  className="mt-1.5 block w-full rounded-md border border-border bg-background p-2 text-sm"
+                  aria-label="OpenCode v2 connection mode"
+                  value={connectionMode}
+                  onChange={(event) =>
+                    onConnectionModeChange?.(event.target.value as "shared" | "isolated")
+                  }
+                >
+                  <option value="shared">Shared TUI service (recommended)</option>
+                  <option value="isolated">Isolated profile (advanced)</option>
+                </select>
+              </label>
+            ) : null}
             <div className="border-t border-border/60 px-4 py-3 sm:px-5">
               <label htmlFor={`provider-install-${card.provider}-binary-path`} className="block">
                 <span className="text-xs font-medium text-foreground">
@@ -190,7 +203,8 @@ export function ProviderCard({
               </label>
             </div>
 
-            {card.homePathKey ? (
+            {card.homePathKey &&
+            (card.provider !== "opencodeV2" || connectionMode === "isolated") ? (
               <div className="border-t border-border/60 px-4 py-3 sm:px-5">
                 <label htmlFor={`provider-install-${card.homePathKey}`} className="block">
                   <span className="text-xs font-medium text-foreground">
@@ -220,73 +234,12 @@ export function ProviderCard({
               <div className="mt-1 text-xs text-muted-foreground">
                 {card.models.length} model{card.models.length === 1 ? "" : "s"} available.
               </div>
-              <div ref={modelListRef} className="mt-2 max-h-40 overflow-y-auto pb-1">
-                {card.models.map((model) => {
-                  const caps = model.capabilities;
-                  const capLabels: string[] = [];
-                  if (caps?.supportsFastMode) capLabels.push("Fast mode");
-                  if (caps?.supportsThinkingToggle) capLabels.push("Thinking");
-                  if (caps?.reasoningEffortLevels && caps.reasoningEffortLevels.length > 0) {
-                    capLabels.push("Reasoning");
-                  }
-                  const hasDetails = capLabels.length > 0 || model.name !== model.slug;
-
-                  return (
-                    <div
-                      key={`${card.provider}:${model.slug}:${model.subProviderID ?? "default"}:${model.isCustom ? "custom" : "built-in"}`}
-                      className="flex items-center gap-2 py-1"
-                    >
-                      <span className="min-w-0 truncate text-xs text-foreground/90">
-                        {model.name}
-                      </span>
-                      {hasDetails ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                className="shrink-0 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-                                aria-label={`Details for ${model.name}`}
-                              />
-                            }
-                          >
-                            <InfoIcon className="size-3" />
-                          </TooltipTrigger>
-                          <TooltipPopup side="top" className="max-w-56">
-                            <div className="space-y-1">
-                              <span className="block break-all text-sm font-light text-foreground">
-                                {model.slug}
-                              </span>
-                              {capLabels.length > 0 ? (
-                                <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                                  {capLabels.map((label) => (
-                                    <span key={label} className="text-[10px] text-muted-foreground">
-                                      {label}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          </TooltipPopup>
-                        </Tooltip>
-                      ) : null}
-                      {model.isCustom ? (
-                        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground">custom</span>
-                          <button
-                            type="button"
-                            className="text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label={`Remove ${model.slug}`}
-                            onClick={() => onRemoveCustomModel(model.slug)}
-                          >
-                            <XIcon className="size-3" />
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
+              <ProviderModelList
+                provider={card.provider}
+                models={card.models}
+                modelListRef={modelListRef}
+                onRemoveCustomModel={onRemoveCustomModel}
+              />
 
               {card.supportsCustomModels ? (
                 <>

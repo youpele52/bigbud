@@ -49,13 +49,18 @@ export function getProviderModelAvailability(input: {
   workspaceExecutionTargetId?: string | null | undefined;
 }) {
   const loading =
-    input.modelCount === 0 && (input.providers === undefined || input.provider === undefined);
+    input.modelCount === 0 &&
+    (input.providers === undefined ||
+      input.provider === undefined ||
+      (input.provider.provider === "opencodeV2" && input.provider.initialProbeComplete === false));
   const unavailableMessage =
     input.provider &&
     (!input.provider.enabled
       ? "Provider is disabled"
       : !input.provider.installed
-        ? "Provider is not installed"
+        ? input.provider.provider === "opencodeV2"
+          ? (input.provider.message ?? "Configure OpenCode v2 in Providers settings")
+          : "Provider is not installed"
         : input.provider.auth.status === "unauthenticated"
           ? "Provider login required"
           : input.provider.status === "error" || input.provider.status === "warning"
@@ -70,9 +75,10 @@ export function getProviderModelAvailability(input: {
     input.provider !== undefined &&
     (unsupportedRemoteWorkspace ||
       !input.provider.enabled ||
-      !input.provider.installed ||
-      input.provider.auth.status === "unauthenticated" ||
-      input.provider.status === "error" ||
+      ((!input.provider.installed ||
+        input.provider.auth.status === "unauthenticated" ||
+        input.provider.status === "error") &&
+        !(input.provider.provider === "opencodeV2" && input.modelCount > 0)) ||
       (input.provider.status === "warning" && input.modelCount === 0));
 
   return {
@@ -91,6 +97,7 @@ export type ModelOption = {
   name: string;
   group?: string | undefined;
   subProviderID?: string | undefined;
+  availability?: "available" | "requires-setup" | undefined;
 };
 
 /**
@@ -128,6 +135,10 @@ export function visibleModelOptionsForPicker(
   recentOptions: ReadonlyArray<ModelOption> | undefined,
   query: string,
 ): ReadonlyArray<ModelOption> {
+  if (provider === "opencodeV2")
+    return options.toSorted(
+      (a, b) => Number(b.availability === "available") - Number(a.availability === "available"),
+    );
   if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
     return options;
   }
@@ -153,7 +164,11 @@ export function groupModelOptions(options: ReadonlyArray<ModelOption>): GroupedS
   }
 
   const named: GroupedSection[] = [...namedMap.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
+    .toSorted(
+      ([a, modelsA], [b, modelsB]) =>
+        Number(modelsB.some((model) => model.availability === "available")) -
+          Number(modelsA.some((model) => model.availability === "available")) || a.localeCompare(b),
+    )
     .map(([group, models]) => ({ kind: "named" as const, group, models }));
   if (ungrouped.length > 0) {
     named.push({ kind: "ungrouped" as const, models: ungrouped });

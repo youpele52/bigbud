@@ -5,6 +5,10 @@ import {
   type ServerProvider,
 } from "@bigbud/contracts";
 import type { ReactNode } from "react";
+import {
+  providerAttachmentPolicy,
+  type ProviderAttachmentPolicy,
+} from "@bigbud/shared/providerAttachments";
 
 import {
   ClaudeAI,
@@ -56,6 +60,7 @@ export interface ProviderDescriptor {
   };
   readonly customModels: ProviderCustomModelsDescriptor | null;
   readonly traitsEnabled: boolean;
+  readonly attachments?: ProviderAttachmentPolicy;
 }
 
 const visible = () => true;
@@ -83,16 +88,17 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
     isVisible: visible,
     supportsSubProviderID: true,
     catalogAuthoritative: true,
+    attachments: providerAttachmentPolicy("opencodeV2"),
     settings: {
       path: binary(
-        "Separate V2 executable path",
-        "Absolute path to your separately installed OpenCode 2.0.19 executable. No V1 fallback. Restart after binary/profile changes. Supervised asks before actions; Auto-accept edits permits bounded canonical edits only (without the helper, native edits still ask). Explicit Full access trusts native tools with host-user filesystem/process/network access, not a sandbox. External-directory requests still ask; synthetic remote workspaces deny native file/shell tools.",
+        "Automatic native TUI service discovery",
+        "Shared mode uses your installed OpenCode TUI service, accounts and configuration. No binary override is needed. Recommended runtime 2.0.26+; qualified older versions remain usable. This override is used only for explicit isolated mode. Restart after connection changes.",
       ),
       home: {
         key: "opencodeV2ProfileRoot",
         placeholder: "/absolute/path/to/new-bigbud-v2-profile",
         description:
-          "Dedicated private storage outside every workspace/repository/worktree and separate from your normal OpenCode profile. Choose a new directory under an existing parent; bigbud creates it on enable. Configure models in config/opencode/opencode.jsonc, then refresh. Existing unowned or overlapping storage is rejected, never moved. Credentials and project configuration are not imported.",
+          "Advanced isolated mode only. Separate private storage outside workspaces; existing profiles/history are never moved or copied. Shared mode ignores this path and uses your native service.",
       },
     },
     customModels: null,

@@ -26,6 +26,7 @@ function buildModelOptionsByProvider(
       name: model.name ?? model.slug,
       group: model.group ?? undefined,
       subProviderID: model.subProviderID ?? undefined,
+      availability: model.availability,
     }));
   }
 

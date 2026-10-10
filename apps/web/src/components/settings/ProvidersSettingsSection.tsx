@@ -1,4 +1,5 @@
 import { LoaderIcon, RefreshCwIcon } from "lucide-react";
+import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { type ProviderKind } from "@bigbud/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
@@ -178,6 +179,15 @@ export function ProvidersSettingsSection({
           <ProviderCard
             key={card.provider}
             card={card}
+            connectionMode={resolveOpencodeV2ConnectionMode(settings.providers.opencodeV2)}
+            onConnectionModeChange={(connectionMode) =>
+              updateSettings({
+                providers: {
+                  ...settings.providers,
+                  opencodeV2: { ...settings.providers.opencodeV2, connectionMode },
+                },
+              })
+            }
             isOpen={openProviderDetails[card.provider]}
             codexHomePath={
               card.provider === "opencodeV2"

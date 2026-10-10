@@ -26,7 +26,7 @@ const snapshot: ServerProvider = {
   provider: "opencodeV2",
   enabled: true,
   installed: true,
-  version: "2.0.19",
+  version: "2.0.26",
   status: "ready",
   auth: { status: "unknown" },
   checkedAt: "fixture",
