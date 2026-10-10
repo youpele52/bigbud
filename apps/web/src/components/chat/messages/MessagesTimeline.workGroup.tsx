@@ -1,6 +1,7 @@
 import { CompactActivityGroup } from "../common/CompactActivityGroup";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES, type MessagesTimelineRow } from "./MessagesTimeline.logic";
-import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
+import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
+import { WorkEntryActionButtons } from "./MessagesTimeline.workEntry.actions";
 import type { ExecutionTargetId } from "@bigbud/contracts";
 
 type WorkGroupRow = Extract<MessagesTimelineRow, { kind: "work" }>;
