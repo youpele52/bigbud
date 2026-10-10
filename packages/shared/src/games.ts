@@ -55,6 +55,12 @@ export const GAMES = [
     description: "Draw and guess with friends.",
   },
   {
+    name: "Lagos Life",
+    url: "https://lagoslife.app/",
+    category: "Social & puzzles",
+    description: "Live your Lagos story in a social life simulation.",
+  },
+  {
     name: "Solitaire",
     url: "https://cardgames.io/solitaire/",
     category: "Social & puzzles",

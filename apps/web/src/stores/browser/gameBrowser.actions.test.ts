@@ -55,6 +55,18 @@ describe("game browser launch", () => {
     );
   });
 
+  it("opens Lagos Life from the Social & puzzles group at its exact approved URL", () => {
+    const lagosLife = GAMES.find((entry) => entry.name === "Lagos Life")!;
+    expect(lagosLife.category).toBe("Social & puzzles");
+    expect(
+      openGameBrowserTab({ name: lagosLife.name, url: lagosLife.url, onOpened: vi.fn() }),
+    ).toBe(true);
+    const activeTabId = useRightPanelTabsStore.getState().activeTabId!;
+    expect(useBrowserPanelStore.getState().tabsById[activeTabId]?.url).toBe(
+      "https://lagoslife.app/",
+    );
+  });
+
   it("evicts the earliest created tab after reorder, including an agent-opened unleased tab", () => {
     const ids = fillTabs();
     useBrowserPanelStore.getState().markTabOpenedByAgent(ids[0]!);
