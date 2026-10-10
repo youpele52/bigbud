@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { AccessModeInfoBanner } from "./AccessModeInfoBanner";
+import { AccessModeInfoBanner, getAccessModeInfoDescription } from "./AccessModeInfoBanner";
 
 function renderBanner(overrides: Partial<ComponentProps<typeof AccessModeInfoBanner>> = {}) {
   return renderToStaticMarkup(
@@ -10,75 +10,51 @@ function renderBanner(overrides: Partial<ComponentProps<typeof AccessModeInfoBan
       threadId="thread-1"
       provider="opencodeV2"
       runtimeMode="full-access"
+      accessModeChangeId={0}
       {...overrides}
     />,
   );
 }
 
 describe("AccessModeInfoBanner", () => {
-  it.each(["approval-required", "auto-accept-edits", "full-access"] as const)(
-    "initially renders %s as neutral, nonurgent information",
-    (runtimeMode) => {
-      const markup = renderBanner({ runtimeMode });
-      expect(markup).toContain('role="status"');
-      expect(markup).not.toContain('role="alert"');
-      expect(markup).toContain("bg-transparent");
-      expect(markup).toContain('class="text-foreground"');
-      expect(markup).not.toContain("text-warning");
-      expect(markup).not.toContain("bg-warning");
-      expect(markup).not.toContain("bg-info");
-      expect(markup).toContain("Dismiss access information");
-    },
-  );
-
-  it.each(["codex", "claudeAgent", "opencode"] as const)("does not render for %s", (provider) => {
-    expect(renderBanner({ provider })).toBe("");
+  it("does not render before an explicit access-mode change", () => {
+    expect(renderBanner()).toBe("");
   });
 
-  it.each(["shared", "isolated"] as const)(
-    "explains Supervised for %s without unrelated mode descriptions",
-    (connectionMode) => {
-      const markup = renderBanner({ runtimeMode: "approval-required", connectionMode });
-      expect(markup).toContain("Access: Supervised");
-      expect(markup).toContain("Supervised asks before actions.");
-      expect(markup).not.toContain("Auto-accept edits permits");
-      expect(markup).not.toContain("Full access trusts");
-      expect(markup).toContain("External-directory requests still ask.");
+  it.each(["codex", "claudeAgent", "opencode"] as const)(
+    "does not render for %s, even with a change notification",
+    (provider) => {
+      expect(renderBanner({ provider, accessModeChangeId: 1 })).toBe("");
     },
   );
 
-  it("defaults to shared native edit behavior without asserting helper restrictions", () => {
-    const markup = renderBanner({ runtimeMode: "auto-accept-edits" });
-    expect(markup).toContain(
+  it("describes Supervised without unrelated mode details", () => {
+    expect(getAccessModeInfoDescription("approval-required")).toBe(
+      "Supervised asks before actions.",
+    );
+  });
+
+  it("describes shared auto-accept behavior without asserting helper restrictions", () => {
+    expect(getAccessModeInfoDescription("auto-accept-edits")).toBe(
       "Auto-accept edits permits native file edits; other actions still ask.",
     );
-    expect(markup).not.toContain("bounded");
-    expect(markup).not.toContain("Synthetic remote workspaces");
   });
 
   it("explains isolated auto edits with conditional helper availability", () => {
-    const markup = renderBanner({ runtimeMode: "auto-accept-edits", connectionMode: "isolated" });
-    expect(markup).toContain("only bounded canonical file edits; other actions still ask.");
-    expect(markup).toContain("If the bounded file helper is unavailable, native edits still ask.");
-    expect(markup).toContain("Synthetic remote workspaces never gain native file or shell access.");
-    expect(markup).not.toContain("permits native file edits");
+    expect(getAccessModeInfoDescription("auto-accept-edits", "isolated")).toContain(
+      "only bounded canonical file edits; other actions still ask.",
+    );
+    expect(getAccessModeInfoDescription("auto-accept-edits", "isolated")).toContain(
+      "If the bounded file helper is unavailable, native edits still ask.",
+    );
   });
 
   it.each(["shared", "isolated"] as const)(
-    "preserves the host-user trust explanation for %s Full access",
+    "preserves the %s Full access trust explanation",
     (connectionMode) => {
-      const markup = renderBanner({ connectionMode });
-      expect(markup).toContain("Access: Full access");
-      expect(markup).toContain("host-user filesystem, process and network access—not a sandbox.");
-      expect(markup).toContain("External-directory requests still ask.");
-      if (connectionMode === "isolated") {
-        expect(markup).toContain("In co-located workspaces, Full access");
-        expect(markup).toContain(
-          "Synthetic remote workspaces never gain native file or shell access.",
-        );
-      } else {
-        expect(markup).not.toContain("Synthetic remote workspaces");
-      }
+      expect(getAccessModeInfoDescription("full-access", connectionMode)).toContain(
+        "host-user filesystem, process and network access—not a sandbox.",
+      );
     },
   );
 });

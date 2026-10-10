@@ -91,6 +91,7 @@ export function ChatViewChatBody({
         threadId={base.threadId}
         provider={composer.selectedProvider}
         runtimeMode={base.runtimeMode}
+        accessModeChangeId={runtime.accessModeChangeId}
         connectionMode={base.settings.providers.opencodeV2.connectionMode ?? "shared"}
       />
 

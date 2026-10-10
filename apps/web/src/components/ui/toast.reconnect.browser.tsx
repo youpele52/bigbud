@@ -19,6 +19,10 @@ it("renders a leading amber Wi-Fi icon with neutral text and restores the severi
   expect(icon?.classList.contains("text-warning")).toBe(true);
   expect(icon && getComputedStyle(icon).animationName).toBe("none");
   const title = document.querySelector('[data-slot="toast-title"]');
+  const description = document.querySelector('[data-slot="toast-description"]');
+  expect(title && description && getComputedStyle(title).fontSize).toBe(
+    description && getComputedStyle(description).fontSize,
+  );
   expect(title && icon && getComputedStyle(title).color).not.toBe(
     icon && getComputedStyle(icon).color,
   );

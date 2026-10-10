@@ -43,6 +43,7 @@ import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import { persistThreadSettingsForNextTurn } from "./chat-view-runtime.persist";
+import { useChatViewRuntimeComposerModes } from "./chat-view-runtime.composerModes";
 
 interface ChatViewRuntimeInput {
   base: ChatViewBaseState;
@@ -311,46 +312,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
   });
 
   const projectScripts = useProjectScripts({ activeProject: base.activeProject });
-
-  const handleRuntimeModeChange = useCallback(
-    (mode: RuntimeMode) => {
-      if (mode === base.runtimeMode) return;
-      base.setComposerDraftRuntimeMode(base.threadId, mode);
-      if (base.isLocalDraftThread) {
-        base.setDraftThreadContext(base.threadId, { runtimeMode: mode });
-      }
-      scheduleComposerFocus();
-    },
-    [base, scheduleComposerFocus],
-  );
-
-  const handleInteractionModeChange = useCallback(
-    (mode: ProviderInteractionMode) => {
-      if (mode === base.interactionMode) return;
-      base.setComposerDraftInteractionMode(base.threadId, mode);
-      if (base.isLocalDraftThread) {
-        base.setDraftThreadContext(base.threadId, { interactionMode: mode });
-      }
-      scheduleComposerFocus();
-    },
-    [base, scheduleComposerFocus],
-  );
-
-  const toggleInteractionMode = useCallback(() => {
-    handleInteractionModeChange(base.interactionMode === "plan" ? "default" : "plan");
-  }, [base.interactionMode, handleInteractionModeChange]);
-
-  const togglePlanCard = useCallback(() => {
-    base.setPlanCardOpen((open) => {
-      if (open) {
-        base.planCardDismissedForTurnRef.current =
-          thread.activePlan?.turnId ?? thread.cardProposedPlan?.turnId ?? "__dismissed__";
-      } else {
-        base.planCardDismissedForTurnRef.current = null;
-      }
-      return !open;
-    });
-  }, [base, thread.activePlan?.turnId, thread.cardProposedPlan?.turnId]);
+  const composerModes = useChatViewRuntimeComposerModes({ base, thread, scheduleComposerFocus });
 
   const persistThreadSettingsForNextTurnCallback = useCallback(
     (input: {
@@ -418,10 +380,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     addTerminalContextToDraft,
     terminalActions,
     projectScripts,
-    handleRuntimeModeChange,
-    handleInteractionModeChange,
-    toggleInteractionMode,
-    togglePlanCard,
+    ...composerModes,
     persistThreadSettingsForNextTurn: persistThreadSettingsForNextTurnCallback,
     scrollBehavior,
     envLocked,

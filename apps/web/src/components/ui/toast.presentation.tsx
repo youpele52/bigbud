@@ -73,7 +73,10 @@ export function ToastTitleAndDescription({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
+        <Toast.Title
+          className="min-w-0 wrap-break-word font-medium text-sm"
+          data-slot="toast-title"
+        />
         <Toast.Description
           className="min-w-0 select-text wrap-break-word whitespace-pre-line text-muted-foreground"
           data-slot="toast-description"
