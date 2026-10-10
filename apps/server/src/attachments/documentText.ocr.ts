@@ -93,7 +93,9 @@ async function extractPdfOcrTextFromFile(filePath: string): Promise<string | nul
     }
 
     const combined = normalizeExtractedText(pageTexts.join("\n\n"));
-    return combined.length > 0 ? combined : null;
+    return combined.length > 0
+      ? `[PDF OCR preview: up to the first 3 pages only. Recognition may contain errors and does not preserve visual/layout details.]\n\n${combined}`
+      : null;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

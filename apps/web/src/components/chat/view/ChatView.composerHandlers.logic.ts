@@ -17,6 +17,7 @@ import {
 } from "../../../logic/user-input";
 import { toastManager } from "../../ui/toast";
 import { randomUUID } from "~/lib/utils";
+import { desktopAttachmentPath } from "./ChatView.attachments.logic";
 import {
   type ComposerImageAttachment,
   type ComposerFileAttachment,
@@ -48,7 +49,6 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
     pendingUserInputsLength,
     addComposerImage,
     addComposerImagesToDraft,
-    setThreadError,
   } = input;
 
   return useCallback(
@@ -98,7 +98,8 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
       } else if (nextImages.length > 1) {
         addComposerImagesToDraft(nextImages);
       }
-      setThreadError(activeThreadId, error);
+      if (error)
+        toastManager.add({ type: "error", title: "Could not attach image", description: error });
     },
     [
       activeThreadId,
@@ -106,7 +107,6 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
       pendingUserInputsLength,
       addComposerImage,
       addComposerImagesToDraft,
-      setThreadError,
     ],
   );
 }
@@ -120,20 +120,19 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
     pendingUserInputsLength,
     addComposerFile,
     addComposerFilesToDraft,
-    setThreadError,
     isElectron,
   } = input;
 
   return useCallback(
     (files: File[]) => {
-      if (!activeThreadId || files.length === 0) return;
+      if (!activeThreadId || files.length === 0) return false;
 
       if (pendingUserInputsLength > 0) {
         toastManager.add({
           type: "error",
           title: "Attach files after answering plan questions.",
         });
-        return;
+        return false;
       }
 
       const nextFiles: ComposerFileAttachment[] = [];
@@ -157,11 +156,7 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
           break;
         }
 
-        const filePath = isElectron ? (window.desktopBridge?.getFilePath(file) ?? "") : "";
-        if (isElectron && filePath.length === 0) {
-          error = `Failed to access the full path for '${file.name}'. Try re-attaching the file.`;
-          continue;
-        }
+        const filePath = isElectron ? desktopAttachmentPath(file) : "";
 
         nextFiles.push({
           type: "file",
@@ -172,7 +167,7 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
           entryKind: "file",
           attachmentMode: "upload",
           filePath,
-          file: isElectron ? null : file,
+          file,
         });
         nextCount += 1;
       }
@@ -182,7 +177,9 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
       } else if (nextFiles.length > 1) {
         addComposerFilesToDraft(nextFiles);
       }
-      setThreadError(activeThreadId, error);
+      if (error)
+        toastManager.add({ type: "error", title: "Could not attach file", description: error });
+      return nextFiles.length > 0;
     },
     [
       activeThreadId,
@@ -191,7 +188,6 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
       pendingUserInputsLength,
       addComposerFile,
       addComposerFilesToDraft,
-      setThreadError,
       isElectron,
     ],
   );

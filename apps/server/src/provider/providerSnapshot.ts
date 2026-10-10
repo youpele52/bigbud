@@ -206,6 +206,7 @@ export function buildServerProvider(input: {
     // App-level steering is universal; providers without native steering use
     // the explicit interrupt-and-continue strategy.
     supportsSteer: input.provider !== "opencodeV2",
+    supportsAttachments: providerAttachmentPolicy(input.provider).supported,
     turnControl: {
       nativeSteer,
       interruptTarget: input.provider === "codex" ? "exact-turn" : "current-session",
@@ -249,3 +250,4 @@ export const collectStreamAsString = <E>(
       (acc, chunk) => acc + chunk,
     ),
   );
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";

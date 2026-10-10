@@ -1,4 +1,5 @@
 import { parseStandaloneComposerSlashCommand } from "../../../logic/composer";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { recordModelUsage } from "../../../models/recentlyUsedModels";
@@ -73,6 +74,14 @@ export async function sendChatTurn({
     shouldAutoScrollRef,
   } = input;
   if (!thread) return;
+  const attachmentIssue = providerAttachmentIssue(selectedProvider, [
+    ...composerImages,
+    ...composerFiles,
+  ]);
+  if (attachmentIssue) {
+    input.setThreadError(thread.id, attachmentIssue);
+    return;
+  }
 
   const promptForSend = promptRef.current;
   const {

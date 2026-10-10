@@ -19,6 +19,7 @@ import { ServerConfig } from "../startup/config.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { normalizeDispatchCommand } from "./Normalizer.ts";
 import { calculateCommandPayloadDigest } from "./commandDigest.ts";
+import { OrchestrationEngineService } from "./Services/OrchestrationEngine.ts";
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspacePathsLive),
@@ -27,7 +28,18 @@ const TestLayer = Layer.empty.pipe(
 );
 
 function runNormalize(command: ClientOrchestrationCommand) {
-  return Effect.runPromise(normalizeDispatchCommand(command).pipe(Effect.provide(TestLayer)));
+  return Effect.runPromise(
+    normalizeDispatchCommand(command).pipe(
+      Effect.provide(TestLayer),
+      Effect.provideService(OrchestrationEngineService, {
+        ensureThreadState: () =>
+          Effect.succeed({
+            workspaceExecutionTargetId: "local",
+            modelSelection: { provider: "codex" },
+          }),
+      } as unknown as typeof OrchestrationEngineService.Service),
+    ),
+  );
 }
 
 function getServerConfig() {

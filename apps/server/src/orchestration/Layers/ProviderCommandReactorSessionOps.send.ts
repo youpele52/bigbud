@@ -164,7 +164,10 @@ export const sendTurnAttempt = (
     const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
 
     const providerAttachments = normalizedAttachments.filter(
-      (attachment) => attachment.type === "file" || attachment.type === "image",
+      (attachment) =>
+        attachment.type === "file" ||
+        attachment.type === "image" ||
+        (modelForTurn.provider === "opencodeV2" && attachment.type === "path"),
     );
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const turn = yield* providerService.sendTurn({

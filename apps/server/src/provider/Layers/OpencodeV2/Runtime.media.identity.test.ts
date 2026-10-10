@@ -21,12 +21,12 @@ it.skipIf(process.platform === "win32")(
       await actual.mkdtemp(path.join(os.tmpdir(), "v2-media-outside-")),
     );
     const directory = path.join(root, "media");
-    const filename = path.join(directory, "file.txt");
+    const filename = path.join(directory, "media.txt");
     let opened: fs.FileHandle | undefined;
     try {
       await actual.mkdir(directory, { mode: 0o700 });
       await actual.writeFile(filename, "permitted bytes", { mode: 0o600 });
-      await actual.writeFile(path.join(outside, "file.txt"), "foreign synthetic bytes", {
+      await actual.writeFile(path.join(outside, "media.txt"), "foreign synthetic bytes", {
         mode: 0o600,
       });
       vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
@@ -55,6 +55,7 @@ it.skipIf(process.platform === "win32")(
             ],
           },
           root,
+          directory,
         ),
       ).rejects.toThrow("identity changed");
       expect(opened?.read).not.toHaveBeenCalled();

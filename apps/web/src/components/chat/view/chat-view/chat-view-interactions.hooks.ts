@@ -200,6 +200,7 @@ export function useChatViewInteractions({
     base,
     thread,
     runtime,
+    provider: composer.selectedProvider,
   });
 
   const composerCommandHandlers = useComposerCommandHandlers({

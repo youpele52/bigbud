@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./providerAttachments": {
+      "types": "./src/providerAttachments.ts",
+      "import": "./src/providerAttachments.ts"
+    },
     "./providerApproval": {
       "types": "./src/providerApproval.ts",
       "import": "./src/providerApproval.ts"

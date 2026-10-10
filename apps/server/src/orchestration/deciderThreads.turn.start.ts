@@ -18,6 +18,7 @@ import {
 } from "./ThreadPromptAdmission.logic.ts";
 import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
 import { verifiedOrchestraAssignmentSegments } from "./ThreadMessageOrigin.logic.ts";
+import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.ts";
 
 export function requireThreadReadyForMutation(input: {
   readonly thread: OrchestrationThread;
@@ -64,6 +65,7 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     threadId: command.threadId,
   });
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
+  yield* requireThreadAttachmentsSupported(targetThread, command);
   if (isThreadTurnDispatchBlocked(targetThread)) {
     const existing = targetThread.queuedPrompts?.find(
       (prompt) => prompt.id === command.message.messageId,

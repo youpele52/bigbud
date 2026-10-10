@@ -29,6 +29,7 @@ import {
 } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
+import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
 import { makeStartSession } from "./Adapter.session.ts";
 import { applyClaudeRuntimeTraits } from "./Adapter.session.traits.ts";
 import { toRequestError } from "./Adapter.utils.ts";
@@ -208,7 +209,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       providerRefs: {},
     });
 
-    const message = yield* buildUserMessageEffect(input as ProviderSendTurnInput);
+    const message = yield* buildUserMessageEffect(
+      input as ProviderSendTurnInput,
+      canReadManagedProviderPaths(context.session),
+    );
 
     if (message.uuid) {
       rememberBoundedIdentity(context.queuedUserMessageIds, message.uuid, 500);

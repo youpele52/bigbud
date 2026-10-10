@@ -10,7 +10,7 @@ import { makeV2TargetPreparation } from "./Application.targets.ts";
 import { makeV2RemoteAgentFixture } from "./Remote.fixture.ts";
 import { V2RemoteFiles } from "./Remote.files.ts";
 
-it("target composition injects actual remote coding, stages target references and never exposes native local tools", async () => {
+it("target composition injects remote coding and prepared attachment context without exposing native local tools", async () => {
   await withV2RuntimeFixture(async ({ runtime: fixture, http, directory, events }) => {
     http.autoComplete = false;
     const profile = await realpath(fixture.options.config.profileRoot);
@@ -75,12 +75,9 @@ it("target composition injects actual remote coding, stages target references an
         ],
       });
       const prompt = http.calls.find((call) => call.pathname.endsWith("/prompt"))!;
-      expect(JSON.stringify(prompt.body.files)).toContain(
-        Buffer.from("remote media").toString("base64"),
-      );
-      expect(prompt.body.metadata).toMatchObject({
-        bigbud_attachment_references: expect.stringContaining(target),
-      });
+      expect(prompt.body.files).toEqual([]);
+      expect(prompt.body.text).toContain("remote media");
+      expect(prompt.body.text).toContain(target);
       const invocation = coding.invoke({
         action: "edit",
         input: { path: "code.txt", oldText: "TARGET", newText: "$& remote" },

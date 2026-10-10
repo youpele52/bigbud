@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Stats } from "node:fs";
 
 /** Capture and recheck the permitted path and opened object, not merely its final symlink bit. */
-export async function captureV2MediaIdentity(root: string, filename: string) {
+export async function captureAttachmentIdentity(root: string, filename: string) {
   const names = [root];
   let current = root;
   for (const segment of path.relative(root, filename).split(path.sep)) {

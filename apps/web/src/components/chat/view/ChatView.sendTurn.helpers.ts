@@ -21,6 +21,7 @@ import {
   type revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
+import { desktopAttachmentPath, isRealAttachmentPath } from "./ChatView.attachments.logic";
 
 export const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -171,13 +172,25 @@ export function buildTurnAttachments(
   files: readonly ComposerFileAttachment[],
 ) {
   return Promise.all([
-    ...images.map(async (image) => ({
-      type: "image" as const,
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes: image.sizeBytes,
-      dataUrl: await readFileAsDataUrl(image.file),
-    })),
+    ...images.map(async (image) => {
+      const filePath = isElectron ? desktopAttachmentPath(image.file) : "";
+      if (filePath)
+        return {
+          type: "file" as const,
+          transport: "path" as const,
+          name: image.name,
+          mimeType: image.mimeType,
+          sizeBytes: image.sizeBytes,
+          filePath,
+        };
+      return {
+        type: "image" as const,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+        dataUrl: await readFileAsDataUrl(image.file),
+      };
+    }),
     ...files.map(async (file) => {
       if (file.attachmentMode === "thread-reference") {
         return {
@@ -200,7 +213,7 @@ export function buildTurnAttachments(
           entryKind: file.entryKind ?? "file",
         };
       }
-      if (isElectron && file.filePath) {
+      if (isElectron && isRealAttachmentPath(file.filePath)) {
         return {
           type: "file" as const,
           transport: "path" as const,
@@ -210,10 +223,11 @@ export function buildTurnAttachments(
           filePath: file.filePath,
         };
       }
-      if (isElectron) {
-        throw new Error(`Missing filesystem path for attachment '${file.name}'.`);
-      }
-      const dataUrl = file.file ? await readFileAsDataUrl(file.file) : "";
+      if (!file.file)
+        throw new Error(
+          `Attachment '${file.name}' has no readable file or path. Reattach it before sending.`,
+        );
+      const dataUrl = await readFileAsDataUrl(file.file);
       return {
         type: "file" as const,
         transport: "base64" as const,

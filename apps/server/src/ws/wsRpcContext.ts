@@ -313,7 +313,10 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       lifecycleEvents,
       loadServerConfig,
       mobileRemoteControl,
-      normalizeDispatchCommand,
+      normalizeDispatchCommand: (command: Parameters<typeof normalizeDispatchCommand>[0]) =>
+        normalizeDispatchCommand(command).pipe(
+          Effect.provideService(OrchestrationEngineService, orchestrationEngine),
+        ),
       open,
       orchestrationEngine,
       pluginRegistry,

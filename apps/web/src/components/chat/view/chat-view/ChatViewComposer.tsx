@@ -1,4 +1,5 @@
 import { type MessageId } from "@bigbud/contracts";
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
 import { useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
@@ -55,6 +56,7 @@ export function ChatViewComposer({
   onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
+  const attachmentPolicy = providerAttachmentPolicy(composer.selectedProvider);
   const promptHasText = base.prompt.trim().length > 0;
   const isDefaultComposerState =
     !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
@@ -306,12 +308,15 @@ export function ChatViewComposer({
                       className="sr-only"
                       tabIndex={-1}
                       onChange={interactions.onFileInputChange}
+                      disabled={!attachmentPolicy.supported}
                     />
                     <ComposerAttachmentMenu
                       onAttachFiles={interactions.onAttachFiles}
                       onOpenReadDialog={onOpenReadDialog}
                       onCallAgent={onCallAgent}
                       onUseSkill={onUseSkill}
+                      showAttachFiles={attachmentPolicy.supported}
+                      showReadDialog={attachmentPolicy.supported}
                       disabled={base.isConnecting || thread.isComposerApprovalState}
                     />
                   </>

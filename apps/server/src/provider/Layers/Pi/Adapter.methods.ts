@@ -19,9 +19,10 @@ import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";
 import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
 import { toMessage } from "./Adapter.utils.ts";
+import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
 
 export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
-  const { appendTextFileAttachments, resolveImages, stopSessionRecord } = createPiMethodSetup({
+  const { prepareAttachments, stopSessionRecord } = createPiMethodSetup({
     attachmentsDir: deps.attachmentsDir,
     emit: deps.emit,
     makeSyntheticEvent: deps.makeSyntheticEvent,
@@ -42,6 +43,25 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       });
     }
 
+    const attachmentAwareInput = appendPiAttachmentInstructions({
+      prompt: input.input ?? "",
+      hasFileAttachments: (input.attachments ?? []).some(
+        (attachment) => attachment.type === "file",
+      ),
+    });
+    const prepared = yield* prepareAttachments(
+      input.attachments ?? [],
+      attachmentAwareInput,
+      canReadManagedProviderPaths(session),
+    );
+    const images = prepared.attachments
+      .filter(({ attachment }) => attachment.type === "image")
+      .map(({ attachment, bytes }) => ({
+        type: "image" as const,
+        data: bytes.toString("base64"),
+        mimeType: attachment.mimeType,
+      }));
+
     if (input.modelSelection) {
       yield* applyModelSelection({ session, modelSelection: input.modelSelection });
     }
@@ -57,22 +77,11 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
 
-    const images = yield* resolveImages(input.attachments ?? []);
-    const attachmentAwareInput = appendPiAttachmentInstructions({
-      prompt: input.input ?? "",
-      hasFileAttachments: (input.attachments ?? []).some(
-        (attachment) => attachment.type === "file",
-      ),
-    });
-    const messageText = yield* appendTextFileAttachments(
-      input.attachments ?? [],
-      attachmentAwareInput,
-    );
     yield* Effect.tryPromise({
       try: () =>
         session.process.request({
           type: "prompt",
-          message: messageText,
+          message: prepared.text,
           ...(images.length > 0 ? { images } : {}),
           ...(queuedWhileRunning ? { streamingBehavior: "steer" as const } : {}),
         }),

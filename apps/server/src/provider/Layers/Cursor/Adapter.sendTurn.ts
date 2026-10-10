@@ -1,6 +1,10 @@
 import { TurnId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
 import { Effect, type FileSystem } from "effect";
 import type { ContentBlock } from "effect-acp/schema";
+import {
+  canReadManagedProviderPaths,
+  prepareManagedAttachmentContext,
+} from "../../../attachments/providerAttachments.managed.ts";
 
 import {
   ProviderAdapterRequestError,
@@ -14,7 +18,6 @@ import {
   mapAcpToAdapterError,
   PROVIDER,
   applyRequestedSessionConfiguration,
-  resolveAttachmentPath,
   resolveCursorAcpBaseModelId,
 } from "./Adapter.helpers.ts";
 
@@ -40,6 +43,22 @@ export function makeSendTurnEffect(
       input.modelSelection?.provider === "cursor" ? input.modelSelection : undefined;
     const model = turnModelSelection?.model ?? ctx.session.model;
     const resolvedModel = resolveCursorAcpBaseModelId(model);
+    const prepared = yield* Effect.tryPromise({
+      try: () =>
+        prepareManagedAttachmentContext(
+          input.input ?? "",
+          input.attachments ?? [],
+          deps.attachmentsDir,
+          canReadManagedProviderPaths(ctx.session),
+        ),
+      catch: (cause) =>
+        new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "session/prompt",
+          detail: cause instanceof Error ? cause.message : "Failed to prepare attachments.",
+          cause,
+        }),
+    });
 
     yield* applyRequestedSessionConfiguration({
       runtime: ctx.acp,
@@ -57,36 +76,15 @@ export function makeSendTurnEffect(
     });
 
     const promptParts: Array<ContentBlock> = [];
-    if (input.input?.trim()) {
-      promptParts.push({ type: "text", text: input.input.trim() });
+    if (prepared.text.trim()) {
+      promptParts.push({ type: "text", text: prepared.text.trim() });
     }
-    if (input.attachments && input.attachments.length > 0) {
-      for (const attachment of input.attachments) {
-        const attachmentPath = resolveAttachmentPath({
-          attachmentsDir: deps.attachmentsDir,
-          attachment,
-        });
-        if (!attachmentPath) {
-          return yield* new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session/prompt",
-            detail: `Invalid attachment id '${attachment.id}'.`,
-          });
-        }
-        const bytes = yield* deps.fileSystem.readFile(attachmentPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterRequestError({
-                provider: PROVIDER,
-                method: "session/prompt",
-                detail: cause.message,
-                cause,
-              }),
-          ),
-        );
+    if (prepared.attachments.length > 0) {
+      for (const { attachment, bytes } of prepared.attachments) {
+        if (attachment.type !== "image") continue;
         promptParts.push({
           type: "image",
-          data: Buffer.from(bytes).toString("base64"),
+          data: bytes.toString("base64"),
           mimeType: attachment.mimeType,
         });
       }

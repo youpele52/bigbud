@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../../ui/toast";
@@ -39,6 +40,14 @@ export function useOnSend(input: UseOnSendInput) {
       } = inputRef.current;
 
       if (!api || !thread) return;
+      const attachmentIssue = providerAttachmentIssue(inputRef.current.selectedProvider, [
+        ...inputRef.current.composerImages,
+        ...inputRef.current.composerFiles,
+      ]);
+      if (attachmentIssue) {
+        inputRef.current.setThreadError(thread.id, attachmentIssue);
+        return;
+      }
       const resetComposerDraft = () => {
         pRef.current = "";
         inputRef.current.clearComposerDraftContent(thread.id);

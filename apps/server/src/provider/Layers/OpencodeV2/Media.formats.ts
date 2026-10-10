@@ -1,4 +1,4 @@
-/** Pinned 2.0.19 accepts UTF-8 text and PNG/JPEG/GIF/WebP; never silently admit unsupported binary media. */
+/** Pinned 2.0.26 accepts UTF-8 text and PNG/JPEG/GIF/WebP; never silently admit unsupported binary media. */
 export function assertV2MediaFormat(bytes: Buffer, mime: string) {
   if (!/^[\w.+-]+\/[\w.+-]+$/.test(mime)) throw new Error("V2 attachment MIME rejected.");
   const header = bytes.subarray(0, 12);

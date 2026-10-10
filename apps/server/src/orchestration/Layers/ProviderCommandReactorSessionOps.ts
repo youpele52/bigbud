@@ -5,6 +5,7 @@ import {
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect, Equal, Schema } from "effect";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
@@ -219,6 +220,16 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     const thread = yield* services.resolveThread(input.threadId);
     if (!thread) return;
     const effectiveInput = { ...input, ...resolveTurnExecutionSettings(thread, input) };
+    const attachmentIssue =
+      providerAttachmentIssue(
+        thread.session?.providerName ?? effectiveInput.modelSelection.provider,
+        input.attachments,
+      ) ?? providerAttachmentIssue(effectiveInput.modelSelection.provider, input.attachments);
+    if (attachmentIssue)
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.sendTurnForThread",
+        issue: attachmentIssue,
+      });
     yield* withOneShotContextLimitRecovery({
       threadId: input.threadId,
       providerService: services.providerService,

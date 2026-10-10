@@ -118,7 +118,7 @@ describe("ProviderCommandReactor", () => {
     ).toBe(true);
   });
 
-  it("adds attached file metadata with full source path to providers", async () => {
+  it("adds attached file metadata without treating source provenance as a readable path", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
     const sourcePath = "/Users/alice/Desktop/report.pdf";
@@ -155,9 +155,8 @@ describe("ProviderCommandReactor", () => {
       | { input?: string; attachments?: ReadonlyArray<{ type: string }> }
       | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
-    expect(sendInput?.input).toContain(
-      `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
-    );
+    expect(sendInput?.input).toContain("- report.pdf (application/pdf, 120000 bytes)");
+    expect(sendInput?.input).not.toContain(sourcePath);
     expect(sendInput?.attachments).toEqual([expect.objectContaining({ type: "file" })]);
   });
 
@@ -256,7 +255,7 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain("follow up");
   });
 
-  it("adds generic attached file metadata uniformly for Pi with full source path", async () => {
+  it("adds generic attached file metadata uniformly for Pi without source-path read instructions", async () => {
     const harness = await createHarness({
       threadModelSelection: {
         provider: "pi",
@@ -297,9 +296,8 @@ describe("ProviderCommandReactor", () => {
 
     const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
-    expect(sendInput?.input).toContain(
-      `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
-    );
+    expect(sendInput?.input).toContain("- report.pdf (application/pdf, 120000 bytes)");
+    expect(sendInput?.input).not.toContain(sourcePath);
   });
 
   it("prepends the capability LP to the first provider input", async () => {

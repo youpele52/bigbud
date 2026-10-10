@@ -46,6 +46,7 @@ describe("mobile existing-thread command builder", () => {
         threadId,
       });
       expect(command).toMatchObject({ type: "thread.message.submit", modelSelection, runtimeMode });
+      expect(command.message.attachments).toEqual([]);
     },
   );
   it("uses the admission submission and preserves thread modes", () => {

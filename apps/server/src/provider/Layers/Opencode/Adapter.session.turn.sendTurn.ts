@@ -4,12 +4,10 @@ import { pathToFileURL } from "node:url";
 import { TurnId, type ProviderTurnStartResult } from "@bigbud/contracts";
 import { Effect } from "effect";
 
-import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
-  appendAttachedImageOcrContents,
-  appendAttachedFileContents,
-  extractPromptTextFromFile,
-} from "../../../attachments/documentText.ts";
+  canReadManagedProviderPaths,
+  prepareManagedAttachmentContext,
+} from "../../../attachments/providerAttachments.managed.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import { toMessage } from "./Adapter.stream.ts";
@@ -39,6 +37,22 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       const record = yield* requireSession(input.threadId);
       const effectServices = yield* Effect.services();
       const runPromise = Effect.runPromiseWith(effectServices);
+      const prepared = yield* Effect.tryPromise({
+        try: () =>
+          prepareManagedAttachmentContext(
+            input.input ?? "",
+            input.attachments ?? [],
+            deps.serverConfig.attachmentsDir,
+            canReadManagedProviderPaths(record),
+          ),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider,
+            method: "session.prompt",
+            detail: toMessage(cause, "Failed to prepare attachments."),
+            cause,
+          }),
+      });
 
       if (isProviderModelSelection(input.modelSelection, provider)) {
         record.model = input.modelSelection.model;
@@ -83,63 +97,20 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
         filename: string;
         url: string;
       }> = [];
-      const inlineTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-      const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-      for (const attachment of input.attachments ?? []) {
-        if (attachment.type === "path") continue;
-        const sourcePath =
-          attachment.type === "file" && attachment.sourcePath
-            ? attachment.sourcePath
-            : resolveAttachmentPath({
-                attachmentsDir: deps.serverConfig.attachmentsDir,
-                attachment,
-              });
-        if (!sourcePath) {
-          return yield* new ProviderAdapterRequestError({
-            provider,
-            method: "session.prompt",
-            detail: `Invalid attachment id '${attachment.id}'.`,
-          });
-        }
-
-        if (attachment.type === "file" || attachment.type === "image") {
-          const extractedText = yield* Effect.tryPromise({
-            try: () =>
-              extractPromptTextFromFile({
-                filePath: sourcePath,
-                mimeType: attachment.mimeType,
-                fileName: attachment.name,
-              }),
-            catch: (cause) =>
-              new ProviderAdapterRequestError({
-                provider,
-                method: "session.prompt",
-                detail: `Failed to extract text from file attachment '${attachment.name}' for ${provider}.`,
-                cause,
-              }),
-          });
-          if (extractedText !== null) {
-            if (attachment.type === "file") {
-              inlineTextBlocks.push({ fileName: attachment.name, text: extractedText });
-              continue;
-            }
-
-            imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
-          }
-        }
-
+      for (const { attachment, bytes, path: sourcePath } of prepared.attachments) {
+        if (!attachment.mimeType.startsWith("image/") && attachment.mimeType !== "application/pdf")
+          continue;
         fileParts.push({
           type: "file" as const,
           mime: attachment.mimeType,
           filename: attachment.name,
-          url: pathToFileURL(sourcePath).href,
+          url: sourcePath
+            ? pathToFileURL(sourcePath).href
+            : `data:${attachment.mimeType};base64,${bytes.toString("base64")}`,
         });
       }
 
-      const promptText = appendAttachedImageOcrContents(
-        appendAttachedFileContents(input.input ?? "", inlineTextBlocks),
-        imageOcrBlocks,
-      );
+      const promptText = prepared.text;
       const systemPrompt = buildOpencodeSystemPrompt(record.remoteWorkspaceSystemPrompt);
 
       if (record.model && !record.providerID) {

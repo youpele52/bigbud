@@ -60,6 +60,7 @@ export interface ProviderTurnControlCapabilities {
 export interface ProviderAdapterCapabilities {
   /** Explicit durable job hook; not inferred from generic workload support or public availability. */
   readonly durableLearningReview?: boolean;
+  readonly supportsAttachments?: boolean;
   /**
    * Declares whether changing the model on an existing session is supported.
    */

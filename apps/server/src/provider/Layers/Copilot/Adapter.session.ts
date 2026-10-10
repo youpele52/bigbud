@@ -9,18 +9,15 @@
  * @module CopilotAdapter.session
  */
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 
 import { type ProviderSession, type ProviderTurnStartResult, TurnId } from "@bigbud/contracts";
 import { type MessageOptions } from "@github/copilot-sdk";
 import { Effect } from "effect";
 
-import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
-  appendAttachedImageOcrContents,
-  appendAttachedFileContents,
-  extractPromptTextFromFile,
-} from "../../../attachments/documentText.ts";
+  canReadManagedProviderPaths,
+  prepareManagedAttachmentContext,
+} from "../../../attachments/providerAttachments.managed.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import { type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
 import {
@@ -39,68 +36,33 @@ export const makeSendTurn =
   (input) =>
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
-      const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-      const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-      const persistableAttachments = (input.attachments ?? []).filter(
-        (attachment) => attachment.type !== "path",
-      );
-      const attachments: MessageOptions["attachments"] = yield* Effect.forEach(
-        persistableAttachments,
-        (attachment) =>
-          Effect.gen(function* () {
-            const filePath = resolveAttachmentPath({
-              attachmentsDir: deps.serverConfig.attachmentsDir,
-              attachment,
-            });
-            if (!filePath) {
-              return yield* new ProviderAdapterRequestError({
-                provider: PROVIDER,
-                method: "session.send",
-                detail: `Invalid attachment id '${attachment.id}'.`,
-              });
-            }
-            if (attachment.type === "file" || attachment.type === "image") {
-              const extractedText = yield* Effect.tryPromise({
-                try: () =>
-                  extractPromptTextFromFile({
-                    filePath,
-                    mimeType: attachment.mimeType,
-                    fileName: attachment.name,
-                  }),
-                catch: (cause) =>
-                  new ProviderAdapterRequestError({
-                    provider: PROVIDER,
-                    method: "session.send",
-                    detail: `Failed to extract text from attachment '${attachment.name}'.`,
-                    cause,
-                  }),
-              });
-              if (extractedText !== null) {
-                if (attachment.type === "file") {
-                  extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
-                } else {
-                  imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
-                }
-              }
-            }
-            const bytes = yield* Effect.tryPromise({
-              try: () => readFile(filePath),
-              catch: (cause) =>
-                new ProviderAdapterRequestError({
-                  provider: PROVIDER,
-                  method: "session.send",
-                  detail: `Failed to read attachment '${attachment.name}'.`,
-                  cause,
-                }),
-            });
-            return {
-              type: "blob" as const,
-              data: bytes.toString("base64"),
-              mimeType: attachment.mimeType,
-              displayName: attachment.name,
-            };
+      const prepared = yield* Effect.tryPromise({
+        try: () =>
+          prepareManagedAttachmentContext(
+            input.input ?? "",
+            input.attachments ?? [],
+            deps.serverConfig.attachmentsDir,
+            canReadManagedProviderPaths(record),
+          ),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "session.send",
+            detail: toMessage(cause, "Failed to prepare attachments."),
+            cause,
           }),
-      );
+      });
+      const attachments: MessageOptions["attachments"] = prepared.attachments
+        .filter(
+          ({ attachment }) =>
+            attachment.mimeType.startsWith("image/") || attachment.mimeType === "application/pdf",
+        )
+        .map(({ attachment, bytes }) => ({
+          type: "blob",
+          data: bytes.toString("base64"),
+          mimeType: attachment.mimeType,
+          displayName: attachment.name,
+        }));
 
       const copilotModelSelection =
         input.modelSelection?.provider === "copilot" ? input.modelSelection : undefined;
@@ -149,10 +111,7 @@ export const makeSendTurn =
       record.updatedAt = new Date().toISOString();
 
       const sendPayload: Parameters<typeof record.session.send>[0] = {
-        prompt: appendAttachedImageOcrContents(
-          appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
-          imageOcrBlocks,
-        ),
+        prompt: prepared.text,
         ...(attachments.length > 0 ? { attachments } : {}),
         mode: "immediate",
       };

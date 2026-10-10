@@ -20,6 +20,7 @@ describe("dormant V2 capability and composition boundaries", () => {
     expect(snapshot.auth.status).toBe("unknown");
     expect(snapshot.models).toEqual([]);
     expect(snapshot.supportsSteer).toBe(false);
+    expect(snapshot.supportsAttachments).toBe(true);
     expect(snapshot.turnControl).toEqual(adapter.capabilities.turnControl);
     expect(adapter.capabilities).toMatchObject({
       sessionRecovery: "unsupported",

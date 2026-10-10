@@ -5,6 +5,7 @@ import type {
   OrchestrationQueuedPrompt,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
+import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.ts";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
@@ -118,6 +119,8 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   const { command, readModel } = input;
   const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
   yield* requireThreadReadyForMutation({ thread, command });
+  if (command.type === "thread.message.submit")
+    yield* requireThreadAttachmentsSupported(thread, command);
 
   if (command.type === "thread.queued-prompt.flush-cancel") {
     if (thread.pendingInterruptFlushIntent?.intentId !== command.intentId) return [];
