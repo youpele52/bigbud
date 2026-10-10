@@ -109,7 +109,7 @@ describe("ProviderCommandReactor", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "stopped",
-          providerName: "opencode",
+          providerName: "kilocode",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,
@@ -141,7 +141,7 @@ describe("ProviderCommandReactor", () => {
   it("interrupts against a live provider runtime session even when thread session state is stale", async () => {
     const harness = await createHarness({
       threadModelSelection: {
-        provider: "opencode",
+        provider: "kilocode",
         model: "gpt-5-codex",
       },
     });
@@ -163,7 +163,7 @@ describe("ProviderCommandReactor", () => {
         session: {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "stopped",
-          providerName: "opencode",
+          providerName: "kilocode",
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,

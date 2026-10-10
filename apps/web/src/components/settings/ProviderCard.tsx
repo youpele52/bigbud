@@ -157,7 +157,7 @@ export function ProviderCard({
                 Connection mode
                 <select
                   className="mt-1.5 block w-full rounded-md border border-border bg-background p-2 text-sm"
-                  aria-label="OpenCode v2 connection mode"
+                  aria-label="OpenCode connection mode"
                   value={connectionMode}
                   onChange={(event) =>
                     onConnectionModeChange?.(event.target.value as "shared" | "isolated")

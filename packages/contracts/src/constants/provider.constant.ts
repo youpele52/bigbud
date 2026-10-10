@@ -26,7 +26,7 @@ export const PROVIDER_DISPLAY_NAMES = {
   copilot: "Copilot",
   kilocode: "KiloCode",
   opencode: "OpenCode",
-  opencodeV2: "OpenCode v2 (Preview)",
+  opencodeV2: "OpenCode",
   pi: "Pi",
   cursor: "Cursor",
   devin: "Devin",

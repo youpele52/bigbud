@@ -1,13 +1,18 @@
 import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 import { OrchestrationDispatchCommandError } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import { Effect } from "effect";
+import {
+  isLegacyOpencodeThread,
+  isRetiredProvider,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import { canAutoDispatchQueuedPrompts } from "../orchestration/QueuedPromptPolicy.logic.ts";
 
 type BootstrapPromptCommand = Extract<
   OrchestrationCommand,
-  { type: "thread.turn.start" | "thread.message.submit" }
+  { type: "thread.turn.start" | "thread.message.submit" | "thread.shell.run" }
 >;
 
 export function validateBootstrapSubmission(input: {
@@ -16,6 +21,14 @@ export function validateBootstrapSubmission(input: {
 }) {
   return Effect.gen(function* () {
     const { command, engine } = input;
+    if (
+      ("modelSelection" in command && isRetiredProvider(command.modelSelection?.provider)) ||
+      isRetiredProvider(command.bootstrap?.createThread?.modelSelection.provider)
+    ) {
+      return yield* new OrchestrationDispatchCommandError({
+        message: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+      });
+    }
     const thread = engine.ensureThreadState
       ? yield* engine.ensureThreadState(command.threadId, "operational")
       : yield* command.bootstrap?.createThread
@@ -35,6 +48,13 @@ export function validateBootstrapSubmission(input: {
                   readModel.threads.find((entry) => entry.id === command.threadId),
                 ),
               );
+    if (thread && isLegacyOpencodeThread(thread)) {
+      return yield* new OrchestrationDispatchCommandError({
+        message: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+      });
+    }
+    // Shell bootstrap keeps its existing non-queue admission semantics.
+    if (command.type === "thread.shell.run") return;
     // A createThread payload is the materialization path for a new thread. If
     // it has no existing target, retain its direct create/worktree/setup order.
     if (!thread && command.bootstrap?.createThread) return;

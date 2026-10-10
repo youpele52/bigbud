@@ -1,4 +1,8 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import {
+  isRetiredProvider,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts/orchestration/providerRuntime.events.ts";
 import { Deferred, Effect, Option, Schema } from "effect";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
@@ -44,6 +48,9 @@ export function makeBackgroundReviews(
         durableReview?.threadId ?? ThreadId.makeUnsafe(`${prefix}${crypto.randomUUID()}`);
       const fail = (detail: string) =>
         toValidationError("ProviderService.runBackgroundReview", detail);
+      if (isRetiredProvider(request.modelSelection.provider)) {
+        return yield* fail(LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+      }
       if (durableReview) {
         const adapter = yield* input.registry.getByProvider("opencodeV2");
         if (adapter.runBackgroundReview) {

@@ -8,6 +8,7 @@ import {
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
+import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
 import { decideOrchestrationCommand } from "./decider.ts";
 
 const now = "2026-10-09T00:00:00.000Z";
@@ -123,8 +124,8 @@ for (const type of ["thread.turn.start", "thread.message.submit"] as const) {
     });
 }
 
-it("does not alter V1/Kilo attachment admission or V2 text queueing", async () => {
-  for (const provider of ["opencode", "kilocode", "opencodeV2"] as const) {
+it("does not alter Kilo attachment admission or V2 text queueing", async () => {
+  for (const provider of ["kilocode", "opencodeV2"] as const) {
     const events = await Effect.runPromise(
       decideOrchestrationCommand({
         readModel: readModel(provider),
@@ -144,4 +145,33 @@ it("does not alter V1/Kilo attachment admission or V2 text queueing", async () =
     );
     expect("type" in events ? events.type : events[0]?.type).toBe("thread.prompt-queued");
   }
+});
+
+it("rejects legacy attachment queueing without altering history", async () => {
+  const history = readModel("opencode");
+  const before = structuredClone(history);
+  const result = await Effect.runPromise(
+    Effect.result(
+      decideOrchestrationCommand({
+        readModel: history,
+        command: {
+          type: "thread.message.submit",
+          commandId: CommandId.makeUnsafe("retired-attachment"),
+          threadId,
+          message: {
+            messageId: MessageId.makeUnsafe("retained"),
+            text: "Do not queue",
+            attachments: [attachments[0]],
+          },
+          delivery: "queue",
+          createdAt: now,
+        },
+      }),
+    ),
+  );
+  expect(result).toMatchObject({
+    _tag: "Failure",
+    failure: { detail: LEGACY_OPENCODE_READ_ONLY_MESSAGE },
+  });
+  expect(history).toEqual(before);
 });

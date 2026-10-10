@@ -6,6 +6,10 @@ import {
 } from "@bigbud/contracts";
 import { Effect, Equal, Schema } from "effect";
 import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
+import {
+  isLegacyOpencodeThread,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
@@ -43,6 +47,12 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     const thread = readModel.threads.find((entry) => entry.id === threadId);
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
+    }
+    if (isLegacyOpencodeThread(thread)) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+      });
     }
     const desiredRuntimeMode = options?.runtimeMode ?? thread.runtimeMode;
     const currentProvider: import("@bigbud/contracts").ProviderKind | undefined = Schema.is(

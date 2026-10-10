@@ -219,7 +219,8 @@ describe("PROVIDER_OPTIONS", () => {
   it("advertises providers in the shared provider order", () => {
     const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
     const copilot = PROVIDER_OPTIONS.find((option) => option.value === "copilot");
-    const opencode = PROVIDER_OPTIONS.find((option) => option.value === "opencode");
+    const opencode = PROVIDER_OPTIONS.find((option) => option.value === "opencodeV2");
+    expect(PROVIDER_OPTIONS.some((option) => option.value === "opencode")).toBe(false);
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     const devin = PROVIDER_OPTIONS.find((option) => option.value === "devin");
     expect(PROVIDER_OPTIONS).toEqual([
@@ -230,8 +231,7 @@ describe("PROVIDER_OPTIONS", () => {
       { value: "cursor", label: "Cursor", available: true },
       { value: "devin", label: "Devin", available: true },
       { value: "kilocode", label: "KiloCode", available: true },
-      { value: "opencode", label: "OpenCode", available: true },
-      { value: "opencodeV2", label: "OpenCode v2 (Preview)", available: true },
+      { value: "opencodeV2", label: "OpenCode", available: true },
       { value: "pi", label: "Pi", available: true },
     ]);
     expect(claude).toEqual({
@@ -250,7 +250,7 @@ describe("PROVIDER_OPTIONS", () => {
       available: true,
     });
     expect(opencode).toEqual({
-      value: "opencode",
+      value: "opencodeV2",
       label: "OpenCode",
       available: true,
     });

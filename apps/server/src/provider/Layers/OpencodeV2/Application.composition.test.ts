@@ -8,6 +8,14 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 
+const disabledSettings = {
+  ...DEFAULT_SERVER_SETTINGS,
+  providers: {
+    ...DEFAULT_SERVER_SETTINGS.providers,
+    opencodeV2: { ...DEFAULT_SERVER_SETTINGS.providers.opencodeV2, enabled: false },
+  },
+};
+
 it("registers V2 without env flags, honors settings edits, and rejects missing/incompatible binaries independently of V1", async () => {
   await withV2RuntimeFixture(async ({ runtime }) => {
     const parent = await realpath(runtime.options.config.profileRoot);
@@ -74,7 +82,7 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
             expect((yield* registration.providerService.refresh).enabled).toBe(false);
           }),
         ).pipe(
-          Effect.provide(ServerSettingsService.layerTest()),
+          Effect.provide(ServerSettingsService.layerTest(disabledSettings)),
           Effect.provideService(ProviderTurnAdmissions, runtime.options.journal),
         ),
       );
@@ -88,7 +96,7 @@ it("publishes readiness changes when saved V2 settings change without manual ref
       Effect.scoped(
         Effect.gen(function* () {
           const settingsChanges = yield* PubSub.unbounded<typeof DEFAULT_SERVER_SETTINGS>();
-          let current = DEFAULT_SERVER_SETTINGS;
+          let current = disabledSettings;
           const registrations = yield* composeOptionalProviders([], {}).pipe(
             Effect.provideService(ServerSettingsService, {
               getSettings: Effect.sync(() => current),
@@ -119,7 +127,7 @@ it("publishes readiness changes when saved V2 settings change without manual ref
           };
           yield* PubSub.publish(settingsChanges, current);
           yield* Effect.promise(() => expect.poll(() => enabled).toEqual([true]));
-          current = DEFAULT_SERVER_SETTINGS;
+          current = disabledSettings;
           yield* PubSub.publish(settingsChanges, current);
           yield* Effect.promise(() => expect.poll(() => enabled).toEqual([true, false]));
         }),

@@ -14,6 +14,6 @@ export function automationAlreadyAdmitted(
 /** Scheduled work may use explicit Full access host-user trust, never infer that trust from an unattended launch. */
 export function automationProviderLimitation(thread: OrchestrationThread | undefined) {
   return thread?.modelSelection.provider === "opencodeV2" && thread.runtimeMode !== "full-access"
-    ? "OpenCode v2 (Preview) scheduled actions require supervision in approval-required/Auto edits modes. Explicitly user-selected Full access permits ordinary native workspace tools; external-directory requests/forms may still require an operator. No automatic trust escalation or provider fallback."
+    ? "OpenCode scheduled actions require supervision in approval-required/Auto edits modes. Explicitly user-selected Full access permits ordinary native workspace tools; external-directory requests/forms may still require an operator. No automatic trust escalation or provider fallback."
     : undefined;
 }

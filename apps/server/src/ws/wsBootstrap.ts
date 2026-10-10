@@ -205,11 +205,7 @@ export function makeDispatchBootstrapThreadCommand(
         const parentOutcome = yield* getCommandOutcome(command.commandId);
         isAcceptedThreadOutcome(parentOutcome, command.threadId, "bootstrap parent");
         let submissionRecipe: BootstrapSubmissionRecipe | undefined;
-        if (
-          bootstrap &&
-          (command.type === "thread.turn.start" || command.type === "thread.message.submit") &&
-          parentOutcome.status === "unknown"
-        ) {
+        if (bootstrap && parentOutcome.status === "unknown") {
           yield* validateBootstrapSubmission({ command, engine: orchestrationEngine });
         }
         if (command.type === "thread.message.submit" && bootstrap) {

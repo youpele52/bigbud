@@ -148,57 +148,25 @@ validation.layer("ProviderServiceLive validation", (it) => {
     }),
   );
 
-  it.effect("allows remote opencode sessions and persists their execution target", () =>
+  it.effect("rejects legacy OpenCode before adapter startup or persistence", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
-      const sql = yield* SqlClient.SqlClient;
-      yield* createProjectedThread(sql, "thread-remote-opencode");
-
-      validation.opencode.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
-        Effect.sync(() => {
-          const now = new Date().toISOString();
-          return {
-            provider: "opencode",
-            status: "ready",
-            threadId: input.threadId,
-            executionTargetId: input.executionTargetId,
-            runtimeMode: input.runtimeMode,
-            cwd: input.cwd ?? "/root/project",
-            createdAt: now,
-            updatedAt: now,
-          } satisfies ProviderSession;
+      const failure = yield* Effect.result(
+        provider.startSession(asThreadId("thread-remote-opencode"), {
+          provider: "opencode",
+          threadId: asThreadId("thread-remote-opencode"),
+          executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+          cwd: "/root/project",
+          runtimeMode: "full-access",
         }),
       );
-
-      const session = yield* provider.startSession(asThreadId("thread-remote-opencode"), {
-        provider: "opencode",
-        threadId: asThreadId("thread-remote-opencode"),
-        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        cwd: "/root/project",
-        runtimeMode: "full-access",
-      });
-
-      assert.equal(session.executionTargetId, "ssh:host=devbox&user=root&port=22&auth=ssh-key");
-
+      assert.equal(failure._tag, "Failure");
+      assert.equal(validation.opencode.startSession.mock.calls.length, 0);
       const runtime = yield* runtimeRepository.getByThreadId({
-        threadId: session.threadId,
+        threadId: asThreadId("thread-remote-opencode"),
       });
-      assert.equal(Option.isSome(runtime), true);
-      if (Option.isSome(runtime)) {
-        assert.equal(
-          runtime.value.providerRuntimeExecutionTargetId,
-          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        );
-        assert.equal(
-          runtime.value.workspaceExecutionTargetId,
-          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        );
-        assert.equal(
-          runtime.value.executionTargetId,
-          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        );
-      }
+      assert.equal(Option.isNone(runtime), true);
     }),
   );
 

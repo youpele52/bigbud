@@ -56,7 +56,7 @@ describe("providerWorkloadSupport", () => {
     ["cliProxy", true, false, false, false],
     ["copilot", true, true, true, true],
     ["kilocode", true, true, true, true],
-    ["opencode", true, true, true, true],
+    ["opencode", false, false, false, false],
     ["pi", true, true, true, true],
     ["cursor", true, true, true, false],
     ["devin", true, true, true, false],

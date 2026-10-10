@@ -178,7 +178,7 @@ export const CopilotSettings = Schema.Struct({
 export type CopilotSettings = typeof CopilotSettings.Type;
 
 export const OpencodeSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   binaryPath: makeBinaryPathSetting("opencode"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
 });

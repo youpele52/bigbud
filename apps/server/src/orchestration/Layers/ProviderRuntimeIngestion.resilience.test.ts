@@ -116,14 +116,14 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBe("runtime still processed");
   });
 
-  it("keeps recovery exhaustion turn-scoped through dispatch and queue safety", async () => {
+  it("keeps KiloCode V1-protocol recovery exhaustion turn-scoped through dispatch and queue safety", async () => {
     const harness = await createHarness();
     const threadId = asThreadId("thread-1");
     const turnId = asTurnId("opencode-recovery-turn");
     const createdAt = new Date().toISOString();
 
     harness.setProviderSession({
-      provider: "opencode",
+      provider: "kilocode",
       status: "running",
       runtimeMode: "approval-required",
       sessionEpoch: 0,
@@ -135,7 +135,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "turn.started",
       eventId: asEventId("evt-opencode-recovery-turn-started"),
-      provider: "opencode",
+      provider: "kilocode",
       threadId,
       turnId,
       createdAt,
@@ -155,7 +155,7 @@ describe("ProviderRuntimeIngestion", () => {
       ) =>
         Effect.succeed({
           eventId: EventId.makeUnsafe("evt-opencode-recovery-exhausted"),
-          provider: "opencode",
+          provider: "kilocode",
           threadId: _threadId,
           sessionEpoch,
           createdAt: new Date().toISOString(),

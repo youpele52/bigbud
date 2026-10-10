@@ -21,7 +21,6 @@ import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
 import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
-import { makeOpencodeAdapterLive } from "./provider/Layers/Opencode/Adapter";
 import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
 import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
@@ -207,9 +206,6 @@ const makeProviderLayerLive = (
       const kilocodeAdapterLayer = makeKilocodeAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
-      const opencodeAdapterLayer = makeOpencodeAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
       const piAdapterLayer = makePiAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
@@ -225,7 +221,6 @@ const makeProviderLayerLive = (
         Layer.provide(cursorAdapterLayer),
         Layer.provide(devinAdapterLayer),
         Layer.provide(kilocodeAdapterLayer),
-        Layer.provide(opencodeAdapterLayer),
         Layer.provide(piAdapterLayer),
         Layer.provideMerge(providerSessionDirectoryLayer),
       );
@@ -317,7 +312,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   ),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
-  // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process
+  // V1 protocol manager is retained for KiloCode only; OpenCode uses its V2 service.
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),

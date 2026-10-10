@@ -9,6 +9,85 @@ const config = Layer.fresh(
 );
 
 it.layer(NodeServices.layer)("V2 settings persistence boundaries", (it) => {
+  it.effect("malformed V2 entries retain explicit consent through disk recovery and reload", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { settingsPath } = yield* ServerConfig;
+      for (const enabled of [false, undefined, true]) {
+        const raw = JSON.stringify({
+          providers: {
+            opencodeV2: { enabled, binaryPath: 42 },
+            opencode: { binaryPath: "/historical" },
+            codex: { enabled: false },
+          },
+        });
+        yield* fs.writeFileString(settingsPath, raw);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            const loaded = yield* settings.getSettings;
+            assert.equal(loaded.providers.opencodeV2.enabled, enabled === true);
+            assert.equal(loaded.providers.opencode.enabled, false);
+            assert.equal(loaded.providers.opencode.binaryPath, "/historical");
+            assert.equal(loaded.providers.codex.enabled, false);
+            assert.equal(yield* fs.readFileString(settingsPath), raw);
+            yield* settings.updateSettings({ enableThinkingStreaming: false });
+            assert.equal(
+              JSON.parse(yield* fs.readFileString(settingsPath)).providers.opencodeV2.enabled,
+              enabled === true,
+            );
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            assert.equal(
+              (yield* settings.getSettings).providers.opencodeV2.enabled,
+              enabled === true,
+            );
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+      }
+    }).pipe(Effect.provide(config)),
+  );
+  it.effect(
+    "fresh enable survives an unrelated write and reload; corrupt existing settings fail closed",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { settingsPath } = yield* ServerConfig;
+        yield* fs.remove(settingsPath, { force: true });
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            assert.equal((yield* settings.getSettings).providers.opencodeV2.enabled, true);
+            yield* settings.updateSettings({ enableThinkingStreaming: false });
+            assert.equal(
+              JSON.parse(yield* fs.readFileString(settingsPath)).providers.opencodeV2.enabled,
+              true,
+            );
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            assert.equal((yield* settings.getSettings).providers.opencodeV2.enabled, true);
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+        yield* fs.writeFileString(settingsPath, "{broken");
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            assert.equal((yield* settings.getSettings).providers.opencodeV2.enabled, false);
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+      }).pipe(Effect.provide(config)),
+  );
   it.effect(
     "imports old JSON default-off and exports/reloads independent V2 paths without changing V1/Kilo",
     () =>
@@ -52,7 +131,7 @@ it.layer(NodeServices.layer)("V2 settings persistence boundaries", (it) => {
             });
             yield* settings.updateSettings({ providers: { opencodeV2: { enabled: false } } });
             const disabled = JSON.parse(yield* fs.readFileString(settingsPath));
-            assert.equal(disabled.providers.opencodeV2.enabled, undefined); // Sparse default false, not erased paths.
+            assert.equal(disabled.providers.opencodeV2.enabled, false); // Explicit disable, not erased paths.
             assert.equal(disabled.providers.opencodeV2.binaryPath, "/separate/v2");
             assert.equal(disabled.providers.opencode.binaryPath, "/v1");
             assert.equal(disabled.providers.kilocode.binaryPath, "/kilo");

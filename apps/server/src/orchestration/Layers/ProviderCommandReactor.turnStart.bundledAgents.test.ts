@@ -36,7 +36,7 @@ describe("ProviderCommandReactor — bundled agents", () => {
     const harness = await createHarness({
       baseDir,
       threadModelSelection: {
-        provider: "opencode",
+        provider: "opencodeV2",
         model: "gpt-5-codex",
       },
       discoveryCatalog: {

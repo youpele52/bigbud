@@ -4,7 +4,7 @@ import { TrimmedString } from "./baseSchemas";
 
 /** Shared TUI service is the default; private storage requires explicit opt-in. */
 export const OpencodeV2DevelopmentSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   profileRoot: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),

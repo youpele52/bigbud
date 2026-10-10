@@ -183,7 +183,7 @@ describe("ProviderRuntimeIngestion queued prompt settlement", () => {
     },
   );
 
-  it("reconciles a rejected terminal event from the live idle session and flushes once", async () => {
+  it("reconciles historical legacy identity without flushing queued runtime work", async () => {
     const harness = await createHarness();
     const threadId = ThreadId.makeUnsafe("thread-1");
     const projectedTurnId = asTurnId("turn-projected");
@@ -235,13 +235,12 @@ describe("ProviderRuntimeIngestion queued prompt settlement", () => {
 
     const settled = await waitForThread(
       harness.engine,
-      (thread) =>
-        thread.session?.status === "starting" &&
-        (thread.queuedPrompts?.length ?? 0) === 0 &&
-        thread.messages.filter((message) => message.text.includes("Continue after reconciliation"))
-          .length === 1,
+      (thread) => thread.session?.status === "ready" && thread.session?.providerName === "opencode",
     );
-    expect(settled.queuedPrompts).toEqual([]);
+    expect(settled.queuedPrompts).toHaveLength(1);
+    expect(
+      settled.messages.some((message) => message.text.includes("Continue after reconciliation")),
+    ).toBe(false);
   });
 
   it("preserves a newer live turn when an older provider terminal event arrives", async () => {

@@ -6,7 +6,7 @@ export function isComposerProviderVisible(
   provider: ProviderKind,
   hiddenProviders: ReadonlyArray<ProviderKind>,
 ): boolean {
-  return !hiddenProviders.includes(provider);
+  return provider !== "opencode" && !hiddenProviders.includes(provider);
 }
 
 export function getVisibleComposerProviders(

@@ -36,7 +36,7 @@ export function isProviderEnabled(
   provider: ProviderKind,
 ): boolean {
   const snapshot = getProviderSnapshot(providers, provider);
-  return snapshot?.enabled ?? provider !== "opencodeV2";
+  return provider !== "opencode" && (snapshot?.enabled ?? provider !== "opencodeV2");
 }
 
 export function resolveSelectableProvider(
@@ -45,12 +45,13 @@ export function resolveSelectableProvider(
 ): ProviderKind {
   // If user explicitly selected a provider, keep it even if unusable —
   // the UI will display the error/warning state and block selection.
-  if (provider) {
+  if (provider && provider !== "opencode") {
     return provider;
   }
   // Only fall back when no provider was explicitly selected.
   const fromSnapshot = providers.find(
-    (candidate) => candidate.provider !== "opencodeV2" && candidate.enabled,
+    (candidate) =>
+      candidate.provider !== "opencodeV2" && candidate.provider !== "opencode" && candidate.enabled,
   )?.provider;
   if (fromSnapshot) return fromSnapshot;
   return PROVIDER_KINDS[0];
@@ -113,7 +114,10 @@ export function getDefaultServerModel(
 export function getFirstReadyProvider(
   providers: ReadonlyArray<ServerProvider>,
 ): ServerProvider | undefined {
-  return providers.find((p) => p.provider !== "opencodeV2" && p.enabled && p.status === "ready");
+  return providers.find(
+    (p) =>
+      p.provider !== "opencodeV2" && p.provider !== "opencode" && p.enabled && p.status === "ready",
+  );
 }
 
 /**
@@ -131,7 +135,9 @@ export function getDefaultModelSelection(providers: ReadonlyArray<ServerProvider
     const model = firstModel?.slug ?? DEFAULT_MODEL_BY_PROVIDER[ready.provider];
     return buildModelSelection(ready.provider, model, firstModel?.subProviderID);
   }
-  const firstEnabled = providers.find((p) => p.provider !== "opencodeV2" && p.enabled);
+  const firstEnabled = providers.find(
+    (p) => p.provider !== "opencodeV2" && p.provider !== "opencode" && p.enabled,
+  );
   if (firstEnabled) {
     const firstModel = firstEnabled.models[0];
     const model = firstModel?.slug ?? DEFAULT_MODEL_BY_PROVIDER[firstEnabled.provider];

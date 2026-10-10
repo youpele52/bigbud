@@ -23,6 +23,7 @@ import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic
 import type { MobileRecoveryController } from "../logic/mobileRecovery.controller";
 import type { MobileRpcClient } from "../lib/mobileRpc";
 import type { MobileCommandDeliveryController } from "../lib/mobileCommandDelivery";
+import { isLegacyOpencodeThread, isRetiredProvider } from "@bigbud/shared/providerLifecycle";
 
 function newCommandId() {
   return CommandId.makeUnsafe(crypto.randomUUID());
@@ -89,6 +90,9 @@ export function buildMobileExistingThreadMessageSubmitCommand(input: {
 }
 
 export function createMobileThreadCommands(input: MobileThreadCommandInput) {
+  const readOnly =
+    isLegacyOpencodeThread(input.thread) ||
+    isRetiredProvider(input.selectedModelSelection.provider);
   const refreshAfterCommand = async () => {
     if (input.recovery) {
       await input.recovery.refresh(input.threadId);
@@ -120,7 +124,7 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
     submittedRevision: number,
     delivery = input.delivery,
   ) => {
-    if (!input.client) return null;
+    if (!input.client || readOnly) return null;
     let state = await delivery.submit({
       command,
       dispatch: (submittedCommand) => input.client!.dispatchCommand(submittedCommand),
@@ -150,7 +154,7 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
   };
 
   const retryDelivery = async () => {
-    if (!input.client) return input.delivery.getState();
+    if (!input.client || readOnly) return input.delivery.getState();
     const state = await input.delivery.retrySameOperation((command) =>
       input.client!.dispatchCommand(command),
     );
@@ -176,7 +180,7 @@ export function createMobileThreadCommands(input: MobileThreadCommandInput) {
   };
 
   const sendPrompt = async () => {
-    if (!input.client || !input.actionsAvailable) return;
+    if (!input.client || !input.actionsAvailable || readOnly) return;
 
     if (input.activePendingUserInput) {
       const progress = derivePendingUserInputProgress(

@@ -36,6 +36,25 @@ const snapshot: ServerProvider = {
 };
 
 describe("independent V2 preview model/UI boundaries", () => {
+  it("exposes exactly one OpenCode option and no legacy settings or automatic selection", () => {
+    expect(
+      PROVIDER_OPTIONS.filter((option) => option.label === "OpenCode").map(
+        (option) => option.value,
+      ),
+    ).toEqual(["opencodeV2"]);
+    expect(PROVIDER_SETTINGS.some((descriptor) => descriptor.provider === "opencode")).toBe(false);
+    expect(
+      getVisibleProviderDescriptors([snapshot]).some(
+        (descriptor) => descriptor.provider === "opencode",
+      ),
+    ).toBe(false);
+    const legacy = { ...snapshot, provider: "opencode" as const };
+    expect(isProviderEnabled([legacy], "opencode")).toBe(false);
+    expect(getDefaultModelSelection([legacy, snapshot]).provider).not.toBe("opencode");
+    expect(resolveSelectableProvider([legacy, snapshot], "opencode")).not.toBe("opencode");
+    expect(getComposerProviderFallback([legacy, snapshot], [])).not.toBe("opencode");
+    expect(resolveSelectableProvider([snapshot], "claudeAgent")).toBe("claudeAgent");
+  });
   it("offers explicitly marked development selections/settings without becoming the automatic default", () => {
     const development = { ...snapshot, developmentOnly: true };
     expect(isProviderEnabled([development], "opencodeV2")).toBe(true);

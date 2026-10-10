@@ -30,6 +30,10 @@ it("reads the development snapshot without probing or publishing a provider chan
         yield* Effect.sleep("10 millis");
         expect(updates).toEqual([]);
       }),
-    ).pipe(Effect.provide(ServerSettingsService.layerTest())),
+    ).pipe(
+      Effect.provide(
+        ServerSettingsService.layerTest({ providers: { opencodeV2: { enabled: false } } }),
+      ),
+    ),
   );
 });

@@ -21,7 +21,6 @@ import { CodexAdapter } from "../Services/Codex/Adapter.ts";
 import { CursorAdapter } from "../Services/Cursor/Adapter.ts";
 import { DevinAdapter } from "../Services/Devin/Adapter.ts";
 import { KilocodeAdapter } from "../Services/Kilocode/Adapter.ts";
-import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../Services/Pi/Adapter.ts";
 import type { AdapterRegistration } from "../ProviderRegistration.ts";
 
@@ -44,7 +43,6 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
           yield* CursorAdapter,
           yield* DevinAdapter,
           yield* KilocodeAdapter,
-          yield* OpencodeAdapter,
           yield* PiAdapter,
         ];
   return makeAdapterLookup(adapters);

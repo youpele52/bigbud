@@ -4,6 +4,7 @@ import {
   type ProviderKind,
   type ServerProvider,
 } from "@bigbud/contracts";
+import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
 
 export type ProviderWorkload =
   | "interactive"
@@ -68,10 +69,10 @@ const PROVIDER_WORKLOAD_SUPPORT = {
     usageAccounting: true,
   },
   opencode: {
-    interactive: true,
-    unattendedTextGeneration: true,
-    learning: true,
-    usageAccounting: true,
+    interactive: false,
+    unattendedTextGeneration: false,
+    learning: false,
+    usageAccounting: false,
   },
   pi: {
     interactive: true,
@@ -151,6 +152,9 @@ export function resolveProviderWorkload(input: {
   readonly fallbackOrder?: ReadonlyArray<ProviderKind>;
 }): ProviderWorkloadResolution {
   const { requested, workload } = input;
+  if (requested.provider === "opencode" && workload !== "unattendedTextGeneration") {
+    return { requested, actual: null, action: "reject", reason: LEGACY_OPENCODE_READ_ONLY_MESSAGE };
+  }
   if (requested.provider === "opencodeV2" && workload === "learning") {
     return {
       requested,

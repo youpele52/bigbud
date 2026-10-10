@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./providerLifecycle": {
+      "types": "./src/providerLifecycle.ts",
+      "import": "./src/providerLifecycle.ts"
+    },
     "./providerAttachments": {
       "types": "./src/providerAttachments.ts",
       "import": "./src/providerAttachments.ts"

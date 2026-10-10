@@ -188,8 +188,8 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
     provider: "opencode",
     label: PROVIDER_DISPLAY_NAMES.opencode,
     icon: OpenCodeIcon,
-    pickerAvailable: true,
-    isVisible: visible,
+    pickerAvailable: false,
+    isVisible: () => false,
     supportsSubProviderID: true,
     catalogAuthoritative: false,
     settings: { path: binary("OpenCode binary path", "Path to the OpenCode binary") },
@@ -243,7 +243,9 @@ export const PROVIDER_DESCRIPTORS = PROVIDER_KINDS.map(
 );
 
 export const PROVIDER_DESCRIPTOR_BY_KIND = DESCRIPTORS_BY_PROVIDER;
-export const PUBLIC_PROVIDER_DESCRIPTORS = PROVIDER_DESCRIPTORS;
+export const PUBLIC_PROVIDER_DESCRIPTORS = PROVIDER_DESCRIPTORS.filter(
+  (descriptor) => descriptor.provider !== "opencode",
+);
 export type ProviderPickerKind = ProviderKind;
 export const PROVIDER_OPTIONS = PUBLIC_PROVIDER_DESCRIPTORS.map((descriptor) => ({
   value: descriptor.provider,

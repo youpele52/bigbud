@@ -52,6 +52,11 @@ import {
   reconcileThreadRetentionPolicy,
   type ThreadRetentionSettingsOperations,
 } from "./serverSettings.retention.ts";
+import {
+  normalizeExistingOpencodeSettings,
+  preserveOpencodeEnablePreference,
+  EXISTING_SERVER_SETTINGS_FALLBACK,
+} from "./serverSettings.opencodePolicy.ts";
 
 export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly start: Effect.Effect<void, ServerSettingsError>;
@@ -154,7 +159,7 @@ const makeServerSettings = Effect.gen(function* () {
       return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
     }
 
-    const raw = yield* readRawConfig;
+    const raw = normalizeExistingOpencodeSettings(yield* readRawConfig);
     const decoded = Schema.decodeUnknownExit(ServerSettingsJson)(raw);
     if (decoded._tag === "Success") {
       return reconcileThreadRetentionPolicy(decoded.value, authorizedPolicy);
@@ -173,7 +178,7 @@ const makeServerSettings = Effect.gen(function* () {
       path: settingsPath,
       issues: Cause.pretty(decoded.cause),
     });
-    return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
+    return reconcileThreadRetentionPolicy(EXISTING_SERVER_SETTINGS_FALLBACK, authorizedPolicy);
   });
 
   const settingsCache = yield* Cache.make<typeof cacheKey, ServerSettings, ServerSettingsError>({
@@ -193,6 +198,7 @@ const makeServerSettings = Effect.gen(function* () {
         string,
         unknown
       > | null) ?? {};
+    preserveOpencodeEnablePreference(sparseSettings, settings.providers.opencodeV2.enabled);
     if (options?.preserveThreadRetentionPolicy) {
       preserveThreadRetentionPolicy(sparseSettings, settings);
     }

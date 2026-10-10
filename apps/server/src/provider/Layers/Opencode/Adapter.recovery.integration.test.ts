@@ -25,7 +25,7 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 
-describe("OpenCode recovered completion integration", () => {
+describe("KiloCode V1-protocol recovered completion integration", () => {
   registerProviderRuntimeIngestionTestCleanup();
 
   it("leaves terminal ownership to canonical ingestion and runs completion consumers once", async () => {
@@ -91,12 +91,12 @@ describe("OpenCode recovered completion integration", () => {
       allowedTools: {},
     } as unknown as ActiveOpencodeSession;
     const { sendTurn } = makeTurnMethods({
-      provider: "opencode",
+      provider: "kilocode",
       requireSession: () => Effect.succeed(record),
       syntheticEventFn: (threadId, sessionEpoch, type, payload, extra) =>
         Effect.succeed({
           eventId: EventId.makeUnsafe(`opencode-recovery-${++syntheticOrdinal}`),
-          provider: "opencode",
+          provider: "kilocode",
           threadId,
           sessionEpoch,
           turnId: extra?.turnId,
@@ -140,7 +140,7 @@ describe("OpenCode recovered completion integration", () => {
     });
 
     harness.setProviderSession({
-      provider: "opencode",
+      provider: "kilocode",
       status: "running",
       runtimeMode: "approval-required",
       threadId: THREAD_ID,
@@ -173,7 +173,7 @@ describe("OpenCode recovered completion integration", () => {
     const liveness: ProviderTurnLiveness = {
       threadId: THREAD_ID,
       turnId: turn.turnId,
-      provider: "opencode",
+      provider: "kilocode",
       sessionEpoch: runningThread.session?.sessionEpoch ?? 0,
       turnStartedAt: new Date().toISOString(),
       lastRuntimeEventAt: new Date().toISOString(),

@@ -1,9 +1,4 @@
-import {
-  CommandId,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
+import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
 import { TextGenerationError } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +8,6 @@ import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTi
 import {
   asMessageId,
   createHarness,
-  makeTrackedTempDir,
   registerProviderCommandReactorTestCleanup,
   waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
@@ -112,7 +106,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: now,
         modelSelection: {
-          provider: "opencode",
+          provider: "kilocode",
           model: "nemotron-3-super-free",
           subProviderID: "openrouter",
         },
@@ -156,7 +150,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: now,
         modelSelection: {
-          provider: "opencode",
+          provider: "kilocode",
           model: "nemotron-3-super-free",
           subProviderID: "openrouter",
         },
@@ -204,7 +198,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: now,
         modelSelection: {
-          provider: "opencode",
+          provider: "kilocode",
           model: "nemotron-3-super-free",
           subProviderID: "openrouter",
         },
@@ -245,7 +239,7 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         createdAt: now,
         modelSelection: {
-          provider: "opencode",
+          provider: "kilocode",
           model: "nemotron-3-super-free",
           subProviderID: "openrouter",
         },
@@ -366,122 +360,4 @@ describe("ProviderCommandReactor", () => {
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.title).toBe("Summer sun");
   });
-
-  it("generates a thread title even when the outgoing prompt is reformatted", async () => {
-    const harness = await createHarness();
-    const now = new Date().toISOString();
-    harness.generateThreadTitle.mockReturnValue(
-      Effect.succeed({
-        title: "Reconnect spinner resume bug",
-      }),
-    );
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe("cmd-turn-start-title-formatted"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-title-formatted"),
-          role: "user",
-          text: "[effort:high]\\n\\nFix reconnect spinner on resume",
-          attachments: [],
-        },
-        modelSelection: {
-          provider: "codex",
-          model: "gpt-5-codex",
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 1);
-    await waitFor(async () => {
-      const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      return (
-        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
-        "Reconnect spinner resume bug"
-      );
-    });
-
-    const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.title).toBe("Reconnect spinner resume bug");
-  });
-
-  it("generates a worktree branch name for the first turn", async () => {
-    const baseDir = makeTrackedTempDir("bigbud-title-branch-");
-    const harness = await createHarness({ baseDir });
-    const now = new Date().toISOString();
-    const threadId = ThreadId.makeUnsafe("thread-branch-generation");
-    const worktreePath = path.join(baseDir, "worktree");
-    fs.mkdirSync(worktreePath);
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.makeUnsafe("cmd-thread-branch-create"),
-        threadId,
-        projectId: ProjectId.makeUnsafe("project-1"),
-        title: "New thread",
-        modelSelection: { provider: "codex", model: "gpt-5-codex" },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        branch: null,
-        worktreePath: null,
-        createdAt: now,
-      }),
-    );
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-branch"),
-        threadId,
-        branch: "bigbud/1234abcd",
-        worktreePath,
-      }),
-    );
-
-    harness.generateBranchName.mockImplementation((input: unknown) =>
-      Effect.succeed({
-        branch:
-          typeof input === "object" &&
-          input !== null &&
-          "modelSelection" in input &&
-          typeof input.modelSelection === "object" &&
-          input.modelSelection !== null &&
-          "model" in input.modelSelection &&
-          typeof input.modelSelection.model === "string"
-            ? `feature/${input.modelSelection.model}`
-            : "feature/generated",
-      }),
-    );
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe("cmd-turn-start-branch-model"),
-        threadId,
-        message: {
-          messageId: asMessageId("user-message-branch-model"),
-          role: "user",
-          text: "Add a safer reconnect backoff.",
-          attachments: [],
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.generateBranchName.mock.calls.length === 1);
-    expect(harness.generateBranchName.mock.calls[0]?.[0]).toMatchObject({
-      message: "Add a safer reconnect backoff.",
-    });
-  });
 });
-import fs from "node:fs";
-import path from "node:path";

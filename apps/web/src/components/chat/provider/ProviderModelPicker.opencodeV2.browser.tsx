@@ -62,7 +62,7 @@ it("exposes a separate unavailable V2 entry without selecting a model", async ()
   );
   try {
     await page.getByRole("button").click();
-    await expect.element(page.getByRole("menuitem", { name: /OpenCode v2/i })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: /OpenCode/i })).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   } finally {
     await screen.unmount();

@@ -9,6 +9,7 @@
  */
 import { type ProviderKind, type ProviderSession, type ThreadId } from "@bigbud/contracts";
 import { Cause, Effect, Option } from "effect";
+import { isRetiredProvider } from "@bigbud/shared/providerLifecycle";
 
 import {
   providerMetricAttributes,
@@ -292,25 +293,29 @@ export function makeRunStopAll(
       adapter.listSessions(),
     ).pipe(Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)));
     yield* Effect.forEach(activeSessions, (session) =>
-      upsertSessionBinding(session, session.threadId, {
-        lastRuntimeEvent: "provider.stopAll",
-        lastRuntimeEventAt: new Date().toISOString(),
-      }),
+      isRetiredProvider(session.provider)
+        ? Effect.void
+        : upsertSessionBinding(session, session.threadId, {
+            lastRuntimeEvent: "provider.stopAll",
+            lastRuntimeEventAt: new Date().toISOString(),
+          }),
     ).pipe(Effect.asVoid);
     yield* Effect.forEach(adapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* Effect.forEach(threadIds, (threadId) =>
       directory.getProvider(threadId).pipe(
         Effect.flatMap((provider) =>
-          directory.upsert({
-            threadId,
-            provider,
-            status: "stopped",
-            runtimePayload: {
-              activeTurnId: null,
-              lastRuntimeEvent: "provider.stopAll",
-              lastRuntimeEventAt: new Date().toISOString(),
-            },
-          }),
+          isRetiredProvider(provider)
+            ? Effect.void
+            : directory.upsert({
+                threadId,
+                provider,
+                status: "stopped",
+                runtimePayload: {
+                  activeTurnId: null,
+                  lastRuntimeEvent: "provider.stopAll",
+                  lastRuntimeEventAt: new Date().toISOString(),
+                },
+              }),
         ),
       ),
     ).pipe(Effect.asVoid);

@@ -211,7 +211,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
-  it.effect("writes only non-default server settings to disk", () =>
+  it.effect("writes sparse settings while pinning the OpenCode enable preference", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsService;
       const serverConfig = yield* ServerConfig;
@@ -237,6 +237,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         },
         providers: {
+          opencodeV2: { enabled: true },
           codex: {
             binaryPath: "/opt/homebrew/bin/codex",
           },

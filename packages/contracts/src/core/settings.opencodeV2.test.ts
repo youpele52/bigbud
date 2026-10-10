@@ -6,17 +6,18 @@ import { ServerSettings, DEFAULT_SERVER_SETTINGS } from "./settings";
 import { ServerSettingsPatch } from "./settings.serverPatch";
 import { ModelSelection } from "../orchestration/orchestration.provider";
 
-describe("independent dormant OpenCode v2 settings and identity", () => {
-  it("old settings decode disabled V2 without altering V1/Kilo/default", () => {
+describe("independent OpenCode settings and identity", () => {
+  it("fresh schema defaults enable V2 without altering paths or global default", () => {
     const decoded = Schema.decodeUnknownSync(ServerSettings)({
       providers: { opencode: { binaryPath: "/v1" }, kilocode: { binaryPath: "/kilo" } },
     });
     expect(decoded.providers.opencodeV2).toEqual({
-      enabled: false,
+      enabled: true,
       binaryPath: "",
       profileRoot: "",
     });
     expect(decoded.providers.opencode.binaryPath).toBe("/v1");
+    expect(decoded.providers.opencode.enabled).toBe(false);
     expect(decoded.providers.kilocode.binaryPath).toBe("/kilo");
     expect(DEFAULT_PROVIDER_KIND).toBe("codex");
   });

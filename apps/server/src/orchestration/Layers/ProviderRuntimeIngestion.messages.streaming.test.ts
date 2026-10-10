@@ -182,7 +182,6 @@ describe("ProviderRuntimeIngestion", () => {
   it.each([
     { provider: "pi", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "copilot", finalText: "# Title\n- first\n- middle\n- last\n" },
-    { provider: "opencode", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "opencodeV2", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "kilocode", finalText: "# Title\n- first\n- middle\n- last\n" },
     { provider: "codex", finalText: "# Title\n- first\n- middle\n- last\n" },

@@ -33,6 +33,10 @@ import {
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
+import {
+  isRetiredProvider,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 export function makeRecoverSessionForThread(
   registry: ProviderAdapterRegistryShape,
@@ -59,6 +63,9 @@ export function makeRecoverSessionForThread(
     },
     ProviderServiceError
   > {
+    if (isRetiredProvider(input.binding.provider)) {
+      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    }
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "recover-session",
       "provider.kind": input.binding.provider,
@@ -204,6 +211,9 @@ export function makeResolveRoutableSession(
       );
     }
     const persistedEpoch = readPersistedSessionEpoch(binding.runtimePayload);
+    if (isRetiredProvider(binding.provider)) {
+      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    }
     if (
       input.expectedSessionEpoch !== undefined &&
       persistedEpoch !== undefined &&

@@ -28,6 +28,43 @@ function makeThread(): OrchestrationThread {
 }
 
 describe("mobile existing-thread command builder", () => {
+  it("never sends, responds, interrupts or retries runtime work for legacy history", async () => {
+    const dispatchCommand = vi.fn(async () => undefined);
+    const thread = {
+      ...makeThread(),
+      modelSelection: { provider: "opencode", model: "historical" },
+    } as OrchestrationThread;
+    const commands = createMobileThreadCommands({
+      actionsAvailable: true,
+      activePendingUserInput: null,
+      activeUserInputAnswers: {},
+      activeUserInputQuestionIndex: 0,
+      client: { dispatchCommand } as never,
+      clearNewThread: () => undefined,
+      clearSubmittedIfRevision: () => undefined,
+      delivery: createMobileCommandDeliveryController({ deadlineMs: 1_000 }),
+      draftThread: null,
+      isDraft: false,
+      project: undefined,
+      prompt: "Do not resend",
+      recovery: null,
+      refetchSnapshot: async () => undefined,
+      refetchThread: async () => undefined,
+      revision: 1,
+      selectedModelSelection: { provider: "opencodeV2", model: "do-not-rebind" },
+      setIsRespondingToUserInput: () => undefined,
+      setPendingModelSelection: () => undefined,
+      setUserInputAnswersByRequestId: () => undefined,
+      setUserInputQuestionIndexByRequestId: () => undefined,
+      thread,
+      threadId,
+    });
+    await commands.sendPrompt();
+    await commands.interruptTurn();
+    await commands.retryDelivery();
+    expect(dispatchCommand).not.toHaveBeenCalled();
+    expect(thread.modelSelection.provider).toBe("opencode");
+  });
   it.each(["approval-required", "auto-accept-edits", "full-access"] as const)(
     "V2 submission preserves explicit %s and native model/subprovider identity without mobile trust escalation",
     (runtimeMode) => {

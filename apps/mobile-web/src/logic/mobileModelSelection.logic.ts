@@ -39,13 +39,19 @@ function isProviderUsable(provider: ServerProvider | undefined): boolean {
 function findReadyProvider(providers: ReadonlyArray<ServerProvider>): ServerProvider | undefined {
   return providers.find(
     (provider) =>
-      provider.provider !== "opencodeV2" && provider.enabled && provider.status === "ready",
+      provider.provider !== "opencodeV2" &&
+      provider.provider !== "opencode" &&
+      provider.enabled &&
+      provider.status === "ready",
   );
 }
 
 function firstUsableProvider(providers: ReadonlyArray<ServerProvider>): ServerProvider | undefined {
   return providers.find(
-    (provider) => provider.provider !== "opencodeV2" && isProviderUsable(provider),
+    (provider) =>
+      provider.provider !== "opencodeV2" &&
+      provider.provider !== "opencode" &&
+      isProviderUsable(provider),
   );
 }
 
@@ -100,7 +106,7 @@ export function resolveMobileComposerModelSelection(
 ): ModelSelection {
   const { thread, draft, project, providers } = context;
 
-  if (pendingModelSelection) {
+  if (pendingModelSelection && (thread || pendingModelSelection.provider !== "opencode")) {
     return pendingModelSelection;
   }
 
@@ -111,12 +117,12 @@ export function resolveMobileComposerModelSelection(
     }
   }
 
-  if (draft?.modelSelection) {
+  if (draft?.modelSelection && draft.modelSelection.provider !== "opencode") {
     return draft.modelSelection;
   }
 
   const projectSelection = getProjectModelSelection(project);
-  if (projectSelection) {
+  if (projectSelection && projectSelection.provider !== "opencode") {
     return projectSelection;
   }
 

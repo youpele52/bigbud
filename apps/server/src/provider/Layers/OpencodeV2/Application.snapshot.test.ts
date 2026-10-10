@@ -6,6 +6,14 @@ import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 
+const disabledSettings = {
+  ...DEFAULT_SERVER_SETTINGS,
+  providers: {
+    ...DEFAULT_SERVER_SETTINGS.providers,
+    opencodeV2: { ...DEFAULT_SERVER_SETTINGS.providers.opencodeV2, enabled: false },
+  },
+};
+
 it("reads the application snapshot without publishing a provider change", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -26,7 +34,7 @@ it("reads the application snapshot without publishing a provider change", async 
         expect(updates).toEqual([]);
       }),
     ).pipe(
-      Effect.provide(ServerSettingsService.layerTest()),
+      Effect.provide(ServerSettingsService.layerTest(disabledSettings)),
       Effect.provideService(ProviderTurnAdmissions, {} as typeof ProviderTurnAdmissions.Service),
     ),
   );
@@ -59,7 +67,7 @@ it("keeps optional provider construction nonblocking when settings cannot be rea
 });
 
 it("does not refresh again when a registry listener reads a configuration failure", async () => {
-  let current = DEFAULT_SERVER_SETTINGS;
+  let current = disabledSettings;
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

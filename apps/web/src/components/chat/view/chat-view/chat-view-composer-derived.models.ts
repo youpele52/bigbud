@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo } from "react";
 
 import { normalizeModelSlug } from "@bigbud/shared/model";
+import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
 import {
   createModelSelection,
   getProviderModels,
@@ -134,6 +135,7 @@ export function useComposerProviderState(
   const selectedModelForPicker = modelPickerValue(selectedModelSelection);
 
   useEffect(() => {
+    if (base.isServerThread && isLegacyOpencodeThread(base.activeThread)) return;
     if (!composerProviderFallback || !base.activeThread || lockedProvider !== null) return;
     base.setComposerDraftModelSelection(base.activeThread.id, selectedModelSelection);
     base.setStickyComposerModelSelection(selectedModelSelection);
