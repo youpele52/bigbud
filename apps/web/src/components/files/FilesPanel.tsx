@@ -8,7 +8,6 @@ import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { canMoveFileHistory, EMPTY_FILE_HISTORY } from "../../stores/files/filesPanel.history";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import type { CodeAnnotationDraft } from "./FilePreview";
-import { FilesPanelHeader } from "./FilesPanel.header";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
 import {
   applyDirectoryNavigationRequest,
@@ -19,7 +18,6 @@ import {
 import { EMPTY_ENTRIES, makeAnnotationId } from "./FilesPanel.shared";
 import { renderFilesPanelTreeBody } from "./FilesPanel.body";
 import { FilesPanelRefreshCoordinator } from "./FilesPanelRefreshCoordinator";
-import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
 import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
 import {
   useFilesPanelAuxNavigation,
@@ -32,10 +30,12 @@ import { pruneRemovedPaths } from "./FilesPanel.pathState";
 
 interface FilesPanelProps {
   activeThreadId?: ThreadId | null;
+  visible?: boolean;
 }
 
 export const FilesPanelContent = memo(function FilesPanelContent({
   activeThreadId,
+  visible = true,
 }: FilesPanelProps) {
   const previewPath = useFilesPanelStore((state) => state.previewPath);
   const filesWorkspaceKey = useFilesPanelStore((state) => state.workspaceKey);
@@ -82,8 +82,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const activeHistory = histories[workspaceKey] ?? EMPTY_FILE_HISTORY;
   const activeHistoryEntry = activeHistory.entries[activeHistory.index];
   const panelContainerRef = useRef<HTMLDivElement>(null);
-  const fileTreeContainerRef = useRef<HTMLDivElement>(null);
-  const { fileTreeWidth, resizeTreeWidth } = useFilesTreeWidth();
   const previewPathRef = useRef<string | null>(previewPath);
   const previewPositionRef = useRef(previewPosition);
   const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
@@ -131,34 +129,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   useEffect(() => {
     previewPositionRef.current = previewPosition;
   }, [previewPosition]);
-
-  const handleTreeResizeStart = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault();
-      const container = fileTreeContainerRef.current;
-      if (!container) return;
-
-      const startX = event.clientX;
-      const startWidth = fileTreeWidth;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        resizeTreeWidth(
-          container.getBoundingClientRect().width,
-          startWidth,
-          moveEvent.clientX - startX,
-        );
-      };
-
-      const handleMouseUp = () => {
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-      };
-
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-    },
-    [fileTreeWidth, resizeTreeWidth],
-  );
 
   useEffect(() => {
     setWorkspaceKey(workspaceKey);
@@ -342,8 +312,9 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       targetLine: previewTargetLine,
       executionTargetId: activeWorkspaceExecutionTargetId,
       projectName: activeProjectName,
-      fileTreeContainerRef,
-      fileTreeWidth,
+      workspaceKey,
+      contextMenuOpen: contextMenuState !== null,
+      visible,
       onNavigateBack: handleNavigateBack,
       onNavigateForward: handleNavigateForward,
       onClose: closePreview,
@@ -351,19 +322,17 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       onScrollPositionChange: persistScrollPosition,
       onCreateAnnotation: activeThreadId ? handleCreateCodeAnnotation : undefined,
       onSearchMatch: handleSearchMatch,
-      onTreeResizeStart: handleTreeResizeStart,
     });
   }, [
     activeThreadId,
     activeHistory,
     activeHistoryEntry,
     closePreview,
-    fileTreeWidth,
+    contextMenuState,
     handleCreateCodeAnnotation,
     handleNavigateBack,
     handleNavigateForward,
     handleSearchMatch,
-    handleTreeResizeStart,
     handlePreviewLoadError,
     previewPath,
     previewTargetLine,
@@ -372,11 +341,12 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     treeBody,
     activeWorkspaceExecutionTargetId,
     activeWorkspaceRoot,
+    workspaceKey,
+    visible,
   ]);
 
   return (
     <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
-      <FilesPanelHeader />
       <div className="min-h-0 flex-1 overflow-hidden">
         <FilesPanelRefreshCoordinator
           workspaceRoot={activeWorkspaceRoot}

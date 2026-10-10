@@ -182,7 +182,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     )}
                     inert={!isActive ? true : undefined}
                   >
-                    <FilesPanelContent activeThreadId={activeThreadId ?? null} />
+                    <FilesPanelContent activeThreadId={activeThreadId ?? null} visible={isActive} />
                   </div>
                 );
               }

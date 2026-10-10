@@ -1,16 +1,5 @@
 import * as React from "react";
-import {
-  Columns3Icon,
-  DiffIcon,
-  FoldersIcon,
-  GitBranchIcon,
-  GlobeIcon,
-  NotebookTextIcon,
-  PlusIcon,
-  ActivityIcon,
-  TerminalIcon,
-  XIcon,
-} from "lucide-react";
+import { DiffIcon, GitBranchIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { contentPanelHeaderClassName } from "../layout/ContentPanelHeader";
@@ -23,31 +12,10 @@ import {
   getRightPanelTabKind,
   MAX_RIGHT_PANEL_BROWSER_TABS,
   type RightPanelTabId,
-  type RightPanelTabKind,
   useRightPanelTabsStore,
 } from "~/stores/rightPanel/rightPanelTabs.store";
-
-const TAB_LABELS: Record<RightPanelTabKind, string> = {
-  browser: "Browser",
-  diff: "Diff",
-  files: "Files",
-  git: "Git",
-  kanban: "Kanban",
-  notes: "Notes",
-  system: "System",
-  terminal: "Terminal",
-};
-
-const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: string }>> = {
-  browser: GlobeIcon,
-  diff: DiffIcon,
-  files: FoldersIcon,
-  git: GitBranchIcon,
-  kanban: Columns3Icon,
-  notes: NotebookTextIcon,
-  system: ActivityIcon,
-  terminal: TerminalIcon,
-};
+import { TabMenuItem } from "./RightPanelTabs.menuItem";
+import { TAB_ICONS, TAB_LABELS } from "./RightPanelTabs.shared";
 
 interface RightPanelTabsProps {
   browserShortcutLabel: string | null;
@@ -76,24 +44,6 @@ interface RightPanelTabsProps {
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
-}
-
-function TabMenuItem(props: {
-  disabled?: boolean;
-  kind: RightPanelTabKind;
-  label?: string;
-  onSelect: () => void;
-  shortcutLabel: string | null;
-}) {
-  const Icon = TAB_ICONS[props.kind];
-
-  return (
-    <MenuItem disabled={props.disabled} onClick={props.onSelect}>
-      <Icon className="size-3.5" />
-      <span>{props.label ?? TAB_LABELS[props.kind]}</span>
-      {props.shortcutLabel ? <MenuShortcut>{props.shortcutLabel}</MenuShortcut> : null}
-    </MenuItem>
-  );
 }
 
 function getBrowserTabFallbackLabel(url: string): string {

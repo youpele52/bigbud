@@ -11,6 +11,8 @@ export const FILES_TREE_WIDTH_STORAGE_KEY = "files_tree_width";
 export const FILES_TREE_MIN_WIDTH = 220;
 export const FILES_TREE_MAX_WIDTH_FACTOR = 0.6;
 export const FILES_TREE_DEFAULT_WIDTH = 280;
+export const FILES_TREE_SEPARATOR_WIDTH = 3;
+export const FILES_DRAWER_WIDTH_FACTOR = 1 / 3;
 export const FILE_PREVIEW_MIN_WIDTH = 452;
 
 export function entryName(entry: ProjectEntry): string {

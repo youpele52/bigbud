@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const openNewBrowserTabMock = vi.hoisted(() => vi.fn());
 const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
 const browserPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
+const filesPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
@@ -102,7 +103,10 @@ vi.mock("../browser/BrowserPanel", () => ({
 }));
 
 vi.mock("../files/FilesPanel", () => ({
-  FilesPanelContent: () => <div data-testid="files-panel">files</div>,
+  FilesPanelContent: (props: Record<string, unknown>) => {
+    filesPanelPropsMock.props.push(props);
+    return <div data-testid="files-panel">files</div>;
+  },
 }));
 
 vi.mock("../terminal/TerminalPanel", () => ({
@@ -151,6 +155,7 @@ describe("RightPanelHost", () => {
   afterEach(() => {
     launcherPropsMock.props = null;
     browserPanelPropsMock.props = [];
+    filesPanelPropsMock.props = [];
     openNewBrowserTabMock.mockReset();
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
@@ -226,6 +231,24 @@ describe("RightPanelHost", () => {
     expect(markup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
     expect(markup).toContain('inert=""><div data-testid="files-panel">files</div>');
     expect(markup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
+  });
+
+  it("propagates Files tab ownership visibility while retaining the mounted body", () => {
+    renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(filesPanelPropsMock.props.at(-1)?.visible).toBe(false);
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+    });
+    renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(filesPanelPropsMock.props.at(-1)?.visible).toBe(true);
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "terminal",
+      activeTabId: "terminal",
+    });
+    const markup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(markup).toContain('inert=""><div data-testid="files-panel">files</div>');
+    expect(filesPanelPropsMock.props.at(-1)?.visible).toBe(false);
   });
 
   it("wires the launcher browser action to open a new browser tab", () => {
