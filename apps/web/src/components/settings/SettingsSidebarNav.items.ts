@@ -2,13 +2,13 @@ import type { ComponentType } from "react";
 import {
   ArchiveIcon,
   BellIcon,
-  BotIcon,
   CpuIcon,
   InfoIcon,
   KeyboardIcon,
   Settings2Icon,
   SmartphoneIcon,
 } from "lucide-react";
+import { SettingsAiIcon } from "./SettingsAiIcon";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -28,7 +28,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Notifications", to: "/settings/notifications", icon: BellIcon },
   { label: "Providers", to: "/settings/providers", icon: CpuIcon },
-  { label: "AI", to: "/settings/ai", icon: BotIcon },
+  { label: "AI", to: "/settings/ai", icon: SettingsAiIcon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
   { label: "Remote", to: "/settings/remote", icon: SmartphoneIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
