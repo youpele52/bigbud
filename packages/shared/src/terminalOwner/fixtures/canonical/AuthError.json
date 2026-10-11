@@ -1,0 +1,8 @@
+{
+  "type": "AuthError",
+  "input": {
+    "code": 1,
+    "retryAfterMs": 1000
+  },
+  "canonical": "01000003e8"
+}

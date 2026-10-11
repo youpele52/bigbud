@@ -4,6 +4,66 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./terminalOwner/cleanupGrant.model": {
+      "types": "./src/terminalOwner/cleanupGrant.model.ts",
+      "import": "./src/terminalOwner/cleanupGrant.model.ts"
+    },
+    "./terminalOwner/shutdownInventory.model": {
+      "types": "./src/terminalOwner/shutdownInventory.model.ts",
+      "import": "./src/terminalOwner/shutdownInventory.model.ts"
+    },
+    "./terminalOwner/controller.model": {
+      "types": "./src/terminalOwner/controller.model.ts",
+      "import": "./src/terminalOwner/controller.model.ts"
+    },
+    "./terminalOwner/grant.model": {
+      "types": "./src/terminalOwner/grant.model.ts",
+      "import": "./src/terminalOwner/grant.model.ts"
+    },
+    "./terminalOwner/canonical": {
+      "types": "./src/terminalOwner/canonical.ts",
+      "import": "./src/terminalOwner/canonical.ts"
+    },
+    "./terminalOwner/auth": {
+      "types": "./src/terminalOwner/auth.ts",
+      "import": "./src/terminalOwner/auth.ts"
+    },
+    "./terminalOwner/auth.model": {
+      "types": "./src/terminalOwner/auth.model.ts",
+      "import": "./src/terminalOwner/auth.model.ts"
+    },
+    "./terminalOwner/permissions": {
+      "types": "./src/terminalOwner/permissions.ts",
+      "import": "./src/terminalOwner/permissions.ts"
+    },
+    "./terminalOwner/authority.model": {
+      "types": "./src/terminalOwner/authority.model.ts",
+      "import": "./src/terminalOwner/authority.model.ts"
+    },
+    "./terminalOwner/lease.model": {
+      "types": "./src/terminalOwner/lease.model.ts",
+      "import": "./src/terminalOwner/lease.model.ts"
+    },
+    "./terminalOwner/quota.model": {
+      "types": "./src/terminalOwner/quota.model.ts",
+      "import": "./src/terminalOwner/quota.model.ts"
+    },
+    "./terminalOwner/reservation.model": {
+      "types": "./src/terminalOwner/reservation.model.ts",
+      "import": "./src/terminalOwner/reservation.model.ts"
+    },
+    "./terminalOwner/cleanup.model": {
+      "types": "./src/terminalOwner/cleanup.model.ts",
+      "import": "./src/terminalOwner/cleanup.model.ts"
+    },
+    "./terminalOwner/environment": {
+      "types": "./src/terminalOwner/environment.ts",
+      "import": "./src/terminalOwner/environment.ts"
+    },
+    "./terminalOwner/artifactDag": {
+      "types": "./src/terminalOwner/artifactDag.ts",
+      "import": "./src/terminalOwner/artifactDag.ts"
+    },
     "./providerLifecycle": {
       "types": "./src/providerLifecycle.ts",
       "import": "./src/providerLifecycle.ts"
