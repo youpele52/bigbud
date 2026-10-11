@@ -80,13 +80,18 @@ pub(super) fn scan(process: HANDLE) -> io::Result<BTreeSet<Mapping>> {
     let started = Instant::now();
     let mut address = 0usize;
     let mut result = BTreeSet::new();
-    let mut incomplete = false;
+    let mut unresolved = 0usize;
+    let mut first_error = None;
     for _ in 0..65536 {
         if started.elapsed() > Duration::from_secs(8) {
             return Err(io::Error::other("mapping inspection deadline"));
         }
         if address > maximum {
-            if incomplete {
+            if unresolved != 0 {
+                eprintln!(
+                    "metadata prototype incomplete mappings={unresolved} first_os={first_error:?} shm_regions={}",
+                    result.len()
+                );
                 return Err(io::Error::other("mapping names incomplete"));
             }
             return Ok(result);
@@ -118,11 +123,10 @@ pub(super) fn scan(process: HANDLE) -> io::Result<BTreeSet<Mapping>> {
                 )
             } as usize;
             if count == 0 || count >= name.len() {
-                eprintln!(
-                    "metadata prototype mapped-name unavailable os={:?}",
-                    io::Error::last_os_error().raw_os_error()
-                );
-                incomplete = true;
+                if unresolved == 0 {
+                    first_error = io::Error::last_os_error().raw_os_error();
+                }
+                unresolved += 1;
             } else {
                 let native = String::from_utf16(
                     name.get(..count)
@@ -137,6 +141,11 @@ pub(super) fn scan(process: HANDLE) -> io::Result<BTreeSet<Mapping>> {
                         size: info.RegionSize,
                         path: local_path(&native)?,
                     });
+                    // Two observations already violate the single-candidate contract. Bound retained
+                    // filename memory even for a target with many long-named mappings.
+                    if result.len() > 1 {
+                        return Err(io::Error::other("mapped SHM inventory ambiguous"));
+                    }
                 }
             }
         }

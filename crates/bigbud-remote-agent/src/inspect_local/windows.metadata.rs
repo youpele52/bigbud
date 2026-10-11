@@ -141,7 +141,7 @@ fn measured(process: &Process, path: &str, private: bool) -> io::Result<(File, S
 /// Investigate class-47 membership on a known fixture pathname, without treating its path as identity.
 pub fn membership(pid: u32, path: &str) -> io::Result<(bool, String)> {
     let process = Process::open(pid)?;
-    let local = file::open_checked(path, false, false)?;
+    let local = file::open_checked(path, false, true)?;
     ntfs(&local)?;
     let identity = file::identity(&local)?;
     let member = members::contains(&local, pid)?;
