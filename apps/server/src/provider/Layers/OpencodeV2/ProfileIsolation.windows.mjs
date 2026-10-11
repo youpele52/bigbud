@@ -106,7 +106,12 @@ export async function inspectV2WindowsAcl(root, signal) {
       "-EncodedCommand",
       Buffer.from(V2_WINDOWS_ACL_PROGRAM, "utf16le").toString("base64"),
     ],
-    { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false },
+    {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      shell: false,
+      env: v2WindowsPowerShellEnvironment(),
+    },
   );
   const abort = () => child.kill();
   signal?.addEventListener("abort", abort, { once: true });
@@ -136,4 +141,21 @@ export async function inspectV2WindowsAcl(root, signal) {
     clearTimeout(timer);
     signal?.removeEventListener("abort", abort);
   }
+}
+
+/** A PS7 parent must not redirect the fixed Windows PowerShell executable to incompatible modules. */
+export function v2WindowsPowerShellEnvironment(environment = process.env) {
+  if (!environment.SystemRoot) throw new Error("Windows system root unavailable.");
+  return {
+    ...Object.fromEntries(
+      Object.entries(environment).filter(([key]) => key.toUpperCase() !== "PSMODULEPATH"),
+    ),
+    PSModulePath: path.win32.join(
+      environment.SystemRoot,
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "Modules",
+    ),
+  };
 }

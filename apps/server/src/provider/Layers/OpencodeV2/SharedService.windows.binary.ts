@@ -7,6 +7,7 @@ const executeFile = promisify(execFile);
 export async function verifyV2InspectionCapability(
   binary: string,
   deadline: number,
+  signal: AbortSignal,
 ): Promise<void> {
   const timeout = deadline - Date.now();
   if (timeout <= 0) throw new Error("Native inspection deadline exceeded.");
@@ -17,6 +18,7 @@ export async function verifyV2InspectionCapability(
       maxBuffer: 64 * 1024,
       windowsHide: true,
       shell: false,
+      signal,
     });
     const fields = stdout.trim().split("\t");
     if (fields[0] !== "bigbud-remote-agent" || !fields.slice(7).includes("inspect-local=1"))

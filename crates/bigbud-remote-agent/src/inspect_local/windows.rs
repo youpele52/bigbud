@@ -46,6 +46,38 @@ fn duplicate(process: HANDLE, handle: HANDLE, rights: u32) -> io::Result<OwnedHa
     Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
 }
 
+fn snapshot_name(pointer: *const u16, bytes: u16) -> io::Result<String> {
+    if pointer.is_null() || bytes == 0 || !bytes.is_multiple_of(2) {
+        return Err(io::Error::other("unclassified snapshot handle"));
+    }
+    // SAFETY: PSS supplied this counted string, whose allocation remains live with the walk marker.
+    String::from_utf16(unsafe { std::slice::from_raw_parts(pointer, usize::from(bytes) / 2) })
+        .map_err(io::Error::other)
+}
+
+fn snapshot_disk_candidate(entry: &PSS_HANDLE_ENTRY) -> io::Result<bool> {
+    if entry.Flags & PSS_HANDLE_HAVE_TYPE == 0 {
+        return Err(io::Error::other("unclassified snapshot handle"));
+    }
+    if snapshot_name(entry.TypeName, entry.TypeNameLength)? != "File" {
+        return Ok(false);
+    }
+    if entry.Flags & PSS_HANDLE_HAVE_NAME == 0 {
+        return Err(io::Error::other("unnamed file handle"));
+    }
+    let name = snapshot_name(entry.ObjectName, entry.ObjectNameLength)?.to_ascii_lowercase();
+    // These named devices cannot contain SQLite files. In particular, never DuplicateHandle a
+    // Winsock socket: Microsoft documents that doing so interferes with Winsock reference counts.
+    Ok(![
+        r"\device\afd",
+        r"\device\namedpipe",
+        r"\device\condrv",
+        r"\device\null",
+    ]
+    .iter()
+    .any(|device| name == *device || name.starts_with(&format!("{device}\\"))))
+}
+
 /// Inspect process handles only; database contents and the process address space are never read.
 pub(super) fn inspect(pid: u32) -> io::Result<String> {
     // SAFETY: OpenProcess is called with query/duplicate only, never termination or VM rights.
@@ -85,7 +117,14 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
         return Err(io::Error::other("handle inventory bound"));
     }
     // SAFETY: capture only the handle table; no memory, threads or process clone.
-    let result = unsafe { PssCaptureSnapshot(raw, PSS_CAPTURE_HANDLES, 0, &mut snapshot) };
+    let result = unsafe {
+        PssCaptureSnapshot(
+            raw,
+            PSS_CAPTURE_HANDLES | PSS_CAPTURE_HANDLE_NAME_INFORMATION,
+            0,
+            &mut snapshot,
+        )
+    };
     if result != 0 {
         return Err(io::Error::from_raw_os_error(result as i32));
     }
@@ -123,11 +162,14 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             return Err(io::Error::from_raw_os_error(result as i32));
         }
         count += 1;
+        if !snapshot_disk_candidate(&entry)? {
+            continue;
+        }
         // A vanished, unclassified handle can hide another database: reject incomplete inventories.
         let probe = duplicate(raw, entry.Handle, 0)?;
         // SAFETY: zero-right duplicate is live; GetFileType does not read data or change file position.
         if unsafe { GetFileType(probe.as_raw_handle()) } != FILE_TYPE_DISK {
-            continue;
+            return Err(io::Error::other("snapshot file classification changed"));
         }
         // Retain the classified object while obtaining metadata rights. Never resample the source
         // handle number: it may have been closed and reused for a different object meanwhile.

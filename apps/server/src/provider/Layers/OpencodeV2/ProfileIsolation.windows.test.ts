@@ -1,5 +1,23 @@
 import { expect, it } from "vitest";
-import { validateV2WindowsAcl, V2_WINDOWS_ACL_PROGRAM } from "./ProfileIsolation.windows.mjs";
+import {
+  validateV2WindowsAcl,
+  V2_WINDOWS_ACL_PROGRAM,
+  v2WindowsPowerShellEnvironment,
+} from "./ProfileIsolation.windows.mjs";
+
+it("prevents inherited PS7 or case-aliased module paths from redirecting Windows ACL inspection", () => {
+  const environment = {
+    SystemRoot: "C:\\Windows",
+    PSModulePath: "C:\\untrusted",
+    PSMODULEPATH: "C:\\PS7",
+    TEMP: "C:\\fixture",
+  };
+  const child = v2WindowsPowerShellEnvironment(environment);
+  expect(child.PSModulePath).toBe("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules");
+  expect(child).not.toHaveProperty("PSMODULEPATH");
+  expect(child.TEMP).toBe(environment.TEMP);
+  expect(environment.PSModulePath).toBe("C:\\untrusted");
+});
 
 const sid = "S-1-5-21-100-200-300-400";
 const rule = { sid, allow: true, rights: 2032127 };

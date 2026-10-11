@@ -83,7 +83,26 @@ pub fn run_stdio() -> io::Result<()> {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 writeln!(output, "ERR\tmissing")?
             }
-            // Never serialize native errors: they can contain private paths or registration bytes.
+            Err(error) => {
+                // A finite diagnostic vocabulary only; never serialize arbitrary error text/paths.
+                let reason = match error.to_string().as_str() {
+                    "owner rejected" => "owner",
+                    "untrusted access" => "acl-access",
+                    "unsupported acl" => "acl-type",
+                    "null dacl" => "acl-null",
+                    "reparse rejected" => "reparse",
+                    "unclassified snapshot handle" => "snapshot-type",
+                    "unnamed file handle" => "snapshot-name",
+                    "snapshot file classification changed" => "snapshot-reused",
+                    _ => "operation",
+                };
+                eprintln!(
+                    "local inspection rejected: {reason} (os={:?})",
+                    error.raw_os_error()
+                );
+                writeln!(output, "ERR")?;
+            }
+            // Never serialize oversized replies.
             _ => writeln!(output, "ERR")?,
         }
         output.flush()?;

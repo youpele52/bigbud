@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { V2_WINDOWS_ACL_PROGRAM } from "../apps/server/src/provider/Layers/OpencodeV2/ProfileIsolation.windows.mjs";
+import {
+  V2_WINDOWS_ACL_PROGRAM,
+  v2WindowsPowerShellEnvironment,
+} from "../apps/server/src/provider/Layers/OpencodeV2/ProfileIsolation.windows.mjs";
 
 // Diagnostics are restricted to a disposable fixture and its ancestor ACL metadata.
 if (process.platform !== "win32") throw new Error("Windows fixture diagnostics only.");
@@ -26,6 +29,7 @@ try {
       node: process.arch,
       helperStatus: helper.status,
       helperReply: helper.stdout,
+      helperError: helper.stderr,
     }),
   );
   const program = spawnSync(
@@ -36,7 +40,13 @@ try {
       "-EncodedCommand",
       Buffer.from(V2_WINDOWS_ACL_PROGRAM, "utf16le").toString("base64"),
     ],
-    { input: JSON.stringify({ root }), encoding: "utf8", timeout: 10_000, maxBuffer: 64 * 1024 },
+    {
+      input: JSON.stringify({ root }),
+      encoding: "utf8",
+      timeout: 10_000,
+      maxBuffer: 64 * 1024,
+      env: v2WindowsPowerShellEnvironment(),
+    },
   );
   console.log(
     JSON.stringify({

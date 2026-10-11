@@ -18,10 +18,12 @@ export class V2WindowsInspector {
     | { resolve: (value: string[]) => void; reject: (error: Error) => void }
     | undefined;
   private bytes = Buffer.alloc(0);
+  private preflight: AbortController | undefined;
 
   constructor(private readonly binary = resolveLocalWorkspaceWatchAgentBinary) {}
 
   close() {
+    this.preflight?.abort();
     clearTimeout(this.idle);
     const child = this.child;
     this.child = undefined;
@@ -62,7 +64,14 @@ export class V2WindowsInspector {
   private async connect(deadline: number) {
     if (this.child) return;
     const binary = this.binary();
-    await verifyV2InspectionCapability(binary, deadline);
+    const preflight = new AbortController();
+    this.preflight = preflight;
+    try {
+      await verifyV2InspectionCapability(binary, deadline, preflight.signal);
+      preflight.signal.throwIfAborted();
+    } finally {
+      if (this.preflight === preflight) this.preflight = undefined;
+    }
     if (Date.now() >= deadline) throw new Error("Native inspection deadline exceeded.");
     const child = spawn(binary, ["--inspect-local"], {
       stdio: ["pipe", "pipe", "pipe"],

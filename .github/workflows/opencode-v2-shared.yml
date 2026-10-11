@@ -57,7 +57,7 @@ jobs:
         shell: pwsh
         run: |
           node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" (Join-Path $env:RUNNER_TEMP "opencode-fixture-${{ matrix.version }}")
-      - name: Real Windows transport, application, storage and ownership tests (no skips)
+      - name: Real Windows transport, application, storage and ownership tests (required fixtures)
         run: >-
           bun run --cwd apps/server vitest run
           src/provider/Layers/OpencodeV2/SharedService.native.test.ts
