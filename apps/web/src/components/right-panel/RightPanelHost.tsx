@@ -197,7 +197,10 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     )}
                     inert={!isActive ? true : undefined}
                   >
-                    <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                    <TerminalPanelContent
+                      activeThreadId={activeThreadId ?? null}
+                      visible={isActive}
+                    />
                   </div>
                 );
               }

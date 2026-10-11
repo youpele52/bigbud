@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const openNewBrowserTabMock = vi.hoisted(() => vi.fn());
 const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
 const browserPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
+const terminalPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 const filesPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
@@ -110,7 +111,10 @@ vi.mock("../files/FilesPanel", () => ({
 }));
 
 vi.mock("../terminal/TerminalPanel", () => ({
-  TerminalPanelContent: () => <div data-testid="terminal-panel">terminal</div>,
+  TerminalPanelContent: (props: Record<string, unknown>) => {
+    terminalPanelPropsMock.props.push(props);
+    return <div data-testid="terminal-panel">terminal</div>;
+  },
 }));
 
 vi.mock("../notes/NotesPanel", () => ({
@@ -155,6 +159,7 @@ describe("RightPanelHost", () => {
   afterEach(() => {
     launcherPropsMock.props = null;
     browserPanelPropsMock.props = [];
+    terminalPanelPropsMock.props = [];
     filesPanelPropsMock.props = [];
     openNewBrowserTabMock.mockReset();
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
@@ -231,6 +236,24 @@ describe("RightPanelHost", () => {
     expect(markup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
     expect(markup).toContain('inert=""><div data-testid="files-panel">files</div>');
     expect(markup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
+  });
+
+  it("propagates terminal tab ownership visibility while retaining the mounted body", () => {
+    renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(terminalPanelPropsMock.props.at(-1)?.visible).toBe(false);
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "terminal",
+      activeTabId: "terminal",
+    });
+    renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(terminalPanelPropsMock.props.at(-1)?.visible).toBe(true);
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+    });
+    const markup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    expect(markup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
+    expect(terminalPanelPropsMock.props.at(-1)?.visible).toBe(false);
   });
 
   it("propagates Files tab ownership visibility while retaining the mounted body", () => {
