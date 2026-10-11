@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect } from "vitest";
 import { closeOwnedChild, isolatedEnvironment } from "./ServerManager.child.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 import {
   readV2SharedRegistration,
   v2SharedRegistrationFile,
@@ -16,6 +17,7 @@ export async function sharedServiceNativeFixture(
   databaseName = "opencode.db",
 ) {
   const fixture = await makeV2CodingNativeFixture();
+  await ownV2WindowsFixture(fixture.profile);
   const env = await isolatedEnvironment({
     binaryPath: binary,
     profileRoot: fixture.profile,
@@ -69,6 +71,7 @@ export async function sharedServiceNativeFixture(
         async () => {
           if (spawnError || child.exitCode !== null || child.signalCode !== null)
             throw new Error("Disposable shared service exited.");
+          await ownV2WindowsFixture(fixture.profile);
           return await readV2SharedRegistration(file).then(
             () => true,
             (error: unknown) => {
@@ -100,7 +103,13 @@ export async function sharedServiceNativeFixture(
         child.stderr.on("data", capture);
         child.on("error", () => {});
         await expect
-          .poll(async () => (await readV2SharedRegistration(file)).pid, { timeout: 15000 })
+          .poll(
+            async () => {
+              await ownV2WindowsFixture(fixture.profile);
+              return (await readV2SharedRegistration(file)).pid;
+            },
+            { timeout: 15000 },
+          )
           .toBe(child.pid);
       },
       async close() {

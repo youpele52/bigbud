@@ -56,9 +56,7 @@ fn snapshot_name(pointer: *const u16, bytes: u16) -> io::Result<String> {
 }
 
 fn snapshot_disk_candidate(entry: &PSS_HANDLE_ENTRY) -> io::Result<bool> {
-    if entry.Flags & PSS_HANDLE_HAVE_TYPE == 0 {
-        return Err(io::Error::other("unclassified snapshot handle"));
-    }
+    // HAVE_TYPE validates ObjectType, whose enum omits files; TypeName is captured separately.
     if snapshot_name(entry.TypeName, entry.TypeNameLength)? != "File" {
         return Ok(false);
     }
@@ -120,7 +118,9 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
     let result = unsafe {
         PssCaptureSnapshot(
             raw,
-            PSS_CAPTURE_HANDLES | PSS_CAPTURE_HANDLE_NAME_INFORMATION,
+            PSS_CAPTURE_HANDLES
+                | PSS_CAPTURE_HANDLE_NAME_INFORMATION
+                | PSS_CAPTURE_HANDLE_BASIC_INFORMATION,
             0,
             &mut snapshot,
         )
@@ -166,20 +166,13 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             continue;
         }
         // A vanished, unclassified handle can hide another database: reject incomplete inventories.
-        let probe = duplicate(raw, entry.Handle, 0)?;
-        // SAFETY: zero-right duplicate is live; GetFileType does not read data or change file position.
-        if unsafe { GetFileType(probe.as_raw_handle()) } != FILE_TYPE_DISK {
+        let metadata: File =
+            duplicate(raw, entry.Handle, FILE_READ_ATTRIBUTES | READ_CONTROL)?.into();
+        // SAFETY: retained metadata-only duplicate is live; no data read or file position change.
+        if unsafe { GetFileType(metadata.as_raw_handle()) } != FILE_TYPE_DISK {
             return Err(io::Error::other("snapshot file classification changed"));
         }
-        // Retain the classified object while obtaining metadata rights. Never resample the source
-        // handle number: it may have been closed and reused for a different object meanwhile.
-        // SAFETY: the current-process pseudo handle is only used by DuplicateHandle, never closed.
-        let metadata: File = duplicate(
-            unsafe { GetCurrentProcess() },
-            probe.as_raw_handle(),
-            FILE_READ_ATTRIBUTES | READ_CONTROL,
-        )?
-        .into();
+        // Classification, identity and owner all use this one retained source duplicate.
         if !metadata.metadata()?.is_file() {
             continue;
         }

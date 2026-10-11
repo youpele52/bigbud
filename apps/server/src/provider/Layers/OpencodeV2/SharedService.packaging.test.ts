@@ -8,6 +8,7 @@ import {
 } from "../../../../../../scripts/lib/workspace-agent-target.ts";
 import { resolveLocalWorkspaceWatchAgentBinary } from "../../../remote-agent/localWorkspaceWatchAgent.binary.ts";
 import { V2WindowsInspector } from "./SharedService.windows.ts";
+import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 
 it.skipIf(process.platform !== "win32")(
   "resolves and handshakes a real packaged native Windows helper from a path with spaces",
@@ -29,6 +30,7 @@ it.skipIf(process.platform !== "win32")(
       assertWorkspaceAgentArtifactTarget(binary, target);
       const fixture = path.join(root, "private.json");
       await writeFile(fixture, "fixture");
+      await ownV2WindowsFixture(root);
       expect(await inspector.request(`READ\t${Buffer.from(fixture).toString("hex")}`)).toEqual([
         Buffer.from("fixture").toString("hex"),
       ]);

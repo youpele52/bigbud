@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { expect, it } from "vitest";
 import { readV2WindowsRegistration, v2WindowsInspector } from "./SharedService.windows.ts";
+import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 
 it.skipIf(process.platform !== "win32")(
   "reads only private same-handle bounded registration and rejects foreign read grants",
@@ -12,6 +13,7 @@ it.skipIf(process.platform !== "win32")(
     const file = path.join(root, "registration.json");
     try {
       await writeFile(file, '{"fixture":"only"}');
+      await ownV2WindowsFixture(root);
       expect((await readV2WindowsRegistration(file)).toString()).toBe('{"fixture":"only"}');
       execFileSync("icacls.exe", [file, "/grant", "*S-1-1-0:(R)"], { stdio: "ignore" });
       await expect(readV2WindowsRegistration(file)).rejects.toThrow("rejected");

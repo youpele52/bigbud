@@ -1,5 +1,3 @@
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Schema } from "effect";
@@ -7,6 +5,7 @@ import type { Endpoint } from "@opencode/client/service";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { readV2WindowsRegistration } from "./SharedService.windows.ts";
+import { readV2UnixRegistration } from "./SharedService.registration.unix.ts";
 
 const Registration = Schema.Struct({
   id: Schema.String,
@@ -54,26 +53,10 @@ export async function readV2SharedRegistration(file: string): Promise<V2SharedRe
       "registration",
       "OpenCode v2 service registration must use an absolute path.",
     );
-  let handle;
   try {
-    let buffer: Buffer;
-    if (process.platform === "win32") {
-      buffer = await readV2WindowsRegistration(file);
-    } else {
-      handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-      const stat = await handle.stat();
-      if (
-        !stat.isFile() ||
-        stat.size > 16_384 ||
-        (stat.mode & 0o077) !== 0 ||
-        stat.uid !== process.getuid?.()
-      )
-        throw new Error("Invalid registration file.");
-      buffer = Buffer.alloc(16_385);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      if (bytesRead > 16_384) throw new Error("Registration exceeds bound.");
-      buffer = buffer.subarray(0, bytesRead);
-    }
+    const buffer = await (process.platform === "win32"
+      ? readV2WindowsRegistration(file)
+      : readV2UnixRegistration(file));
     const decoded = Schema.decodeUnknownSync(Registration)(JSON.parse(buffer.toString("utf8")));
     if (
       !decoded.id ||
@@ -109,8 +92,6 @@ export async function readV2SharedRegistration(file: string): Promise<V2SharedRe
       "registration",
       "OpenCode v2 service registration is invalid or not private to this user. Check the native service; bigbud did not modify it.",
     );
-  } finally {
-    await handle?.close();
   }
 }
 

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ownV2WindowsFixture } from "../apps/server/src/provider/Layers/OpencodeV2/SharedService.windows.fixture.mjs";
 import {
   V2_WINDOWS_ACL_PROGRAM,
   v2WindowsPowerShellEnvironment,
@@ -13,13 +14,14 @@ const root = await mkdtemp(path.join(tmpdir(), "bigbud-inspection-diagnostic-"))
 try {
   const file = path.join(root, "registration.json");
   await writeFile(file, "fixture");
+  await ownV2WindowsFixture(root);
   const helper = spawnSync(
     path.resolve("target/debug/bigbud-remote-agent.exe"),
     ["--inspect-local"],
     {
       input: `HELLO\t1\nREAD\t${Buffer.from(file).toString("hex")}\n`,
       encoding: "utf8",
-      timeout: 10_000,
+      timeout: 30_000,
       maxBuffer: 64 * 1024,
     },
   );

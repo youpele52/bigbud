@@ -1,5 +1,5 @@
 import { realpath, stat } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { v2UnixStorageIdentity } from "./SharedService.storage.identity.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { inspectV2UnixProcess } from "./SharedService.storage.unix.ts";
@@ -31,10 +31,15 @@ export async function resolveV2SharedStorage(registrationFile: string): Promise<
         timeoutMs: 5000,
         run: (signal) => inspectV2UnixProcess(before.registration.pid, signal),
       });
-    const { files, binaryPath } = await inspect();
-    const databasePath = await realpath(selectV2SharedDatabase(files));
-    const metadata = await stat(databasePath);
-    if (!metadata.isFile() || metadata.uid !== process.getuid?.())
+    const first = await inspect();
+    const { files, binaryPath } = first;
+    const selected = selectV2SharedDatabase(files);
+    const databasePath = await realpath(selected);
+    const inspectPath = () =>
+      process.platform === "linux" ? stat(databasePath, { bigint: true }) : stat(databasePath);
+    const metadata = await inspectPath();
+    const uid = process.platform === "linux" ? BigInt(process.getuid!()) : process.getuid?.();
+    if (!metadata.isFile() || metadata.uid !== uid)
       throw new Error("Native storage owner mismatch.");
     const second = await inspect();
     if (
@@ -42,9 +47,16 @@ export async function resolveV2SharedStorage(registrationFile: string): Promise<
       second.binaryPath !== binaryPath
     )
       throw new Error("Native open file identity changed.");
-    const retained = await stat(databasePath);
+    const retained = await inspectPath();
     if (retained.dev !== metadata.dev || retained.ino !== metadata.ino)
       throw new Error("Native storage changed.");
+    if (process.platform === "linux") {
+      for (const inventory of [first, second]) {
+        const opened = inventory.openedFiles?.get(selected);
+        if (opened?.dev !== metadata.dev || opened.ino !== metadata.ino)
+          throw new Error("Native database pathname no longer identifies the opened file.");
+      }
+    }
     const after = await discoverV2SharedService({ file: registrationFile });
     if (before.generation !== after.generation) throw new Error("Native generation changed.");
     return {
@@ -52,11 +64,11 @@ export async function resolveV2SharedStorage(registrationFile: string): Promise<
       databasePath,
       binaryPath,
       generation: before.generation,
-      storageIdentity: createHash("sha256")
-        .update(
-          JSON.stringify(["opencodeV2-shared-local", databasePath, metadata.dev, metadata.ino]),
-        )
-        .digest("hex"),
+      storageIdentity: v2UnixStorageIdentity(
+        process.platform as "darwin" | "linux",
+        databasePath,
+        metadata,
+      ),
     };
   } catch {
     throw new V2SharedServiceError(

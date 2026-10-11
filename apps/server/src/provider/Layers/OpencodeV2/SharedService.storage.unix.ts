@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readdir, readlink, stat } from "node:fs/promises";
+import { inspectV2LinuxProcess, type V2LinuxFileIdentity } from "./SharedService.storage.linux.ts";
 
 const executeFile = promisify(execFile);
 
@@ -22,6 +22,7 @@ export async function inspectV2UnixProcess(pid: number, signal?: AbortSignal) {
     if (!binaryPath.startsWith("/")) throw new Error("Native executable identity unavailable.");
     return {
       binaryPath,
+      openedFiles: undefined as Map<string, V2LinuxFileIdentity> | undefined,
       files: stdout
         .split("\n")
         .filter((line) => line.startsWith("n"))
@@ -29,30 +30,5 @@ export async function inspectV2UnixProcess(pid: number, signal?: AbortSignal) {
     };
   }
   if (process.platform !== "linux") throw new Error("Unsupported native metadata platform.");
-  const root = `/proc/${pid}`;
-  const owner = await stat(root);
-  if (owner.uid !== process.getuid?.()) throw new Error("Native process owner mismatch.");
-  const binaryPath = await readlink(`${root}/exe`);
-  if (!binaryPath.startsWith("/") || binaryPath.endsWith(" (deleted)"))
-    throw new Error("Native executable unavailable.");
-  const entries = await readdir(`${root}/fd`);
-  if (entries.length > 4096) throw new Error("Native handle inventory exceeds bound.");
-  const files: string[] = [];
-  // Sequential metadata reads bound concurrent work; only a vanished noncandidate FD is ignored.
-  for (const entry of entries) {
-    signal?.throwIfAborted();
-    try {
-      const name = await readlink(`${root}/fd/${entry}`);
-      if (!name.startsWith("/") || name.endsWith(" (deleted)")) continue;
-      const opened = await stat(`${root}/fd/${entry}`);
-      const named = await stat(name);
-      if (opened.isFile() && opened.dev === named.dev && opened.ino === named.ino) files.push(name);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-  signal?.throwIfAborted();
-  if (Buffer.byteLength(files.join("\n")) > 512 * 1024)
-    throw new Error("Native metadata exceeds bound.");
-  return { binaryPath, files };
+  return inspectV2LinuxProcess(pid, signal);
 }

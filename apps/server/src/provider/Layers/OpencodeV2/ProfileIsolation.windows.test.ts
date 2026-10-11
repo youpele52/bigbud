@@ -37,6 +37,24 @@ const valid = () => ({
     entry("C:\\", true),
   ],
 });
+it("trusts the exact Windows installer ancestor while keeping leaf ownership strict", () => {
+  const installer = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+  const snapshot = valid();
+  snapshot.entries[3]!.owner = installer;
+  snapshot.entries[3]!.rules.push({ sid: installer, allow: true, rights: 2032127 });
+  expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", snapshot)).not.toThrow();
+  snapshot.entries[0]!.owner = installer;
+  expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", snapshot)).toThrow("owner");
+});
+it("ignores inherit-only ancestor grants but rejects effective child-deletion grants", () => {
+  const snapshot = valid();
+  const inherited = { sid: "S-1-3-0", allow: true, rights: 2032127, inheritOnly: true };
+  snapshot.entries[3]!.rules.push(inherited);
+  snapshot.entries[3]!.rules.push({ sid: "S-1-5-11", allow: true, rights: 4 });
+  expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", snapshot)).not.toThrow();
+  inherited.inheritOnly = false;
+  expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", snapshot)).toThrow("untrusted");
+});
 it("Windows ACL verification accepts only inspected owner/trusted ACEs and all ancestors, not mode guesses", () => {
   expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", valid())).not.toThrow();
   for (const rights of [1, 2, 2032127]) {
@@ -45,7 +63,7 @@ it("Windows ACL verification accepts only inspected owner/trusted ACEs and all a
     expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", snapshot)).toThrow("untrusted");
   }
   const writableParent = valid();
-  writableParent.entries[1]!.rules.push({ sid: "S-1-5-11", allow: true, rights: 2 });
+  writableParent.entries[1]!.rules.push({ sid: "S-1-5-11", allow: true, rights: 0x40 });
   expect(() => validateV2WindowsAcl("C:\\Users\\fixture\\v2", writableParent)).toThrow("untrusted");
   const missingParent = valid();
   missingParent.entries.pop();

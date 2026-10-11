@@ -1,149 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { V2_SHARED_REQUIRED_OPERATIONS } from "./SharedService.capabilities.ts";
-import { V2_SHARED_REQUEST_FIELDS, V2_SHARED_RESPONSES } from "./SharedService.protocol.ts";
+import { v2OfficialContract } from "./SharedService.official.fixture.ts";
+import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 
-const object = (properties: Record<string, unknown> = {}) => ({ type: "object", properties });
-const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
-const json = (schema: unknown) => ({ content: { "application/json": { schema } } });
-
-/** Synthetic contract seam; native qualification uses the actual runtime OpenAPI. */
+/** Independently sourced official contract, never generated from the production capability manifest. */
 export function sharedServiceTestContract() {
-  const paths: Record<string, Record<string, unknown>> = {};
-  const shapes = {
-    ServerInfo: ["version", "pid"],
-    "Session.Info": ["id", "location", "metadata", "permissions", "model", "projectID"],
-    "Model.Info": ["id", "providerID", "variants"],
-    "Integration.Info": ["id", "connections"],
-  };
-  const contract = {
-    openapi: "3.1.0",
-    paths,
-    components: {
-      schemas: Object.fromEntries(
-        Object.entries(shapes).map(([name, fields]) => [
-          name,
-          { type: "object", properties: Object.fromEntries(fields.map((field) => [field, {}])) },
-        ]),
-      ),
-    },
-  };
-  const schemas = contract.components.schemas;
-  schemas.ServerInfo!.properties = { version: { type: "string" }, pid: { type: "integer" } };
-  schemas["Session.Info"]!.properties = {
-    id: { type: "string" },
-    projectID: { type: "string" },
-    location: { $ref: "#/components/schemas/Location.PublicRef" },
-    metadata: { $ref: "#/components/schemas/Session.Metadata" },
-    permissions: { $ref: "#/components/schemas/Permission.Ruleset" },
-    model: { $ref: "#/components/schemas/Model.Ref" },
-  };
-  schemas["Model.Info"]!.properties = {
-    id: { type: "string" },
-    providerID: { type: "string" },
-    variants: { type: "array" },
-  };
-  schemas["Integration.Info"]!.properties = {
-    id: { type: "string" },
-    connections: { type: "array" },
-  };
-  for (const name of ["Location.PublicRef", "Session.Metadata", "Permission.Ruleset", "Model.Ref"])
-    schemas[name] = { type: "object", properties: {} };
-  schemas["Location.PublicRef"]!.properties = { directory: { type: "string" } };
-  schemas["Model.Ref"]!.properties = {
-    id: { type: "string" },
-    providerID: { type: "string" },
-    variant: { type: "string" },
-  };
-  Object.assign(schemas["Permission.Ruleset"]!, {
-    type: "array",
-    items: object({
-      action: { type: "string" },
-      resource: { type: "string" },
-      effect: { type: "string", enum: ["allow", "ask", "deny"] },
-    }),
-  });
-  for (const [method, route, operationId] of V2_SHARED_REQUIRED_OPERATIONS) {
-    const kind = V2_SHARED_RESPONSES[operationId];
-    let data: unknown = object();
-    if (kind === "array" || kind === "page")
-      data = {
-        type: "array",
-        items:
-          operationId === "model.list"
-            ? ref("Model.Info")
-            : operationId === "integration.list"
-              ? ref("Integration.Info")
-              : object(),
-      };
-    if (kind === "session") data = ref("Session.Info");
-    if (kind === "interaction" || kind === "admission")
-      data = object({
-        id: { type: "string" },
-        sessionID: { type: "string" },
-        type: { type: "string" },
-        payload: object({ metadata: object() }),
-      });
-    const result =
-      kind === "info"
-        ? ref("ServerInfo")
-        : kind === "interrupt"
-          ? object({ interrupted: { type: "boolean" } })
-          : object({ data, cursor: object() });
-    const responses =
-      kind === "sse"
-        ? {
-            "200": {
-              content: {
-                "text/event-stream": {
-                  schema: object({ event: { type: "string" }, data: { type: "string" } }),
-                  "x-effect-stream": { encoding: "sse" },
-                },
-              },
-            },
-          }
-        : kind
-          ? { "200": json(result) }
-          : { "204": {} };
-    const fields = V2_SHARED_REQUEST_FIELDS[operationId];
-    const parameters: unknown[] = [...route.matchAll(/\{([^}]+)\}/g)].map((match) => ({
-      name: match[1],
-      in: "path",
-      required: true,
-      schema: { type: "string" },
-    }));
-    if (operationId === "session.interrupt")
-      parameters.push({ name: "resume", in: "query", schema: { type: "string" } });
-    (paths[route] ??= {})[method] = {
-      operationId,
-      responses,
-      parameters,
-      ...(fields
-        ? {
-            requestBody: json(
-              object(
-                Object.fromEntries(
-                  Object.entries(fields).map(([field, type]) => [
-                    field,
-                    field === "model"
-                      ? ref("Model.Ref")
-                      : field === "location"
-                        ? ref("Location.PublicRef")
-                        : field === "permissions"
-                          ? ref("Permission.Ruleset")
-                          : type
-                            ? { type }
-                            : {},
-                  ]),
-                ),
-              ),
-            ),
-          }
-        : {}),
-    };
-  }
-  return contract;
+  return v2OfficialContract();
 }
 
 /** Private disposable native-registration shape; never edits a real service file. */
@@ -159,5 +22,6 @@ export async function sharedServiceTestRegistration(overrides: Record<string, un
     ...overrides,
   };
   await writeFile(file, JSON.stringify(value), { mode: 0o600 });
+  await ownV2WindowsFixture(root);
   return { file, root, value, close: () => rm(root, { recursive: true, force: true }) };
 }

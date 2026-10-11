@@ -101,6 +101,11 @@ pub(super) fn private_file(handle: HANDLE, ancestor: bool, owner_only: bool) -> 
     let user = current_user()?;
     let system = well_known(WinLocalSystemSid)?;
     let admins = well_known(WinBuiltinAdministratorsSid)?;
+    // Exact NT SERVICE\TrustedInstaller SID; Windows owns the system-drive ancestor this way.
+    // Only ancestor ownership/grants trust this service, never registration/database ownership.
+    let installer = Sid(vec![
+        0x00000601, 0x05000000, 80, 956008885, 3418522649, 1831038044, 1853292631, 2271478464,
+    ]);
     let mut owner = ptr::null_mut();
     let mut acl = ptr::null_mut();
     let mut descriptor = ptr::null_mut();
@@ -121,7 +126,10 @@ pub(super) fn private_file(handle: HANDLE, ancestor: bool, owner_only: bool) -> 
         return Err(io::Error::from_raw_os_error(result as i32));
     }
     let _guard = Descriptor(descriptor);
-    if !user.matches(owner) && !(ancestor && (system.matches(owner) || admins.matches(owner))) {
+    if !user.matches(owner)
+        && !(ancestor
+            && (system.matches(owner) || admins.matches(owner) || installer.matches(owner)))
+    {
         return Err(io::Error::other("owner rejected"));
     }
     if owner_only {
@@ -153,7 +161,10 @@ pub(super) fn private_file(handle: HANDLE, ancestor: bool, owner_only: bool) -> 
             }
             let ace = &*raw.cast::<ACCESS_ALLOWED_ACE>();
             let sid = ptr::from_ref(&ace.SidStart).cast_mut().cast();
-            let trusted = user.matches(sid) || system.matches(sid) || admins.matches(sid);
+            let trusted = user.matches(sid)
+                || system.matches(sid)
+                || admins.matches(sid)
+                || (ancestor && installer.matches(sid));
             // Ancestors may be readable, but untrusted principals cannot replace children or mutate ACLs.
             let mutation = 0x10000000 | 0x40000000 | 0x000d0150;
             if !trusted && (!ancestor || ace.Mask & mutation != 0) {

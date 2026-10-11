@@ -4,6 +4,26 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 #[cfg(windows)]
 static INVENTORY_FIXTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[cfg(windows)]
+fn own_fixture(root: &std::path::Path) -> io::Result<()> {
+    let user = Command::new("whoami.exe")
+        .args(["/user", "/fo", "csv", "/nh"])
+        .output()?;
+    let text = String::from_utf8(user.stdout).map_err(io::Error::other)?;
+    let sid = text
+        .split('"')
+        .find(|field| field.starts_with("S-1-5-"))
+        .ok_or_else(|| io::Error::other("fixture user unavailable"))?;
+    let status = Command::new("icacls.exe")
+        .arg(root)
+        .args(["/setowner", &format!("*{sid}"), "/T", "/Q"])
+        .status()?;
+    if !user.status.success() || !status.success() {
+        return Err(io::Error::other("fixture ownership failed"));
+    }
+    Ok(())
+}
+
 struct Probe {
     child: Child,
     input: ChildStdin,
@@ -123,6 +143,7 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
     fs::create_dir(&root)?;
     let file = root.join("private registration.json");
     fs::write(&file, b"fixture")?;
+    own_fixture(&root)?;
     let hex = |s: &str| {
         s.as_bytes()
             .iter()
@@ -206,6 +227,7 @@ fn inspect_local_windows_failed_snapshots_release_handles_and_detect_replacement
     let result = (|| {
         let file = root.join("native-state");
         fs::write(&file, b"first")?;
+        own_fixture(&root)?;
         let held = fs::File::open(&file)?;
         let hex = |value: &str| {
             value
@@ -241,6 +263,7 @@ fn inspect_local_windows_failed_snapshots_release_handles_and_detect_replacement
         let before = identity(&probe.request(&command)?)?;
         fs::rename(&file, root.join("retained-old"))?;
         fs::write(&file, b"replacement")?;
+        own_fixture(&root)?;
         let replacement = fs::File::open(&file)?;
         let after = identity(&probe.request(&command)?)?;
         if before == after {
@@ -261,9 +284,15 @@ fn inspect_local_windows_failed_snapshots_release_handles_and_detect_replacement
         };
         let initial_handles = handle_count(&probe)?;
         for _ in 0..32 {
+            // Force source handle-number reuse between repeated incomplete inventories.
+            let churn_path = root.join("churn-file");
+            fs::write(&churn_path, b"disposable")?;
+            let churn = fs::File::open(&churn_path)?;
+            fs::remove_file(&churn_path)?;
             if !probe.request(&command)?.starts_with("ERR") {
                 return Err(io::Error::other("deleted open file was not rejected"));
             }
+            drop(churn);
         }
         if handle_count(&probe)? > initial_handles + 1 {
             return Err(io::Error::other("failed snapshots leaked native handles"));

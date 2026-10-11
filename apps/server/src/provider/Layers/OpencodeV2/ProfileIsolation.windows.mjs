@@ -13,7 +13,7 @@ function Inspect($name, $ancestor) {
   if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Reparse point rejected' }
   $acl = Get-Acl -LiteralPath $name
   $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
-    @{sid=$_.IdentityReference.Value; allow=($_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow); rights=[int64]$_.FileSystemRights}
+    @{sid=$_.IdentityReference.Value; allow=($_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow); rights=[int64]$_.FileSystemRights; inheritOnly=(($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)}
   })
   $entries.Add(@{path=$item.FullName; ancestor=$ancestor; directory=$item.PSIsContainer; owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; rules=$rules})
   if ($entries.Count -gt 2000) { throw 'ACL inventory exceeds bound' }
@@ -44,6 +44,7 @@ export function validateV2WindowsAcl(root, snapshot) {
   )
     throw new Error("V2 Windows ACL inventory rejected.");
   const allowed = new Set([snapshot.sid, "S-1-5-18", "S-1-5-32-544"]);
+  const installer = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
   const canonical = path.win32.resolve(root).toLowerCase();
   const seen = new Set();
   for (const entry of snapshot.entries) {
@@ -65,20 +66,31 @@ export function validateV2WindowsAcl(root, snapshot) {
     )
       throw new Error("V2 Windows ACL scope rejected.");
     seen.add(name);
-    if (entry.ancestor ? !allowed.has(entry.owner) : entry.owner !== snapshot.sid)
+    if (
+      entry.ancestor
+        ? !allowed.has(entry.owner) && entry.owner !== installer
+        : entry.owner !== snapshot.sid
+    )
       throw new Error("V2 Windows profile owner rejected.");
     let grants = 0;
     for (const rule of entry.rules) {
       if (
         typeof rule.sid !== "string" ||
         typeof rule.allow !== "boolean" ||
+        (rule.inheritOnly !== undefined && typeof rule.inheritOnly !== "boolean") ||
         !Number.isSafeInteger(rule.rights)
       )
         throw new Error("V2 Windows ACL rule rejected.");
       if (!rule.allow) continue;
+      if (entry.ancestor && rule.inheritOnly === true) continue;
       grants++;
-      // Reject unknown principals with any private-root rights or ancestor mutation rights.
-      if (!allowed.has(rule.sid) && (!entry.ancestor || rule.rights & 852310))
+      // Creating a new sibling is harmless; replacing existing children or changing ACLs is not.
+      const ancestorMutation = 0x10000000 | 0x40000000 | 0x000d0150;
+      if (
+        !allowed.has(rule.sid) &&
+        !(entry.ancestor && rule.sid === installer) &&
+        (!entry.ancestor || rule.rights & ancestorMutation)
+      )
         throw new Error("V2 Windows profile ACL permits an untrusted principal.");
     }
     if (!grants) throw new Error("V2 Windows empty/unknown DACL rejected.");
