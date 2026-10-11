@@ -132,7 +132,7 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
             Authorization::{SE_FILE_OBJECT, SetSecurityInfo},
             DACL_SECURITY_INFORMATION,
         },
-        Storage::FileSystem::WRITE_DAC,
+        Storage::FileSystem::{READ_CONTROL, WRITE_DAC},
     };
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -186,7 +186,11 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
         fs::write(&file, vec![b'x'; 16_385])?;
         probe.expect_reply(&format!("READ\t{encoded}"), "ERR")?;
         fs::write(&file, b"fixture")?;
-        let acl_handle = fs::OpenOptions::new().access_mode(WRITE_DAC).open(&file)?;
+        // SetSecurityInfo also reads the existing descriptor while propagating inheritance.
+        let acl_handle = fs::OpenOptions::new()
+            .access_mode(WRITE_DAC | READ_CONTROL)
+            .open(&file)
+            .map_err(|error| io::Error::other(format!("fixture ACL open: {error}")))?;
         // SAFETY: mutate only this disposable fixture file. Null DACL must be rejected, never repaired.
         let status = unsafe {
             SetSecurityInfo(
@@ -200,7 +204,7 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
             )
         };
         if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
+            return Err(io::Error::other(format!("fixture null DACL: {status}")));
         }
         probe.expect_reply(&format!("READ\t{encoded}"), "ERR")?;
         for unsupported in [
@@ -251,7 +255,9 @@ fn inspect_local_windows_failed_snapshots_release_handles_and_detect_replacement
                 .map(|b| format!("{b:02x}"))
                 .collect::<String>()
         };
-        let encoded = hex(file
+        // GetFinalPathNameByHandle expands runner TEMP's short (8.3) ancestor names.
+        let canonical = fs::canonicalize(&file)?;
+        let encoded = hex(canonical
             .to_str()
             .ok_or_else(|| io::Error::other("fixture path"))?);
         let identity = |reply: &str| -> io::Result<String> {
