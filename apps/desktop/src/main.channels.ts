@@ -35,6 +35,7 @@ export const desktopIpcChannels = {
   backendStartupState: "desktop:backend-startup-state",
   backendStartupGetState: "desktop:backend-startup-get-state",
   getWindowRole: "desktop:get-window-role",
+  getTerminalRenderingPolicy: "desktop:get-terminal-rendering-policy",
   openMainWindow: "desktop:open-main-window",
   openCompactChat: "desktop:open-compact-chat",
   getPendingCompactScreenshot: "desktop:get-pending-compact-screenshot",

@@ -74,6 +74,8 @@ export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
 export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
+export const TerminalGpuAcceleration = Schema.Literals(["auto", "on", "off"]);
+export type TerminalGpuAcceleration = typeof TerminalGpuAcceleration.Type;
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
 export const DesktopWindowMaterial = Schema.Literals(DESKTOP_WINDOW_MATERIALS);
 export type DesktopWindowMaterial = typeof DesktopWindowMaterial.Type;
@@ -105,6 +107,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(() => "automatic" as const satisfies DesktopWindowMaterial),
   ),
   terminalFontSize: TerminalFontSize.pipe(Schema.withDecodingDefault(() => 12)),
+  terminalGpuAcceleration: TerminalGpuAcceleration.pipe(
+    Schema.withDecodingDefault(() => "auto" as const),
+  ),
   contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(
     Schema.withDecodingDefault(() => DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD),
   ),

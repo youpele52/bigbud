@@ -59,6 +59,7 @@ import { stopCuaDriverCommandsAndWait } from "./backend/cuaDriver.process";
 import { sweepWindowsCuaDriverProcesses } from "./backend/cuaDriver.windowsSweep";
 import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceability";
 import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
+import { registerTerminalRenderingIpc } from "./main.terminalRendering";
 
 interface BootstrapDesktopOptions {
   readonly baseDir: string;
@@ -233,6 +234,10 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     systemMonitor,
     (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
   );
+  registerTerminalRenderingIpc((sender) => {
+    const role = windowRegistry.getRole(sender);
+    return role === "main" || role === "compact-chat";
+  });
   await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
     logHeader("system monitor agent bridge unavailable");
   });

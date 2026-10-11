@@ -13,6 +13,7 @@ import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
+import type { TerminalRenderingPolicy } from "./ipc.terminal";
 
 export type {
   DesktopRuntimeArch,
@@ -75,6 +76,7 @@ export interface DesktopBridge
     DesktopScreenshotBridge,
     DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
+  getTerminalRenderingPolicy?: () => Promise<TerminalRenderingPolicy>;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;
   beginMascotDrag?: (point: { x: number; y: number }) => Promise<boolean>;

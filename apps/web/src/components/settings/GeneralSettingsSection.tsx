@@ -12,6 +12,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useTheme } from "../../hooks/useTheme";
+import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
 
 const THEME_OPTIONS = [
   {
@@ -295,6 +296,7 @@ export function GeneralSettingsSection() {
           }
         />
 
+        <TerminalRenderingSettings />
         <SettingsRow
           title="Diff line wrapping"
           description="Set the default wrap state when the diff panel opens."

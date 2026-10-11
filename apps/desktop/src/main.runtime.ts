@@ -1,4 +1,5 @@
 import type { App } from "electron";
+import { registerTerminalRenderingPolicy } from "./main.terminalRendering";
 
 import {
   armLinuxGpuFallbackMarker,
@@ -49,6 +50,10 @@ export function registerDesktopRuntimeMonitoring(options: {
   readonly linuxGpuFallbackMarkerPath: string;
   readonly log: (message: string) => void;
 }): void {
+  registerTerminalRenderingPolicy(
+    options.appInstance,
+    options.runtimeConfig.disableHardwareAcceleration,
+  );
   options.log(
     `linux runtime config conservativeMode=${options.runtimeConfig.conservativeMode} disableHardwareAcceleration=${options.runtimeConfig.disableHardwareAcceleration} spellcheckEnabled=${options.runtimeConfig.spellcheckEnabled} backendMaxOldSpaceMb=${options.runtimeConfig.backendMaxOldSpaceMb ?? "default"} ozonePlatform=${options.runtimeConfig.ozonePlatform ?? "auto"} gpuFallbackMarkerArmed=${options.runtimeConfig.gpuFallbackMarkerArmed}`,
   );
