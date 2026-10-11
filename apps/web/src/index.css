@@ -2,6 +2,7 @@
 @import "shadcn/tailwind.css";
 @import "./index.markdown.css";
 @import "./index.effects.css";
+@import "./components/chat/common/ChatGreeting.shimmer.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 

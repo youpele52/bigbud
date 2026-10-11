@@ -1,5 +1,5 @@
 import { type MessageId } from "@bigbud/contracts";
-import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
+import { ChatGreeting } from "../common/ChatGreeting";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { measureElement as measureVirtualElement, useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
@@ -22,6 +22,8 @@ import { useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
+  emptyChatGreeting,
+  shimmerEmptyChat = false,
   isWorking,
   activeTurnInProgress,
   activeTurnStartedAt,
@@ -301,11 +303,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);
 
   if (rows.length === 0 && !isWorking) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <BigbudLogo className="h-8 opacity-70" />
-      </div>
-    );
+    return <ChatGreeting greeting={emptyChatGreeting ?? null} shimmer={shimmerEmptyChat} />;
   }
 
   return (

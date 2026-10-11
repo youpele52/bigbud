@@ -17,6 +17,8 @@ export const MIN_ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
 export const RECENT_COMPLETED_TURNS_TO_KEEP_MOUNTED = 2;
 
 export interface MessagesTimelineProps {
+  emptyChatGreeting?: string | null;
+  shimmerEmptyChat?: boolean;
   isWorking: boolean;
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;

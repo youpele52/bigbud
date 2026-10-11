@@ -9,6 +9,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useTheme } from "../../hooks/useTheme";
+import { GeneralSettingsGreetingName } from "./GeneralSettingsGreetingName";
 
 const THEME_OPTIONS = [
   {
@@ -54,6 +55,7 @@ export function GeneralSettingsSection() {
   return (
     <>
       <SettingsSection title="General">
+        <GeneralSettingsGreetingName />
         <SettingsRow
           title="Theme"
           description="Choose how bigbud looks across the app."

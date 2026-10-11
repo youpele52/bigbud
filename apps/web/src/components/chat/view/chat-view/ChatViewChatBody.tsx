@@ -151,6 +151,8 @@ export function ChatViewChatBody({
                 <DelegatedChildrenCard items={base.activeThread!.delegatedChildren ?? []} />
                 <MessagesTimeline
                   key={base.activeThread!.id}
+                  emptyChatGreeting={timeline.emptyChatGreeting}
+                  shimmerEmptyChat={timeline.shimmerEmptyChat}
                   isWorking={thread.isWorking}
                   activeTurnInProgress={interactions.activeTurnInProgress}
                   activeTurnStartedAt={thread.activeWorkStartedAt}

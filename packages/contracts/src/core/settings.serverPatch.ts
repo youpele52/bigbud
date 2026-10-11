@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
+import { GreetingName } from "./settings.greeting";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -119,6 +120,7 @@ const ProviderSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  greetingName: Schema.optionalKey(GreetingName),
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),

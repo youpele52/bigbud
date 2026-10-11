@@ -16,6 +16,7 @@ import {
 import { ATTACHMENT_PREVIEW_HANDOFF_TTL_MS } from "./shared";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
+import { useChatGreeting } from "../../common/ChatGreeting.hooks";
 
 interface ChatViewTimelineStateInput {
   base: ChatViewBaseState;
@@ -255,7 +256,21 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
     return deriveCompletionDividerBeforeEntryId(timelineEntries, activeLatestTurn);
   }, [activeLatestTurn, completionSummary, latestTurnSettled, timelineEntries]);
 
+  const chatGreeting = useChatGreeting({
+    threadId: base.threadId,
+    name: base.settings.greetingName,
+    isLocalDraftThread: base.isLocalDraftThread,
+    hasContent:
+      !activeThread ||
+      timelineEntries.length > 0 ||
+      (activeThread?.messages.length ?? 0) > 0 ||
+      activeLatestTurn !== null,
+    isWorking: thread.isWorking,
+  });
+
   return {
+    emptyChatGreeting: chatGreeting.greeting,
+    shimmerEmptyChat: chatGreeting.shimmer,
     timelineMessages,
     timelineEntries,
     turnDiffSummaryByAssistantMessageId,

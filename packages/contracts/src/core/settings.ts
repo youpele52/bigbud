@@ -17,6 +17,7 @@ import {
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
+import { GreetingName } from "./settings.greeting";
 import {
   AgentBrowserPreference,
   ComputerUseActionTimeoutMs,
@@ -230,6 +231,7 @@ export const MobileRemoteControlSettings = Schema.Struct({
 export type MobileRemoteControlSettings = typeof MobileRemoteControlSettings.Type;
 
 export const ServerSettings = Schema.Struct({
+  greetingName: GreetingName.pipe(Schema.withDecodingDefault(() => "")),
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableThinkingStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
