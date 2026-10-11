@@ -1,9 +1,19 @@
 export type GreetingPeriod = "morning" | "afternoon" | "evening" | "night";
+export type GreetingDay =
+  | "sunday"
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday";
 
 export interface GreetingMessage {
   readonly id: string;
   readonly nameless: string;
   readonly named?: string;
+  readonly nameFallback?: string;
+  readonly eligibleDays?: readonly GreetingDay[];
 }
 
 // All new-chat copy lives here. {name} is rendered as plain text, never markup.
@@ -36,6 +46,102 @@ export const GREETING_MESSAGES = {
       named: "A little morning tinkering, {name}?",
     },
     { id: "morning-start", nameless: "A new morning. An open canvas." },
+    {
+      id: "source-good-morning",
+      nameless: "Good morning, bud",
+      named: "Good morning, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-welcome-morning",
+      nameless: "Welcome, bud",
+      named: "Welcome, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-hey-there",
+      nameless: "Hey there, bud",
+      named: "Hey there, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-happy-monday",
+      nameless: "Happy Monday, bud",
+      named: "Happy Monday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["monday"],
+    },
+    {
+      id: "source-happy-tuesday",
+      nameless: "Happy Tuesday, bud",
+      named: "Happy Tuesday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["tuesday"],
+    },
+    {
+      id: "source-happy-wednesday",
+      nameless: "Happy Wednesday, bud",
+      named: "Happy Wednesday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["wednesday"],
+    },
+    {
+      id: "source-happy-thursday",
+      nameless: "Happy Thursday, bud",
+      named: "Happy Thursday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["thursday"],
+    },
+    {
+      id: "source-happy-friday",
+      nameless: "Happy Friday, bud",
+      named: "Happy Friday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["friday"],
+    },
+    {
+      id: "source-friday-feeling",
+      nameless: "That Friday feeling, bud",
+      named: "That Friday feeling, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["friday"],
+    },
+    {
+      id: "source-weekend-welcome",
+      nameless: "Welcome to the weekend, bud",
+      named: "Welcome to the weekend, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["saturday", "sunday"],
+    },
+    {
+      id: "source-happy-saturday",
+      nameless: "Happy Saturday, bud",
+      named: "Happy Saturday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["saturday"],
+    },
+    {
+      id: "source-weekend-mind",
+      nameless: "What’s on your mind, bud?",
+      named: "What’s on your mind, {name}?",
+      nameFallback: "bud",
+      eligibleDays: ["saturday", "sunday"],
+    },
+    {
+      id: "source-sunday-session",
+      nameless: "Sunday session, bud?",
+      named: "Sunday session, {name}?",
+      nameFallback: "bud",
+      eligibleDays: ["sunday"],
+    },
+    {
+      id: "source-happy-sunday",
+      nameless: "Happy Sunday, bud",
+      named: "Happy Sunday, {name}",
+      nameFallback: "bud",
+      eligibleDays: ["sunday"],
+    },
+    { id: "source-coffee", nameless: "Coffee and bigbud time?" },
   ],
   afternoon: [
     {
@@ -64,6 +170,30 @@ export const GREETING_MESSAGES = {
       named: "An afternoon idea taking shape, {name}?",
     },
     { id: "afternoon-room", nameless: "An afternoon with room for a new idea." },
+    {
+      id: "source-good-afternoon",
+      nameless: "Good afternoon, bud",
+      named: "Good afternoon, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-how-are-you",
+      nameless: "Hi bud, how are you?",
+      named: "Hi {name}, how are you?",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-whats-new",
+      nameless: "What’s new, bud?",
+      named: "What’s new, {name}?",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-back-at-it",
+      nameless: "Back at it, bud",
+      named: "Back at it, {name}",
+      nameFallback: "bud",
+    },
   ],
   evening: [
     {
@@ -92,14 +222,39 @@ export const GREETING_MESSAGES = {
       named: "Evening, {name}. What would you like to explore?",
     },
     { id: "evening-canvas", nameless: "An evening. A blank canvas. A new possibility." },
+    {
+      id: "source-returns",
+      nameless: "bud returns!",
+      named: "{name} returns!",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-good-evening",
+      nameless: "Good evening, bud",
+      named: "Good evening, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-evening",
+      nameless: "Evening, bud",
+      named: "Evening, {name}",
+      nameFallback: "bud",
+    },
+    {
+      id: "source-how-was-your-day",
+      nameless: "How was your day, bud?",
+      named: "How was your day, {name}?",
+      nameFallback: "bud",
+    },
   ],
   night: [
     { id: "night-idea", nameless: "A late-night idea?", named: "A late-night idea, {name}?" },
     { id: "night-jam", nameless: "It’s a late-night jam session." },
     {
       id: "night-mind",
-      nameless: "What’s on your mind tonight?",
+      nameless: "What’s on your mind tonight, bud?",
       named: "What’s on your mind tonight, {name}?",
+      nameFallback: "bud",
     },
     {
       id: "night-tinker",
@@ -112,6 +267,13 @@ export const GREETING_MESSAGES = {
       named: "Which idea are we following tonight, {name}?",
     },
     { id: "night-thought", nameless: "A quiet hour for a curious thought." },
+    {
+      id: "source-how-is-it-going",
+      nameless: "How’s it going, bud?",
+      named: "How’s it going, {name}?",
+      nameFallback: "bud",
+    },
+    { id: "source-night-owl", nameless: "Hello, night owl" },
   ],
   anytime: [
     { id: "anytime-next", nameless: "What’s up next?", named: "What’s up next, {name}?" },
