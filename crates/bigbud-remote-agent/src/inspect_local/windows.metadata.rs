@@ -6,6 +6,7 @@ use std::{
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     ptr,
 };
+use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 use windows_sys::Win32::{Foundation::*, Storage::FileSystem::*, System::Threading::*};
 #[path = "windows.metadata.maps.rs"]
 mod maps;
@@ -56,6 +57,8 @@ impl Process {
         if unsafe { GetProcessTimes(raw, &mut creation, &mut exit, &mut kernel, &mut user) } == 0
             || unsafe { GetExitCodeProcess(raw, &mut code) } == 0
             || code != STILL_ACTIVE as u32
+            || exit.dwHighDateTime != 0
+            || exit.dwLowDateTime != 0
         {
             return Err(io::Error::other("process unavailable"));
         }
@@ -73,6 +76,28 @@ impl Process {
 }
 
 fn ntfs(file: &File) -> io::Result<()> {
+    let path = file::name(file)?;
+    let drive_path = match path.strip_prefix("\\\\?\\") {
+        Some(value) => value,
+        None => &path,
+    };
+    let drive = drive_path
+        .as_bytes()
+        .first()
+        .copied()
+        .filter(u8::is_ascii_alphabetic)
+        .ok_or_else(|| io::Error::other("local drive required"))?;
+    if !drive_path.get(1..3).is_some_and(|rest| rest == ":\\") {
+        return Err(io::Error::other("local drive path required"));
+    }
+    let root = [u16::from(drive), u16::from(b':'), u16::from(b'\\'), 0];
+    // SAFETY: bounded null-terminated drive root; reads drive metadata without changing mount state.
+    if unsafe { GetDriveTypeW(root.as_ptr()) } != DRIVE_FIXED {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "prototype requires fixed local storage",
+        ));
+    }
     let mut name = [0u16; 32];
     // SAFETY: independently opened local file, bounded filesystem-name output; metadata only.
     if unsafe {

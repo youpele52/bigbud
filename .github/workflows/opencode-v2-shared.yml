@@ -82,10 +82,8 @@ jobs:
           "BIGBUD_WINDOWS_METADATA_PROBE=$(Join-Path $env:GITHUB_WORKSPACE 'target/debug/examples/inspect_metadata.exe')" >> $env:GITHUB_ENV
       - name: Qualify metadata-only membership and replacement primitives
         if: ${{ !cancelled() && steps.metadata-probe.outcome == 'success' }}
-        run: |
-          cargo test --locked --package bigbud-remote-agent --features windows-metadata-prototype --lib inspect_local::metadata::members::tests -- --nocapture
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo test --locked --package bigbud-remote-agent --features windows-metadata-prototype --test inspect_metadata -- --nocapture
+        timeout-minutes: 5
+        run: cargo test --locked --package bigbud-remote-agent --features windows-metadata-prototype --test inspect_metadata -- --nocapture
       - name: Qualify metadata probe against official native fixture
         if: ${{ !cancelled() && steps.metadata-probe.outcome == 'success' && steps.fixture.outcome == 'success' }}
         env:

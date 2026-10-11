@@ -5,6 +5,10 @@ use std::{fs, io};
 mod file_fixture;
 #[path = "support/metadata.fixture.rs"]
 mod fixture;
+// Compile the parser's own regressions without unrelated Unix-only library test modules.
+#[allow(dead_code)]
+#[path = "../src/inspect_local/windows.metadata.members.rs"]
+mod membership_validation;
 
 #[test]
 fn metadata_fixture_child() -> io::Result<()> {
