@@ -123,17 +123,21 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             return Err(io::Error::from_raw_os_error(result as i32));
         }
         count += 1;
-        let probe = match duplicate(raw, entry.Handle, 0) {
-            Ok(value) => value,
-            Err(error) if error.raw_os_error() == Some(ERROR_INVALID_HANDLE as i32) => continue,
-            Err(error) => return Err(error),
-        };
+        // A vanished, unclassified handle can hide another database: reject incomplete inventories.
+        let probe = duplicate(raw, entry.Handle, 0)?;
         // SAFETY: zero-right duplicate is live; GetFileType does not read data or change file position.
         if unsafe { GetFileType(probe.as_raw_handle()) } != FILE_TYPE_DISK {
             continue;
         }
-        let metadata: File =
-            duplicate(raw, entry.Handle, FILE_READ_ATTRIBUTES | READ_CONTROL)?.into();
+        // Retain the classified object while obtaining metadata rights. Never resample the source
+        // handle number: it may have been closed and reused for a different object meanwhile.
+        // SAFETY: the current-process pseudo handle is only used by DuplicateHandle, never closed.
+        let metadata: File = duplicate(
+            unsafe { GetCurrentProcess() },
+            probe.as_raw_handle(),
+            FILE_READ_ATTRIBUTES | READ_CONTROL,
+        )?
+        .into();
         if !metadata.metadata()?.is_file() {
             continue;
         }

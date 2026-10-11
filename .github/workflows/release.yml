@@ -407,6 +407,7 @@ jobs:
           BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
         run: |
           cargo test --locked --package bigbud-remote-agent --test inspect_local
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo build --locked --release --package bigbud-remote-agent
       - name: Stage native server artifact
         shell: pwsh

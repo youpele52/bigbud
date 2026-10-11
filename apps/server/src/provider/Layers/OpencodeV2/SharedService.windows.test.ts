@@ -1,16 +1,23 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { V2WindowsInspector } from "./SharedService.windows.ts";
 
 /** Simulated protocol peer only; these tests do not claim Windows ACL/process coverage. */
-async function peer(hello = '"OK\\t1"') {
+async function peer(hello = '"OK\\t1"', capability = true) {
   const root = await mkdtemp(path.join(os.tmpdir(), "v2 probe space "));
   const binary = path.join(root, "probe");
+  const state = path.join(root, "default-agent-state");
   await writeFile(
     binary,
     `#!/usr/bin/env node
+if (process.argv[2] === "--check") {
+  console.log("bigbud-remote-agent\\told-version\\t1\\t0\\tdigest\\tlinux\\tx86_64" + ${capability ? '"\\tinspect-local=1"' : '""'});
+  process.exit(0);
+}
+// Model pre-feature executables: unknown mode flags enter stateful default startup.
+if (!${capability}) require("node:fs").writeFileSync(${JSON.stringify(state)}, "initialized");
 const readline = require("node:readline");
 let count = 0;
 readline.createInterface({input: process.stdin}).on("line", line => {
@@ -29,12 +36,28 @@ readline.createInterface({input: process.stdin}).on("line", line => {
   return {
     inspector,
     resolve,
+    state,
     async close() {
       inspector.close();
       await rm(root, { recursive: true, force: true });
     },
   };
 }
+
+it.skipIf(process.platform === "win32")(
+  "rejects a pre-feature executable before its unknown flag initializes agent state",
+  async () => {
+    const fixture = await peer('"OK\\t1"', false);
+    try {
+      await expect(fixture.inspector.request("READ\t00")).rejects.toThrow(
+        "capability incompatible",
+      );
+      await expect(stat(fixture.state)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fixture.close();
+    }
+  },
+);
 
 it.skipIf(process.platform === "win32")(
   "keeps one bounded serial peer across fences and handles partial replies",

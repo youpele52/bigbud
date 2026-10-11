@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolveLocalWorkspaceWatchAgentBinary } from "../../../remote-agent/localWorkspaceWatchAgent.binary.ts";
+import { verifyV2InspectionCapability } from "./SharedService.windows.binary.ts";
 
 /** Strict hex framing keeps paths and secret file bytes out of commands, diagnostics and delimiter parsing. */
 export function decodeInspectionHex(value: string): string {
@@ -60,7 +61,10 @@ export class V2WindowsInspector {
 
   private async connect(deadline: number) {
     if (this.child) return;
-    const child = spawn(this.binary(), ["--inspect-local"], {
+    const binary = this.binary();
+    await verifyV2InspectionCapability(binary, deadline);
+    if (Date.now() >= deadline) throw new Error("Native inspection deadline exceeded.");
+    const child = spawn(binary, ["--inspect-local"], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       shell: false,

@@ -43,12 +43,16 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
           node -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Node architecture mismatch"); console.log(process.version, process.platform, process.arch)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Bun architecture mismatch"); console.log(Bun.version, process.platform, process.arch)'
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Build and exercise read-only native helper
-        run: |
-          cargo test --locked --package bigbud-remote-agent --test inspect_local
-          cargo build --locked --package bigbud-remote-agent
+      - name: Build read-only native helper
+        run: cargo build --locked --package bigbud-remote-agent
+      - name: Exercise read-only native helper
+        run: cargo test --locked --package bigbud-remote-agent --test inspect_local
+      - name: Diagnose disposable fixture ACL boundaries
+        if: ${{ always() && hashFiles('target/debug/bigbud-remote-agent.exe') != '' }}
+        run: node scripts/opencode-v2-windows-diagnostics.ts
       - name: Download official disposable OpenCode package and verify registry integrity
         shell: pwsh
         run: |
