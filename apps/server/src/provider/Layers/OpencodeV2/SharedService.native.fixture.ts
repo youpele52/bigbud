@@ -5,6 +5,8 @@ import { expect } from "vitest";
 import { closeOwnedChild, isolatedEnvironment } from "./ServerManager.child.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
+import { makeOwnedClient } from "./Client.ts";
+import { readV2NativeCatalog } from "./Catalog.native.ts";
 import {
   readV2SharedRegistration,
   v2SharedRegistrationFile,
@@ -82,6 +84,25 @@ export async function sharedServiceNativeFixture(
               registrationError = error instanceof Error ? error.message : "invalid registration";
               return false;
             },
+          );
+        },
+        { timeout: 15000 },
+      )
+      .toBe(true);
+    // A nonempty built-in catalog is not proof that the disposable provider/config has settled.
+    const registration = await readV2SharedRegistration(file);
+    const client = makeOwnedClient({
+      endpoint: registration.endpoint.url,
+      password: registration.endpoint.auth!.password,
+    });
+    await expect
+      .poll(
+        async () => {
+          const catalog = await readV2NativeCatalog(client, fixture.workspace, {
+            requested: { providerID: "bigbud-v2-fixture", id: "synthetic-model" },
+          });
+          return catalog.data.some(
+            (model) => model.providerID === "bigbud-v2-fixture" && model.id === "synthetic-model",
           );
         },
         { timeout: 15000 },

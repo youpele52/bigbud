@@ -3,6 +3,9 @@
 #[path = "windows.file.rs"]
 mod file;
 #[cfg(windows)]
+#[path = "windows.handles.rs"]
+mod handles;
+#[cfg(windows)]
 #[path = "windows.object.rs"]
 mod object;
 mod protocol;
