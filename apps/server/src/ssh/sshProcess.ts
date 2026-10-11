@@ -18,6 +18,7 @@ export interface RunSshCommandInput {
   readonly timeoutMs?: number;
   readonly maxBufferBytes?: number;
   readonly outputMode?: ProcessRunOptions["outputMode"];
+  readonly onStdoutChunk?: ProcessRunOptions["onStdoutChunk"];
 }
 
 export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessRunResult> {
@@ -29,5 +30,6 @@ export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessR
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
     ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),
     ...(input.outputMode !== undefined ? { outputMode: input.outputMode } : {}),
+    ...(input.onStdoutChunk ? { onStdoutChunk: input.onStdoutChunk } : {}),
   });
 }

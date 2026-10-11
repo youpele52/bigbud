@@ -283,6 +283,8 @@ export function normalizePersistedDraftsByThreadId(
       !hasModelData &&
       !runtimeMode &&
       !interactionMode &&
+      draftCandidate.pendingEnvMode !== "local" &&
+      draftCandidate.pendingEnvMode !== "worktree" &&
       bootstrapSourceThreadId === null &&
       replyTarget === null
     ) {
@@ -297,6 +299,9 @@ export function normalizePersistedDraftsByThreadId(
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(draftCandidate.pendingEnvMode === "local" || draftCandidate.pendingEnvMode === "worktree"
+        ? { pendingEnvMode: draftCandidate.pendingEnvMode }
+        : {}),
       ...(bootstrapSourceThreadId !== null ? { bootstrapSourceThreadId } : {}),
       ...(replyTarget !== null ? { replyTarget } : {}),
     };

@@ -1,7 +1,13 @@
 // TODO: Split by concern when this file is next touched.
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
-import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { type PtyProcess } from "../Services/PTY";
 import { defaultTerminalAgentDetector } from "./Manager.agentDetection";
@@ -100,6 +106,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     yield* Effect.addFinalizer(() => Scope.close(workerScope, Exit.void));
 
     const acquireWorktreeLease = (input: {
+      runtimePathIdentity?: import("./Manager.types").RuntimePathIdentity | undefined;
       threadId: string;
       terminalId: string;
       executionTargetId: string;
@@ -375,6 +382,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       deleteAllHistoryForThread,
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
+      resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,
       snapshot,
       acquireWorktreeLease,
       markWorktreeLeaseStarted,

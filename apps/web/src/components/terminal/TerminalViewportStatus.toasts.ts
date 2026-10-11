@@ -11,6 +11,9 @@ export interface TerminalViewportToastState {
   gpuRequested: boolean;
   terminalLabel: string;
   visible: boolean;
+  startupPending?: boolean;
+  startupFailed?: boolean;
+  directoryNotice?: string | null;
 }
 
 type ToastOptions = Parameters<typeof toastManager.add>[0];
@@ -20,6 +23,7 @@ type ToastLane = { id: string | null; key: string | null };
 export class TerminalViewportToasts {
   private readonly input: ToastLane = { id: null, key: null };
   private readonly gpu: ToastLane = { id: null, key: null };
+  private readonly folder: ToastLane = { id: null, key: null };
   private latest: TerminalViewportToastState | null = null;
   private disposed = false;
 
@@ -32,33 +36,46 @@ export class TerminalViewportToasts {
       this.close(this.input);
       this.input.key = null;
       this.close(this.gpu);
+      this.close(this.folder);
       return;
     }
     if (state.inputEnabled) {
       this.close(this.input);
       this.input.key = null;
     } else {
-      const description = state.deliveryError ?? "Restoring legacy terminal history — input paused";
+      const description =
+        state.deliveryError ??
+        (state.startupPending
+          ? "Resolving terminal folder..."
+          : "Restoring legacy terminal history — input paused");
       this.show(this.input, `${state.terminalLabel}:${description}`, {
         type: state.deliveryError ? "error" : "loading",
         title: state.deliveryError
-          ? `${state.terminalLabel}: terminal input paused`
-          : `${state.terminalLabel}: restoring terminal history`,
+          ? `${state.terminalLabel}: ${state.startupFailed ? "terminal startup failed" : "terminal input paused"}`
+          : `${state.terminalLabel}: ${state.startupPending ? "resolving terminal folder" : "restoring terminal history"}`,
         description:
-          state.deliveryError && state.retryDelivery
+          state.deliveryError && state.retryDelivery && !state.startupFailed
             ? `${description}\nReload uses retained legacy history, not an exact restore. The running process will not be restarted.`
             : description,
         timeout: 0,
         actionProps:
           state.deliveryError && state.retryDelivery
             ? {
-                children: "Reload legacy view",
+                children: state.startupFailed ? "Retry terminal startup" : "Reload legacy view",
                 onClick: () => {
                   if (this.latest?.visible && this.latest.deliveryError)
                     this.latest.retryDelivery?.();
                 },
               }
             : undefined,
+      });
+    }
+    if (state.inputEnabled && state.directoryNotice) {
+      this.show(this.folder, state.directoryNotice, {
+        type: "warning",
+        title: `${state.terminalLabel}: started in Home`,
+        description: state.directoryNotice,
+        timeout: 10000,
       });
     }
 
@@ -124,5 +141,6 @@ export class TerminalViewportToasts {
     this.latest = null;
     this.close(this.input);
     this.close(this.gpu);
+    this.close(this.folder);
   }
 }

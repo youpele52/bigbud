@@ -17,6 +17,8 @@ import {
   writeSystemMessage,
 } from "./ThreadTerminalDrawer.logic";
 import type { TerminalViewportIntake } from "./TerminalViewport.intake";
+import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
+import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 
 interface TerminalSelectionActionStateRefs {
   readonly selectionActionRequestIdRef: MutableRefObject<number>;
@@ -63,6 +65,9 @@ interface TerminalOpenSessionInput {
   readonly containerRef: RefObject<HTMLDivElement | null>;
   readonly attachOnly?: boolean;
   readonly beforeOpen?: () => void;
+  readonly onSnapshot?: (
+    snapshot: import("@bigbud/contracts/workspace/terminal.ts").TerminalSessionSnapshot,
+  ) => void;
 }
 
 export function clearSelectionAction(refs: TerminalSelectionActionStateRefs) {
@@ -263,6 +268,8 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   fitTerminalViewport(input);
   // Subscribe immediately before the snapshot request, not during font/layout waits.
   input.beforeOpen?.();
+  if (!input.attachOnly) await ensureThreadMaterialized(input.threadId);
+  if (input.disposed()) return true;
   if (input.attachOnly && !api.terminal.snapshot) {
     throw new Error(
       "View-only recovery is unavailable. Upgrade the server; the running process was not restarted.",
@@ -283,6 +290,13 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
         ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
       });
   if (input.disposed()) return true;
+  input.onSnapshot?.(snapshot);
+  recordTerminalLaunch(snapshot);
+  if (snapshot.status === "error" || snapshot.pid === null) {
+    throw new Error(
+      "The terminal did not start. Check the target and shell configuration, then retry startup.",
+    );
+  }
   useTerminalStateStore.getState().hydrateTerminalAgentFromSnapshot(snapshot);
   if (
     input.intake.snapshotUpdatedAt === null ||

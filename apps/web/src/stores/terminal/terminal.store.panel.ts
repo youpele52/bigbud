@@ -1,9 +1,9 @@
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 import { terminalRunningSubprocessFromEvent } from "../../utils/terminal";
+import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import {
   appendTerminalEventEntry,
   createSingleThreadTerminalState,
-  launchContextFromStartEvent,
   newThreadTerminal,
   normalizeThreadTerminalState,
   selectThreadTerminalState,
@@ -93,7 +93,6 @@ export function applyTerminalEventToState(
   const threadId = ThreadId.makeUnsafe(event.threadId);
   let nextTerminalStateByThreadId = state.terminalStateByThreadId;
   let nextPanelTerminalStateByThreadId = state.panelTerminalStateByThreadId;
-  let nextTerminalLaunchContextByThreadId = state.terminalLaunchContextByThreadId;
   const identity = applyTerminalAgentEvent(state, event);
   if (identity.blocked) return state;
   const drawerTerminalState = selectThreadTerminalState(state.terminalStateByThreadId, threadId);
@@ -121,6 +120,7 @@ export function applyTerminalEventToState(
   };
 
   if (event.type === "started" || event.type === "restarted") {
+    recordTerminalLaunch(event.snapshot);
     updateTargetTerminalState((current) => {
       let nextState = current;
       if (!current.terminalIds.includes(event.terminalId)) {
@@ -130,10 +130,6 @@ export function applyTerminalEventToState(
       nextState = setThreadTerminalOpen(nextState, true);
       return normalizeThreadTerminalState(nextState);
     });
-    nextTerminalLaunchContextByThreadId = {
-      ...nextTerminalLaunchContextByThreadId,
-      [threadId]: launchContextFromStartEvent(event),
-    };
   }
 
   const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
@@ -153,7 +149,7 @@ export function applyTerminalEventToState(
   return {
     terminalStateByThreadId: nextTerminalStateByThreadId,
     panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
-    terminalLaunchContextByThreadId: nextTerminalLaunchContextByThreadId,
+    terminalLaunchContextByThreadId: state.terminalLaunchContextByThreadId,
     ...identity.state,
     ...nextEventState,
   };

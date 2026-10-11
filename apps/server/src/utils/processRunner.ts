@@ -8,6 +8,7 @@ export interface ProcessRunOptions {
   allowNonZeroExit?: boolean | undefined;
   maxBufferBytes?: number | undefined;
   outputMode?: "error" | "truncate" | undefined;
+  onStdoutChunk?: ((chunk: string) => void) | undefined;
 }
 
 export interface ProcessRunResult {
@@ -215,6 +216,12 @@ export async function runProcess(
       const error = appendOutput("stdout", chunk);
       if (error) {
         fail(error);
+        return;
+      }
+      try {
+        options.onStdoutChunk?.(typeof chunk === "string" ? chunk : chunk.toString());
+      } catch (cause) {
+        fail(cause instanceof Error ? cause : new Error("Process output observer failed."));
       }
     });
 

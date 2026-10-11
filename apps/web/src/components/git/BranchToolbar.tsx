@@ -8,6 +8,7 @@ import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationComma
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
+import { preservePendingEnvMode } from "../../lib/threadMaterialization.envMode";
 import {
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
@@ -33,6 +34,9 @@ export default function BranchToolbar({
   const projects = useStore((store) => store.projects);
   const setThreadBranchAction = useStore((store) => store.setThreadBranch);
   const draftThread = useComposerDraftStore((store) => store.getDraftThread(threadId));
+  const pendingEnvMode = useComposerDraftStore(
+    (store) => store.draftsByThreadId[threadId]?.pendingEnvMode,
+  );
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
 
   const serverThread = threads.find((thread) => thread.id === threadId);
@@ -45,8 +49,8 @@ export default function BranchToolbar({
   const hasServerThread = serverThread !== undefined;
   const effectiveEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
-    hasServerThread,
-    draftThreadEnvMode: draftThread?.envMode,
+    hasServerThread: hasServerThread && (serverThread?.messages.length ?? 0) > 0,
+    draftThreadEnvMode: draftThread?.envMode ?? pendingEnvMode,
   });
   const envModeLocked = envLocked || (serverThread !== undefined && activeWorktreePath !== null);
 
@@ -77,6 +81,15 @@ export default function BranchToolbar({
       }
       if (hasServerThread) {
         setThreadBranchAction(activeThreadId, branch, worktreePath);
+        if (serverThread?.messages.length === 0)
+          preservePendingEnvMode(
+            activeThreadId,
+            resolveDraftEnvModeAfterBranchChange({
+              nextWorktreePath: worktreePath,
+              currentWorktreePath: activeWorktreePath,
+              effectiveEnvMode,
+            }),
+          );
         return;
       }
       const nextDraftEnvMode = resolveDraftEnvModeAfterBranchChange({
@@ -93,6 +106,7 @@ export default function BranchToolbar({
     [
       activeThreadId,
       serverThread?.session,
+      serverThread?.messages.length,
       activeWorktreePath,
       hasServerThread,
       setThreadBranchAction,

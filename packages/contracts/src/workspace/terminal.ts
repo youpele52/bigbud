@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import {
   ExecutionTargetId,
   LOCAL_EXECUTION_TARGET_ID,
@@ -105,6 +105,11 @@ export const TerminalSessionSnapshot = Schema.Struct({
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   activeAgentProvider: Schema.optional(Schema.NullOr(ProviderKind)),
   runtimeGeneration: Schema.optional(Schema.String),
+  // Explicit launch overrides only, not the inherited process environment or live shell state.
+  runtimeEnv: Schema.optional(TerminalEnvSchema),
+  directoryFallback: Schema.optional(
+    Schema.Struct({ requestedCwd: Schema.String, reason: Schema.String }),
+  ),
   history: Schema.String,
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
@@ -185,11 +190,13 @@ export class TerminalCwdError extends Schema.TaggedErrorClass<TerminalCwdError>(
   "TerminalCwdError",
   {
     cwd: Schema.String,
-    reason: Schema.Literals(["notFound", "notDirectory", "statFailed"]),
+    reason: Schema.Literals(["notFound", "notDirectory", "statFailed", "timedOut"]),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message() {
+    if (this.reason === "timedOut")
+      return `Terminal folder resolution exceeded 10 seconds: ${this.cwd}`;
     if (this.reason === "notDirectory") {
       return `Terminal cwd is not a directory: ${this.cwd}`;
     }

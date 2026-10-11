@@ -152,6 +152,10 @@
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
     },
+    "./terminalCommand": {
+      "types": "./src/terminalCommand.ts",
+      "import": "./src/terminalCommand.ts"
+    },
     "./history": {
       "types": "./src/history.ts",
       "import": "./src/history.ts"

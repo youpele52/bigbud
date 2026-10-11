@@ -1,4 +1,5 @@
-import type { Effect, Fiber } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Fiber from "effect/Fiber";
 
 import type {
   TerminalCwdError,
@@ -35,6 +36,7 @@ export interface TerminalSessionState {
   dropPathMode: TerminalDropPathMode;
   cwd: string;
   worktreePath: string | null;
+  directoryFallback?: { requestedCwd: string; reason: string } | undefined;
   runtimeEpoch: number;
   runtimeGeneration: string;
   status: TerminalSessionStatus;
@@ -102,6 +104,9 @@ export interface TerminalStartInput {
 }
 
 export interface TerminalManagerOptions {
+  resolveRuntimePathIdentity?: (
+    cwd: string,
+  ) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>;
   logsDir: string;
   historyLineLimit?: number;
   ptyAdapter: PtyAdapterShape;
@@ -112,6 +117,7 @@ export interface TerminalManagerOptions {
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
   acquireWorktreeLease?: (input: {
+    runtimePathIdentity?: RuntimePathIdentity | undefined;
     threadId: string;
     terminalId: string;
     executionTargetId: string;
@@ -124,4 +130,10 @@ export interface TerminalManagerOptions {
     processId: number;
   }) => Effect.Effect<void>;
   releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
+}
+
+export interface RuntimePathIdentity {
+  readonly canonicalPath: string;
+  readonly device: number;
+  readonly inode: number;
 }

@@ -1,7 +1,10 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
-import { Effect, Fiber, Option, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
 
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
@@ -81,6 +84,8 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     dropPathMode: session.dropPathMode,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
+    runtimeEnv: { ...session.runtimeEnv },
+    ...(session.directoryFallback ? { directoryFallback: session.directoryFallback } : {}),
     status: session.status,
     pid: session.pid,
     runtimeGeneration: session.runtimeGeneration,

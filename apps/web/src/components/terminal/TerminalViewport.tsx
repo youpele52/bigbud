@@ -18,6 +18,9 @@ import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
 import { TerminalViewportStatus } from "./TerminalViewportStatus";
 import { useTerminalResizeRequest } from "./TerminalViewport.resize";
+import { useTerminalLaunchBinding } from "./TerminalViewport.launch";
+import { fitTerminalViewport } from "./TerminalViewport.fit";
+export { fitTerminalViewport } from "./TerminalViewport.fit";
 import {
   TerminalViewportAnnotationComposer,
   type PendingTerminalAnnotation,
@@ -46,30 +49,6 @@ export interface TerminalViewportProps {
   keybindings: ResolvedKeybindingsConfig;
 }
 
-interface FitTerminalViewportInput {
-  container: Pick<HTMLDivElement, "getBoundingClientRect"> | null;
-  terminal: Pick<Terminal, "buffer" | "scrollToBottom"> | null;
-  fitAddon: Pick<FitAddon, "fit"> | null;
-  requestTerminalResize: () => void;
-}
-
-export function fitTerminalViewport(input: FitTerminalViewportInput): void {
-  const { container, terminal, fitAddon, requestTerminalResize } = input;
-  if (!terminal || !fitAddon || !container) return;
-
-  const { width, height } = container.getBoundingClientRect();
-  if (width < 32 || height < 32) {
-    return;
-  }
-
-  const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
-  fitAddon.fit();
-  if (wasAtBottom) {
-    terminal.scrollToBottom();
-  }
-  requestTerminalResize();
-}
-
 export function TerminalViewport({
   threadId,
   visible,
@@ -87,6 +66,12 @@ export function TerminalViewport({
   drawerHeight,
   keybindings,
 }: TerminalViewportProps) {
+  const launch = useTerminalLaunchBinding(threadId, terminalId, {
+    cwd,
+    worktreePath,
+    executionTargetId,
+    runtimeEnv,
+  });
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -157,40 +142,48 @@ export function TerminalViewport({
   const worktreePathRef = useRef(worktreePath);
   // Keep refs in sync without triggering effects
   autoFocusRef.current = autoFocus;
-  worktreePathRef.current = worktreePath;
+  worktreePathRef.current = launch.worktreePath;
 
   const keybindingsRef = useTerminalKeybindings({ keybindings });
 
-  const { inputEnabled, deliveryError, rendering, retryGpu, retryDelivery } =
-    useTerminalViewportSession({
-      containerRef: mountRef,
-      terminalRef,
-      fitAddonRef,
-      hasHandledExitRef,
-      selectionPointerRef,
-      selectionGestureActiveRef,
-      selectionActionRequestIdRef,
-      selectionActionOpenRef,
-      selectionActionTimerRef,
-      keybindingsRef,
-      autoFocusRef,
-      worktreePathRef,
-      dropPathModeRef,
-      threadId,
-      visible,
-      terminalId,
-      readTerminalLabel,
-      executionTargetId,
-      cwd,
-      runtimeEnv,
-      terminalFontFamily,
-      terminalFontSize,
-      usesBundledTerminalFont,
-      terminalGpuAcceleration: settings.terminalGpuAcceleration,
-      onSessionExited: handleSessionExited,
-      onAddTerminalContext: handleAddTerminalContext,
-      onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
-    });
+  const {
+    inputEnabled,
+    deliveryError,
+    rendering,
+    retryGpu,
+    retryDelivery,
+    startupPending,
+    startupFailed,
+    directoryNotice,
+  } = useTerminalViewportSession({
+    containerRef: mountRef,
+    terminalRef,
+    fitAddonRef,
+    hasHandledExitRef,
+    selectionPointerRef,
+    selectionGestureActiveRef,
+    selectionActionRequestIdRef,
+    selectionActionOpenRef,
+    selectionActionTimerRef,
+    keybindingsRef,
+    autoFocusRef,
+    worktreePathRef,
+    dropPathModeRef,
+    threadId,
+    visible,
+    terminalId,
+    readTerminalLabel,
+    executionTargetId: launch.executionTargetId,
+    cwd: launch.cwd,
+    runtimeEnv: launch.runtimeEnv,
+    terminalFontFamily,
+    terminalFontSize,
+    usesBundledTerminalFont,
+    terminalGpuAcceleration: settings.terminalGpuAcceleration,
+    onSessionExited: handleSessionExited,
+    onAddTerminalContext: handleAddTerminalContext,
+    onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
+  });
 
   const requestTerminalResize = useTerminalResizeRequest({ terminalRef, threadId, terminalId });
 
@@ -254,7 +247,7 @@ export function TerminalViewport({
       readNativeFilePath,
     });
     const pasteablePaths = (
-      isRemoteExecutionTargetId(executionTargetId)
+      isRemoteExecutionTargetId(launch.executionTargetId)
         ? paths.filter((path) => path.origin === "internal")
         : paths
     ).map((path) => path.path);
@@ -350,6 +343,9 @@ export function TerminalViewport({
         visible={visible}
         inputEnabled={inputEnabled}
         deliveryError={deliveryError}
+        startupPending={startupPending}
+        startupFailed={startupFailed}
+        directoryNotice={directoryNotice}
         rendering={rendering}
         retryGpu={retryGpu}
         retryDelivery={retryDelivery}

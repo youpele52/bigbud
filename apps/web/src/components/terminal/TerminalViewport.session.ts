@@ -9,11 +9,7 @@ import {
 import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
-import {
-  shouldHandleTerminalSelectionMouseUp,
-  terminalSelectionActionDelayForClickCount,
-  terminalThemeFromApp,
-} from "./ThreadTerminalDrawer.logic";
+import { terminalThemeFromApp } from "./ThreadTerminalDrawer.logic";
 import { createTerminalViewportDelivery } from "./TerminalViewport.delivery";
 import { subscribeTerminalOutput } from "./TerminalOutputStream";
 import { useTerminalTypography } from "./TerminalViewport.typography";
@@ -27,9 +23,9 @@ import {
   clearSelectionAction,
   fitAndResizeServerTerminal,
   openTerminalSession,
-  showTerminalSelectionAction,
   waitForBundledTerminalFont,
 } from "./TerminalViewport.session.helpers";
+import { attachTerminalSelection } from "./TerminalViewport.selection";
 
 interface UseTerminalViewportSessionInput {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -78,6 +74,9 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   onSessionExitedRef.current = input.onSessionExited;
   const [inputEnabled, setInputEnabled] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [startupPending, setStartupPending] = useState(true);
+  const [startupFailed, setStartupFailed] = useState(false);
+  const [directoryNotice, setDirectoryNotice] = useState<string | null>(null);
   const [rendering, setRendering] = useState<TerminalRendererState>({ mode: "dom", reason: null });
   const rendererRef = useRef<ReturnType<typeof attachTerminalRenderer> | null>(null);
   const retryDeliveryRef = useRef<() => void>(() => undefined);
@@ -162,16 +161,26 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const writeNotice = (target: Terminal, message: string) => {
       if (!disposed) delivery.writeBatcher.write(target, `\r\n[terminal] ${message}\r\n`);
     };
-    const terminalLinksDisposable = terminal.registerLinkProvider(
-      makeTerminalLinkProvider({
-        terminalRef: input.terminalRef,
-        cwd: input.cwd,
-        workspaceRoot: input.worktreePathRef.current ?? input.cwd,
-        executionTargetId: input.executionTargetId,
-        api,
-        writeNotice,
-      }),
-    );
+    const registerLinks = (context: {
+      cwd: string;
+      worktreePath?: string | null | undefined;
+      executionTargetId?: string | undefined;
+    }) =>
+      terminal.registerLinkProvider(
+        makeTerminalLinkProvider({
+          terminalRef: input.terminalRef,
+          cwd: context.cwd,
+          workspaceRoot: context.worktreePath ?? context.cwd,
+          executionTargetId: context.executionTargetId,
+          api,
+          writeNotice,
+        }),
+      );
+    let terminalLinksDisposable = registerLinks({
+      cwd: input.cwd,
+      executionTargetId: input.executionTargetId,
+      worktreePath: input.worktreePathRef.current,
+    });
     const inputDisposable = terminal.onData((data) => {
       if (disposed || !delivery.intake.acceptsInput) return;
       void api.terminal
@@ -190,51 +199,23 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       acceptsInput: () => !disposed && delivery.intake.acceptsInput,
       writeNotice,
     });
-    const selectionDisposable = terminal.onSelectionChange(() => {
-      if (input.terminalRef.current?.hasSelection()) {
-        return;
-      }
-      clearSelectionActionState();
+    const disposeSelection = attachTerminalSelection({
+      containerRef: input.containerRef,
+      terminalRef: input.terminalRef,
+      terminalId: input.terminalId,
+      selectionPointerRef: input.selectionPointerRef,
+      selectionActionOpenRef: input.selectionActionOpenRef,
+      selectionActionRequestIdRef: input.selectionActionRequestIdRef,
+      selectionActionTimerRef: input.selectionActionTimerRef,
+      selectionGestureActiveRef: input.selectionGestureActiveRef,
+      terminal,
+      mount,
+      disposed: () => disposed,
+      clearSelectionAction: clearSelectionActionState,
+      onAddTerminalContext,
+      onRequestTerminalAnnotation,
+      readTerminalLabel,
     });
-
-    const handleMouseUp = (event: MouseEvent) => {
-      const shouldHandle = shouldHandleTerminalSelectionMouseUp(
-        input.selectionGestureActiveRef.current,
-        event.button,
-      );
-      input.selectionGestureActiveRef.current = false;
-      if (!shouldHandle) {
-        return;
-      }
-      input.selectionPointerRef.current = { x: event.clientX, y: event.clientY };
-      const delay = terminalSelectionActionDelayForClickCount(event.detail);
-      input.selectionActionTimerRef.current = window.setTimeout(() => {
-        if (disposed || terminalRef.current !== terminal) return;
-        input.selectionActionTimerRef.current = null;
-        window.requestAnimationFrame(() => {
-          if (disposed || terminalRef.current !== terminal) return;
-          void showTerminalSelectionAction({
-            containerRef: input.containerRef,
-            terminalRef: input.terminalRef,
-            selectionPointerRef: input.selectionPointerRef,
-            selectionActionRequestIdRef: input.selectionActionRequestIdRef,
-            selectionActionOpenRef: input.selectionActionOpenRef,
-            selectionActionTimerRef: input.selectionActionTimerRef,
-            terminalId: input.terminalId,
-            clearSelectionAction: clearSelectionActionState,
-            onAddTerminalContext,
-            onRequestTerminalAnnotation,
-            readTerminalLabel,
-          });
-        });
-      }, delay);
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      clearSelectionActionState();
-      input.selectionGestureActiveRef.current = event.button === 0;
-    };
-    window.addEventListener("mouseup", handleMouseUp);
-    mount.addEventListener("pointerdown", handlePointerDown);
 
     const themeObserver = new MutationObserver(() => {
       if (disposed) return;
@@ -259,6 +240,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
 
     let initialFitResizeTimer: number | null = null;
     let openTerminalRetryTimer: number | null = null;
+    let hasRunningSnapshot = false;
     const runOpenTerminal = async (attachOnly = false) => {
       const owner = delivery;
       try {
@@ -278,6 +260,18 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           dropPathModeRef: input.dropPathModeRef,
           usesBundledTerminalFont: typographyRef.current.usesBundledTerminalFont,
           terminalFontSize: typographyRef.current.terminalFontSize,
+          onSnapshot: (snapshot) => {
+            terminalLinksDisposable.dispose();
+            terminalLinksDisposable = registerLinks(snapshot);
+            hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
+            setStartupPending(false);
+            setStartupFailed(!hasRunningSnapshot);
+            setDirectoryNotice(
+              snapshot.directoryFallback
+                ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
+                : null,
+            );
+          },
           autoFocusRef: input.autoFocusRef,
           containerRef: input.containerRef,
         });
@@ -289,6 +283,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         }
       } catch (err) {
         if (disposed || delivery !== owner) return;
+        setStartupPending(false);
+        setStartupFailed(!hasRunningSnapshot);
         owner.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
       }
     };
@@ -299,8 +295,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       unsubscribeTerminalEvents?.();
       unsubscribeTerminalEvents = null;
       setDeliveryError(null);
+      setStartupPending(!hasRunningSnapshot);
+      setStartupFailed(false);
       delivery = createDelivery();
-      void runOpenTerminal(true);
+      void runOpenTerminal(hasRunningSnapshot);
     };
 
     initialFitResizeTimer = window.setTimeout(() => {
@@ -337,13 +335,11 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         window.clearTimeout(openTerminalRetryTimer);
       }
       inputDisposable.dispose();
-      selectionDisposable.dispose();
+      disposeSelection();
       terminalLinksDisposable.dispose();
       if (selectionActionTimerRef.current !== null) {
         window.clearTimeout(selectionActionTimerRef.current);
       }
-      window.removeEventListener("mouseup", handleMouseUp);
-      mount.removeEventListener("pointerdown", handlePointerDown);
       themeObserver.disconnect();
       renderer.dispose();
       if (rendererRef.current === renderer) rendererRef.current = null;
@@ -377,6 +373,9 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   return {
     inputEnabled,
     deliveryError,
+    startupPending,
+    startupFailed,
+    directoryNotice,
     rendering,
     retryGpu: () => rendererRef.current?.retry(),
     retryDelivery: () => retryDeliveryRef.current(),

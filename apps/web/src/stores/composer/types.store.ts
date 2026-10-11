@@ -94,6 +94,7 @@ export type PersistedTerminalContextDraft = typeof PersistedTerminalContextDraft
 export type PersistedComposerFileAttachment = typeof PersistedComposerFileAttachment.Type;
 
 export const PersistedComposerThreadDraftState = Schema.Struct({
+  pendingEnvMode: Schema.optionalKey(DraftThreadEnvModeSchema),
   prompt: Schema.String,
   shellMode: Schema.optionalKey(Schema.Boolean),
   attachments: Schema.Array(PersistedComposerImageAttachment),
@@ -188,6 +189,7 @@ export const PersistedComposerDraftStoreStorage = Schema.Struct({
 });
 
 export interface ComposerThreadDraftState {
+  pendingEnvMode?: DraftThreadEnvMode;
   prompt: string;
   shellMode: boolean;
   images: ComposerImageAttachment[];

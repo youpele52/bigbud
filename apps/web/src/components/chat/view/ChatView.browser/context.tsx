@@ -1,6 +1,7 @@
 import "../../../../index.css";
 
 import {
+  BUILT_IN_CHATS_PROJECT_ID,
   ORCHESTRATION_WS_METHODS,
   WS_METHODS,
   type MessageId,
@@ -12,17 +13,26 @@ import { HttpResponse, http, ws } from "msw";
 import { setupWorker } from "msw/browser";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import { DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/settings";
+import { closeTerminalPanel } from "../../../../stores/terminal/terminalPanel.coordinator";
+import { useCommandPaletteStore } from "../../../../stores/ui";
 
 import { __resetNativeApiForTests } from "../../../../rpc/nativeApi";
+import { __resetWsRpcClientForTests } from "../../../../rpc/wsRpcClient";
 import { getRouter } from "../../../../config/router";
 import { useStore } from "../../../../stores/main";
 import { useComposerDraftStore } from "../../../../stores/composer";
 import { useTerminalStateStore } from "../../../../stores/terminal";
+import { forgetTerminalLaunch } from "../../../../lib/terminalLaunchBinding";
+import { admitThreadCreationForSend } from "../../../../lib/threadMaterialization.admission";
 import {
   BrowserWsRpcHarness,
   type NormalizedWsRpcRequestBody,
 } from "../../../../../test/wsRpcHarness";
 import { measureUserRow, setViewport, waitForLayout, waitForProductionStyles } from "./dom";
+import { createTerminalOwnershipRpcFixture } from "./context.terminalOwnership";
+import { resolveCatalogRpc, withBuiltInChatsProject } from "./context.catalog";
+import { publishProjectMetadata } from "./context.projectMetadata";
 import {
   ATTACHMENT_SVG,
   DEFAULT_VIEWPORT,
@@ -45,6 +55,14 @@ export function createChatViewBrowserTestContext() {
   );
   const rpcHarness = new BrowserWsRpcHarness();
   const wsRequests = rpcHarness.requests;
+  const terminalOwnership = createTerminalOwnershipRpcFixture({
+    readSnapshot: () => fixture.snapshot,
+    writeSnapshot: (snapshot) => {
+      fixture.snapshot = snapshot;
+    },
+    emitEvent: (event) =>
+      rpcHarness.emitStreamValue(WS_METHODS.subscribeOrchestrationDomainEvents, event),
+  });
   let customWsRpcResolver: ((body: NormalizedWsRpcRequestBody) => unknown | undefined) | null =
     null;
   const wsLink = ws.link(/ws(s)?:\/\/.*/);
@@ -53,7 +71,7 @@ export function createChatViewBrowserTestContext() {
       void rpcHarness.connect(client);
       client.addEventListener("message", (event) => {
         if (typeof event.data === "string") {
-          void rpcHarness.onMessage(event.data);
+          void rpcHarness.onMessage(event.data, client);
         }
       });
     }),
@@ -68,8 +86,23 @@ export function createChatViewBrowserTestContext() {
     if (customResult !== undefined) {
       return customResult;
     }
+    return resolveDefaultRpc(body);
+  }
+
+  function resolveDefaultRpc(body: NormalizedWsRpcRequestBody): unknown {
+    // Legacy snapshots are scoped to the selected project; loading Chats expands that projection.
+    if (
+      body._tag === ORCHESTRATION_WS_METHODS.getStartupProjectCatalog &&
+      body.priorityProjectId === BUILT_IN_CHATS_PROJECT_ID
+    )
+      fixture.snapshot = withBuiltInChatsProject(fixture.snapshot);
+    const ownershipResult = terminalOwnership.resolve(body);
+    if (ownershipResult !== undefined) return ownershipResult;
+    const catalogResult = resolveCatalogRpc(body, fixture.snapshot);
+    if (catalogResult !== undefined) return catalogResult;
     if (body._tag === ORCHESTRATION_WS_METHODS.getSnapshot) return fixture.snapshot;
     if (body._tag === WS_METHODS.serverGetConfig) return fixture.serverConfig;
+    if (body._tag === WS_METHODS.serverPing) return { serverTime: fixture.snapshot.updatedAt };
     if (body._tag === WS_METHODS.gitListBranches) {
       return {
         isRepo: true,
@@ -101,6 +134,10 @@ export function createChatViewBrowserTestContext() {
       return {
         threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
         terminalId: typeof body.terminalId === "string" ? body.terminalId : "default",
+        executionTargetId:
+          typeof body.executionTargetId === "string" ? body.executionTargetId : "local",
+        runtimeEnv: body.env ?? {},
+        dropPathMode: "posix",
         cwd: typeof body.cwd === "string" ? body.cwd : "/repo/project",
         worktreePath: typeof body.worktreePath === "string" ? body.worktreePath : null,
         status: "running",
@@ -168,6 +205,18 @@ export function createChatViewBrowserTestContext() {
 
     const router = getRouter(createMemoryHistory({ initialEntries: [`/${THREAD_ID}`] }));
     const screen = await render(<RouterProvider router={router} />, { container: host });
+    await vi.waitFor(() => expect(useStore.getState().bootstrapComplete).toBe(true), {
+      timeout: 8_000,
+    });
+    await waitForLayout();
+    await publishProjectMetadata({
+      readSnapshot: () => fixture.snapshot,
+      writeSnapshot: (snapshot) => {
+        fixture.snapshot = snapshot;
+      },
+      emitEvent: (event) =>
+        rpcHarness.emitStreamValue(WS_METHODS.subscribeOrchestrationDomainEvents, event),
+    });
     await waitForLayout();
 
     const cleanup = async () => {
@@ -243,14 +292,46 @@ export function createChatViewBrowserTestContext() {
           if (request._tag === WS_METHODS.subscribeServerConfig) {
             return [{ version: 1, type: "snapshot", config: fixture.serverConfig }];
           }
+          if (request._tag === WS_METHODS.subscribeOrchestrationDomainEvents)
+            return [
+              {
+                type: "lifecycle",
+                route: "direct-unmanaged",
+                consumerId: request.consumerId,
+                consumerGeneration: 0,
+                state: "live",
+                acknowledgedSequence: request.appliedSequence ?? 0,
+                restartAttempt: 0,
+              },
+            ];
           return [];
         },
       });
-      __resetNativeApiForTests();
+      await __resetWsRpcClientForTests();
+      await __resetNativeApiForTests();
       await setViewport(DEFAULT_VIEWPORT);
       localStorage.clear();
+      localStorage.setItem(
+        "bigbud:client-settings:v1",
+        JSON.stringify({ ...DEFAULT_CLIENT_SETTINGS, hasSeenFileAccessPrompt: true }),
+      );
       document.body.innerHTML = "";
       wsRequests.length = 0;
+      terminalOwnership.reset();
+      closeTerminalPanel();
+      useCommandPaletteStore.setState({ open: false });
+      // Each case resets the fake server, so retained launch/owner confirmations must reset too.
+      for (const [threadId, state] of Object.entries(
+        useTerminalStateStore.getState().terminalStateByThreadId,
+      )) {
+        for (const terminalId of state.terminalIds) forgetTerminalLaunch(threadId, terminalId);
+      }
+      for (const [threadId, state] of Object.entries(
+        useTerminalStateStore.getState().panelTerminalStateByThreadId,
+      )) {
+        for (const terminalId of state.terminalIds) forgetTerminalLaunch(threadId, terminalId);
+      }
+      await admitThreadCreationForSend(THREAD_ID, false);
       customWsRpcResolver = null;
       useComposerDraftStore.setState({
         draftsByThreadId: {},
@@ -259,10 +340,22 @@ export function createChatViewBrowserTestContext() {
         stickyModelSelectionByProvider: {},
         stickyActiveProvider: null,
       });
-      useStore.setState({ projects: [], threads: [], bootstrapComplete: false });
+      useStore.setState({
+        projects: [],
+        threads: [],
+        sidebarThreadsById: {},
+        threadIdsByProjectId: {},
+        threadSummaryCursorByProjectId: {},
+        sidebarRecentThreadIds: [],
+        sidebarPinnedThreadIds: [],
+        threadHydrationById: {},
+        latestProjectEventSequenceById: {},
+        bootstrapComplete: false,
+      });
       useTerminalStateStore.persist.clearStorage();
       useTerminalStateStore.setState({
         terminalStateByThreadId: {},
+        panelTerminalStateByThreadId: {},
         terminalLaunchContextByThreadId: {},
         terminalEventEntriesByKey: {},
         nextTerminalEventId: 1,
@@ -276,6 +369,8 @@ export function createChatViewBrowserTestContext() {
   }
 
   return {
+    resolveDefaultRpc,
+    readServerSnapshot: () => fixture.snapshot,
     wsRequests,
     mountChatView,
     measureUserRowAtViewport,

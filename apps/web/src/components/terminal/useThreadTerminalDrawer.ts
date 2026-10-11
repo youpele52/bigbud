@@ -11,9 +11,10 @@ import {
   terminalEventBufferKey,
   useTerminalStateStore,
 } from "../../stores/terminal";
-import { useDefaultChatCwd } from "../../rpc/serverState";
+import { useServerSettings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
+import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -66,7 +67,8 @@ export function useThreadTerminalDrawer(
     (store) => store.draftThreadsByThreadId[threadId] ?? null,
   );
   const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
-  const defaultChatCwd = useDefaultChatCwd();
+  // Leave home expansion to the launch target, not to the server's welcome payload.
+  const defaultChatCwd = useServerSettings().defaultChatCwd;
   const executionTargetId = resolveTerminalExecutionTargetId({ serverThread, project });
   const useLegacyOutputDetection =
     executionTargetId !== undefined && executionTargetId !== LOCAL_EXECUTION_TARGET_ID;
@@ -227,6 +229,7 @@ export function useThreadTerminalDrawer(
       }
 
       storeCloseTerminal(threadId, terminalId);
+      forgetTerminalLaunch(threadId, terminalId);
       bumpFocusRequestId();
     },
     [bumpFocusRequestId, storeCloseTerminal, terminalState.terminalIds.length, threadId],

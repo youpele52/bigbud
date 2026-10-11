@@ -31,6 +31,45 @@ beforeEach(() => {
 });
 
 describe("terminal status toasts", () => {
+  it("reports folder resolution and retries failed startup rather than a nonexistent legacy view", () => {
+    const toasts = new TerminalViewportToasts(threadId);
+    toasts.update(state({ inputEnabled: false, startupPending: true }));
+    expect(toastManager.add).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "loading", description: "Resolving terminal folder..." }),
+    );
+    const retryDelivery = vi.fn();
+    toasts.update(
+      state({
+        inputEnabled: false,
+        startupFailed: true,
+        deliveryError: "Could not save the chat",
+        retryDelivery,
+      }),
+    );
+    const update = vi.mocked(toastManager.update).mock.calls.at(-1)?.[1];
+    expect(update).toMatchObject({
+      type: "error",
+      title: "Terminal 1: terminal startup failed",
+      description: "Could not save the chat",
+      actionProps: { children: "Retry terminal startup" },
+    });
+    update?.actionProps?.onClick?.({} as never);
+    expect(retryDelivery).toHaveBeenCalledOnce();
+    toasts.dispose();
+  });
+
+  it("reports the actual Home folder and reason without changing a running terminal", () => {
+    const toasts = new TerminalViewportToasts(threadId);
+    toasts.update(state({ directoryNotice: "Missing /project. Started in /home/target." }));
+    expect(toastManager.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "warning",
+        title: "Terminal 1: started in Home",
+        description: "Missing /project. Started in /home/target.",
+      }),
+    );
+    toasts.dispose();
+  });
   it("deduplicates restoration progress and closes it when input resumes", () => {
     const toasts = new TerminalViewportToasts(threadId);
     const paused = state({ inputEnabled: false });
