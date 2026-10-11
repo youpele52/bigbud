@@ -323,6 +323,12 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(WS_METHODS.terminalOpen, context.terminalManager.open(input), {
         "rpc.aggregate": "terminal",
       }),
+    [WS_METHODS.terminalSnapshot]: (
+      input: Parameters<WsRpcContext["terminalManager"]["snapshot"]>[0],
+    ) =>
+      observeRpcEffect(WS_METHODS.terminalSnapshot, context.terminalManager.snapshot(input), {
+        "rpc.aggregate": "terminal",
+      }),
     [WS_METHODS.terminalWrite]: (input: Parameters<WsRpcContext["terminalManager"]["write"]>[0]) =>
       observeRpcEffect(WS_METHODS.terminalWrite, context.terminalManager.write(input), {
         "rpc.aggregate": "terminal",

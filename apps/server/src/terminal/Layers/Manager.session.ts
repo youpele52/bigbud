@@ -11,6 +11,7 @@ import { subscribeToTerminalEvents } from "./Manager.session.subscription.ts";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
 import { type TerminalSessionState } from "./Manager.types";
 import { makeAssertExecutionTargetReady } from "./Manager.session.execution.ts";
+import { TerminalNotRunningError } from "../Services/Manager";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -366,6 +367,15 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         ),
       ),
     open,
+    snapshot: (input) =>
+      Effect.gen(function* () {
+        const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
+        const session = yield* requireSession(input.threadId, terminalId);
+        if (session.status !== "running" || !session.process) {
+          return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
+        }
+        return snapshot(session);
+      }),
     write,
     resize,
     clear,

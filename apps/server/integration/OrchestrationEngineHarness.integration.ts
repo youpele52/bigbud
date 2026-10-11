@@ -236,6 +236,7 @@ export const makeOrchestrationIntegrationHarness = (
       closeAll: () => Effect.void,
     });
     const terminalLayer = Layer.succeed(TerminalManager, {
+      snapshot: () => Effect.die(new Error("Unexpected terminal snapshot in integration harness")),
       open: () => Effect.die(new Error("Unexpected terminal open in integration harness")),
       write: () => Effect.die(new Error("Unexpected terminal write in integration harness")),
       resize: () => Effect.die(new Error("Unexpected terminal resize in integration harness")),

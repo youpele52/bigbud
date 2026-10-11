@@ -1,6 +1,7 @@
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { WS_METHODS } from "../constants/websocket.constant";
+import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
 import {
   WsKanbanCreateRpc,
   WsKanbanDeleteRpc,
@@ -239,6 +240,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitDiscardChangesRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
+  WsTerminalSnapshotRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,
   WsTerminalRestartRpc,

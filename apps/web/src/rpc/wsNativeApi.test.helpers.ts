@@ -50,6 +50,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   dispose: vi.fn(),
   reconnect: vi.fn(),
   terminal: {
+    snapshot: vi.fn(),
     open: vi.fn(),
     write: vi.fn(),
     resize: vi.fn(),

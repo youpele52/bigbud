@@ -56,6 +56,9 @@ export interface NativeApi {
     ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
+    snapshot?: (
+      input: typeof Terminal.TerminalSnapshotInput.Encoded,
+    ) => Promise<Terminal.TerminalSessionSnapshot>;
     open: (
       input: typeof Terminal.TerminalOpenInput.Encoded,
     ) => Promise<Terminal.TerminalSessionSnapshot>;

@@ -240,6 +240,7 @@ export async function createHarness(input?: {
     closeAll: () => Effect.void,
   };
   const terminalService: TerminalManagerShape = {
+    snapshot: () => unsupported(),
     open: () => unsupported(),
     write: () => unsupported(),
     resize: () => unsupported(),

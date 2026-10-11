@@ -75,6 +75,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       await transport.reconnect();
     },
     terminal: {
+      snapshot: (input) =>
+        transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),
       open: (input) => transport.request((client) => client[WS_METHODS.terminalOpen](input)),
       write: (input) => transport.request((client) => client[WS_METHODS.terminalWrite](input)),
       resize: (input) => transport.request((client) => client[WS_METHODS.terminalResize](input)),

@@ -67,6 +67,9 @@ export type TerminalResizeInput = Schema.Codec.Encoded<typeof TerminalResizeInpu
 export const TerminalClearInput = TerminalSessionInput;
 export type TerminalClearInput = Schema.Codec.Encoded<typeof TerminalClearInput>;
 
+export const TerminalSnapshotInput = TerminalSessionInput;
+export type TerminalSnapshotInput = Schema.Codec.Encoded<typeof TerminalSnapshotInput>;
+
 export const TerminalRestartInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   executionTargetId: Schema.optional(ExecutionTargetId),
