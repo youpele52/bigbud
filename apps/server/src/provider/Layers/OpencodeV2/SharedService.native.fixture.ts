@@ -23,11 +23,15 @@ export async function sharedServiceNativeFixture(
     profileRoot: fixture.profile,
     runtimeTargetId: "local",
   });
-  const configFile = path.join(fixture.profile, "config", "opencode", "opencode.json");
+  const globalConfig = path.join(fixture.profile, "config", "opencode", "opencode.json");
+  // Windows native builds do not consistently discover the XDG config override. Use the documented
+  // project config in this disposable workspace; production discovers metadata through the API.
+  const configFile =
+    process.platform === "win32" ? path.join(fixture.workspace, "opencode.json") : globalConfig;
   if (path.basename(databaseName) !== databaseName)
     throw new Error("Fixture database name must be a basename.");
   env.OPENCODE_DB = path.join(fixture.profile, "data", "opencode", databaseName);
-  const config = JSON.parse(await readFile(configFile, "utf8"));
+  const config = JSON.parse(await readFile(globalConfig, "utf8"));
   config.agents = {
     "qualification-reviewer": {
       description: "Disposable native config agent",

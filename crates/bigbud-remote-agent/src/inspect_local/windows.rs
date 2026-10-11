@@ -193,14 +193,22 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             FILE_TYPE_CHAR | FILE_TYPE_PIPE => continue,
             _ => return Err(io::Error::other("snapshot file classification changed")),
         }
-        // Upgrade only our retained duplicate; never resample the source handle number.
-        // SAFETY: current-process pseudo handle is not closed or used to access process memory.
-        let metadata: File = duplicate(
-            unsafe { GetCurrentProcess() },
-            retained.as_raw_handle(),
-            FILE_READ_ATTRIBUTES | READ_CONTROL,
-        )?
-        .into();
+        // DuplicateHandle cannot add file rights to a zero-right duplicate (ERROR_NOT_SUPPORTED).
+        // ReOpenFile derives a metadata-only handle from the retained object, never its pathname.
+        // SAFETY: retained disk file handle is live; open-existing metadata rights with full sharing.
+        let reopened = unsafe {
+            ReOpenFile(
+                retained.as_raw_handle(),
+                FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_FLAG_BACKUP_SEMANTICS,
+            )
+        };
+        if reopened == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: successful ReOpenFile transfers ownership of a distinct handle.
+        let metadata = unsafe { File::from_raw_handle(reopened) };
         if !metadata.metadata()?.is_file() {
             continue;
         }
