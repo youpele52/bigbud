@@ -43,6 +43,8 @@ fn create_session() -> Result<AgentSession> {
 }
 
 fn run_stdio(mut session: AgentSession) -> io::Result<()> {
+    #[cfg(unix)]
+    let _cleanup = bigbud_remote_agent::pty::CleanupOwner::start()?;
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
     let writer = Arc::new(Mutex::new(BufWriter::new(io::stdout())));

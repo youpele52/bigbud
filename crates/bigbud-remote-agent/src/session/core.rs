@@ -22,8 +22,12 @@ mod journal_restore;
 mod process_handlers;
 #[path = "protocol_helpers.rs"]
 mod protocol_helpers;
+#[path = "pty_controls.rs"]
+mod pty_controls;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+pub use pty_controls::{PreparedPtyControl, is_pty_control};
+use pty_handlers::PtySession;
 #[path = "retirement.rs"]
 mod retirement;
 #[path = "workspace_handlers.rs"]
@@ -117,12 +121,6 @@ pub struct AgentSession {
 struct AcceptedOperation {
     request_digest: Vec<u8>,
     expires_at: Instant,
-}
-
-struct PtySession {
-    handle: Arc<pty::PtyHandle>,
-    request_digest: Vec<u8>,
-    expires_at: Option<Instant>,
 }
 
 #[derive(Clone)]
