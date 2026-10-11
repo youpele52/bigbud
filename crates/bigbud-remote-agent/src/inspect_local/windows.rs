@@ -69,12 +69,21 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
         // A vanished, unclassified handle can hide another database: reject incomplete inventories.
         let retained = at("retain", duplicate(raw, handle, rights))?;
         if !at("type", object::is_file(retained.as_raw_handle()))? {
+            eprintln!("local metadata retained type changed");
             return Err(io::Error::other("snapshot file classification changed"));
         }
         // SAFETY: retained duplicate is live; no data read or file position change.
         match unsafe { GetFileType(retained.as_raw_handle()) } {
             FILE_TYPE_DISK => {}
             FILE_TYPE_CHAR | FILE_TYPE_PIPE => continue,
+            FILE_TYPE_UNKNOWN
+                if at(
+                    "device",
+                    object::irrelevant_device(retained.as_raw_handle()),
+                )? =>
+            {
+                continue;
+            }
             _ => return Err(io::Error::other("snapshot file classification changed")),
         }
         // Basic attributes, final path and file ID need no data access. Keep the original object
