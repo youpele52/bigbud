@@ -47,6 +47,7 @@ jobs:
           bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Bun architecture mismatch"); console.log(Bun.version, process.platform, process.arch)'
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Build read-only native helper
+        id: helper-build
         run: cargo build --locked --package bigbud-remote-agent
       - name: Exercise read-only native helper
         run: cargo test --locked --package bigbud-remote-agent --test inspect_local
@@ -54,10 +55,13 @@ jobs:
         if: ${{ always() && hashFiles('target/debug/bigbud-remote-agent.exe') != '' }}
         run: node scripts/opencode-v2-windows-diagnostics.ts
       - name: Download official disposable OpenCode package and verify registry integrity
+        id: fixture
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
         shell: pwsh
         run: |
           node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" (Join-Path $env:RUNNER_TEMP "opencode-fixture-${{ matrix.version }}")
       - name: Real Windows transport, application, storage and ownership tests (required fixtures)
+        if: ${{ !cancelled() && steps.fixture.outcome == 'success' }}
         run: >-
           bun run --cwd apps/server vitest run
           src/provider/Layers/OpencodeV2/SharedService.native.test.ts
@@ -70,6 +74,7 @@ jobs:
           src/provider/Layers/OpencodeV2/ProfileIsolation.windows.test.ts
           src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
       - name: Package resolver and ARM64 PE identity tests
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
         run: >-
           bun run --cwd apps/server vitest run
           src/remote-agent/localWorkspaceWatchAgent.binary.test.ts

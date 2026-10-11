@@ -45,7 +45,7 @@ try {
     {
       input: JSON.stringify({ root }),
       encoding: "utf8",
-      timeout: 10_000,
+      timeout: 30_000,
       maxBuffer: 64 * 1024,
       env: v2WindowsPowerShellEnvironment(),
     },

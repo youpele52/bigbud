@@ -57,6 +57,29 @@ fn snapshot_name(pointer: *const u16, bytes: u16) -> io::Result<String> {
 
 fn snapshot_disk_candidate(entry: &PSS_HANDLE_ENTRY) -> io::Result<bool> {
     // HAVE_TYPE validates ObjectType, whose enum omits files; TypeName is captured separately.
+    if entry.Flags & PSS_HANDLE_HAVE_TYPE != 0
+        && matches!(
+            entry.ObjectType,
+            PSS_OBJECT_TYPE_PROCESS
+                | PSS_OBJECT_TYPE_THREAD
+                | PSS_OBJECT_TYPE_MUTANT
+                | PSS_OBJECT_TYPE_EVENT
+                | PSS_OBJECT_TYPE_SECTION
+                | PSS_OBJECT_TYPE_SEMAPHORE
+        )
+    {
+        return Ok(false);
+    }
+    if entry.TypeName.is_null()
+        || entry.TypeNameLength == 0
+        || !entry.TypeNameLength.is_multiple_of(2)
+    {
+        // Numeric metadata only: never log object names, paths or contents.
+        eprintln!(
+            "snapshot type unavailable: flags={} kind={} type-bytes={} name-bytes={}",
+            entry.Flags, entry.ObjectType, entry.TypeNameLength, entry.ObjectNameLength
+        );
+    }
     if snapshot_name(entry.TypeName, entry.TypeNameLength)? != "File" {
         return Ok(false);
     }
@@ -120,7 +143,8 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             raw,
             PSS_CAPTURE_HANDLES
                 | PSS_CAPTURE_HANDLE_NAME_INFORMATION
-                | PSS_CAPTURE_HANDLE_BASIC_INFORMATION,
+                | PSS_CAPTURE_HANDLE_BASIC_INFORMATION
+                | PSS_CAPTURE_HANDLE_TYPE_SPECIFIC_INFORMATION,
             0,
             &mut snapshot,
         )
