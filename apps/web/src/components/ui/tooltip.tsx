@@ -18,6 +18,7 @@ function TooltipPopup({
   sideOffset = 4,
   side = "top",
   anchor,
+  positionerClassName,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props & {
@@ -25,13 +26,17 @@ function TooltipPopup({
   side?: TooltipPrimitive.Positioner.Props["side"];
   sideOffset?: TooltipPrimitive.Positioner.Props["sideOffset"];
   anchor?: TooltipPrimitive.Positioner.Props["anchor"];
+  positionerClassName?: string;
 }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
         align={align}
         anchor={anchor}
-        className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none"
+        className={cn(
+          "z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none",
+          positionerClassName,
+        )}
         data-slot="tooltip-positioner"
         side={side}
         sideOffset={sideOffset}

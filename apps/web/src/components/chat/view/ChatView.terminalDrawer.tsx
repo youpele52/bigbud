@@ -18,6 +18,7 @@ interface PersistentThreadTerminalDrawerProps {
   closeShortcutLabel: string | undefined;
   keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  onToggleExpanded: () => void;
 }
 
 interface PersistentTerminalLaunchContext {
@@ -36,6 +37,7 @@ export function PersistentThreadTerminalDrawer({
   closeShortcutLabel,
   keybindings,
   onAddTerminalContext,
+  onToggleExpanded,
 }: PersistentThreadTerminalDrawerProps) {
   const drawer = useThreadTerminalDrawer(threadId, launchContext, visible);
   const project = drawer.project;
@@ -135,6 +137,7 @@ export function PersistentThreadTerminalDrawer({
         onHeightChange={drawer.setTerminalHeight}
         onAddTerminalContext={handleAddTerminalContext}
         fillAvailableSpace={presentation === "fill"}
+        onToggleExpanded={onToggleExpanded}
       />
     </div>
   );

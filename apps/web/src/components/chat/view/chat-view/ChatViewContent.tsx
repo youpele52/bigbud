@@ -99,8 +99,7 @@ export function ChatViewContent({
           rightPanelOpen={rightPanelOpen}
           planCardLabel={thread.planCardLabel}
           planCardOpen={base.planCardOpen}
-          terminalOpen={base.terminalState.terminalOpen}
-          terminalLayoutNextActionLabel={terminalLayout.nextActionLabel}
+          terminalLayoutMode={terminalLayout.mode}
           onOpenOrchestra={() => setOrchestraOpen(true)}
           onOpenSideChat={() => {
             void openSideChat(base.activeThread!);
@@ -114,7 +113,7 @@ export function ChatViewContent({
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
           onTogglePlanCard={runtime.togglePlanCard}
           onOpenTerminal={terminalLayout.openTerminal}
-          onCycleTerminalLayout={terminalLayout.cycleLayout}
+          onSelectTerminalLayout={terminalLayout.selectLayout}
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </ContentPanelHeader>
@@ -157,6 +156,7 @@ export function ChatViewContent({
           closeShortcutLabel={composer.closeTerminalShortcutLabel ?? undefined}
           keybindings={composer.keybindings}
           onAddTerminalContext={runtime.addTerminalContextToDraft}
+          onToggleExpanded={terminalLayout.toggleExpanded}
         />
       ))}
 

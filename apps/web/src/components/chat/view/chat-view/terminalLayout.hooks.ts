@@ -1,10 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 
 import {
-  cycleTerminalLayoutMode,
   resolveEffectiveTerminalLayoutMode,
   resolveTerminalLayoutVisibility,
-  terminalLayoutNextActionLabel,
+  type TerminalLayoutMode,
   type TerminalLayoutSelection,
 } from "./terminalLayout.logic";
 
@@ -63,19 +62,30 @@ export function useTerminalLayout(input: UseTerminalLayoutInput) {
     toggleTerminalVisibility();
   }, [resetToSplit, toggleTerminalVisibility]);
 
-  const cycleLayout = useCallback(() => {
-    setSelection({
-      threadId: identityRef.current.threadId,
-      epoch: identityRef.current.epoch,
-      mode: cycleTerminalLayoutMode(mode),
-    });
-  }, [mode]);
+  const selectLayout = useCallback(
+    (nextMode: TerminalLayoutMode) => {
+      setSelection({
+        threadId: identityRef.current.threadId,
+        epoch: identityRef.current.epoch,
+        mode: nextMode,
+      });
+      // Chat-only is presentation-only: keep the mounted session and its output alive.
+      if (nextMode !== "chat-only" && !terminalOpen) {
+        setTerminalOpen(true);
+      }
+    },
+    [setTerminalOpen, terminalOpen],
+  );
+  const toggleExpanded = useCallback(() => {
+    selectLayout(mode === "terminal-only" ? "split" : "terminal-only");
+  }, [mode, selectLayout]);
 
   return {
     mode,
-    ...resolveTerminalLayoutVisibility(mode),
-    nextActionLabel: terminalLayoutNextActionLabel(mode),
-    cycleLayout,
+    // Keep the existing close animation/unmount path; only the menu reports chat-only while closed.
+    ...resolveTerminalLayoutVisibility(terminalOpen ? mode : "split"),
+    selectLayout,
+    toggleExpanded,
     openTerminal,
     toggleTerminal,
   };

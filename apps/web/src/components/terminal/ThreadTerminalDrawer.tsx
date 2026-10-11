@@ -56,6 +56,7 @@ interface ThreadTerminalDrawerProps {
   terminalProviderById: Readonly<Record<string, ProviderKind>>;
   mode?: "drawer" | "panel";
   fillAvailableSpace?: boolean;
+  onToggleExpanded?: (() => void) | undefined;
   onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
   onClearTerminalLabelOverride: (terminalId: string) => void;
 }
@@ -88,6 +89,7 @@ export default function ThreadTerminalDrawer({
   terminalProviderById,
   mode = "drawer",
   fillAvailableSpace = false,
+  onToggleExpanded,
   onSetTerminalLabelOverride,
   onClearTerminalLabelOverride,
 }: ThreadTerminalDrawerProps) {
@@ -300,6 +302,8 @@ export default function ThreadTerminalDrawer({
 
       {!hasTerminalSidebar && (
         <ThreadTerminalDrawerFloatingActions
+          expanded={fillAvailableSpace}
+          onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
           hasReachedSplitLimit={hasReachedSplitLimit}
           renameTerminalActionLabel={renameTerminalActionLabel}
           splitTerminalActionLabel={splitTerminalActionLabel}
@@ -354,6 +358,8 @@ export default function ThreadTerminalDrawer({
 
           {hasTerminalSidebar && (
             <ThreadTerminalDrawerSidebar
+              expanded={fillAvailableSpace}
+              onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
               resolvedTerminalGroups={resolvedTerminalGroups}
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               normalizedTerminalIds={normalizedTerminalIds}

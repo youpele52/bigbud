@@ -1,20 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  cycleTerminalLayoutMode,
+  TERMINAL_LAYOUT_LABELS,
   resolveEffectiveTerminalLayoutMode,
   resolveTerminalLayoutVisibility,
-  terminalLayoutNextActionLabel,
 } from "./terminalLayout.logic";
 
 describe("terminal layout", () => {
-  it("cycles through split, terminal-only, chat-only, and split", () => {
-    expect(cycleTerminalLayoutMode("split")).toBe("terminal-only");
-    expect(cycleTerminalLayoutMode("terminal-only")).toBe("chat-only");
-    expect(cycleTerminalLayoutMode("chat-only")).toBe("split");
-  });
-
-  it("uses split while closed or after the active thread identity changes", () => {
+  it("displays chat-only while closed and resets to split after identity changes", () => {
     const selection = { threadId: "thread-a", epoch: 2, mode: "terminal-only" as const };
 
     expect(
@@ -24,7 +17,7 @@ describe("terminal layout", () => {
         activeEpoch: 2,
         selection,
       }),
-    ).toBe("split");
+    ).toBe("chat-only");
     expect(
       resolveEffectiveTerminalLayoutMode({
         terminalOpen: true,
@@ -58,9 +51,25 @@ describe("terminal layout", () => {
     });
   });
 
-  it("provides exact next-action labels", () => {
-    expect(terminalLayoutNextActionLabel("split")).toBe("Show terminal only");
-    expect(terminalLayoutNextActionLabel("terminal-only")).toBe("Show chat only");
-    expect(terminalLayoutNextActionLabel("chat-only")).toBe("Show split chat and terminal");
+  it.each(["split", "terminal-only", "chat-only"] as const)(
+    "preserves the selected %s layout while open",
+    (mode) => {
+      expect(
+        resolveEffectiveTerminalLayoutMode({
+          terminalOpen: true,
+          activeThreadId: "thread-a",
+          activeEpoch: 2,
+          selection: { threadId: "thread-a", epoch: 2, mode },
+        }),
+      ).toBe(mode);
+    },
+  );
+
+  it("offers explicit layouts in display order", () => {
+    expect(Object.entries(TERMINAL_LAYOUT_LABELS)).toEqual([
+      ["chat-only", "Chat only"],
+      ["split", "Chat + terminal"],
+      ["terminal-only", "Terminal only"],
+    ]);
   });
 });
