@@ -108,6 +108,7 @@ export async function sharedServiceNativeFixture(
         { timeout: 15000 },
       )
       .toBe(true);
+    await ownV2WindowsFixture(fixture.profile);
     return {
       ...fixture,
       file,

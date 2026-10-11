@@ -75,22 +75,15 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             FILE_TYPE_CHAR | FILE_TYPE_PIPE => continue,
             _ => return Err(io::Error::other("snapshot file classification changed")),
         }
-        // ReOpenFile derives a metadata-only handle from the retained object, never its pathname.
-        // SAFETY: retained disk file handle is live; open-existing metadata rights with full sharing.
-        let reopened = unsafe {
-            ReOpenFile(
-                retained.as_raw_handle(),
-                FILE_READ_ATTRIBUTES | READ_CONTROL,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_FLAG_BACKUP_SEMANTICS,
-            )
-        };
-        if reopened == INVALID_HANDLE_VALUE {
-            return at("reopen", Err(io::Error::last_os_error()));
+        // Basic attributes, final path and file ID need no data access. Keep the original object
+        // pinned; use a separately checked, identity-matched path handle only for owner ACL access.
+        let metadata: File = retained.into();
+        let mut attributes = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: live disk handle and initialized output; no file contents or position are read.
+        if unsafe { GetFileInformationByHandle(metadata.as_raw_handle(), &mut attributes) } == 0 {
+            return at("attributes", Err(io::Error::last_os_error()));
         }
-        // SAFETY: successful ReOpenFile transfers ownership of a distinct handle.
-        let metadata = unsafe { File::from_raw_handle(reopened) };
-        if !at("metadata", metadata.metadata())?.is_file() {
+        if attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
             continue;
         }
         let path = at("path", file::name(&metadata))?;
@@ -99,7 +92,7 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
         if file::identity(&named)? != identity {
             return Err(io::Error::other("file replaced"));
         }
-        let owned = security::private_file(metadata.as_raw_handle(), false, true).is_ok();
+        let owned = security::private_file(named.as_raw_handle(), false, true).is_ok();
         let row = format!("{},{},{}", hex(path.as_bytes()), identity, u8::from(owned));
         if !files.contains(&row) {
             reply_bytes += row.len() + 1;
