@@ -46,7 +46,7 @@ pub(super) fn is_file(handle: HANDLE) -> io::Result<bool> {
     Ok(text == [70, 105, 108, 101])
 }
 
-/// Recognize non-filesystem network/null devices when GetFileType cannot classify a File object.
+/// Recognize specific non-filesystem devices when GetFileType cannot classify a File object.
 pub(super) fn irrelevant_device(handle: HANDLE) -> io::Result<bool> {
     use windows_sys::{
         Wdk::Storage::FileSystem::{FileFsDeviceInformation, NtQueryVolumeInformationFile},
@@ -72,8 +72,9 @@ pub(super) fn irrelevant_device(handle: HANDLE) -> io::Result<bool> {
         );
         return Err(io::Error::other("device classification unavailable"));
     }
-    // FILE_DEVICE_NETWORK (not FILE_DEVICE_NETWORK_FILE_SYSTEM) and FILE_DEVICE_NULL.
-    let irrelevant = matches!(device[0], 0x12 | 0x15);
+    // ntddk.h: FILE_DEVICE_NETWORK (not NETWORK_FILE_SYSTEM), NULL, KSEC and CRYPT_PROVIDER.
+    // Security-provider devices occur in ordinary Rust/Bun processes and cannot hold SQLite files.
+    let irrelevant = matches!(device[0], 0x12 | 0x15 | 0x39 | 0x3f);
     if !irrelevant {
         eprintln!("local device classification unsupported={:#x}", device[0]);
     }
