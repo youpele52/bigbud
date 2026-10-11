@@ -1,6 +1,11 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+// Include the production modules so the native retention-hook regressions run in this CI target.
+#[cfg(windows)]
+#[path = "../src/inspect_local/mod.rs"]
+mod safety_native;
+
 #[cfg(windows)]
 static INVENTORY_FIXTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

@@ -74,7 +74,13 @@ fn snapshot(process: HANDLE) -> io::Result<Vec<Entry>> {
     Ok(entries)
 }
 
-/// Return only kernel-classified File candidates; file handle closure/reuse still fails in the caller.
+/// Reject unresolved File objects before any foreign handle can be duplicated.
+///
+/// ProcessHandleInformation's File type includes Winsock sockets. It supplies neither a device
+/// subtype nor an atomic, pinned disk-file reference. DuplicateHandle is explicitly unsafe for
+/// sockets, even with zero rights. A separate name/type snapshot followed by duplication also
+/// permits handle-number reuse. Until a nonmutating atomic disk-file acquisition is available,
+/// these entries invalidate the entire inventory; they must never be probed or silently omitted.
 pub(super) fn files(process: HANDLE) -> io::Result<Vec<(HANDLE, u32)>> {
     // This helper's own executable supplies a known File type without creating any state or reading data.
     let known_file = OpenOptions::new()
@@ -95,9 +101,16 @@ pub(super) fn files(process: HANDLE) -> io::Result<Vec<(HANDLE, u32)>> {
     {
         return Err(io::Error::other("unclassified snapshot handle"));
     }
-    Ok(entries
-        .into_iter()
-        .filter(|entry| entry.type_index == kind)
-        .map(|entry| (entry.handle, entry.granted_access & FILE_READ_ATTRIBUTES))
-        .collect())
+    if entries.iter().any(|entry| entry.type_index == kind) {
+        eprintln!("local inspection blocked: safe foreign disk-file retention unavailable");
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "safe foreign disk-file retention unavailable",
+        ));
+    }
+    Ok(Vec::new())
 }
+
+#[cfg(test)]
+#[path = "windows.handles.test.rs"]
+mod tests;

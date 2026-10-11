@@ -29,8 +29,16 @@ fn at<T>(stage: &'static str, result: io::Result<T>) -> io::Result<T> {
 
 /// Inspect process handles only; database contents and the process address space are never read.
 pub(super) fn inspect(pid: u32) -> io::Result<String> {
-    // SAFETY: OpenProcess is called with query/duplicate only, never termination or VM rights.
-    let raw = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_DUP_HANDLE, 0, pid) };
+    inspect_with(pid, duplicate)
+}
+
+fn inspect_with(
+    pid: u32,
+    mut retain: impl FnMut(HANDLE, HANDLE, u32) -> io::Result<OwnedHandle>,
+) -> io::Result<String> {
+    // SAFETY: query-only access. No duplication authority while remote File classification is
+    // unresolved; even an accidental admission cannot mutate a source socket's reference count.
+    let raw = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid) };
     if raw.is_null() {
         return Err(io::Error::last_os_error());
     }
@@ -67,7 +75,7 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             return Err(io::Error::other("inspection bound"));
         }
         // A vanished, unclassified handle can hide another database: reject incomplete inventories.
-        let retained = at("retain", duplicate(raw, handle, rights))?;
+        let retained = at("retain", retain(raw, handle, rights))?;
         if !at("type", object::is_file(retained.as_raw_handle()))? {
             eprintln!("local metadata retained type changed");
             return Err(io::Error::other("snapshot file classification changed"));
@@ -144,4 +152,12 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
         return Err(io::Error::other("metadata bound"));
     }
     Ok(reply)
+}
+
+#[cfg(test)]
+pub(super) fn inspect_recording_retention(
+    pid: u32,
+    retain: impl FnMut(HANDLE, HANDLE, u32) -> io::Result<OwnedHandle>,
+) -> io::Result<String> {
+    inspect_with(pid, retain)
 }
