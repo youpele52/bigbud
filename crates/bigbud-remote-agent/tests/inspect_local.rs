@@ -161,6 +161,10 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
             &format!("OK\t{}", hex("fixture")),
         )?;
         let _held = fs::File::open(&file)?;
+        let _directory = fs::OpenOptions::new()
+            .access_mode(windows_sys::Win32::Storage::FileSystem::FILE_TRAVERSE)
+            .custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&root)?;
         // Real socket handles coexist with the file inventory; inspection must preserve transport.
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let mut client = std::net::TcpStream::connect(listener.local_addr()?)?;

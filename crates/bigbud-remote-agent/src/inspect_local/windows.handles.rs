@@ -75,7 +75,7 @@ fn snapshot(process: HANDLE) -> io::Result<Vec<Entry>> {
 }
 
 /// Return only kernel-classified File candidates; file handle closure/reuse still fails in the caller.
-pub(super) fn files(process: HANDLE) -> io::Result<Vec<HANDLE>> {
+pub(super) fn files(process: HANDLE) -> io::Result<Vec<(HANDLE, u32)>> {
     // This helper's own executable supplies a known File type without creating any state or reading data.
     let known_file = OpenOptions::new()
         .access_mode(FILE_READ_ATTRIBUTES)
@@ -98,6 +98,6 @@ pub(super) fn files(process: HANDLE) -> io::Result<Vec<HANDLE>> {
     Ok(entries
         .into_iter()
         .filter(|entry| entry.type_index == kind)
-        .map(|entry| entry.handle)
+        .map(|entry| (entry.handle, entry.granted_access & FILE_READ_ATTRIBUTES))
         .collect())
 }
