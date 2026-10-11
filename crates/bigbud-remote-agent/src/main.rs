@@ -215,6 +215,9 @@ fn main() -> Result<()> {
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),
+        Some("--inspect-local") => {
+            bigbud_remote_agent::inspect_local::run_stdio().context("local inspection mode failed")
+        }
         _ => run_stdio(create_session()?).context("remote agent stdio mode failed"),
     }
 }

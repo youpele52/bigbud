@@ -1,11 +1,12 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { realpath, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { inspectV2UnixProcess } from "./SharedService.storage.unix.ts";
+import { selectV2SharedDatabase } from "./SharedService.storage.files.ts";
+import { inspectV2WindowsStorage } from "./SharedService.storage.windows.ts";
+import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 
-const executeFile = promisify(execFile);
 export interface V2SharedStorage {
   readonly registrationFile: string;
   readonly databasePath: string;
@@ -17,43 +18,33 @@ export interface V2SharedStorage {
 /** Process-open-file metadata only: never read SQLite contents or guess the daemon's HOME. */
 export async function resolveV2SharedStorage(registrationFile: string): Promise<V2SharedStorage> {
   const before = await discoverV2SharedService({ file: registrationFile });
-  if (process.platform !== "darwin")
-    throw new V2SharedServiceError(
-      "compatibility",
-      "Shared OpenCode v2 database identity is currently qualified on macOS only. Use explicit isolated mode on this platform; no profile was changed.",
-      before.version,
-    );
   try {
-    const pid = String(before.registration.pid);
-    const { stdout } = await executeFile("/usr/sbin/lsof", ["-a", "-p", pid, "-Fn"], {
-      timeout: 5000,
-      maxBuffer: 512 * 1024,
-    });
-    const files = stdout
-      .split("\n")
-      .filter((line) => line.startsWith("n"))
-      .map((line) => line.slice(1));
-    const candidates = [
-      ...new Set(
-        files.filter(
-          (file) =>
-            /\.(db|sqlite|sqlite3)$/.test(file) &&
-            (files.includes(`${file}-wal`) || files.includes(`${file}-shm`)),
-        ),
-      ),
-    ];
-    if (candidates.length !== 1) throw new Error("Ambiguous native SQLite handle.");
-    const databasePath = await realpath(candidates[0]!);
+    if (process.platform === "win32") {
+      const storage = await inspectV2WindowsStorage(before.registration.pid);
+      const after = await discoverV2SharedService({ file: registrationFile });
+      if (before.generation !== after.generation) throw new Error("Native generation changed.");
+      return { ...storage, registrationFile, generation: before.generation };
+    }
+    const inspect = () =>
+      runWithAbortableDeadline({
+        operation: "Native process metadata",
+        timeoutMs: 5000,
+        run: (signal) => inspectV2UnixProcess(before.registration.pid, signal),
+      });
+    const { files, binaryPath } = await inspect();
+    const databasePath = await realpath(selectV2SharedDatabase(files));
     const metadata = await stat(databasePath);
     if (!metadata.isFile() || metadata.uid !== process.getuid?.())
       throw new Error("Native storage owner mismatch.");
-    const { stdout: command } = await executeFile("/bin/ps", ["-p", pid, "-o", "comm="], {
-      timeout: 5000,
-      maxBuffer: 4096,
-    });
-    const binaryPath = command.trim();
-    if (!binaryPath.startsWith("/") || !/opencode(?:$|\s)/.test(binaryPath))
-      throw new Error("Native executable identity unavailable.");
+    const second = await inspect();
+    if (
+      (await realpath(selectV2SharedDatabase(second.files))) !== databasePath ||
+      second.binaryPath !== binaryPath
+    )
+      throw new Error("Native open file identity changed.");
+    const retained = await stat(databasePath);
+    if (retained.dev !== metadata.dev || retained.ino !== metadata.ino)
+      throw new Error("Native storage changed.");
     const after = await discoverV2SharedService({ file: registrationFile });
     if (before.generation !== after.generation) throw new Error("Native generation changed.");
     return {

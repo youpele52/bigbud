@@ -178,6 +178,7 @@ export function ProviderCard({
                 <Input
                   id={`provider-install-${card.provider}-binary-path`}
                   className="mt-1.5"
+                  disabled={card.provider === "opencodeV2" && connectionMode === "shared"}
                   value={card.configPath ? card.configPathValue : card.binaryPathValue}
                   onChange={(event) =>
                     card.configPath

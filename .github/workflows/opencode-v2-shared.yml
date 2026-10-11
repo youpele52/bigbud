@@ -1,0 +1,68 @@
+name: OpenCode V2 shared native Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: ["task/opencode-v2-*"]
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }} OpenCode ${{ matrix.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2022
+            version: "2.0.24"
+          - arch: x64
+            runner: windows-2022
+            version: "2.0.26"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.0.24"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.0.26"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Build and exercise read-only native helper
+        run: |
+          cargo test --locked --package bigbud-remote-agent --test inspect_local
+          cargo build --locked --package bigbud-remote-agent
+      - name: Download official disposable OpenCode package and verify registry integrity
+        shell: pwsh
+        run: |
+          node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" (Join-Path $env:RUNNER_TEMP "opencode-fixture-${{ matrix.version }}")
+      - name: Real Windows transport, application, storage and ownership tests (no skips)
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/SharedService.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.application.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.storage.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+      - name: Package resolver and ARM64 PE identity tests
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/remote-agent/localWorkspaceWatchAgent.binary.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.packaging.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencode-v2-helper-${{ matrix.arch }}-${{ matrix.version }}
+          path: target/debug/bigbud-remote-agent.exe
+          if-no-files-found: error

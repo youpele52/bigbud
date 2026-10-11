@@ -40,7 +40,9 @@ vi.mock("./Catalog.public.ts", async (original) => ({
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 const version = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_VERSION;
 
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+if (process.env.BIGBUD_OPENCODE_V2_REQUIRED_NATIVE === "1" && (!binary || !version))
+  throw new Error("Required shared native binary/version missing; refusing a skipped validation.");
+it.skipIf(!binary || !version)(
   "shared application qualifies replay, native tools, disable/rebind and active TUI sibling preservation",
   async () => {
     const fixture = await sharedServiceNativeFixture(binary!);

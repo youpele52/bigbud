@@ -13,4 +13,5 @@ pub use session::{
     SessionError, is_pty_control, protocol_error_frame, workspace_watch_event_frame,
 };
 pub mod identity;
+pub mod inspect_local;
 mod spawn_gate;

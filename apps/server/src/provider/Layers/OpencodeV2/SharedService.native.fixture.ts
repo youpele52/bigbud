@@ -13,6 +13,7 @@ import {
 export async function sharedServiceNativeFixture(
   binary: string,
   prepareConfig?: (file: string) => Promise<void>,
+  databaseName = "opencode.db",
 ) {
   const fixture = await makeV2CodingNativeFixture();
   const env = await isolatedEnvironment({
@@ -21,6 +22,9 @@ export async function sharedServiceNativeFixture(
     runtimeTargetId: "local",
   });
   const configFile = path.join(fixture.profile, "config", "opencode", "opencode.json");
+  if (path.basename(databaseName) !== databaseName)
+    throw new Error("Fixture database name must be a basename.");
+  env.OPENCODE_DB = path.join(fixture.profile, "data", "opencode", databaseName);
   const config = JSON.parse(await readFile(configFile, "utf8"));
   config.agents = {
     "qualification-reviewer": {
@@ -39,7 +43,7 @@ export async function sharedServiceNativeFixture(
     "---\nname: example\ndescription: Disposable qualification skill\n---\nSynthetic read-only instructions.\n",
   );
   fixture.state.textOnlyDelegated = true;
-  const child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
+  let child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
     env: { ...env, OPENCODE_CONFIG_PROJECT_DISABLE: "0" },
     cwd: fixture.profile,
     shell: false,
@@ -79,8 +83,26 @@ export async function sharedServiceNativeFixture(
     return {
       ...fixture,
       file,
-      child,
+      get child() {
+        return child;
+      },
       configFile,
+      async restart() {
+        // Only this fixture-owned process/profile; never use native service lifecycle discovery.
+        await closeOwnedChild(child);
+        child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
+          env: { ...env, OPENCODE_CONFIG_PROJECT_DISABLE: "0" },
+          cwd: fixture.profile,
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        child.stdout.on("data", capture);
+        child.stderr.on("data", capture);
+        child.on("error", () => {});
+        await expect
+          .poll(async () => (await readV2SharedRegistration(file)).pid, { timeout: 15000 })
+          .toBe(child.pid);
+      },
       async close() {
         await closeOwnedChild(child);
         await fixture.close();

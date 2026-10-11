@@ -2,13 +2,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { V2_SHARED_REQUIRED_OPERATIONS } from "./SharedService.capabilities.ts";
+import { V2_SHARED_REQUEST_FIELDS, V2_SHARED_RESPONSES } from "./SharedService.protocol.ts";
+
+const object = (properties: Record<string, unknown> = {}) => ({ type: "object", properties });
+const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
+const json = (schema: unknown) => ({ content: { "application/json": { schema } } });
 
 /** Synthetic contract seam; native qualification uses the actual runtime OpenAPI. */
 export function sharedServiceTestContract() {
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const [method, route, operationId] of V2_SHARED_REQUIRED_OPERATIONS) {
-    (paths[route] ??= {})[method] = { operationId, responses: { "200": {} }, requestBody: {} };
-  }
   const shapes = {
     ServerInfo: ["version", "pid"],
     "Session.Info": ["id", "location", "metadata", "permissions", "model", "projectID"],
@@ -48,6 +50,99 @@ export function sharedServiceTestContract() {
   };
   for (const name of ["Location.PublicRef", "Session.Metadata", "Permission.Ruleset", "Model.Ref"])
     schemas[name] = { type: "object", properties: {} };
+  schemas["Location.PublicRef"]!.properties = { directory: { type: "string" } };
+  schemas["Model.Ref"]!.properties = {
+    id: { type: "string" },
+    providerID: { type: "string" },
+    variant: { type: "string" },
+  };
+  Object.assign(schemas["Permission.Ruleset"]!, {
+    type: "array",
+    items: object({
+      action: { type: "string" },
+      resource: { type: "string" },
+      effect: { type: "string", enum: ["allow", "ask", "deny"] },
+    }),
+  });
+  for (const [method, route, operationId] of V2_SHARED_REQUIRED_OPERATIONS) {
+    const kind = V2_SHARED_RESPONSES[operationId];
+    let data: unknown = object();
+    if (kind === "array" || kind === "page")
+      data = {
+        type: "array",
+        items:
+          operationId === "model.list"
+            ? ref("Model.Info")
+            : operationId === "integration.list"
+              ? ref("Integration.Info")
+              : object(),
+      };
+    if (kind === "session") data = ref("Session.Info");
+    if (kind === "interaction" || kind === "admission")
+      data = object({
+        id: { type: "string" },
+        sessionID: { type: "string" },
+        type: { type: "string" },
+        payload: object({ metadata: object() }),
+      });
+    const result =
+      kind === "info"
+        ? ref("ServerInfo")
+        : kind === "interrupt"
+          ? object({ interrupted: { type: "boolean" } })
+          : object({ data, cursor: object() });
+    const responses =
+      kind === "sse"
+        ? {
+            "200": {
+              content: {
+                "text/event-stream": {
+                  schema: object({ event: { type: "string" }, data: { type: "string" } }),
+                  "x-effect-stream": { encoding: "sse" },
+                },
+              },
+            },
+          }
+        : kind
+          ? { "200": json(result) }
+          : { "204": {} };
+    const fields = V2_SHARED_REQUEST_FIELDS[operationId];
+    const parameters: unknown[] = [...route.matchAll(/\{([^}]+)\}/g)].map((match) => ({
+      name: match[1],
+      in: "path",
+      required: true,
+      schema: { type: "string" },
+    }));
+    if (operationId === "session.interrupt")
+      parameters.push({ name: "resume", in: "query", schema: { type: "string" } });
+    (paths[route] ??= {})[method] = {
+      operationId,
+      responses,
+      parameters,
+      ...(fields
+        ? {
+            requestBody: json(
+              object(
+                Object.fromEntries(
+                  Object.entries(fields).map(([field, type]) => [
+                    field,
+                    field === "model"
+                      ? ref("Model.Ref")
+                      : field === "location"
+                        ? ref("Location.PublicRef")
+                        : field === "permissions"
+                          ? ref("Permission.Ruleset")
+                          : type
+                            ? { type }
+                            : {},
+                  ]),
+                ),
+              ),
+            ),
+          }
+        : {}),
+    };
+  }
   return contract;
 }
 

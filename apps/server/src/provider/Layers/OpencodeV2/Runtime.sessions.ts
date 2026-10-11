@@ -90,7 +90,12 @@ export async function createRuntimeSession(
   };
   const localTools = options.enableLocalTools === true && !disableTools;
   const permissions = options.config.sharedService
-    ? v2SharedToolPolicy(input.runtimeMode, options.config.sharedService.databasePath, localTools)
+    ? v2SharedToolPolicy(
+        input.runtimeMode,
+        options.config.sharedService.databasePath,
+        localTools,
+        options.config.sharedService.registrationFile,
+      )
     : v2LocalToolPolicy(input.runtimeMode, localTools, Boolean(options.codingBridge), {
         nativeWorkspace: runtimeTarget === workspaceTarget,
         profileRoot: root,

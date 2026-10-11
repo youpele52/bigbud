@@ -15,6 +15,7 @@ import type { V2ProcessLease } from "./ServerManager.ts";
 import { assertDevelopmentVersion, OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import {
   assertV2SharedQualifiedVersion,
+  isV2SharedUpdateRecommended,
   V2_RECOMMENDED_RUNTIME_VERSION,
 } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
@@ -134,7 +135,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         }),
         ...(!application ? { developmentOnly: true } : {}),
         ...(shared ? { supportsLocalRuntimeRemoteWorkspace: false } : {}),
-        ...(shared && info.version === "2.0.24"
+        ...(shared && isV2SharedUpdateRecommended(info.version)
           ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION }
           : {}),
         ...(agents

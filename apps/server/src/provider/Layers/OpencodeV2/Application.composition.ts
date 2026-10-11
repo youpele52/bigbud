@@ -27,19 +27,7 @@ import { Schedule } from "effect";
 import path from "node:path";
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
-
-const keyOf = (value: {
-  binaryPath: string;
-  profileRoot: string;
-  connectionMode?: "shared" | "isolated";
-  serviceFile?: string;
-}) =>
-  JSON.stringify([
-    resolveOpencodeV2ConnectionMode(value),
-    value.binaryPath,
-    value.profileRoot,
-    value.serviceFile ?? "",
-  ]);
+import { v2ApplicationConfigKey } from "./Application.configKey.ts";
 
 /** Settings-driven local preview. Harness authorization never leaks into application routing. */
 export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistration")(
@@ -73,7 +61,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         const value = yield* configuration;
         if (!value.enabled)
           return yield* failure("V2 is disabled. Enable it in Providers settings.");
-        const key = keyOf(value);
+        const key = v2ApplicationConfigKey(value);
         if (initialized) {
           if (initialized.key !== key)
             return yield* failure(
@@ -151,7 +139,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             : {}),
           authorizeExecution: async () => {
             const current = await Effect.runPromise(configuration);
-            if (!current.enabled || keyOf(current) !== key)
+            if (!current.enabled || v2ApplicationConfigKey(current) !== key)
               throw new Error(
                 "V2 configuration changed or is disabled; restart bigbud after binary/profile changes.",
               );
@@ -213,7 +201,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
     const snapshots = yield* makeProviderSnapshotStore(initialSnapshot);
     const refresh = Effect.gen(function* () {
       const config = yield* configuration;
-      if (initialized && (!config.enabled || initialized.key !== keyOf(config))) {
+      if (initialized && (!config.enabled || initialized.key !== v2ApplicationConfigKey(config))) {
         const owned = yield* initialized.adapter.listSessions();
         yield* Effect.forEach(
           owned,
@@ -228,7 +216,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             Effect.catch((error) => Effect.succeed(unavailable(true, error.issue))),
           );
       const current = yield* configuration;
-      if (current.enabled !== config.enabled || keyOf(current) !== keyOf(config))
+      if (
+        current.enabled !== config.enabled ||
+        v2ApplicationConfigKey(current) !== v2ApplicationConfigKey(config)
+      )
         snapshot = unavailable(
           current.enabled,
           "V2 settings changed during discovery. Refresh provider status; restart bigbud after binary/profile changes.",
