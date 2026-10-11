@@ -102,7 +102,6 @@ export function SystemPanel({ visible }: { visible: boolean }) {
                 .map((widget) => {
                   const metric = displayWidget(snapshot, widget);
                   if (widget === "cpu") metric.history = history.cpu;
-                  if (widget === "memory") metric.history = history.memory;
                   if (widget === "network") metric.history = history.network;
                   return <ResourceMetricCard key={widget} metric={metric} />;
                 })}

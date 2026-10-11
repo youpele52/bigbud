@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { ResourceDiskUsage, type DiskUsage } from "./ResourceDiskUsage";
+import { ResourceCapacityUsage } from "./ResourceCapacityUsage";
+import type { CapacityUsage } from "./ResourceCapacityUsage.logic";
 import { ResourceMetricHistory } from "./ResourceMetricHistory";
 import { ResourceNetworkRates, type NetworkRates } from "./ResourceNetworkRates";
 
@@ -17,7 +18,7 @@ export interface DisplayMetric {
   history?: readonly DisplayPoint[];
   historyValueFormatter?: (value: number) => string;
   historyStyle?: "network";
-  diskUsage?: DiskUsage;
+  capacityUsage?: CapacityUsage;
   networkRates?: NetworkRates;
 }
 
@@ -34,11 +35,8 @@ export function ResourceMetricCard({
         <CardTitle className="text-sm font-medium">{metric.label}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 px-4">
-        {metric.diskUsage ? (
-          <ResourceDiskUsage
-            usage={metric.diskUsage}
-            {...(metric.detail ? { detail: metric.detail } : {})}
-          />
+        {metric.capacityUsage ? (
+          <ResourceCapacityUsage usage={metric.capacityUsage} label={metric.label} large={large} />
         ) : metric.networkRates ? (
           <ResourceNetworkRates rates={metric.networkRates} />
         ) : (
@@ -46,7 +44,7 @@ export function ResourceMetricCard({
             {metric.value}
           </div>
         )}
-        {metric.detail && !metric.diskUsage ? (
+        {metric.detail && !metric.capacityUsage ? (
           <p className="truncate text-xs text-muted-foreground" title={metric.detail}>
             {metric.detail}
           </p>
@@ -56,7 +54,7 @@ export function ResourceMetricCard({
             {metric.status.replaceAll("_", " ")}
           </p>
         ) : null}
-        <ResourceMetricHistory metric={metric} large={large} />
+        {!metric.capacityUsage ? <ResourceMetricHistory metric={metric} large={large} /> : null}
       </CardContent>
     </Card>
   );

@@ -5,8 +5,10 @@ import { SUBSCRIPTION_PROVIDER_LABELS } from "./UsageSubscriptionLimits.logic";
 
 export function UsageSubscriptionLimits({
   limits,
+  compact = false,
 }: {
   readonly limits: ReadonlyArray<ServerProviderUsageLimits | undefined>;
+  readonly compact?: boolean;
 }) {
   const supportedLimits = limits
     .filter(
@@ -18,18 +20,25 @@ export function UsageSubscriptionLimits({
         SUBSCRIPTION_PROVIDER_LABELS[right.source],
       ),
     );
-  if (supportedLimits.length === 0) return null;
+  if (supportedLimits.length === 0)
+    return compact ? (
+      <p className="text-xs text-muted-foreground">
+        Subscription limits unavailable for enabled providers.
+      </p>
+    ) : null;
 
   return (
     <section aria-label="Subscription limits" className="space-y-4">
       <div className="space-y-1">
-        <h2>Subscription limits</h2>
-        <p className="text-xs text-muted-foreground">Remaining allowance</p>
+        <h2 className={compact ? "text-sm font-semibold" : undefined}>Subscription limits</h2>
+        <p className="text-xs text-muted-foreground">
+          {compact ? "Remaining allowance · provider-defined windows" : "Remaining allowance"}
+        </p>
       </div>
       <Card>
-        <CardContent className="divide-y divide-border">
+        <CardContent className={compact ? "divide-y divide-border p-3" : "divide-y divide-border"}>
           {supportedLimits.map((limit) => (
-            <UsageSubscriptionProviderLimits key={limit.source} limits={limit} />
+            <UsageSubscriptionProviderLimits key={limit.source} limits={limit} compact={compact} />
           ))}
         </CardContent>
       </Card>

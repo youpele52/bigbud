@@ -10,6 +10,7 @@ import {
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
+import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
 
 type UsageAccumulator = {
   usedTokens: number;
@@ -112,28 +113,12 @@ function sortBreakdownEntries<T extends { usedTokens: number; label: string }>(e
   );
 }
 
-function computeStreakDays(entries: ReadonlyArray<UsageEntry>) {
-  if (entries.length === 0) {
-    return 0;
-  }
-
-  const dayKeys = new Set(entries.map((entry) => entry.createdAt.slice(0, 10)));
-  const cursor = new Date();
-  cursor.setUTCHours(0, 0, 0, 0);
-
-  let streakDays = 0;
-  while (dayKeys.has(cursor.toISOString().slice(0, 10))) {
-    streakDays += 1;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-  }
-
-  return streakDays;
-}
-
 function buildUsageSummary(
   entries: ReadonlyArray<UsageEntry>,
   range: ServerUsageRange,
   historyStatus: ServerUsageSummaryResult["historyStatus"],
+  streakDays: number,
+  now: Date,
 ): ServerUsageSummaryResult {
   const totals = emptyUsageGroup();
   const bucketMap = new Map<string, UsageGroup>();
@@ -188,7 +173,7 @@ function buildUsageSummary(
 
   return {
     range,
-    generatedAt: new Date().toISOString(),
+    generatedAt: now.toISOString(),
     historyStatus,
     providerCoverage: usageProviderCoverage(),
     totals: completeUsageGroup(totals),
@@ -198,7 +183,7 @@ function buildUsageSummary(
     favoriteProvider: providers[0] ?? null,
     favoriteModel: models[0] ?? null,
     favoriteMode,
-    streakDays: computeStreakDays(entries),
+    streakDays,
   };
 }
 
@@ -208,10 +193,14 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverGetUsageSummary,
         Effect.gen(function* () {
-          const rangeStart = getRangeStart(input.range, new Date());
-          const [rows, historyStatus] = yield* Effect.all([
+          const now = new Date();
+          const rangeStart = getRangeStart(input.range, now);
+          const tomorrow = new Date(now);
+          tomorrow.setUTCHours(24, 0, 0, 0);
+          const [rows, historyStatus, activeDays] = yield* Effect.all([
             context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
             context.projectionSnapshotQuery.getUsageHistoryStatus(),
+            context.projectionSnapshotQuery.getUsageActiveDays(tomorrow.toISOString()),
           ]);
           const entries: UsageEntry[] = rows.flatMap((row) => {
             const createdAt = parseValidDate(row.createdAt);
@@ -228,7 +217,13 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
               : [];
           });
 
-          return buildUsageSummary(entries, input.range, historyStatus);
+          return buildUsageSummary(
+            entries,
+            input.range,
+            historyStatus,
+            computeCurrentStreakDays(activeDays, now),
+            now,
+          );
         }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
         { "rpc.aggregate": "server" },
       ),

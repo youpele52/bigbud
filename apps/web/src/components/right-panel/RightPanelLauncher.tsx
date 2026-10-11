@@ -6,6 +6,7 @@ import {
   NotebookTextIcon,
   TerminalIcon,
   ActivityIcon,
+  ChartNoAxesCombinedIcon,
 } from "lucide-react";
 
 import { RightPanelFilesIcon } from "./RightPanel.filesIcon";
@@ -19,6 +20,7 @@ export type LauncherToolKind =
   | "kanban"
   | "notes"
   | "system"
+  | "usage"
   | "terminal";
 
 interface RightPanelLauncherProps {
@@ -37,6 +39,7 @@ interface RightPanelLauncherProps {
   onToggleKanban: () => void;
   onToggleNotes: () => void;
   onToggleSystem: () => void;
+  onToggleUsage: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -58,6 +61,7 @@ export function RightPanelLauncher({
   onToggleKanban,
   onToggleNotes,
   onToggleSystem,
+  onToggleUsage,
   onToggleTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -124,6 +128,14 @@ export function RightPanelLauncher({
           label="Diff"
           onSelect={onToggleDiff}
           shortcutLabel={diffShortcutLabel}
+        />
+        <LauncherCard
+          description="See token usage and limits"
+          icon={ChartNoAxesCombinedIcon}
+          kind="usage"
+          label="Usage"
+          onSelect={onToggleUsage}
+          shortcutLabel={null}
         />
         <LauncherCard
           description="See this computer's resources"

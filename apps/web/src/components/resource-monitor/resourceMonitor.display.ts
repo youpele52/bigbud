@@ -2,6 +2,7 @@ import type { MonitorMetric, MonitorSnapshot } from "@bigbud/contracts/system-mo
 
 import type { ResourceWidget } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
 import type { DisplayMetric } from "./ResourceMetricCard";
+import { formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 import {
   formatBytes,
   formatPercent,
@@ -15,6 +16,12 @@ function show(metric: MonitorMetric | undefined, format: (value: number) => stri
 
 function status(metric: MonitorMetric | undefined): string {
   return metric?.status ?? "unavailable";
+}
+
+function capacityValue(metric: MonitorMetric | undefined): number | null {
+  return metric?.status === "ready" && Number.isFinite(metric.value) && metric.value >= 0
+    ? metric.value
+    : null;
 }
 
 export function hasTemperature(snapshot: MonitorSnapshot | null): boolean {
@@ -34,6 +41,15 @@ export function displayWidget(
       label: WIDGET_LABELS[widget],
       value: "—",
       status: "warming",
+      ...(widget === "memory" || widget === "disk"
+        ? {
+            capacityUsage: {
+              usedBytes: null,
+              totalBytes: null,
+              footer: ["Waiting for capacity data"],
+            },
+          }
+        : {}),
       ...(widget === "network"
         ? { networkRates: { download: "—", upload: "—" }, historyStyle: "network" as const }
         : {}),
@@ -57,6 +73,14 @@ export function displayWidget(
         status: status(snapshot.memoryUsedBytes),
         historyValueFormatter: formatBytes,
         detail: `${show(snapshot.memoryTotalBytes, formatBytes)} total · ${show(snapshot.swapUsedBytes, formatBytes)} swap used`,
+        capacityUsage: {
+          usedBytes: capacityValue(snapshot.memoryUsedBytes),
+          totalBytes: capacityValue(snapshot.memoryTotalBytes),
+          footer: [
+            `Available: ${formatCapacityGiB(capacityValue(snapshot.memoryAvailableBytes))}`,
+            `Swap: ${formatCapacityGiB(capacityValue(snapshot.swapUsedBytes))} used / ${formatCapacityGiB(capacityValue(snapshot.swapTotalBytes))} total`,
+          ],
+        },
       };
     case "disk": {
       // Show one named volume: mounted volumes may share backing storage, so
@@ -74,28 +98,27 @@ export function displayWidget(
           value: "— free",
           status: "unavailable",
           detail: `${show(snapshot.diskCapacityBytes, formatBytes)} total · Free space unavailable`,
+          capacityUsage: {
+            usedBytes: null,
+            totalBytes: null,
+            footer: ["Free space and volume unavailable"],
+          },
         };
       }
       const volume = snapshot.disks.length > 1 ? `${disk.name} (${disk.mount})` : disk.name;
-      const total = disk.totalBytes;
-      const free = disk.freeBytes;
-      const diskUsage =
-        total?.status === "ready" &&
-        free?.status === "ready" &&
-        Number.isFinite(total.value) &&
-        Number.isFinite(free.value) &&
-        total.value > 0 &&
-        free.value >= 0 &&
-        free.value <= total.value
-          ? { totalBytes: total.value, freeBytes: free.value }
-          : undefined;
+      const total = capacityValue(disk.totalBytes);
+      const free = capacityValue(disk.freeBytes);
       return {
         label: "Disk",
         value: `${show(disk.freeBytes, formatBytes)} free`,
         status:
           disk.freeBytes?.status === "ready" ? status(disk.totalBytes) : status(disk.freeBytes),
         detail: `${show(disk.totalBytes, formatBytes)} total · ${volume}`,
-        ...(diskUsage ? { diskUsage } : {}),
+        capacityUsage: {
+          usedBytes: total !== null && free !== null && free <= total ? total - free : null,
+          totalBytes: total,
+          footer: [`Free: ${formatCapacityGiB(free)}`, `${disk.name || "Volume"} (${disk.mount})`],
+        },
       };
     }
     case "network":

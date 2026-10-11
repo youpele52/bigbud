@@ -33,6 +33,7 @@ import { RightPanelLauncher } from "./RightPanelLauncher";
 import { RightPanelShell } from "./RightPanelShell";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { SystemPanel } from "../resource-monitor/SystemPanel";
+import { UsagePanel } from "../usage/UsagePanel";
 import { useRightPanelWidth } from "./useRightPanelWidth";
 
 interface RightPanelHostProps {
@@ -68,6 +69,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
   const openSystem = () => useRightPanelTabsStore.getState().openTab("system");
   const closeSystem = () => useRightPanelTabsStore.getState().closeTab("system");
+  const openUsage = () => useRightPanelTabsStore.getState().openTab("usage");
+  const closeUsage = () => useRightPanelTabsStore.getState().closeTab("usage");
 
   return (
     <RightPanelShell
@@ -93,6 +96,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onCloseKanban={closeKanbanPanel}
         onCloseNotes={closeNotesPanel}
         onCloseSystem={closeSystem}
+        onCloseUsage={closeUsage}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
@@ -101,6 +105,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onOpenKanban={openKanbanPanel}
         onOpenNotes={openNotesPanel}
         onOpenSystem={openSystem}
+        onOpenUsage={openUsage}
         onOpenTerminal={openTerminalPanel}
         notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
@@ -126,6 +131,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   onToggleKanban={openKanbanPanel}
                   onToggleNotes={openNotesPanel}
                   onToggleSystem={openSystem}
+                  onToggleUsage={openUsage}
                   onToggleTerminal={openTerminalPanel}
                   notesShortcutLabel={notesShortcutLabel}
                   terminalAvailable={Boolean(workspaceRoot)}
@@ -137,7 +143,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
               const kind = getRightPanelTabKind(tabId);
               const isActive = activeTabId === tabId && rightPanelOpen;
 
-              if (kind === "system") {
+              if (kind === "system" || kind === "usage") {
                 return (
                   <div
                     key={tabId}
@@ -147,7 +153,11 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     )}
                     inert={!isActive ? true : undefined}
                   >
-                    <SystemPanel visible={isActive} />
+                    {kind === "system" ? (
+                      <SystemPanel visible={isActive} />
+                    ) : (
+                      <UsagePanel visible={isActive} />
+                    )}
                   </div>
                 );
               }

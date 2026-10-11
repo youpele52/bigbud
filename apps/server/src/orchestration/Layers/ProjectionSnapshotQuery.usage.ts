@@ -110,3 +110,26 @@ export function makeGetUsageHistoryStatus(
       Effect.mapError(toUsageQueryError),
     );
 }
+
+export function makeGetUsageActiveDays(
+  sql: SqlClient.SqlClient,
+): ProjectionSnapshotQueryShape["getUsageActiveDays"] {
+  const listDays = SqlSchema.findAll({
+    Request: Schema.Struct({ before: IsoDateTime }),
+    Result: Schema.Struct({ day: Schema.String }),
+    execute: ({ before }) => sql`
+      SELECT DISTINCT date(occurred_at) AS day
+      FROM projection_usage_contributions
+      WHERE occurred_at < ${before} AND date(occurred_at) IS NOT NULL
+    `,
+  });
+  return (before) =>
+    listDays({ before }).pipe(
+      Effect.map((rows) => rows.map((row) => row.day)),
+      Effect.mapError((cause) =>
+        Schema.isSchemaError(cause)
+          ? toPersistenceDecodeError("ProjectionSnapshotQuery.getUsageActiveDays:decodeRows")(cause)
+          : toPersistenceSqlError("ProjectionSnapshotQuery.getUsageActiveDays:query")(cause),
+      ),
+    );
+}

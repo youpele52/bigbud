@@ -19,7 +19,7 @@ function expectFilesIcon(element: Element) {
   );
 }
 
-describe("Files panel navigation icons", () => {
+describe("Right panel navigation", () => {
   beforeEach(() => {
     useRightPanelTabsStore.setState({
       activeKind: "files",
@@ -44,10 +44,12 @@ describe("Files panel navigation icons", () => {
         onCloseBrowserTab={onSelect}
         onCloseFiles={onSelect}
         onCloseSystem={onSelect}
+        onCloseUsage={onSelect}
         onCloseTerminal={onSelect}
         onOpenNewBrowserTab={onSelect}
         onOpenFiles={onOpenFiles}
         onOpenSystem={onSelect}
+        onOpenUsage={onSelect}
         onOpenTerminal={onSelect}
         terminalAvailable
         terminalShortcutLabel={null}
@@ -61,6 +63,51 @@ describe("Files panel navigation icons", () => {
       expectFilesIcon(filesMenuItem.element());
       await filesMenuItem.click();
       expect(onOpenFiles).toHaveBeenCalledOnce();
+    } finally {
+      await mounted.unmount();
+    }
+  });
+
+  it("opens, selects, and closes Usage through the existing tab menu", async () => {
+    useRightPanelTabsStore.setState({ openTabs: ["files", "system"] });
+    const onSelect = vi.fn();
+    const mounted = await render(
+      <RightPanelTabs
+        browserShortcutLabel={null}
+        filesShortcutLabel={null}
+        hasActiveProject
+        onCloseBrowserTab={onSelect}
+        onCloseFiles={onSelect}
+        onCloseSystem={onSelect}
+        onCloseUsage={() => useRightPanelTabsStore.getState().closeTab("usage")}
+        onCloseTerminal={onSelect}
+        onOpenNewBrowserTab={onSelect}
+        onOpenFiles={onSelect}
+        onOpenSystem={onSelect}
+        onOpenUsage={() => useRightPanelTabsStore.getState().openTab("usage")}
+        onOpenTerminal={onSelect}
+        terminalAvailable
+        terminalShortcutLabel={null}
+      />,
+    );
+    try {
+      await page.getByRole("button", { name: "Open another right panel tab" }).click();
+      const menuLabels = page
+        .getByRole("menuitem")
+        .all()
+        .map((item) => item.element().textContent);
+      expect(menuLabels.indexOf("Usage")).toBeGreaterThanOrEqual(0);
+      expect(menuLabels.indexOf("Usage")).toBeLessThan(menuLabels.indexOf("System"));
+      await page.getByRole("menuitem", { name: "Usage", exact: true }).click();
+      expect(useRightPanelTabsStore.getState().activeTabId).toBe("usage");
+      expect(useRightPanelTabsStore.getState().openTabs).toEqual(["files", "system", "usage"]);
+      await expect.element(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Files", exact: true }).click();
+      expect(useRightPanelTabsStore.getState().activeTabId).toBe("files");
+      await page.getByRole("button", { name: "Usage", exact: true }).click();
+      expect(useRightPanelTabsStore.getState().activeTabId).toBe("usage");
+      await page.getByRole("button", { name: "Close Usage tab" }).click();
+      expect(useRightPanelTabsStore.getState().openTabs).toEqual(["files", "system"]);
     } finally {
       await mounted.unmount();
     }

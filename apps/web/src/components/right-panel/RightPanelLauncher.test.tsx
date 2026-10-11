@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { RightPanelLauncher } from "./RightPanelLauncher";
+import { TAB_ICONS, TAB_LABELS } from "./RightPanelTabs.shared";
 
 describe("RightPanelLauncher", () => {
   it("uses Folder02 artwork for the large Files tile", () => {
@@ -23,6 +24,7 @@ describe("RightPanelLauncher", () => {
         onToggleKanban={onToggle}
         onToggleNotes={onToggle}
         onToggleSystem={onToggle}
+        onToggleUsage={onToggle}
         onToggleTerminal={onToggle}
         terminalAvailable
         terminalShortcutLabel={null}
@@ -39,5 +41,15 @@ describe("RightPanelLauncher", () => {
     );
     expect(markup).toContain(filesIcon);
     expect(markup).not.toContain("lucide-folders");
+    expect(markup).toContain("Usage");
+    expect(markup.indexOf(">Diff</span>")).toBeLessThan(markup.indexOf(">Usage</span>"));
+    expect(markup.indexOf(">Usage</span>")).toBeLessThan(markup.indexOf(">System</span>"));
+  });
+
+  it("lists Usage before System in both shared tab catalogs", () => {
+    for (const catalog of [TAB_LABELS, TAB_ICONS]) {
+      const order = Object.keys(catalog);
+      expect(order.indexOf("usage")).toBeLessThan(order.indexOf("system"));
+    }
   });
 });

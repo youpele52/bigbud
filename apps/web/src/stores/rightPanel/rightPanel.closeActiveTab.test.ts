@@ -31,6 +31,19 @@ describe("rightPanel.closeActiveTab", () => {
     expect(useRightPanelTabsStore.getState().openTabs).toEqual(["files"]);
   });
 
+  it("restores Usage selection on reopen and closes it with the existing active-tab shortcut", () => {
+    useRightPanelTabsStore.getState().openTab("system");
+    useRightPanelTabsStore.getState().openTab("usage");
+    useRightPanelTabsStore.getState().openTab("usage");
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(["system", "usage"]);
+    useRightPanelTabsStore.getState().toggleRightPanel();
+    useRightPanelTabsStore.getState().toggleRightPanel();
+    expect(useRightPanelTabsStore.getState().activeTabId).toBe("usage");
+    expect(closeActiveRightPanelTab()).toBe(true);
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(["system"]);
+    expect(useRightPanelTabsStore.getState().activeTabId).toBe("system");
+  });
+
   it("does nothing when the launcher is showing", () => {
     useRightPanelTabsStore.getState().openTab("files");
     useRightPanelTabsStore.getState().showLauncher();

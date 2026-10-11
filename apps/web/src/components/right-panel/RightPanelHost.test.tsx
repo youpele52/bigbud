@@ -9,11 +9,29 @@ const filesPanelPropsMock = vi.hoisted(() => ({ props: [] as Array<Record<string
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
-    activeKind: "browser" | "diff" | "files" | "git" | "notes" | "system" | "terminal" | null;
+    activeKind:
+      | "browser"
+      | "diff"
+      | "files"
+      | "git"
+      | "notes"
+      | "system"
+      | "usage"
+      | "terminal"
+      | null;
     activeTabId: string | null;
     openTabs: ReadonlyArray<string>;
     rightPanelOpen: boolean;
-    lastActiveKind: "browser" | "diff" | "files" | "git" | "notes" | "system" | "terminal" | null;
+    lastActiveKind:
+      | "browser"
+      | "diff"
+      | "files"
+      | "git"
+      | "notes"
+      | "system"
+      | "usage"
+      | "terminal"
+      | null;
   };
 
   let state: RightPanelTabsState = {
@@ -124,6 +142,12 @@ vi.mock("../notes/NotesPanel", () => ({
 vi.mock("../resource-monitor/SystemPanel", () => ({
   SystemPanel: ({ visible }: { visible: boolean }) => (
     <div data-testid="system-panel">{String(visible)}</div>
+  ),
+}));
+
+vi.mock("../usage/UsagePanel", () => ({
+  UsagePanel: ({ visible }: { visible: boolean }) => (
+    <div data-testid="usage-panel">{String(visible)}</div>
   ),
 }));
 
@@ -299,5 +323,24 @@ describe("RightPanelHost", () => {
     });
     const markup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
     expect(markup).toContain('data-testid="system-panel">true');
+  });
+
+  it("renders Usage without a thread, gates inactive visibility, and unmounts when panel closes", () => {
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "usage",
+      activeTabId: "usage",
+      openTabs: ["usage", "system"],
+      rightPanelOpen: true,
+    });
+    expect(renderToStaticMarkup(<RightPanelHost />)).toContain('data-testid="usage-panel">true');
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: "system",
+      activeTabId: "system",
+    });
+    expect(renderToStaticMarkup(<RightPanelHost />)).toContain(
+      'inert=""><div data-testid="usage-panel">false',
+    );
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({ rightPanelOpen: false });
+    expect(renderToStaticMarkup(<RightPanelHost />)).not.toContain('data-testid="usage-panel"');
   });
 });

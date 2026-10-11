@@ -11,8 +11,10 @@ import { UsageSubscriptionLimitProgress } from "./UsageSubscriptionLimits.progre
 
 export function UsageSubscriptionProviderLimits({
   limits,
+  compact = false,
 }: {
   readonly limits: ServerProviderUsageLimits;
+  readonly compact?: boolean;
 }) {
   const hasRetainedLimits = limits.status === "available" || limits.status === "stale";
   const title = `${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits`;
@@ -61,7 +63,9 @@ export function UsageSubscriptionProviderLimits({
         <StatusBanner icon={<ClockIcon />} description={`Checking ${title}...`} />
       ) : null}
       {hasRetainedLimits ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div
+          className={compact ? "grid gap-4 @min-[640px]:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}
+        >
           {limits.windows.map((window) => (
             <UsageSubscriptionLimitProgress
               key={window.id}

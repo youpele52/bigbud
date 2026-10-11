@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  ChartNoAxesCombinedIcon,
   Columns3Icon,
   DiffIcon,
   GitBranchIcon,
@@ -19,6 +20,7 @@ export const TAB_LABELS: Record<RightPanelTabKind, string> = {
   git: "Git",
   kanban: "Kanban",
   notes: "Notes",
+  usage: "Usage",
   system: "System",
   terminal: "Terminal",
 };
@@ -30,6 +32,7 @@ export const TAB_ICONS: Record<RightPanelTabKind, ComponentType<{ className?: st
   git: GitBranchIcon,
   kanban: Columns3Icon,
   notes: NotebookTextIcon,
+  usage: ChartNoAxesCombinedIcon,
   system: ActivityIcon,
   terminal: TerminalIcon,
 };

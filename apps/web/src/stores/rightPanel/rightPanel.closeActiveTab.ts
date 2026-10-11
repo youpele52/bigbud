@@ -45,6 +45,9 @@ export function closeRightPanelTabById(tabId: RightPanelTabId): void {
     case "system":
       useRightPanelTabsStore.getState().closeTab("system");
       return;
+    case "usage":
+      useRightPanelTabsStore.getState().closeTab("usage");
+      return;
     case "terminal":
       closeTerminalPanel();
       return;

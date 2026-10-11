@@ -65,7 +65,6 @@ export function SystemMonitorHostView() {
   const cpu = displayWidget(snapshot, "cpu");
   cpu.history = history.cpu;
   const memory = displayWidget(snapshot, "memory");
-  memory.history = history.memory;
   const disk = displayWidget(snapshot, "disk");
   const network = displayWidget(snapshot, "network");
   network.history = history.network;
