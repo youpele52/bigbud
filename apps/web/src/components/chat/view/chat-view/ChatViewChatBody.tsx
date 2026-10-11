@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
+import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
 import { useCallback } from "react";
 
 import { useThreadActions } from "~/hooks/useThreadActions";
 import BranchToolbar from "~/components/git/BranchToolbar";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
+import { LegacyOpencodeNotice } from "../../common/LegacyOpencodeNotice";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
@@ -76,6 +78,9 @@ export function ChatViewChatBody({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-chat-body>
+      {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
+        <LegacyOpencodeNotice />
+      ) : null}
       <ProviderStatusBanner status={composer.activeProviderStatus} />
       <ContextWindowWarningBanner
         threadId={base.activeThread!.id}
