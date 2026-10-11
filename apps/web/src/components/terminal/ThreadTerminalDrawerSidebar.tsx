@@ -1,4 +1,4 @@
-import { type ProviderKind } from "@bigbud/contracts";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { TerminalSquare, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
@@ -9,6 +9,7 @@ import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
 
 interface ThreadTerminalDrawerSidebarProps {
+  threadId?: ThreadId;
   resolvedTerminalGroups: ReadonlyArray<ThreadTerminalGroup>;
   resolvedActiveTerminalId: string;
   normalizedTerminalIds: ReadonlyArray<string>;
@@ -38,6 +39,7 @@ interface ThreadTerminalDrawerSidebarProps {
 }
 
 export function ThreadTerminalDrawerSidebar({
+  threadId,
   resolvedTerminalGroups,
   resolvedActiveTerminalId,
   normalizedTerminalIds,
@@ -69,6 +71,7 @@ export function ThreadTerminalDrawerSidebar({
     <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
         <ThreadTerminalDrawerToolbar
+          threadId={threadId}
           variant="sidebar"
           hasReachedSplitLimit={hasReachedSplitLimit}
           renameTerminalActionLabel={renameTerminalActionLabel}

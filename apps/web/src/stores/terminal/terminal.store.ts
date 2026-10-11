@@ -41,6 +41,7 @@ import {
   setTerminalLabelOverrideByThreadId,
 } from "./terminal.store.labels";
 import { type TerminalStateStoreState } from "./terminal.store.types";
+import { terminalWslSelectionPatch, removeOrphanedWslSelections } from "./terminal.store.wsl";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
 export {
@@ -102,6 +103,9 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       };
 
       return {
+        terminalWslDistributionByThreadId: {},
+        setTerminalWslDistribution: (threadId, distribution) =>
+          set((state) => terminalWslSelectionPatch(state, threadId, distribution)),
         terminalStateByThreadId: {},
         panelTerminalStateByThreadId: {},
         terminalLabelOverridesByThreadId: {},
@@ -276,6 +280,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               !hadPanelTerminalState &&
               !hadLabelOverrides &&
               !hadLaunchContext &&
+              state.terminalWslDistributionByThreadId[threadId] === undefined &&
               !transient.removed
             ) {
               return state;
@@ -291,6 +296,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
             delete nextLaunchContexts[threadId];
             return {
+              ...terminalWslSelectionPatch(state, threadId, null),
               terminalStateByThreadId: nextTerminalStateByThreadId,
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
               terminalLabelOverridesByThreadId: nextLabelOverridesByThreadId,
@@ -300,6 +306,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           }),
         removeOrphanedTerminalStates: (activeThreadIds) =>
           set((state) => {
+            const wslSelections = removeOrphanedWslSelections(state, activeThreadIds);
             const orphanedIds = Object.keys(state.terminalStateByThreadId).filter(
               (id) => !activeThreadIds.has(id as ThreadId),
             );
@@ -323,6 +330,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               orphanedPanelIds.length === 0 &&
               orphanedLabelOverrideIds.length === 0 &&
               orphanedLaunchContextIds.length === 0 &&
+              wslSelections.terminalWslDistributionByThreadId ===
+                state.terminalWslDistributionByThreadId &&
               !transient.removed
             ) {
               return state;
@@ -340,6 +349,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               delete nextLaunchContexts[id as ThreadId];
             }
             return {
+              ...wslSelections,
               terminalStateByThreadId: next,
               panelTerminalStateByThreadId: nextPanel,
               terminalLabelOverridesByThreadId: nextOverridesByThreadId,
@@ -354,6 +364,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       version: 1,
       storage: createJSONStorage(createTerminalStateStorage),
       partialize: (state) => ({
+        terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,
         terminalStateByThreadId: state.terminalStateByThreadId,
         terminalLabelOverridesByThreadId: state.terminalLabelOverridesByThreadId,
       }),

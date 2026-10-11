@@ -19,6 +19,8 @@ import { useTerminalViewportSession } from "./TerminalViewport.session";
 import { TerminalViewportStatus } from "./TerminalViewportStatus";
 import { useTerminalResizeRequest } from "./TerminalViewport.resize";
 import { useTerminalLaunchBinding } from "./TerminalViewport.launch";
+import { readTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { writeSystemMessage } from "./ThreadTerminalDrawer.logic";
 import { fitTerminalViewport } from "./TerminalViewport.fit";
 export { fitTerminalViewport } from "./TerminalViewport.fit";
 import {
@@ -29,6 +31,7 @@ import {
   acceptsTerminalDrop,
   pasteDroppedTerminalPaths,
   readDroppedTerminalPaths,
+  rejectWslTerminalFileDrop,
 } from "./TerminalViewport.drop";
 
 export interface TerminalViewportProps {
@@ -242,12 +245,20 @@ export function TerminalViewport({
     dragDepthRef.current = 0;
     setIsDragOver(false);
     if (!inputEnabled) return;
+    const actualTarget =
+      readTerminalLaunch(threadId, terminalId)?.executionTargetId ?? launch.executionTargetId;
+    if (
+      rejectWslTerminalFileDrop(actualTarget, (message) => {
+        if (terminalRef.current) writeSystemMessage(terminalRef.current, message);
+      })
+    )
+      return;
     const paths = readDroppedTerminalPaths({
       dataTransfer: event.dataTransfer,
       readNativeFilePath,
     });
     const pasteablePaths = (
-      isRemoteExecutionTargetId(launch.executionTargetId)
+      isRemoteExecutionTargetId(actualTarget)
         ? paths.filter((path) => path.origin === "internal")
         : paths
     ).map((path) => path.path);

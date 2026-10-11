@@ -14,6 +14,8 @@ import {
 } from "./Manager.shell";
 import { buildRemoteTerminalShellCandidate } from "./Manager.remote.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import { buildWslTerminalShellCandidate } from "./Manager.wsl.invocation";
 import {
   cleanupProcessHandles,
   enqueueProcessEvent,
@@ -33,6 +35,7 @@ export function trySpawnWith(
   session: TerminalSessionState,
   shellCandidates: ReadonlyArray<{
     shell: string;
+    label?: string;
     args?: string[];
     dropPathMode: TerminalSessionState["dropPathMode"];
   }>,
@@ -79,7 +82,10 @@ export function trySpawnWith(
         rows: session.rows,
         env: spawnEnv,
         executionTargetId: session.executionTargetId,
-        ...(isLocalExecutionTarget(session.executionTargetId) ? {} : { remoteCwd: session.cwd }),
+        ...(isLocalExecutionTarget(session.executionTargetId) ||
+        isWslTerminalTargetId(session.executionTargetId)
+          ? {}
+          : { remoteCwd: session.cwd }),
       }),
     );
 
@@ -198,7 +204,9 @@ export function startSessionWith(
           Effect.gen(function* () {
             const shellCandidates = isLocalExecutionTarget(session.executionTargetId)
               ? resolveShellCandidates(ctx.shellResolver)
-              : [buildRemoteTerminalShellCandidate(session)];
+              : isWslTerminalTargetId(session.executionTargetId)
+                ? [buildWslTerminalShellCandidate(session)]
+                : [buildRemoteTerminalShellCandidate(session)];
             const terminalEnv = createTerminalSpawnEnv(
               process.env,
               isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,

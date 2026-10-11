@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./terminalExecutionTarget": {
+      "types": "./src/terminalExecutionTarget.ts",
+      "import": "./src/terminalExecutionTarget.ts"
+    },
     "./terminalOwner/cleanupGrant.model": {
       "types": "./src/terminalOwner/cleanupGrant.model.ts",
       "import": "./src/terminalOwner/cleanupGrant.model.ts"

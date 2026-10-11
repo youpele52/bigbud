@@ -71,10 +71,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           executionTargetId,
           cwd: request.cwd,
           worktreePath: request.worktreePath,
+          env: request.env,
         });
         const input = {
           ...request,
           cwd: folder.cwd,
+          ...(folder.wslIdentity ? { worktreePath: folder.worktreePath, env: folder.env } : {}),
           ...(folder.directoryFallback ? { worktreePath: null, env: undefined } : {}),
         };
         const sessionKey = toSessionKey(input.threadId, terminalId);
@@ -97,6 +99,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             runtimeEnv: normalizedRuntimeEnv(input.env),
           });
           session.directoryFallback = folder.directoryFallback;
+          session.wslIdentity = folder.wslIdentity;
 
           const createdSession = session;
           session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
@@ -157,6 +160,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           liveSession.worktreePath = input.worktreePath ?? null;
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.directoryFallback = folder.directoryFallback;
+          liveSession.wslIdentity = folder.wslIdentity;
           resetSessionRuntimeState(liveSession);
           yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         }
@@ -241,10 +245,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           executionTargetId,
           cwd: request.cwd,
           worktreePath: request.worktreePath,
+          env: request.env,
         });
         const input = {
           ...request,
           cwd: folder.cwd,
+          ...(folder.wslIdentity ? { worktreePath: folder.worktreePath, env: folder.env } : {}),
           ...(folder.directoryFallback ? { worktreePath: null, env: undefined } : {}),
         };
         const sessionKey = toSessionKey(input.threadId, terminalId);
@@ -290,6 +296,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const cols = input.cols ?? session.cols;
         const rows = input.rows ?? session.rows;
         session.directoryFallback = folder.directoryFallback;
+        session.wslIdentity = folder.wslIdentity;
         resetSessionRuntimeState(session);
         yield* persistHistory(input.threadId, terminalId, session.history);
         yield* acquireWorktreeLease({

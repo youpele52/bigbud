@@ -1,6 +1,8 @@
 import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/terminal.ts";
+import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 
 export interface TerminalLaunchBinding {
+  wslIdentity?: TerminalWslIdentity | undefined;
   cwd: string;
   worktreePath?: string | null | undefined;
   executionTargetId?: string | undefined;
@@ -8,6 +10,13 @@ export interface TerminalLaunchBinding {
 }
 
 const bindings = new Map<string, TerminalLaunchBinding>();
+const listeners = new Set<() => void>();
+export function subscribeTerminalLaunch(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 const key = (threadId: string, terminalId: string) => JSON.stringify([threadId, terminalId]);
 
 /** Read an existing launch without binding a retained terminal to new chat settings. */
@@ -41,13 +50,16 @@ export function recordTerminalLaunch(snapshot: TerminalSessionSnapshot): void {
   const previous = bindings.get(id);
   bindings.set(id, {
     ...previous,
+    wslIdentity: snapshot.wslIdentity,
     cwd: snapshot.cwd,
     worktreePath: snapshot.worktreePath,
     executionTargetId: snapshot.executionTargetId,
     runtimeEnv: snapshot.runtimeEnv ? { ...snapshot.runtimeEnv } : undefined,
   });
+  for (const listener of listeners) listener();
 }
 
 export function forgetTerminalLaunch(threadId: string, terminalId: string): void {
   bindings.delete(key(threadId, terminalId));
+  for (const listener of listeners) listener();
 }

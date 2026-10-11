@@ -13,6 +13,8 @@ import {
 import type { TerminalAgentVersion } from "./terminal.store.identity";
 
 export interface TerminalStateStoreState {
+  terminalWslDistributionByThreadId: Record<string, string>;
+  setTerminalWslDistribution: (threadId: ThreadId, distribution: string | null) => void;
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLabelOverridesByThreadId: Record<ThreadId, Record<string, string>>;

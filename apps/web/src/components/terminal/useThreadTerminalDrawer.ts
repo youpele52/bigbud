@@ -15,6 +15,7 @@ import { useServerSettings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
 import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -69,7 +70,13 @@ export function useThreadTerminalDrawer(
   const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
   // Leave home expansion to the launch target, not to the server's welcome payload.
   const defaultChatCwd = useServerSettings().defaultChatCwd;
-  const executionTargetId = resolveTerminalExecutionTargetId({ serverThread, project });
+  const distribution = useTerminalStateStore(
+    (state) => state.terminalWslDistributionByThreadId[threadId],
+  );
+  const executionTargetId = resolveManualTerminalTarget(
+    resolveTerminalExecutionTargetId({ serverThread, project }),
+    distribution,
+  );
   const useLegacyOutputDetection =
     executionTargetId !== undefined && executionTargetId !== LOCAL_EXECUTION_TARGET_ID;
 

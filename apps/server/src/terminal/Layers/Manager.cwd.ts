@@ -9,9 +9,13 @@ import { isLocalExecutionTarget } from "../../executionTargets";
 import { runSshCommand } from "../../ssh/sshProcess";
 import { assertSshExecutionTargetReady } from "../../ssh/sshVerification";
 import type { RuntimePathIdentity } from "./Manager.types";
+import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import { resolveWslTerminalFolder } from "./Manager.wsl";
 
 export const TERMINAL_FOLDER_TIMEOUT_MS = 10_000;
 export interface TerminalFolderInput {
+  env?: Record<string, string> | undefined;
   threadId: string;
   terminalId: string;
   executionTargetId: string;
@@ -20,6 +24,9 @@ export interface TerminalFolderInput {
 }
 
 export interface ResolvedTerminalFolder {
+  wslIdentity?: TerminalWslIdentity | undefined;
+  worktreePath?: string | null | undefined;
+  env?: Record<string, string> | undefined;
   cwd: string;
   runtimePathIdentity?: RuntimePathIdentity | undefined;
   directoryFallback?: { requestedCwd: string; reason: string };
@@ -98,6 +105,8 @@ export function makeResolveTerminalFolder(
   return Effect.fn("terminal.resolveFolder")(function* (
     input: TerminalFolderInput,
   ): Effect.fn.Return<ResolvedTerminalFolder, TerminalCwdError | TerminalExecutionTargetError> {
+    if (isWslTerminalTargetId(input.executionTargetId))
+      return yield* resolveWslTerminalFolder(input);
     const local = isLocalExecutionTarget(input.executionTargetId);
     if (!local) {
       yield* Effect.try({

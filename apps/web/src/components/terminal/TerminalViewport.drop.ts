@@ -2,6 +2,19 @@ import { type TerminalDropPathMode } from "@bigbud/contracts";
 import { type Terminal } from "@xterm/xterm";
 
 import { BIGBUD_FILES_PANEL_DRAG_MIME, parseFilesPanelDragEntry } from "../files/filesPanel.dnd";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+
+/** Explicit WSL sessions cannot forward host/file-panel paths to unsupported workspace APIs. */
+export function rejectWslTerminalFileDrop(
+  target: string | undefined,
+  notice: (message: string) => void,
+): boolean {
+  if (!isWslTerminalTargetId(target)) return false;
+  notice(
+    "File drops are unavailable for WSL terminals. Enter a path inside the selected distro instead.",
+  );
+  return true;
+}
 
 export interface DroppedTerminalPath {
   readonly path: string;

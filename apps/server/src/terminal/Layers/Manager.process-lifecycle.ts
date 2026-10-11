@@ -78,6 +78,7 @@ export function enqueueProcessEvent(
 
 export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
   return {
+    ...(session.wslIdentity ? { wslIdentity: session.wslIdentity } : {}),
     threadId: session.threadId,
     terminalId: session.terminalId,
     executionTargetId: session.executionTargetId,

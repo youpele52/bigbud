@@ -302,6 +302,7 @@ export default function ThreadTerminalDrawer({
 
       {!hasTerminalSidebar && (
         <ThreadTerminalDrawerFloatingActions
+          threadId={threadId}
           expanded={fillAvailableSpace}
           onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
           hasReachedSplitLimit={hasReachedSplitLimit}
@@ -358,6 +359,7 @@ export default function ThreadTerminalDrawer({
 
           {hasTerminalSidebar && (
             <ThreadTerminalDrawerSidebar
+              threadId={threadId}
               expanded={fillAvailableSpace}
               onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
               resolvedTerminalGroups={resolvedTerminalGroups}

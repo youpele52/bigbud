@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { PtyAdapter, PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
+import { terminalNodePtyArgs } from "./NodePTY.wsl";
 
 let didEnsureSpawnHelperExecutable = false;
 
@@ -103,13 +104,17 @@ export const layer = Layer.effect(
     return {
       spawn: Effect.fn(function* (input) {
         yield* ensureNodePtySpawnHelperExecutableCached;
-        const ptyProcess = nodePty.spawn(input.shell, input.args ?? [], {
-          cwd: input.cwd,
-          cols: input.cols,
-          rows: input.rows,
-          env: input.env,
-          name: globalThis.process.platform === "win32" ? "xterm-color" : "xterm-256color",
-        });
+        const ptyProcess = nodePty.spawn(
+          input.shell,
+          terminalNodePtyArgs(input.args ?? [], input.executionTargetId),
+          {
+            cwd: input.cwd,
+            cols: input.cols,
+            rows: input.rows,
+            env: input.env,
+            name: globalThis.process.platform === "win32" ? "xterm-color" : "xterm-256color",
+          },
+        );
         return new NodePtyProcess(ptyProcess);
       }),
     } satisfies PtyAdapterShape;

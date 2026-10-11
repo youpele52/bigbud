@@ -11,6 +11,7 @@ import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
+import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,6 +30,7 @@ export const DEFAULT_OPEN_ROWS = 30;
 // ---------------------------------------------------------------------------
 
 export interface TerminalSessionState {
+  wslIdentity?: TerminalWslIdentity | undefined;
   remoteOwnerRecoveryRequired?: boolean;
   threadId: string;
   terminalId: string;

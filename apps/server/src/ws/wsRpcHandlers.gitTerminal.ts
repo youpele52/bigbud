@@ -14,6 +14,8 @@ import {
 } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import { listWslDistributions } from "../terminal/Layers/Manager.wsl.process";
+import { TerminalWslDiscoveryError } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import {
   connectRemoteAgentEffect,
   getRemoteAgentUpdateStatusEffect,
@@ -52,6 +54,18 @@ function withGitMutationOperationId<
 
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.terminalWslDistributions]: () =>
+      observeRpcEffect(
+        WS_METHODS.terminalWslDistributions,
+        Effect.tryPromise({
+          try: (signal) => listWslDistributions(undefined, undefined, { signal }),
+          catch: () =>
+            new TerminalWslDiscoveryError({
+              message: "WSL distribution discovery failed. Check WSL installation and retry.",
+            }),
+        }),
+        { "rpc.aggregate": "terminal" },
+      ),
     [WS_METHODS.serverConnectRemoteAgent]: (
       input: Parameters<typeof connectRemoteAgentEffect>[0],
     ) =>

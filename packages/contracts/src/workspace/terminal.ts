@@ -6,6 +6,7 @@ import {
 } from "../core/baseSchemas";
 import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 import { ProviderKind } from "../orchestration/orchestration.provider";
+import { TerminalWslIdentity } from "./terminal.wsl";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -95,6 +96,7 @@ export const TerminalDropPathMode = Schema.Literals(["posix", "powershell", "cmd
 export type TerminalDropPathMode = typeof TerminalDropPathMode.Type;
 
 export const TerminalSessionSnapshot = Schema.Struct({
+  wslIdentity: Schema.optional(TerminalWslIdentity),
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   executionTargetId: Schema.optional(ExecutionTargetId),

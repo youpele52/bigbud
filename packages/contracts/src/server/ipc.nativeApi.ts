@@ -32,6 +32,7 @@ import type { TerminalApplicationId } from "../workspace/terminalApplication";
 import type * as Git from "../workspace/git";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
+import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
 import type { ContextMenuItem } from "./ipc";
 import type * as Kanban from "./kanban";
@@ -56,6 +57,7 @@ export interface NativeApi {
     ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
+    wslDistributions?: () => Promise<TerminalWslDistributions>;
     snapshot?: (
       input: typeof Terminal.TerminalSnapshotInput.Encoded,
     ) => Promise<Terminal.TerminalSessionSnapshot>;

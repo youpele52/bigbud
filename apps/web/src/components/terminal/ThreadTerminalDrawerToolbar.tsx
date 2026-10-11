@@ -3,8 +3,11 @@ import { Maximize2, Minimize2, Pencil, Plus, SquareSplitHorizontal, Trash2 } fro
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { TerminalActionButton } from "./TerminalActionButton";
+import type { ThreadId } from "@bigbud/contracts";
+import { TerminalTargetPicker } from "./TerminalTargetPicker";
 
 export interface ThreadTerminalDrawerToolbarProps {
+  threadId?: ThreadId | undefined;
   hasReachedSplitLimit: boolean;
   renameTerminalActionLabel: string;
   splitTerminalActionLabel: string;
@@ -22,6 +25,7 @@ export interface ThreadTerminalDrawerToolbarProps {
 
 /** Shared action strip for the single-terminal and multi-terminal drawer layouts. */
 export function ThreadTerminalDrawerToolbar({
+  threadId,
   hasReachedSplitLimit,
   renameTerminalActionLabel,
   splitTerminalActionLabel,
@@ -46,6 +50,13 @@ export function ThreadTerminalDrawerToolbar({
 
   return (
     <div className={cn("inline-flex items-center", sidebar && "h-full")}>
+      {threadId && (
+        <TerminalTargetPicker
+          threadId={threadId}
+          terminalId={resolvedActiveTerminalId}
+          compact={sidebar}
+        />
+      )}
       <TerminalActionButton
         className={buttonClassName}
         onClick={onNewTerminalAction}
