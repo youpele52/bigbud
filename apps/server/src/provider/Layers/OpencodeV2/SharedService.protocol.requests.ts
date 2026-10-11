@@ -1,4 +1,9 @@
-import { makeV2SchemaReader, schemaObject, type V2SchemaObject } from "./SharedService.schema.ts";
+import {
+  acceptsV2Values,
+  makeV2SchemaReader,
+  schemaObject,
+  type V2SchemaObject,
+} from "./SharedService.schema.ts";
 
 function requiredFields(shape: V2SchemaObject, supported: readonly string[]) {
   if (shape.required === undefined) return;
@@ -9,20 +14,11 @@ function requiredFields(shape: V2SchemaObject, supported: readonly string[]) {
     throw new Error("Unsupported required request field.");
 }
 
-function accepts(shape: V2SchemaObject, values: readonly string[]) {
-  const enumeration = shape.enum;
-  if (
-    enumeration !== undefined &&
-    (!Array.isArray(enumeration) || values.some((value) => !enumeration.includes(value)))
-  )
-    throw new Error("Unsupported request enum.");
-}
-
 /** Only the nested objects emitted by owned-session creation, policy and admission are interpreted. */
 export function verifyV2ConsumedRequest(
   operation: V2SchemaObject,
   expected: Record<string, string> | undefined,
-  read: ReturnType<typeof makeV2SchemaReader>,
+  read: ReturnType<typeof makeV2SchemaReader>["input"],
 ) {
   if (!expected) {
     if (operation.requestBody && schemaObject(operation.requestBody).required === true)
@@ -44,12 +40,20 @@ export function verifyV2ConsumedRequest(
     requiredFields(location, ["directory"]);
   }
   if (expected.metadata) requiredFields(read.field(body, "metadata", "object"), []);
+  if (expected.files) {
+    const attachment = read.resolve(read.field(body, "files", "array").items);
+    read.field(attachment, "uri", "string");
+    read.field(attachment, "name", "string");
+    requiredFields(attachment, ["uri", "name"]);
+  }
+  if (expected.delivery) acceptsV2Values(read.field(body, "delivery", "string"), ["queue"]);
+  if (expected.resume) acceptsV2Values(read.field(body, "resume", "boolean"), [true]);
   if (expected.permissions) {
     const rule = read.resolve(read.field(body, "permissions", "array").items);
     for (const field of ["action", "resource", "effect"]) read.field(rule, field, "string");
     requiredFields(rule, ["action", "resource", "effect"]);
-    accepts(read.field(rule, "effect"), ["allow", "ask", "deny"]);
+    acceptsV2Values(read.field(rule, "effect"), ["allow", "ask", "deny"]);
   }
   if (expected.decision)
-    accepts(read.field(body, "decision", "string"), ["once", "always", "reject"]);
+    acceptsV2Values(read.field(body, "decision", "string"), ["once", "always", "reject"]);
 }

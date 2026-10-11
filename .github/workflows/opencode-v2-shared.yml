@@ -65,6 +65,9 @@ jobs:
           src/provider/Layers/OpencodeV2/SharedService.storage.native.test.ts
           src/provider/Layers/OpencodeV2/SharedService.windows.native.test.ts
           src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.direction.test.ts
+          src/provider/Layers/OpencodeV2/ProfileIsolation.windows.test.ts
           src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
       - name: Package resolver and ARM64 PE identity tests
         run: >-

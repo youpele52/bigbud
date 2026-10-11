@@ -1,5 +1,15 @@
-import { makeV2SchemaReader, schemaObject, type V2SchemaObject } from "./SharedService.schema.ts";
+import {
+  acceptsV2Values,
+  makeV2SchemaReader,
+  schemaObject,
+  type V2SchemaObject,
+} from "./SharedService.schema.ts";
 import { verifyV2ConsumedRequest } from "./SharedService.protocol.requests.ts";
+import {
+  verifyV2InboxUser,
+  verifyV2MessageProjection,
+  verifyV2SessionProjection,
+} from "./SharedService.protocol.projections.ts";
 
 /** Finite request fields the shared application actually supplies. Never admit new mandatory inputs. */
 export const V2_SHARED_REQUEST_FIELDS: Record<string, Record<string, string>> = {
@@ -12,7 +22,14 @@ export const V2_SHARED_REQUEST_FIELDS: Record<string, Record<string, string>> = 
   },
   "session.update": { permissions: "array" },
   "session.switchModel": { model: "object" },
-  "session.prompt": { id: "string", text: "string", files: "array", metadata: "object" },
+  "session.prompt": {
+    id: "string",
+    text: "string",
+    files: "array",
+    metadata: "object",
+    delivery: "string",
+    resume: "boolean",
+  },
   "session.permission.reply": { decision: "string" },
   "session.form.reply": { answer: "" },
   "experimental.session.instructions.entry.put": { value: "" },
@@ -51,7 +68,7 @@ export function verifyV2ConsumedOperation(
   read: ReturnType<typeof makeV2SchemaReader>,
 ) {
   const expected = V2_SHARED_REQUEST_FIELDS[id];
-  verifyV2ConsumedRequest(operation, expected, read);
+  verifyV2ConsumedRequest(operation, expected, read.input);
   const parameters = (operation.parameters ?? []) as unknown[];
   if (!Array.isArray(parameters)) throw new Error("Invalid parameters.");
   for (const match of route.matchAll(/\{([^}]+)\}/g)) {
@@ -59,18 +76,28 @@ export function verifyV2ConsumedOperation(
       const p = schemaObject(item);
       return p.name === match[1] && p.in === "path" && p.required === true;
     });
-    if (!parameter || read.resolve(schemaObject(parameter).schema).type !== "string")
+    if (!parameter || read.input.resolve(schemaObject(parameter).schema).type !== "string")
       throw new Error("Missing path parameter.");
   }
   for (const parameter of parameters) {
     const p = schemaObject(parameter);
     if (p.required === true && p.in !== "path") throw new Error("Unsupported required parameter.");
   }
-  if (
-    id === "session.interrupt" &&
-    !parameters.some((p) => schemaObject(p).name === "resume" && schemaObject(p).in === "query")
-  )
-    throw new Error("Missing non-resuming interrupt.");
+  const query = (name: string) => {
+    const parameter = parameters.find(
+      (p) => schemaObject(p).name === name && schemaObject(p).in === "query",
+    );
+    const shape = read.input.resolve(schemaObject(parameter).schema);
+    if (shape.type !== "string") throw new Error("Incompatible query parameter.");
+    return shape;
+  };
+  if (id === "session.interrupt") acceptsV2Values(query("resume"), ["false"]);
+  if (id === "session.list" || id === "session.message.list") {
+    acceptsV2Values(query("limit"), id === "session.list" ? ["200"] : ["100", "1"]);
+    query("cursor");
+    if (id === "session.message.list") acceptsV2Values(query("order"), ["asc"]);
+    else query("directory");
+  }
   const responses = schemaObject(operation.responses);
   const kind = V2_SHARED_RESPONSES[id];
   if (!kind) {
@@ -79,8 +106,8 @@ export function verifyV2ConsumedOperation(
   }
   if (kind === "sse") {
     const response = read.content(responses["200"], "text/event-stream");
-    read.field(response, "event", "string");
-    read.field(response, "data", "string"); // V2EventEncoded is JSON encoded in an SSE data string.
+    read.requiredField(response, "event", "string");
+    read.requiredField(response, "data", "string"); // V2EventEncoded is JSON encoded in an SSE data string.
     const media = schemaObject(
       schemaObject(schemaObject(responses["200"]).content)["text/event-stream"],
     );
@@ -90,36 +117,28 @@ export function verifyV2ConsumedOperation(
   }
   const response = read.content(responses["200"]);
   if (kind === "info") {
-    read.field(response, "version", "string");
-    read.field(response, "pid", "integer");
+    read.requiredField(response, "version", "string");
+    read.requiredField(response, "pid", "integer");
     return;
   }
   if (kind === "interrupt") {
-    read.field(response, "interrupted", "boolean");
+    read.requiredField(response, "interrupted", "boolean");
     return;
   }
-  const data = read.field(
+  const data = read.requiredField(
     response,
     "data",
     kind === "array" || kind === "page" ? "array" : "object",
   );
-  if (kind === "page") read.field(response, "cursor", "object");
-  if (kind === "session") {
-    for (const name of ["id", "projectID"]) read.field(data, name, "string");
-    read.field(read.field(data, "location", "object"), "directory", "string");
-    read.field(data, "metadata", "object");
-    read.field(data, "permissions", "array");
-    const model = read.field(data, "model", "object");
-    read.field(model, "id", "string");
-    read.field(model, "providerID", "string");
-  }
+  if (kind === "page")
+    read.nullableField(read.requiredField(response, "cursor", "object"), "next", "string");
+  if (kind === "session") verifyV2SessionProjection(data, read);
+  if (id === "session.list") verifyV2SessionProjection(read.resolve(data.items), read);
+  if (id === "session.message.list") verifyV2MessageProjection(data.items, read);
+  if (id === "session.inbox.list") verifyV2InboxUser(read.tagged(data.items, "type", "user"), read);
   if (kind === "admission" || kind === "interaction") {
     read.field(data, "id", "string");
-    if (kind === "admission") {
-      read.field(data, "sessionID", "string");
-      read.field(data, "type", "string");
-      read.field(read.field(data, "payload", "object"), "metadata", "object");
-    }
+    if (kind === "admission") verifyV2InboxUser(data, read);
   }
   if (id === "model.list" || id === "integration.list") {
     const item = read.resolve(data.items);
