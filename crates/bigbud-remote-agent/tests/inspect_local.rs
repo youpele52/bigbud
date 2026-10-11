@@ -161,9 +161,20 @@ fn inspect_local_windows_registration_and_process_metadata() -> io::Result<()> {
             &format!("OK\t{}", hex("fixture")),
         )?;
         let _held = fs::File::open(&file)?;
+        // Real socket handles coexist with the file inventory; inspection must preserve transport.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let mut client = std::net::TcpStream::connect(listener.local_addr()?)?;
+        let (mut peer, _) = listener.accept()?;
+        peer.set_read_timeout(Some(std::time::Duration::from_secs(2)))?;
         let response = probe.request(&format!("PROCESS\t{}", std::process::id()))?;
         if !response.starts_with("OK\t") || !response.contains(&hex("private registration.json")) {
             return Err(io::Error::other("fixture process metadata missing"));
+        }
+        client.write_all(b"ok")?;
+        let mut received = [0u8; 2];
+        std::io::Read::read_exact(&mut peer, &mut received)?;
+        if received != *b"ok" {
+            return Err(io::Error::other("fixture socket changed"));
         }
         if fs::read(&file)? != b"fixture" {
             return Err(io::Error::other("fixture changed"));

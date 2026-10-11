@@ -1,4 +1,4 @@
-use super::{file, protocol::hex, security};
+use super::{file, object, protocol::hex, security};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::{
     collections::BTreeSet,
@@ -70,25 +70,18 @@ fn snapshot_disk_candidate(entry: &PSS_HANDLE_ENTRY) -> io::Result<bool> {
     {
         return Ok(false);
     }
-    if entry.TypeName.is_null()
-        || entry.TypeNameLength == 0
-        || !entry.TypeNameLength.is_multiple_of(2)
-    {
-        // Numeric metadata only: never log object names, paths or contents.
-        eprintln!(
-            "snapshot type unavailable: flags={} kind={} type-bytes={} name-bytes={}",
-            entry.Flags, entry.ObjectType, entry.TypeNameLength, entry.ObjectNameLength
-        );
+    if entry.TypeName.is_null() || entry.TypeNameLength == 0 {
+        return Ok(true);
     }
     if snapshot_name(entry.TypeName, entry.TypeNameLength)? != "File" {
         return Ok(false);
     }
     if entry.Flags & PSS_HANDLE_HAVE_NAME == 0 {
-        return Err(io::Error::other("unnamed file handle"));
+        return Ok(true);
     }
     let name = snapshot_name(entry.ObjectName, entry.ObjectNameLength)?.to_ascii_lowercase();
-    // These named devices cannot contain SQLite files. In particular, never DuplicateHandle a
-    // Winsock socket: Microsoft documents that doing so interferes with Winsock reference counts.
+    // Known device names cannot contain SQLite files and need no retained probe. Missing PSS
+    // metadata is not proof of irrelevance: it is classified below without using any socket API.
     Ok(![
         r"\device\afd",
         r"\device\namedpipe",
@@ -190,13 +183,24 @@ pub(super) fn inspect(pid: u32) -> io::Result<String> {
             continue;
         }
         // A vanished, unclassified handle can hide another database: reject incomplete inventories.
-        let metadata: File =
-            duplicate(raw, entry.Handle, FILE_READ_ATTRIBUTES | READ_CONTROL)?.into();
-        // SAFETY: retained metadata-only duplicate is live; no data read or file position change.
-        if unsafe { GetFileType(metadata.as_raw_handle()) } != FILE_TYPE_DISK {
-            return Err(io::Error::other("snapshot file classification changed"));
+        let retained = duplicate(raw, entry.Handle, 0)?;
+        if !object::is_file(retained.as_raw_handle())? {
+            continue;
         }
-        // Classification, identity and owner all use this one retained source duplicate.
+        // SAFETY: retained zero-right duplicate is live; no data read or file position change.
+        match unsafe { GetFileType(retained.as_raw_handle()) } {
+            FILE_TYPE_DISK => {}
+            FILE_TYPE_CHAR | FILE_TYPE_PIPE => continue,
+            _ => return Err(io::Error::other("snapshot file classification changed")),
+        }
+        // Upgrade only our retained duplicate; never resample the source handle number.
+        // SAFETY: current-process pseudo handle is not closed or used to access process memory.
+        let metadata: File = duplicate(
+            unsafe { GetCurrentProcess() },
+            retained.as_raw_handle(),
+            FILE_READ_ATTRIBUTES | READ_CONTROL,
+        )?
+        .into();
         if !metadata.metadata()?.is_file() {
             continue;
         }

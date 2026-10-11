@@ -127,7 +127,7 @@ export async function inspectV2WindowsAcl(root, signal) {
   );
   const abort = () => child.kill();
   signal?.addEventListener("abort", abort, { once: true });
-  const timer = setTimeout(abort, 5000);
+  const timer = setTimeout(abort, 30000);
   try {
     const output = await new Promise((resolve, reject) => {
       let bytes = Buffer.alloc(0);

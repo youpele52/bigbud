@@ -179,10 +179,10 @@ describe("local workspace watcher agent binary", () => {
       resolveLocalWorkspaceWatchAgentBinary({
         environment: {},
         platform: "win32",
-        architecture: "arm64",
+        architecture: "ia32",
         searchFrom: [],
       }),
-    ).toThrow("does not support win32/arm64");
+    ).toThrow("does not support win32/ia32");
   });
 
   it("classifies a protocol mismatch as permanently unavailable with a bounded probe", () => {

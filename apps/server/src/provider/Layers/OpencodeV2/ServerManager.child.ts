@@ -49,7 +49,7 @@ export async function isolatedEnvironment(config: V2ProcessConfig): Promise<Node
   }
   await runWithAbortableDeadline({
     operation: "V2 launcher profile isolation",
-    timeoutMs: 5000,
+    timeoutMs: process.platform === "win32" ? 30000 : 5000,
     run: (signal) => inspectPrivateV2Profile(config.profileRoot, { signal, marker: false }),
   });
   const env: NodeJS.ProcessEnv = {};
