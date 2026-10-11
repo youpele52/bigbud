@@ -116,6 +116,62 @@ All paths in the first eight rows are under
 
 ## Phases
 
+### Windows metadata prototype amendment (approved after P2 containment)
+
+This amendment supersedes the PSS/foreign-handle acquisition hypothesis below.
+Security-approved containment `5e2e1bff81afa7d1cd3d0b6501904f30e24dd319` remains the
+production boundary. User approval is for a disposable qualification prototype,
+not automatic admission or a weaker history identity.
+
+1. **Contract:** build an explicit `windows-metadata-prototype` feature and separate
+   `inspect_metadata` example, never packaged or dispatched by `--inspect-local`.
+   Inputs are fixture PID, or PID plus a known fixture path for primitive testing.
+   Output is observation-only: retained process birth stamp, candidate pathname,
+   volume serial/128-bit DB ID and SHM ID; errors yield no identity.
+2. **Metadata discovery:** retain one same-user PROCESS_QUERY_INFORMATION handle;
+   VirtualQueryEx enumerates bounded region descriptors, GetMappedFileNameW supplies
+   filenames without VM_READ or page access. Nominate an extensionless DB from one
+   mapped `-shm` path. Resolve only an unambiguous local DOS device path, walk with
+   the existing no-reparse/ancestor owner/DACL rules, open existing files with only
+   attributes/READ_CONTROL/SYNCHRONIZE and unrestricted read/write/delete sharing.
+3. **Membership proof:** query FILE_ID_INFO and class-47
+   FileProcessIdsUsingFileInformation on each same independently opened local file
+   handle. A successful, complete bounded PID list must contain the retained target
+   process. Recheck IDs, checked path identity, mapping inventory, PID membership,
+   process liveness and creation stamp. PID/pathname membership alone is insufficient.
+4. **Bounds:** 65,536 queried regions / eight-second scan budget; 32,768 UTF-16 path
+   units; class-47 buffers grow 16→64→256→1,024→4,096 PID capacity, never accept an
+   overflow/truncated/unsupported result. The qualification executable has a 20-second
+   caller deadline. Pending I/O buffers stay live through completion; no timed-out
+   asynchronous stack buffer may escape. Initial filesystem experiment is local NTFS;
+   other filesystem names reject until independently qualified.
+5. **Proof matrix:** x64/ARM64 × official minimum 2.0.24/pinned 2.0.26. Test same-file
+   membership through independently opened handles, byte-identical replacement while
+   the target retains the old file, mapped extensionless DB discovery, same-DB manual
+   fixture restart, different DB/physical replacement identity, two candidates,
+   invalidated mappings, target exit, bounded malformed membership, and existing
+   zero-socket-retention regressions with real TCP/UDP. Prototype failures must not be
+   hidden by the existing production containment failures; use independent CI steps.
+6. **Admission gate:** mapping metadata is nomination, not complete open-file inventory.
+   Unnamed/vanished mappings, unsupported class 47, reused observations, multiple DBs,
+   unmapped/in-memory DBs, or inability to prove full candidate coverage must reject.
+   A mapped SHM alone cannot establish absence of an unmapped second DB. Independent
+   security review must resolve coverage and same-object/replacement semantics before
+   any production call site changes. If the measured API route cannot meet those
+   guarantees, stop with exact evidence and maintain containment.
+
+Microsoft references: [VirtualQueryEx](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex),
+[GetMappedFileNameW](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmappedfilenamew),
+[FILE_ID_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info),
+[NtQueryInformationFile](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntqueryinformationfile),
+[FILE_INFORMATION_CLASS](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_file_information_class).
+Class 47 is explicitly **reserved for system use**, not a documented stability
+guarantee. Context7 Windows Rust documentation confirms mapping API signatures;
+the installed windows-sys **0.61.2** supplies the actual bindings. Its
+Wdk/System/SystemServices FILE_PROCESS_IDS_USING_FILE_INFORMATION is a u32 count
+followed by an aligned pointer-sized PID array; the decoder uses `repr(C)` and
+`offset_of!` rather than assuming packed layout. No new dependency is introduced.
+
 ### Phase 1: implement the reviewed native identity contract
 
 Preferred candidate: a bounded, provider-neutral read-only metadata capability in

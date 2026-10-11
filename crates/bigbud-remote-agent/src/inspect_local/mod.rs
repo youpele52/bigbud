@@ -5,6 +5,9 @@ mod file;
 #[cfg(windows)]
 #[path = "windows.handles.rs"]
 mod handles;
+#[cfg(all(windows, feature = "windows-metadata-prototype"))]
+#[path = "windows.metadata.rs"]
+pub mod metadata;
 #[cfg(windows)]
 #[path = "windows.object.rs"]
 mod object;

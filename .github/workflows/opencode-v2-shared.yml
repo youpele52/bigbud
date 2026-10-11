@@ -73,6 +73,24 @@ jobs:
           src/provider/Layers/OpencodeV2/SharedService.protocol.direction.test.ts
           src/provider/Layers/OpencodeV2/ProfileIsolation.windows.test.ts
           src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+      - name: Build qualification-only Windows metadata probe
+        id: metadata-probe
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
+        run: |
+          cargo build --locked --package bigbud-remote-agent --features windows-metadata-prototype --example inspect_metadata
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "BIGBUD_WINDOWS_METADATA_PROBE=$(Join-Path $env:GITHUB_WORKSPACE 'target/debug/examples/inspect_metadata.exe')" >> $env:GITHUB_ENV
+      - name: Qualify metadata-only membership and replacement primitives
+        if: ${{ !cancelled() && steps.metadata-probe.outcome == 'success' }}
+        run: |
+          cargo test --locked --package bigbud-remote-agent --features windows-metadata-prototype --lib inspect_local::metadata::members::tests -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --package bigbud-remote-agent --features windows-metadata-prototype --test inspect_metadata -- --nocapture
+      - name: Qualify metadata probe against official native fixture
+        if: ${{ !cancelled() && steps.metadata-probe.outcome == 'success' && steps.fixture.outcome == 'success' }}
+        env:
+          BIGBUD_WINDOWS_METADATA_REQUIRED: "1"
+        run: bun run --cwd apps/server vitest run src/provider/Layers/OpencodeV2/SharedService.metadata.prototype.native.test.ts
       - name: Package resolver and ARM64 PE identity tests
         if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
         run: >-

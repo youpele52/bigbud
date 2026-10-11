@@ -5,6 +5,18 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Qualification-only. This does not change --inspect-local or production admission.
+windows-metadata-prototype = []
+
+[[example]]
+name = "inspect_metadata"
+required-features = ["windows-metadata-prototype"]
+
+[[test]]
+name = "inspect_metadata"
+required-features = ["windows-metadata-prototype"]
+
 [dependencies]
 anyhow.workspace = true
 bigbud-protocol = { path = "../bigbud-protocol" }
@@ -24,6 +36,9 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
+  "Win32_System_Memory",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemInformation",
   "Win32_System_Threading",
   "Win32_Security_Authorization",
 ] }
