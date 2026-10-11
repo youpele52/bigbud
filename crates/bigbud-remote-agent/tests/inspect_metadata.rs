@@ -28,6 +28,8 @@ fn class47_binds_same_measured_file_not_replacement_path() -> io::Result<()> {
     );
     fs::rename(f.path(""), f.path(".retained"))?;
     fs::copy(f.path(".retained"), f.path(""))?;
+    // Elevated runners create the replacement as Administrators-owned; normalize only our fixture.
+    file_fixture::own_fixture(&f.root)?;
     let replacement = metadata::membership(f.child.id(), &f.path(""))?;
     assert!(
         !replacement.0,
@@ -53,6 +55,7 @@ fn mapped_extensionless_identity_survives_restart_but_not_replacement() -> io::R
     f.stop()?;
     fs::rename(f.path(""), f.path(".old"))?;
     fs::copy(f.path(".old"), f.path(""))?;
+    file_fixture::own_fixture(&f.root)?;
     f.restart()?;
     assert_ne!(before.identity, metadata::probe(f.child.id())?.identity);
     Ok(())
