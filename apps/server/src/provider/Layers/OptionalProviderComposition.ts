@@ -10,6 +10,7 @@ import { makeDormantOpencodeV2Provider } from "./OpencodeV2/Provider.ts";
 import { makeV2DevelopmentRegistration } from "./OpencodeV2/Development.composition.ts";
 import { makeV2ApplicationRegistration } from "./OpencodeV2/Application.composition.ts";
 import { ProviderTurnAdmissionsLive } from "../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../persistence/Layers/OpencodeV2SharedBindings.ts";
 
 /** One aggregate registration service; optional providers cannot replace each other. */
 export function appendDormantOpencodeV2(
@@ -59,4 +60,7 @@ export const OptionalProviderCompositionLive = Layer.effect(
     const registrations = yield* OptionalProviderRegistrations;
     return yield* composeOptionalProviders(registrations);
   }),
-).pipe(Layer.provide(CliProxyCompositionLive), Layer.provide(ProviderTurnAdmissionsLive));
+).pipe(
+  Layer.provide(CliProxyCompositionLive),
+  Layer.provide(Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive)),
+);

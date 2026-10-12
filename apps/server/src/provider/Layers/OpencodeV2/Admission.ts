@@ -69,7 +69,14 @@ export const admitV2Turn = Effect.fn("admitV2Turn")(function* (request: V2Admiss
         }),
       );
     }
-    return yield* journal.transition(row, "accepted", new Date().toISOString());
+    const accepted = yield* journal.transition(row, "accepted", new Date().toISOString());
+    if (!request.isCurrent())
+      return yield* Effect.fail(
+        new V2AdmissionUnconfirmed({
+          detail: "Admission SQL result owner changed; no publication or resend.",
+        }),
+      );
+    return accepted;
   }
   row = yield* journal.transition(row, "dispatch-intent", new Date().toISOString());
   // Any failure after this durable write, including cancellation before RPC, stays uncertain.
@@ -85,5 +92,12 @@ export const admitV2Turn = Effect.fn("admitV2Turn")(function* (request: V2Admiss
       }),
     );
   }
-  return yield* journal.transition(row, "accepted", new Date().toISOString());
+  const result = yield* journal.transition(row, "accepted", new Date().toISOString());
+  if (!request.isCurrent())
+    return yield* Effect.fail(
+      new V2AdmissionUnconfirmed({
+        detail: "Admission SQL result owner changed; no publication or resend.",
+      }),
+    );
+  return result;
 });

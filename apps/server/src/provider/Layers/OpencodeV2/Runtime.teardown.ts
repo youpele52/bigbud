@@ -57,6 +57,7 @@ export class V2RuntimeTeardown {
     if (this.runtime.sessions.get(record.owner.threadId) === record.owner)
       this.runtime.sessions.delete(record.owner.threadId);
     record.unsubscribeDeath();
+    record.owner.consentPermit?.release();
     clearTimeout(record.repairTimer);
   }
 

@@ -71,7 +71,10 @@ export async function prepareV2TurnAttachments(
     throw new Error("V2 shared attachment preparation requires private bigbud admission storage.");
   const root =
     options.attachmentAdmissionsDir ??
-    path.join(options.config.profileRoot, "bigbud-attachment-admissions");
+    (options.config.sharedService
+      ? undefined
+      : path.join(options.config.profileRoot, "bigbud-attachment-admissions"));
+  if (!root) throw new Error("V2 shared attachment storage unavailable.");
   await mkdir(root, { recursive: true, mode: 0o700 });
   const info = await lstat(root);
   if (

@@ -104,6 +104,7 @@ export async function dispatchV2Turn(
   input: ProviderSendTurnInput,
   mutations: V2RuntimeMutations,
   beforeDispatch: () => Promise<() => void>,
+  validateOwner: () => void,
   prepared?: V2PreparedAttachments,
 ) {
   const attachmentIssue = providerAttachmentIssue("opencodeV2", input.attachments);
@@ -178,7 +179,7 @@ export async function dispatchV2Turn(
   if (references)
     text += `\n\nbigbud workspace attachment references (target-bound metadata):\n${references}`;
   if (text.length > 120000) throw new Error("V2 prompt plus context exceeds bound.");
-  const fingerprint = runtimePromptFingerprint(
+  let fingerprint = runtimePromptFingerprint(
     text,
     requestedModel,
     media.digest,
@@ -195,7 +196,32 @@ export async function dispatchV2Turn(
       ),
     instructionRevision,
   );
-  const isCurrent = () => !session.stopped && session.lease.process.isRunning();
+  // Native assistant projection materializes the default variant; older omitted selections
+  // fingerprinted its absence. Select only an exact match to immutable historical evidence.
+  if (
+    existing &&
+    !input.modelSelection &&
+    requestedModel.variant === "default" &&
+    fingerprint !== existing.fingerprint
+  ) {
+    const { variant: _default, ...originalModel } = requestedModel;
+    const candidate = runtimePromptFingerprint(
+      text,
+      originalModel,
+      media.digest,
+      session.executionPolicy,
+      instructionRevision,
+    );
+    if (candidate === existing.fingerprint) fingerprint = candidate;
+  }
+  const isCurrent = () => {
+    try {
+      validateOwner();
+      return !session.stopped && session.lease.process.isRunning();
+    } catch {
+      return false;
+    }
+  };
   const failure = () =>
     new V2AdmissionUnconfirmed({
       detail: "V2 admission unconfirmed; no automatic resend. New work may duplicate execution.",
@@ -242,6 +268,8 @@ export async function dispatchV2Turn(
                 { signal },
               );
             });
+            validate();
+            validateOwner();
             return (
               ack.type === "user" &&
               ack.id === row.nativeAdmissionId &&
@@ -254,8 +282,11 @@ export async function dispatchV2Turn(
         }),
       reconcile: (row) =>
         Effect.tryPromise({
-          try: async () =>
-            (await observeV2Admission(session, row)) ? ("accepted" as const) : ("unknown" as const),
+          try: async () => {
+            const observed = await observeV2Admission(session, row);
+            validateOwner();
+            return observed ? ("accepted" as const) : ("unknown" as const);
+          },
           catch: failure,
         }),
     }).pipe(Effect.provideService(ProviderTurnAdmissions, options.journal)),

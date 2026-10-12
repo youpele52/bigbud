@@ -1,6 +1,8 @@
 import type { OpenCodeEvent } from "@opencode/client";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
+import { checkedV2EventConnection } from "./EventHub.connection.ts";
+import { isV2LocationlessExecutionStart } from "./EventHub.hints.ts";
 
 export interface V2EventOwner {
   readonly nativeSessionId: string;
@@ -8,6 +10,8 @@ export interface V2EventOwner {
   readonly onEvent: (event: OpenCodeEvent, signal: AbortSignal) => Promise<void>;
   /** Dirty is sticky until authoritative reconciliation, never a terminal claim. */
   readonly onDirty: (reason: "gap" | "overflow" | "ambiguous" | "consumer-failed") => void;
+  /** Request a fresh caller-owned read after an aborted delivery has finished unwinding. */
+  readonly onDrained?: () => void;
 }
 
 type Owner = V2EventOwner & {
@@ -17,6 +21,7 @@ type Owner = V2EventOwner & {
   dirty: boolean;
   dirtyGeneration: number;
   delivery: AbortController;
+  reconcileAfterDrain: boolean;
 };
 
 export function validateV2EventHubBounds(input: {
@@ -48,7 +53,11 @@ export class OpencodeV2EventHub {
 
   constructor(
     private readonly input: {
-      readonly subscribe: (signal: AbortSignal) => AsyncIterable<OpenCodeEvent>;
+      readonly subscribe: (
+        signal: AbortSignal,
+        activity?: () => void,
+      ) => AsyncIterable<OpenCodeEvent>;
+      readonly requireMarker?: boolean;
       readonly maxOwners: number;
       readonly maxQueuedEvents: number;
       readonly maxEventBytes: number;
@@ -74,6 +83,7 @@ export class OpencodeV2EventHub {
       dirty: false,
       dirtyGeneration: 0,
       delivery: new AbortController(),
+      reconcileAfterDrain: false,
     };
     this.owners.set(owner.nativeSessionId, record);
     return () => {
@@ -114,8 +124,14 @@ export class OpencodeV2EventHub {
 
   reconciled(nativeSessionId: string, generation = this.generation(nativeSessionId)): boolean {
     const owner = this.owners.get(nativeSessionId);
-    if (!owner || owner.draining || this.closed || generation !== owner.dirtyGeneration)
+    if (!owner || this.closed || generation !== owner.dirtyGeneration) return false;
+    // Healthy callback reconciliation is already in the current generation. Replacing
+    // its delivery signal or treating its own drain as a gap would invalidate its output.
+    if (!owner.dirty) return true;
+    if (owner.draining) {
+      owner.reconcileAfterDrain = true;
       return false;
+    }
     owner.delivery = new AbortController();
     owner.dirty = false;
     return true;
@@ -137,7 +153,10 @@ export class OpencodeV2EventHub {
 
   private async consume(controller: AbortController): Promise<void> {
     try {
-      for await (const event of this.input.subscribe(controller.signal)) {
+      const source = this.input.requireMarker
+        ? checkedV2EventConnection({ subscribe: this.input.subscribe, signal: controller.signal })
+        : this.input.subscribe(controller.signal);
+      for await (const event of source) {
         if (this.closed || controller.signal.aborted) return;
         const envelope = event as {
           data?: { sessionID?: unknown; form?: { sessionID?: unknown } };
@@ -147,6 +166,9 @@ export class OpencodeV2EventHub {
         if (typeof sessionID !== "string") continue;
         const owner = this.owners.get(sessionID);
         if (!owner) continue;
+        // The pinned native start notification is allowed to omit Location. Never route it
+        // as owned content or infer a source gap from this explicitly optional hint.
+        if (isV2LocationlessExecutionStart(event, sessionID)) continue;
         if (envelope.location?.directory !== owner.location) {
           this.dirty(owner, "ambiguous");
           continue;
@@ -168,7 +190,8 @@ export class OpencodeV2EventHub {
     } catch {
       /* A failed stream proves a gap, not completion or no admission. */
     } finally {
-      if (!this.closed) this.markGap();
+      controller.abort();
+      if (!this.closed && this.controller === controller) this.markGap();
     }
   }
 
@@ -189,6 +212,14 @@ export class OpencodeV2EventHub {
       if (owner.active && !this.closed) this.dirty(owner, "consumer-failed");
     } finally {
       owner.draining = false;
+      if (owner.reconcileAfterDrain && owner.active && !this.closed) {
+        owner.reconcileAfterDrain = false;
+        try {
+          owner.onDrained?.();
+        } catch {
+          /* Dirty remains sticky until another owned read. */
+        }
+      }
     }
   }
 

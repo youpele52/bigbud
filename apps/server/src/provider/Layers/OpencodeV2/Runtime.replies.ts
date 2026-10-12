@@ -1,6 +1,7 @@
 import type { ThreadId, TurnId } from "@bigbud/contracts";
 import { v2Request } from "./Client.ts";
 import { assertV2SharedSessionOwner } from "./Runtime.ownership.ts";
+import { currentV2RequestContext } from "./Client.guard.ts";
 
 /** Interrupt cancellation must enter before the session queue held by the executing command. */
 export async function interruptV2Execution(
@@ -12,7 +13,7 @@ export async function interruptV2Execution(
   if (turnId && turnId !== session.row?.turnId)
     throw new Error("V2 interrupt turn fence rejected.");
   await session.coding?.cancelActive();
-  return runtime.withSession(threadId, async () => {
+  return runtime.withCleanupSession(threadId, async () => {
     if (runtime.get(threadId) !== session || (turnId && turnId !== session.row?.turnId))
       throw new Error("V2 interrupt owner fence rejected.");
     await assertV2SharedSessionOwner(session, false);
@@ -22,7 +23,13 @@ export async function interruptV2Execution(
         { signal },
       ),
     );
-    await runtime.reconcile(session);
+    try {
+      session.consentPermit?.assertCurrent();
+    } catch {
+      return;
+    }
+    // Repair uses a new execution permit, never the cleanup-only request context.
+    runtime.scheduleRepair(session);
   });
 }
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
@@ -91,7 +98,10 @@ export function v2ReplyGuard(
   const generation = owner.lease.generation;
   const epoch = owner.epoch;
   const nativeId = owner.native.id;
+  const permit = currentV2RequestContext()?.permit;
   const validate = () => {
+    permit?.assertCurrent();
+    owner.consentPermit?.assertCurrent();
     if (
       sessions.get(owner.threadId) !== owner ||
       owner.stopped ||

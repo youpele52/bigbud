@@ -9,24 +9,32 @@ export async function v2RuntimeStatus(
   session: V2RuntimeSession,
   state: "error" | "running" | "waiting" | "ready",
   reason?: string,
+  validate?: () => void,
 ) {
   if (session.stopped) return;
+  session.consentPermit?.assertCurrent();
+  validate?.();
   const signature = createHash("sha256")
     .update(JSON.stringify([state, reason, session.row?.turnId]))
     .digest("hex");
   if (session.runtimeState?.signature === signature) return;
   const sequence = (session.runtimeState?.sequence ?? 0) + 1;
+  await runtime.emit(
+    session,
+    {
+      // A recovered owner must not collide with an earlier owner's persisted state transition.
+      ...runtimeEventBase(session, `state:${session.epoch}:${sequence}:${randomUUID()}`),
+      type: "session.state.changed",
+      payload: { state, ...(reason ? { reason } : {}) },
+    },
+    validate,
+  );
+  validate?.();
   session.session = {
     ...session.session,
     status: state === "waiting" ? "running" : state,
     lastError: state === "error" ? reason : undefined,
     updatedAt: new Date().toISOString(),
   };
-  await runtime.emit(session, {
-    // A recovered owner must not collide with an earlier owner's persisted state transition.
-    ...runtimeEventBase(session, `state:${session.epoch}:${sequence}:${randomUUID()}`),
-    type: "session.state.changed",
-    payload: { state, ...(reason ? { reason } : {}) },
-  });
   session.runtimeState = { signature, sequence };
 }

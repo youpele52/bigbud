@@ -137,7 +137,7 @@ for (const fence of ["settings", "epoch", "quarantine"] as const) {
         { id: "per_other", sessionID: owner.native.id, action: "webfetch", resources: ["small"] },
       ]);
       const get = http.client.permission.get;
-      vi.spyOn(http.client.permission, "get").mockImplementation(async (...args) => {
+      const read = vi.spyOn(http.client.permission, "get").mockImplementation(async (...args) => {
         const request = await get(...args);
         if (fence === "settings") enabled = false;
         if (fence === "epoch") Object.assign(owner, { epoch: owner.epoch + 1 });
@@ -160,6 +160,16 @@ for (const fence of ["settings", "epoch", "quarantine"] as const) {
       expect(
         events.some((event) => event.type === "request.resolved" && event.requestId === "per_huge"),
       ).toBe(false);
+      if (fence === "epoch") {
+        // A late hydration cannot publish even unrelated pending work for its old epoch.
+        expect(
+          events.some(
+            (event) => event.type === "request.opened" && event.requestId === "per_other",
+          ),
+        ).toBe(false);
+        read.mockRestore();
+        await runtime.reconcile(owner);
+      }
       expect(
         events.some((event) => event.type === "request.opened" && event.requestId === "per_other"),
       ).toBe(true);

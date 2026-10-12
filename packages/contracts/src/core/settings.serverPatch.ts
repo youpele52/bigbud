@@ -179,6 +179,7 @@ export const ServerSettingsPatch = Schema.Struct({
           profileRoot: Schema.optionalKey(Schema.String),
           connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),
           serviceFile: Schema.optionalKey(Schema.String),
+          nativeServiceTrust: Schema.optionalKey(Schema.NullOr(Schema.Literal("host-user-v1"))),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

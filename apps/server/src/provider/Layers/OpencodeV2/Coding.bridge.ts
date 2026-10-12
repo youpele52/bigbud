@@ -68,6 +68,8 @@ export class V2CodingBridge {
   }
   async attach(session: V2RuntimeSession, runtime: OpencodeV2Runtime) {
     if (!session.localTools) return;
+    if (runtime.options.config.sharedService)
+      throw new Error("V2 isolated coding bridge refuses shared native execution.");
     const files = await openV2OwnedFiles(session, runtime.options.config.profileRoot, this.python);
     const owner: Owner = {
       session,
@@ -151,7 +153,7 @@ export class V2CodingBridge {
         request.action === "shell" || request.action === "orchestration"
           ? prepareV2ExecutionAction(
               owner.session,
-              owner.runtime.options.config.profileRoot,
+              isolatedCodingProfile(owner.runtime),
               request.action,
               input,
               [
@@ -327,4 +329,9 @@ export class V2CodingBridge {
   close() {
     for (const owner of this.owners.values()) owner.session.coding?.revoke();
   }
+}
+
+function isolatedCodingProfile(runtime: OpencodeV2Runtime) {
+  if (runtime.options.config.sharedService) throw new Error("V2 coding profile is not isolated.");
+  return runtime.options.config.profileRoot;
 }

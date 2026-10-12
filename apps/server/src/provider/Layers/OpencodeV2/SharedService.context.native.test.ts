@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer } from "effect";
 import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, MessageId, ThreadId } from "@bigbud/contracts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
@@ -35,7 +37,7 @@ function tools(request: Record<string, unknown>) {
 }
 
 /** Compare native request construction without touching live accounts or depending on vendor eligibility heuristics. */
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+it.skipIf(!binary || !version)(
   "keeps native Build base instructions, skills and tools while app context is additive and subagent ownership remains denied",
   async () => {
     const fixture = await sharedServiceNativeFixture(binary!);
@@ -67,8 +69,8 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
           request.tools.length > 0,
       )!;
       expect(baseline).toBeDefined();
-      const settings = {
-        getSettings: Effect.succeed({
+      const settings = await Effect.runPromise(
+        makeTestSettings({
           ...DEFAULT_SERVER_SETTINGS,
           providers: {
             ...DEFAULT_SERVER_SETTINGS.providers,
@@ -77,11 +79,11 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
+              nativeServiceTrust: "host-user-v1",
             },
           },
         }),
-        streamChanges: Stream.never,
-      } as unknown as typeof ServerSettingsService.Service;
+      );
       const threadId = ThreadId.makeUnsafe("shared-native-context");
       await Effect.runPromise(
         Effect.scoped(
@@ -152,7 +154,11 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             yield* adapter.stopSession(threadId);
           }),
         ).pipe(
-          Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
+          Effect.provide(
+            Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+              Layer.provide(SqlitePersistenceMemory),
+            ),
+          ),
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,

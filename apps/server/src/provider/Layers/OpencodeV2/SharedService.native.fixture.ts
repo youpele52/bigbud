@@ -1,27 +1,61 @@
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, copyFile } from "node:fs/promises";
 import path from "node:path";
 import { expect } from "vitest";
 import { closeOwnedChild, isolatedEnvironment } from "./ServerManager.child.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
+import { makeOwnedClient } from "./Client.ts";
+import { readV2NativeCatalog } from "./Catalog.native.ts";
 import {
   readV2SharedRegistration,
   v2SharedRegistrationFile,
 } from "./SharedService.registration.ts";
 
+/** Registration is published before HTTP readiness; wait for the disposable provider too. */
+async function waitForNativeFixtureCatalog(file: string, workspace: string) {
+  const registration = await readV2SharedRegistration(file);
+  const client = makeOwnedClient({
+    endpoint: registration.endpoint.url,
+    password: registration.endpoint.auth!.password,
+  });
+  await expect
+    .poll(
+      async () => {
+        const catalog = await readV2NativeCatalog(client, workspace, {
+          requested: { providerID: "bigbud-v2-fixture", id: "synthetic-model" },
+        });
+        return catalog.data.some(
+          (model) => model.providerID === "bigbud-v2-fixture" && model.id === "synthetic-model",
+        );
+      },
+      { timeout: 15000 },
+    )
+    .toBe(true);
+}
+
 /** Real registered service in disposable HOME/XDG/DB only, never an installed TUI service. */
 export async function sharedServiceNativeFixture(
   binary: string,
   prepareConfig?: (file: string) => Promise<void>,
+  databaseName = "opencode.db",
 ) {
   const fixture = await makeV2CodingNativeFixture();
+  await ownV2WindowsFixture(fixture.profile);
   const env = await isolatedEnvironment({
     binaryPath: binary,
     profileRoot: fixture.profile,
     runtimeTargetId: "local",
   });
-  const configFile = path.join(fixture.profile, "config", "opencode", "opencode.json");
-  const config = JSON.parse(await readFile(configFile, "utf8"));
+  const globalConfig = path.join(fixture.profile, "config", "opencode", "opencode.json");
+  // Windows native builds do not consistently discover the XDG config override. Use the documented
+  // project config in this disposable workspace; production discovers metadata through the API.
+  const configFile =
+    process.platform === "win32" ? path.join(fixture.workspace, "opencode.json") : globalConfig;
+  if (path.basename(databaseName) !== databaseName)
+    throw new Error("Fixture database name must be a basename.");
+  env.OPENCODE_DB = path.join(fixture.profile, "data", "opencode", databaseName);
+  const config = JSON.parse(await readFile(globalConfig, "utf8"));
   config.agents = {
     "qualification-reviewer": {
       description: "Disposable native config agent",
@@ -39,7 +73,7 @@ export async function sharedServiceNativeFixture(
     "---\nname: example\ndescription: Disposable qualification skill\n---\nSynthetic read-only instructions.\n",
   );
   fixture.state.textOnlyDelegated = true;
-  const child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
+  let child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
     env: { ...env, OPENCODE_CONFIG_PROJECT_DISABLE: "0" },
     cwd: fixture.profile,
     shell: false,
@@ -65,6 +99,7 @@ export async function sharedServiceNativeFixture(
         async () => {
           if (spawnError || child.exitCode !== null || child.signalCode !== null)
             throw new Error("Disposable shared service exited.");
+          await ownV2WindowsFixture(fixture.profile);
           return await readV2SharedRegistration(file).then(
             () => true,
             (error: unknown) => {
@@ -76,11 +111,59 @@ export async function sharedServiceNativeFixture(
         { timeout: 15000 },
       )
       .toBe(true);
+    // A nonempty built-in catalog is not proof that the disposable provider/config has settled.
+    await waitForNativeFixtureCatalog(file, fixture.workspace);
+    await ownV2WindowsFixture(fixture.profile);
     return {
       ...fixture,
       file,
-      child,
+      get child() {
+        return child;
+      },
       configFile,
+      async restart(copyHistory: boolean | "empty" = false) {
+        // Only this fixture-owned process/profile; never use native service lifecycle discovery.
+        await closeOwnedChild(child);
+        if (child.exitCode === null && child.signalCode === null)
+          throw new Error("Disposable fixture exit unconfirmed; refusing history copy.");
+        if (copyHistory === true) {
+          const original = env.OPENCODE_DB!;
+          const copied = path.join(fixture.profile, "data", "opencode", "logical-copy.db");
+          await copyFile(original, copied);
+          try {
+            await copyFile(`${original}-wal`, `${copied}-wal`);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+          env.OPENCODE_DB = copied;
+        }
+        if (copyHistory === "empty")
+          env.OPENCODE_DB = path.join(
+            fixture.profile,
+            "data",
+            "opencode",
+            "different-empty-history.db",
+          );
+        child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
+          env: { ...env, OPENCODE_CONFIG_PROJECT_DISABLE: "0" },
+          cwd: fixture.profile,
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        child.stdout.on("data", capture);
+        child.stderr.on("data", capture);
+        child.on("error", () => {});
+        await expect
+          .poll(
+            async () => {
+              await ownV2WindowsFixture(fixture.profile);
+              return (await readV2SharedRegistration(file)).pid;
+            },
+            { timeout: 15000 },
+          )
+          .toBe(child.pid);
+        await waitForNativeFixtureCatalog(file, fixture.workspace);
+      },
       async close() {
         await closeOwnedChild(child);
         await fixture.close();

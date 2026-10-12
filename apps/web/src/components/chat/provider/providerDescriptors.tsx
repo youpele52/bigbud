@@ -92,7 +92,7 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
     settings: {
       path: binary(
         "Automatic native TUI service discovery",
-        "Shared mode uses your installed OpenCode TUI service, accounts and configuration. No binary override is needed. Recommended runtime 2.0.26+; qualified older versions remain usable. This override is used only for explicit isolated mode. Restart after connection changes.",
+        "Shared mode connects only to your already-running OpenCode service with your own accounts and configuration. Requires stable V2 2.0.24 or newer with compatible APIs; V3 is not supported. This binary override is used only in isolated mode. Restart after connection changes.",
       ),
       home: {
         key: "opencodeV2ProfileRoot",

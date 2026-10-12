@@ -24,6 +24,7 @@ export class FixtureEvents {
     const abort = () => this.wake.resolve();
     signal.addEventListener("abort", abort, { once: true });
     try {
+      yield { id: "fixture-connected", type: "server.connected", data: {} };
       while (!signal.aborted) {
         const event = this.queue.shift();
         if (event) yield event;

@@ -9,5 +9,6 @@ export const OpencodeV2DevelopmentSettings = Schema.Struct({
   profileRoot: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),
   serviceFile: Schema.optionalKey(TrimmedString),
+  nativeServiceTrust: Schema.optionalKey(Schema.NullOr(Schema.Literal("host-user-v1"))),
 });
 export type OpencodeV2DevelopmentSettings = typeof OpencodeV2DevelopmentSettings.Type;

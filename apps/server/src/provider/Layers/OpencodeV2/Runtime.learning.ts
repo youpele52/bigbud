@@ -8,6 +8,7 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { createHash } from "node:crypto";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
+import { verifyV2SharedLearningHistory } from "./Runtime.learning.shared.ts";
 
 /** Durable job identity reuses terminal results, never retries uncertain execution or applies memory. */
 export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
@@ -87,6 +88,17 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
         result.finalText.length > 24000
       )
         return yield* fail("runBackgroundReview");
+      yield* Effect.tryPromise({
+        try: () =>
+          runtime.authorized(() =>
+            verifyV2SharedLearningHistory(runtime.options, startInput, binding, {
+              providerID: selection.subProviderID!,
+              id: selection.model,
+              ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
+            }),
+          ),
+        catch: () => fail("runBackgroundReview"),
+      });
       return result.finalText; // Existing LearningReview parser/validation remains authoritative.
     }
     const attempt = new V2StartAttempt();

@@ -11,6 +11,8 @@ import { V2AdmissionUnconfirmed } from "./Admission.ts";
 import { ProviderTurnAdmissionConflict } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
+import { currentV2RequestContext } from "./Client.guard.ts";
+import { guardV2Publication, validV2Publication } from "./Runtime.publication.ts";
 
 /** Real local adapter factory. Explicit isolated harness inputs, not preview enablement. */
 export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Adapter")(function* (
@@ -23,16 +25,32 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
   }).pipe(Effect.andThen(PubSub.shutdown(events)));
   const runtime = new OpencodeV2Runtime({
     ...options,
-    emit: (event) =>
-      closing
+    emit: (event, validate) => {
+      const captured = currentV2RequestContext();
+      return closing
         ? Promise.resolve()
-        : Effect.runPromise(PubSub.publish(events, event).pipe(Effect.timeout("10 seconds"))).then(
-            () => {},
-          ),
+        : Effect.runPromise(
+            Effect.suspend(() => {
+              captured?.permit.assertCurrent();
+              guardV2Publication(event, validate ?? captured?.permit.assertCurrent);
+              return Effect.sync(() => {
+                captured?.permit.assertCurrent();
+                validate?.();
+                if (!PubSub.publishUnsafe(events, event))
+                  throw new Error(
+                    "V2 event publication queue overflow; authoritative repair required.",
+                  );
+              });
+            }).pipe(Effect.timeout("10 seconds")),
+          ).then(() => {});
+    },
   });
   const call = <T>(operation: string, run: () => Promise<T>) =>
     Effect.tryPromise({
-      try: run,
+      try: () =>
+        ["stopSession", "stopAll", "shutdown", "interruptTurn"].includes(operation)
+          ? run()
+          : runtime.authorized(run),
       catch: (error) =>
         new ProviderAdapterValidationError({
           provider: "opencodeV2",
@@ -99,7 +117,7 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
         }),
       ),
     stopAll: () => shutdownEvents.pipe(Effect.andThen(call("stopAll", () => runtime.close()))),
-    streamEvents: Stream.fromPubSub(events),
+    streamEvents: Stream.fromPubSub(events).pipe(Stream.filter(validV2Publication)),
   };
   yield* Effect.addFinalizer(() =>
     shutdownEvents.pipe(Effect.andThen(call("shutdown", () => runtime.close()).pipe(Effect.orDie))),

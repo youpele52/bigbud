@@ -1,10 +1,15 @@
-import { Effect, Option, PubSub, Scope, Stream } from "effect";
+import { Effect, Option, PubSub, Schema, Scope, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import type { OptionalProviderRegistration } from "../../ProviderRegistration.ts";
 import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
+import { V2ConsentAuthority } from "./Application.consent.ts";
+import { runAuthorizedV2, currentV2RequestContext } from "./Client.guard.ts";
+import { readV2HealthSnapshot } from "./Application.discovery.ts";
+import { v2SharedRegistrationFile } from "./SharedService.registration.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import { makeProviderSnapshotStore } from "../../providerSnapshot.store.ts";
@@ -27,25 +32,24 @@ import { Schedule } from "effect";
 import path from "node:path";
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
-
-const keyOf = (value: {
-  binaryPath: string;
-  profileRoot: string;
-  connectionMode?: "shared" | "isolated";
-  serviceFile?: string;
-}) =>
-  JSON.stringify([
-    resolveOpencodeV2ConnectionMode(value),
-    value.binaryPath,
-    value.profileRoot,
-    value.serviceFile ?? "",
-  ]);
+import { v2ApplicationConfigKey } from "./Application.configKey.ts";
+import { validV2Publication } from "./Runtime.publication.ts";
+import { warnV2SharedRollback } from "./Application.rollback.ts";
+import { invalidatedV2Snapshot } from "./Application.snapshot.ts";
 
 /** Settings-driven local preview. Harness authorization never leaks into application routing. */
 export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistration")(
   function* () {
     const settings = yield* ServerSettingsService;
     const journal = yield* ProviderTurnAdmissions;
+    const bindingService = yield* Effect.serviceOption(OpencodeV2SharedBindings);
+    const bindings = Option.getOrUndefined(bindingService);
+    // Composition precedes startup phases; initialize the existing idempotent settings service
+    // rather than waiting on a Deferred whose starter depends on this registration layer.
+    if (settings.start) yield* settings.start;
+    if (settings.ready) yield* settings.ready;
+    const consent = new V2ConsentAuthority(settings);
+    yield* Effect.addFinalizer(() => Effect.sync(() => consent.close()));
     const serverConfig = yield* Effect.serviceOption(ServerConfig);
     const scope = yield* Effect.scope;
     const permit = yield* Semaphore.make(1);
@@ -73,7 +77,18 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         const value = yield* configuration;
         if (!value.enabled)
           return yield* failure("V2 is disabled. Enable it in Providers settings.");
-        const key = keyOf(value);
+        const key = v2ApplicationConfigKey(value);
+        if (resolveOpencodeV2ConnectionMode(value) === "shared" && !bindings)
+          return yield* failure(
+            "V2 shared binding persistence is unavailable; no native execution.",
+          );
+        if (
+          resolveOpencodeV2ConnectionMode(value) === "shared" &&
+          value.nativeServiceTrust !== "host-user-v1"
+        )
+          return yield* failure(
+            "V2 native service trust consent required before activating native Locations/plugins.",
+          );
         if (initialized) {
           if (initialized.key !== key)
             return yield* failure(
@@ -132,11 +147,16 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           maxQueuedEvents: 256,
           maxEventBytes: 2000000,
           consumerTimeoutMs: 10000,
+          consent,
         });
         const executionOptions = {
           manager,
           journal,
-          config: { ...config.process, ...(coding ? { codingEndpoint: coding.endpoint } : {}) },
+          ...(bindings ? { sharedBindings: bindings } : {}),
+          consent,
+          config: config.process.sharedService
+            ? config.process
+            : { ...config.process, ...(coding ? { codingEndpoint: coding.endpoint } : {}) },
           ...(coding ? { codingBridge: coding.bridge } : {}),
           allowLocalWorkspace: true,
           enableLocalTools: true,
@@ -150,8 +170,15 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
               }
             : {}),
           authorizeExecution: async () => {
+            currentV2RequestContext()?.permit.assertCurrent();
             const current = await Effect.runPromise(configuration);
-            if (!current.enabled || keyOf(current) !== key)
+            currentV2RequestContext()?.permit.assertCurrent();
+            if (
+              !current.enabled ||
+              v2ApplicationConfigKey(current) !== key ||
+              (resolveOpencodeV2ConnectionMode(current) === "shared" &&
+                current.nativeServiceTrust !== "host-user-v1")
+            )
               throw new Error(
                 "V2 configuration changed or is disabled; restart bigbud after binary/profile changes.",
               );
@@ -175,7 +202,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           Effect.provideService(ServerSettingsService, settings),
         );
         yield* Stream.runForEach(executing.adapter.streamEvents, (event) =>
-          PubSub.publish(events, event),
+          Effect.sync(() => {
+            if (validV2Publication(event) && !PubSub.publishUnsafe(events, event))
+              throw new Error("V2 application event publication queue overflow.");
+          }),
         ).pipe(Effect.forkScoped, Scope.provide(scope));
         initialized = { key, adapter: executing.adapter, provider };
         yield* startV2AdmissionMaintenance(journal).pipe(Scope.provide(scope));
@@ -209,17 +239,43 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           initialProbeComplete: !config.enabled,
         }),
       }),
+      Effect.flatMap((snapshot) => warnV2SharedRollback(bindings, snapshot)),
     );
-    const snapshots = yield* makeProviderSnapshotStore(initialSnapshot);
-    const refresh = Effect.gen(function* () {
+    const snapshots = yield* makeProviderSnapshotStore(initialSnapshot, () =>
+      invalidatedV2Snapshot(settings),
+    );
+    const refreshBody = Effect.gen(function* () {
       const config = yield* configuration;
-      if (initialized && (!config.enabled || initialized.key !== keyOf(config))) {
+      if (
+        initialized &&
+        (!config.enabled ||
+          initialized.key !== v2ApplicationConfigKey(config) ||
+          (resolveOpencodeV2ConnectionMode(config) === "shared" &&
+            config.nativeServiceTrust !== "host-user-v1"))
+      ) {
         const owned = yield* initialized.adapter.listSessions();
         yield* Effect.forEach(
           owned,
           (session) => initialized!.adapter.stopSession(session.threadId),
           { discard: true, concurrency: "unbounded" },
         );
+      }
+      if (
+        config.enabled &&
+        resolveOpencodeV2ConnectionMode(config) === "shared" &&
+        config.nativeServiceTrust !== "host-user-v1"
+      ) {
+        const { permit, snapshot: health } = yield* Effect.tryPromise({
+          try: () => readV2HealthSnapshot(config, consent),
+          catch: () => failure("V2 consent/configuration changed during health discovery."),
+        });
+        try {
+          const snapshot = yield* warnV2SharedRollback(bindings, health);
+          yield* snapshots.publish(snapshot, permit.assertCurrent);
+          return snapshot;
+        } finally {
+          permit.release();
+        }
       }
       let snapshot = !config.enabled
         ? unavailable(false, disabledMessage)
@@ -228,18 +284,54 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             Effect.catch((error) => Effect.succeed(unavailable(true, error.issue))),
           );
       const current = yield* configuration;
-      if (current.enabled !== config.enabled || keyOf(current) !== keyOf(config))
+      if (
+        current.enabled !== config.enabled ||
+        v2ApplicationConfigKey(current) !== v2ApplicationConfigKey(config)
+      )
         snapshot = unavailable(
           current.enabled,
           "V2 settings changed during discovery. Refresh provider status; restart bigbud after binary/profile changes.",
         );
+      const context = currentV2RequestContext();
+      snapshot = yield* warnV2SharedRollback(bindings, snapshot);
+      yield* snapshots.publish(snapshot, context?.permit.assertCurrent);
       return snapshot;
-    }).pipe(
-      Effect.catch(() => Effect.succeed(unavailable(false, "V2 settings are unavailable."))),
-      Effect.tap(snapshots.publish),
-    );
+    }).pipe(Effect.catch(() => Effect.succeed(unavailable(false, "V2 settings are unavailable."))));
+    const refresh = Effect.suspend(() => {
+      const config = settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+      if (
+        !config?.enabled ||
+        config.nativeServiceTrust !== "host-user-v1" ||
+        resolveOpencodeV2ConnectionMode(config) === "isolated"
+      )
+        return refreshBody;
+      return Effect.tryPromise({
+        try: () =>
+          runAuthorizedV2(consent, config.serviceFile?.trim() || v2SharedRegistrationFile(), () =>
+            Effect.runPromise(refreshBody),
+          ),
+        catch: () =>
+          failure("V2 consent/configuration changed during discovery; late publication rejected."),
+      }).pipe(Effect.catch((error) => Effect.succeed(unavailable(true, error.issue))));
+    });
     const invoke = <T, E>(run: (adapter: OpencodeV2AdapterShape) => Effect.Effect<T, E>) =>
-      ensure.pipe(Effect.flatMap((entry) => run(entry.adapter)));
+      Effect.suspend(() => {
+        const config = settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+        return Effect.tryPromise({
+          try: () =>
+            runAuthorizedV2(
+              consent,
+              config && resolveOpencodeV2ConnectionMode(config) === "shared"
+                ? config.serviceFile?.trim() || v2SharedRegistrationFile()
+                : undefined,
+              () => Effect.runPromise(ensure.pipe(Effect.flatMap((entry) => run(entry.adapter)))),
+            ),
+          catch: (error) =>
+            Schema.is(ProviderAdapterValidationError)(error)
+              ? error
+              : failure(error instanceof Error ? error.message : "V2 authorization unavailable."),
+        });
+      });
     const dormant = makeDormantOpencodeV2Adapter();
     const adapter: OpencodeV2AdapterShape = {
       ...dormant,
@@ -261,7 +353,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
         invoke((active) => active.respondToRequest(thread, id, decision)),
       respondToUserInput: (thread, id, answers) =>
         invoke((active) => active.respondToUserInput(thread, id, answers)),
-      streamEvents: Stream.fromPubSub(events),
+      streamEvents: Stream.fromPubSub(events).pipe(Stream.filter(validV2Publication)),
     };
     yield* settings.streamChanges.pipe(
       Stream.map((value) => JSON.stringify(value.providers.opencodeV2)),

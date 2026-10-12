@@ -1,6 +1,8 @@
 import path from "node:path";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
+import { currentV2RequestContext, runV2RequestContext } from "./Client.guard.ts";
+import type { V2ConsentAuthority } from "./Application.consent.ts";
 import { V2UnconfirmedProcessStartup, v2ProcessExited } from "./ServerManager.lifecycle.ts";
 
 import { OpencodeV2EventHub, validateV2EventHubBounds } from "./EventHub.ts";
@@ -21,6 +23,7 @@ interface Entry {
   startupSettled?: boolean;
   exclusive?: boolean;
   unsubscribe?: () => void;
+  releaseStream?: (() => void) | undefined;
 }
 
 export interface V2ProcessLease {
@@ -46,6 +49,7 @@ export class OpencodeV2ServerManager {
       readonly maxQueuedEvents: number;
       readonly maxEventBytes: number;
       readonly consumerTimeoutMs: number;
+      readonly consent?: V2ConsentAuthority;
     },
   ) {
     validateV2EventHubBounds(options);
@@ -91,25 +95,45 @@ export class OpencodeV2ServerManager {
   }
 
   async acquire(config: V2ProcessConfig): Promise<V2ProcessLease> {
+    const authority =
+      config.sharedService && this.options.consent ? currentV2RequestContext() : undefined;
+    if (
+      config.sharedService &&
+      this.options.consent &&
+      (!authority ||
+        authority.intent !== "execute" ||
+        authority.transport !== config.sharedService.registrationFile)
+    )
+      throw new Error("V2 manager acquisition requires native trust consent.");
+    authority?.permit.assertCurrent();
     if (this.closed) throw new Error("OpenCode v2 manager is closed.");
     const resolvePath = config.runtimeTargetId === "local" ? path.resolve : path.posix.resolve;
-    const key = JSON.stringify([
-      config.runtimeTargetId,
-      resolvePath(config.binaryPath),
-      resolvePath(config.profileRoot),
-      config.sharedService ? "shared" : (config.workspaceRoot ?? null),
-    ]);
+    const key = config.sharedService
+      ? JSON.stringify([
+          "shared",
+          config.sharedService.registrationFile,
+          config.sharedService.generation,
+        ])
+      : JSON.stringify([
+          config.runtimeTargetId,
+          resolvePath(config.binaryPath),
+          resolvePath(config.profileRoot),
+          config.sharedService ? "shared" : (config.workspaceRoot ?? null),
+        ]);
     let entry = this.entries.get(key);
     if (!entry) {
       if (this.entries.size >= this.options.maxProcesses)
         throw new Error("OpenCode v2 process capacity reached.");
-      const storageKey = JSON.stringify([config.runtimeTargetId, resolvePath(config.profileRoot)]);
+      const storageKey = config.sharedService
+        ? JSON.stringify(["shared", config.sharedService.registrationFile])
+        : JSON.stringify([config.runtimeTargetId, resolvePath(config.profileRoot)]);
       if ([...this.entries.values()].some((existing) => existing.storageKey === storageKey)) {
         throw new Error("OpenCode v2 profile storage is already owned by another executable.");
       }
-      const start = Promise.resolve().then(() =>
-        (this.options.start ?? startOwnedV2Process)(config),
-      );
+      const start = Promise.resolve().then(() => {
+        authority?.permit.assertCurrent();
+        return (this.options.start ?? startOwnedV2Process)(config);
+      });
       entry = {
         storageKey,
         generation: ++this.nextGeneration,
@@ -154,9 +178,12 @@ export class OpencodeV2ServerManager {
     let process: OwnedV2Process;
     try {
       process = await owned.started;
+      authority?.permit.assertCurrent();
     } catch (error) {
       owned.references--;
       owned.closing = true;
+      if (owned.references === 0 && owned.process?.ownership === "borrowed")
+        await owned.process.close();
       this.forgetSettled(key, owned);
       if (
         error instanceof Error &&
@@ -179,12 +206,33 @@ export class OpencodeV2ServerManager {
     }
     if (!owned.hub) {
       this.remember(key, owned, process);
+      const streamPermit = config.sharedService ? this.options.consent?.capture() : undefined;
+      owned.releaseStream = streamPermit?.release;
+      const transport = config.sharedService?.registrationFile;
+      streamPermit?.assertCurrent();
       const hub = new OpencodeV2EventHub({
         ...this.options,
-        subscribe: (signal) => process.client.event.subscribe({ signal }),
+        requireMarker: true,
+        subscribe: (signal, onActivity) =>
+          process.client.event.subscribe({
+            signal: streamPermit ? AbortSignal.any([signal, streamPermit.signal]) : signal,
+            ...(onActivity ? { onActivity } : {}),
+          }),
       });
       owned.hub = hub;
-      hub.start();
+      if (streamPermit && transport) {
+        streamPermit.signal.addEventListener(
+          "abort",
+          () => {
+            hub.markGap();
+            void hub.close().finally(streamPermit.release);
+          },
+          { once: true },
+        );
+        runV2RequestContext({ transport, permit: streamPermit, intent: "execute" }, () =>
+          hub.start(),
+        );
+      } else hub.start();
     }
     let released = false;
     return {
@@ -208,6 +256,7 @@ export class OpencodeV2ServerManager {
           owned.closing = true;
           try {
             await owned.hub?.close();
+            owned.releaseStream?.();
             await process.close();
           } finally {
             this.forgetSettled(key, owned);
@@ -223,6 +272,7 @@ export class OpencodeV2ServerManager {
       [...this.entries.entries()].map(async ([key, entry]) => {
         entry.closing = true;
         await entry.hub?.close();
+        entry.releaseStream?.();
         // Late startup completion is disposed too, even if the first caller cancelled.
         await runWithAbortableDeadline({
           operation: "OpenCode v2 manager shutdown",

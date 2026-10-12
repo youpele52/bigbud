@@ -8,14 +8,23 @@ import { makeOwnedClient, v2Request, type OpencodeV2Client } from "./Client.ts";
 import { assertDevelopmentVersion, validateOwnedEndpoint } from "./Compatibility.ts";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
 
-export interface V2ProcessConfig {
-  readonly sharedService?: import("./SharedService.storage.ts").V2SharedStorage;
+export interface V2IsolatedProcessConfig {
+  readonly sharedService?: undefined;
   readonly binaryPath: string;
   readonly profileRoot: string;
   readonly runtimeTargetId: string;
   readonly workspaceRoot?: string;
   readonly codingEndpoint?: { readonly url: string; readonly token: string };
 }
+export interface V2SharedProcessConfig {
+  readonly sharedService: import("./SharedService.descriptor.ts").V2SharedConnection;
+  readonly binaryPath?: never;
+  readonly profileRoot?: never;
+  readonly runtimeTargetId: string;
+  readonly workspaceRoot?: never;
+  readonly codingEndpoint?: never;
+}
+export type V2ProcessConfig = V2IsolatedProcessConfig | V2SharedProcessConfig;
 
 export interface OwnedV2Process {
   readonly ownership?: "borrowed";
@@ -30,7 +39,9 @@ export interface OwnedV2Process {
 }
 
 /** Only explicitly isolated roots and a small environment allowlist reach the child. */
-export async function isolatedEnvironment(config: V2ProcessConfig): Promise<NodeJS.ProcessEnv> {
+export async function isolatedEnvironment(
+  config: V2IsolatedProcessConfig,
+): Promise<NodeJS.ProcessEnv> {
   if (config.runtimeTargetId !== "local") {
     throw new Error("OpenCode v2 SSH bootstrap is not yet verified; runtime unavailable.");
   }
@@ -49,7 +60,7 @@ export async function isolatedEnvironment(config: V2ProcessConfig): Promise<Node
   }
   await runWithAbortableDeadline({
     operation: "V2 launcher profile isolation",
-    timeoutMs: 5000,
+    timeoutMs: process.platform === "win32" ? 30000 : 5000,
     run: (signal) => inspectPrivateV2Profile(config.profileRoot, { signal, marker: false }),
   });
   const env: NodeJS.ProcessEnv = {};
@@ -107,7 +118,10 @@ export async function closeOwnedChild(child: ChildProcess): Promise<void> {
   });
 }
 
-async function executableVersion(config: V2ProcessConfig, env: NodeJS.ProcessEnv): Promise<string> {
+async function executableVersion(
+  config: V2IsolatedProcessConfig,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
   const child = spawn(config.binaryPath, ["--version"], {
     env,
     cwd: config.profileRoot,
@@ -189,6 +203,7 @@ async function readiness(child: ChildProcess): Promise<string> {
 }
 
 export async function startOwnedV2Process(config: V2ProcessConfig): Promise<OwnedV2Process> {
+  if (config.sharedService) throw new Error("V2 owned launcher refuses a borrowed shared service.");
   const env = await isolatedEnvironment(config);
   assertDevelopmentVersion(await executableVersion(config, env));
   let password = randomBytes(32).toString("base64url");

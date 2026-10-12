@@ -3,12 +3,80 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { ServerConfig } from "../startup/config.ts";
 import { ServerSettingsLive, ServerSettingsService } from "./serverSettings.ts";
+import { V2ConsentAuthority } from "../provider/Layers/OpencodeV2/Application.consent.ts";
 
 const config = Layer.fresh(
   ServerConfig.layerTest(process.cwd(), { prefix: "v2-settings-boundary-" }),
 );
 
 it.layer(NodeServices.layer)("V2 settings persistence boundaries", (it) => {
+  it.effect(
+    "native trust is never inferred, explicit export/import survives, and accepted disk writes revoke before acknowledgement",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { settingsPath } = yield* ServerConfig;
+        yield* fs.writeFileString(
+          settingsPath,
+          JSON.stringify({
+            providers: { opencodeV2: { enabled: true, connectionMode: "shared" } },
+          }),
+        );
+        const exported = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            assert.equal(
+              settings.currentSnapshot?.()?.settings.providers.opencodeV2.nativeServiceTrust,
+              undefined,
+            );
+            yield* settings.updateSettings({
+              providers: { opencodeV2: { nativeServiceTrust: "host-user-v1" } },
+            });
+            return yield* fs.readFileString(settingsPath);
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+        assert.equal(JSON.parse(exported).providers.opencodeV2.nativeServiceTrust, "host-user-v1");
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const settings = yield* ServerSettingsService;
+            yield* settings.start;
+            const authority = new V2ConsentAuthority(settings);
+            const permit = authority.capture();
+            let acknowledged = false;
+            const accepted: boolean[] = [];
+            const unsubscribe = settings.onSnapshotChange?.(() =>
+              accepted.push(!acknowledged && permit.signal.aborted),
+            );
+            try {
+              yield* settings.updateSettings({
+                providers: { opencodeV2: { nativeServiceTrust: null } },
+              });
+              acknowledged = true;
+              assert.deepEqual(accepted, [true]);
+              assert.equal(
+                settings.currentSnapshot?.()?.settings.providers.opencodeV2.nativeServiceTrust,
+                null,
+              );
+              assert.equal(
+                JSON.parse(yield* fs.readFileString(settingsPath)).providers.opencodeV2
+                  .nativeServiceTrust,
+                null,
+              );
+              yield* settings.updateSettings({ greetingName: "independent" });
+              assert.equal(
+                (yield* settings.getSettings).providers.opencodeV2.nativeServiceTrust,
+                null,
+              );
+            } finally {
+              unsubscribe?.();
+              permit.release();
+              authority.close();
+            }
+          }).pipe(Effect.provide(ServerSettingsLive)),
+        );
+      }).pipe(Effect.provide(config)),
+  );
   it.effect("malformed V2 entries retain explicit consent through disk recovery and reload", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

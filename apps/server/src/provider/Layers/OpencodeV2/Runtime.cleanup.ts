@@ -2,9 +2,19 @@ import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { v2Request } from "./Client.ts";
 import { releaseV2PreparedSession } from "./Runtime.preparation.ts";
 import { assertV2SharedSessionOwner } from "./Runtime.ownership.ts";
+import { runV2Cleanup } from "./Client.guard.ts";
 
 /** Native cleanup can fail, but lease release must always run. History and journal survive. */
 export async function releaseV2Session(
+  session: V2RuntimeSession,
+  observe?: (operation: Promise<unknown>) => void,
+) {
+  return runV2Cleanup(session.sharedTransport, session.native.id, () =>
+    releaseOwnedV2Session(session, observe),
+  );
+}
+
+async function releaseOwnedV2Session(
   session: V2RuntimeSession,
   observe?: (operation: Promise<unknown>) => void,
 ) {
@@ -45,6 +55,7 @@ export async function releaseV2Session(
       return operation;
     });
   } finally {
+    session.consentPermit?.release();
     await releaseV2PreparedSession(session);
   }
 }

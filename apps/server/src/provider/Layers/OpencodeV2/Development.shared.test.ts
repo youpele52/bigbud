@@ -17,13 +17,11 @@ it("refreshes native account metadata without credential reads, preserves native
       .spyOn(http.client.integration, "list")
       .mockResolvedValue({ location: { directory }, data: [] });
     const config = {
-      ...runtime.options.config,
+      runtimeTargetId: "local",
       sharedService: {
         registrationFile: "/native/service.json",
-        databasePath: runtime.options.config.profileRoot,
         storageIdentity: "native-db",
         generation: "native",
-        binaryPath: "/native/opencode",
       },
     };
     await Effect.runPromise(

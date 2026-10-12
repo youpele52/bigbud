@@ -32,6 +32,11 @@ import type { ProviderRegistration } from "../ProviderRegistration.ts";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
 import { isProviderRetryable, needsProviderRefresh } from "../providerRecovery";
 import { providerAdvertisesRemoteWorkspaceSupport } from "../providerRemoteWorkspaceConformance.ts";
+import {
+  currentProviderSnapshot,
+  currentProviderSnapshots,
+  inheritProviderSnapshot,
+} from "../providerSnapshot.authority.ts";
 
 const MANUAL_REFRESH_MAX_ATTEMPTS = 3;
 const MANUAL_REFRESH_DELAYS = ["1 second", "3 seconds"] as const;
@@ -62,10 +67,12 @@ const loadProviders = (
   Effect.all(
     registrations.map((registration) =>
       registration.service.getSnapshot.pipe(
-        Effect.map((snapshot) => ({
-          ...snapshot,
-          supportsLocalRuntimeRemoteWorkspace: providerAdvertisesRemoteWorkspaceSupport(snapshot),
-        })),
+        Effect.map((snapshot) =>
+          inheritProviderSnapshot(snapshot, {
+            ...snapshot,
+            supportsLocalRuntimeRemoteWorkspace: providerAdvertisesRemoteWorkspaceSupport(snapshot),
+          }),
+        ),
       ),
     ),
     { concurrency: "unbounded" },
@@ -114,8 +121,8 @@ const makeProviderRegistryLayer = (
 
       // Every managed provider supplies an immediate snapshot, so the registry
       // can expose the complete ordered list before background probes finish.
-      const initialProviders = yield* loadProviders(registrations);
-      const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(initialProviders);
+      const initialProviders = currentProviderSnapshots(yield* loadProviders(registrations));
+      let currentProviders = initialProviders;
       const manualGenerationRef = yield* Ref.make(0);
 
       // Latches the first provider that becomes ready.  Subsequent ready
@@ -129,9 +136,15 @@ const makeProviderRegistryLayer = (
       const syncProviders = Effect.fn("syncProviders")(function* (options?: {
         readonly publish?: boolean;
       }) {
-        const previousProviders = yield* Ref.get(providersRef);
-        const providers = yield* loadProviders(registrations);
-        yield* Ref.set(providersRef, providers);
+        const loaded = yield* loadProviders(registrations);
+        const providers = yield* Effect.sync(() => {
+          const previous = currentProviders;
+          const next = currentProviderSnapshots(loaded);
+          currentProviders = next;
+          if (options?.publish !== false && haveProvidersChanged(previous, next))
+            PubSub.publishUnsafe(changesPubSub, next);
+          return next;
+        });
 
         // Latch the first ready provider (idempotent after first success).
         const maybeReady = findFirstReadyProvider(providers);
@@ -139,11 +152,7 @@ const makeProviderRegistryLayer = (
           yield* Deferred.succeed(firstReadyDeferred, maybeReady.value).pipe(Effect.ignore);
         }
 
-        if (options?.publish !== false && haveProvidersChanged(previousProviders, providers)) {
-          yield* PubSub.publish(changesPubSub, providers);
-        }
-
-        return providers;
+        return yield* Effect.sync(() => currentProviderSnapshots(providers));
       });
 
       yield* Effect.forEach(registrations, (registration) =>
@@ -159,8 +168,8 @@ const makeProviderRegistryLayer = (
       );
 
       const refresh = Effect.fn("refresh")(function* (provider?: ProviderKind) {
-        const currentProviders = yield* Ref.get(providersRef);
-        let targets = selectManualRefreshTargets(registrations, currentProviders, provider);
+        const current = currentProviderSnapshots(currentProviders);
+        let targets = selectManualRefreshTargets(registrations, current, provider);
         const generation = yield* Ref.updateAndGet(
           manualGenerationRef,
           (currentGeneration) => currentGeneration + 1,
@@ -237,7 +246,7 @@ const makeProviderRegistryLayer = (
       });
 
       return {
-        getProviders: Ref.get(providersRef).pipe(
+        getProviders: Effect.sync(() => currentProviderSnapshots(currentProviders)).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => []),
         ),
@@ -247,11 +256,29 @@ const makeProviderRegistryLayer = (
             Effect.orElseSucceed(() => []),
           ),
         get streamChanges() {
-          return Stream.fromPubSub(changesPubSub);
+          return Stream.fromPubSub(changesPubSub).pipe(
+            Stream.rechunk(1),
+            Stream.map(currentProviderSnapshots),
+          );
         },
-        openChanges: PubSub.subscribe(changesPubSub).pipe(Effect.map(Stream.fromSubscription)),
+        openChanges: PubSub.subscribe(changesPubSub).pipe(
+          Effect.map((subscription) =>
+            Stream.fromSubscription(subscription).pipe(
+              Stream.rechunk(1),
+              Stream.map(currentProviderSnapshots),
+            ),
+          ),
+        ),
         awaitFirstReadyProvider: Deferred.await(firstReadyDeferred).pipe(
           Effect.timeoutOption(10_000),
+          Effect.map((snapshot) =>
+            Option.flatMap(snapshot, (value) => {
+              const current = currentProviderSnapshot(value);
+              return current.enabled && current.status === "ready"
+                ? Option.some(current)
+                : Option.none();
+            }),
+          ),
         ),
       } satisfies ProviderRegistryShape;
     }),

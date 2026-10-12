@@ -1,0 +1,133 @@
+name: OpenCode V2 API logical history (disposable fixtures)
+on:
+  workflow_dispatch:
+  push:
+    branches: ["task/opencode-v2-*"]
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }} OpenCode ${{ matrix.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2022
+            version: "2.0.24"
+          - arch: x64
+            runner: windows-2022
+            version: "2.0.26"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.0.24"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.0.26"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Native Windows ARM64 binaries require Bun >=1.3.10.
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Verify native JavaScript runtime architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Node architecture mismatch"); console.log(process.version, process.platform, process.arch)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Bun architecture mismatch"); console.log(Bun.version, process.platform, process.arch)'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Build read-only native helper
+        id: helper-build
+        run: cargo build --locked --package bigbud-remote-agent
+      - name: Exercise read-only native helper
+        run: cargo test --locked --package bigbud-remote-agent --test inspect_local
+      - name: Diagnose disposable fixture ACL boundaries
+        if: ${{ always() && hashFiles('target/debug/bigbud-remote-agent.exe') != '' }}
+        run: node scripts/opencode-v2-windows-diagnostics.ts
+      - name: Download official disposable OpenCode package and verify registry integrity
+        id: fixture
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" (Join-Path $env:RUNNER_TEMP "opencode-fixture-${{ matrix.version }}")
+      - name: API transport, logical history, consent and secure registration (required fixtures)
+        if: ${{ !cancelled() && steps.fixture.outcome == 'success' }}
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/SharedService.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.application.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.logical.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.binding.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.learning.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.creation.consent.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.recovery.fences.test.ts
+          src/ws/serverSettings.consentWatcher.test.ts
+          src/provider/Layers/OpencodeV2/Application.consent.test.ts
+          src/provider/Layers/OpencodeV2/EventHub.connection.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.context.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.model.routing.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.direction.test.ts
+          src/provider/Layers/OpencodeV2/ProfileIsolation.windows.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+      - name: Package resolver and ARM64 PE identity tests
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/remote-agent/localWorkspaceWatchAgent.binary.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.packaging.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencode-v2-helper-${{ matrix.arch }}-${{ matrix.version }}
+          path: target/debug/bigbud-remote-agent.exe
+          if-no-files-found: error
+  unix:
+    name: API ${{ matrix.runner }} OpenCode ${{ matrix.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-14]
+        version: ["2.0.24", "2.0.26"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Download verified disposable native fixture
+        run: node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" "$RUNNER_TEMP/opencode-fixture-${{ matrix.version }}"
+      - name: Required native API/history and deterministic safety matrix
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/SharedService.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.application.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.logical.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.context.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.model.routing.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.binding.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.learning.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.creation.consent.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.recovery.fences.test.ts
+          src/ws/serverSettings.consentWatcher.test.ts
+          src/provider/Layers/OpencodeV2/Application.consent.test.ts
+          src/provider/Layers/OpencodeV2/EventHub.connection.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.registration.test.ts

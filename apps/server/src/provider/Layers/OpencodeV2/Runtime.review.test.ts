@@ -33,12 +33,12 @@ it("serializes startup recovery with hub repair so a blocked final publication c
     const entered = deferred<void>();
     const emit = runtime.options.emit;
     let publications = 0;
-    vi.spyOn(runtime.options, "emit").mockImplementation(async (event) => {
+    vi.spyOn(runtime.options, "emit").mockImplementation(async (event, validate) => {
       if (event.type === "item.completed" && ++publications === 1) {
         entered.resolve();
         await gate.promise;
       }
-      await emit(event);
+      await emit(event, validate);
     });
     const resumed = runtime.start({
       threadId,

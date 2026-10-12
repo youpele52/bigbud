@@ -13,7 +13,7 @@ export function v2HttpFailureStatus(error: unknown): number | undefined {
     if (
       current instanceof V2HttpStatusError &&
       Number.isInteger(current.status) &&
-      current.status >= 500 &&
+      current.status >= 400 &&
       current.status <= 599
     )
       return current.status;

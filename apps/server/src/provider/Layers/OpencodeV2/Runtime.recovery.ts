@@ -81,28 +81,50 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
   }
   if (session.stopped || !session.lease.process.isRunning()) return;
   const generation = session.lease.hub.generation(session.native.id);
+  const dirtyGeneration = session.dirtyGeneration;
+  const epoch = session.epoch;
+  const validate = () => {
+    session.consentPermit?.assertCurrent();
+    if (
+      session.stopped ||
+      runtime.sessions.get(session.threadId) !== session ||
+      epoch !== session.epoch ||
+      session.dirtyGeneration !== dirtyGeneration ||
+      session.lease.hub.generation(session.native.id) !== generation ||
+      !session.lease.process.isRunning()
+    )
+      throw new Error("V2 late recovery snapshot owner/generation rejected.");
+  };
   let phase = "admission";
   try {
     let row = session.row;
     if (!row || row.state === "reserved") return;
+    phase = "canonical publication";
+    if (session.publicationUnconfirmed) throw new Error("V2 canonical publication unconfirmed.");
+    phase = "admission";
     if (row.state === "dispatch-intent") {
-      if (!(await observeV2Admission(session, row))) {
+      const observed = await observeV2Admission(session, row);
+      validate();
+      if (!observed) {
         await v2RuntimeStatus(
           runtime,
           session,
           "error",
           "Admission remains unconfirmed; no automatic resend or replacement. Check existing execution before retrying.",
+          validate,
         );
         return;
       }
       row = await Effect.runPromise(
         runtime.options.journal.transition(row, "accepted", new Date().toISOString()),
       );
+      validate();
       if (session.stopped) return;
       session.row = row;
     }
     phase = "message projection";
     const messages = await readV2Messages(session);
+    validate();
     if (session.stopped) return;
     const projection = correlatedProjection(session, messages);
     if (!projection) {
@@ -111,6 +133,7 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
         session,
         "error",
         "Native output correlation remains unconfirmed; no automatic resend.",
+        validate,
       );
       return;
     }
@@ -127,11 +150,12 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
     for (const message of projection.assistants) session.messages.set(message.id, message);
     phase = "output repair";
     for (const event of projectionEvents(session, projection.assistants))
-      await runtime.emit(session, event);
+      await runtime.emit(session, event, validate);
     phase = "interaction projection";
     const interactions = await pendingV2Interactions(session);
+    validate();
     if (session.stopped) return;
-    for (const event of interactions) await runtime.emit(session, event);
+    for (const event of interactions) await runtime.emit(session, event, validate);
     const pending = interactions.some(
       (event) => event.type === "request.opened" || event.type === "user-input.requested",
     );
@@ -146,6 +170,7 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
           : projection.assistants.length === 0
             ? "Native admission accepted; waiting for output. No automatic resend."
             : undefined,
+        validate,
       );
     let terminalOutcome = projection.idle?.outcome;
     const last = projection.assistants.at(-1);
@@ -167,6 +192,7 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
         ),
       );
       if (inbox.length > 1000) throw new Error("V2 aborted-step inbox bound exceeded.");
+      validate();
       if (!active[session.native.id] && !inbox.some((item) => item.id === row.nativeAdmissionId))
         terminalOutcome = "interrupted";
     }
@@ -196,10 +222,11 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
             ? "failed"
             : "interrupted";
       phase = "terminal journal";
+      validate();
       if (row.state === "terminal" && row.terminalOutcome !== outcome)
         throw new Error("V2 durable/native terminal outcome conflict.");
-      if (row.state !== "terminal")
-        session.row = await Effect.runPromise(
+      if (row.state !== "terminal") {
+        const terminal = await Effect.runPromise(
           runtime.options.journal.transition(
             row,
             "terminal",
@@ -208,21 +235,37 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
             outcome,
           ),
         );
+        validate();
+        session.row = terminal;
+      }
       phase = "terminal delivery";
+      validate();
+      if (session.publicationUnconfirmed) {
+        phase = "canonical publication";
+        throw new Error("V2 canonical publication unconfirmed.");
+      }
       if (session.stopped) return;
-      await runtime.emit(session, {
-        ...runtimeEventBase(session, `terminal:${row.turnId}`),
-        type: "turn.completed",
-        payload: {
-          state: outcome,
-          ...(outcome === "failed" ? { errorMessage: v2NativeFailureMessage(last) } : {}),
-          totalCostUsd: projection.assistants.reduce(
-            (sum, message) => sum + (message.cost ?? 0),
-            0,
-          ),
+      await runtime.emit(
+        session,
+        {
+          ...runtimeEventBase(session, `terminal:${row.turnId}`),
+          type: "turn.completed",
+          payload: {
+            state: outcome,
+            ...(outcome === "failed" ? { errorMessage: v2NativeFailureMessage(last) } : {}),
+            totalCostUsd: projection.assistants.reduce(
+              (sum, message) => sum + (message.cost ?? 0),
+              0,
+            ),
+          },
         },
-      });
-      await v2RuntimeStatus(runtime, session, "ready");
+        validate,
+      );
+      await v2RuntimeStatus(runtime, session, "ready", undefined, validate);
+      if (session.publicationUnconfirmed) {
+        phase = "canonical publication";
+        throw new Error("V2 canonical publication unconfirmed.");
+      }
       session.terminalDelivered = true;
       session.session = {
         ...session.session,
@@ -231,10 +274,16 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
         lastError: undefined,
       };
     }
-    if (!session.lease.hub.reconciled(session.native.id, generation))
-      runtime.scheduleRepair(session);
+    // A dirty owner still unwinding requests its next fresh read from onDrained.
+    // Merely scheduling that retry must not invalidate the projection just queued.
+    session.lease.hub.reconciled(session.native.id, generation);
     session.lease.hub.start();
   } catch {
+    try {
+      validate();
+    } catch {
+      return;
+    }
     await v2RuntimeStatus(
       runtime,
       session,

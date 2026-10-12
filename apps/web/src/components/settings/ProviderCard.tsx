@@ -12,6 +12,7 @@ import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { SettingResetButton } from "./settingsLayout";
 import { ProviderModelList } from "./ProviderCard.modelList";
+import { ProviderNativeTrust } from "./ProviderCard.nativeTrust";
 
 export type ProviderCardData = {
   provider: ProviderKind;
@@ -54,6 +55,10 @@ type ProviderCardProps = {
   onHomePathChange: (value: string) => void;
   connectionMode?: "shared" | "isolated";
   onConnectionModeChange?: (mode: "shared" | "isolated") => void;
+  nativeServiceConsented?: boolean;
+  onNativeServiceConsentChange?: (enabled: boolean) => void;
+  serviceFile?: string;
+  onServiceFileChange?: (file: string) => void;
   onCustomModelInputChange: (value: string) => void;
   onAddCustomModel: () => void;
   onRemoveCustomModel: (slug: string) => void;
@@ -78,6 +83,10 @@ export function ProviderCard({
   onHomePathChange,
   connectionMode = "shared",
   onConnectionModeChange,
+  nativeServiceConsented = false,
+  onNativeServiceConsentChange,
+  serviceFile = "",
+  onServiceFileChange,
   onCustomModelInputChange,
   onAddCustomModel,
   onRemoveCustomModel,
@@ -168,6 +177,14 @@ export function ProviderCard({
                 </select>
               </label>
             ) : null}
+            {card.provider === "opencodeV2" && connectionMode === "shared" ? (
+              <ProviderNativeTrust
+                consented={nativeServiceConsented}
+                onConsentChange={onNativeServiceConsentChange}
+                serviceFile={serviceFile}
+                onServiceFileChange={onServiceFileChange}
+              />
+            ) : null}
             <div className="border-t border-border/60 px-4 py-3 sm:px-5">
               <label htmlFor={`provider-install-${card.provider}-binary-path`} className="block">
                 <span className="text-xs font-medium text-foreground">
@@ -178,6 +195,7 @@ export function ProviderCard({
                 <Input
                   id={`provider-install-${card.provider}-binary-path`}
                   className="mt-1.5"
+                  disabled={card.provider === "opencodeV2" && connectionMode === "shared"}
                   value={card.configPath ? card.configPathValue : card.binaryPathValue}
                   onChange={(event) =>
                     card.configPath

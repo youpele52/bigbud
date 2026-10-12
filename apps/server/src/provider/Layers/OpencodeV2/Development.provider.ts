@@ -15,9 +15,11 @@ import type { V2ProcessLease } from "./ServerManager.ts";
 import { assertDevelopmentVersion, OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import {
   assertV2SharedQualifiedVersion,
+  isV2SharedUpdateRecommended,
   V2_RECOMMENDED_RUNTIME_VERSION,
 } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { currentV2RequestContext } from "./Client.guard.ts";
 
 /** Discovery and execution share one manager/client/hub; lease auth is not model credential proof. */
 export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(function* (
@@ -102,6 +104,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         nativeModels,
         new Map(providers.data.map(({ id, name }) => [id, name])),
       );
+      currentV2RequestContext()?.permit.assertCurrent();
       lastModels = models;
       const catalogMessage = publicCatalog.stale
         ? "Full catalog refresh failed; showing the last good catalog and current native models. Retry after 30 seconds. "
@@ -134,7 +137,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         }),
         ...(!application ? { developmentOnly: true } : {}),
         ...(shared ? { supportsLocalRuntimeRemoteWorkspace: false } : {}),
-        ...(shared && info.version === "2.0.24"
+        ...(shared && isV2SharedUpdateRecommended(info.version)
           ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION }
           : {}),
         ...(agents
@@ -233,14 +236,16 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
     const enabled = yield* isEnabled;
     let snapshot: ServerProvider = enabled
       ? yield* Effect.promise(() => {
-          pending ??= probe(enabled).finally(() => {
-            pending = undefined;
-          });
+          pending ??= runtime
+            .authorized(() => probe(enabled))
+            .finally(() => {
+              pending = undefined;
+            });
           return pending;
         })
       : disabledSnapshot();
     if (!(yield* isEnabled)) snapshot = disabledSnapshot();
-    yield* snapshots.publish(snapshot);
+    yield* snapshots.publish(snapshot, currentV2RequestContext()?.permit.assertCurrent);
     return snapshot;
   });
   yield* Effect.addFinalizer(() =>

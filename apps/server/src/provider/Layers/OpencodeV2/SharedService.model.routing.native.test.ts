@@ -5,6 +5,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, MessageId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "../../../persistence/Layers/ProviderSessionRuntime.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -47,7 +49,7 @@ vi.mock(
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 const version = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_VERSION;
 
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+it.skipIf(!binary || !version)(
   "routes captured cross-subprovider model/variant switching through application, ProviderService and orchestration without replacing history",
   async () => {
     const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
@@ -69,8 +71,8 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
       const registrationBefore = await readFile(fixture.file);
       const endpoint = (await readV2SharedRegistration(fixture.file)).endpoint;
       const client = makeV2Client({ endpoint: endpoint.url, headers: Service.headers(endpoint) });
-      const settings = {
-        getSettings: Effect.succeed({
+      const settings = await Effect.runPromise(
+        makeTestSettings({
           ...DEFAULT_SERVER_SETTINGS,
           providers: {
             ...DEFAULT_SERVER_SETTINGS.providers,
@@ -79,11 +81,11 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
+              nativeServiceTrust: "host-user-v1",
             },
           },
         }),
-        streamChanges: Stream.never,
-      } as unknown as typeof ServerSettingsService.Service;
+      );
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
@@ -241,7 +243,11 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             }).pipe(Effect.provide(serviceLayer));
           }),
         ).pipe(
-          Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
+          Effect.provide(
+            Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+              Layer.provide(SqlitePersistenceMemory),
+            ),
+          ),
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,

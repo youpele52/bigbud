@@ -1,5 +1,5 @@
 import type { ModelRef, SessionInfo } from "@opencode/client";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { v2Request } from "./Client.ts";
 import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession, V2StartInput } from "./Runtime.types.ts";
@@ -9,13 +9,13 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
-
-const Cursor = Schema.Struct({
-  provider: Schema.Literal("opencodeV2"),
-  nativeSessionId: Schema.String,
-  storageIdentity: Schema.String,
-  directory: Schema.String,
-});
+import { decodeV2Cursor } from "./Runtime.cursor.ts";
+import { decodeV2NativeSession } from "./Runtime.session.decode.ts";
+import {
+  prepareSharedCreation,
+  findSharedSession,
+  conservedSharedPolicy,
+} from "./Runtime.sessions.shared.ts";
 
 /** Rebinding is unsupported; compare native selection, not just the runtime fingerprint. */
 export function assertV2Model(actual: ModelRef | undefined, requested: ModelRef): void {
@@ -28,7 +28,9 @@ export function assertV2Model(actual: ModelRef | undefined, requested: ModelRef)
 }
 
 export function v2ResumeCursor(
-  session: Pick<V2RuntimeSession, "native" | "storageIdentity" | "model">,
+  session: Pick<V2RuntimeSession, "native" | "storageIdentity" | "model"> &
+    Partial<Pick<V2RuntimeSession, "sharedTransport">>,
+  connectionMode?: "shared" | "isolated",
 ) {
   return {
     provider: "opencodeV2",
@@ -36,6 +38,8 @@ export function v2ResumeCursor(
     storageIdentity: session.storageIdentity,
     directory: session.native.location.directory,
     model: { ...session.model },
+    connectionMode: connectionMode ?? (session.sharedTransport ? "shared" : "isolated"),
+    identityVersion: 1,
   } as const;
 }
 
@@ -73,12 +77,14 @@ export async function createRuntimeSession(
   ) {
     throw new Error("V2 requires an explicit native provider/model.");
   }
-  if (input.resumeCursor !== undefined) {
-    const cursor = Schema.decodeUnknownSync(Cursor)(input.resumeCursor);
+  const cursor = input.resumeCursor === undefined ? undefined : decodeV2Cursor(input.resumeCursor);
+  if (cursor) {
     if (
       cursor.nativeSessionId !== nativeSessionId ||
       cursor.storageIdentity !== storageIdentity ||
-      cursor.directory !== directory
+      cursor.directory !== directory ||
+      (cursor.connectionMode !== undefined &&
+        cursor.connectionMode !== (options.config.sharedService ? "shared" : "isolated"))
     ) {
       throw new Error("V2 resume ownership mismatch; no fresh-session fallback.");
     }
@@ -88,9 +94,15 @@ export async function createRuntimeSession(
     id: selection.model,
     ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
   };
+  if (cursor?.model) assertV2Model(cursor.model, model);
   const localTools = options.enableLocalTools === true && !disableTools;
-  const permissions = options.config.sharedService
-    ? v2SharedToolPolicy(input.runtimeMode, options.config.sharedService.databasePath, localTools)
+  let permissions = options.config.sharedService
+    ? v2SharedToolPolicy(
+        input.runtimeMode,
+        undefined,
+        localTools,
+        options.config.sharedService.registrationFile,
+      )
     : v2LocalToolPolicy(input.runtimeMode, localTools, Boolean(options.codingBridge), {
         nativeWorkspace: runtimeTarget === workspaceTarget,
         profileRoot: root,
@@ -102,6 +114,16 @@ export async function createRuntimeSession(
   cancellation?.throwIfAborted();
   await options.authorizeExecution?.();
   cancellation?.throwIfAborted();
+  const shared = options.config.sharedService
+    ? await prepareSharedCreation(
+        options,
+        input,
+        { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId },
+        model,
+        permissions,
+      )
+    : undefined;
+  let sharedRow = shared?.row;
   const acquire = async (): Promise<Omit<V2RuntimeSession, "unregister" | "unsubscribeDeath">> => {
     mutations?.assertSafe();
     cancellation?.throwIfAborted();
@@ -111,10 +133,13 @@ export async function createRuntimeSession(
       mutations?.assertSafe();
       const verify = async () => {
         if (cancellation?.aborted || !lease.process.isRunning()) return false;
-        const observed = await v2Request(
-          "startup session.verify",
-          (signal) => lease.process.client.session.get({ sessionID: nativeSessionId }, { signal }),
-          requests,
+        const observed = decodeV2NativeSession(
+          await v2Request(
+            "startup session.verify",
+            (signal) =>
+              lease.process.client.session.get({ sessionID: nativeSessionId }, { signal }),
+            requests,
+          ),
         );
         return (
           observed.id === nativeSessionId &&
@@ -127,10 +152,12 @@ export async function createRuntimeSession(
       const mutate = <T>(operation: string, request: (signal: AbortSignal) => Promise<T>) =>
         mutations.runOwned(lease.process, operation, request, verify, 10000, cancellation, true);
       let native: SessionInfo;
-      let found: SessionInfo | undefined;
+      let found: SessionInfo | undefined = shared
+        ? await findSharedSession(lease.process.client, nativeSessionId, cancellation)
+        : undefined;
       let cursor: string | undefined;
       const cursors = new Set<string>();
-      for (let page = 0; page < 100; page++) {
+      for (let page = 0; !shared && page < 100; page++) {
         const listing = await v2Request(
           "session.list",
           (signal) =>
@@ -148,21 +175,28 @@ export async function createRuntimeSession(
         cursors.add(cursor);
       }
       if (found)
-        native = await v2Request(
-          "session.get",
-          (signal) => lease.process.client.session.get({ sessionID: nativeSessionId }, { signal }),
-          requests,
+        native = decodeV2NativeSession(
+          await v2Request(
+            "session.get",
+            (signal) =>
+              lease.process.client.session.get({ sessionID: nativeSessionId }, { signal }),
+            requests,
+          ),
         );
       else {
         // A resume must never manufacture new native history. A deterministic creation ID
         // prevents a lost creation acknowledgement from silently creating a second session.
-        if (input.resumeCursor !== undefined) throw new Error("V2 bound session unavailable.");
+        if (input.resumeCursor !== undefined || retained || (shared && !shared.canCreate))
+          throw new Error(
+            "V2 bound session unavailable; retained creation/admission intent, no replacement.",
+          );
         // Existing history/replay can rebind without current availability; only fresh history needs preflight.
         await assertV2ModelAvailable(lease.process.client, directory, model, cancellation);
         await options.authorizeExecution?.();
         cancellation?.throwIfAborted();
         mutations.assertSafe();
         if (!lease.process.isRunning()) throw new Error("V2 startup process is unavailable.");
+        if (shared) sharedRow = await shared.dispatch();
         native = await mutate("session.create", (signal) =>
           lease.process.client.session.create(
             {
@@ -180,6 +214,18 @@ export async function createRuntimeSession(
           ),
         );
       }
+      if (shared) {
+        const observed = await findSharedSession(
+          lease.process.client,
+          nativeSessionId,
+          cancellation,
+        );
+        if (!observed)
+          throw new Error(
+            "V2 creation/history verification unavailable; intent retained, no resend.",
+          );
+        native = observed;
+      }
       if (
         native.id !== nativeSessionId ||
         native.location.directory !== directory ||
@@ -191,6 +237,9 @@ export async function createRuntimeSession(
         throw new Error("V2 native session ownership rejected.");
       }
       assertV2Model(native.model, model);
+      if (shared?.row.identityKind === "adopted-legacy-v1")
+        permissions = conservedSharedPolicy(native.permissions, permissions);
+      if (shared && sharedRow) await shared.verify(sharedRow);
       if (localTools) await assertV2NoSavedGrants(lease.process.client, native);
       // Reset only this owned session's permissions. Never trust persisted broad approvals.
       mutations?.assertSafe();
@@ -226,7 +275,10 @@ export async function createRuntimeSession(
           createdAt: now,
           updatedAt: now,
           sessionEpoch: input.sessionEpoch ?? 0,
-          resumeCursor: v2ResumeCursor({ native, storageIdentity, model }),
+          resumeCursor: v2ResumeCursor(
+            { native, storageIdentity, model },
+            options.config.sharedService ? "shared" : "isolated",
+          ),
         },
         stopped: false,
         localTools,

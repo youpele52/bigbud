@@ -1,6 +1,6 @@
 import { chmod, writeFile, realpath, readFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, ThreadId } from "@bigbud/contracts";
 import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
@@ -52,10 +52,7 @@ it("disabled flag preserves registrations; missing configuration remains nonbloc
     await Effect.runPromise(
       check.pipe(
         Effect.provideService(ProviderTurnAdmissions, runtime.options.journal),
-        Effect.provideService(ServerSettingsService, {
-          getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
-          streamChanges: Stream.empty,
-        } as unknown as typeof ServerSettingsService.Service),
+        Effect.provide(ServerSettingsService.layerTest(DEFAULT_SERVER_SETTINGS)),
       ),
     );
   });
@@ -82,7 +79,13 @@ it("disabled settings never launch a configured executable; unknown versions fai
       ...DEFAULT_SERVER_SETTINGS,
       providers: {
         ...DEFAULT_SERVER_SETTINGS.providers,
-        opencodeV2: { ...DEFAULT_SERVER_SETTINGS.providers.opencodeV2, enabled: true },
+        opencodeV2: {
+          ...DEFAULT_SERVER_SETTINGS.providers.opencodeV2,
+          enabled: true,
+          connectionMode: "isolated" as const,
+          binaryPath: binary,
+          profileRoot: root,
+        },
       },
     };
     for (const settings of [DEFAULT_SERVER_SETTINGS, enabled]) {
@@ -123,9 +126,7 @@ it("disabled settings never launch a configured executable; unknown versions fai
               expect(start.failure.message).toContain("disabled");
           }).pipe(
             Effect.provideService(ProviderTurnAdmissions, runtime.options.journal),
-            Effect.provideService(ServerSettingsService, {
-              getSettings: Effect.succeed(settings),
-            } as unknown as typeof ServerSettingsService.Service),
+            Effect.provide(ServerSettingsService.layerTest(settings)),
           ),
         ),
       );

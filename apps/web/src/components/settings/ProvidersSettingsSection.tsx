@@ -184,7 +184,38 @@ export function ProvidersSettingsSection({
               updateSettings({
                 providers: {
                   ...settings.providers,
-                  opencodeV2: { ...settings.providers.opencodeV2, connectionMode },
+                  opencodeV2: {
+                    ...settings.providers.opencodeV2,
+                    connectionMode,
+                    nativeServiceTrust: null,
+                  },
+                },
+              })
+            }
+            nativeServiceConsented={
+              settings.providers.opencodeV2.nativeServiceTrust === "host-user-v1"
+            }
+            onNativeServiceConsentChange={(enabled) =>
+              updateSettings({
+                providers: {
+                  ...settings.providers,
+                  opencodeV2: {
+                    ...settings.providers.opencodeV2,
+                    nativeServiceTrust: enabled ? "host-user-v1" : null,
+                  },
+                },
+              })
+            }
+            serviceFile={settings.providers.opencodeV2.serviceFile ?? ""}
+            onServiceFileChange={(serviceFile) =>
+              updateSettings({
+                providers: {
+                  ...settings.providers,
+                  opencodeV2: {
+                    ...settings.providers.opencodeV2,
+                    serviceFile,
+                    nativeServiceTrust: null,
+                  },
                 },
               })
             }
@@ -210,7 +241,10 @@ export function ProvidersSettingsSection({
               updateSettings({
                 providers: {
                   ...settings.providers,
-                  [card.provider]: DEFAULT_UNIFIED_SETTINGS.providers[card.provider],
+                  [card.provider]: {
+                    ...DEFAULT_UNIFIED_SETTINGS.providers[card.provider],
+                    ...(card.provider === "opencodeV2" ? { nativeServiceTrust: null } : {}),
+                  },
                 },
               });
               setCustomModelErrorByProvider((prev) => ({ ...prev, [card.provider]: null }));

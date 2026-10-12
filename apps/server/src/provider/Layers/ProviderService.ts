@@ -8,7 +8,7 @@ import {
   type ProviderRuntimeEvent,
   type ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Layer, PubSub, Stream } from "effect";
+import { Effect, Layer, PubSub } from "effect";
 
 import {
   providerMetricAttributes,
@@ -45,7 +45,11 @@ import {
   makeStopStaleSessionsForThread,
   makeUpsertSessionBinding,
 } from "./ProviderService.sessionLifecycle.ts";
-import { makeProcessProviderRuntimeEvent } from "./ProviderService.runtimeEvents.ts";
+import {
+  makeProcessProviderRuntimeEvent,
+  makeCanonicalRuntimePublisher,
+  canonicalRuntimeStream,
+} from "./ProviderService.runtimeEvents.ts";
 import { ProviderTurnLivenessRepository } from "../../persistence/Services/ProviderTurnLiveness.ts";
 import { recordAcceptedSendTurn } from "./ProviderService.sendTurn.record.ts";
 import {
@@ -99,11 +103,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
   const processRuntimeEvent = makeProcessProviderRuntimeEvent({
     observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
-    publish: (event) =>
-      (canonicalEventLogger ? canonicalEventLogger.write(event, null) : Effect.void).pipe(
-        Effect.andThen(PubSub.publish(runtimeEventPubSub, event)),
-        Effect.asVoid,
-      ),
+    publish: makeCanonicalRuntimePublisher(runtimeEventPubSub, canonicalEventLogger),
   });
 
   yield* monitorProviderRuntimeEvents({
@@ -377,7 +377,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     rollbackConversation,
     // Each consumer independently receives all canonical runtime events.
     get streamEvents(): ProviderServiceShape["streamEvents"] {
-      return Stream.fromPubSub(runtimeEventPubSub);
+      return canonicalRuntimeStream(runtimeEventPubSub);
     },
   } satisfies ProviderServiceShape;
 });

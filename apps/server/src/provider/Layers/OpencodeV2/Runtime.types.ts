@@ -11,6 +11,8 @@ import type { V2ProcessLease, OpencodeV2ServerManager } from "./ServerManager.ts
 import type { V2ProcessConfig } from "./ServerManager.child.ts";
 
 export interface V2RuntimeSession {
+  readonly consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
+  readonly sharedTransport?: string;
   readonly resources?: V2SessionResources;
   coding?: {
     readonly pending: () => ProviderRuntimeEvent[];
@@ -40,6 +42,10 @@ export interface V2RuntimeSession {
   cancelUnsupportedForm?: (form: import("@opencode/client").FormInfo) => Promise<void>;
   dirtyGeneration: number;
   repairQueued: boolean;
+  /** Polls wait for admission's owner queue; actual stream gaps still invalidate it immediately. */
+  admissionInFlight?: boolean;
+  /** A downstream fence rejected queued output; native terminal evidence is not delivery proof. */
+  publicationUnconfirmed?: boolean;
   terminalDelivered: boolean;
   operation: Promise<unknown>;
   readonly emitted: Set<string>;
@@ -71,7 +77,7 @@ export interface V2SessionResources {
 }
 
 /** Explicit harness authorization; never inferred from saved provider enabled settings. */
-export interface V2IsolatedRuntimeOptions {
+export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessConfig> {
   readonly prepareSession?: (
     input: V2StartInput,
     signal: AbortSignal,
@@ -83,9 +89,11 @@ export interface V2IsolatedRuntimeOptions {
   }>;
   readonly codingBridge?: import("./Coding.bridge.ts").V2CodingBridge;
   readonly manager: OpencodeV2ServerManager;
-  readonly config: V2ProcessConfig;
+  readonly config: C;
   readonly journal: ProviderTurnAdmissionsShape;
-  readonly emit: (event: ProviderRuntimeEvent) => Promise<void>;
+  readonly sharedBindings?: import("../../../persistence/Services/OpencodeV2SharedBindings.ts").OpencodeV2SharedBindingsShape;
+  readonly consent?: import("./Application.consent.ts").V2ConsentAuthority;
+  readonly emit: (event: ProviderRuntimeEvent, validate?: () => void) => Promise<void>;
   readonly maxSessions?: number;
   readonly pollIntervalMs?: number;
   readonly attachmentsDir?: string;

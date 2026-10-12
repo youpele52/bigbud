@@ -35,20 +35,20 @@ it("borrows a qualified older service with two bounded authenticated GETs only",
   }
 });
 
-it.each(["2.0.20", "2.0.25", "2.0.27", "2.1.0", "3.0.0"])(
-  "never trusts unqualified %s by semver alone",
+it.each(["2.0.20", "1.0.0", "3.0.0", "2.00.24", "2.0.24-beta", "2.0.9007199254740992"])(
+  "rejects unsupported %s",
   (version) => {
-    expect(() => assertV2SharedQualifiedVersion(version)).toThrow("not qualified");
+    expect(() => assertV2SharedQualifiedVersion(version)).toThrow("unsupported");
   },
 );
 
 it("reports verified unsupported runtime without contacting mutation or credential endpoints", async () => {
-  const fixture = await sharedServiceTestRegistration({ version: "2.0.27" });
-  const request = vi.fn(async () => Response.json({ version: "2.0.27", pid: 42 }));
+  const fixture = await sharedServiceTestRegistration({ version: "2.0.23" });
+  const request = vi.fn(async () => Response.json({ version: "2.0.23", pid: 42 }));
   try {
     await expect(
       discoverV2SharedService({ file: fixture.file, fetch: request as unknown as typeof fetch }),
-    ).rejects.toThrow("2.0.27 is not qualified");
+    ).rejects.toThrow("2.0.23 is unsupported");
     expect(request).toHaveBeenCalledTimes(1);
   } finally {
     await fixture.close();
@@ -64,8 +64,33 @@ it("emits one advisory warning per app session, not a permanent ready-status war
   });
   expect(notice("2.0.24")).toBeUndefined();
   expect(notice("2.0.26")).toBeUndefined();
-  expect(() => notice("2.0.27")).toThrow("not qualified");
+  expect(notice("2.0.27")).toBeUndefined();
 });
+
+it.each(["2.0.24", "2.0.25", "2.0.27", "2.1.0", "2.999.999"])(
+  "accepts %s only after the required API contract passes",
+  async (version) => {
+    const fixture = await sharedServiceTestRegistration({ version });
+    const request = vi.fn(async (url: URL) =>
+      Response.json(
+        url.pathname === "/api/info" ? { version, pid: 42 } : sharedServiceTestContract(),
+      ),
+    );
+    try {
+      expect(
+        (
+          await discoverV2SharedService({
+            file: fixture.file,
+            fetch: request as unknown as typeof fetch,
+          })
+        ).version,
+      ).toBe(version);
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      await fixture.close();
+    }
+  },
+);
 
 it.each([
   "pid",

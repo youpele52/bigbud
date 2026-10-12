@@ -10,6 +10,7 @@ import { v2RuntimeStatus } from "./Runtime.status.ts";
 import { v2ResumeCursor } from "./Runtime.sessions.ts";
 import { runtimeEventBase } from "./Runtime.projection.ts";
 import { prepareV2TurnAttachments } from "./Runtime.attachments.ts";
+import { captureV2AdmissionOwner, withV2AdmissionOperation } from "./Runtime.admission.owner.ts";
 
 /** Serialize admission against the exact owner; native dispatch rechecks authorization after awaited reads. */
 export function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSendTurnInput) {
@@ -17,78 +18,86 @@ export function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSendTurnIn
   if (attachmentIssue) throw new Error(attachmentIssue);
   const session = runtime.get(input.threadId);
   const guard = v2ExecutionGuard(runtime, session, input.learningJob?.ownerThreadId);
-  return runtime.withSession(input.threadId, async () => {
-    runtime.mutations.assertSafe();
-    await guard();
-    runtime.mutations.assertSafe();
-    const identity = runtimeAdmissionIdentity(input);
-    const existing = await Effect.runPromise(runtime.options.journal.find(identity));
-    if (
-      session.row &&
-      !session.terminalDelivered &&
-      session.row.requestMessageId !== identity.requestMessageId
-    )
-      throw new Error("V2 previous admission is unresolved; new work may duplicate execution.");
-    const active = await v2Request("session.active", (signal) =>
-      session.lease.process.client.session.active({ signal }),
-    );
-    if (!existing && active[session.native.id])
-      throw new Error("V2 native execution is already active; no queued duplicate work.");
-    const prepared = await prepareV2TurnAttachments(
-      runtime.options,
-      session,
-      input,
-      Boolean(existing),
-    );
-    if (!existing) await switchV2TurnModel(runtime, session, input);
-    if (!existing) {
-      session.messages.clear();
-      session.terminalDelivered = false;
-    }
-    try {
-      session.row = await dispatchV2Turn(
+  return runtime.withSession(input.threadId, () =>
+    withV2AdmissionOperation(session, async () => {
+      const validate = captureV2AdmissionOwner(runtime, session);
+      runtime.mutations.assertSafe();
+      await guard();
+      runtime.mutations.assertSafe();
+      const identity = runtimeAdmissionIdentity(input);
+      const existing = await Effect.runPromise(runtime.options.journal.find(identity));
+      if (
+        session.row &&
+        !session.terminalDelivered &&
+        session.row.requestMessageId !== identity.requestMessageId
+      )
+        throw new Error("V2 previous admission is unresolved; new work may duplicate execution.");
+      const active = await v2Request("session.active", (signal) =>
+        session.lease.process.client.session.active({ signal }),
+      );
+      if (!existing && active[session.native.id])
+        throw new Error("V2 native execution is already active; no queued duplicate work.");
+      const prepared = await prepareV2TurnAttachments(
         runtime.options,
         session,
         input,
-        runtime.mutations,
-        guard,
-        prepared,
+        Boolean(existing),
       );
-    } catch (error) {
-      session.row = await Effect.runPromise(runtime.options.journal.find(identity));
-      if (session.row)
-        await v2RuntimeStatus(
-          runtime,
+      if (!existing) await switchV2TurnModel(runtime, session, input);
+      if (!existing) {
+        session.messages.clear();
+        session.terminalDelivered = false;
+      }
+      try {
+        const admitted = await dispatchV2Turn(
+          runtime.options,
           session,
-          "error",
-          "Admission unconfirmed. No automatic resend; new work may duplicate execution.",
+          input,
+          runtime.mutations,
+          guard,
+          validate,
+          prepared,
         );
-      throw error;
-    }
-    if (session.row.state === "terminal") {
+        validate();
+        session.row = admitted;
+      } catch (error) {
+        const uncertain = await Effect.runPromise(runtime.options.journal.find(identity));
+        validate();
+        session.row = uncertain;
+        if (session.row)
+          await v2RuntimeStatus(
+            runtime,
+            session,
+            "error",
+            "Admission unconfirmed. No automatic resend; new work may duplicate execution.",
+          );
+        throw error;
+      }
+      if (session.row.state === "terminal") {
+        await runtime.reconcile(session);
+        return {
+          threadId: input.threadId,
+          turnId: session.row.turnId,
+          resumeCursor: v2ResumeCursor(session),
+        };
+      }
+      session.session = {
+        ...session.session,
+        status: "running",
+        activeTurnId: session.row.turnId,
+        updatedAt: new Date().toISOString(),
+      };
+      await runtime.emit(session, {
+        ...runtimeEventBase(session, `started:${session.row.turnId}`),
+        type: "turn.started",
+        payload: { model: session.model.id },
+      });
       await runtime.reconcile(session);
       return {
         threadId: input.threadId,
         turnId: session.row.turnId,
         resumeCursor: v2ResumeCursor(session),
       };
-    }
-    session.session = {
-      ...session.session,
-      status: "running",
-      activeTurnId: session.row.turnId,
-      updatedAt: new Date().toISOString(),
-    };
-    await runtime.emit(session, {
-      ...runtimeEventBase(session, `started:${session.row.turnId}`),
-      type: "turn.started",
-      payload: { model: session.model.id },
-    });
-    await runtime.reconcile(session);
-    return {
-      threadId: input.threadId,
-      turnId: session.row.turnId,
-      resumeCursor: v2ResumeCursor(session),
-    };
-  });
+    }),
+  );
 }

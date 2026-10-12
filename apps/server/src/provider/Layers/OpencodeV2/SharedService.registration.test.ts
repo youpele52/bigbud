@@ -1,5 +1,6 @@
 import { chmod, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { homedir } from "node:os";
 import { expect, it } from "vitest";
 import {
   readV2SharedRegistration,
@@ -9,10 +10,16 @@ import { sharedServiceTestRegistration } from "./SharedService.test.fixture.ts";
 
 it("follows native XDG state/HOME discovery without creating files", () => {
   expect(v2SharedRegistrationFile({ HOME: "/native/home" })).toBe(
-    "/native/home/.local/state/opencode/service.json",
+    path.join(
+      process.platform === "win32" ? homedir() : "/native/home",
+      ".local",
+      "state",
+      "opencode",
+      "service.json",
+    ),
   );
   expect(v2SharedRegistrationFile({ HOME: "/native/home", XDG_STATE_HOME: "/native/state" })).toBe(
-    "/native/state/opencode/service.json",
+    path.join("/native/state", "opencode", "service.json"),
   );
 });
 

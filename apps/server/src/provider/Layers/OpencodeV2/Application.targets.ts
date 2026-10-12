@@ -52,6 +52,8 @@ export function makeV2TargetPreparation(
         },
       };
     }
+    if (options.config.sharedService) throw new Error("V2 shared remote workspace rejected.");
+    const isolatedConfig = options.config;
     const remote = await V2RemoteFiles.open(
       workspaceTarget,
       context.workspaceTarget.cwd,
@@ -108,7 +110,7 @@ export function makeV2TargetPreparation(
         options: {
           ...options,
           config: {
-            ...options.config,
+            ...isolatedConfig,
             runtimeTargetId: runtimeTarget,
             ...(runtimeTarget !== "local" ? { workspaceRoot: remote.root } : {}),
           },
@@ -116,7 +118,7 @@ export function makeV2TargetPreparation(
           remoteSessionConformance: {
             providerRuntimeTargetId: runtimeTarget,
             workspaceTargetId: workspaceTarget,
-            profileRoot: options.config.profileRoot,
+            profileRoot: isolatedConfig.profileRoot,
             syntheticDirectory: cwd,
           },
         },

@@ -5,18 +5,18 @@ import {
   sameV2SharedRegistration,
   v2SharedGeneration,
 } from "./SharedService.registration.ts";
-import { resolveV2SharedStorage, type V2SharedStorage } from "./SharedService.storage.ts";
+import { resolveV2SharedConnection, type V2SharedConnection } from "./SharedService.descriptor.ts";
 import type { OwnedV2Process } from "./ServerManager.child.ts";
 
 /** Borrow only a verified storage/generation. Closing releases our client, never the daemon. */
-export async function borrowV2SharedService(expected: V2SharedStorage): Promise<OwnedV2Process> {
-  const actual = await resolveV2SharedStorage(expected.registrationFile);
+export async function borrowV2SharedService(expected: V2SharedConnection): Promise<OwnedV2Process> {
+  const actual = await resolveV2SharedConnection(expected.registrationFile);
   if (
     actual.storageIdentity !== expected.storageIdentity ||
     actual.generation !== expected.generation
   )
     throw new Error(
-      "V2 shared storage/service changed; restart bigbud to reconnect without rebinding history.",
+      "V2 shared service changed; restart bigbud to reconnect without rebinding history.",
     );
   const registration = await readV2SharedRegistration(expected.registrationFile);
   if (v2SharedGeneration(registration) !== actual.generation)
@@ -45,6 +45,7 @@ export async function borrowV2SharedService(expected: V2SharedStorage): Promise<
       endpoint: registration.endpoint.url,
       headers: Service.headers(registration.endpoint),
       beforeRequest: validate,
+      sharedTransport: expected.registrationFile,
     }),
     isRunning: () => !closed && !unavailable,
     hasExited: () => false, // Subscription disposal/health loss is never physical exit proof.

@@ -16,11 +16,14 @@ import { Effect, Layer } from "effect";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
 import { FixtureEvents } from "./Test.fixtures.ts";
+import type { V2IsolatedProcessConfig } from "./ServerManager.child.ts";
 
 /** Real pinned Promise client against deterministic synthetic HTTP, backed by real SQLite. */
 export class V2RuntimeHttpFixture {
@@ -58,6 +61,7 @@ export class V2RuntimeHttpFixture {
   readonly deaths = new Set<() => void>();
   running = true;
   loseAck = false;
+  loseCreateAck = false;
   autoComplete = true;
   fail = false;
   hideAdmission = false;
@@ -127,6 +131,7 @@ export class V2RuntimeHttpFixture {
       if (this.sessions.has(native.id)) throw new Error("Duplicate fixture creation.");
       this.sessions.set(native.id, native);
       this.messages.set(native.id, []);
+      if (this.loseCreateAck) throw new Error("Synthetic lost creation acknowledgement.");
       return response({ data: native });
     }
     if (pathname === "/api/session/active") return response({ data: {} });
@@ -236,6 +241,8 @@ export class V2RuntimeHttpFixture {
     if (pathname.endsWith("/reply") || pathname.includes("/inbox/") || method === "PATCH")
       return new Response(null, { status: 204 });
     if (this.sessions.has(sessionId)) return response({ data: this.sessions.get(sessionId) });
+    if (method === "GET" && pathname === `/api/session/${sessionId}`)
+      return new Response(null, { status: 404 });
     throw new Error(`Unexpected synthetic request ${method} ${pathname}`);
   }
 
@@ -272,7 +279,7 @@ export class V2RuntimeHttpFixture {
 
 export async function withV2RuntimeFixture(
   run: (fixture: {
-    runtime: OpencodeV2Runtime;
+    runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>;
     http: V2RuntimeHttpFixture;
     directory: string;
     events: ProviderRuntimeEvent[];
@@ -304,21 +311,26 @@ export async function withV2RuntimeFixture(
       },
     }),
   });
-  const layer = ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory));
+  const layer = Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+    Layer.provide(SqlitePersistenceMemory),
+  );
   try {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const journal = yield* ProviderTurnAdmissions;
+          const sharedBindings = yield* OpencodeV2SharedBindings;
           const runtime = new OpencodeV2Runtime({
             manager,
             journal,
+            sharedBindings,
             config: {
               binaryPath: "/synthetic/opencode",
               profileRoot: profile,
               runtimeTargetId: "local",
             },
-            emit: async (event) => {
+            emit: async (event, validate) => {
+              validate?.();
               events.push(event);
             },
             pollIntervalMs: 100,

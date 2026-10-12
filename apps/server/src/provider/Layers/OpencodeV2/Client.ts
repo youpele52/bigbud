@@ -1,4 +1,6 @@
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
+import { Service } from "@opencode/client/service";
+import { assertV2RequestContext, currentV2RequestContext } from "./Client.guard.ts";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
@@ -16,9 +18,10 @@ export function makeOwnedClient(input: {
 }): OpencodeV2Client {
   return makeV2Client({
     ...input,
-    headers: {
-      authorization: `Basic ${Buffer.from(`opencode:${input.password}`).toString("base64")}`,
-    },
+    headers: Service.headers({
+      url: input.endpoint,
+      auth: { type: "basic", username: "opencode", password: input.password },
+    }),
   });
 }
 
@@ -27,6 +30,7 @@ export function makeV2Client(input: {
   readonly headers?: Record<string, string> | undefined;
   readonly fetch?: typeof globalThis.fetch;
   readonly beforeRequest?: () => Promise<void>;
+  readonly sharedTransport?: string;
 }): OpencodeV2Client {
   const origin = validateOwnedEndpoint(input.endpoint);
   const fetchImplementation = input.fetch ?? globalThis.fetch;
@@ -37,9 +41,32 @@ export function makeV2Client(input: {
         return Promise.reject(new Error("OpenCode v2 request origin rejected."));
       }
       await input.beforeRequest?.();
-      return fetchImplementation(request, { ...init, redirect: "error" }).then((response) => {
+      const context = input.sharedTransport
+        ? assertV2RequestContext(
+            input.sharedTransport,
+            url,
+            init?.method ?? (request instanceof Request ? request.method : "GET"),
+          )
+        : undefined;
+      const originalSignal =
+        init?.signal ?? (request instanceof Request ? request.signal : undefined);
+      const signal = context
+        ? AbortSignal.any([context.permit.signal, ...(originalSignal ? [originalSignal] : [])])
+        : originalSignal;
+      signal?.throwIfAborted();
+      return fetchImplementation(request, {
+        ...init,
+        ...(signal ? { signal } : {}),
+        redirect: "error",
+      }).then((response) => {
+        try {
+          context?.permit.assertCurrent();
+        } catch (error) {
+          void response.body?.cancel().catch(() => {});
+          throw error;
+        }
         // Native Location initialization may return an empty 500. Preserve status before SDK JSON decoding.
-        if (response.status >= 500 && response.status <= 599) {
+        if (response.status >= 400 && response.status <= 599) {
           void response.body?.cancel().catch(() => {});
           throw new V2HttpStatusError(response.status);
         }
@@ -71,16 +98,24 @@ export async function v2Request<T>(
   options: { readonly timeoutMs?: number; readonly signal?: AbortSignal } = {},
 ): Promise<T> {
   try {
-    return await runWithAbortableDeadline({
+    const context = currentV2RequestContext();
+    context?.permit.assertCurrent();
+    const signal = context
+      ? AbortSignal.any([context.permit.signal, ...(options.signal ? [options.signal] : [])])
+      : options.signal;
+    const result = await runWithAbortableDeadline({
       operation,
       timeoutMs: options.timeoutMs ?? 10_000,
-      ...(options.signal ? { signal: options.signal } : {}),
+      ...(signal ? { signal } : {}),
       run,
     });
+    context?.permit.assertCurrent();
+    return result;
   } catch (error) {
     if (isV2ResponseSizeError(error)) throw new V2ResponseSizeError();
     const status = v2HttpFailureStatus(error);
     if (status !== undefined) throw new V2HttpStatusError(status);
+    // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
     throw new Error(`OpenCode v2 ${operation} failed or timed out; admission may be unconfirmed.`);
   }
 }

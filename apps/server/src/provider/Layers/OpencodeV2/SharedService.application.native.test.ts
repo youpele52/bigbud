@@ -9,13 +9,15 @@ import {
   type ProviderRuntimeEvent,
 } from "@bigbud/contracts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { makeV2ApplicationRegistration } from "./Application.composition.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
-import { resolveV2SharedStorage } from "./SharedService.storage.ts";
+import { resolveV2SharedConnection } from "./SharedService.descriptor.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { readV2NativeCatalog } from "./Catalog.native.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
@@ -40,7 +42,9 @@ vi.mock("./Catalog.public.ts", async (original) => ({
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 const version = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_VERSION;
 
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+if (process.env.BIGBUD_OPENCODE_V2_REQUIRED_NATIVE === "1" && (!binary || !version))
+  throw new Error("Required shared native binary/version missing; refusing a skipped validation.");
+it.skipIf(!binary || !version)(
   "shared application qualifies replay, native tools, disable/rebind and active TUI sibling preservation",
   async () => {
     const fixture = await sharedServiceNativeFixture(binary!);
@@ -94,13 +98,16 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
         ...DEFAULT_SERVER_SETTINGS,
         providers: {
           ...DEFAULT_SERVER_SETTINGS.providers,
-          opencodeV2: { enabled: true, binaryPath: "", profileRoot: "", serviceFile: fixture.file },
+          opencodeV2: {
+            enabled: true,
+            binaryPath: "",
+            profileRoot: "",
+            serviceFile: fixture.file,
+            nativeServiceTrust: "host-user-v1" as const,
+          },
         },
       };
-      const settings = {
-        getSettings: Effect.sync(() => current),
-        streamChanges: Stream.never,
-      } as unknown as typeof ServerSettingsService.Service;
+      const settings = await Effect.runPromise(makeTestSettings(current));
       const selection = {
         provider: "opencodeV2",
         subProviderID: model.providerID,
@@ -175,7 +182,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
                 client.permission.create({
                   sessionID: sessionId,
                   action: "edit",
-                  resources: [path.join(fixture.profile, "data", "opencode", "opencode.db")],
+                  resources: [fixture.file],
                 }),
               );
               expect(deny.effect).toBe("deny");
@@ -201,6 +208,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
                   opencodeV2: { ...current.providers.opencodeV2, enabled: false },
                 },
               };
+              yield* settings.updateSettings(current);
               expect((yield* registration.providerService.refresh).enabled).toBe(false);
               expect(
                 (yield* registration.adapterService.listSessions()).filter(
@@ -216,6 +224,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
               opencodeV2: { ...current.providers.opencodeV2, enabled: true },
             },
           };
+          yield* settings.updateSettings(current);
           yield* Effect.scoped(
             Effect.gen(function* () {
               const registration = yield* makeV2ApplicationRegistration();
@@ -233,7 +242,11 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             }),
           );
         }).pipe(
-          Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
+          Effect.provide(
+            Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+              Layer.provide(SqlitePersistenceMemory),
+            ),
+          ),
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,
@@ -249,7 +262,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
       expect(await client.permission.list({ sessionID: sibling.id })).toEqual(permissionBefore);
       expect(await readFile(fixture.configFile)).toEqual(configBefore);
       expect(await readFile(fixture.file)).toEqual(serviceBefore);
-      expect((await resolveV2SharedStorage(fixture.file)).storageIdentity).toBe(
+      expect((await resolveV2SharedConnection(fixture.file)).storageIdentity).toBe(
         (cursor as { storageIdentity: string }).storageIdentity,
       );
       await expect(access(path.join(fixture.profile, ".bigbud-opencode-v2"))).rejects.toThrow();
