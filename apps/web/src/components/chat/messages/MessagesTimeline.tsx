@@ -1,7 +1,7 @@
 import { type MessageId } from "@bigbud/contracts";
 import { ChatGreeting } from "../common/ChatGreeting";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { measureElement as measureVirtualElement, useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
 import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
 import { deriveChatScrollRowsFromTimeline } from "../scroller/chatScroll.timelineRows";
@@ -18,7 +18,7 @@ import {
   getMessagesTimelineRowMeasurementKey,
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
-import { useTimelineWidth } from "./MessagesTimeline.measurement";
+import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -139,7 +139,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         turnDiffSummaryByAssistantMessageId,
       });
     },
-    measureElement: measureVirtualElement,
+    measureElement: measureVisibleTimelineElement,
     useAnimationFrameWithResizeObserver: true,
     overscan: 8,
   });
