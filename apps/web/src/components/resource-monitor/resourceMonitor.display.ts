@@ -4,6 +4,7 @@ import type { ResourceWidget } from "~/stores/resource-monitor/resourceMonitorPr
 import type { DisplayMetric } from "./ResourceMetricCard";
 import { capacityValue, formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 import { diskCapacityUsage } from "./resourceMonitor.display.disk";
+import { cpuUsageValue } from "./resourceMonitor.display.cpu";
 import {
   formatBytes,
   formatPercent,
@@ -57,13 +58,7 @@ export function displayWidget(
         label: "CPU",
         value: show(snapshot.cpuPercent, formatPercent),
         status: status(snapshot.cpuPercent),
-        gaugeValue:
-          snapshot.cpuPercent?.status === "ready" &&
-          Number.isFinite(snapshot.cpuPercent.value) &&
-          snapshot.cpuPercent.value >= 0 &&
-          snapshot.cpuPercent.value <= 100
-            ? snapshot.cpuPercent.value
-            : null,
+        gaugeValue: cpuUsageValue(snapshot.cpuPercent),
         historyValueFormatter: formatPercent,
         ...(snapshot.perCorePercent.length
           ? { detail: `${snapshot.perCorePercent.length} logical cores` }

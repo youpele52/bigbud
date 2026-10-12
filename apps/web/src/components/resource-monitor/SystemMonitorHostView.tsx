@@ -14,6 +14,7 @@ import { ResourceHostExtras } from "./ResourceHostExtras";
 import { ResourceDetailPreferences } from "./ResourceDetailPreferences";
 import { ResourceNetworkInterfaces } from "./ResourceNetworkInterfaces";
 import { ResourceDisks } from "./ResourceDisks";
+import { ResourceCpuCores } from "./ResourceCpuCores";
 import { displayWidget } from "./resourceMonitor.display";
 import {
   formatBytes,
@@ -201,37 +202,22 @@ export function SystemMonitorHostView() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {show("cores") ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm">CPU cores</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 px-4 text-sm">
-              {snapshot?.perCorePercent.length ? (
-                snapshot.perCorePercent.map(({ name, metric }) => (
-                  <div key={name} className="flex justify-between gap-2">
-                    <span className="truncate text-muted-foreground">{name}</span>
-                    <span className="tabular-nums">
-                      {metric.status === "ready" ? formatPercent(metric.value) : metric.status}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <CenteredStatus
-                  loading={
-                    connection !== "unavailable" &&
-                    collectionStatus?.state !== "failed" &&
-                    snapshot?.summaryStatus !== "unavailable"
-                  }
-                >
-                  {connection === "unavailable" ||
-                  collectionStatus?.state === "failed" ||
-                  snapshot?.summaryStatus === "unavailable"
-                    ? "Core data unavailable"
-                    : "Waiting for core data"}
-                </CenteredStatus>
-              )}
-            </CardContent>
-          </Card>
+          <ResourceCpuCores
+            cores={snapshot?.perCorePercent ?? []}
+            active={
+              connection === "connected" &&
+              snapshot?.summaryStatus === "ready" &&
+              (!collectionStatus || collectionStatus.state === "healthy")
+            }
+            loading={
+              connection === "connecting" ||
+              (connection === "connected" &&
+                collectionStatus?.state !== "failed" &&
+                (!snapshot ||
+                  snapshot.summaryStatus === "ready" ||
+                  isLoadingStatus(snapshot.summaryStatus)))
+            }
+          />
         ) : null}
         {show("memory") ? (
           <Card className="gap-2 py-4">

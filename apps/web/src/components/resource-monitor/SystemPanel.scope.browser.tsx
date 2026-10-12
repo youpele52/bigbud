@@ -12,6 +12,7 @@ import { EMPTY_APP_HISTORY } from "~/stores/resource-monitor/resourceMonitor.app
 import { SystemMonitorHostView } from "./SystemMonitorHostView";
 import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 import { diskMonitorSnapshot, diskMonitorHistory } from "./ResourceDisks.fixtures";
+import { cpuCoreReadings } from "./ResourceCpuCores.fixtures";
 
 function MonitorLink({
   children,
@@ -38,6 +39,32 @@ beforeEach(() => {
     reason: null,
     collectionStatus: null,
   });
+});
+
+it("wires core usage bars into the host view and suppresses old usage when disconnected", async () => {
+  vi.mocked(useResourceMonitor).mockReturnValue({
+    ...useResourceMonitor(true, false, false),
+    snapshot: { ...appMonitorSnapshot(), perCorePercent: cpuCoreReadings() },
+  });
+  const content = () => (
+    <div style={{ width: 896 }}>
+      <SystemMonitorHostView />
+    </div>
+  );
+  const screen = await render(content());
+  try {
+    const cores = screen.getByRole("region", { name: "CPU cores", exact: true });
+    expect(cores.getByRole("meter").elements()).toHaveLength(10);
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      connection: "unavailable",
+    });
+    await screen.rerender(content());
+    expect(cores.getByRole("meter").elements()).toHaveLength(0);
+    expect(cores.getByRole("img").elements()).toHaveLength(10);
+  } finally {
+    await screen.unmount();
+  }
 });
 
 it("wires per-volume history into the full-width host Disks section", async () => {
