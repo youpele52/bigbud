@@ -24,7 +24,7 @@ describe("manual-only WSL selection", () => {
     expect(resolveManualTerminalTarget("ssh:host=box", selected)).toBe("ssh:host=box");
     expect(resolveManualTerminalTarget(undefined, undefined)).toBeUndefined();
   });
-  it.each(["", " invalid ", "invalid\0name", null, 123])(
+  it.each(["", " invalid ", "invalid\0name", "invalid\ud800", "invalid\udfff", null, 123])(
     "fails closed for corrupt persisted selection %j even if a sentinel-named distro exists",
     (saved) => {
       const target = resolveManualTerminalTarget("local", saved as string);

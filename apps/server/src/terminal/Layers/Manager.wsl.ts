@@ -38,11 +38,17 @@ function fields(raw: string, marker: string, count: number): string[] {
   return values.slice(1, -1);
 }
 
-function linuxPath(value: string): string {
+function validatedPath(value: string): string {
   // Reject protocol delimiters and terminal-control characters before probing a folder.
   // oxlint-disable-next-line no-control-regex
-  if (!value.startsWith("/") || /[\x00-\x1f\x7f]/.test(value) || value.length > 4096)
+  if (!value || /[\x00-\x1f\x7f]/.test(value) || value.length > 4096)
     throw new Error("The WSL terminal path is invalid.");
+  return value;
+}
+
+function linuxPath(value: string): string {
+  validatedPath(value);
+  if (!value.startsWith("/")) throw new Error("The WSL terminal path is invalid.");
   return value;
 }
 
@@ -60,7 +66,15 @@ export function makeResolveWslTerminalFolder(
         const distribution = parseWslTerminalTargetId(input.executionTargetId);
         if (!distribution || platform !== "win32")
           throw new Error("This WSL terminal target is unsupported.");
-        let deadline = performance.now() + WSL_PROBE_TIMEOUT_MS;
+        const deadline = performance.now() + WSL_PROBE_TIMEOUT_MS;
+        // Validate all raw path context before probing: Home fallback must not bypass it.
+        validatedPath(input.cwd);
+        if (input.worktreePath !== undefined && input.worktreePath !== null)
+          validatedPath(input.worktreePath);
+        const runtimeEnv = normalizedRuntimeEnv(input.env) ?? {};
+        for (const [key, value] of Object.entries(runtimeEnv)) {
+          if (PATH_ENV_KEYS.has(key)) validatedPath(value);
+        }
         const run = async (args: readonly string[]) => {
           const timeoutMs = deadline - performance.now();
           if (timeoutMs <= 0 || signal.aborted)
@@ -98,11 +112,10 @@ export function makeResolveWslTerminalFolder(
           throw new Error("The selected WSL distribution returned an invalid Linux identity.");
         const identity: TerminalWslIdentity = { distribution, username, uid: Number(uidText) };
         const home = linuxPath(rawHome ?? "");
-        const runtimeEnv = normalizedRuntimeEnv(input.env) ?? {};
         const probe = async (value: string, directory: boolean, env = runtimeEnv) => {
-          if (value.includes("\0")) throw new Error("Invalid WSL terminal path.");
+          validatedPath(value);
           // HOME is part of the captured launch identity, not a later process default.
-          const pathValue = value.replace(/^~(?=\/|$)/, () => home);
+          const pathValue = validatedPath(value.replace(/^~(?=\/|$)/, () => home));
           const result = await run(
             wslProbeArgs({
               distribution,
@@ -139,8 +152,7 @@ export function makeResolveWslTerminalFolder(
           cwd = await probe(requestedPath, true);
         } catch (error) {
           if (!Schema.is(TerminalCwdError)(error)) throw error;
-          // Home has a separate deadline but can never recapture another user or target.
-          deadline = performance.now() + WSL_PROBE_TIMEOUT_MS;
+          // Home shares the launch deadline and can never recapture another user or target.
           const fallback = await probe(home, true, {});
           return {
             cwd: fallback,

@@ -69,7 +69,7 @@ describe("target-bound WSL folder resolution", () => {
       expect(options.timeoutMs).toBeLessThanOrEqual(10_000);
     }
   });
-  it("fallback has its own deadline, same identity, process HOME and cleared project context", async () => {
+  it("fallback uses the remaining deadline, same identity, process HOME and cleared project context", async () => {
     let clock = 0;
     vi.spyOn(performance, "now").mockImplementation(() => clock);
     const runner = vi
@@ -94,10 +94,146 @@ describe("target-bound WSL folder resolution", () => {
       directoryFallback: { requestedCwd: "/missing" },
       wslIdentity: { username: "alice" },
     });
-    expect(runner.mock.calls[3]?.[1].timeoutMs).toBe(10_000);
+    expect(runner.mock.calls[3]?.[1].timeoutMs).toBe(1_000);
     expect(runner.mock.calls[3]?.[0]).toContain("/custom/home");
     expect(runner.mock.calls[3]?.[0]).toContain("alice");
     expect(runner.mock.calls[3]?.[0]).not.toContain("SETUP=do-not-run");
+  });
+  it("rejects a late Home result instead of restarting the resolution deadline", async () => {
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+      .mockResolvedValueOnce(identityReply())
+      .mockImplementationOnce(async () => {
+        clock = 9_000;
+        return reply(WSL_CWD_FAILURE_OUTPUT, 77);
+      })
+      .mockImplementationOnce(async () => {
+        clock = 10_001;
+        return pathReply("/custom/home");
+      });
+    await expect(
+      Effect.runPromise(
+        makeResolveWslTerminalFolder(runner, "win32")({ ...input, cwd: "/missing" }),
+      ),
+    ).rejects.toThrow("10 seconds");
+    expect(runner).toHaveBeenCalledTimes(4);
+  });
+  it.each(["/missing\nfolder", "/missing\x1b[31m", "C:\\missing\x7f", `/${"x".repeat(4096)}`])(
+    "rejects malformed requested paths before a guest path probe or fallback",
+    async (cwd) => {
+      const runner = vi
+        .fn()
+        .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+        .mockResolvedValueOnce(identityReply())
+        .mockResolvedValueOnce(reply(WSL_CWD_FAILURE_OUTPUT, 77))
+        .mockResolvedValueOnce(pathReply("/custom/home"));
+      await expect(
+        Effect.runPromise(makeResolveWslTerminalFolder(runner, "win32")({ ...input, cwd })),
+      ).rejects.toThrow("path is invalid");
+      expect(runner).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { worktreePath: "/worktree\ninvalid" },
+    { env: { BIGBUD_PROJECT_ROOT: "/project\x1b[31m" } },
+  ])("rejects malformed context paths before translating them", async (context) => {
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+      .mockResolvedValueOnce(identityReply())
+      .mockResolvedValueOnce(pathReply("/project"));
+    await expect(
+      Effect.runPromise(
+        makeResolveWslTerminalFolder(runner, "win32")({ ...input, cwd: "/project", ...context }),
+      ),
+    ).rejects.toThrow("path is invalid");
+    expect(runner).not.toHaveBeenCalled();
+  });
+  it.each(
+    [
+      "worktreePath",
+      "BIGBUD_PROJECT_ROOT",
+      "BIGBUD_WORKTREE_PATH",
+      "T3CODE_PROJECT_ROOT",
+      "T3CODE_WORKTREE_PATH",
+    ].flatMap((field) => ["/missing", "/project"].map((cwd) => ({ field, cwd }))),
+  )("rejects malformed $field before any probe for $cwd", async ({ field, cwd }) => {
+    for (const value of [
+      "/bad\nfolder",
+      "/bad\x1bfolder",
+      "/bad\0folder",
+      `/${"x".repeat(4096)}`,
+      "",
+    ]) {
+      const runner = vi
+        .fn()
+        .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+        .mockResolvedValueOnce(identityReply())
+        .mockResolvedValueOnce(
+          cwd === "/missing" ? reply(WSL_CWD_FAILURE_OUTPUT, 77) : pathReply(cwd),
+        )
+        .mockResolvedValue(pathReply("/custom/home"));
+      const context =
+        field === "worktreePath" ? { worktreePath: value } : { env: { [field]: value } };
+      await expect(
+        Effect.runPromise(
+          makeResolveWslTerminalFolder(runner, "win32")({ ...input, cwd, ...context }),
+        ),
+      ).rejects.toThrow("path is invalid");
+      expect(runner).not.toHaveBeenCalled();
+    }
+  });
+  it("valid raw context still permits same-identity Home fallback and discards project context", async () => {
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+      .mockResolvedValueOnce(identityReply())
+      .mockResolvedValueOnce(reply(WSL_CWD_FAILURE_OUTPUT, 77))
+      .mockResolvedValueOnce(pathReply("/custom/home"));
+    const result = await Effect.runPromise(
+      makeResolveWslTerminalFolder(
+        runner,
+        "win32",
+      )({
+        ...input,
+        cwd: "/missing",
+        worktreePath: "C:\\worktree",
+        env: { BIGBUD_PROJECT_ROOT: "C:\\project", CUSTOM: "config\ntext\x1b" },
+      }),
+    );
+    expect(result).toMatchObject({
+      cwd: "/custom/home",
+      env: {},
+      worktreePath: null,
+      directoryFallback: { requestedCwd: "/missing" },
+      wslIdentity: { distribution: "Ubuntu dev", username: "alice", uid: 1000 },
+    });
+    expect(runner).toHaveBeenCalledTimes(4);
+    expect(runner.mock.calls[2]?.[0]).toContain("CUSTOM=config\ntext\x1b");
+    expect(runner.mock.calls[3]?.[0]).not.toContain("BIGBUD_PROJECT_ROOT=C:\\project");
+  });
+  it.each([undefined, null])("accepts absent worktree context %s", async (worktreePath) => {
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce(reply("Ubuntu dev\n"))
+      .mockResolvedValueOnce(identityReply())
+      .mockResolvedValueOnce(pathReply("/project"));
+    const result = await Effect.runPromise(
+      makeResolveWslTerminalFolder(
+        runner,
+        "win32",
+      )({
+        ...input,
+        cwd: "/project",
+        worktreePath,
+        env: undefined,
+      }),
+    );
+    expect(result.cwd).toBe("/project");
+    expect(runner).toHaveBeenCalledTimes(3);
   });
   it.each([79, 80, 1])(
     "target, user or missing-utility error %s never falls back",

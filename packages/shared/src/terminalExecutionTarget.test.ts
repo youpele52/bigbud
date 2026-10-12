@@ -1,16 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   isWslTerminalTargetId,
+  isWslDistributionName,
   parseWslTerminalTargetId,
   wslTerminalTargetId,
 } from "./terminalExecutionTarget";
 
 describe("terminal-only WSL identity", () => {
-  it.each(["Ubuntu", "Ubuntu dev", "-option", 'distro & %PATH% "quoted"', "Linux-日本語"])(
-    "round trips exact registered name %s",
+  it.each([
+    "Ubuntu",
+    "Ubuntu dev",
+    "-option",
+    'distro & %PATH% "quoted"',
+    "Linux-日本語",
+    "Linux-🌍",
+  ])("round trips exact registered name %s", (name) => {
+    const id = wslTerminalTargetId(name);
+    expect(parseWslTerminalTargetId(id)).toBe(name);
+  });
+  it.each(["bad\ud800", "bad\udfff", "bad\ud800x"])(
+    "rejects malformed UTF-16 before encoding a distro name",
     (name) => {
-      const id = wslTerminalTargetId(name);
-      expect(parseWslTerminalTargetId(id)).toBe(name);
+      expect(isWslDistributionName(name)).toBe(false);
+      expect(() => wslTerminalTargetId(name)).toThrow("Invalid WSL distribution name");
     },
   );
   it.each(["wsl:", "wsl:%GG", "wsl:Ubuntu%20", "wsl:%55buntu", "wsl:a%00b", "wsl:a%0Ab"])(

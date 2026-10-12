@@ -11,6 +11,8 @@ export function isWslDistributionName(value: string): boolean {
     value.length > 0 &&
     value.length <= 256 &&
     value === value.trim() &&
+    // In Unicode mode valid surrogate pairs are one code point; reject only unpaired surrogates.
+    !/[\uD800-\uDFFF]/u.test(value) &&
     // oxlint-disable-next-line no-control-regex -- Distro names are protocol identifiers, not terminal output.
     !/[\x00-\x1f\x7f]/.test(value)
   );
