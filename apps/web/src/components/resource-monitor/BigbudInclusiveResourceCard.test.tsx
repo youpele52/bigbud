@@ -32,7 +32,7 @@ describe("inclusive usage card", () => {
     const markup = renderToStaticMarkup(
       <BigbudInclusiveResourceCard app={app} history={EMPTY_APP_HISTORY} />,
     );
-    expect(markup.match(/Waiting for history…/g)).toHaveLength(2);
+    expect(markup.match(/Waiting for history/g)).toHaveLength(2);
     expect(markup).not.toContain('role="img"');
   });
   it.each([undefined, { ...app, incomplete: true }])(

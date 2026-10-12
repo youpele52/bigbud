@@ -42,6 +42,69 @@ describe("network metric card", () => {
     expect(markup).toContain("Download");
     expect(markup).toContain("Upload");
     expect(markup.match(/<dd[^>]*>—<\/dd>/g)).toHaveLength(2);
-    expect(markup).toContain("warming");
+    expect(markup).toContain(">Warming</div>");
   });
+});
+
+describe("system capacity gauges", () => {
+  it("uses the shared gauge and moves logical cores into the header badge", () => {
+    const markup = renderToStaticMarkup(
+      <ResourceMetricCard
+        metric={{
+          label: "CPU",
+          value: "47.66%",
+          status: "ready",
+          gaugeValue: 47.66,
+          detail: "10 logical cores",
+        }}
+      />,
+    );
+    expect(markup).toContain('data-slot="gauge"');
+    expect(markup).toContain('data-slot="badge"');
+    expect(markup).toContain('aria-valuenow="47.66"');
+    expect(markup.match(/10 logical cores/g)).toHaveLength(1);
+  });
+  it("shows memory totals in a badge and keeps available/swap details, but not visible severity", () => {
+    const markup = renderToStaticMarkup(
+      <ResourceMetricCard
+        metric={{
+          label: "Memory",
+          value: "unused",
+          status: "ready",
+          capacityUsage: {
+            usedBytes: 13 * 1024 ** 3,
+            totalBytes: 16 * 1024 ** 3,
+            footer: ["Available: 3.00 GiB", "Swap: 1.00 GiB used / 2.00 GiB total"],
+          },
+        }}
+      />,
+    );
+    expect(markup).toContain('data-slot="gauge"');
+    expect(markup).toContain('data-slot="badge"');
+    expect(markup).toContain("13.00 GiB / 16.00 GiB");
+    expect(markup).toContain('aria-valuetext="81.25% used · High usage"');
+    expect(markup).not.toContain(">High usage</p>");
+    expect(markup).toContain("Available: 3.00 GiB");
+    expect(markup).toContain("Swap: 1.00 GiB used / 2.00 GiB total");
+  });
+  it.each(["ready", "stale", "warming"])(
+    "shows system memory history only when measurements are ready (%s)",
+    (status) => {
+      const markup = renderToStaticMarkup(
+        <ResourceMetricCard
+          metric={{
+            label: "Memory",
+            value: "unused",
+            status,
+            history: [
+              { sequence: 1, value: 12 * 1024 ** 3 },
+              { sequence: 2, value: 13 * 1024 ** 3 },
+            ],
+            capacityUsage: { usedBytes: 13 * 1024 ** 3, totalBytes: 16 * 1024 ** 3, footer: [] },
+          }}
+        />,
+      );
+      expect(markup.includes('aria-label="Memory history"')).toBe(status === "ready");
+    },
+  );
 });

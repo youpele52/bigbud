@@ -6,6 +6,8 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ProcessTable, type DisplayProcess } from "./ProcessTable";
 import { ResourceMetricCard } from "./ResourceMetricCard";
+import { CenteredStatus } from "../common/CenteredStatus";
+import { isLoadingStatus } from "../common/CenteredStatus.logic";
 import { ResourceCollectionStatus } from "./ResourceCollectionStatus";
 import { ResourceListLimitWarning } from "./ResourceListLimitWarning";
 import { ResourceHostExtras } from "./ResourceHostExtras";
@@ -65,6 +67,8 @@ export function SystemMonitorHostView() {
   const cpu = displayWidget(snapshot, "cpu");
   cpu.history = history.cpu;
   const memory = displayWidget(snapshot, "memory");
+  memory.history =
+    connection === "connected" && snapshot?.summaryStatus === "ready" ? history.memory : [];
   const disk = displayWidget(snapshot, "disk");
   const network = displayWidget(snapshot, "network");
   network.history = history.network;
@@ -92,10 +96,13 @@ export function SystemMonitorHostView() {
         <ResourceDetailPreferences />
       </div>
       {connection !== "connected" ? (
-        <div role="status" className="rounded-md border bg-muted/30 p-4 text-sm">
+        <CenteredStatus
+          loading={connection === "connecting"}
+          className="rounded-md border bg-muted/30 p-4 text-sm"
+        >
           <p>
             {connection === "connecting"
-              ? "Connecting to this computer’s System Monitor…"
+              ? "Connecting to this computer’s System Monitor"
               : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
           </p>
           {connection === "unavailable" ? (
@@ -108,7 +115,7 @@ export function SystemMonitorHostView() {
               Retry
             </Button>
           ) : null}
-        </div>
+        </CenteredStatus>
       ) : null}
       {connection === "connected" ? (
         <ResourceCollectionStatus
@@ -117,9 +124,12 @@ export function SystemMonitorHostView() {
         />
       ) : null}
       {snapshot?.summaryStatus && snapshot.summaryStatus !== "ready" ? (
-        <p role="status" className="text-xs capitalize text-amber-600">
+        <CenteredStatus
+          loading={connection === "connected" && isLoadingStatus(snapshot.summaryStatus)}
+          className="capitalize"
+        >
           Resource summary: {snapshot.summaryStatus.replaceAll("_", " ")}
-        </p>
+        </CenteredStatus>
       ) : null}
       {snapshot &&
       (snapshot.perCoreTruncated ||
@@ -129,10 +139,18 @@ export function SystemMonitorHostView() {
         <ResourceListLimitWarning />
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <ResourceMetricCard metric={cpu} large />
-        <ResourceMetricCard metric={memory} large />
-        <ResourceMetricCard metric={disk} large />
-        <ResourceMetricCard metric={network} large />
+        {[cpu, memory, disk, network].map((metric) => (
+          <ResourceMetricCard
+            key={metric.label}
+            metric={metric}
+            large
+            loading={
+              connection !== "unavailable" &&
+              collectionStatus?.state !== "failed" &&
+              isLoadingStatus(metric.status)
+            }
+          />
+        ))}
       </div>
       {show("hostDetails") ? (
         <Card className="gap-2 py-4">
@@ -244,7 +262,19 @@ export function SystemMonitorHostView() {
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-muted-foreground">Waiting for core data</p>
+                <CenteredStatus
+                  loading={
+                    connection !== "unavailable" &&
+                    collectionStatus?.state !== "failed" &&
+                    snapshot?.summaryStatus !== "unavailable"
+                  }
+                >
+                  {connection === "unavailable" ||
+                  collectionStatus?.state === "failed" ||
+                  snapshot?.summaryStatus === "unavailable"
+                    ? "Core data unavailable"
+                    : "Waiting for core data"}
+                </CenteredStatus>
               )}
             </CardContent>
           </Card>
@@ -336,15 +366,25 @@ export function SystemMonitorHostView() {
           hasNextPage={processes.hasNextPage}
           hasPreviousPage={processes.hasPreviousPage}
           status={
-            snapshot?.processStatus && snapshot.processStatus !== "ready"
-              ? snapshot.processStatus
-              : processes.status
+            connection === "unavailable" || collectionStatus?.state === "failed"
+              ? "unavailable"
+              : snapshot?.processStatus && snapshot.processStatus !== "ready"
+                ? snapshot.processStatus
+                : processes.status
           }
           truncated={processes.page?.truncatedInventory ?? false}
         />
       ) : null}
       {show("processes") && snapshot?.processStatus && snapshot.processStatus !== "ready" ? (
-        <p className="text-xs text-muted-foreground">Process inventory: {snapshot.processStatus}</p>
+        <CenteredStatus
+          loading={
+            connection !== "unavailable" &&
+            collectionStatus?.state !== "failed" &&
+            isLoadingStatus(snapshot.processStatus)
+          }
+        >
+          Process inventory: {snapshot.processStatus}
+        </CenteredStatus>
       ) : null}
       {show("temperatures") && snapshot?.temperaturesCelsius.length ? (
         <p className="sr-only">

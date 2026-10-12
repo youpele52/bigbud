@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
+import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const checkedAt = "2026-09-06T12:00:00.000Z";
 let mounted: Awaited<ReturnType<typeof render>> | undefined;
@@ -58,11 +59,16 @@ describe("UsageSubscriptionLimits", () => {
   });
 
   it.each([
-    ["pending", "Checking Claude subscription limits..."],
+    ["pending", "Checking Claude subscription limits"],
     ["error", "Couldn't load Claude subscription limits"],
   ] as const)("renders the %s state", async (state, text) => {
     await renderLimits(status(state));
     await expect.element(page.getByText(text)).toBeInTheDocument();
+    if (state === "pending") expectCenteredStatuses(document.body);
+    else {
+      expect(getComputedStyle(page.getByText(text).element()).textAlign).toBe("center");
+      expect(document.querySelector(".animate-breathe")).toBeNull();
+    }
   });
 
   it("renders retained bars and the last-success timestamp while stale", async () => {

@@ -10,7 +10,7 @@ import { readNativeApi } from "~/rpc/nativeApi";
 import { useServerProviders } from "~/rpc/serverState";
 import { formatHumanReadableDate } from "~/utils/timestamp";
 import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
-import { BigbudLoader } from "../layout/BigbudLoader";
+import { CenteredStatus } from "../common/CenteredStatus";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
@@ -124,7 +124,7 @@ export function UsagePage() {
       <StandalonePageContent contentClassName="flex flex-col gap-8">
         {loading ? (
           <section className="flex min-h-72 flex-1 items-center justify-center overflow-hidden">
-            <BigbudLoader />
+            <CenteredStatus loading>Loading usage</CenteredStatus>
           </section>
         ) : displaySummary ? (
           <>

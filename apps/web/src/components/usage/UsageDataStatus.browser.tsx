@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { UsageDataStatus } from "./UsageDataStatus";
+import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const SUMMARY = {
   range: "7d",
@@ -45,6 +46,18 @@ async function mountUsageDataStatus() {
 describe("UsageDataStatus", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+  });
+
+  it("centers historical indexing with a breathing logo", async () => {
+    const screen = await render(
+      <UsageDataStatus summary={{ ...SUMMARY, historyStatus: "building", providerCoverage: [] }} />,
+    );
+    try {
+      await expect.element(page.getByText("Indexing historical usage")).toBeVisible();
+      expectCenteredStatuses(document.body);
+    } finally {
+      await screen.unmount();
+    }
   });
 
   it("keeps the unavailable usage warning dismissed when the page remounts", async () => {

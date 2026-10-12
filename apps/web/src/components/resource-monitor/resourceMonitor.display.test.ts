@@ -33,8 +33,20 @@ describe("resource metric precision", () => {
     const metric = displayWidget(snapshot, "cpu");
 
     expect(metric.value).toBe("45.90%");
+    expect(metric.gaugeValue).toBe(45.9);
     expect(metric.historyValueFormatter?.(48.418731689453125)).toBe("48.42%");
   });
+  it.each([Number.NaN, -1, 101])(
+    "keeps invalid CPU usage %s unavailable instead of drawing it",
+    (value) => {
+      const snapshot = {
+        cpuPercent: { value, status: "ready", sampledAtMs: 1 },
+        perCorePercent: [],
+      } as unknown as MonitorSnapshot;
+      expect(displayWidget(snapshot, "cpu").gaugeValue).toBeNull();
+      expect(displayWidget(null, "cpu").gaugeValue).toBeNull();
+    },
+  );
 });
 
 describe("network resource widget", () => {

@@ -67,6 +67,9 @@ describe("BigbudResourceView", () => {
     expect(markup).toContain("0.00 B/s");
     expect(markup).toContain("estimated");
     expect(markup).toContain("CPU capacity: 4.80% core bigbud of total host CPU");
+    expect(markup).toContain('data-slot="gauge"');
+    expect(markup).toContain("of total host CPU");
+    expect(markup).toContain('role="meter"');
     expect(markup).toContain("Memory capacity: 6.25% core bigbud of total host RAM");
     expect(markup).not.toContain(">of host CPU<");
     expect(markup).not.toContain(">of host RAM<");

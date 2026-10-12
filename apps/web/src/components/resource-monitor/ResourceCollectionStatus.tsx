@@ -1,6 +1,7 @@
 import type { MonitorCollectionStatus } from "@bigbud/contracts/system-monitor/types";
 
 import { Button } from "../ui/button";
+import { CenteredStatus } from "../common/CenteredStatus";
 
 export function ResourceCollectionStatus({
   status,
@@ -13,7 +14,8 @@ export function ResourceCollectionStatus({
 
   const retrying = status.state === "retrying";
   return (
-    <div
+    <CenteredStatus
+      loading={retrying}
       role={retrying ? "status" : "alert"}
       className={`rounded-md border p-3 text-sm ${retrying ? "border-blue-500/30 bg-blue-500/5" : "border-red-500/30 bg-red-500/5"}`}
     >
@@ -30,6 +32,6 @@ export function ResourceCollectionStatus({
           Retry collection
         </Button>
       )}
-    </div>
+    </CenteredStatus>
   );
 }

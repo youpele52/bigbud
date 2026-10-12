@@ -3,10 +3,12 @@ import { Button } from "../ui/button";
 import { ResourceCollectionStatus } from "./ResourceCollectionStatus";
 import { BigbudResourceMetricCard } from "./BigbudResourceMetricCard";
 import { BigbudResourceBreakdown } from "./BigbudResourceBreakdown";
-import { appCard, currentAppResources } from "./BigbudResourceView.logic";
+import { appCard, appMetricValue, currentAppResources } from "./BigbudResourceView.logic";
+import { formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 import { BigbudInclusiveResourceCard } from "./BigbudInclusiveResourceCard";
 import { BigbudIoResourceCard } from "./BigbudIoResourceCard";
 import { useResourceMonitor } from "./useResourceMonitor";
+import { CenteredStatus } from "../common/CenteredStatus";
 
 export function BigbudResourceView({
   visible,
@@ -25,7 +27,7 @@ export function BigbudResourceView({
   );
   const cpu = appCard(app?.core, "cpu");
   const memory = appCard(app?.core, "memory", snapshot?.memoryTotalBytes);
-  if (connection === "unavailable" || appReason) {
+  if (connection === "unavailable" || appReason || collectionStatus?.state === "failed") {
     cpu.status = "unavailable";
     memory.status = "unavailable";
   }
@@ -38,6 +40,10 @@ export function BigbudResourceView({
     memory.capacity = undefined;
   }
   const ioLabel = snapshot?.osName.toLowerCase().includes("windows") ? "Process I/O" : "Disk I/O";
+  const pending =
+    !appReason &&
+    (connection === "connecting" ||
+      (connection === "connected" && (!collectionStatus || collectionStatus.state !== "failed")));
 
   return (
     <section className="@container space-y-3 text-sm" aria-label="bigbud resource usage">
@@ -48,13 +54,13 @@ export function BigbudResourceView({
         </p>
       </div>
       {connection !== "connected" || appReason ? (
-        <div
-          role="status"
+        <CenteredStatus
+          loading={connection === "connecting" && !appReason}
           className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground"
         >
           <p>
             {connection === "connecting" && !appReason
-              ? "Connecting to bigbud’s resource monitor…"
+              ? "Connecting to bigbud’s resource monitor"
               : `bigbud monitoring unavailable${appReason || reason ? `: ${appReason || reason}` : ""}`}
           </p>
           {connection === "unavailable" || appReason ? (
@@ -67,36 +73,52 @@ export function BigbudResourceView({
               Retry
             </Button>
           ) : null}
-        </div>
+        </CenteredStatus>
       ) : (
         <ResourceCollectionStatus
           status={collectionStatus}
           onRetry={() => void retryResourceMonitor()}
         />
       )}
-      {connection === "connected" && !app && !appReason ? (
-        <p role="status" className="text-xs text-muted-foreground">
-          Waiting for a fresh bigbud sample…
-        </p>
+      {connection === "connected" && !app && !appReason && collectionStatus?.state !== "failed" ? (
+        <CenteredStatus loading={pending}>Waiting for a fresh bigbud sample</CenteredStatus>
       ) : null}
       {app?.incomplete ? (
-        <p role="status" className="text-xs text-amber-600">
+        <CenteredStatus className="text-warning">
           Some owned processes could not be measured. Totals are unavailable rather than
           understated.
-        </p>
+        </CenteredStatus>
       ) : null}
       <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
-        <BigbudResourceMetricCard metric={cpu} kind="cpu" capacity={cpu.capacity} large={large} />
+        <BigbudResourceMetricCard
+          metric={cpu}
+          kind="cpu"
+          capacity={cpu.capacity}
+          large={large}
+          processCount={app?.core.processCount}
+        />
         <BigbudResourceMetricCard
           metric={memory}
           kind="memory"
+          memoryTotal={appMetricValue(snapshot?.memoryTotalBytes, formatCapacityGiB)}
           capacity={memory.capacity}
           large={large}
         />
       </div>
       <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-2 @md:grid-cols-2">
-        <BigbudIoResourceCard app={app} label={ioLabel} history={appHistory.io} large={large} />
-        <BigbudInclusiveResourceCard app={app} history={appHistory} large={large} />
+        <BigbudIoResourceCard
+          app={app}
+          label={ioLabel}
+          history={appHistory.io}
+          large={large}
+          pending={!app && pending}
+        />
+        <BigbudInclusiveResourceCard
+          app={app}
+          history={appHistory}
+          large={large}
+          pending={!app && pending}
+        />
       </div>
       <BigbudResourceBreakdown groups={app?.groups ?? []} />
       <p className="text-xs text-muted-foreground">

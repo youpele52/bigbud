@@ -12,6 +12,7 @@ import { applyUsageDisplayLabels } from "./UsagePage.labels";
 import { UsageStatCard } from "./UsagePage.stat";
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 import { useUsagePanelSummary } from "./useUsagePanelSummary";
+import { CenteredStatus } from "../common/CenteredStatus";
 
 export function UsagePanel({ visible }: { visible: boolean }) {
   const providers = useServerProviders();
@@ -26,17 +27,17 @@ export function UsagePanel({ visible }: { visible: boolean }) {
             <h3 className="text-sm font-medium">24-hour overview</h3>
           </div>
           {loading || error ? (
-            <p
-              role="status"
+            <CenteredStatus
+              loading={loading && !error}
               className={
                 error
                   ? "text-xs text-amber-600 dark:text-amber-400"
                   : "text-xs text-muted-foreground"
               }
             >
-              {error ?? (summary ? "Refreshing usage…" : "Loading usage…")}
+              {error ?? (summary ? "Refreshing usage" : "Loading usage")}
               {error && summary ? " Showing last successful data; values may be out of date." : ""}
-            </p>
+            </CenteredStatus>
           ) : null}
           {displaySummary ? (
             <>

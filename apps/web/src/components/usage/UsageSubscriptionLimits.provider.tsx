@@ -1,7 +1,8 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
-import { CircleAlertIcon, ClockIcon, TriangleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { formatHumanReadableDate } from "~/utils/timestamp";
 import { StatusBanner } from "../common/StatusBanner";
+import { CenteredStatus } from "../common/CenteredStatus";
 import {
   extraUsageUtilization,
   formatExtraUsageRemaining,
@@ -37,6 +38,7 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "stale" ? (
         <StatusBanner
+          centered
           variant="warning"
           icon={<TriangleAlertIcon />}
           title="Subscription limits may be out of date"
@@ -53,6 +55,7 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "error" ? (
         <StatusBanner
+          centered
           variant="error"
           icon={<CircleAlertIcon />}
           title={`Couldn't load ${title}`}
@@ -60,7 +63,9 @@ export function UsageSubscriptionProviderLimits({
         />
       ) : null}
       {limits.status === "pending" ? (
-        <StatusBanner icon={<ClockIcon />} description={`Checking ${title}...`} />
+        <CenteredStatus loading className="rounded-xl border px-3.5 py-3">
+          Checking {title}
+        </CenteredStatus>
       ) : null}
       {hasRetainedLimits ? (
         <div

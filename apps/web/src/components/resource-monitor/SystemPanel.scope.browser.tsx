@@ -9,6 +9,8 @@ import { appMonitorSnapshot } from "./BigbudResourceView.fixtures";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { BigbudResourceView } from "./BigbudResourceView";
 import { EMPTY_APP_HISTORY } from "~/stores/resource-monitor/resourceMonitor.appHistory";
+import { SystemMonitorHostView } from "./SystemMonitorHostView";
+import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 function MonitorLink({
   children,
@@ -35,6 +37,94 @@ beforeEach(() => {
     collectionStatus: null,
   });
 });
+
+it.each(["panel", "host", "bigbud"])(
+  "centers loading states and retry messages in %s",
+  async (scope) => {
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      snapshot: null,
+      connection: "connecting",
+    });
+    const content = () => (
+      <div
+        className="bg-background p-4 text-foreground"
+        style={{ width: 340 }}
+        data-testid="surface"
+      >
+        {scope === "panel" ? (
+          <SystemPanel visible />
+        ) : scope === "host" ? (
+          <SystemMonitorHostView />
+        ) : (
+          <BigbudResourceView visible large />
+        )}
+      </div>
+    );
+    const screen = await render(content());
+    try {
+      const surface = screen.getByTestId("surface").element();
+      expectCenteredStatuses(surface);
+      expect(surface.querySelectorAll('[data-loading="true"]').length).toBeGreaterThan(1);
+      const directory = import.meta.env.VITE_MONITOR_SCREENSHOT_DIR;
+      if (directory)
+        await screen
+          .getByTestId("surface")
+          .screenshot({ path: `${directory}/loading-${scope}-340.png` });
+      vi.mocked(useResourceMonitor).mockReturnValue({
+        ...useResourceMonitor(true, false, false),
+        connection: "unavailable",
+        reason: "Connection lost",
+      });
+      await screen.rerender(content());
+      await expect
+        .element(screen.getByRole("button", { name: "Retry", exact: true }))
+        .toBeVisible();
+      expectCenteredStatuses(surface);
+      expect(surface.querySelectorAll('[data-loading="true"]')).toHaveLength(0);
+    } finally {
+      await screen.unmount();
+    }
+  },
+);
+
+it.each(["panel", "host"])(
+  "wires system memory history in the %s view and clears it when disconnected",
+  async (scope) => {
+    const snapshot = appMonitorSnapshot();
+    snapshot.memoryUsedBytes = { value: 12 * 1024 ** 3, status: "ready", sampledAtMs: 1000 };
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      snapshot,
+      history: {
+        cpu: [],
+        network: [],
+        memory: [
+          { sequence: 1, value: 11 * 1024 ** 3 },
+          { sequence: 2, value: 12 * 1024 ** 3 },
+        ],
+      },
+    });
+    const content = scope === "panel" ? <SystemPanel visible /> : <SystemMonitorHostView />;
+    const screen = await render(<div style={{ width: 896 }}>{content}</div>);
+    await expect
+      .element(screen.getByRole("img", { name: "Memory history", exact: true }))
+      .toBeVisible();
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      connection: "unavailable",
+    });
+    await screen.rerender(
+      <div style={{ width: 896 }}>
+        {scope === "panel" ? <SystemPanel visible /> : <SystemMonitorHostView />}
+      </div>,
+    );
+    expect(
+      screen.getByRole("img", { name: "Memory history", exact: true }).elements(),
+    ).toHaveLength(0);
+    await screen.unmount();
+  },
+);
 
 it("uses the full monitor width for both scopes and remains fluid in narrow panels", async () => {
   await page.viewport(1400, 1400);
@@ -115,13 +205,15 @@ it("matches the full view's stacked charts and card dimensions in the right pane
   await panel.getByRole("button", { name: "Monitor bigbud resources" }).click();
   for (const label of ["CPU", "Memory"]) {
     const history = panel.getByRole("img", { name: `${label} history` });
-    const donut = panel.getByRole("img", { name: new RegExp(`^${label} capacity:`) });
+    const capacity = panel.getByRole("meter", {
+      name: new RegExp(`^${label} capacity:`),
+    });
     const reference = full.getByRole("img", { name: `${label} history` });
     expect(history.element().getBoundingClientRect().height).toBe(
       reference.element().getBoundingClientRect().height,
     );
     expect(history.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      donut.element().getBoundingClientRect().bottom,
+      capacity.element().getBoundingClientRect().bottom,
     );
     const card = history.element().closest('[data-slot="card"]')!.getBoundingClientRect();
     const fullCard = reference.element().closest('[data-slot="card"]')!.getBoundingClientRect();

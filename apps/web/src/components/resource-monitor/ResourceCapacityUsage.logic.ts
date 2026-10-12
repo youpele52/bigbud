@@ -27,6 +27,18 @@ export function capacitySeverity(
   return percent >= 95 ? "critical" : percent >= 80 ? "warning" : "neutral";
 }
 
+/** Keep status wording consistent across capacity bar and gauge accessibility descriptions. */
+export function capacityUsageStatus(percent: number | null): string {
+  const severity = capacitySeverity(percent);
+  return severity === "critical"
+    ? "Critical usage"
+    : severity === "warning"
+      ? "High usage"
+      : severity === "neutral"
+        ? "Normal usage"
+        : "Usage unavailable";
+}
+
 export function formatCapacityGiB(bytes: number | null): string {
   return bytes === null || !Number.isFinite(bytes) || bytes < 0
     ? "—"

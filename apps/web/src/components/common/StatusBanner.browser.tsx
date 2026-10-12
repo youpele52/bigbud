@@ -109,4 +109,32 @@ describe("StatusBanner", () => {
 
     await expect.element(page.getByTestId("description-node")).toBeInTheDocument();
   });
+
+  it("centers optional status content without blocking dismissal", async () => {
+    const dismiss = vi.fn();
+    await render(
+      <div style={{ width: 280 }}>
+        <StatusBanner
+          centered
+          variant="warning"
+          icon={<TriangleAlertIcon />}
+          title="Unavailable"
+          description="Usage unavailable for this provider."
+          onDismiss={dismiss}
+        />
+      </div>,
+    );
+    const alert = page.getByRole("alert").element();
+    const bounds = alert.getBoundingClientRect();
+    const title = page.getByText("Unavailable", { exact: true }).element();
+    expect(getComputedStyle(title).textAlign).toBe("center");
+    const titleBounds = title.getBoundingClientRect();
+    expect((titleBounds.left + titleBounds.right) / 2).toBeCloseTo(
+      (bounds.left + bounds.right) / 2,
+      0,
+    );
+    expect(alert.scrollWidth).toBeLessThanOrEqual(alert.clientWidth);
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    expect(dismiss).toHaveBeenCalledOnce();
+  });
 });

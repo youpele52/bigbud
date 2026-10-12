@@ -21,6 +21,8 @@ import {
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
 import { MonitorScopeToggle, type MonitorScope } from "./MonitorScopeToggle";
 import { BigbudResourceView } from "./BigbudResourceView";
+import { CenteredStatus } from "../common/CenteredStatus";
+import { isLoadingStatus } from "../common/CenteredStatus.logic";
 
 export function SystemPanel({ visible }: { visible: boolean }) {
   const [scope, setScope] = useState<MonitorScope>("system");
@@ -64,13 +66,13 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         ) : (
           <>
             {connection !== "connected" ? (
-              <div
-                role="status"
+              <CenteredStatus
+                loading={connection === "connecting"}
                 className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground"
               >
                 <p>
                   {connection === "connecting"
-                    ? "Connecting to this computer’s System Monitor…"
+                    ? "Connecting to this computer’s System Monitor"
                     : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
                 </p>
                 {connection === "unavailable" ? (
@@ -83,7 +85,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
                     Retry
                   </Button>
                 ) : null}
-              </div>
+              </CenteredStatus>
             ) : null}
             {connection === "connected" ? (
               <ResourceCollectionStatus
@@ -92,9 +94,12 @@ export function SystemPanel({ visible }: { visible: boolean }) {
               />
             ) : null}
             {snapshot?.summaryStatus && snapshot.summaryStatus !== "ready" ? (
-              <p role="status" className="text-xs capitalize text-amber-600">
+              <CenteredStatus
+                loading={connection === "connected" && isLoadingStatus(snapshot.summaryStatus)}
+                className="capitalize"
+              >
                 Resource summary: {snapshot.summaryStatus.replaceAll("_", " ")}
-              </p>
+              </CenteredStatus>
             ) : null}
             <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
               {orderedWidgets
@@ -102,8 +107,23 @@ export function SystemPanel({ visible }: { visible: boolean }) {
                 .map((widget) => {
                   const metric = displayWidget(snapshot, widget);
                   if (widget === "cpu") metric.history = history.cpu;
+                  if (widget === "memory")
+                    metric.history =
+                      connection === "connected" && snapshot?.summaryStatus === "ready"
+                        ? history.memory
+                        : [];
                   if (widget === "network") metric.history = history.network;
-                  return <ResourceMetricCard key={widget} metric={metric} />;
+                  return (
+                    <ResourceMetricCard
+                      key={widget}
+                      metric={metric}
+                      loading={
+                        connection !== "unavailable" &&
+                        collectionStatus?.state !== "failed" &&
+                        isLoadingStatus(metric.status)
+                      }
+                    />
+                  );
                 })}
               {orderedWidgets.length === 0 ? (
                 <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
@@ -111,9 +131,9 @@ export function SystemPanel({ visible }: { visible: boolean }) {
                 </p>
               ) : null}
               {widgets.includes("temperature") && snapshot && !temperatureSupported ? (
-                <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                <CenteredStatus className="rounded-md border border-dashed p-3">
                   Temperature is unavailable on this computer.
-                </p>
+                </CenteredStatus>
               ) : null}
             </div>
           </>

@@ -2,6 +2,7 @@ import { useId } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import type { HistoryPoint } from "~/stores/resource-monitor/resourceMonitor.store";
+import { CenteredStatus } from "../common/CenteredStatus";
 
 /** A separately scaled usage trend, with units preserved in its hover values. */
 export function ResourceUsageTrend({
@@ -11,6 +12,7 @@ export function ResourceUsageTrend({
   color,
   formatValue,
   large = false,
+  loading = value !== "—",
 }: {
   label: "CPU" | "Memory";
   value: string;
@@ -18,6 +20,7 @@ export function ResourceUsageTrend({
   color: string;
   formatValue: (value: number) => string;
   large?: boolean;
+  loading?: boolean;
 }) {
   const gradientId = useId();
   const available = value !== "—";
@@ -73,9 +76,9 @@ export function ResourceUsageTrend({
             </ChartContainer>
           </div>
         ) : (
-          <p className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
-            {available ? "Waiting for history…" : "Measurements unavailable"}
-          </p>
+          <CenteredStatus loading={loading} className="h-full px-2">
+            {loading ? "Waiting for history" : "Measurements unavailable"}
+          </CenteredStatus>
         )}
       </div>
     </div>

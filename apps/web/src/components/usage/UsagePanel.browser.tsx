@@ -23,6 +23,7 @@ vi.mock("~/rpc/serverState", () => ({ useServerProviders: () => state.providers 
 
 import { UsagePanel } from "./UsagePanel";
 import { STANDALONE_PAGE_WIDTH_CLASS } from "../standalone/StandalonePageContent";
+import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const totals = {
   usedTokens: 12345,
@@ -166,6 +167,8 @@ describe("Usage panel", () => {
     await expect
       .element(mounted.getByRole("status"))
       .toHaveTextContent("Showing last successful data");
+    expectCenteredStatuses(mounted.getByRole("status").element().parentElement!);
+    expect(mounted.getByRole("status").element().querySelector("svg")).toBeNull();
     await expect.element(mounted.getByText("12,345")).toBeVisible();
     let finish!: (value: ServerUsageSummaryResult) => void;
     getUsageSummary.mockReturnValueOnce(
@@ -178,6 +181,33 @@ describe("Usage panel", () => {
     finish({ ...summary, totals: { ...totals, usedTokens: 999 } });
     await expect.element(mounted.getByText("12,345")).toBeVisible();
     expect(mounted.getByText("999", { exact: true }).all()).toHaveLength(0);
+  });
+
+  it("centers the compact breathing logo while loading", async () => {
+    let finish!: (value: ServerUsageSummaryResult) => void;
+    getUsageSummary.mockReturnValueOnce(
+      new Promise<ServerUsageSummaryResult>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mounted = await render(
+      <RouterContextProvider router={makeRouter()}>
+        <div style={{ width: 280 }} data-testid="surface">
+          <UsagePanel visible />
+        </div>
+      </RouterContextProvider>,
+    );
+    await expect.element(mounted.getByText("Loading usage", { exact: true })).toBeVisible();
+    expectCenteredStatuses(mounted.getByTestId("surface").element());
+    expect(
+      mounted
+        .getByText("Loading usage", { exact: true })
+        .element()
+        .closest('[data-slot="centered-status"]')
+        ?.getAttribute("data-loading"),
+    ).toBe("true");
+    finish(summary);
+    await expect.element(mounted.getByText("12,345")).toBeVisible();
   });
 
   it.each([280, 1200])(

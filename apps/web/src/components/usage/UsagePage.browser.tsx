@@ -35,6 +35,7 @@ vi.mock("../standalone/StandaloneChatPageHeader", () => ({
 }));
 
 import { UsagePage } from "./UsagePage";
+import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const totals = {
   usedTokens: 100,
@@ -94,6 +95,13 @@ describe("Usage page heading hierarchy", () => {
     await mounted?.unmount();
     mounted = undefined;
     document.body.innerHTML = "";
+  });
+
+  it("uses the compact centered breathing logo while loading the full page", async () => {
+    getUsageSummary.mockReturnValue(new Promise(() => {}));
+    mounted = await render(<UsagePage />);
+    await expect.element(page.getByText("Loading usage", { exact: true })).toBeVisible();
+    expectCenteredStatuses(document.body);
   });
 
   it("categorizes usage with consistently spaced H2s outside cards and H3s inside", async () => {

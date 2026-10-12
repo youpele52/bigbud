@@ -5,6 +5,9 @@ import { appMetricValue } from "./BigbudResourceView.logic";
 import { ResourceMetricHistory } from "./ResourceMetricHistory";
 import { ResourceTransferRates } from "./ResourceTransferRates";
 import { formatRate } from "./resourceMonitor.format";
+import { ResourceMetricBadge } from "./ResourceMetricBadge";
+import { CenteredStatus } from "../common/CenteredStatus";
+import { isLoadingStatus } from "../common/CenteredStatus.logic";
 
 /** Display process I/O using the same direction readings and mirrored graph as Network. */
 export function BigbudIoResourceCard({
@@ -12,22 +15,33 @@ export function BigbudIoResourceCard({
   label,
   history,
   large = false,
+  pending = false,
 }: {
   app: MonitorAppResources | undefined;
   label: string;
   history: HistoryPoint[];
   large?: boolean;
+  pending?: boolean;
 }) {
   const points = app && !app.incomplete ? history : [];
+  const waiting =
+    pending ||
+    Boolean(
+      app &&
+      !app.incomplete &&
+      [app.core.readBytesPerSecond, app.core.writtenBytesPerSecond].some(
+        (metric) => metric?.status === "ready" || isLoadingStatus(metric?.status ?? "unavailable"),
+      ),
+    );
   return (
     <Card className={`min-w-0 gap-0 py-4 ${large ? "min-h-72" : "min-h-60"}`}>
       <CardContent className="flex h-full flex-1 flex-col gap-4 px-4 py-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-medium">{label}</h3>
-          <span className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+          <ResourceMetricBadge>
             <span className="font-medium text-foreground">{app?.core.processCount ?? "—"}</span>{" "}
             core processes
-          </span>
+          </ResourceMetricBadge>
         </div>
         <div className="space-y-2">
           <ResourceTransferRates
@@ -48,11 +62,9 @@ export function BigbudIoResourceCard({
               large={large}
             />
           ) : (
-            <p
-              className={`flex items-center justify-center text-xs text-muted-foreground ${large ? "h-28" : "h-12"}`}
-            >
-              {app && !app.incomplete ? "Waiting for I/O history…" : "Measurements unavailable"}
-            </p>
+            <CenteredStatus loading={waiting} className={large ? "h-28" : "h-12"}>
+              {waiting ? "Waiting for I/O history" : "Measurements unavailable"}
+            </CenteredStatus>
           )}
         </div>
       </CardContent>

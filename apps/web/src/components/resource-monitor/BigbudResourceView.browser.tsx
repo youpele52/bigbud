@@ -82,7 +82,10 @@ it.each([
     await expect.element(ioRates.getByText("Write", { exact: true })).toBeVisible();
     await expect.element(ioRates.getByText("0.00 B/s", { exact: true })).toBeVisible();
     await expect.element(ioRates.getByText("2.00 KiB/s", { exact: true })).toBeVisible();
-    await expect.element(screen.getByText("12 core processes", { exact: true })).toBeVisible();
+    expect(
+      ioHistory.element().closest('[data-slot="card"]')!.querySelector('[data-slot="badge"]')!
+        .textContent,
+    ).toBe("12 core processes");
     const ioCurves = ioHistory.element().querySelectorAll(".recharts-area-curve");
     expect(ioCurves).toHaveLength(2);
     expect(ioCurves[0]!.getAttribute("stroke")).toBe("var(--chart-2)");
@@ -114,23 +117,39 @@ it.each([
     expect(ioTooltip()).not.toMatch(/-\d/);
     expect(ioTooltip()).not.toContain("Download");
     expect(ioTooltip()).not.toContain("Upload");
-    const cpuDonut = screen.getByRole("img", {
+    const cpuGauge = screen.getByRole("meter", {
       name: "CPU capacity: 4.80% core bigbud of total host CPU",
     });
-    const memoryDonut = screen.getByRole("img", {
+    const memoryGauge = screen.getByRole("meter", {
       name: "Memory capacity: 6.25% core bigbud of total host RAM",
     });
-    await expect.element(cpuDonut).toBeVisible();
-    await expect.element(memoryDonut).toBeVisible();
-    await expect
-      .poll(() => cpuDonut.element().querySelectorAll(".recharts-sector").length)
-      .toBeGreaterThanOrEqual(3);
-    const donutRect = cpuDonut.element().getBoundingClientRect();
+    await expect.element(cpuGauge).toBeVisible();
+    await expect.element(memoryGauge).toBeVisible();
+    expect(cpuGauge.element().querySelectorAll('[data-slot="gauge-segment"]')).toHaveLength(40);
+    expect(cpuGauge.element().querySelector('[data-slot="gauge-needle"]')).not.toBeNull();
+    expect(memoryGauge.element().querySelectorAll('[data-slot="gauge-segment"]')).toHaveLength(40);
+    expect(memoryGauge.element().querySelector('[data-slot="gauge-needle"]')).not.toBeNull();
+    await expect.element(memoryGauge).toHaveAttribute("aria-valuenow", "6.25");
+    await expect.element(memoryGauge.getByText("of total host RAM", { exact: true })).toBeVisible();
+    await expect.element(cpuGauge).toHaveAttribute("aria-valuenow", "4.8");
+    const cpuBadge = cpuGauge
+      .element()
+      .closest('[data-slot="card"]')!
+      .querySelector('[data-slot="card-header"] [data-slot="badge"]')!;
+    expect(cpuBadge.textContent).toBe("12 core processes");
+    const memoryBadge = memoryGauge
+      .element()
+      .closest('[data-slot="card"]')!
+      .querySelector('[data-slot="card-header"] [data-slot="badge"]')!;
+    expect(memoryBadge.textContent).toBe("1.00 GiB / 16.00 GiB");
+    expect(memoryBadge.getAttribute("title")).toContain("estimated");
+    await expect.element(cpuGauge.getByText("of total host CPU", { exact: true })).toBeVisible();
+    const gaugeRect = cpuGauge.element().getBoundingClientRect();
     const historyRect = screen
       .getByRole("img", { name: "CPU history", exact: true })
       .element()
       .getBoundingClientRect();
-    expect(historyRect.top).toBeGreaterThanOrEqual(donutRect.bottom);
+    expect(historyRect.top).toBeGreaterThanOrEqual(gaugeRect.bottom);
     await expect
       .element(screen.getByRole("heading", { name: "Including agents/tools" }))
       .toBeVisible();
@@ -140,8 +159,14 @@ it.each([
       .element()
       .closest('[data-slot="card"]')!
       .getBoundingClientRect();
-    const cpuCard = cpuDonut.element().closest('[data-slot="card"]')!.getBoundingClientRect();
-    const memoryCard = memoryDonut.element().closest('[data-slot="card"]')!.getBoundingClientRect();
+    const cpuCard = cpuGauge.element().closest('[data-slot="card"]')!.getBoundingClientRect();
+    const memoryCard = memoryGauge.element().closest('[data-slot="card"]')!.getBoundingClientRect();
+    const memoryHistoryBounds = screen
+      .getByRole("img", { name: "Memory history", exact: true })
+      .element()
+      .getBoundingClientRect();
+    if (width !== 340) expect(memoryHistoryBounds.top).toBe(historyRect.top);
+    expect(memoryCard.height).toBe(cpuCard.height);
     expect(ioCard.width).toBe(inclusiveCard.width);
     expect(ioCard.height).toBe(inclusiveCard.height);
     expect(ioCard.width).toBe(cpuCard.width);
@@ -160,15 +185,6 @@ it.each([
       await surface.screenshot({
         path: `${screenshotDirectory}/bigbud-monitor-${width}-${dark ? "dark" : "light"}.png`,
       });
-    const pie = cpuDonut.getByRole("application");
-    const pieBounds = pie.element().getBoundingClientRect();
-    await pie.hover({ position: { x: pieBounds.width * 0.55, y: pieBounds.height * 0.15 } });
-    await expect
-      .poll(() => cpuDonut.element().querySelector(".recharts-tooltip-wrapper")?.textContent)
-      .toContain("Core bigbud");
-    expect(cpuDonut.element().querySelector(".recharts-tooltip-wrapper")?.textContent).toContain(
-      "4.80%",
-    );
     await screen.unmount();
   },
 );
@@ -203,7 +219,7 @@ it.each([false, true])(
     expect(ioBounds.height).toBe(inclusiveBounds.height);
     expect(ioBounds.height).toBeGreaterThanOrEqual(large ? 288 : 240);
     expect(ioBounds.top).toBe(inclusiveBounds.top);
-    expect(screen.getByText("Waiting for history…").elements()).toHaveLength(4);
+    expect(screen.getByText("Waiting for history", { exact: true }).elements()).toHaveLength(4);
     await screen.unmount();
   },
 );

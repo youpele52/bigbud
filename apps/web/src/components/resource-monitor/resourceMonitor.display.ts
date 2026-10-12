@@ -41,12 +41,13 @@ export function displayWidget(
       label: WIDGET_LABELS[widget],
       value: "—",
       status: "warming",
+      ...(widget === "cpu" ? { gaugeValue: null } : {}),
       ...(widget === "memory" || widget === "disk"
         ? {
             capacityUsage: {
               usedBytes: null,
               totalBytes: null,
-              footer: ["Waiting for capacity data"],
+              footer: [],
             },
           }
         : {}),
@@ -61,6 +62,13 @@ export function displayWidget(
         label: "CPU",
         value: show(snapshot.cpuPercent, formatPercent),
         status: status(snapshot.cpuPercent),
+        gaugeValue:
+          snapshot.cpuPercent?.status === "ready" &&
+          Number.isFinite(snapshot.cpuPercent.value) &&
+          snapshot.cpuPercent.value >= 0 &&
+          snapshot.cpuPercent.value <= 100
+            ? snapshot.cpuPercent.value
+            : null,
         historyValueFormatter: formatPercent,
         ...(snapshot.perCorePercent.length
           ? { detail: `${snapshot.perCorePercent.length} logical cores` }

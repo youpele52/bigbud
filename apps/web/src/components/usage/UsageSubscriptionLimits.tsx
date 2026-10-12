@@ -2,6 +2,7 @@ import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLi
 import { Card, CardContent } from "../ui/card";
 import { UsageSubscriptionProviderLimits } from "./UsageSubscriptionLimits.provider";
 import { SUBSCRIPTION_PROVIDER_LABELS } from "./UsageSubscriptionLimits.logic";
+import { CenteredStatus } from "../common/CenteredStatus";
 
 export function UsageSubscriptionLimits({
   limits,
@@ -22,9 +23,7 @@ export function UsageSubscriptionLimits({
     );
   if (supportedLimits.length === 0)
     return compact ? (
-      <p className="text-xs text-muted-foreground">
-        Subscription limits unavailable for enabled providers.
-      </p>
+      <CenteredStatus>Subscription limits unavailable for enabled providers.</CenteredStatus>
     ) : null;
 
   return (

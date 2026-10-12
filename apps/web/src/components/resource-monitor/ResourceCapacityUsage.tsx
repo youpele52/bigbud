@@ -1,8 +1,10 @@
 import { cn } from "~/lib/utils";
+import { CenteredStatus } from "../common/CenteredStatus";
 import { formatPercent } from "./resourceMonitor.format";
 import {
   capacityPercent,
   capacitySeverity,
+  capacityUsageStatus,
   formatCapacityGiB,
   type CapacityUsage,
 } from "./ResourceCapacityUsage.logic";
@@ -18,14 +20,7 @@ export function ResourceCapacityUsage({
 }) {
   const percent = capacityPercent(usage);
   const severity = capacitySeverity(percent);
-  const status =
-    severity === "critical"
-      ? "Critical usage"
-      : severity === "warning"
-        ? "High usage"
-        : severity === "neutral"
-          ? "Normal usage"
-          : "Usage unavailable";
+  const status = capacityUsageStatus(percent);
   const color =
     severity === "critical"
       ? "text-red-600 dark:text-red-400"
@@ -74,10 +69,16 @@ export function ResourceCapacityUsage({
           />
         ) : null}
       </div>
-      <p className={cn("text-xs", percent === null ? "text-muted-foreground" : color)}>{status}</p>
-      <div className="space-y-1 text-xs text-muted-foreground">
-        {usage.footer.map((line, index) => (
-          <p key={index} className="break-words">
+      {percent === null ? (
+        <CenteredStatus>{status}</CenteredStatus>
+      ) : (
+        <p className={cn("text-xs", color)}>{status}</p>
+      )}
+      <div
+        className={cn("space-y-1 text-xs text-muted-foreground", percent === null && "text-center")}
+      >
+        {usage.footer.map((line) => (
+          <p key={line} className="break-words">
             {line}
           </p>
         ))}
