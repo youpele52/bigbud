@@ -33,6 +33,7 @@ import { RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import * as RemoteDefault from "./remoteAgentDefault.ts";
 import { runRestartFixtureTool } from "./remoteAgentOwners.httpFixture.ts";
+import * as SshProcess from "../ssh/sshProcess.ts";
 
 vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReady: () => undefined }));
 vi.mock("../ssh/sshCommand.ts", () => ({
@@ -224,6 +225,13 @@ describe("application terminal owner recovery after server services restart", ()
   });
 
   it("reopens through the durable old PTY identity after newer activation; never spawns a replacement", async () => {
+    const folderProbe = vi.spyOn(SshProcess, "runSshCommand").mockImplementation(async (input) => ({
+      stdout: `\x1e${input.args?.[3]}\x1f`,
+      stderr: "",
+      code: 0,
+      signal: null,
+      timedOut: false,
+    }));
     const directory = mkdtempSync(join(tmpdir(), "bigbud-owner-restart-"));
     const old = binding("g1");
     const newer = binding("g2");
@@ -337,6 +345,7 @@ describe("application terminal owner recovery after server services restart", ()
           }),
         );
         expect(result.pid).toBe(9000);
+        expect(result.cwd).toBe("/workspace");
         await runtime.runPromise(Scope.close(scope, Exit.void));
         pool.closeAll();
         await runtime.dispose();
@@ -347,6 +356,10 @@ describe("application terminal owner recovery after server services restart", ()
       expect(requests.every((entry) => entry.generation === "g1")).toBe(true);
       expect(selection).toHaveBeenCalledOnce();
       expect(requests.some((entry) => entry.frame.type === "ptySignalRequest")).toBe(false);
+      expect(folderProbe).toHaveBeenCalledTimes(2);
+      expect(folderProbe).toHaveBeenCalledWith(
+        expect.objectContaining({ executionTargetId: "ssh:fixture", command: "sh" }),
+      );
     } finally {
       for (const controller of controllers) await controller.dispose();
       rmSync(directory, { recursive: true, force: true });

@@ -53,9 +53,9 @@ export function saturatedCleanupModel(pending: boolean) {
       expect(grants.grants + r.ordinaryGrants.snapshot().items).toBeLessThanOrEqual(128);
       expect(grants.capsuleBytes).toBeLessThanOrEqual(16384);
     }
+    // Keep every per-transition encoding check without creating assertions for each child.
+    const childViolations = [];
     for (const c of snapshot.children) {
-      expect(c.effects).toBeLessThanOrEqual(1);
-      expect(c.id.length).toBe(64);
       const state = { reserved: 1, accepted: 2, succeeded: 4, cleanupUnknown: 7 }[c.state];
       const encoded = encodeCanonical("CleanupOutcome", {
         child: c.ref,
@@ -66,10 +66,18 @@ export function saturatedCleanupModel(pending: boolean) {
         resultCapsuleDigest: id(0),
         authorityRevision: "248",
       });
-      expect(encoded.length).toBeLessThanOrEqual(r.childOutcomeBytes);
       // Fixed model index/state allowance, not measured JS object/native allocator overhead.
-      expect(encoded.length + 256).toBeLessThanOrEqual(r.childRecordBytes);
+      if (
+        !(
+          c.effects <= 1 &&
+          c.id.length === 64 &&
+          encoded.length <= r.childOutcomeBytes &&
+          encoded.length + 256 <= r.childRecordBytes
+        )
+      )
+        childViolations.push({ id: c.id, effects: c.effects, outcomeBytes: encoded.length });
     }
+    expect(childViolations).toEqual([]);
     return snapshot;
   };
   return { model, check, ordinary };

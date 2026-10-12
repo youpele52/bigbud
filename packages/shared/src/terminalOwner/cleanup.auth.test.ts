@@ -46,6 +46,9 @@ describe("prototype v1.1 immutable shutdown-inventory authentication", () => {
 
   it.each([33, 64])(
     "authenticates an actual owner-captured %i-PTY grant without widening ordinary scope",
+    // Every PTY/permission revalidates canonical inventory: ~6s under root-suite load.
+    // Use the saturation model's 15s test budget; credential deadlines stay unchanged.
+    { timeout: 15_000 },
     (count) => {
       const model = new OwnerCleanupModel(id(1), id(230));
       for (let i = 0; i < count; i++) model.reserveResource("pty", id(11 + i), "live");

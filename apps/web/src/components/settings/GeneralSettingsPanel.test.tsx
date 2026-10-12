@@ -53,7 +53,12 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Terminal",
       expect.stringContaining("Learning projects"),
     ]);
-    expect(sections[0]?.rows).toEqual(["Theme", "Time format", "Diff line wrapping"]);
+    expect(sections[0]?.rows).toEqual([
+      "What should bigbud call you?",
+      "Theme",
+      "Time format",
+      "Diff line wrapping",
+    ]);
     expect(sections[2]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
@@ -68,6 +73,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sectionClasses[2]).toBe(sectionClasses[1]);
     expect(cardClasses[2]).toBeTruthy();
     expect(cardClasses[2]).toBe(cardClasses[1]);
+    expect(markup).toContain('aria-label="What should bigbud call you?"');
     expect(markup).toContain('aria-label="Terminal font family"');
     expect(markup).toContain('aria-label="Terminal font size"');
     expect(markup).toContain('aria-label="Terminal GPU rendering"');
