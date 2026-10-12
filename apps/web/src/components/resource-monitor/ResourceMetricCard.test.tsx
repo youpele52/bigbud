@@ -82,8 +82,8 @@ describe("system capacity gauges", () => {
     expect(markup).toContain('data-slot="gauge"');
     expect(markup).toContain('data-slot="badge"');
     expect(markup).toContain("13.00 GiB / 16.00 GiB");
-    expect(markup).toContain('aria-valuetext="81.25% used · High usage"');
-    expect(markup).not.toContain(">High usage</p>");
+    expect(markup).toContain('aria-valuetext="81.25% used · Critical usage"');
+    expect(markup).not.toContain(">Critical usage</p>");
     expect(markup).toContain("Available: 3.00 GiB");
     expect(markup).toContain("Swap: 1.00 GiB used / 2.00 GiB total");
   });

@@ -1,4 +1,5 @@
 import type { MonitorMetric } from "@bigbud/contracts/system-monitor/types";
+import { usagePercentBand } from "../ui/usageBands.logic";
 
 /** Only measured, nonnegative capacities can be used in bars and totals. */
 export function capacityValue(metric: MonitorMetric | undefined): number | null {
@@ -13,9 +14,10 @@ export interface CapacityUsage {
   footer: readonly string[];
 }
 
-/** Reject unknown or inconsistent capacities rather than showing a false zero. */
+/** Preserve over-capacity memory estimates only when explicitly allowed; unknowns are never zero. */
 export function capacityPercent(
   usage: Pick<CapacityUsage, "usedBytes" | "totalBytes">,
+  allowOverCapacity = false,
 ): number | null {
   const { usedBytes, totalBytes } = usage;
   return usedBytes !== null &&
@@ -24,7 +26,8 @@ export function capacityPercent(
     Number.isFinite(totalBytes) &&
     totalBytes > 0 &&
     usedBytes >= 0 &&
-    usedBytes <= totalBytes
+    (allowOverCapacity || usedBytes <= totalBytes) &&
+    Number.isFinite((usedBytes / totalBytes) * 100)
     ? (usedBytes / totalBytes) * 100
     : null;
 }
@@ -32,8 +35,7 @@ export function capacityPercent(
 export function capacitySeverity(
   percent: number | null,
 ): "unknown" | "neutral" | "warning" | "critical" {
-  if (percent === null || !Number.isFinite(percent)) return "unknown";
-  return percent >= 95 ? "critical" : percent >= 80 ? "warning" : "neutral";
+  return usagePercentBand(percent)?.severity ?? "unknown";
 }
 
 /** Keep status wording consistent across capacity bar and gauge accessibility descriptions. */

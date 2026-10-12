@@ -1,8 +1,10 @@
 import type { MonitorNamedMetric } from "@bigbud/contracts/system-monitor/types";
 import { cpuUsageValue } from "./resourceMonitor.display.cpu";
 import { formatPercent } from "./resourceMonitor.format";
+import { capacityUsageStatus } from "./ResourceCapacityUsage.logic";
+import { usagePercentColor } from "../ui/usageBands.logic";
 
-/** Equal-scale per-core meters make load distribution comparable without assigning severity. */
+/** Equal-scale core meters share usage colors with RAM, Swap and Disk capacity bars. */
 export function ResourceCpuCore({ core, active }: { core: MonitorNamedMetric; active: boolean }) {
   const label = /^\d+$/.test(core.name) ? `Core ${core.name}` : core.name;
   const value = active ? cpuUsageValue(core.metric) : null;
@@ -19,13 +21,14 @@ export function ResourceCpuCore({ core, active }: { core: MonitorNamedMetric; ac
       <div
         role={value === null ? "img" : "meter"}
         aria-label={`${label} usage${value === null ? ` ${status.toLowerCase()}` : ""}`}
+        title={value === null ? status : capacityUsageStatus(value)}
         {...(value === null
           ? {}
           : {
               "aria-valuemin": 0,
               "aria-valuemax": 100,
               "aria-valuenow": value,
-              "aria-valuetext": formatPercent(value),
+              "aria-valuetext": `${formatPercent(value)} · ${capacityUsageStatus(value)}`,
             })}
         className="h-1.5 min-w-0 overflow-hidden rounded-full bg-muted"
       >
@@ -33,8 +36,8 @@ export function ResourceCpuCore({ core, active }: { core: MonitorNamedMetric; ac
           <div
             data-slot="cpu-core-fill"
             aria-hidden="true"
-            className="h-full rounded-full bg-info transition-[width] duration-300 ease-out motion-reduce:transition-none"
-            style={{ width: `${value}%` }}
+            className="h-full rounded-full transition-[width] duration-300 ease-out motion-reduce:transition-none"
+            style={{ width: `${value}%`, backgroundColor: usagePercentColor(value) }}
           />
         ) : null}
       </div>

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ResourceCpuCore } from "./ResourceCpuCore";
 import { ResourceCpuCores } from "./ResourceCpuCores";
 import { cpuCoreReadings } from "./ResourceCpuCores.fixtures";
+import { usagePercentColor } from "../ui/usageBands.logic";
 
 const reading: MonitorNamedMetric = {
   name: "0",
@@ -21,9 +22,25 @@ describe("horizontal core usage bars", () => {
     expect(markup).toContain('aria-valuemax="100"');
     expect(markup).toContain(`aria-valuenow="${value}"`);
     expect(markup).toContain(`width:${value}%`);
-    expect(markup).toContain("bg-info");
+    expect(markup).toContain(`background-color:${usagePercentColor(value)}`);
+    expect(markup).not.toContain("bg-info");
     expect(markup).toContain("motion-reduce:transition-none");
-    expect(markup).not.toContain("Critical");
+    expect(markup).not.toContain(">Critical usage</span>");
+  });
+  it.each([
+    [0, "var(--chart-1)", "Normal usage"],
+    [49.999, "var(--chart-1)", "Normal usage"],
+    [50, "var(--chart-3)", "High usage"],
+    [79.999, "var(--chart-3)", "High usage"],
+    [80, "var(--chart-4)", "Critical usage"],
+    [100, "var(--chart-4)", "Critical usage"],
+  ] as const)("uses %s%% usage colors and accessible severity", (value, color, status) => {
+    const markup = renderToStaticMarkup(
+      <ResourceCpuCore core={{ ...reading, metric: { ...reading.metric, value } }} active />,
+    );
+    expect(markup).toContain(color);
+    expect(markup).toContain(`title="${status}"`);
+    expect(markup).toContain(`aria-valuetext="${value.toFixed(2)}% · ${status}"`);
   });
   it.each([-1, 101, NaN, Infinity])(
     "keeps invalid reading %s unknown rather than capping or showing zero",

@@ -5,6 +5,7 @@ import { page } from "vitest/browser";
 import { ResourceCpuCores } from "./ResourceCpuCores";
 import { cpuCoreReadings } from "./ResourceCpuCores.fixtures";
 import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
+import { usagePercentColor } from "../ui/usageBands.logic";
 
 afterEach(() => document.documentElement.classList.remove("dark"));
 
@@ -13,7 +14,7 @@ it.each([
   { width: 340, dark: true },
   { width: 896, dark: true },
 ])(
-  "shows equal-scale blue bars without overflow at $width px (dark: $dark)",
+  "shows equal-scale usage-colored bars without overflow at $width px (dark: $dark)",
   async ({ width, dark }) => {
     await page.viewport(1200, 1000);
     document.documentElement.classList.toggle("dark", dark);
@@ -48,6 +49,9 @@ it.each([
         expect(meter.querySelector('[data-slot="cpu-core-fill"]')?.getAttribute("style")).toContain(
           `width: ${readings[index]!.metric.value}%`,
         );
+        expect(
+          (meter.querySelector('[data-slot="cpu-core-fill"]') as HTMLElement).style.backgroundColor,
+        ).toBe(usagePercentColor(readings[index]!.metric.value));
       }
       const surface = screen.getByTestId("surface");
       expect(surface.element().scrollWidth).toBeLessThanOrEqual(width);
@@ -68,6 +72,24 @@ it.each([
       await expect
         .element(region.getByRole("meter", { name: "Core 0 usage", exact: true }))
         .toHaveAttribute("aria-valuenow", "20");
+      expect(
+        (first.querySelector('[data-slot="cpu-core-fill"]') as HTMLElement).style.backgroundColor,
+      ).toBe("var(--chart-1)");
+      for (const [value, color, status] of [
+        [49.999, "var(--chart-1)", "Normal usage"],
+        [50, "var(--chart-3)", "High usage"],
+        [79.999, "var(--chart-3)", "High usage"],
+        [80, "var(--chart-4)", "Critical usage"],
+      ] as const) {
+        readings = readings.with(0, { ...readings[0]!, metric: { ...readings[0]!.metric, value } });
+        await screen.rerender(content());
+        await expect
+          .element(region.getByRole("meter", { name: "Core 0 usage", exact: true }))
+          .toHaveAttribute("aria-valuetext", `${value.toFixed(2)}% · ${status}`);
+        expect(
+          (first.querySelector('[data-slot="cpu-core-fill"]') as HTMLElement).style.backgroundColor,
+        ).toBe(color);
+      }
     } finally {
       await screen.unmount();
     }

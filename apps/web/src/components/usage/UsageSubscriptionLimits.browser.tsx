@@ -186,9 +186,12 @@ describe("UsageSubscriptionLimits", () => {
   });
 
   it.each([
-    [0, 100, "bg-info"],
-    [90, 10, "bg-warning"],
-    [100, 0, "bg-destructive"],
+    [0, 100, "var(--chart-1)"],
+    [49.999, 50.001, "var(--chart-1)"],
+    [50, 50, "var(--chart-3)"],
+    [79.999, 20.001, "var(--chart-3)"],
+    [80, 20, "var(--chart-4)"],
+    [100, 0, "var(--chart-4)"],
   ] as const)(
     "shows %s%% used as %s%% remaining with the correct severity",
     async (utilization, remaining, color) => {
@@ -198,10 +201,19 @@ describe("UsageSubscriptionLimits", () => {
       });
       await expect
         .element(page.getByRole("progressbar", { name: "5-hour limit" }))
-        .toHaveAttribute("aria-valuenow", String(remaining));
+        .toHaveAttribute("aria-valuenow", String(100 - utilization));
       expect(
-        document.querySelector('[data-slot="progress-indicator"]')?.classList.contains(color),
-      ).toBe(true);
+        Number(
+          page
+            .getByRole("progressbar", { name: "5-hour limit" })
+            .element()
+            .getAttribute("aria-valuenow"),
+        ),
+      ).toBeCloseTo(remaining);
+      expect(
+        (document.querySelector('[data-slot="progress-indicator"]') as HTMLElement).style
+          .backgroundColor,
+      ).toBe(color);
     },
   );
 });

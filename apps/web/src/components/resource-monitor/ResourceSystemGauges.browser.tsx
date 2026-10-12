@@ -71,7 +71,7 @@ it.each([
     expect(memoryGauge.element().closest('[data-slot="card"]')!.textContent).not.toContain(
       "High usage",
     );
-    expect(memoryGauge.element().getAttribute("aria-valuetext")).toContain("High usage");
+    expect(memoryGauge.element().getAttribute("aria-valuetext")).toContain("Critical usage");
     const history = screen.getByRole("img", { name: "CPU history", exact: true });
     await expect.element(history).toBeVisible();
     const memoryHistory = screen.getByRole("img", { name: "Memory history", exact: true });

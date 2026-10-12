@@ -1,4 +1,3 @@
-import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { formatHumanReadableDate } from "~/utils/timestamp";
 import {
   Progress,
@@ -11,7 +10,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   formatAllowanceUsage,
   formatRemainingAllowance,
-  remainingAllowanceClassName,
+  remainingAllowanceColor,
   remainingAllowancePercent,
 } from "./UsageSubscriptionLimits.logic";
 
@@ -19,13 +18,11 @@ import {
 export function UsageSubscriptionLimitProgress({
   label,
   utilization,
-  status,
   resetAt,
   description,
 }: {
   readonly label: string;
   readonly utilization: number;
-  readonly status: ServerProviderUsageLimits["status"];
   readonly resetAt?: string | undefined;
   readonly description?: string | undefined;
 }) {
@@ -51,7 +48,7 @@ export function UsageSubscriptionLimitProgress({
           <ProgressValue className="ml-auto text-foreground">{() => valueText}</ProgressValue>
         </div>
         <ProgressTrack>
-          <ProgressIndicator className={remainingAllowanceClassName(remaining, status)} />
+          <ProgressIndicator style={{ backgroundColor: remainingAllowanceColor(remaining) }} />
         </ProgressTrack>
         {resetAt ? (
           <div className="text-xs text-muted-foreground">

@@ -77,7 +77,6 @@ export function UsageSubscriptionProviderLimits({
               label={window.label}
               utilization={window.utilization}
               resetAt={window.resetAt}
-              status={limits.status}
             />
           ))}
           {limits.extraUsage ? (
@@ -85,7 +84,6 @@ export function UsageSubscriptionProviderLimits({
               <UsageSubscriptionLimitProgress
                 label="Extra usage"
                 utilization={extraUtilization}
-                status={limits.status}
                 description={formatExtraUsageRemaining(limits.extraUsage)}
               />
             ) : (

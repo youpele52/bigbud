@@ -63,7 +63,9 @@ it.each(
         expect(meter.querySelector('[data-slot="gauge-needle"]')).not.toBeNull();
         await expect.element(screen.getByText("of total host RAM")).toBeVisible();
       } else {
-        expect(meter.firstElementChild?.classList.contains("bg-red-500")).toBe(true);
+        expect((meter.firstElementChild as HTMLElement).style.backgroundColor).toBe(
+          "var(--chart-4)",
+        );
         expect(meter.getBoundingClientRect().height).toBe(8);
         expect(meter.getBoundingClientRect().width).toBeCloseTo(
           meter.parentElement!.getBoundingClientRect().width,

@@ -2,6 +2,7 @@ import type {
   ServerProviderExtraUsage,
   ServerProviderUsageLimits,
 } from "@bigbud/contracts/server/usageLimits.ts";
+import { usagePercentColor } from "../ui/usageBands.logic";
 
 export const SUBSCRIPTION_PROVIDER_LABELS: Record<ServerProviderUsageLimits["source"], string> = {
   "claude-agent-sdk": "Claude",
@@ -29,13 +30,9 @@ function formatAllowancePercent(value: number): string {
   return `${Math.round(value * 10) / 10}%`;
 }
 
-export function remainingAllowanceClassName(
-  remaining: number,
-  status: ServerProviderUsageLimits["status"],
-): string {
-  if (remaining <= 5) return "bg-destructive";
-  if (status === "stale" || remaining <= 20) return "bg-warning";
-  return "bg-info";
+/** Color expresses used capacity, while the bar and accessible value still express remaining quota. */
+export function remainingAllowanceColor(remaining: number): string {
+  return usagePercentColor(100 - remaining);
 }
 
 /** Derives extra-usage utilization only when the provider reports a finite allowance. */
