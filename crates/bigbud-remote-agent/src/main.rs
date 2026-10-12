@@ -123,15 +123,20 @@ fn write_stdio_responses(
     writer.flush()
 }
 
-fn run_check() {
+fn run_check(capabilities: bool) {
     println!(
-        "bigbud-remote-agent\t{}\t{}\t{}\t{}\t{}\t{}",
+        "bigbud-remote-agent\t{}\t{}\t{}\t{}\t{}\t{}{}",
         identity::build_version(),
         bigbud_protocol::PROTOCOL_MAJOR,
         bigbud_protocol::PROTOCOL_MINOR,
         identity::build_digest(),
         std::env::consts::OS,
         std::env::consts::ARCH,
+        if capabilities {
+            "\tinspect-local=1"
+        } else {
+            ""
+        },
     );
 }
 
@@ -158,7 +163,7 @@ fn run_supervisor_mode(_root: std::path::PathBuf) -> Result<()> {
 fn main() -> Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("--check") => {
-            run_check();
+            run_check(std::env::args().nth(2).as_deref() == Some("--capabilities"));
             Ok(())
         }
         Some("--supervisor") => {
@@ -215,6 +220,9 @@ fn main() -> Result<()> {
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),
+        Some("--inspect-local") => {
+            bigbud_remote_agent::inspect_local::run_stdio().context("local inspection mode failed")
+        }
         _ => run_stdio(create_session()?).context("remote agent stdio mode failed"),
     }
 }
