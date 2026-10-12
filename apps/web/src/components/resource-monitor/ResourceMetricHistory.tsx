@@ -12,6 +12,9 @@ export function ResourceMetricHistory({
   large?: boolean;
 }) {
   if ((metric.history?.length ?? 0) <= 1) return null;
+  const mirrored = metric.historyStyle === "network" || metric.historyStyle === "io";
+  const incomingLabel = metric.historyStyle === "io" ? "Read" : "Download";
+  const outgoingLabel = metric.historyStyle === "io" ? "Write" : "Upload";
   return (
     <div className={large ? "h-28" : "h-12"} role="img" aria-label={`${metric.label} history`}>
       <ResponsiveContainer width="100%" height="100%">
@@ -24,20 +27,20 @@ export function ResourceMetricHistory({
                   formatHistoryTooltipValue(
                     value,
                     metric.historyValueFormatter,
-                    metric.historyStyle === "network" && name === "Upload",
+                    mirrored && name === outgoingLabel,
                   )
                 }
               />
             }
           />
-          {metric.historyStyle === "network" ? (
+          {mirrored ? (
             <>
               <YAxis domain={networkDomain(metric.history)} hide />
               <ReferenceLine y={0} stroke="var(--border)" />
               <Area
                 type="monotone"
                 dataKey="value"
-                name="Download"
+                name={incomingLabel}
                 baseValue={0}
                 stroke="var(--chart-2)"
                 fill="var(--chart-2)"
@@ -47,7 +50,7 @@ export function ResourceMetricHistory({
               <Area
                 type="monotone"
                 dataKey="sentValue"
-                name="Upload"
+                name={outgoingLabel}
                 baseValue={0}
                 stroke="var(--chart-4)"
                 fill="var(--chart-4)"

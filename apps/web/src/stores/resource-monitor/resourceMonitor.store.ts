@@ -6,6 +6,7 @@ import type {
 } from "@bigbud/contracts/system-monitor/types";
 import { create } from "zustand";
 import { EMPTY_APP_HISTORY, nextAppHistory, type AppHistory } from "./resourceMonitor.appHistory";
+import { appendTransferHistory } from "./resourceMonitor.history";
 
 export interface HistoryPoint {
   sequence: number;
@@ -132,27 +133,6 @@ function append(
   return [...points.slice(-299), { sequence, value }];
 }
 
-function appendNetwork(
-  points: HistoryPoint[],
-  received: number | undefined,
-  transmitted: number | undefined,
-  sequence: number,
-): HistoryPoint[] {
-  const safeReceived = received !== undefined && Number.isFinite(received) ? received : undefined;
-  const safeTransmitted =
-    transmitted !== undefined && Number.isFinite(transmitted) ? transmitted : undefined;
-  if (safeReceived === undefined && safeTransmitted === undefined) return points;
-  return [
-    ...points.slice(-299),
-    {
-      sequence,
-      value: safeReceived ?? null,
-      // Negative sent values plot below the chart's zero baseline.
-      sentValue: safeTransmitted === undefined ? null : -safeTransmitted,
-    },
-  ];
-}
-
 function acceptSnapshot(snapshot: MonitorSnapshot) {
   if (subscriptionId === null) {
     if (consumers.size > 0) pendingSnapshot = snapshot;
@@ -189,7 +169,7 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
           snapshot.memoryUsedBytes?.status === "ready" ? snapshot.memoryUsedBytes.value : undefined,
           snapshot.sequence,
         ),
-        network: appendNetwork(
+        network: appendTransferHistory(
           history.network,
           snapshot.networkReceivedBytesPerSecond?.status === "ready"
             ? snapshot.networkReceivedBytesPerSecond.value

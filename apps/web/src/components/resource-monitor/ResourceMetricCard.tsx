@@ -17,7 +17,7 @@ export interface DisplayMetric {
   detail?: string;
   history?: readonly DisplayPoint[];
   historyValueFormatter?: (value: number) => string;
-  historyStyle?: "network";
+  historyStyle?: "network" | "io";
   capacityUsage?: CapacityUsage;
   networkRates?: NetworkRates;
 }

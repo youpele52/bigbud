@@ -8,6 +8,7 @@ import { SystemPanel } from "./SystemPanel";
 import { appMonitorSnapshot } from "./BigbudResourceView.fixtures";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { BigbudResourceView } from "./BigbudResourceView";
+import { EMPTY_APP_HISTORY } from "~/stores/resource-monitor/resourceMonitor.appHistory";
 
 function MonitorLink({
   children,
@@ -27,7 +28,7 @@ beforeEach(() => {
   vi.mocked(useResourceMonitor).mockReturnValue({
     snapshot: appMonitorSnapshot(),
     history: { cpu: [], memory: [], network: [] },
-    appHistory: { cpu: [], memory: [] },
+    appHistory: EMPTY_APP_HISTORY,
     appReason: null,
     connection: "connected",
     reason: null,
@@ -97,7 +98,7 @@ it("matches the full view's stacked charts and card dimensions in the right pane
   ];
   vi.mocked(useResourceMonitor).mockReturnValue({
     ...useResourceMonitor(true, false, false, true),
-    appHistory: { cpu: points, memory: points },
+    appHistory: { ...EMPTY_APP_HISTORY, cpu: points, memory: points },
   });
   const screen = await render(
     <div style={{ width: 896 }}>

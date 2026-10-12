@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BigbudResourceView } from "./BigbudResourceView";
 import { appCard, appMetricValue, currentAppResources } from "./BigbudResourceView.logic";
 import { useResourceMonitor } from "./useResourceMonitor";
+import { EMPTY_APP_HISTORY } from "~/stores/resource-monitor/resourceMonitor.appHistory";
 
 vi.mock("./useResourceMonitor", () => ({ useResourceMonitor: vi.fn() }));
 const metric = (value: number): MonitorMetric => ({ value, status: "ready", sampledAtMs: 1000 });
@@ -45,7 +46,7 @@ beforeEach(() =>
   vi.mocked(useResourceMonitor).mockReturnValue({
     snapshot,
     appReason: null,
-    appHistory: { cpu: [], memory: [] },
+    appHistory: EMPTY_APP_HISTORY,
     history: { cpu: [], memory: [], network: [] },
     connection: "connected",
     reason: null,
@@ -62,7 +63,8 @@ describe("BigbudResourceView", () => {
     expect(markup).toContain("4.80%");
     expect(markup).toContain("18.40%");
     expect(markup).toContain("Backend");
-    expect(markup).toContain("Read 0.00 B/s");
+    expect(markup).toContain(">Read</dt>");
+    expect(markup).toContain("0.00 B/s");
     expect(markup).toContain("estimated");
     expect(markup).toContain("CPU capacity: 4.80% core bigbud of total host CPU");
     expect(markup).toContain("Memory capacity: 6.25% core bigbud of total host RAM");
@@ -89,6 +91,72 @@ describe("BigbudResourceView", () => {
     });
     expect(renderToStaticMarkup(<BigbudResourceView visible />)).toContain("Process I/O");
   });
+  it.each([false, true])(
+    "matches Network's separate I/O readings and mirrored history (large: %s)",
+    (large) => {
+      vi.mocked(useResourceMonitor).mockReturnValue({
+        ...useResourceMonitor(true, false, false, true),
+        appHistory: {
+          ...EMPTY_APP_HISTORY,
+          cpu: [],
+          memory: [],
+          io: [
+            { sequence: 1, value: 1024, sentValue: -2048 },
+            { sequence: 2, value: 0, sentValue: -2048 },
+          ],
+        },
+      });
+      const markup = renderToStaticMarkup(<BigbudResourceView visible large={large} />);
+      expect(markup).toContain('aria-label="Disk I/O history"');
+      expect(markup).toContain(large ? 'class="h-28"' : 'class="h-12"');
+      expect(markup).toContain('aria-label="I/O transfer rates"');
+      expect(markup).toContain(">Read</dt>");
+      expect(markup).toContain(">Write</dt>");
+      expect(markup).toContain("0.00 B/s");
+      expect(markup).toContain("2.00 KiB/s");
+      expect(markup).toContain(">12</span> core processes");
+      expect(markup).not.toContain("Network transfer rates");
+    },
+  );
+  it.each(["unavailable", "incomplete", "stale", "retrying"])(
+    "does not chart old I/O or inclusive histories when samples are %s",
+    (state) => {
+      vi.mocked(useResourceMonitor).mockReturnValue({
+        ...useResourceMonitor(true, false, false, true),
+        connection: state === "unavailable" ? "unavailable" : "connected",
+        snapshot: {
+          ...snapshot,
+          sampledAtMs: state === "stale" ? 12000 : 1000,
+          appResources: { ...app, incomplete: state === "incomplete" },
+        },
+        collectionStatus:
+          state === "retrying"
+            ? { state: "retrying", attempts: 1, retryAfterMs: 1000, reason: "sampling", epoch: 1 }
+            : null,
+        appHistory: {
+          ...EMPTY_APP_HISTORY,
+          cpu: [],
+          memory: [],
+          inclusiveCpu: [
+            { sequence: 1, value: 10 },
+            { sequence: 2, value: 18.4 },
+          ],
+          inclusiveMemory: [
+            { sequence: 1, value: 1024 ** 3 },
+            { sequence: 2, value: 2 * 1024 ** 3 },
+          ],
+          io: [
+            { sequence: 1, value: 1024, sentValue: -2048 },
+            { sequence: 2, value: 0, sentValue: -2048 },
+          ],
+        },
+      });
+      const markup = renderToStaticMarkup(<BigbudResourceView visible />);
+      expect(markup).not.toContain("Disk I/O history");
+      expect(markup).not.toContain("Including agents/tools CPU history");
+      expect(markup).not.toContain("Including agents/tools Memory history");
+    },
+  );
   it("shows an actionable missing-sample diagnostic instead of indefinite warming", () => {
     const missing = { ...snapshot };
     delete missing.appResources;
