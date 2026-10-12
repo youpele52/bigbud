@@ -2,7 +2,8 @@ import type { MonitorMetric, MonitorSnapshot } from "@bigbud/contracts/system-mo
 
 import type { ResourceWidget } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
 import type { DisplayMetric } from "./ResourceMetricCard";
-import { formatCapacityGiB } from "./ResourceCapacityUsage.logic";
+import { capacityValue, formatCapacityGiB } from "./ResourceCapacityUsage.logic";
+import { diskCapacityUsage } from "./resourceMonitor.display.disk";
 import {
   formatBytes,
   formatPercent,
@@ -16,12 +17,6 @@ function show(metric: MonitorMetric | undefined, format: (value: number) => stri
 
 function status(metric: MonitorMetric | undefined): string {
   return metric?.status ?? "unavailable";
-}
-
-function capacityValue(metric: MonitorMetric | undefined): number | null {
-  return metric?.status === "ready" && Number.isFinite(metric.value) && metric.value >= 0
-    ? metric.value
-    : null;
 }
 
 export function hasTemperature(snapshot: MonitorSnapshot | null): boolean {
@@ -114,19 +109,13 @@ export function displayWidget(
         };
       }
       const volume = snapshot.disks.length > 1 ? `${disk.name} (${disk.mount})` : disk.name;
-      const total = capacityValue(disk.totalBytes);
-      const free = capacityValue(disk.freeBytes);
       return {
         label: "Disk",
         value: `${show(disk.freeBytes, formatBytes)} free`,
         status:
           disk.freeBytes?.status === "ready" ? status(disk.totalBytes) : status(disk.freeBytes),
         detail: `${show(disk.totalBytes, formatBytes)} total · ${volume}`,
-        capacityUsage: {
-          usedBytes: total !== null && free !== null && free <= total ? total - free : null,
-          totalBytes: total,
-          footer: [`Free: ${formatCapacityGiB(free)}`, `${disk.name || "Volume"} (${disk.mount})`],
-        },
+        capacityUsage: diskCapacityUsage(disk),
       };
     }
     case "network":

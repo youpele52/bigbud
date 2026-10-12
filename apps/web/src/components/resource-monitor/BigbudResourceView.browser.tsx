@@ -27,6 +27,7 @@ it.each([
     vi.mocked(useResourceMonitor).mockReturnValue({
       snapshot: appMonitorSnapshot(),
       history: { cpu: [], memory: [], network: [] },
+      diskHistory: {},
       appHistory: {
         cpu: points,
         memory: points.map(({ sequence, value }) => ({ sequence, value: (value * 1024 ** 3) / 8 })),
@@ -196,6 +197,7 @@ it.each([false, true])(
       snapshot: appMonitorSnapshot(),
       history: { cpu: [], memory: [], network: [] },
       appHistory: EMPTY_APP_HISTORY,
+      diskHistory: {},
       appReason: null,
       connection: "connected",
       reason: null,

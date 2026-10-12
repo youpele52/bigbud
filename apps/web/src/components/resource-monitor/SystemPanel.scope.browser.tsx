@@ -11,6 +11,7 @@ import { BigbudResourceView } from "./BigbudResourceView";
 import { EMPTY_APP_HISTORY } from "~/stores/resource-monitor/resourceMonitor.appHistory";
 import { SystemMonitorHostView } from "./SystemMonitorHostView";
 import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
+import { diskMonitorSnapshot, diskMonitorHistory } from "./ResourceDisks.fixtures";
 
 function MonitorLink({
   children,
@@ -31,11 +32,35 @@ beforeEach(() => {
     snapshot: appMonitorSnapshot(),
     history: { cpu: [], memory: [], network: [] },
     appHistory: EMPTY_APP_HISTORY,
+    diskHistory: {},
     appReason: null,
     connection: "connected",
     reason: null,
     collectionStatus: null,
   });
+});
+
+it("wires per-volume history into the full-width host Disks section", async () => {
+  vi.mocked(useResourceMonitor).mockReturnValue({
+    ...useResourceMonitor(true, false, false),
+    snapshot: diskMonitorSnapshot(),
+    diskHistory: diskMonitorHistory(),
+  });
+  const screen = await render(
+    <div style={{ width: 896 }}>
+      <SystemMonitorHostView />
+    </div>,
+  );
+  try {
+    const disks = screen.getByRole("region", { name: "Disks", exact: true });
+    await expect.element(disks).toBeVisible();
+    expect(disks.element().getBoundingClientRect().width).toBe(896);
+    await expect
+      .element(disks.getByRole("img", { name: "Macintosh HD (/) I/O history" }))
+      .toBeVisible();
+  } finally {
+    await screen.unmount();
+  }
 });
 
 it.each(["panel", "host", "bigbud"])(

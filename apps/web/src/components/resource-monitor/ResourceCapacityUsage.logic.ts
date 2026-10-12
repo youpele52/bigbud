@@ -1,3 +1,12 @@
+import type { MonitorMetric } from "@bigbud/contracts/system-monitor/types";
+
+/** Only measured, nonnegative capacities can be used in bars and totals. */
+export function capacityValue(metric: MonitorMetric | undefined): number | null {
+  return metric?.status === "ready" && Number.isFinite(metric.value) && metric.value >= 0
+    ? metric.value
+    : null;
+}
+
 export interface CapacityUsage {
   usedBytes: number | null;
   totalBytes: number | null;

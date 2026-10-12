@@ -47,6 +47,7 @@ beforeEach(() =>
     snapshot,
     appReason: null,
     appHistory: EMPTY_APP_HISTORY,
+    diskHistory: {},
     history: { cpu: [], memory: [], network: [] },
     connection: "connected",
     reason: null,

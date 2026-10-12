@@ -7,16 +7,23 @@ import { formatHistoryTooltipValue, networkDomain } from "./ResourceMetricHistor
 export function ResourceMetricHistory({
   metric,
   large = false,
+  fill = false,
 }: {
   metric: DisplayMetric;
   large?: boolean;
+  /** Fill the containing grid track instead of using a fixed history height. */
+  fill?: boolean;
 }) {
   if ((metric.history?.length ?? 0) <= 1) return null;
   const mirrored = metric.historyStyle === "network" || metric.historyStyle === "io";
   const incomingLabel = metric.historyStyle === "io" ? "Read" : "Download";
   const outgoingLabel = metric.historyStyle === "io" ? "Write" : "Upload";
   return (
-    <div className={large ? "h-28" : "h-12"} role="img" aria-label={`${metric.label} history`}>
+    <div
+      className={fill ? "h-full min-h-0" : large ? "h-28" : "h-12"}
+      role="img"
+      aria-label={`${metric.label} history`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={metric.history as DisplayPoint[]}>
           <XAxis dataKey="sequence" hide />

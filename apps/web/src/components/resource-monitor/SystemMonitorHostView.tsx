@@ -13,6 +13,7 @@ import { ResourceListLimitWarning } from "./ResourceListLimitWarning";
 import { ResourceHostExtras } from "./ResourceHostExtras";
 import { ResourceDetailPreferences } from "./ResourceDetailPreferences";
 import { ResourceNetworkInterfaces } from "./ResourceNetworkInterfaces";
+import { ResourceDisks } from "./ResourceDisks";
 import { displayWidget } from "./resourceMonitor.display";
 import {
   formatBytes,
@@ -33,11 +34,8 @@ function criticalTemperature(snapshot: MonitorSnapshot, name: string): string | 
 export function SystemMonitorHostView() {
   const details = useResourceDetailPreferences((state) => state.visible);
   const show = (detail: (typeof details)[number]) => details.includes(detail);
-  const { snapshot, history, connection, reason, collectionStatus } = useResourceMonitor(
-    true,
-    show("processes"),
-    show("temperatures"),
-  );
+  const { snapshot, history, diskHistory, connection, reason, collectionStatus } =
+    useResourceMonitor(true, show("processes"), show("temperatures"));
   const processes = useProcessPage(
     show("processes") &&
       connection === "connected" &&
@@ -181,65 +179,21 @@ export function SystemMonitorHostView() {
       {show("hostExtras") ? <ResourceHostExtras snapshot={snapshot} /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         {show("disks") ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm">Disks</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 px-4 text-sm">
-              {snapshot?.disks.length ? (
-                snapshot.disks.map((item) => (
-                  <div key={`${item.name}:${item.mount}`} className="rounded-md border p-2">
-                    <p className="truncate font-medium" title={item.mount}>
-                      {item.name || item.mount}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.mount} · {item.filesystem || "Filesystem unavailable"}
-                    </p>
-                    <p>
-                      {item.usedBytes?.status === "ready"
-                        ? formatBytes(item.usedBytes.value)
-                        : (item.usedBytes?.status ?? "unavailable")}{" "}
-                      used of{" "}
-                      {item.totalBytes?.status === "ready"
-                        ? formatBytes(item.totalBytes.value)
-                        : (item.totalBytes?.status ?? "unavailable")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Free:{" "}
-                      {item.freeBytes?.status === "ready"
-                        ? formatBytes(item.freeBytes.value)
-                        : (item.freeBytes?.status ?? "unavailable")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.removable?.status === "ready"
-                        ? item.removable.value
-                          ? "Removable"
-                          : "Fixed"
-                        : (item.removable?.status ?? "Removable status unavailable")}{" "}
-                      ·{" "}
-                      {item.readOnly?.status === "ready"
-                        ? item.readOnly.value
-                          ? "Read only"
-                          : "Writable"
-                        : (item.readOnly?.status ?? "Write status unavailable")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Read{" "}
-                      {item.readBytesPerSecond?.status === "ready"
-                        ? `${formatBytes(item.readBytesPerSecond.value)}/s`
-                        : (item.readBytesPerSecond?.status ?? "unavailable")}{" "}
-                      · Write{" "}
-                      {item.writtenBytesPerSecond?.status === "ready"
-                        ? `${formatBytes(item.writtenBytesPerSecond.value)}/s`
-                        : (item.writtenBytesPerSecond?.status ?? "unavailable")}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground">No disk details available</p>
-              )}
-            </CardContent>
-          </Card>
+          <ResourceDisks
+            snapshot={snapshot}
+            history={diskHistory}
+            active={
+              connection === "connected" &&
+              snapshot?.summaryStatus === "ready" &&
+              (!collectionStatus || collectionStatus.state === "healthy")
+            }
+            loading={
+              connection === "connecting" ||
+              (connection === "connected" &&
+                collectionStatus?.state !== "failed" &&
+                (!snapshot || isLoadingStatus(snapshot.summaryStatus)))
+            }
+          />
         ) : null}
         {show("interfaces") ? (
           <ResourceNetworkInterfaces interfaces={snapshot?.interfaces ?? []} />
