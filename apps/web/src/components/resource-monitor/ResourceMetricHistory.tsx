@@ -3,6 +3,7 @@ import { Area, AreaChart, ReferenceLine, ResponsiveContainer, XAxis, YAxis } fro
 import { ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import type { DisplayMetric, DisplayPoint } from "./ResourceMetricCard";
 import { formatHistoryTooltipValue, networkDomain } from "./ResourceMetricHistory.logic";
+import { formatTemperature } from "./resourceMonitor.format";
 
 export function ResourceMetricHistory({
   metric,
@@ -16,6 +17,7 @@ export function ResourceMetricHistory({
 }) {
   if ((metric.history?.length ?? 0) <= 1) return null;
   const mirrored = metric.historyStyle === "network" || metric.historyStyle === "io";
+  const temperature = metric.historyStyle === "temperature";
   const incomingLabel = metric.historyStyle === "io" ? "Read" : "Download";
   const outgoingLabel = metric.historyStyle === "io" ? "Write" : "Upload";
   return (
@@ -27,6 +29,17 @@ export function ResourceMetricHistory({
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={metric.history as DisplayPoint[]}>
           <XAxis dataKey="sequence" hide />
+          {temperature ? (
+            <YAxis
+              domain={["dataMin - 1", "dataMax + 1"]}
+              hide={!large}
+              tickFormatter={formatTemperature}
+              tickLine={false}
+              axisLine={false}
+              width={80}
+              tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+            />
+          ) : null}
           <ChartTooltip
             content={
               <ChartTooltipContent
@@ -67,9 +80,10 @@ export function ResourceMetricHistory({
             </>
           ) : (
             <Area
-              type="monotone"
+              type={temperature ? "linear" : "monotone"}
               dataKey="value"
               name={metric.label}
+              {...(temperature ? { baseValue: "dataMin" as const } : {})}
               stroke="var(--chart-1)"
               fill="var(--chart-1)"
               fillOpacity={0.12}

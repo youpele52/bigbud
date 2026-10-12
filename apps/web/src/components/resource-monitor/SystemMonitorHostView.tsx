@@ -1,4 +1,3 @@
-import type { MonitorSnapshot } from "@bigbud/contracts/system-monitor/types";
 import { useMemo } from "react";
 
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
@@ -15,28 +14,27 @@ import { ResourceDetailPreferences } from "./ResourceDetailPreferences";
 import { ResourceNetworkInterfaces } from "./ResourceNetworkInterfaces";
 import { ResourceDisks } from "./ResourceDisks";
 import { ResourceCpuCores } from "./ResourceCpuCores";
+import { ResourceMemorySwap } from "./ResourceMemorySwap";
+import { ResourceTemperatures } from "./ResourceTemperatures";
 import { displayWidget } from "./resourceMonitor.display";
-import {
-  formatBytes,
-  formatDecimal,
-  formatPercent,
-  formatTemperature,
-} from "./resourceMonitor.format";
+import { formatBytes, formatDecimal, formatPercent } from "./resourceMonitor.format";
 import { useProcessPage } from "./useProcessPage";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
 
-function criticalTemperature(snapshot: MonitorSnapshot, name: string): string | null {
-  const metric = snapshot.criticalTemperaturesCelsius?.find((entry) => entry.name === name)?.metric;
-  if (!metric) return null;
-  return metric.status === "ready" ? formatTemperature(metric.value) : metric.status;
-}
-
 export function SystemMonitorHostView() {
   const details = useResourceDetailPreferences((state) => state.visible);
   const show = (detail: (typeof details)[number]) => details.includes(detail);
-  const { snapshot, history, diskHistory, connection, reason, collectionStatus } =
-    useResourceMonitor(true, show("processes"), show("temperatures"));
+  const {
+    snapshot,
+    history,
+    diskHistory,
+    interfaceHistory,
+    temperatureHistory,
+    connection,
+    reason,
+    collectionStatus,
+  } = useResourceMonitor(true, show("processes"), show("temperatures"));
   const processes = useProcessPage(
     show("processes") &&
       connection === "connected" &&
@@ -71,7 +69,6 @@ export function SystemMonitorHostView() {
   const disk = displayWidget(snapshot, "disk");
   const network = displayWidget(snapshot, "network");
   network.history = history.network;
-  const temperature = displayWidget(snapshot, "temperature");
 
   return (
     <div className="space-y-5">
@@ -197,7 +194,21 @@ export function SystemMonitorHostView() {
           />
         ) : null}
         {show("interfaces") ? (
-          <ResourceNetworkInterfaces interfaces={snapshot?.interfaces ?? []} />
+          <ResourceNetworkInterfaces
+            interfaces={snapshot?.interfaces ?? []}
+            history={interfaceHistory}
+            current={
+              connection === "connected" &&
+              snapshot?.summaryStatus === "ready" &&
+              (!collectionStatus || collectionStatus.state === "healthy")
+            }
+            loading={
+              connection === "connecting" ||
+              (connection === "connected" &&
+                collectionStatus?.state !== "failed" &&
+                (!snapshot || isLoadingStatus(snapshot.summaryStatus)))
+            }
+          />
         ) : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -220,81 +231,38 @@ export function SystemMonitorHostView() {
           />
         ) : null}
         {show("memory") ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm">Memory and swap</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p>
-                RAM total:{" "}
-                {snapshot?.memoryTotalBytes?.status === "ready"
-                  ? formatBytes(snapshot.memoryTotalBytes.value)
-                  : "—"}
-              </p>
-              <p>
-                RAM used:{" "}
-                {snapshot?.memoryUsedBytes?.status === "ready"
-                  ? formatBytes(snapshot.memoryUsedBytes.value)
-                  : "—"}
-              </p>
-              <p>
-                RAM available:{" "}
-                {snapshot?.memoryAvailableBytes?.status === "ready"
-                  ? formatBytes(snapshot.memoryAvailableBytes.value)
-                  : (snapshot?.memoryAvailableBytes?.status ?? "unavailable")}
-              </p>
-              <p>
-                Swap total:{" "}
-                {snapshot?.swapTotalBytes?.status === "ready"
-                  ? formatBytes(snapshot.swapTotalBytes.value)
-                  : "—"}
-              </p>
-              <p>
-                Swap used:{" "}
-                {snapshot?.swapUsedBytes?.status === "ready"
-                  ? formatBytes(snapshot.swapUsedBytes.value)
-                  : "—"}
-              </p>
-              <p>
-                Swap free:{" "}
-                {snapshot?.swapFreeBytes?.status === "ready"
-                  ? formatBytes(snapshot.swapFreeBytes.value)
-                  : (snapshot?.swapFreeBytes?.status ?? "unavailable")}
-              </p>
-            </CardContent>
-          </Card>
+          <ResourceMemorySwap
+            snapshot={snapshot}
+            current={
+              connection === "connected" &&
+              snapshot?.summaryStatus === "ready" &&
+              (!collectionStatus || collectionStatus.state === "healthy")
+            }
+            loading={
+              connection === "connecting" ||
+              (connection === "connected" &&
+                collectionStatus?.state !== "failed" &&
+                (!snapshot || isLoadingStatus(snapshot.summaryStatus)))
+            }
+          />
         ) : null}
       </div>
       {show("temperatures") ? (
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm">Temperatures</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 px-4 text-sm">
-            {snapshot?.temperaturesCelsius.length ? (
-              snapshot.temperaturesCelsius.map(({ name, metric }) => {
-                const critical = criticalTemperature(snapshot, name);
-                return (
-                  <div key={name} className="flex flex-wrap justify-between gap-2">
-                    <span className="truncate text-muted-foreground">{name}</span>
-                    <span className="tabular-nums">
-                      {metric.status === "ready" ? formatTemperature(metric.value) : metric.status}
-                    </span>
-                    {critical ? (
-                      <span className="w-full text-xs text-muted-foreground">
-                        Critical: {critical}
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No supported temperature sensor reported
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <ResourceTemperatures
+          snapshot={snapshot}
+          history={temperatureHistory}
+          current={
+            connection === "connected" &&
+            snapshot?.summaryStatus === "ready" &&
+            (!collectionStatus || collectionStatus.state === "healthy")
+          }
+          loading={
+            connection === "connecting" ||
+            (connection === "connected" &&
+              collectionStatus?.state !== "failed" &&
+              (!snapshot || isLoadingStatus(snapshot.summaryStatus)))
+          }
+        />
       ) : null}
       {show("processes") ? (
         <ProcessTable
@@ -325,11 +293,6 @@ export function SystemMonitorHostView() {
         >
           Process inventory: {snapshot.processStatus}
         </CenteredStatus>
-      ) : null}
-      {show("temperatures") && snapshot?.temperaturesCelsius.length ? (
-        <p className="sr-only">
-          {temperature.label}: {temperature.value}
-        </p>
       ) : null}
     </div>
   );

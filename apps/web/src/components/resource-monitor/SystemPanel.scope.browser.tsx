@@ -13,6 +13,11 @@ import { SystemMonitorHostView } from "./SystemMonitorHostView";
 import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 import { diskMonitorSnapshot, diskMonitorHistory } from "./ResourceDisks.fixtures";
 import { cpuCoreReadings } from "./ResourceCpuCores.fixtures";
+import {
+  interfaceMonitorSnapshot,
+  interfaceMonitorHistory,
+  interfaceMetric,
+} from "./ResourceNetworkInterfaces.fixtures";
 
 function MonitorLink({
   children,
@@ -34,11 +39,79 @@ beforeEach(() => {
     history: { cpu: [], memory: [], network: [] },
     appHistory: EMPTY_APP_HISTORY,
     diskHistory: {},
+    interfaceHistory: {},
+    temperatureHistory: {},
     appReason: null,
     connection: "connected",
     reason: null,
     collectionStatus: null,
   });
+});
+
+it("wires separate interface histories into the full-width host section", async () => {
+  vi.mocked(useResourceMonitor).mockReturnValue({
+    ...useResourceMonitor(true, false, false),
+    snapshot: interfaceMonitorSnapshot(),
+    interfaceHistory: interfaceMonitorHistory(),
+  });
+  const screen = await render(
+    <div style={{ width: 896 }}>
+      <SystemMonitorHostView />
+    </div>,
+  );
+  try {
+    const interfaces = screen.getByRole("region", { name: "Network interfaces", exact: true });
+    expect(interfaces.element().getBoundingClientRect().width).toBe(896);
+    await expect
+      .element(interfaces.getByRole("img", { name: "en0 network history", exact: true }))
+      .toBeVisible();
+    await interfaces
+      .getByRole("button", { name: "Expand en0 network interface", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "en0 network interface", exact: true });
+    await expect
+      .element(dialog.getByRole("img", { name: "en0 network history", exact: true }))
+      .toBeVisible();
+    const snapshot = interfaceMonitorSnapshot();
+    snapshot.interfaces[0]!.mtuBytes = interfaceMetric(9000);
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      snapshot,
+    });
+    await screen.rerender(
+      <div style={{ width: 896 }}>
+        <SystemMonitorHostView />
+      </div>,
+    );
+    await expect.element(dialog.getByText("9,000 B", { exact: true })).toBeVisible();
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      connection: "unavailable",
+    });
+    await screen.rerender(
+      <div style={{ width: 896 }}>
+        <SystemMonitorHostView />
+      </div>,
+    );
+    await expect
+      .element(dialog.getByRole("img", { name: "Link unavailable", exact: true }))
+      .toBeVisible();
+    expect(
+      dialog.getByRole("img", { name: "en0 network history", exact: true }).elements(),
+    ).toHaveLength(0);
+    vi.mocked(useResourceMonitor).mockReturnValue({
+      ...useResourceMonitor(true, false, false),
+      snapshot: { ...snapshot, interfaces: [] },
+    });
+    await screen.rerender(
+      <div style={{ width: 896 }}>
+        <SystemMonitorHostView />
+      </div>,
+    );
+    await expect.element(dialog).not.toBeInTheDocument();
+  } finally {
+    await screen.unmount();
+  }
 });
 
 it("wires core usage bars into the host view and suppresses old usage when disconnected", async () => {

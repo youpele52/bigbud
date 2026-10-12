@@ -7,11 +7,13 @@ export function ResourceTransferRates({
   outgoing,
   kind,
   compact = false,
+  centered = false,
 }: {
   incoming: string;
   outgoing: string;
   kind: "network" | "io";
   compact?: boolean;
+  centered?: boolean;
 }) {
   return (
     <div
@@ -19,7 +21,7 @@ export function ResourceTransferRates({
       role="group"
       aria-label={kind === "io" ? "I/O transfer rates" : "Network transfer rates"}
     >
-      <div className="flex min-w-0 items-center gap-1.5 pr-3">
+      <div className={cn("flex min-w-0 items-center gap-1.5 pr-3", centered && "justify-center")}>
         <ArrowDownIcon
           className={cn("shrink-0 text-(--chart-2)", compact ? "size-3" : "size-4")}
           aria-hidden="true"
@@ -36,7 +38,7 @@ export function ResourceTransferRates({
           </dd>
         </dl>
       </div>
-      <div className="flex min-w-0 items-center gap-1.5 pl-3">
+      <div className={cn("flex min-w-0 items-center gap-1.5 pl-3", centered && "justify-center")}>
         <ArrowUpIcon
           className={cn("shrink-0 text-(--chart-4)", compact ? "size-3" : "size-4")}
           aria-hidden="true"

@@ -8,6 +8,11 @@ import { create } from "zustand";
 import { EMPTY_APP_HISTORY, nextAppHistory, type AppHistory } from "./resourceMonitor.appHistory";
 import { appendTransferHistory } from "./resourceMonitor.history";
 import { nextDiskHistory, type DiskHistory } from "./resourceMonitor.diskHistory";
+import { nextInterfaceHistory, type InterfaceHistory } from "./resourceMonitor.interfaceHistory";
+import {
+  nextTemperatureHistory,
+  type TemperatureHistory,
+} from "./resourceMonitor.temperatureHistory";
 
 export interface HistoryPoint {
   sequence: number;
@@ -18,6 +23,8 @@ export interface MonitorState {
   appReason: string | null;
   appHistory: AppHistory;
   diskHistory: DiskHistory;
+  interfaceHistory: InterfaceHistory;
+  temperatureHistory: TemperatureHistory;
   snapshot: MonitorSnapshot | null;
   history: Record<"cpu" | "memory" | "network", HistoryPoint[]>;
   connection: "connecting" | "connected" | "unavailable";
@@ -30,6 +37,8 @@ export const useResourceMonitorStore = create<MonitorState>(() => ({
   appReason: null,
   appHistory: EMPTY_APP_HISTORY,
   diskHistory: {},
+  interfaceHistory: {},
+  temperatureHistory: {},
   snapshot: null,
   history: EMPTY_HISTORY,
   connection: "connecting",
@@ -59,6 +68,8 @@ function markTransportUnavailable() {
     collectionStatus: null,
     appHistory: EMPTY_APP_HISTORY,
     diskHistory: {},
+    interfaceHistory: {},
+    temperatureHistory: {},
   });
 }
 
@@ -161,6 +172,18 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
       snapshot,
       appHistory: nextAppHistory(previous, snapshot, state.appHistory, continuous),
       diskHistory: nextDiskHistory(previous, snapshot, state.diskHistory, continuous),
+      interfaceHistory: nextInterfaceHistory(
+        previous,
+        snapshot,
+        state.interfaceHistory,
+        continuous,
+      ),
+      temperatureHistory: nextTemperatureHistory(
+        previous,
+        snapshot,
+        state.temperatureHistory,
+        continuous,
+      ),
       connection: "connected",
       reason: null,
       history: {
@@ -195,6 +218,8 @@ function acceptSnapshot(snapshot: MonitorSnapshot) {
         connection: "unavailable",
         reason: "Could not acknowledge resource update",
         diskHistory: {},
+        interfaceHistory: {},
+        temperatureHistory: {},
         collectionStatus: null,
       });
     });
@@ -206,7 +231,12 @@ function onEvent(event: MonitorEvent) {
     useResourceMonitorStore.setState({
       collectionStatus: event.status,
       ...(event.status.state !== "healthy"
-        ? { appHistory: EMPTY_APP_HISTORY, diskHistory: {} }
+        ? {
+            appHistory: EMPTY_APP_HISTORY,
+            diskHistory: {},
+            interfaceHistory: {},
+            temperatureHistory: {},
+          }
         : {}),
     });
   if (event.type === "unavailable")
@@ -214,6 +244,8 @@ function onEvent(event: MonitorEvent) {
       connection: "unavailable",
       reason: event.reason,
       diskHistory: {},
+      interfaceHistory: {},
+      temperatureHistory: {},
       appHistory: EMPTY_APP_HISTORY,
       collectionStatus: null,
     });
@@ -226,6 +258,8 @@ function onEvent(event: MonitorEvent) {
       connection: "unavailable",
       reason: event.error.message,
       diskHistory: {},
+      interfaceHistory: {},
+      temperatureHistory: {},
       collectionStatus: null,
     });
   }
@@ -246,6 +280,8 @@ async function start() {
   useResourceMonitorStore.setState({
     connection: "connecting",
     diskHistory: {},
+    interfaceHistory: {},
+    temperatureHistory: {},
     reason: null,
     appReason: null,
     collectionStatus: null,
@@ -303,6 +339,8 @@ export function setResourceMonitorConsumer(id: string, next: MonitorDemand | nul
       appReason: null,
       appHistory: EMPTY_APP_HISTORY,
       diskHistory: {},
+      interfaceHistory: {},
+      temperatureHistory: {},
       history: EMPTY_HISTORY,
       connection: "connecting",
       reason: null,

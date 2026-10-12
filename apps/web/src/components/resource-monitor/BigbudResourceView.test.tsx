@@ -48,6 +48,8 @@ beforeEach(() =>
     appReason: null,
     appHistory: EMPTY_APP_HISTORY,
     diskHistory: {},
+    interfaceHistory: {},
+    temperatureHistory: {},
     history: { cpu: [], memory: [], network: [] },
     connection: "connected",
     reason: null,

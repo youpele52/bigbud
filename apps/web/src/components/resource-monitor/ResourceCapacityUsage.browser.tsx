@@ -4,6 +4,10 @@ import { expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { ResourceMetricCard } from "./ResourceMetricCard";
+import { ResourceCpuCore } from "./ResourceCpuCore";
+import { ResourceMemorySwap } from "./ResourceMemorySwap";
+import { memorySwapMetric, memorySwapSnapshot } from "./ResourceMemorySwap.fixtures";
+import { Gauge } from "../ui/gauge";
 
 it.each(
   ["Disk", "Memory"].flatMap((label) => [
@@ -124,3 +128,56 @@ it("keeps missing memory totals unavailable, preserves footers, and suppresses m
     await screen.unmount();
   }
 });
+
+it.each(
+  ["light", "dark"].flatMap((theme) =>
+    [0, 49.999, 50, 79.999, 80, 100].map((percent) => ({ theme, percent })),
+  ),
+)(
+  "shares gauge colors and cutoffs across CPU, RAM, Swap and Disk ($theme, $percent%)",
+  async ({ theme, percent }) => {
+    const snapshot = {
+      ...memorySwapSnapshot(),
+      memoryUsedBytes: memorySwapMetric((64 * percent) / 100),
+      swapUsedBytes: memorySwapMetric((4 * percent) / 100),
+    };
+    const screen = await render(
+      <div className={theme} style={{ width: 480 }}>
+        <ResourceMetricCard
+          metric={{
+            label: "Disk",
+            value: "",
+            status: "ready",
+            capacityUsage: { usedBytes: percent, totalBytes: 100, footer: [] },
+          }}
+        />
+        <ResourceMemorySwap snapshot={snapshot} current loading={false} />
+        <ResourceCpuCore
+          core={{ name: "0", metric: { value: percent, status: "ready", sampledAtMs: 1000 } }}
+          active
+        />
+        <Gauge value={percent} label="Reference usage" />
+      </div>,
+    );
+    try {
+      const bars = [
+        "Disk capacity used",
+        "RAM capacity used",
+        "Swap capacity used",
+        "Core 0 usage",
+      ].map((name) => screen.getByRole("meter", { name, exact: true }));
+      const gaugeValue = screen
+        .getByRole("meter", { name: "Reference usage" })
+        .element()
+        .querySelector('[data-slot="gauge-value"]')!;
+      for (const bar of bars) {
+        await expect.element(bar).toBeVisible();
+        const fill = bar.element().firstElementChild!;
+        expect(getComputedStyle(fill).backgroundColor).toBe(getComputedStyle(gaugeValue).color);
+        expect(fill.classList.contains("bg-primary/70")).toBe(false);
+      }
+    } finally {
+      await screen.unmount();
+    }
+  },
+);

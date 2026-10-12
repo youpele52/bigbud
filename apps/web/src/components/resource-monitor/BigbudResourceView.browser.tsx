@@ -28,6 +28,8 @@ it.each([
       snapshot: appMonitorSnapshot(),
       history: { cpu: [], memory: [], network: [] },
       diskHistory: {},
+      interfaceHistory: {},
+      temperatureHistory: {},
       appHistory: {
         cpu: points,
         memory: points.map(({ sequence, value }) => ({ sequence, value: (value * 1024 ** 3) / 8 })),
@@ -198,6 +200,8 @@ it.each([false, true])(
       history: { cpu: [], memory: [], network: [] },
       appHistory: EMPTY_APP_HISTORY,
       diskHistory: {},
+      interfaceHistory: {},
+      temperatureHistory: {},
       appReason: null,
       connection: "connected",
       reason: null,

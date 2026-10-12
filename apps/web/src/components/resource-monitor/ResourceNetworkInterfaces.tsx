@@ -1,62 +1,71 @@
-import type {
-  MonitorMetric,
-  MonitorNetworkInterface,
-  MonitorTextField,
-} from "@bigbud/contracts/system-monitor/types";
-
+import type { MonitorNetworkInterface } from "@bigbud/contracts/system-monitor/types";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { formatBytes, formatDecimal } from "./resourceMonitor.format";
-
-function showMetric(metric: MonitorMetric | undefined, format: (value: number) => string): string {
-  return metric?.status === "ready" ? format(metric.value) : (metric?.status ?? "unavailable");
-}
-
-function showLinkState(field: MonitorTextField | undefined): string {
-  return field?.status === "ready" ? field.value : (field?.status ?? "unavailable");
-}
+import { Button } from "../ui/button";
+import { CenteredStatus } from "../common/CenteredStatus";
+import {
+  interfaceHistoryKey,
+  type InterfaceHistory,
+} from "~/stores/resource-monitor/resourceMonitor.interfaceHistory";
+import { ResourceNetworkInterface } from "./ResourceNetworkInterface";
 
 export function ResourceNetworkInterfaces({
   interfaces,
+  history = {},
+  current = true,
+  loading = false,
 }: {
   interfaces: readonly MonitorNetworkInterface[];
+  history?: InterfaceHistory;
+  current?: boolean;
+  loading?: boolean;
 }) {
+  const [showHistory, setShowHistory] = useState(true);
+  const ordered = interfaces.toSorted((left, right) =>
+    left.name.localeCompare(right.name, undefined, { numeric: true }),
+  );
   return (
-    <Card className="gap-2 py-4">
-      <CardHeader className="px-4">
+    <Card
+      role="region"
+      aria-label="Network interfaces"
+      className="@container col-span-full min-w-0 gap-2 py-4"
+    >
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
         <CardTitle className="text-sm">Network interfaces</CardTitle>
+        <Button
+          size="xs"
+          variant={showHistory ? "outline" : "ghost"}
+          aria-label="Show interface history"
+          aria-pressed={showHistory}
+          onClick={() => setShowHistory((previous) => !previous)}
+        >
+          History
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-2 px-4 text-sm">
-        {interfaces.length ? (
-          interfaces.map((item) => (
-            <div key={item.name} className="rounded-md border p-2">
-              <p className="truncate font-medium">{item.name}</p>
-              <p className="text-xs text-muted-foreground">
-                Link: {showLinkState(item.linkState)} · MTU:{" "}
-                {showMetric(item.mtuBytes, (value) => `${formatDecimal(value)} B`)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Download{" "}
-                {showMetric(item.receivedBytesPerSecond, (value) => `${formatBytes(value)}/s`)} ·
-                Upload{" "}
-                {showMetric(item.transmittedBytesPerSecond, (value) => `${formatBytes(value)}/s`)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Totals: ↓ {showMetric(item.receivedTotalBytes, formatBytes)} · ↑{" "}
-                {showMetric(item.transmittedTotalBytes, formatBytes)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Errors: receive {showMetric(item.receiveErrors, String)} · transmit{" "}
-                {showMetric(item.transmitErrors, String)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Packets: ↓ {showMetric(item.receivedPackets, String)} · ↑{" "}
-                {showMetric(item.transmittedPackets, String)}
-              </p>
-            </div>
-          ))
+      <CardContent className="min-w-0 space-y-3 px-4">
+        {ordered.length ? (
+          <div className="grid grid-cols-1 items-start gap-3 @min-[640px]:grid-cols-2">
+            {ordered.map((item) => (
+              <ResourceNetworkInterface
+                key={item.name}
+                item={item}
+                history={history[interfaceHistoryKey(item)] ?? []}
+                showHistory={showHistory}
+                current={current}
+              />
+            ))}
+          </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No interface details available</p>
+          <CenteredStatus loading={loading} className="min-h-24">
+            {loading ? "Waiting for interface details" : "No interface details available"}
+          </CenteredStatus>
         )}
+        {ordered.length ? (
+          <p className="text-xs text-muted-foreground">
+            Reported totals are per interface. Bridges and tunnels can count the same traffic more
+            than once.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
