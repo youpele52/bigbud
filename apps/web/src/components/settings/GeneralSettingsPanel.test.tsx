@@ -77,6 +77,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(markup).toContain('aria-label="Terminal font family"');
     expect(markup).toContain('aria-label="Terminal font size"');
     expect(markup).toContain('aria-label="Terminal GPU rendering"');
+    expect(markup).toContain("JetBrains Mono Nerd Font Mono");
     expect(mock.updateSettings).not.toHaveBeenCalled();
   });
 

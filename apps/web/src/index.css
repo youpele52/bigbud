@@ -3,6 +3,7 @@
 @import "./index.markdown.css";
 @import "./index.effects.css";
 @import "./components/chat/common/ChatGreeting.shimmer.css";
+@import "./components/terminal/terminalTypography.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 
@@ -109,14 +110,6 @@ body:has([data-floating-assistant-mascot])::after {
   -webkit-user-drag: none;
   user-select: none;
   pointer-events: none;
-}
-
-@font-face {
-  font-family: "MesloLGL Nerd Font Mono";
-  src: url("/fonts/MesloLGLNerdFontMono-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
 }
 
 /* Suppress all transitions during theme changes */

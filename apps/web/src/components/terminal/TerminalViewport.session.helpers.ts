@@ -59,8 +59,7 @@ interface TerminalOpenSessionInput {
   readonly runtimeEnv?: Record<string, string> | undefined;
   readonly worktreePathRef: MutableRefObject<string | null | undefined>;
   readonly dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
-  readonly usesBundledTerminalFont: boolean;
-  readonly terminalFontSize: number;
+  readonly waitForTypography: () => Promise<void>;
   readonly autoFocusRef: MutableRefObject<boolean>;
   readonly containerRef: RefObject<HTMLDivElement | null>;
   readonly attachOnly?: boolean;
@@ -173,25 +172,6 @@ export async function showTerminalSelectionAction(input: ShowTerminalSelectionAc
   }
 }
 
-export async function waitForBundledTerminalFont(input: {
-  usesBundledTerminalFont: boolean;
-  terminalFontSize: number;
-}) {
-  if (!input.usesBundledTerminalFont || typeof document.fonts === "undefined") {
-    return;
-  }
-  const fontLoadTarget = `${input.terminalFontSize}px "MesloLGL Nerd Font Mono"`;
-  if (document.fonts.check(fontLoadTarget)) {
-    return;
-  }
-  const timeout = new Promise<void>((resolve) => {
-    window.setTimeout(resolve, 1_000);
-  });
-  await Promise.race([document.fonts.load(fontLoadTarget).then(() => undefined), timeout]).catch(
-    () => undefined,
-  );
-}
-
 export function fitTerminalViewport(input: {
   containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
@@ -253,10 +233,7 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   }
   const activeTerminal = input.terminalRef.current;
   if (!activeTerminal || !input.fitAddonRef.current) return true;
-  await waitForBundledTerminalFont({
-    usesBundledTerminalFont: input.usesBundledTerminalFont,
-    terminalFontSize: input.terminalFontSize,
-  });
+  await input.waitForTypography();
   if (input.disposed()) return true;
   await new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());

@@ -317,6 +317,6 @@ describe("MessagesTimeline message features", () => {
     expect(markup).toContain("$ ls");
     expect(markup).toContain("Antworten");
     expect(markup).toContain("font-size:12px");
-    expect(markup).toContain("MesloLGL Nerd Font Mono");
+    expect(markup).toContain("JetBrainsMono Nerd Font Mono");
   });
 });

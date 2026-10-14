@@ -14,20 +14,17 @@ import { createTerminalViewportDelivery } from "./TerminalViewport.delivery";
 import { subscribeTerminalOutput } from "./TerminalOutputStream";
 import { useTerminalTypography } from "./TerminalViewport.typography";
 import { attachTerminalRenderer } from "./TerminalViewport.rendering";
+import { TerminalFontController, type TerminalTypographySettings } from "./TerminalFontController";
+import { SYSTEM_TERMINAL_FONT_FAMILY } from "./terminalTypography";
 import type { TerminalRendererState } from "./TerminalRendererController";
 import type { TerminalGpuAcceleration } from "@bigbud/contracts/core/settings.ts";
 import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
 import { createTerminalWebLinkHandler } from "./TerminalViewport.links.web";
-import {
-  clearSelectionAction,
-  fitAndResizeServerTerminal,
-  openTerminalSession,
-  waitForBundledTerminalFont,
-} from "./TerminalViewport.session.helpers";
+import { clearSelectionAction, openTerminalSession } from "./TerminalViewport.session.helpers";
 import { attachTerminalSelection } from "./TerminalViewport.selection";
 
-interface UseTerminalViewportSessionInput {
+interface UseTerminalViewportSessionInput extends TerminalTypographySettings {
   containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
@@ -48,9 +45,6 @@ interface UseTerminalViewportSessionInput {
   executionTargetId?: ExecutionTargetId | undefined;
   cwd: string;
   runtimeEnv?: Record<string, string> | undefined;
-  terminalFontFamily: string;
-  terminalFontSize: number;
-  usesBundledTerminalFont: boolean;
   terminalGpuAcceleration: TerminalGpuAcceleration;
   onSessionExited: () => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
@@ -79,10 +73,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   const [directoryNotice, setDirectoryNotice] = useState<string | null>(null);
   const [rendering, setRendering] = useState<TerminalRendererState>({ mode: "dom", reason: null });
   const rendererRef = useRef<ReturnType<typeof attachTerminalRenderer> | null>(null);
+  const fontControllerRef = useRef<TerminalFontController | null>(null);
   const retryDeliveryRef = useRef<() => void>(() => undefined);
   const typographyRef = useRef(input);
   typographyRef.current = input;
-  useTerminalTypography({ ...input, serverReady: inputEnabled });
 
   useEffect(() => {
     const mount = input.containerRef.current;
@@ -116,10 +110,11 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       mount;
     const terminal = new Terminal({
       cursorBlink: true,
-      lineHeight: 1.2,
+      lineHeight: typographyRef.current.terminalLineHeight,
       fontSize: typographyRef.current.terminalFontSize,
       scrollback: 5_000,
-      fontFamily: typographyRef.current.terminalFontFamily,
+      // The bundled family is applied only after loading, triggering real measurement.
+      fontFamily: SYSTEM_TERMINAL_FONT_FAMILY,
       disableStdin: true,
       theme: terminalThemeFromApp(themeHost),
       linkHandler: createTerminalWebLinkHandler(),
@@ -132,6 +127,9 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
 
     input.terminalRef.current = terminal;
     input.fitAddonRef.current = fitAddon;
+    const fontController = new TerminalFontController(terminal);
+    fontControllerRef.current = fontController;
+    void fontController.update(typographyRef.current);
 
     const api = readNativeApi();
     if (!api) {
@@ -139,6 +137,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       input.fitAddonRef.current = null;
       renderer.dispose();
       rendererRef.current = null;
+      fontController.dispose();
+      fontControllerRef.current = null;
       terminal.dispose();
       return;
     }
@@ -238,7 +238,6 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       );
     };
 
-    let initialFitResizeTimer: number | null = null;
     let openTerminalRetryTimer: number | null = null;
     let hasRunningSnapshot = false;
     const runOpenTerminal = async (attachOnly = false) => {
@@ -258,8 +257,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           runtimeEnv: input.runtimeEnv,
           worktreePathRef: input.worktreePathRef,
           dropPathModeRef: input.dropPathModeRef,
-          usesBundledTerminalFont: typographyRef.current.usesBundledTerminalFont,
-          terminalFontSize: typographyRef.current.terminalFontSize,
+          waitForTypography: () => fontController.whenReady(),
           onSnapshot: (snapshot) => {
             terminalLinksDisposable.dispose();
             terminalLinksDisposable = registerLinks(snapshot);
@@ -301,24 +299,6 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       void runOpenTerminal(hasRunningSnapshot);
     };
 
-    initialFitResizeTimer = window.setTimeout(() => {
-      void waitForBundledTerminalFont({
-        usesBundledTerminalFont: typographyRef.current.usesBundledTerminalFont,
-        terminalFontSize: typographyRef.current.terminalFontSize,
-      }).then(() => {
-        if (disposed || !typographyRef.current.visible) return;
-        window.requestAnimationFrame(() => {
-          if (disposed || !typographyRef.current.visible || !delivery.intake.acceptsInput) return;
-          fitAndResizeServerTerminal({
-            containerRef: input.containerRef,
-            terminalRef: input.terminalRef,
-            fitAddonRef: input.fitAddonRef,
-            threadId: input.threadId,
-            terminalId: input.terminalId,
-          });
-        });
-      });
-    }, 30);
     void runOpenTerminal();
 
     return () => {
@@ -328,9 +308,6 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       delivery.dispose();
       selectionActionOpenRef.current = false;
       unsubscribeTerminalEvents?.();
-      if (initialFitResizeTimer !== null) {
-        window.clearTimeout(initialFitResizeTimer);
-      }
       if (openTerminalRetryTimer !== null) {
         window.clearTimeout(openTerminalRetryTimer);
       }
@@ -342,6 +319,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       }
       themeObserver.disconnect();
       renderer.dispose();
+      fontController.dispose();
+      if (fontControllerRef.current === fontController) fontControllerRef.current = null;
       if (rendererRef.current === renderer) rendererRef.current = null;
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -367,6 +346,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     input.threadId,
     input.worktreePathRef,
   ]);
+  // Register typography effects after session creation so the initial controller exists.
+  useTerminalTypography({ ...input, fontControllerRef, serverReady: inputEnabled });
   useEffect(() => {
     rendererRef.current?.update(input.terminalGpuAcceleration, input.visible);
   }, [input.terminalGpuAcceleration, input.visible]);

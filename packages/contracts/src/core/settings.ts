@@ -65,7 +65,11 @@ export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const SidebarThreadSortOrder = Schema.Literals(SIDEBAR_THREAD_SORT_ORDERS);
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 
-export const TERMINAL_FONT_FAMILIES = ["meslo-nerd-font-mono", "system-monospace"] as const;
+export const TERMINAL_FONT_FAMILIES = [
+  "jetbrains-mono-nerd-font",
+  "meslo-nerd-font-mono",
+  "system-monospace",
+] as const;
 export const TERMINAL_FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18] as const;
 export const DESKTOP_WINDOW_MATERIALS = ["automatic", "solid", "translucent"] as const;
 export const TERMINAL_FONT_SIZE_MIN = TERMINAL_FONT_SIZES[0];
@@ -102,7 +106,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
   terminalFontFamily: TerminalFontFamily.pipe(
-    Schema.withDecodingDefault(() => "meslo-nerd-font-mono" as const satisfies TerminalFontFamily),
+    Schema.withDecodingDefault(
+      () => "jetbrains-mono-nerd-font" as const satisfies TerminalFontFamily,
+    ),
   ),
   windowMaterial: DesktopWindowMaterial.pipe(
     Schema.withDecodingDefault(() => "automatic" as const satisfies DesktopWindowMaterial),

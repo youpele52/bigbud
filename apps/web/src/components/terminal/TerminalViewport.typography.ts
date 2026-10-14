@@ -6,22 +6,25 @@ import {
   fitTerminalViewport,
   resizeServerTerminal,
   hasUsableTerminalViewportSize,
-  waitForBundledTerminalFont,
 } from "./TerminalViewport.session.helpers";
+import type { TerminalFontController, TerminalTypographySettings } from "./TerminalFontController";
 
-/** Typography updates preserve the emulator, selection and PTY identity. */
-export function useTerminalTypography(input: {
-  containerRef: RefObject<HTMLDivElement | null>;
-  visible: boolean;
-  serverReady: boolean;
-  terminalRef: MutableRefObject<Terminal | null>;
-  fitAddonRef: MutableRefObject<FitAddon | null>;
-  threadId: ThreadId;
-  terminalId: string;
-  terminalFontFamily: string;
-  terminalFontSize: number;
-  usesBundledTerminalFont: boolean;
-}): void {
+/** Typography updates preserve the emulator and PTY identity. */
+export function useTerminalTypography(
+  input: TerminalTypographySettings & {
+    containerRef: RefObject<HTMLDivElement | null>;
+    visible: boolean;
+    serverReady: boolean;
+    terminalRef: MutableRefObject<Terminal | null>;
+    fitAddonRef: MutableRefObject<FitAddon | null>;
+    threadId: ThreadId;
+    terminalId: string;
+    cwd: string;
+    executionTargetId?: string | undefined;
+    runtimeEnv?: Record<string, string> | undefined;
+    fontControllerRef: MutableRefObject<TerminalFontController | null>;
+  },
+): void {
   const {
     containerRef,
     visible,
@@ -32,11 +35,17 @@ export function useTerminalTypography(input: {
     terminalId,
     terminalFontFamily,
     terminalFontSize,
-    usesBundledTerminalFont,
+    bundledTerminalFont,
+    terminalLineHeight,
+    fontControllerRef,
+    cwd,
+    executionTargetId,
+    runtimeEnv,
   } = input;
   useEffect(() => {
     let cancelled = false;
     const terminal = terminalRef.current;
+    const fontController = fontControllerRef.current;
     const mount = containerRef.current;
     let pendingFit = false;
     let frame: number | null = null;
@@ -62,15 +71,23 @@ export function useTerminalTypography(input: {
     const observer = new ResizeObserver(scheduleFit);
     if (mount) observer.observe(mount);
     document.addEventListener("visibilitychange", scheduleFit);
-    void waitForBundledTerminalFont({ usesBundledTerminalFont, terminalFontSize }).then(() => {
+    const onApplied = () => {
       if (cancelled || !terminal || terminalRef.current !== terminal) return;
-      terminal.options.fontFamily = terminalFontFamily;
-      terminal.options.fontSize = terminalFontSize;
       pendingFit = true;
       scheduleFit();
-    });
+    };
+    const unsubscribe = fontController?.onApplied(onApplied);
+    void fontController
+      ?.update({
+        terminalFontFamily,
+        terminalFontSize,
+        terminalLineHeight,
+        bundledTerminalFont,
+      })
+      .then(onApplied);
     return () => {
       cancelled = true;
+      unsubscribe?.();
       observer.disconnect();
       document.removeEventListener("visibilitychange", scheduleFit);
       if (frame !== null) cancelAnimationFrame(frame);
@@ -85,6 +102,12 @@ export function useTerminalTypography(input: {
     terminalId,
     terminalFontFamily,
     terminalFontSize,
-    usesBundledTerminalFont,
+    bundledTerminalFont,
+    terminalLineHeight,
+    fontControllerRef,
+    // These inputs can recreate a session even when its font choice stays the same.
+    cwd,
+    executionTargetId,
+    runtimeEnv,
   ]);
 }

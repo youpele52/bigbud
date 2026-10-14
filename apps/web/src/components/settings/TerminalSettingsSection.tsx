@@ -1,9 +1,9 @@
 import {
   DEFAULT_UNIFIED_SETTINGS,
-  TERMINAL_FONT_FAMILIES,
   TERMINAL_FONT_SIZES,
-  type TerminalFontFamily,
-} from "@bigbud/contracts/settings";
+  TerminalFontFamily,
+} from "@bigbud/contracts/core/settings.ts";
+import { Schema } from "effect";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -11,11 +11,15 @@ import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
-    value: TERMINAL_FONT_FAMILIES[0],
+    value: "jetbrains-mono-nerd-font",
+    label: "JetBrains Mono Nerd Font Mono",
+  },
+  {
+    value: "meslo-nerd-font-mono",
     label: "Meslo Nerd Font Mono",
   },
   {
-    value: TERMINAL_FONT_FAMILIES[1],
+    value: "system-monospace",
     label: "System monospace",
   },
 ];
@@ -28,7 +32,7 @@ export function TerminalSettingsSection() {
     <SettingsSection title="Terminal">
       <SettingsRow
         title="Terminal font"
-        description="Use the bundled Meslo Nerd Font by default so prompt icons render correctly in the built-in terminal."
+        description="JetBrains Mono is the default with compact terminal spacing. Both bundled Nerd Fonts support prompt icons."
         resetAction={
           settings.terminalFontFamily !== DEFAULT_UNIFIED_SETTINGS.terminalFontFamily ? (
             <SettingResetButton
@@ -45,20 +49,20 @@ export function TerminalSettingsSection() {
           <Select
             value={settings.terminalFontFamily}
             onValueChange={(value) => {
-              if (value === TERMINAL_FONT_FAMILIES[0] || value === TERMINAL_FONT_FAMILIES[1]) {
+              if (Schema.is(TerminalFontFamily)(value)) {
                 updateSettings({ terminalFontFamily: value });
               }
             }}
           >
             <SelectTrigger
               variant="muted-outline"
-              className="w-full sm:w-52"
+              className="w-full sm:w-64"
               aria-label="Terminal font family"
             >
               <SelectValue>
                 {TERMINAL_FONT_OPTIONS.find(
                   (option) => option.value === settings.terminalFontFamily,
-                )?.label ?? "Meslo Nerd Font Mono"}
+                )?.label ?? "JetBrains Mono Nerd Font Mono"}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>

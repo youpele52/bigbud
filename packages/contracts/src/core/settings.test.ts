@@ -25,7 +25,7 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 
 describe("DEFAULT_CLIENT_SETTINGS", () => {
   test("defaults terminal appearance settings for client settings", () => {
-    expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("meslo-nerd-font-mono");
+    expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("jetbrains-mono-nerd-font");
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontSize).toBe(12);
     expect(DEFAULT_CLIENT_SETTINGS.windowMaterial).toBe("automatic");
   });

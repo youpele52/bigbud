@@ -3,11 +3,18 @@ import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import type { ResolvedKeybindingsConfig } from "@bigbud/contracts/server/keybindings.ts";
+import type { TerminalFontFamily } from "@bigbud/contracts/core/settings.ts";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
+import {
+  bundledTerminalFontFromSettings,
+  terminalFontFamilyFromSettings,
+  terminalLineHeightFromSettings,
+} from "./terminalTypography";
 
 /** Real hook fixture; terminal lifecycle is observed without mocking xterm internals. */
 export function TerminalSessionFixture(input: {
   fontSize: number;
+  fontFamily?: TerminalFontFamily;
   visible?: boolean;
   gpu?: "off" | "on";
   hiddenLayout?: "none" | "visibility";
@@ -46,9 +53,10 @@ export function TerminalSessionFixture(input: {
     terminalId: "synthetic",
     readTerminalLabel: () => "synthetic",
     cwd: "/synthetic",
-    terminalFontFamily: "monospace",
+    terminalFontFamily: terminalFontFamilyFromSettings(input.fontFamily ?? "system-monospace"),
     terminalFontSize: input.fontSize,
-    usesBundledTerminalFont: false,
+    bundledTerminalFont: bundledTerminalFontFromSettings(input.fontFamily ?? "system-monospace"),
+    terminalLineHeight: terminalLineHeightFromSettings(input.fontFamily ?? "system-monospace"),
     terminalGpuAcceleration: input.gpu ?? "off",
     onSessionExited: () => undefined,
     onAddTerminalContext: () => undefined,

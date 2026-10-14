@@ -13,7 +13,11 @@ import { isElectron } from "~/config/env";
 import { useSettings } from "../../hooks/useSettings";
 import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
 import { makeAnnotationId } from "../files/FilesPanel.shared";
-import { terminalFontFamilyFromSettings } from "./terminalTypography";
+import {
+  bundledTerminalFontFromSettings,
+  terminalFontFamilyFromSettings,
+  terminalLineHeightFromSettings,
+} from "./terminalTypography";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
 import { TerminalViewportStatus } from "./TerminalViewportStatus";
@@ -136,7 +140,8 @@ export function TerminalViewport({
   const settings = useSettings();
   const terminalFontFamily = terminalFontFamilyFromSettings(settings.terminalFontFamily);
   const terminalFontSize = settings.terminalFontSize;
-  const usesBundledTerminalFont = settings.terminalFontFamily === "meslo-nerd-font-mono";
+  const bundledTerminalFont = bundledTerminalFontFromSettings(settings.terminalFontFamily);
+  const terminalLineHeight = terminalLineHeightFromSettings(settings.terminalFontFamily);
 
   // autoFocus and worktreePath are read at mount / specific moments only.
   // They are stored in refs so their current values are accessible without
@@ -181,7 +186,8 @@ export function TerminalViewport({
     runtimeEnv: launch.runtimeEnv,
     terminalFontFamily,
     terminalFontSize,
-    usesBundledTerminalFont,
+    bundledTerminalFont,
+    terminalLineHeight,
     terminalGpuAcceleration: settings.terminalGpuAcceleration,
     onSessionExited: handleSessionExited,
     onAddTerminalContext: handleAddTerminalContext,
