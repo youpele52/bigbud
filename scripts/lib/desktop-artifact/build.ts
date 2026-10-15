@@ -47,6 +47,7 @@ import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { sanitizeUnsignedSigningEnvironment } from "../windows-signing-mode.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
+import { copyDesktopArtifacts } from "./build.copy.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -353,30 +354,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     });
   }
 
-  const stageEntries = yield* fs.readDirectory(stageDistDir);
-  yield* fs.makeDirectory(options.outputDir, { recursive: true });
-
-  const copiedArtifacts: string[] = [];
-  for (const entry of stageEntries) {
-    const from = path.join(stageDistDir, entry);
-    const stat = yield* fs.stat(from).pipe(Effect.catch(() => Effect.succeed(null)));
-    if (!stat) continue;
-
-    const to = path.join(options.outputDir, entry);
-    if (stat.type === "File") {
-      yield* fs.copyFile(from, to);
-      copiedArtifacts.push(to);
-    } else if (stat.type === "Directory") {
-      yield* fs.copy(from, to);
-      copiedArtifacts.push(to);
-    }
-  }
-
-  if (copiedArtifacts.length === 0) {
-    return yield* new BuildScriptError({
-      message: `Build completed but no files were produced in ${stageDistDir}`,
-    });
-  }
+  const copiedArtifacts = yield* copyDesktopArtifacts(stageDistDir, options.outputDir);
 
   if (options.platform === "linux") {
     if (options.target === "dir") {
