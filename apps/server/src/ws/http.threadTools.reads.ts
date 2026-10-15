@@ -1,6 +1,6 @@
 /**
- * Read-only thread tool actions: thread status, pinned threads, and project
- * thread listings. Split from `http.threadTools.ts` to keep that router under
+ * Read-only thread tool actions: thread status, pinned threads, project thread
+ * listings and the models usable for a delegated thread. Split from `http.threadTools.ts` to keep that router under
  * the file length limit.
  */
 import { ProjectId, ThreadId } from "@bigbud/contracts";
@@ -74,3 +74,20 @@ export const handleListThreadsAction = Effect.fn("handleListThreadsAction")(func
   }).pipe(Effect.mapError(toRequestError("Failed to list threads.")));
   return yield* HttpServerResponse.json({ ok: true, result });
 });
+
+export const handleListAvailableModelsAction = Effect.fn("handleListAvailableModelsAction")(
+  function* (input: ReadActionInput) {
+    const listAvailableModels = input.dispatcher.listAvailableModels;
+    if (!listAvailableModels) {
+      return yield* new ThreadToolRequestError({
+        status: 503,
+        message: "Model listing is not ready.",
+      });
+    }
+    const result = yield* listAvailableModels({
+      callerThreadId: input.callerThreadId,
+      ...(input.body.limit !== undefined ? { limit: input.body.limit } : {}),
+    }).pipe(Effect.mapError(toRequestError("Failed to list available models.")));
+    return yield* HttpServerResponse.json({ ok: true, result });
+  },
+);

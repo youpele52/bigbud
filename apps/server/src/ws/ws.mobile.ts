@@ -238,17 +238,24 @@ const makeMobileWsRpcLayer = (
             }).pipe(
               Effect.map((events) => {
                 const consumerId = input.consumerId ?? crypto.randomUUID();
-                return events.pipe(
-                  Stream.map((event) => ({
-                    type: "batch" as const,
-                    route: "direct-unmanaged" as const,
-                    consumerId,
-                    consumerGeneration: 0,
-                    serverEpoch: context.orchestrationEngine.serverEpoch ?? "unavailable",
-                    subscriptionGeneration: 0,
-                    batchId: `mobile-${event.eventId}`,
-                    events: [event],
-                  })),
+                // Mobile bypasses supervised delivery, so it registers its presence explicitly.
+                return Stream.unwrap(
+                  Effect.sync(() => {
+                    const release = context.desktopSupervisorDelivery.retainExternalConsumer();
+                    return events.pipe(
+                      Stream.map((event) => ({
+                        type: "batch" as const,
+                        route: "direct-unmanaged" as const,
+                        consumerId,
+                        consumerGeneration: 0,
+                        serverEpoch: context.orchestrationEngine.serverEpoch ?? "unavailable",
+                        subscriptionGeneration: 0,
+                        batchId: `mobile-${event.eventId}`,
+                        events: [event],
+                      })),
+                      Stream.ensuring(Effect.sync(release)),
+                    );
+                  }),
                 );
               }),
             ),

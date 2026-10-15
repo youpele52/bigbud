@@ -17,6 +17,7 @@ import * as Struct from "effect/Struct";
 import { toPersistenceSqlError } from "../Errors.ts";
 import { captureWorktreePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
+import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
@@ -381,6 +382,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     listByProjectId,
     deleteById,
     touchActivity,
+    listRecentModelSelections: makeListRecentModelSelections(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

@@ -24,6 +24,7 @@ import {
   ComputerUseCheckInIntervalMs,
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
   DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
 
@@ -39,6 +40,7 @@ export {
   ComputerUseCheckInIntervalMs,
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
   DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
 
@@ -130,7 +132,6 @@ export const ClientSettingsSchema = Schema.Struct({
     "unrestricted",
   ] as const).pipe(Schema.withDecodingDefault(() => "none")),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -279,6 +280,11 @@ export const ServerSettings = Schema.Struct({
   ),
   computerUseActionTimeoutMs: ComputerUseActionTimeoutMs.pipe(
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS),
+  ),
+  /** Server-side so delegation can honor it with no client connected (OD1). */
+  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
+  delegatedThreadModelChoice: DelegatedThreadModelChoice.pipe(
+    Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
 });
 export type ServerSettings = typeof ServerSettings.Type;

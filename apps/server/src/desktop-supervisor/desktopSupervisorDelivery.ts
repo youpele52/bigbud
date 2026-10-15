@@ -21,8 +21,10 @@ import {
 import { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
 import { installSessionSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.session.ts";
 import { hasLiveDesktopSupervisorSession } from "./desktopSupervisorDelivery.identity.ts";
+import { DesktopSupervisorDeliveryPresence } from "./desktopSupervisorDelivery.presence.ts";
 import type {
   DesktopSupervisorDeliveryShape,
+  DesktopSupervisorOwner,
   DesktopSupervisorSubscription,
 } from "./desktopSupervisorDelivery.types.ts";
 import { DesktopSupervisorOwnerClient } from "./desktopSupervisorOwnerClient.ts";
@@ -33,18 +35,6 @@ import type {
 } from "./desktopSupervisorProtocol.ts";
 import { isDesktopSupervisorIncompatibleProtocolError } from "./desktopSupervisorProtocol.ts";
 import { computeDesktopSupervisorBatchId } from "./desktopSupervisorProtocol.codec.ts";
-
-export interface DesktopSupervisorOwner {
-  readonly attach: DesktopSupervisorOwnerClient["attach"];
-  readonly detach: DesktopSupervisorOwnerClient["detach"];
-  readonly enqueue: DesktopSupervisorOwnerClient["enqueue"];
-  readonly acknowledge: DesktopSupervisorOwnerClient["acknowledge"];
-  readonly installBaseline: DesktopSupervisorOwnerClient["installBaseline"];
-  readonly heartbeat: DesktopSupervisorOwnerClient["heartbeat"];
-  readonly onFailure: DesktopSupervisorOwnerClient["onFailure"];
-  readonly onFrame: DesktopSupervisorOwnerClient["onFrame"];
-  readonly close: DesktopSupervisorOwnerClient["close"];
-}
 
 function delay(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -61,6 +51,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   private clientPromise: Promise<DesktopSupervisorOwner> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
+  private readonly presence = new DesktopSupervisorDeliveryPresence();
   private readonly ownerFactory: () => Promise<DesktopSupervisorOwner>;
 
   constructor(
@@ -128,6 +119,14 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     const session = this.sessions.get(this.sessionKey(input.consumerId, input.consumerGeneration));
     if (session) return session.acknowledgeBaseline(input);
     return Promise.resolve({ accepted: false, fenced: true, acknowledgedSequence: 0 });
+  }
+
+  hasOpenConsumer(): boolean {
+    return !this.closed && this.presence.hasOpenConsumer(this.authoritativeSessions.values());
+  }
+
+  retainExternalConsumer(): () => void {
+    return this.presence.retainExternal();
   }
 
   get retainedConsumerGenerationCount(): number {
@@ -279,6 +278,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.presence.clear();
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
     for (const session of new Set(this.sessions.values())) session.close();

@@ -8,6 +8,10 @@ export type ThreadEnvMode = typeof ThreadEnvMode.Type;
 export const AgentBrowserPreference = Schema.Literals(["bigbud", "system"]);
 export type AgentBrowserPreference = typeof AgentBrowserPreference.Type;
 
+/** Who picks a delegated thread's model: the delegating agent (validated) or always the parent. */
+export const DelegatedThreadModelChoice = Schema.Literals(["agent", "parent"]);
+export type DelegatedThreadModelChoice = typeof DelegatedThreadModelChoice.Type;
+
 export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN = 60_000;
 export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX = 60 * 60_000;
 export const DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS = 10 * 60_000;

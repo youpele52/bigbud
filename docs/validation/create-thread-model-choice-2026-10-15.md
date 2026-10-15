@@ -30,12 +30,12 @@ Never `bun test`; all runs below use Vitest via `bun run`.
 
 Red → green:
 
-| Test | Red (before code) | Green |
-|---|---|---|
-| `packages/contracts … orchestration.delegationModelChoice.test.ts` | exit 1, module not found | 4/4 |
-| `packages/shared … delegatedModelChoice.test.ts` | exit 1, module not found | 5/5 |
-| `apps/server … deciderThreads.delegationModelChoice.test.ts` | exit 1, 9 failed (unknown command types) | 9/9 |
-| `apps/server … OrchestrationEngine.prepareCommandState.test.ts` (2 new cases) | 2 failed (`operational` loaded) | 7/7 |
+| Test                                                                          | Red (before code)                        | Green |
+| ----------------------------------------------------------------------------- | ---------------------------------------- | ----- |
+| `packages/contracts … orchestration.delegationModelChoice.test.ts`            | exit 1, module not found                 | 4/4   |
+| `packages/shared … delegatedModelChoice.test.ts`                              | exit 1, module not found                 | 5/5   |
+| `apps/server … deciderThreads.delegationModelChoice.test.ts`                  | exit 1, 9 failed (unknown command types) | 9/9   |
+| `apps/server … OrchestrationEngine.prepareCommandState.test.ts` (2 new cases) | 2 failed (`operational` loaded)          | 7/7   |
 
 Gate commands (all exit 0):
 
@@ -46,3 +46,35 @@ Gate commands (all exit 0):
 - `bun fmt` 0, `bun fmt:check` 0, `bun lint` 0, `bun typecheck` 0 (9/9 tasks).
 - `bun run --cwd apps/server thread-tools:manifest:check` 0; no change under `provider/Layers/OpencodeV2/`.
 - Line counts: every new/edited code file ≤ 400 (`orchestration.commands.client.ts` exactly 400).
+
+## Phase 2 — `create_thread` model choice, settings, presence, supervision
+
+Red → green (red recorded before the implementation unless noted):
+
+| Test                                                                      | Red                                                                                       | Green |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----- |
+| `packages/contracts … core/settings.delegatedModelChoice.test.ts`         | 2 failed (fields missing)                                                                 | pass  |
+| `apps/server … desktopSupervisorDelivery.presence.test.ts`                | 3 failed (`hasOpenConsumer` missing)                                                      | 3/3   |
+| `apps/server … ThreadOrchestrationTools.modelChoice.test.ts`              | exit 1, module not found                                                                  | 23/23 |
+| `apps/server … persistence/Layers/ProjectionThreads.modelChoice.test.ts`  | repository methods missing                                                                | 2/2   |
+| `apps/server … ThreadOrchestrationTools.createThread.modelChoice.test.ts` | exit 1, module not found                                                                  | 7/7   |
+| `apps/web … hooks/useSettings.storage.test.ts` (2 new cases)              | migration export missing                                                                  | 8/8   |
+| `apps/server … ws/http.threadTools.modelChoice.test.ts`                   | first red was infrastructure (missing `NodeHttpServer.layerTest`), not a behavior failure | pass  |
+
+Written after the implementation (no recorded red): `ThreadOrchestrationTools.listAvailableModels.test.ts`
+(4/4, includes a spy proving `refresh` is never called), `ThreadWatchReactor.modelChoice.test.ts` (4/4, TestClock:
+timer expiry, resolved interrupts, startup sweep for past and future deadlines),
+`DelegatedThreadsSettingsSection.test.tsx` (3/3), and one `get_thread_status` case (requested vs used; the
+status field itself was red → green in Phase 1).
+
+Gate commands (all exit 0):
+
+- §8.2 set plus the new files: `bun run --cwd apps/server vitest run src/orchestration-tools/ThreadOrchestrationTools.modelChoice.test.ts src/orchestration-tools/ThreadOrchestrationTools.createThread.test.ts src/orchestration-tools/ThreadOrchestrationTools.createThread.modelChoice.test.ts src/orchestration-tools/ThreadOrchestrationTools.listAvailableModels.test.ts src/orchestration-tools/ThreadOrchestrationTools.restart.test.ts src/orchestration-tools/ThreadOrchestrationTools.getThreadStatus.test.ts src/orchestration/Layers/ThreadWatchReactor.modelChoice.test.ts src/desktop-supervisor/desktopSupervisorDelivery.test.ts src/desktop-supervisor/desktopSupervisorDelivery.presence.test.ts src/ws/http.threadTools.test.ts src/ws/http.threadTools.modelChoice.test.ts src/ws/serverSettings.test.ts src/persistence/Layers/ProjectionThreads.modelChoice.test.ts` — 13 files, 92 passed.
+- Wider regressions: `bun run --cwd apps/server vitest run src/desktop-supervisor src/orchestration-tools src/persistence src/retention src/ws src/orchestration/Layers/OrchestrationEngine.queuedPromptRecovery.test.ts src/orchestration/Layers/OrchestrationReactor.test.ts src/orchestration/Layers/ProviderRuntimeIngestion.reconcile.test.ts src/orchestration/projector.fork.test.ts src/server.mobile.ws.test.ts src/server.mobile.recovery.test.ts` — 244 files, 823 passed.
+- Web: `bun run --cwd apps/web vitest run src/components/settings/DelegatedThreadsSettingsSection.test.tsx src/components/settings/ComposerProvidersSettingsSection.test.tsx src/components/settings/ThreadRetentionSettingsSection.test.tsx src/hooks/useSettings.storage.test.ts src/components/settings/SettingsSearch.logic.test.ts` — 5 files, 25 passed.
+- Contracts: `settings.delegatedModelChoice.test.ts` + `settings.test.ts` — 2 files, 24 passed.
+- `bun fmt` 0, `bun lint` 0, `bun typecheck` 0 (9/9 tasks; the TS29 messages printed are pre-existing, none in edited files).
+- `bun run --cwd apps/server thread-tools:manifest:check` 0; no change under `apps/server/src/provider/Layers/OpencodeV2/`.
+- Line counts: every new/edited code file ≤ 400 (largest: `desktopSupervisorDelivery.ts` 399, `desktopSupervisorDelivery.test.ts` 396, `ProjectionThreads.ts` 392).
+- Retry fix: every command and the linked activity use `delegation.createdAt`; the create-thread fixture pins `createdAt`, and the retry-from-`thread_accepted` case reuses the stored decision with no conflict.
+- Deviations: D-5 (sweep without the 1 h cutoff), D-6 (settings section placement).

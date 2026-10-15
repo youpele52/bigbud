@@ -12,17 +12,21 @@ import type { ComputerUseShape } from "../../computer-use/Services/ComputerUse.t
 import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
-  createThreadViaOrchestration,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
   listPinnedThreadsViaOrchestration as listPinnedThreadsViaThreadTools,
   setThreadPinnedViaOrchestration as setThreadPinnedViaThreadTools,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
+import { createThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.createThread.ts";
+import { listAvailableModelsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listAvailableModels.ts";
 import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.rename.ts";
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
 import { getSystemResources } from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
-import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import {
+  getThreadToolModelSources,
+  setThreadOrchestrationToolDispatcher,
+} from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import type { ProjectionKanbanRepositoryShape } from "../../persistence/Services/ProjectionKanban.ts";
 import type { ProjectionNoteRepositoryShape } from "../../persistence/Services/ProjectionNotes.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../../persistence/Services/ProjectionThreadWatches.ts";
@@ -148,6 +152,16 @@ export function installOrchestrationEngineToolDispatchers(input: {
         task: request.task,
         ...(request.projectId !== undefined ? { projectId: request.projectId } : {}),
         watchForCompletion: request.watchForCompletion,
+        ...(request.modelSelection !== undefined
+          ? { modelSelection: request.modelSelection, modelSources: getThreadToolModelSources() }
+          : {}),
+      }),
+    listAvailableModels: (request) =>
+      listAvailableModelsViaOrchestration({
+        orchestrationEngine: input.engine,
+        callerThreadId: request.callerThreadId,
+        limit: request.limit,
+        modelSources: getThreadToolModelSources(),
       }),
   });
   setVisibleBrowserControl(input.visibleBrowser);

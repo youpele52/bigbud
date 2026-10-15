@@ -8,6 +8,20 @@ import type {
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import type { OrchestrationReplayEventsResult } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
+import type { DesktopSupervisorOwnerClient } from "./desktopSupervisorOwnerClient.ts";
+
+export interface DesktopSupervisorOwner {
+  readonly attach: DesktopSupervisorOwnerClient["attach"];
+  readonly detach: DesktopSupervisorOwnerClient["detach"];
+  readonly enqueue: DesktopSupervisorOwnerClient["enqueue"];
+  readonly acknowledge: DesktopSupervisorOwnerClient["acknowledge"];
+  readonly installBaseline: DesktopSupervisorOwnerClient["installBaseline"];
+  readonly heartbeat: DesktopSupervisorOwnerClient["heartbeat"];
+  readonly onFailure: DesktopSupervisorOwnerClient["onFailure"];
+  readonly onFrame: DesktopSupervisorOwnerClient["onFrame"];
+  readonly close: DesktopSupervisorOwnerClient["close"];
+}
+
 export interface DesktopSupervisorSubscription {
   readonly consumerId: string;
   readonly offer: (event: OrchestrationEvent) => Promise<boolean>;
@@ -31,4 +45,8 @@ export interface DesktopSupervisorDeliveryShape {
     input: OrchestrationBaselineAckInput,
   ) => Promise<OrchestrationBaselineAckResult>;
   readonly close: () => Promise<void>;
+  /** Any open delivery consumer (desktop, web or mobile web): a user could answer now (OD6). */
+  readonly hasOpenConsumer: () => boolean;
+  /** Counts a consumer that bypasses supervised delivery (the mobile route) until released. */
+  readonly retainExternalConsumer: () => () => void;
 }

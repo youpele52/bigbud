@@ -18,7 +18,7 @@ import {
   DESKTOP_SUPERVISOR_RESTART_ATTEMPTS,
 } from "./desktopSupervisorConfig.ts";
 import type { DesktopSupervisorDeliveryCoordinator } from "./desktopSupervisorDelivery.ts";
-import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.ts";
+import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.types.ts";
 import { isDesktopSupervisorIncompatibleProtocolError } from "./desktopSupervisorProtocol.ts";
 import { DesktopSupervisorShadowComparator } from "./desktopSupervisorShadow.ts";
 import { deliverBatch } from "./desktopSupervisorDelivery.session.batch.ts";

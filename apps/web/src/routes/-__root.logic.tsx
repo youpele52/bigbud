@@ -19,6 +19,7 @@ import {
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
 import {
+  getServerConfig,
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
   useServerConfig,
@@ -32,7 +33,8 @@ import { useThreadSelectionStore } from "../stores/thread";
 import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
 import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
-import { migrateLocalSettingsToServer } from "../hooks/useSettings";
+import { migrateLocalSettingsToServer, updateServerSettings } from "../hooks/useSettings";
+import { migrateHiddenComposerProvidersToServer } from "../hooks/useSettings.storage";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
@@ -195,6 +197,16 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       clearAllThinkingDeltas();
     }
   }, [clearAllThinkingDeltas, serverSettings.enableThinkingStreaming]);
+
+  const serverConfigLoaded = serverConfig !== null;
+  useEffect(() => {
+    const loaded = getServerConfig();
+    if (!serverConfigLoaded || !loaded || !readNativeApi()) return;
+    migrateHiddenComposerProvidersToServer({
+      serverHiddenComposerProviders: loaded.settings.hiddenComposerProviders,
+      patchServer: (hiddenComposerProviders) => updateServerSettings({ hiddenComposerProviders }),
+    });
+  }, [serverConfigLoaded]);
 
   useEffect(() => {
     const api = readNativeApi();

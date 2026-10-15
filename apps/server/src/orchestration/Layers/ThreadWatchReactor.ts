@@ -1,5 +1,6 @@
 import { Effect, Layer, Stream } from "effect";
 
+import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import {
@@ -7,10 +8,12 @@ import {
   type ThreadWatchReactorShape,
 } from "../Services/ThreadWatchReactor.ts";
 import { handleThreadWatchDomainEvent } from "./ThreadWatchReactor.logic.ts";
+import { startDelegatedModelChoiceSupervision } from "./ThreadWatchReactor.modelChoice.ts";
 
 const makeThreadWatchReactor = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const repository = yield* ProjectionThreadWatchRepository;
+  const activityRepository = yield* ProjectionThreadActivityRepository;
 
   const start: ThreadWatchReactorShape["start"] = Effect.fn("start")(function* () {
     yield* Effect.logDebug("thread watch reactor starting");
@@ -31,6 +34,8 @@ const makeThreadWatchReactor = Effect.gen(function* () {
         ),
       ),
     );
+    // Held delegated first turns (delegated model choice) are supervised beside the watches.
+    yield* startDelegatedModelChoiceSupervision({ orchestrationEngine, activityRepository });
   });
 
   return {

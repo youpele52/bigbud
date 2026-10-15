@@ -3,7 +3,7 @@ import {
   DEFAULT_CLIENT_SETTINGS,
   type TerminalFontFamily,
 } from "@bigbud/contracts/core/settings.ts";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getLocalStorageItem,
   removeLocalStorageItem,
@@ -13,6 +13,7 @@ import {
   CLIENT_SETTINGS_LEGACY_KEYS,
   CLIENT_SETTINGS_STORAGE_KEY,
   CLIENT_SETTINGS_STORAGE_OPTIONS,
+  migrateHiddenComposerProvidersToServer,
 } from "./useSettings.storage";
 
 const read = () =>
@@ -97,4 +98,56 @@ it("prefers the current saved choice over stale legacy defaults", () => {
     ClientSettingsSchema,
   );
   expect(read()?.terminalFontFamily).toBe("meslo-nerd-font-mono");
+});
+
+describe("hidden composer providers move to the server (OD1)", () => {
+  const makeStorage = (entries: Record<string, unknown>) => {
+    const store = new Map(
+      Object.entries(entries).map(([key, value]) => [key, JSON.stringify(value)]),
+    );
+    return {
+      read: (key: string) => JSON.parse(store.get(key) ?? "null") as unknown,
+      storage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+      },
+    };
+  };
+
+  it("patches an empty server list once, then drops the local key", () => {
+    const { read: readRaw, storage } = makeStorage({
+      [CLIENT_SETTINGS_STORAGE_KEY]: {
+        terminalFontSize: 15,
+        hiddenComposerProviders: ["copilot", "not-a-provider", "pi"],
+      },
+    });
+    const patchServer = vi.fn();
+    const migrate = () =>
+      migrateHiddenComposerProvidersToServer({
+        serverHiddenComposerProviders: [],
+        patchServer,
+        storage,
+      });
+    expect(migrate()).toBe("migrated");
+    expect(patchServer).toHaveBeenCalledWith(["copilot", "pi"]);
+    expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({ terminalFontSize: 15 });
+    expect(migrate()).toBe("none");
+    expect(patchServer).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a non-empty server list and still drops the local key", () => {
+    const { read: readRaw, storage } = makeStorage({
+      [CLIENT_SETTINGS_LEGACY_KEYS[0]]: { hiddenComposerProviders: ["copilot"] },
+    });
+    const patchServer = vi.fn();
+    expect(
+      migrateHiddenComposerProvidersToServer({
+        serverHiddenComposerProviders: ["cursor"],
+        patchServer,
+        storage,
+      }),
+    ).toBe("dropped");
+    expect(patchServer).not.toHaveBeenCalled();
+    expect(readRaw(CLIENT_SETTINGS_LEGACY_KEYS[0])).toEqual({});
+  });
 });

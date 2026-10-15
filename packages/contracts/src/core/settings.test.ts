@@ -37,7 +37,7 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
   });
 
   test("shows every provider in the composer by default", () => {
-    expect(DEFAULT_CLIENT_SETTINGS.hiddenComposerProviders).toEqual([]);
+    expect(DEFAULT_SERVER_SETTINGS.hiddenComposerProviders).toEqual([]);
   });
 });
 
@@ -105,7 +105,7 @@ it.effect("decodes valid terminal appearance settings", () =>
 
 it.effect("defaults composer provider visibility when decoding older settings", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeClientSettings({ terminalFontSize: 14 });
+    const parsed = yield* decodeServerSettings({ greetingName: "" });
 
     assert.deepStrictEqual(parsed.hiddenComposerProviders, []);
   }),

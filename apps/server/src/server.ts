@@ -54,6 +54,7 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
 import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
+import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestrationTools.modelSources.ts";
 import { makeProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import {
@@ -353,6 +354,7 @@ export const makeServerLayer = Layer.unwrap(
         disableLogger: !config.logWebSocketEvents,
       }),
       httpListeningLayer,
+      ThreadToolModelSourcesLive,
     );
 
     return serverApplicationLayer.pipe(

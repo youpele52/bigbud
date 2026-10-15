@@ -1,6 +1,6 @@
 import type { OrchestrationBaselineAckInput } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 
-import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.ts";
+import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.types.ts";
 import { installAuthorizedSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.ts";
 import type { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
 

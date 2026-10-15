@@ -1,13 +1,7 @@
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
-import {
-  BrowserAction,
-  ComputerUseAction,
-  ProjectId,
-  ThreadId,
-  MessageId,
-} from "@bigbud/contracts";
+import { BrowserAction, ComputerUseAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
 import {
@@ -22,8 +16,10 @@ import {
 } from "../capabilities/CapabilityCatalog.operations.ts";
 import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
 import { ThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
+import { handleCreateThreadAction } from "./http.threadTools.createThread.ts";
 import {
   handleGetThreadStatusAction,
+  handleListAvailableModelsAction,
   handleListPinnedThreadsAction,
   handleListThreadsAction,
 } from "./http.threadTools.reads.ts";
@@ -185,54 +181,7 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
 
       if (body.action === "create_thread") {
-        if (!dispatcher.createThread) {
-          return yield* new ThreadToolRequestError({
-            status: 503,
-            message: "Thread creation is not ready.",
-          });
-        }
-        if (body.workspacePath !== undefined) {
-          return yield* new ThreadToolRequestError({
-            status: 400,
-            message: "workspacePath is not supported; use projectId.",
-          });
-        }
-        const invocationId = body.invocationId?.trim() ?? "";
-        const sourceMessageId = body.sourceMessageId?.trim() ?? "";
-        if (invocationId.length === 0) {
-          return yield* new ThreadToolRequestError({
-            status: 400,
-            message: "invocationId is required.",
-          });
-        }
-        if (sourceMessageId.length === 0) {
-          return yield* new ThreadToolRequestError({
-            status: 400,
-            message: "sourceMessageId is required.",
-          });
-        }
-        const result = yield* dispatcher
-          .createThread({
-            callerThreadId: threadId,
-            sourceMessageId: MessageId.makeUnsafe(sourceMessageId),
-            invocationId,
-            title: body.title ?? "",
-            task: body.task ?? "",
-            ...(body.projectId?.trim()
-              ? { projectId: ProjectId.makeUnsafe(body.projectId.trim()) }
-              : {}),
-            watchForCompletion: body.watchForCompletion === true,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new ThreadToolRequestError({
-                  status: error instanceof Error && error.message.includes("not found") ? 404 : 400,
-                  message: error instanceof Error ? error.message : "Failed to create thread.",
-                }),
-            ),
-          );
-        return yield* HttpServerResponse.json({ ok: true, result });
+        return yield* handleCreateThreadAction({ dispatcher, callerThreadId: threadId, body });
       }
 
       if (body.action === "send_thread_message") {
@@ -273,11 +222,15 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (
         body.action === "list_pinned" ||
         body.action === "get_status" ||
-        body.action === "list_threads"
+        body.action === "list_threads" ||
+        body.action === "list_available_models"
       ) {
         const readAction = { dispatcher, callerThreadId: threadId, body };
         if (body.action === "list_pinned") {
           return yield* handleListPinnedThreadsAction(readAction);
+        }
+        if (body.action === "list_available_models") {
+          return yield* handleListAvailableModelsAction(readAction);
         }
         if (body.action === "get_status") {
           return yield* handleGetThreadStatusAction(readAction);

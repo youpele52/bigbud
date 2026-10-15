@@ -17,8 +17,10 @@ import {
   AgentBrowserPreference,
   ComputerUseActionTimeoutMs,
   ComputerUseCheckInIntervalMs,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
+import { ProviderKind } from "../orchestration/orchestration.provider";
 
 const CodexModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(CodexModelOptions.fields.reasoningEffort),
@@ -141,6 +143,8 @@ export const ServerSettingsPatch = Schema.Struct({
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
   computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
+  hiddenComposerProviders: Schema.optionalKey(Schema.Array(ProviderKind)),
+  delegatedThreadModelChoice: Schema.optionalKey(DelegatedThreadModelChoice),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(

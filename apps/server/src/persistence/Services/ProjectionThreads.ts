@@ -92,6 +92,17 @@ export type ListProjectionThreadsByProjectInput = typeof ListProjectionThreadsBy
 /**
  * ProjectionThreadRepositoryShape - Service API for projected thread records.
  */
+export const ListRecentModelSelectionsInput = Schema.Struct({ limit: NonNegativeInt });
+export type ListRecentModelSelectionsInput = typeof ListRecentModelSelectionsInput.Type;
+
+/** One provider+model+subProviderID, with the latest activity of a started thread using it. */
+export interface RecentProjectionModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly subProviderID?: string;
+  readonly lastUsedAt: string;
+}
+
 export interface ProjectionThreadRepositoryShape {
   /**
    * Insert or replace a projected thread row.
@@ -125,6 +136,11 @@ export interface ProjectionThreadRepositoryShape {
   readonly touchActivity: (
     input: TouchProjectionThreadActivityInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Models of started, live threads, most recently used first (delegated model choice, D7). */
+  readonly listRecentModelSelections: (
+    input: ListRecentModelSelectionsInput,
+  ) => Effect.Effect<ReadonlyArray<RecentProjectionModelSelection>, ProjectionRepositoryError>;
 }
 
 /**

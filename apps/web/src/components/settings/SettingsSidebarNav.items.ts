@@ -73,6 +73,8 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Enable desktop automation", section: "AI", to: "/settings/ai" },
   { label: "Check-in interval", section: "AI", to: "/settings/ai" },
   { label: "Action timeout", section: "AI", to: "/settings/ai" },
+  { label: "Delegated threads", section: "AI", to: "/settings/ai" },
+  { label: "Let agents choose models for delegated threads", section: "AI", to: "/settings/ai" },
   { label: "File access", section: "AI", to: "/settings/ai" },
   { label: "Default chat folder", section: "AI", to: "/settings/ai" },
   { label: "Permission level", section: "AI", to: "/settings/ai" },

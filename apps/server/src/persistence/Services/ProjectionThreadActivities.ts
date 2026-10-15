@@ -92,6 +92,12 @@ export const DeleteProjectionThreadActivitiesInput = Schema.Struct({
 export type DeleteProjectionThreadActivitiesInput =
   typeof DeleteProjectionThreadActivitiesInput.Type;
 
+export const ListPendingDelegatedModelChoiceRequestsInput = Schema.Struct({
+  limit: NonNegativeInt,
+});
+export type ListPendingDelegatedModelChoiceRequestsInput =
+  typeof ListPendingDelegatedModelChoiceRequestsInput.Type;
+
 /**
  * ProjectionThreadActivityRepositoryShape - Service API for projected thread activity.
  */
@@ -145,6 +151,14 @@ export interface ProjectionThreadActivityRepositoryShape {
   readonly advanceUsageBackfillState: (
     state: ProjectionUsageBackfillState,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Delegated model-choice requests without a resolution, on threads not deleted (oldest first). */
+  readonly listPendingDelegatedModelChoiceRequests: (
+    input: ListPendingDelegatedModelChoiceRequestsInput,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly threadId: ThreadId; readonly payload: unknown }>,
+    ProjectionRepositoryError
+  >;
 }
 
 /**
