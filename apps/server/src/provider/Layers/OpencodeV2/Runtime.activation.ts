@@ -6,6 +6,11 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { currentV2CallerSignal, assertV2CallerCurrent } from "./Runtime.caller.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
+import {
+  runInV2Settlement,
+  v2SettlementBusyReason,
+  type V2SettlementHoldReason,
+} from "./Runtime.activation.hold.ts";
 
 export class V2PreAdmissionRetry extends Error {
   constructor() {
@@ -82,14 +87,22 @@ export async function settleV2PreparedReservation(
   } // Revoked/unreadable evidence stays owned; never infer idle.
 }
 
-/** Terminal delivery plus authoritative native drain/durable journal proof discharge a held physical token. */
-export async function settleV2RuntimeReservation(
+/** Terminal delivery plus authoritative native drain/durable journal proof discharge a held physical token.
+ * Returns the hold reason when the reservation stays owned; `undefined` when settled or nothing is held. */
+export function settleV2RuntimeReservation(
   runtime: OpencodeV2Runtime,
   owner: V2RuntimeSession,
-) {
+): Promise<V2SettlementHoldReason | undefined> {
+  return runInV2Settlement(() => settleV2RuntimeReservationOnce(runtime, owner));
+}
+
+async function settleV2RuntimeReservationOnce(
+  runtime: OpencodeV2Runtime,
+  owner: V2RuntimeSession,
+): Promise<V2SettlementHoldReason | undefined> {
   const activation = owner.activation,
     token = activation?.token;
-  if (!activation || !token) return;
+  if (!activation || !token) return undefined;
   const authority = captureV2OperationAuthority();
   const epoch = owner.epoch,
     dirty = owner.dirtyGeneration,
@@ -112,18 +125,16 @@ export async function settleV2RuntimeReservation(
       throw new Error("V2 settlement owner/generation changed; reservation retained.");
   };
   validate();
-  const busy = () =>
-    Boolean(
-      runtime.mutations.busyCount() ||
-      owner.admissionInFlight ||
-      owner.coding?.busyCount?.() ||
-      owner.publicationUnconfirmed ||
-      owner.finalEvents?.length ||
-      owner.finalPublication?.state === "pending" ||
-      owner.pendingInteractions?.size,
-    );
-  if (busy()) return;
-  if (owner.row && (owner.row.state !== "terminal" || !owner.terminalDelivered)) return;
+  // H1: release only proven-settled failed callbacks before observing busy state.
+  if (owner.coding?.reconcile) {
+    await owner.coding.reconcile();
+    validate();
+  }
+  const busy = () => v2SettlementBusyReason(runtime, owner);
+  const held = busy();
+  if (held) return held;
+  if (owner.row && (owner.row.state !== "terminal" || !owner.terminalDelivered))
+    return "row-not-terminal";
   const unresolved = await Effect.runPromise(
     runtime.options.journal.listBoundPage({
       threadId: owner.threadId,
@@ -132,7 +143,7 @@ export async function settleV2RuntimeReservation(
     }),
   );
   validate();
-  if (unresolved.length) return;
+  if (unresolved.length) return "unresolved-journal";
   const binding = runtime.options.sharedBindings
     ? await Effect.runPromise(runtime.options.sharedBindings.find(owner.threadId))
     : undefined;
@@ -145,20 +156,17 @@ export async function settleV2RuntimeReservation(
       binding.storageIdentity !== owner.storageIdentity ||
       binding.directory !== owner.native.location.directory)
   )
-    return;
+    return "binding";
   const active = await v2Request(
     "activation exact-session drain",
     (signal) => owner.lease.process.client.session.active({ signal }),
     { timeoutMs: 5000 },
   );
   validate();
-  if (
-    active[owner.native.id] ||
-    owner.activation !== activation ||
-    activation.token !== token ||
-    busy()
-  )
-    return;
+  if (active[owner.native.id]) return "native-active";
+  if (owner.activation !== activation || activation.token !== token) return "callbacks";
+  const late = busy();
+  if (late) return late;
   activation.gate.settle(token, {
     physical: true,
     durable: true,
@@ -167,4 +175,5 @@ export async function settleV2RuntimeReservation(
   });
   activation.token = undefined;
   activation.phase = "settled";
+  return undefined;
 }

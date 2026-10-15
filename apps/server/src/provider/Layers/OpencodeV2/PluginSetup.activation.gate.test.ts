@@ -72,3 +72,36 @@ it("the hard gate budget stops new publication without resurrecting stale epoch 
   gate.releaseGate("job");
   expect(gate.tryReserve(prior, "old-B")).toBeUndefined();
 });
+
+it("snapshot is read-only diagnostics without tokens, stamps or job identities", async () => {
+  const gate = new V2ActivationGate("scope", "A", () => {});
+  const stamp = gate.verify("/A", "A", "setup-instance-secret");
+  const token = gate.tryReserve(stamp, "turn-key")!;
+  const physical = deferred<void>();
+  const pending = gate.dispatch(token, () => physical.promise);
+  const snapshot = gate.snapshot();
+  expect(snapshot).toEqual({
+    closed: false,
+    epoch: 0,
+    operations: [{ key: "turn-key", state: "dispatched", physicalSettled: false }],
+  });
+  const serialized = JSON.stringify(snapshot);
+  for (const hidden of ["setup-instance-secret", "/A", "scope"])
+    expect(serialized).not.toContain(hidden);
+  // Mutating the snapshot grants nothing and cannot change gate state.
+  snapshot.operations.length = 0;
+  expect(gate.busyCount()).toBe(1);
+  physical.resolve();
+  await pending;
+  expect(() =>
+    gate.settle(token, {
+      physical: true,
+      durable: true,
+      nativeDrained: true,
+      callbacksSettled: true,
+    }),
+  ).not.toThrow();
+  expect(gate.tryCloseGate("diagnostic-job")).toBe(true);
+  expect(gate.snapshot()).toEqual({ closed: true, epoch: 0, operations: [] });
+  expect(JSON.stringify(gate.snapshot())).not.toContain("diagnostic-job");
+});

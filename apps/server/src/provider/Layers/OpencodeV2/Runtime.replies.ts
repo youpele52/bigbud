@@ -2,6 +2,7 @@ import type { ThreadId, TurnId } from "@bigbud/contracts";
 import { v2Request } from "./Client.ts";
 import { assertV2SharedSessionOwner } from "./Runtime.ownership.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
+import { nextV2SettlementSequence } from "./Execution.owners.ts";
 
 /** Interrupt cancellation must enter before the session queue held by the executing command. */
 export async function interruptV2Execution(
@@ -23,6 +24,8 @@ export async function interruptV2Execution(
         { signal },
       ),
     );
+    // Native acknowledged this interrupt: evidence for earlier uncertain callbacks (H1), never a timer.
+    session.interruptAcknowledgedSequence = nextV2SettlementSequence();
     try {
       session.consentPermit?.assertCurrent();
     } catch {

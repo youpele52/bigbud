@@ -31,6 +31,13 @@ export class V2ThreadReceipts {
     return v2RebootReceiptEvidence(this.records);
   }
 
+  /** Authoritative durable state for settlement evidence. "absent" means no reservation was written,
+   * so the canonical request was never issued; "reserved" stays semantic uncertainty and never resends. */
+  async durableState(key: string): Promise<"absent" | "reserved" | "completed"> {
+    const signed = await this.records.read(key);
+    return signed ? decodeV2ThreadReceipt(signed.value).state : "absent";
+  }
+
   async find(key: string, fingerprint: string) {
     const signed = await this.records.read(key);
     if (!signed) return undefined;

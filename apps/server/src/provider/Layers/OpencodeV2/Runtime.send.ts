@@ -21,6 +21,7 @@ import {
   V2PreAdmissionRetry,
   settleV2RuntimeReservation,
 } from "./Runtime.activation.ts";
+import { logV2SettlementHold } from "./Runtime.settlement.ts";
 
 /** Serialize admission against the exact owner; native dispatch rechecks authorization after awaited reads. */
 export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSendTurnInput) {
@@ -62,9 +63,15 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
         assertV2CallerCurrent();
         if (!current && ready) {
           session.consentPermit?.assertCurrent();
-          if (session.activation?.token) await settleV2RuntimeReservation(runtime, session);
-          if (session.activation?.token)
-            throw new Error("V2 prior physical admission remains owned; no new turn.");
+          const hold = session.activation?.token
+            ? await settleV2RuntimeReservation(runtime, session)
+            : undefined;
+          if (session.activation?.token) {
+            if (hold) logV2SettlementHold(runtime, session, hold);
+            throw new Error(
+              `V2 prior physical admission remains owned${hold ? ` (hold: ${hold})` : ""}; no new turn.`,
+            );
+          }
           const token = ready.gate.tryReserve(
             ready.stamp,
             JSON.stringify([

@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { V2ConsentPermit, V2ConsentAuthority } from "./Application.consent.ts";
 import { runDetachedV2Caller, captureV2CallerGuard } from "./Runtime.caller.ts";
+import { inV2Settlement } from "./Runtime.activation.hold.ts";
+import { logV2SettlementDiagnostic } from "./Runtime.settlement.log.ts";
 
 export interface V2RequestContext {
   readonly transport: string;
@@ -48,8 +50,22 @@ export function assertV2OperationCurrent() {
 export const runV2RequestContext = <T>(context: V2RequestContext, run: () => T): T =>
   contexts.run(context, run);
 
-/** Validate after registration awaits at the last synchronous point before fetch. */
+/** Validate after registration awaits at the last synchronous point before fetch. Rejections
+ * inside settlement reads are logged with pathname and intent only; behavior is unchanged. */
 export function assertV2RequestContext(transport: string, url: URL, method: string) {
+  try {
+    return assertV2RequestContextOnce(transport, url, method);
+  } catch (error) {
+    if (inV2Settlement())
+      logV2SettlementDiagnostic("OpenCode v2 settlement request authority rejected", {
+        pathname: url.pathname,
+        intent: contexts.getStore()?.intent ?? "none",
+      });
+    throw error;
+  }
+}
+
+function assertV2RequestContextOnce(transport: string, url: URL, method: string) {
   const context = contexts.getStore();
   if (!context || context.transport !== transport)
     throw new Error("V2 shared request authority missing/mismatched.");

@@ -26,7 +26,11 @@ export interface V2RuntimeSession {
     readonly revoke: () => void;
     readonly cancelActive: () => Promise<void>;
     readonly busyCount?: () => number;
+    /** Releases proven-settled uncertain callbacks before settlement observes `busyCount`. */
+    readonly reconcile?: () => Promise<number>;
   };
+  /** Sequence of the last native interrupt acknowledgement (see `nextV2SettlementSequence`). */
+  interruptAcknowledgedSequence?: number;
   readonly threadId: ThreadId;
   readonly native: SessionInfo;
   readonly lease: V2ProcessLease;

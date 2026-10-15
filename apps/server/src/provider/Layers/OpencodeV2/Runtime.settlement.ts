@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import { settleV2RuntimeReservation } from "./Runtime.activation.ts";
 import { needsV2FinalRepair } from "./Runtime.finalization.ts";
 import { v2RuntimeStatus } from "./Runtime.status.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
+import { v2SettlementHoldCounts, type V2SettlementHoldReason } from "./Runtime.activation.hold.ts";
+import { logV2SettlementDiagnostic } from "./Runtime.settlement.log.ts";
 
 type Pending = {
   token: NonNullable<NonNullable<V2RuntimeSession["activation"]>["token"]>;
@@ -11,6 +14,8 @@ type Pending = {
   next: number;
   delay: number;
   reported: boolean;
+  /** Last observed hold reason; logged once per change, shown in the 30-second status. */
+  reason?: V2SettlementHoldReason | undefined;
 };
 const pending = new WeakMap<V2RuntimeSession, Pending>();
 
@@ -75,11 +80,12 @@ export async function repairV2RetainedReservation(
   const report = async () => {
     validate();
     if (owner.activation?.token && Date.now() - state.since >= 30000) {
+      const hold = state.reason ? ` (hold: ${state.reason})` : "";
       await v2RuntimeStatus(
         runtime,
         owner,
         "error",
-        "Previous execution settlement remains unconfirmed. New messages are blocked; no automatic resend.",
+        `Previous execution settlement remains unconfirmed${hold}. New messages are blocked; no automatic resend.`,
         validate,
       );
       state.reported = true;
@@ -87,7 +93,9 @@ export async function repairV2RetainedReservation(
   };
   validate();
   try {
-    await settleV2RuntimeReservation(runtime, owner);
+    const reason = await settleV2RuntimeReservation(runtime, owner);
+    if (reason && reason !== state.reason) logV2SettlementHold(runtime, owner, reason);
+    state.reason = reason;
   } catch (error) {
     await report();
     throw error;
@@ -97,4 +105,30 @@ export async function repairV2RetainedReservation(
     if (state.reported) await v2RuntimeStatus(runtime, owner, "ready", undefined, validate);
     pending.delete(owner);
   } else await report();
+}
+
+/** One redacted line per hold-reason change: identifiers, reason, counts and gate states only. */
+export function logV2SettlementHold(
+  runtime: OpencodeV2Runtime,
+  owner: V2RuntimeSession,
+  reason: V2SettlementHoldReason,
+) {
+  const gate = owner.activation?.gate.snapshot();
+  logV2SettlementDiagnostic("OpenCode v2 execution settlement held", {
+    threadId: owner.threadId,
+    nativeSessionId: owner.native.id,
+    reason,
+    ...v2SettlementHoldCounts(runtime, owner),
+    ...(gate
+      ? {
+          gateClosed: gate.closed,
+          gateEpoch: gate.epoch,
+          gateOperations: gate.operations.map(({ key, state, physicalSettled }) => ({
+            key: createHash("sha256").update(key).digest("hex").slice(0, 12),
+            state,
+            physicalSettled,
+          })),
+        }
+      : {}),
+  });
 }

@@ -51,7 +51,9 @@ it("a new explicit send rechecks terminal settlement but cannot bypass a still-a
   await withV2SettlementFixture(async (f) => {
     await f.send("first");
     const token = f.owner.activation?.token;
-    await expect(f.send("blocked")).rejects.toThrow("prior physical admission");
+    await expect(f.send("blocked")).rejects.toThrow(
+      "V2 prior physical admission remains owned (hold: native-active); no new turn.",
+    );
     expect(f.owner.activation?.token).toBe(token);
     f.setActive(false);
     await f.send("second");

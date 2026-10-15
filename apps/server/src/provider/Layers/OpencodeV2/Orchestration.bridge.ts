@@ -24,6 +24,7 @@ import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { Effect } from "effect";
 import {
   v2BridgeRetirementProof,
+  reconcileV2BridgeExecutions,
   registerV2BridgeActivation,
 } from "./Orchestration.bridge.activation.ts";
 
@@ -190,6 +191,8 @@ export class V2ThreadBridge {
     session.coding = {
       pending: () => approvals.events(),
       busyCount: () => owner.active.busyCount() + enrollment.controlCount(),
+      reconcile: () =>
+        reconcileV2BridgeExecutions(runtime, session, owner.active, this.options.receipts),
       revoke,
       cancelActive: () => {
         owner.cancelledTurn = session.row?.turnId;

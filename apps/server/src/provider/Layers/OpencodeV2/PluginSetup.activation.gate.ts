@@ -214,6 +214,18 @@ export class V2ActivationGate {
   busyCount() {
     return this.operations.size;
   }
+  /** Read-only diagnostics: no tokens, stamps, proofs or job identities, and no authority. */
+  snapshot() {
+    return {
+      closed: this.closed !== undefined,
+      epoch: this.epoch,
+      operations: [...this.operations.values()].map(({ token, state, physicalSettled }) => ({
+        key: token.key,
+        state,
+        physicalSettled,
+      })),
+    };
+  }
   expectedDigest() {
     return this.expected;
   }

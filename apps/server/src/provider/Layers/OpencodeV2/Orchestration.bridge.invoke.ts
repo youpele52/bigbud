@@ -88,30 +88,35 @@ export async function invokeV2ThreadOwner(
           runtime.mutations.assertSafe();
           if (session.row !== row || owner.cancelledTurn === row.turnId)
             throw new Error("V2 canonical admission replaced/interrupted.");
-          return owner.active.dispatch(controller, () =>
-            receipts.run(
-              key,
-              fingerprint,
-              async () => {
-                const canonical = await callV2PreparedOrchestration(
-                  session.resources!.orchestration!,
-                  prepared,
-                  guard,
-                  signal,
-                );
-                return encodeV2FinalResult(
-                  captured.handler.interpret({
-                    action: request.action,
-                    canonicalResult: v2ImmutableJson(JSON.parse(canonical.content)),
-                  }),
-                );
-              },
-              {
-                implementationDigest: captured.handler.implementationDigest,
-                requestDigest: createHash("sha256").update(JSON.stringify(prepared)).digest("hex"),
-                resultEncoding: captured.handler.resultEncoding,
-              },
-            ),
+          return owner.active.dispatch(
+            controller,
+            () =>
+              receipts.run(
+                key,
+                fingerprint,
+                async () => {
+                  const canonical = await callV2PreparedOrchestration(
+                    session.resources!.orchestration!,
+                    prepared,
+                    guard,
+                    signal,
+                  );
+                  return encodeV2FinalResult(
+                    captured.handler.interpret({
+                      action: request.action,
+                      canonicalResult: v2ImmutableJson(JSON.parse(canonical.content)),
+                    }),
+                  );
+                },
+                {
+                  implementationDigest: captured.handler.implementationDigest,
+                  requestDigest: createHash("sha256")
+                    .update(JSON.stringify(prepared))
+                    .digest("hex"),
+                  resultEncoding: captured.handler.resultEncoding,
+                },
+              ),
+            key, // Durable receipt identity for H1 settlement reconciliation.
           );
         })
         .then((result) => JSON.parse(result.content));

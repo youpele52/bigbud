@@ -55,7 +55,17 @@ it.each([
       try {
         const settle = settleV2RuntimeReservation(f.runtime, f.owner);
         if (kind === "physical") await expect(settle).rejects.toThrow("settlement unproved");
-        else await settle;
+        else
+          expect(await settle).toBe(
+            {
+              native: "native-active",
+              callback: "coding-busy",
+              mutation: "mutations-busy",
+              journal: "unresolved-journal",
+              binding: "binding",
+              publication: "publication-unconfirmed",
+            }[kind],
+          );
         expect(f.owner.activation?.token).toBe(token);
         expect(f.gate.busyCount()).toBe(1);
         expect(f.http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
