@@ -1,11 +1,8 @@
-import {
-  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
-  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
-} from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
+import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 import {
   ProjectionCheckpointDbRowSchema,
   ProjectionLatestTurnDbRowSchema,
@@ -111,6 +108,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Request: ThreadWindowRequest,
     Result: ProjectionThreadActivityDbRowSchema,
     execute: ({ threadId, limit }) => sql`
+      WITH ${unresolvedModelChoiceRequestsCtes(sql)}
       SELECT * FROM (
         SELECT * FROM (
           SELECT
@@ -130,15 +128,8 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
           r.tone, r.kind, r.summary, r.payload_json AS payload, r.sequence,
           r.created_at AS "createdAt"
         FROM projection_thread_activities r
-        WHERE r.thread_id = ${threadId}
-          AND r.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
-          AND NOT EXISTS (
-            SELECT 1 FROM projection_thread_activities v
-            WHERE v.thread_id = r.thread_id
-              AND v.kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
-              AND json_extract(v.payload_json, '$.choiceId') =
-                json_extract(r.payload_json, '$.choiceId')
-          )
+        JOIN model_choice_unresolved unresolved ON unresolved.activity_id = r.activity_id
+        WHERE unresolved.thread_id = ${threadId}
       )
       ORDER BY
         CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,

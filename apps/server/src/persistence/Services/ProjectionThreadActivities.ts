@@ -94,8 +94,6 @@ export type DeleteProjectionThreadActivitiesInput =
 
 export const ListPendingDelegatedModelChoiceRequestsInput = Schema.Struct({
   limit: NonNegativeInt,
-  /** Age cutoff (L6); holds resolve within seconds, so anything older is abandoned history. */
-  since: IsoDateTime,
   /** Keyset cursor, so unresolvable rows can never starve a sweep page (M4). */
   after: Schema.optional(Schema.Struct({ createdAt: IsoDateTime, activityId: EventId })),
 });

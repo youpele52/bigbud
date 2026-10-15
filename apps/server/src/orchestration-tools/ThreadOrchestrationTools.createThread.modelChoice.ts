@@ -112,7 +112,8 @@ export function modelChoiceResultFields(decision: ModelDecisionType) {
 /**
  * Dispatches the delegated first message: an immediate decision records its resolution and starts
  * the turn with the used model; a hold queues it behind an approval-style pending choice. A failed
- * hold falls back to the trunk's model, so the model choice never fails the delegation.
+ * hold falls back to the trunk's model through one atomic `expire`, so the model choice never
+ * fails the delegation and the delegated message is sent exactly once.
  */
 export const startDelegatedFirstTurn = Effect.fn("startDelegatedFirstTurn")(function* (input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
@@ -177,15 +178,25 @@ export const startDelegatedFirstTurn = Effect.fn("startDelegatedFirstTurn")(func
           childThreadId: input.childThreadId,
           error: String(error),
         }).pipe(
+          // The hold may have committed despite the failure (an interrupt or a timeout), so the
+          // fallback is one atomic decision: it resolves a committed hold, or records the fallback
+          // and starts the message; the message is never sent twice (review #2).
           Effect.andThen(
-            turnStart({
+            input.orchestrationEngine.dispatch({
+              type: "thread.delegation.model-choice.expire",
+              commandId: CommandId.makeUnsafe(
+                stableThreadToolId("command", `${input.identity}:model-choice-fallback`),
+              ),
+              threadId: input.childThreadId,
               choiceId: decision.requested.choiceId,
-              requested: decision.requested.requested,
-              fallback: decision.requested.fallback,
-              reason: decision.requested.reason,
-              used: decision.requested.fallback,
-              outcome: "fallback",
               resolvedBy: "server",
+              fallbackStart: {
+                prompt: input.prompt,
+                runtimeMode: input.callerThread.runtimeMode,
+                interactionMode: input.callerThread.interactionMode,
+                requested: decision.requested,
+              },
+              createdAt: input.createdAt,
             }),
           ),
         ),

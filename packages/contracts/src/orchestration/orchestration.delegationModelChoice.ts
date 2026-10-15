@@ -112,17 +112,20 @@ export const DelegationModelChoiceLinkedSummary = Schema.Struct({
 });
 export type DelegationModelChoiceLinkedSummary = typeof DelegationModelChoiceLinkedSummary.Type;
 
+/** The delegated first message (same text and origin as an unheld `create_thread`). */
+export const DelegatedFirstPrompt = Schema.Struct({
+  messageId: MessageId,
+  text: Schema.String,
+  originSegments: Schema.optional(Schema.Array(MessageOrigin.MessageOriginSegment)),
+});
+export type DelegatedFirstPrompt = typeof DelegatedFirstPrompt.Type;
+
 /** Internal: queue the delegated first message and record the pending choice, atomically. */
 export const ThreadDelegationModelChoiceHoldCommand = Schema.Struct({
   type: Schema.Literal("thread.delegation.model-choice.hold"),
   commandId: CommandId,
   threadId: ThreadId,
-  /** The delegated first message (same text and origin as an unheld `create_thread`). */
-  prompt: Schema.Struct({
-    messageId: MessageId,
-    text: Schema.String,
-    originSegments: Schema.optional(Schema.Array(MessageOrigin.MessageOriginSegment)),
-  }),
+  prompt: DelegatedFirstPrompt,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   requestedActivity: Schema.Struct({
@@ -135,13 +138,26 @@ export const ThreadDelegationModelChoiceHoldCommand = Schema.Struct({
 export type ThreadDelegationModelChoiceHoldCommand =
   typeof ThreadDelegationModelChoiceHoldCommand.Type;
 
-/** Internal: the server timer or restart sweep resolves an unanswered choice with the fallback. */
+/**
+ * Internal: the server timer or restart sweep resolves an unanswered choice with the fallback.
+ * With `fallbackStart` it is the hold-failure fallback (`resolvedBy: "server"`): it resolves a
+ * committed hold like any expiry, and otherwise records the fallback and starts the message in the
+ * same decision, so the delegated message is sent exactly once whatever the hold's fate.
+ */
 export const ThreadDelegationModelChoiceExpireCommand = Schema.Struct({
   type: Schema.Literal("thread.delegation.model-choice.expire"),
   commandId: CommandId,
   threadId: ThreadId,
   choiceId: TrimmedNonEmptyString,
-  resolvedBy: Schema.Literals(["timeout", "restart-sweep"]),
+  resolvedBy: Schema.Literals(["timeout", "restart-sweep", "server"]),
+  fallbackStart: Schema.optional(
+    Schema.Struct({
+      prompt: DelegatedFirstPrompt,
+      runtimeMode: RuntimeMode,
+      interactionMode: ProviderInteractionMode,
+      requested: DelegationModelChoiceRequested,
+    }),
+  ),
   createdAt: IsoDateTime,
 });
 export type ThreadDelegationModelChoiceExpireCommand =

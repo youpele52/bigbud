@@ -183,4 +183,24 @@ describe("hidden composer providers move to the server (OD1)", () => {
     ).toBe("failed");
     expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({ hiddenComposerProviders: ["copilot"] });
   });
+
+  it("keeps local settings written while the server patch was in flight", async () => {
+    const { read: readRaw, storage } = makeStorage({
+      [CLIENT_SETTINGS_STORAGE_KEY]: { terminalFontSize: 13, hiddenComposerProviders: ["copilot"] },
+    });
+    const patchServer = vi.fn(async (_hidden: ReadonlyArray<string>) => {
+      storage.setItem(
+        CLIENT_SETTINGS_STORAGE_KEY,
+        JSON.stringify({ terminalFontSize: 18, hiddenComposerProviders: ["copilot"] }),
+      );
+    });
+    expect(
+      await migrateHiddenComposerProvidersToServer({
+        serverHiddenComposerProviders: [],
+        patchServer,
+        storage,
+      }),
+    ).toBe("migrated");
+    expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({ terminalFontSize: 18 });
+  });
 });

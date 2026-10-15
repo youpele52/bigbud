@@ -44,7 +44,7 @@ const harness = (input: {
     const dispatched = yield* Ref.make<ReadonlyArray<OrchestrationCommand>>([]);
     const attempts = yield* Ref.make(0);
     const rows = yield* Ref.make(input.rows ?? []);
-    const queries = yield* Ref.make<ReadonlyArray<{ since: string; after?: unknown }>>([]);
+    const queries = yield* Ref.make<ReadonlyArray<{ after?: unknown }>>([]);
     yield* startDelegatedModelChoiceSupervision({
       orchestrationEngine: {
         streamDomainEvents: Stream.fromQueue(events),
@@ -179,7 +179,7 @@ it.effect("retries a failed expiry three times with backoff, then leaves it to t
   ).pipe(Effect.provide(TestClock.layer())),
 );
 
-it.effect("pages through every pending row in one sweep, from a 7-day cutoff (M4, L6)", () =>
+it.effect("pages through every pending row in one sweep, with no age cutoff (M4)", () =>
   Effect.scoped(
     Effect.gen(function* () {
       yield* TestClock.adjust("20 seconds");
@@ -193,7 +193,7 @@ it.effect("pages through every pending row in one sweep, from a 7-day cutoff (M4
       assert.equal((yield* Ref.get(dispatched)).length, 150);
       const seen = yield* Ref.get(queries);
       assert.isAbove(seen.length, 1);
-      assert.equal(seen[0]?.since, new Date(20_000 - 7 * 24 * 60 * 60 * 1000).toISOString());
+      assert.isUndefined(seen[0]?.after);
     }),
   ).pipe(Effect.provide(TestClock.layer())),
 );

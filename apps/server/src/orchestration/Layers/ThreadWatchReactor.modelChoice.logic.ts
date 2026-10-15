@@ -15,8 +15,6 @@ import { derivePendingDelegatedModelChoice } from "@bigbud/shared/delegatedModel
 /** Catches timers lost to a crash or a missed event; startup runs the first sweep at once. */
 export const MODEL_CHOICE_SWEEP_INTERVAL_MS = 30_000;
 export const MODEL_CHOICE_SWEEP_BATCH = 100;
-/** Holds resolve within seconds; a week safely covers any outage without scanning old history. */
-export const MODEL_CHOICE_SWEEP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const MODEL_CHOICE_EXPIRE_ATTEMPTS = 3;
 
 export interface PendingModelChoice {

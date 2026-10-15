@@ -26,6 +26,7 @@ import { Effect } from "effect";
 
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+import { decideDelegationModelChoiceFallbackStart } from "./deciderThreads.delegationModelChoice.fallback.ts";
 import {
   findOfferedOption,
   makeResolvedActivity,
@@ -122,7 +123,18 @@ const decideResolution = Effect.fn("decideDelegationModelChoiceResolution")(func
   const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
   yield* requireThreadReadyForMutation({ thread, command });
   const pending = derivePendingDelegatedModelChoice(thread.activities);
-  if (pending === null || pending.choiceId !== command.choiceId) return [];
+  if (pending === null || pending.choiceId !== command.choiceId) {
+    // The hold-failure fallback starts the message itself when no hold is pending (review #2).
+    return command.type === "thread.delegation.model-choice.expire" &&
+      command.fallbackStart !== undefined
+      ? yield* decideDelegationModelChoiceFallbackStart({
+          command,
+          fallbackStart: command.fallbackStart,
+          thread,
+          readModel,
+        })
+      : [];
+  }
 
   const picked =
     command.type === "thread.delegation.model-choice.pick"

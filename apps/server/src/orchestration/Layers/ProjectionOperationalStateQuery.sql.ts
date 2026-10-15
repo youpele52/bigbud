@@ -15,6 +15,7 @@ import {
   ProjectionThreadSessionDbRowSchema,
   ProjectionThreadTaskDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
+import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 
 export const STARTUP_OPERATIONAL_MESSAGE_LIMIT = 50;
 export const STARTUP_OPERATIONAL_ACTIVITY_LIMIT = 100;
@@ -150,83 +151,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
   const listActiveThreadActivityRows = SqlSchema.findAll({
     Request: Schema.Void,
     Result: ProjectionThreadActivityDbRowSchema,
-    execute: () => sql`
-      WITH ranked AS (
-        SELECT
-          a.activity_id AS "activityId",
-          a.thread_id AS "threadId",
-          a.turn_id AS "turnId",
-          a.tone,
-          a.kind,
-          a.summary,
-          a.payload_json AS "payload",
-          a.sequence,
-          a.created_at AS "createdAt",
-          ROW_NUMBER() OVER (
-            PARTITION BY a.thread_id
-            ORDER BY
-              CASE WHEN a.sequence IS NULL THEN 0 ELSE 1 END DESC,
-              a.sequence DESC,
-              a.created_at DESC,
-              a.activity_id DESC
-          ) AS row_number
-        FROM projection_thread_activities a
-        LEFT JOIN projection_thread_sessions s ON s.thread_id = a.thread_id
-        WHERE s.status IN ('starting', 'running')
-          OR EXISTS (
-            SELECT 1 FROM projection_pending_approvals p
-            WHERE p.thread_id = a.thread_id AND p.status = 'pending'
-          )
-          OR EXISTS (
-            SELECT 1 FROM projection_pending_user_inputs u
-            WHERE u.thread_id = a.thread_id AND u.status = 'pending'
-          )
-          -- A held delegated first turn must stay blocked after a restart (dispatch safety).
-          OR EXISTS (
-            SELECT 1 FROM projection_thread_activities r
-            WHERE r.thread_id = a.thread_id
-              AND r.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
-              AND NOT EXISTS (
-                SELECT 1 FROM projection_thread_activities v
-                WHERE v.thread_id = r.thread_id
-                  AND v.kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
-                  AND json_extract(v.payload_json, '$.choiceId') =
-                    json_extract(r.payload_json, '$.choiceId')
-              )
-          )
-      )
-      SELECT
-        "activityId", "threadId", "turnId", tone, kind, summary, payload,
-        sequence, "createdAt"
-      FROM ranked
-      WHERE row_number <= ${STARTUP_OPERATIONAL_ACTIVITY_LIMIT}
-        OR (
-          kind = 'approval.requested'
-          AND EXISTS (
-            SELECT 1 FROM projection_pending_approvals p
-            WHERE p.thread_id = ranked."threadId"
-              AND p.request_id = json_extract(ranked.payload, '$.requestId')
-              AND p.status = 'pending'
-          )
-        )
-        OR kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
-        OR kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
-        OR (
-          kind = 'user-input.requested'
-          AND EXISTS (
-            SELECT 1 FROM projection_pending_user_inputs u
-            WHERE u.thread_id = ranked."threadId"
-              AND u.request_id = json_extract(ranked.payload, '$.requestId')
-              AND u.status = 'pending'
-          )
-        )
-      ORDER BY
-        "threadId" ASC,
-        CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,
-        sequence ASC,
-        "createdAt" ASC,
-        "activityId" ASC
-    `,
+    execute: () => startupActivityWindowStatement(sql),
   });
 
   const listOperationalSessionRows = SqlSchema.findAll({
@@ -313,4 +238,76 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     listOperationalSessionRows,
     listOperationalLatestTurnRows,
   };
+}
+
+/** The startup activity window; exported so its query plan can be asserted. */
+export function startupActivityWindowStatement(sql: SqlClient.SqlClient) {
+  return sql`
+    WITH ${unresolvedModelChoiceRequestsCtes(sql)},
+    ranked AS (
+      SELECT
+        a.activity_id AS "activityId",
+        a.thread_id AS "threadId",
+        a.turn_id AS "turnId",
+        a.tone,
+        a.kind,
+        a.summary,
+        a.payload_json AS "payload",
+        a.sequence,
+        a.created_at AS "createdAt",
+        ROW_NUMBER() OVER (
+          PARTITION BY a.thread_id
+          ORDER BY
+            CASE WHEN a.sequence IS NULL THEN 0 ELSE 1 END DESC,
+            a.sequence DESC,
+            a.created_at DESC,
+            a.activity_id DESC
+        ) AS row_number
+      FROM projection_thread_activities a
+      LEFT JOIN projection_thread_sessions s ON s.thread_id = a.thread_id
+      WHERE s.status IN ('starting', 'running')
+        OR EXISTS (
+          SELECT 1 FROM projection_pending_approvals p
+          WHERE p.thread_id = a.thread_id AND p.status = 'pending'
+        )
+        OR EXISTS (
+          SELECT 1 FROM projection_pending_user_inputs u
+          WHERE u.thread_id = a.thread_id AND u.status = 'pending'
+        )
+        -- A held delegated first turn must stay blocked after a restart (dispatch safety).
+        -- The held set is computed once, not per activity row (see DelegatedModelChoiceSql).
+        OR a.thread_id IN (SELECT thread_id FROM model_choice_unresolved)
+    )
+    SELECT
+      "activityId", "threadId", "turnId", tone, kind, summary, payload,
+      sequence, "createdAt"
+    FROM ranked
+    WHERE row_number <= ${STARTUP_OPERATIONAL_ACTIVITY_LIMIT}
+      OR (
+        kind = 'approval.requested'
+        AND EXISTS (
+          SELECT 1 FROM projection_pending_approvals p
+          WHERE p.thread_id = ranked."threadId"
+            AND p.request_id = json_extract(ranked.payload, '$.requestId')
+            AND p.status = 'pending'
+        )
+      )
+      OR kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
+      OR kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
+      OR (
+        kind = 'user-input.requested'
+        AND EXISTS (
+          SELECT 1 FROM projection_pending_user_inputs u
+          WHERE u.thread_id = ranked."threadId"
+            AND u.request_id = json_extract(ranked.payload, '$.requestId')
+            AND u.status = 'pending'
+        )
+      )
+    ORDER BY
+      "threadId" ASC,
+      CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,
+      sequence ASC,
+      "createdAt" ASC,
+      "activityId" ASC
+  `;
 }

@@ -1,18 +1,16 @@
 /**
  * Read models for delegated model choice: server-derived model recency (D7) and the restart sweep
- * of unresolved holds (D8). Both use existing indexes and never touch the event store.
+ * of unresolved holds (D8). Both use existing indexes and never touch the event store. The sweep
+ * has no age cutoff, so no hold is ever stranded pending (D-20).
  *
  * @module ProjectionThreads.modelChoice
  */
 import { EventId, IsoDateTime, ThreadId } from "@bigbud/contracts";
-import {
-  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
-  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
-} from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { Effect, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
+import { unresolvedModelChoiceRequestsCtes } from "../DelegatedModelChoiceSql.ts";
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   ListRecentModelSelectionsInput,
@@ -78,15 +76,14 @@ export function makeListPendingDelegatedModelChoiceRequests(
   const query = SqlSchema.findAll({
     Request: ListPendingDelegatedModelChoiceRequestsInput,
     Result: PendingRequestRow,
-    execute: ({ limit, since, after }) => sql`
+    execute: ({ limit, after }) => sql`
+      WITH ${unresolvedModelChoiceRequestsCtes(sql)}
       SELECT
         requested.thread_id AS "threadId", requested.activity_id AS "activityId",
         requested.created_at AS "createdAt", requested.payload_json AS payload
-      FROM projection_thread_activities requested
+      FROM model_choice_unresolved requested
       JOIN projection_threads thread ON thread.thread_id = requested.thread_id
-      WHERE requested.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
-        AND requested.created_at >= ${since}
-        AND thread.deleted_at IS NULL
+      WHERE thread.deleted_at IS NULL
         -- A deleting thread rejects resolution; its deletion removes the hold (M4).
         AND thread.deleting_at IS NULL
         AND (
@@ -96,13 +93,6 @@ export function makeListPendingDelegatedModelChoiceRequests(
             requested.created_at = ${after?.createdAt ?? ""}
             AND requested.activity_id > ${after?.activityId ?? ""}
           )
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM projection_thread_activities resolved
-          WHERE resolved.thread_id = requested.thread_id
-            AND resolved.kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
-            AND json_extract(resolved.payload_json, '$.choiceId') =
-              json_extract(requested.payload_json, '$.choiceId')
         )
       ORDER BY requested.created_at ASC, requested.activity_id ASC
       LIMIT ${limit}

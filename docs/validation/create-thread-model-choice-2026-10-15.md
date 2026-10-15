@@ -212,3 +212,33 @@ Gates after the review fixes (2026-10-15): `bun fmt` 0; `bun lint` 0 (0 errors, 
 `bun run test -- --continue` exit 0 (9/9 tasks): contracts 208, scripts 131, desktop 429 + 6 skipped, mobile-web 212,
 shared 372, web 2964, server 5065 + 104 skipped. Every touched code file is ≤ 400 lines (`server.mobile.ws.test.ts`
 split into `server.test.mobile.ts` helpers and `server.mobile.presence.ws.test.ts`).
+
+## Review fixes, round 2 (2026-10-16)
+
+| Finding                 | Test (red first)                                                                       | Red output                                                                                        | Green |
+| ----------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----- |
+| #1 startup plan         | `ProjectionOperationalStateQuery.modelChoice.test.ts` (old predicate swapped back)     | `expected 'SEARCH r USING INDEX idx_projection_t…' to not include 'projection_thread_activities'` | 3/3   |
+| #2 ambiguous hold       | `OrchestrationEngine.modelChoiceHoldFailure.test.ts` (committed and rejected, retried) | `expected [ 'delegated-message' ] to not include 'delegated-message'` (sent and still queued)     | 2/2   |
+| #3 over-age hold        | `ProjectionThreads.modelChoice.test.ts` (old `since` passed for the red run)           | `expected [ 'c1', 'n1' ] to deeply equal [ 'o1', 'c1' ]` (over-age `o1` stranded)                 | 3/3   |
+| #4 concurrent settings  | `useSettings.storage.test.ts`                                                          | `expected { terminalFontSize: 13 } to deeply equal { terminalFontSize: 18 }`                      | 11/11 |
+| #5 provider-less object | `createThread.modelChoice.test.ts` (`{provider:null}`, `""`, `"   "`, `{model}`)       | 4 failed: each produced a pending hold                                                            | 13/13 |
+
+**Query plan (#1).** The evidence comes from a temporary benchmark (not committed) on an in-memory, fully migrated database (SQLite
+3.51.1, the version `node:sqlite` uses). It held 20,000 activities on one held thread, 20,000 on a resolved one and 300
+threads × 100 activities, with 100 resolved and 3 pending holds. The after queries ran three times each (all runs shown); the
+before query ran once.
+
+| Query             | Before                                                                                      | After                                                                                                     | Rows      |
+| ----------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------- |
+| Startup window    | 48,723 ms; `CORRELATED SCALAR SUBQUERY` → `SEARCH r/v USING INDEX …thread_sequence` per row | 62–63 ms; `MATERIALIZE model_choice_unresolved` via `…kind_created`, `AUTOMATIC COVERING INDEX` anti-join | 404 / 404 |
+| Per-thread window | 11.4 ms (correlated per requested row)                                                      | 9.3 ms (same materialized CTEs)                                                                           | 101 / 101 |
+
+The only correlated subqueries left in the startup plan are the pre-existing pending-approval and user-input lookups,
+which use their own indexes. The committed test asserts that no correlated subquery searches
+`projection_thread_activities`.
+
+Gates after round 2 (2026-10-16): `bun fmt` 0; `bun lint` 0 (0 errors; only the pre-existing `makeStorage` warning in a
+touched file); `bun typecheck` 0 (9/9); `thread-tools:manifest:check` 0; nothing under `OpencodeV2/` changed; focused
+server 76 files / 380 tests, contracts 98, web 32. Full `bun run test -- --continue` exit 0 (9/9 tasks): contracts 208,
+scripts 131, desktop 429 + 6 skipped, mobile-web 212, shared 372, web 2965, server 5073 + 104 skipped. Every touched
+code file is ≤ 400 lines.

@@ -58,16 +58,16 @@ export type ModelDecision = typeof ModelDecision.Type;
 const decodeRequested = Schema.decodeUnknownOption(RequestedModelSelection);
 
 /**
- * `null`, `{}` or an object of only `undefined` fields means "no request" at every entry point,
- * exactly like an omitted field: no hold, no picker, today's behavior (L5).
+ * A request names a provider; anything else means "no request" at every entry point, exactly like
+ * an omitted field: no hold, no picker, today's behavior (L5). So `null`, `{}`, `{ provider: null }`,
+ * `{ provider: "" }`, a whitespace-only provider and `{ model }` without a provider are all absent.
+ * Non-object values (a bare string, an array) are still requests and fall back as invalid.
  */
 export function isAbsentModelSelection(value: unknown): boolean {
   if (value === undefined || value === null) return true;
-  return (
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.values(value).every((entry) => entry === undefined)
-  );
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const provider = (value as { readonly provider?: unknown }).provider;
+  return typeof provider !== "string" || provider.trim().length === 0;
 }
 
 /** Lenient transport input to a bounded request; agent-set `options` are dropped (OD5). */

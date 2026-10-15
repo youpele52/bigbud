@@ -16,7 +16,6 @@ import {
   MODEL_CHOICE_EXPIRE_ATTEMPTS,
   MODEL_CHOICE_SWEEP_BATCH,
   MODEL_CHOICE_SWEEP_INTERVAL_MS,
-  MODEL_CHOICE_SWEEP_MAX_AGE_MS,
   modelChoiceEventEffect,
   modelChoiceExpiryDelayMs,
   type PendingModelChoice,
@@ -73,12 +72,10 @@ export const startDelegatedModelChoiceSupervision = Effect.fn(
   // Pages with a keyset cursor, so rows that keep failing never starve newer holds (M4).
   const sweep = Effect.gen(function* () {
     const nowMs = yield* Clock.currentTimeMillis;
-    const since = new Date(nowMs - MODEL_CHOICE_SWEEP_MAX_AGE_MS).toISOString();
     let after: { readonly createdAt: string; readonly activityId: EventId } | undefined;
     for (;;) {
       const rows = yield* input.activityRepository.listPendingDelegatedModelChoiceRequests({
         limit: MODEL_CHOICE_SWEEP_BATCH,
-        since,
         ...(after !== undefined ? { after } : {}),
       });
       for (const row of rows) {

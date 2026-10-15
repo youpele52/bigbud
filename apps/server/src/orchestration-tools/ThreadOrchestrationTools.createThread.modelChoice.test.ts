@@ -81,7 +81,14 @@ describe("create_thread without modelSelection", () => {
   });
 
   // L5: an empty request from any bridge means "no request", never a hold or picker.
-  it.each([null, {}])("treats modelSelection %j as absent", async (modelSelection) => {
+  it.each([
+    null,
+    {},
+    { provider: null },
+    { provider: "" },
+    { provider: "   " },
+    { model: "gpt-5" },
+  ])("treats modelSelection %j as absent", async (modelSelection) => {
     const baseline = local();
     const baselineResult = await create(baseline, {});
     const system = local();

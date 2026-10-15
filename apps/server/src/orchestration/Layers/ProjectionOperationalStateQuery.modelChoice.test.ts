@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
+import { startupActivityWindowStatement } from "./ProjectionOperationalStateQuery.sql.ts";
 
 const layer = it.layer(
   ProjectionOperationalStateQueryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -79,6 +80,46 @@ layer("operational state keeps unresolved delegated model choices (H1)", (it) =>
       const activities = operational.value.threads[0]!.activities;
       assert.equal(activities.length, 101);
       assert.equal(activities[0]?.id, "held-requested");
+    }),
+  );
+
+  it.effect("keeps a hold whose choice id was resolved only on another thread", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const query = yield* ProjectionOperationalStateQuery;
+      // thread-resolved resolved "choice-done"; thread-held's "choice-held" stays unresolved even
+      // when another thread resolves the same id.
+      yield* sql`
+        INSERT INTO projection_thread_activities (
+          activity_id, thread_id, turn_id, tone, kind, summary, payload_json, sequence, created_at
+        ) VALUES ('foreign-resolved', 'thread-resolved', NULL, 'info',
+          'delegation.model-choice-resolved', 'Chosen', '{"choiceId":"choice-held"}', 2,
+          '2026-01-01T00:00:03.000Z')
+      `;
+      const startup = yield* query.getStartupOperationalState();
+      const held = startup.threads.find((thread) => thread.id === "thread-held");
+      assert.isTrue(held?.activities.some((activity) => activity.id === "held-requested"));
+    }),
+  );
+
+  // Review fix #1: the held set is computed once; no correlated activity lookup per row.
+  it.effect("plans the startup window without a correlated activity subquery", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const [text, params] = startupActivityWindowStatement(sql).compile();
+      const plan = yield* sql.unsafe<{ id: number; parent: number; detail: string }>(
+        `EXPLAIN QUERY PLAN ${text}`,
+        params,
+      );
+      const correlated = new Set(
+        plan.filter((row) => row.detail.startsWith("CORRELATED")).map((row) => row.id),
+      );
+      for (const row of plan) {
+        if (correlated.has(row.parent)) {
+          assert.notInclude(row.detail, "projection_thread_activities");
+        }
+      }
+      assert.isTrue(plan.some((row) => row.detail.includes("MATERIALIZE model_choice_unresolved")));
     }),
   );
 });

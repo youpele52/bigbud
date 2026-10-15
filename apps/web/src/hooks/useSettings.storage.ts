@@ -27,6 +27,7 @@ const isProviderKind = Schema.is(ProviderKind);
  * server can honor hidden providers with no client connected. Hiding is a safety preference, so a
  * local list is unioned into the server's (fails closed). The local key is dropped only after the
  * server confirms the patch; a failed patch keeps it and the next start retries. Idempotent.
+ * Storage is re-read after the patch, so settings written meanwhile are kept.
  */
 export async function migrateHiddenComposerProvidersToServer(input: {
   readonly serverHiddenComposerProviders: ReadonlyArray<ProviderKind>;
@@ -36,27 +37,16 @@ export async function migrateHiddenComposerProvidersToServer(input: {
   const storage =
     input.storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!storage) return "none";
-  const entries: Array<{ readonly key: string; readonly rest: Record<string, unknown> }> = [];
+  const keys = [CLIENT_SETTINGS_STORAGE_KEY, ...CLIENT_SETTINGS_LEGACY_KEYS];
   const merged = new Set<ProviderKind>(input.serverHiddenComposerProviders);
-  for (const key of [CLIENT_SETTINGS_STORAGE_KEY, ...CLIENT_SETTINGS_LEGACY_KEYS]) {
-    const raw = storage.getItem(key);
-    if (raw === null) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      continue;
-    }
-    if (typeof parsed !== "object" || parsed === null || !("hiddenComposerProviders" in parsed)) {
-      continue;
-    }
-    const { hiddenComposerProviders, ...rest } = parsed as Record<string, unknown>;
-    if (Array.isArray(hiddenComposerProviders)) {
-      for (const provider of hiddenComposerProviders.filter(isProviderKind)) merged.add(provider);
-    }
-    entries.push({ key, rest });
+  let found = false;
+  for (const key of keys) {
+    const local = readLocalHiddenProviders(storage, key);
+    if (local === null) continue;
+    found = true;
+    for (const provider of local.hidden) merged.add(provider);
   }
-  if (entries.length === 0) return "none";
+  if (!found) return "none";
   const patched = merged.size > new Set(input.serverHiddenComposerProviders).size;
   if (patched) {
     try {
@@ -65,6 +55,35 @@ export async function migrateHiddenComposerProvidersToServer(input: {
       return "failed";
     }
   }
-  for (const { key, rest } of entries) storage.setItem(key, JSON.stringify(rest));
+  for (const key of keys) {
+    // Re-read: other settings may have been written while the patch was in flight.
+    const local = readLocalHiddenProviders(storage, key);
+    if (local === null) continue;
+    // A provider hidden meanwhile is not on the server yet; keep it for the next start.
+    if (local.hidden.some((provider) => !merged.has(provider))) continue;
+    storage.setItem(key, JSON.stringify(local.rest));
+  }
   return patched ? "migrated" : "dropped";
+}
+
+function readLocalHiddenProviders(
+  storage: Pick<Storage, "getItem">,
+  key: string,
+): { readonly hidden: ReadonlyArray<ProviderKind>; readonly rest: Record<string, unknown> } | null {
+  const raw = storage.getItem(key);
+  if (raw === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || !("hiddenComposerProviders" in parsed)) {
+    return null;
+  }
+  const { hiddenComposerProviders, ...rest } = parsed as Record<string, unknown>;
+  const hidden = Array.isArray(hiddenComposerProviders)
+    ? hiddenComposerProviders.filter(isProviderKind)
+    : [];
+  return { hidden, rest };
 }

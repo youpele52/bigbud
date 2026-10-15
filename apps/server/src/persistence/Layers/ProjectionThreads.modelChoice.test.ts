@@ -99,10 +99,7 @@ layer("delegated model choice persistence reads", (it) => {
       yield* add("done", "s2", "delegation.model-choice-resolved", "c2");
       yield* add("gone", "r3", "delegation.model-choice-requested", "c3");
       yield* sql`UPDATE projection_threads SET deleted_at = ${"2026-10-15T10:01:00.000Z"} WHERE thread_id = ${"gone"}`;
-      const pending = yield* activities.listPendingDelegatedModelChoiceRequests({
-        limit: 50,
-        since: "2026-10-01T00:00:00.000Z",
-      });
+      const pending = yield* activities.listPendingDelegatedModelChoiceRequests({ limit: 50 });
       assert.deepStrictEqual(
         pending.map((row) => [row.threadId, (row.payload as { choiceId: string }).choiceId]),
         [["held", "c1"]],
@@ -110,7 +107,7 @@ layer("delegated model choice persistence reads", (it) => {
     }),
   );
 
-  it.effect("skips deleting threads and old requests, and pages with a cursor (M4, L6)", () =>
+  it.effect("skips deleting threads, keeps over-age holds and pages with a cursor (M4)", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const activities = yield* ProjectionThreadActivityRepository;
@@ -130,21 +127,22 @@ layer("delegated model choice persistence reads", (it) => {
       }
       yield* add("deleting", "q0", "d0", "2026-10-15T09:00:00.000Z");
       yield* sql`UPDATE projection_threads SET deleting_at = ${"2026-10-15T10:01:00.000Z"} WHERE thread_id = ${"deleting"}`;
+      // A hold must never stay pending, however old (review fix #3).
       yield* add("old", "q1", "o1", "2026-09-01T00:00:00.000Z");
       yield* add("p1", "q2", "n1", "2026-10-15T10:00:01.000Z");
       yield* add("p2", "q3", "n2", "2026-10-15T10:00:02.000Z");
       yield* add("p3", "q4", "n3", "2026-10-15T10:00:03.000Z");
-      const since = "2026-10-08T10:00:00.000Z";
-      const first = yield* activities.listPendingDelegatedModelChoiceRequests({ limit: 2, since });
+      const first = yield* activities.listPendingDelegatedModelChoiceRequests({ limit: 2 });
       // "c1" is the earlier test's still-pending hold on the shared database.
-      assert.deepStrictEqual(choices(first), ["c1", "n1"]);
-      const last = first.at(-1)!;
-      const next = yield* activities.listPendingDelegatedModelChoiceRequests({
-        limit: 2,
-        since,
-        after: { createdAt: last.createdAt, activityId: last.activityId },
-      });
-      assert.deepStrictEqual(choices(next), ["n2", "n3"]);
+      assert.deepStrictEqual(choices(first), ["o1", "c1"]);
+      const page = (after: (typeof first)[number]) =>
+        activities.listPendingDelegatedModelChoiceRequests({
+          limit: 2,
+          after: { createdAt: after.createdAt, activityId: after.activityId },
+        });
+      const second = yield* page(first.at(-1)!);
+      assert.deepStrictEqual(choices(second), ["n1", "n2"]);
+      assert.deepStrictEqual(choices(yield* page(second.at(-1)!)), ["n3"]);
     }),
   );
 });
