@@ -20,6 +20,28 @@ describe("provider transcript recovery", () => {
     ).toBe(true);
   });
 
+  it("rebuilds context for a message with attachments (attachments are forwarded separately)", () => {
+    const image = { type: "image", id: "img-1", name: "shot.png", mimeType: "image/png" };
+    expect(
+      shouldRebuildProviderContextFromTranscript({
+        thread: { messages: [message("user", "first"), message("assistant", "answer")] },
+        bootstrapThread: null,
+        activeSession: undefined,
+        messageText: "what is in this image?",
+        attachments: [image],
+      } as never),
+    ).toBe(true);
+    expect(
+      shouldRebuildProviderContextFromTranscript({
+        thread: { messages: [] },
+        bootstrapThread: { messages: [message("user", "source"), message("assistant", "reply")] },
+        activeSession: undefined,
+        messageText: "continue with this file",
+        attachments: [image],
+      } as never),
+    ).toBe(true);
+  });
+
   it("does not replay a trailing uncertain user or streaming assistant turn", () => {
     const input = buildResumedTurnInput({
       transcriptThread: {

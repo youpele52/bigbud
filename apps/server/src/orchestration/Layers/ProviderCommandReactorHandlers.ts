@@ -155,6 +155,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         threadId: event.payload.threadId,
         context: "message-validation",
         detail,
+        failureClass: "invalid-request",
         createdAt: event.payload.createdAt,
       });
       return;

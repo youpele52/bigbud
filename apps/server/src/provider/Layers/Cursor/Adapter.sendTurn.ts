@@ -11,6 +11,7 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import { mapAcpPromptToAdapterError } from "../../acp/AcpAdapterSupport.ts";
 import { type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
 import {
   type CursorEventStamp,
@@ -119,7 +120,7 @@ export function makeSendTurnEffect(
 
     const result = yield* ctx.acp.prompt({ prompt: promptParts }).pipe(
       Effect.mapError((error) =>
-        mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+        mapAcpPromptToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
       ),
       Effect.tapError(() => Effect.sync(() => settleIdleCursorTurn(ctx))),
     );

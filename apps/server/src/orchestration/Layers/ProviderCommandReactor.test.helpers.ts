@@ -122,6 +122,7 @@ export async function createHarness(input?: {
   readonly interruptTurnFailure?: string;
   readonly interruptTurnLeavesSessionActive?: boolean;
   readonly stopSessionFailure?: string;
+  readonly sessionRecovery?: "resume-restart" | "fresh-restart" | "unsupported";
   readonly browserCloseFailure?: string;
   readonly terminalCloseFailure?: string;
   readonly discoveryCatalog?: ServerDiscoveryCatalog;

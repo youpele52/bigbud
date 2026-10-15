@@ -14,6 +14,7 @@ import {
   TurnId,
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
+import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -188,6 +189,8 @@ export const ThreadTurnStartFailedPayload = Schema.Struct({
   threadId: ThreadId,
   context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
   detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  /** Absent on events written before classification existed. */
+  failureClass: Schema.optional(TurnStartFailureClass),
   createdAt: IsoDateTime,
 });
 

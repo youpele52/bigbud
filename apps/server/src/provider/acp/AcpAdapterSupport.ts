@@ -37,6 +37,26 @@ export function mapAcpToAdapterError(
   });
 }
 
+/**
+ * Maps an ACP prompt failure. The turn already started when the prompt was sent, so a process
+ * exit leaves its outcome uncertain: classify it `unsafe-to-replay` so it is never auto-resent.
+ */
+export function mapAcpPromptToAdapterError(
+  provider: ProviderKind,
+  threadId: ThreadId,
+  method: string,
+  error: EffectAcpErrors.AcpError,
+): ProviderAdapterError {
+  return Schema.is(EffectAcpErrors.AcpProcessExitedError)(error)
+    ? new ProviderAdapterSessionClosedError({
+        provider,
+        threadId,
+        failureClass: "unsafe-to-replay",
+        cause: error,
+      })
+    : mapAcpToAdapterError(provider, threadId, method, error);
+}
+
 export function acpPermissionOutcome(decision: ProviderApprovalDecision): string {
   switch (decision) {
     case "acceptForSession":

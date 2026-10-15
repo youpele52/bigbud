@@ -156,6 +156,14 @@ export interface Project {
   scripts: ProjectScript[];
 }
 
+/** Client view of the latest turn-start request; drives the reconnecting notice. */
+export interface ThreadTurnStartRequest {
+  messageId: MessageId;
+  requestedAt: string;
+  outcome: "pending" | "started" | "failed";
+  settledAt: string | null;
+}
+
 export interface Thread {
   id: ThreadId;
   codexThreadId: string | null;
@@ -189,6 +197,7 @@ export interface Thread {
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
+  turnStartRequest?: ThreadTurnStartRequest | null | undefined;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;

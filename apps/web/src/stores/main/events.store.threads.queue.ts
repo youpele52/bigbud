@@ -1,6 +1,7 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
 
 import { updateThreadState } from "./helpers.store";
+import { clearPendingTurnStartRequest } from "./events.store.threads.turnStartRequest";
 import { type AppState } from "./main.store";
 
 export function applyThreadQueueEvent(
@@ -17,6 +18,11 @@ export function applyThreadQueueEvent(
         return {
           ...thread,
           queuedPrompts: [...queuedPrompts, event.payload.prompt],
+          // A busy turn start is re-queued as a prompt: it is no longer a pending start.
+          turnStartRequest: clearPendingTurnStartRequest(
+            thread.turnStartRequest,
+            event.payload.prompt.id,
+          ),
           updatedAt: event.occurredAt,
         };
       });

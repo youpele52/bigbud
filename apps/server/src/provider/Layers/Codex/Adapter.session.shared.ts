@@ -44,6 +44,7 @@ function toModelSelectionError(
         provider: PROVIDER,
         operation,
         issue: cause.issue,
+        failureClass: "invalid-request",
         cause,
       })
     : undefined;

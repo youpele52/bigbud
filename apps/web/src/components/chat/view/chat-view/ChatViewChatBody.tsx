@@ -32,6 +32,7 @@ import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
 import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
 import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
 import { StatusBanner } from "~/components/common/StatusBanner";
+import { ThreadRecoveryNotice } from "../ThreadRecoveryNotice";
 
 interface ChatViewChatBodyProps {
   readonly base: ChatViewBaseState;
@@ -123,6 +124,9 @@ export function ChatViewChatBody({
         error={base.activeThread!.error}
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
       />
+      {base.isServerThread && base.activeThread ? (
+        <ThreadRecoveryNotice thread={base.activeThread} />
+      ) : null}
       {!retainedHistory ? (
         <AccessModeInfoBanner
           threadId={base.threadId}

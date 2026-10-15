@@ -1,3 +1,4 @@
+import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Schema } from "effect";
 import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
 import { ProviderTurnAdmissionConflict } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
@@ -6,7 +7,7 @@ import {
   V2_SHARED_BINDING_CONFLICT_DETAILS,
 } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { V2AdmissionUnconfirmed } from "./Admission.ts";
-import { V2HttpStatusError } from "./Client.errors.ts";
+import { V2HttpStatusError, v2HttpFailureStatus } from "./Client.errors.ts";
 import { V2ResponseSizeError } from "./Client.response.ts";
 
 /** Only local classifications escape the adapter; native SDK causes may contain credentials. */
@@ -28,4 +29,16 @@ export function v2ExecutionIssue(error: unknown): string {
   )
     return error.message.slice(0, 512);
   return "OpenCode v2 operation failed or remains unconfirmed; no automatic resend or provider fallback.";
+}
+
+/**
+ * Turn-start class for a V2 failure. V2 never resends automatically, so anything that is not a
+ * provable auth, request or busy failure is `unsafe-to-replay` (user action, no auto-recovery).
+ */
+export function v2ExecutionFailureClass(error: unknown, issue: string): TurnStartFailureClass {
+  const status = v2HttpFailureStatus(error);
+  if (status === 401 || status === 402 || status === 403 || status === 429) return "auth-or-quota";
+  if (issue === providerAttachmentPolicy("opencodeV2").unavailableReason) return "invalid-request";
+  if (/already active/i.test(issue)) return "busy";
+  return "unsafe-to-replay";
 }

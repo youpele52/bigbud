@@ -3,7 +3,7 @@ import { makeV2RuntimeAdapter } from "./Adapter.runtime.ts";
 import { V2IsolatedMcp } from "./Runtime.mcp.ts";
 import type { V2IsolatedRuntimeOptions } from "./Runtime.types.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
-import { v2ExecutionIssue } from "./Adapter.execution.errors.ts";
+import { v2ExecutionFailureClass, v2ExecutionIssue } from "./Adapter.execution.errors.ts";
 
 /** Explicit disposable/legacy test entry. Production imports Adapter.shared, never this MCP harness. */
 export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Adapter")(function* (
@@ -15,13 +15,16 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
   const call = <T>(operation: string, run: () => Promise<T>) =>
     Effect.tryPromise({
       try: () => result.runtime.authorized(run),
-      catch: (error) =>
-        new ProviderAdapterValidationError({
+      catch: (error) => {
+        const issue = v2ExecutionIssue(error);
+        return new ProviderAdapterValidationError({
           provider: "opencodeV2",
           operation,
-          issue: v2ExecutionIssue(error),
+          issue,
+          failureClass: v2ExecutionFailureClass(error, issue),
           cause: { name: error instanceof Error ? error.name : "UnknownFailure" },
-        }),
+        });
+      },
     });
   return {
     ...result,

@@ -161,14 +161,15 @@ describe("ProviderCommandReactor", () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
-    harness.sendTurn.mockImplementationOnce((() =>
+    // Process errors are session-dead: revive and fresh replay also fail before one failure lands.
+    harness.sendTurn.mockImplementation((() =>
       Effect.fail(
         new ProviderAdapterProcessError({
           provider: "pi",
           threadId: "thread-1",
           detail: "Failed to start Pi RPC process.",
         }),
-      )) as unknown as Parameters<typeof harness.sendTurn.mockImplementationOnce>[0]);
+      )) as unknown as Parameters<typeof harness.sendTurn.mockImplementation>[0]);
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -206,8 +207,10 @@ describe("ProviderCommandReactor", () => {
       summary: "Provider turn start failed",
       payload: {
         detail: "Failed to start Pi RPC process.",
+        failureClass: "session-dead",
       },
     });
+    expect(harness.sendTurn.mock.calls).toHaveLength(3);
   });
 
   it("retries a context-limit failure once in a fresh session", async () => {

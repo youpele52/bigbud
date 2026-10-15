@@ -26,6 +26,7 @@ import {
   buildThreadSnapshot,
   isSessionNotFoundError,
   toMessage,
+  toSendTurnError,
 } from "./Adapter.types.ts";
 export { makeStartSession } from "./Adapter.session.start.ts";
 export type { SessionOpsDeps } from "./Adapter.session.start.ts";
@@ -130,13 +131,7 @@ export const makeSendTurn =
             }
           }
         },
-        catch: (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session.send",
-            detail: toMessage(cause, "Failed to send GitHub Copilot turn."),
-            cause,
-          }),
+        catch: toSendTurnError,
       });
 
       return {

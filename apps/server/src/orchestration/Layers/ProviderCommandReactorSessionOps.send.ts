@@ -23,13 +23,15 @@ import type {
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
+import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 
 export const sendTurnAttempt = (
   services: SessionOpServices,
   ensureSession: ReturnType<typeof ensureSessionForThread>,
 ) =>
   Effect.fn("sendTurnAttempt")(function* (
-    input: SendTurnForThreadInput & ResolvedTurnExecutionSettings,
+    input: SendTurnForThreadInput &
+      ResolvedTurnExecutionSettings & { readonly recovery?: TurnStartRecoveryAttempt },
   ) {
     const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
@@ -71,19 +73,24 @@ export const sendTurnAttempt = (
       activeSession,
       activities: thread.activities,
     });
-    const shouldBootstrapFromTranscript = shouldRebuildProviderContextFromTranscript({
-      thread,
-      bootstrapThread,
-      activeSession,
-      messageText: input.messageText,
-      attachments: normalizedAttachments,
-    });
+    // A revive resumes the provider's own history, so it must not replay the transcript.
+    const reviving = input.recovery?.mode === "revive";
+    const shouldBootstrapFromTranscript =
+      !reviving &&
+      shouldRebuildProviderContextFromTranscript({
+        thread,
+        bootstrapThread,
+        activeSession,
+        messageText: input.messageText,
+        attachments: normalizedAttachments,
+      });
 
     yield* ensureSession(input.threadId, input.createdAt, {
       ...(input.modelSelectionWasCaptured ? { modelSelection: input.modelSelection } : {}),
       runtimeMode: input.runtimeMode,
       requireExactModel: input.modelSelectionWasCaptured,
-      restartFreshIfInactive: shouldBootstrapFromTranscript,
+      restartFreshIfInactive: shouldBootstrapFromTranscript || input.recovery?.mode === "fresh",
+      ...(input.recovery?.mode === "revive" ? { resumeCursor: input.recovery.resumeCursor } : {}),
     });
     activeSession = yield* providerService
       .listSessions()

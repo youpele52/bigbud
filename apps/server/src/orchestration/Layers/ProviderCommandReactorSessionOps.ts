@@ -28,7 +28,7 @@ import type {
 } from "./ProviderCommandReactorSessionOps.types.ts";
 
 import { sendTurnAttempt } from "./ProviderCommandReactorSessionOps.send.ts";
-import { withOneShotContextLimitRecovery } from "./ProviderCommandReactorSessionOps.recovery.ts";
+import { withTurnStartRecovery } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
@@ -218,7 +218,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     if (ongoingWorkError) return yield* ongoingWorkError;
 
     const startedSession = yield* start(
-      options?.restartFreshIfInactive ? { fresh: true } : undefined,
+      options?.restartFreshIfInactive
+        ? { fresh: true }
+        : options?.resumeCursor !== undefined
+          ? { resumeCursor: options.resumeCursor }
+          : undefined,
     );
     capabilityContextStates.delete(threadId);
     yield* bindSessionToThread(startedSession);
@@ -240,11 +244,17 @@ export const sendTurnForThread = (services: SessionOpServices) =>
         operation: "ProviderCommandReactor.sendTurnForThread",
         issue: attachmentIssue,
       });
-    yield* withOneShotContextLimitRecovery({
+    yield* withTurnStartRecovery({
       threadId: input.threadId,
+      provider: effectiveInput.modelSelection.provider,
       providerService: services.providerService,
+      orchestrationEngine: services.orchestrationEngine,
       states: services.capabilityContextStates,
-      attempt: () => sendTurnAttempt(services, ensureSessionForThread(services))(effectiveInput),
+      attempt: (recovery) =>
+        sendTurnAttempt(
+          services,
+          ensureSessionForThread(services),
+        )({ ...effectiveInput, ...(recovery ? { recovery } : {}) }),
     });
   });
 

@@ -11,6 +11,7 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import { mapAcpPromptToAdapterError } from "../../acp/AcpAdapterSupport.ts";
 import { type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
 import {
   type DevinEventStamp,
@@ -113,7 +114,7 @@ export function makeSendTurnEffect(
 
     const result = yield* ctx.acp.prompt({ prompt: promptParts }).pipe(
       Effect.mapError((error) =>
-        mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+        mapAcpPromptToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
       ),
       Effect.tapError(() => Effect.sync(() => settleIdleDevinTurn(ctx))),
     );

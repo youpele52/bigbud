@@ -5,7 +5,7 @@ import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.t
 import { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2IsolatedRuntimeOptions } from "./Runtime.types.ts";
 import { makeV2LearningReview } from "./Runtime.learning.ts";
-import { v2ExecutionIssue } from "./Adapter.execution.errors.ts";
+import { v2ExecutionFailureClass, v2ExecutionIssue } from "./Adapter.execution.errors.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
@@ -54,13 +54,16 @@ export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* 
           : ["startSession", "sendTurn"].includes(operation)
             ? runV2Caller(signal, operation === "sendTurn", () => runtime.authorized(run))
             : runtime.authorized(run),
-      catch: (error) =>
-        new ProviderAdapterValidationError({
+      catch: (error) => {
+        const issue = v2ExecutionIssue(error);
+        return new ProviderAdapterValidationError({
           provider: "opencodeV2",
           operation,
-          issue: v2ExecutionIssue(error),
+          issue,
+          failureClass: v2ExecutionFailureClass(error, issue),
           cause: { name: error instanceof Error ? error.name : "UnknownFailure" },
-        }),
+        });
+      },
     });
   const adapter: OpencodeV2AdapterShape = {
     provider: "opencodeV2",

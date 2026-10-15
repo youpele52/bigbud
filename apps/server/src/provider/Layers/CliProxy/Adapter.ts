@@ -118,7 +118,7 @@ function remapEvent(event: ProviderRuntimeEvent): ProviderRuntimeEvent {
   return { ...event, provider: PROVIDER };
 }
 
-function remapError(error: ProviderAdapterError): ProviderAdapterError {
+export function remapError(error: ProviderAdapterError): ProviderAdapterError {
   switch (error._tag) {
     case "ProviderAdapterValidationError":
       return new ProviderAdapterValidationError({ ...error, provider: PROVIDER });

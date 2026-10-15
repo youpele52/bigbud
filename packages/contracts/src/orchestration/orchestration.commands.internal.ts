@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import {
   CheckpointRef,
   CommandId,
@@ -109,6 +110,7 @@ const ThreadTurnStartFailedCommand = Schema.Struct({
   threadId: ThreadId,
   context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
   detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  failureClass: Schema.optional(TurnStartFailureClass),
   createdAt: IsoDateTime,
 });
 

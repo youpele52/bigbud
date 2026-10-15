@@ -1,10 +1,11 @@
 import { CommandId, type OrchestrationMessage, type ThreadId } from "@bigbud/contracts";
-import { Cause, Effect, Schema } from "effect";
+import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
+import { Cause, Effect } from "effect";
 
-import { ProviderAdapterValidationError, ProviderValidationError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
+import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
 
 type TurnStartRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -15,22 +16,9 @@ type RecordTurnStartFailure = (input: {
   readonly threadId: ThreadId;
   readonly context: "provider-turn-start";
   readonly detail: string;
+  readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
-
-const PROVIDER_BUSY_TURN_DETAIL =
-  /already active|ongoing provider work|cannot start another turn|unresolved turn/i;
-
-export function isProviderTurnBusyCause(cause: Cause.Cause<unknown>): boolean {
-  const error = Cause.squash(cause);
-  if (
-    Schema.is(ProviderAdapterValidationError)(error) ||
-    Schema.is(ProviderValidationError)(error)
-  ) {
-    return PROVIDER_BUSY_TURN_DETAIL.test(error.issue);
-  }
-  return PROVIDER_BUSY_TURN_DETAIL.test(formatProviderServiceCauseDetail(cause));
-}
 
 function canQueueTurnStart(input: {
   readonly event: TurnStartRequestedEvent;
@@ -86,14 +74,16 @@ export function makeHandleTurnStartFailure(input: {
     readonly cause: Cause.Cause<unknown>;
   }) => {
     const detail = formatProviderServiceCauseDetail(failure.cause);
+    const failureClass = classifyTurnStartFailure(failure.cause);
     if (
-      !isProviderTurnBusyCause(failure.cause) ||
+      failureClass !== "busy" ||
       !canQueueTurnStart({ event: failure.event, message: failure.message })
     ) {
       return input.recordTurnStartFailure({
         threadId: failure.event.payload.threadId,
         context: "provider-turn-start",
         detail,
+        failureClass,
         createdAt: failure.event.payload.createdAt,
       });
     }
@@ -116,6 +106,7 @@ export function makeHandleTurnStartFailure(input: {
           threadId: failure.event.payload.threadId,
           context: "provider-turn-start",
           detail: `${detail} Failed to queue the follow-up prompt: ${formatProviderServiceCauseDetail(queueCause)}`,
+          failureClass,
           createdAt: failure.event.payload.createdAt,
         }),
       ),

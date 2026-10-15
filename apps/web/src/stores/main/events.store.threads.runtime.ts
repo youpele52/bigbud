@@ -26,6 +26,10 @@ import {
   getProviderTurnStartFailureDetail,
   upsertThreadMessage,
 } from "./events.store.threads.runtime.messages";
+import {
+  clearPendingTurnStartRequest,
+  settleTurnStartRequest,
+} from "./events.store.threads.turnStartRequest";
 
 export function applyThreadRuntimeEvent(
   state: AppState,
@@ -152,10 +156,20 @@ export function applyThreadRuntimeEvent(
           normalizedSession,
         );
 
+        const turnStarted = normalizedSession.status === "running" && incomingActiveTurnId !== null;
         return {
           ...thread,
           session,
           ...(providerAgents !== undefined ? { providerAgents } : {}),
+          ...(turnStarted
+            ? {
+                turnStartRequest: settleTurnStartRequest(
+                  thread.turnStartRequest,
+                  "started",
+                  event.occurredAt,
+                ),
+              }
+            : {}),
           error: sanitizeThreadErrorMessage(incomingSession.lastError),
           latestTurn:
             normalizedSession.status === "running" && incomingActiveTurnId !== null
@@ -197,6 +211,7 @@ export function applyThreadRuntimeEvent(
           ? thread
           : {
               ...thread,
+              turnStartRequest: clearPendingTurnStartRequest(thread.turnStartRequest),
               session: {
                 ...thread.session,
                 status: "closed",
@@ -238,6 +253,11 @@ export function applyThreadRuntimeEvent(
                 assistantMessageId: thread.latestTurn.assistantMessageId,
                 sourceProposedPlan: thread.latestTurn.sourceProposedPlan,
               }),
+        turnStartRequest: settleTurnStartRequest(
+          thread.turnStartRequest,
+          "failed",
+          event.occurredAt,
+        ),
         error: sanitizeThreadErrorMessage(event.payload.detail) ?? event.payload.detail,
         updatedAt: event.occurredAt,
       }));

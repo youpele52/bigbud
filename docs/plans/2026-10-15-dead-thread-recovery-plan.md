@@ -1,7 +1,7 @@
 # Dead thread recovery: OpenCode V2 dead-backend retirement, in-place recovery, fork fallback
 
 **Date:** 15 October, 2026
-**Status:** In progress (Phase 1 implemented in staging worktree `fix/dead-thread-recovery`; Phases 2–3 pending)
+**Status:** In progress (Phases 1–2 implemented in staging worktree `fix/dead-thread-recovery`; Phase 3 pending)
 **Owner:** bigbud server/provider maintainers (implementation agent on branch `fix/dead-thread-recovery`)
 
 **Inspected tree:** worktree `.claude/worktrees/dead-thread-recovery`, branch `fix/dead-thread-recovery` at `228464334` (clean). The guide's status list has no "Ready for implementation"; the requester asked for it explicitly, so it is used here and replaced by "In progress"/"Implemented" as phases land.
@@ -108,10 +108,34 @@ See Problem for line references. More context:
 - **Q1 accepted.** A live retirement proof may carry the optional `deadBackendReceiptFence: {instance, digest}` with `receiptsSettled: false`. At settlement, every reserved receipt must be covered by the sealed reboot checkpoint or by this instance's fence; any other reserved receipt (reserved by the live instance) still blocks. Later reads re-verify the signed fence and reboot seal by digest and do not recompute coverage, because fenced receipts belong to dead processes. Proofs without a fence keep the original `proved()` rule, byte-identical. The logic lives in `Orchestration.receipts.fence.ts` and `Orchestration.enrollment.retirement.deadBackend.ts`. R1 is resolved by this.
 - **Correction to Problem item 2 and D10.** Graceful shutdown already detaches. `Runtime.close()` → `teardown.drain()` → `stop()` → `releaseV2Session` → `releaseV2PreparedSession` → `onThreadToolsCleanup` detaches with the normal proof; a pre-change test passed without any code change. Records stay `active` only when a backend dies without finalizers (SIGKILL, crash, watcher hard kill), when the proof is unproved, or when the unbounded drain is killed. Task 1.7 therefore bounds this existing path rather than adding a new one. `V2RuntimeTeardown.beginShutdown()` creates one shared 5 s signal, and `releaseV2Session` → `releaseV2PreparedSession` → `onThreadToolsCleanup(signal)` resolves at the bound and swallows failure, leaving signed records for dead-backend recovery. `bridge.close()` is unchanged.
 - **D6 implementation choices.**
-  - Recovery does not rewrite the dead owner's enrollment to `revoked`. The retirement phase carries the truth, and rewriting would invalidate the revision `startExclusive` already read. Retries resume from `retiring` or `detach-acknowledged`.
+  - **Deliberate deviation from D6 (accepted in review, 15 October 2026).** Recovery does not rewrite the dead owner's enrollment to `revoked`. The retirement phase carries the truth, and rewriting would invalidate the revision `startExclusive` already read. Retries resume from `retiring` or `detach-acknowledged`.
+  - **Deliberate deviation from D4/D5 verification (accepted in review, 15 October 2026).** A fence-bearing proof, whether dead-backend or Q1 live, has its receipt coverage computed exactly once, at settlement. Later `assertSettled` reads re-verify only the signed fence and the reboot-seal digests. Fenced receipts belong to dead processes and cannot change outcome. Recomputing coverage would let an unrelated in-flight receipt of the live instance un-settle unrelated threads.
   - Recovery is single-flight per retirement identity within the process.
   - The context exists only when `BackendInstance` is provided, the realpath of its `stateDir` equals the thread-tools state directory, and the per-instance fence exists. Attribution markers are written whenever the lock holder matches.
 - **D4 detail.** `supersededRebootCheckpointDigest` is stored on the retirement record, not in the proof. `StateDirLockLive` moved to `startup/backendInstance.ts`, which provides `BackendInstance`, to avoid an import cycle.
+
+**Addendum, 15 October 2026 (Phase 2 implementation).** These notes amend D11–D15; the original text stays as written.
+
+- **G2a decided: no fresh replay for OpenCode V2 (D13).** `resolveV2RuntimeBinding` derives `nativeSessionId = ses_bigbud_ + sha256([storageIdentity, threadId])`. That value does not depend on the session epoch or the resume cursor, and `startSessionFresh` differs from `startSession` only by not reusing the persisted cursor. A "fresh" V2 start therefore reattaches to the same native session and its history, and a transcript replay would duplicate that history. `FRESH_REPLAY_EXCLUDED_PROVIDERS = {opencodeV2}`, so V2 gets at most the revive step and Phase 3's fork stays its fallback. Test: `ProviderCommandReactorSessionOps.opencodeV2.fresh.test.ts`.
+- **Adapter-provided classes (D11).**
+  - All five provider adapter errors carry the optional `failureClass`, not only validation, request and process errors, so an adapter can mark a typed session error as unsafe.
+  - OpenCode V2 sets a class on every error: HTTP 401/402/403/429 → `auth-or-quota`, "already active" → `busy`, and everything else → `unsafe-to-replay`, because V2 never resends automatically. In practice the reactor does not auto-recover V2 turn-start failures; Phase 1 owns V2 dead-backend recovery.
+  - Cursor and Devin (ACP): a process exit during `session/prompt` → `unsafe-to-replay`. The turn had already started, so its outcome is uncertain. This deliberately tightens D11 for correctness. The trade-off is that an ACP process that died while idle is also reported at prompt time, so such threads are not auto-recovered in Phase 2. Detecting idle exits is a follow-up.
+  - Copilot: a `session.send` that still reports "session not found" after its own renewal → `session-dead`. Codex model-selection errors → `invalid-request`.
+- **Classifier order (D11).** Order is: explicit class, busy, unsafe-to-replay text, auth-or-quota text, context-limit, typed session errors, provider recovery refusals ("cannot recover thread", "does not support session recovery", "no provider resume state" → `session-dead`), typed validation → `invalid-request`, session-dead text, and finally `unknown`. `isProviderTurnBusyCause` moved into the classifier so busy detection has one implementation.
+- **Recovery mechanics (D12).**
+  - Revive: capture the live session's resume cursor (stopping drops the binding), stop the session and ignore errors, then start with that cursor and no transcript replay. Revive runs only when a cursor exists and the provider's `sessionRecovery` is not `fresh-restart` or `unsupported`.
+  - Fresh: stop again, then call `startSessionFresh` with a forced transcript rebuild. Replay goes through `buildResumedTurnInput`, which drops the uncertain trailing turn.
+  - Bound: at most two extra attempts while handling one `thread.turn-start-requested`. Redelivery is deduplicated by `markTurnStartHandled`.
+  - `withOneShotContextLimitRecovery` is replaced by `withTurnStartRecovery`; `context-limit` behavior is unchanged.
+  - Behavior change: a typed `ProviderAdapterProcessError` at turn start is now recovered before it is recorded. The existing "concise process details" test now fails all three attempts.
+- **Recovery activities (D12).** Kind `provider.session.recovery`, payload `{step: revive|fresh-replay, outcome: started|succeeded|failed, provider, failureClass?}`. Tone is `info` for `started` and `succeeded`, and `error` for `failed`. Deviation: the contracts tone enum has no `warning`, so the web derives the amber "degraded" state from a `fresh-replay` that succeeded.
+- **Web notice (D15).** The web `Thread.turnStartRequest` (`pending` | `started` | `failed`):
+  - is set by `thread.turn-start-requested`;
+  - is settled by a running `thread.session-set` or by `thread.turn-start-failed`;
+  - is cleared by an interrupt, a session stop, or a re-queue as a prompt.
+
+  `ThreadRecoveryNotice` renders in `ChatViewChatBody.tsx` (`role="status"`, `aria-live="polite"`). It appears only after the 5 s display threshold, or once the server reports a recovery step. Green or amber stays visible for 6 s after the turn starts; red stays until the next request.
 
 ## Definition of Done
 
@@ -225,6 +249,7 @@ Depends on G1 only for the V2 classification texts.
 #### 2.4 Gate G2a
 
 - Test `ProviderCommandReactorSessionOps.opencodeV2.fresh.test.ts` decides D13 and records the outcome in this plan.
+- **Outcome (15 October 2026): fresh replay is disabled for `opencodeV2`.** A fresh V2 start resolves the same native session as the retired one, so it is not isolated. See the Phase 2 addendum.
 
 #### 2.5 Attachments
 
