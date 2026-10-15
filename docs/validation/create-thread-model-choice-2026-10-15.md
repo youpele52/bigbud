@@ -141,3 +141,44 @@ Gate commands (all exit 0):
 - `bun fmt` 0, `bun lint` 0, `bun run --cwd apps/server typecheck` 0.
 - Line counts: every new/edited code file ≤ 400 (`copilotThreadOrchestrationTools.ts` 396 → 148 after the split; largest edited `Claude/Adapter.test.ts` 380).
 - Deviations: D-9 (v1 surface frozen, Codex opts in), D-10 (lenient `modelSelection` schema), D-11 (pre-approval and catalog wording, Copilot split).
+
+## Full gate (after Phase 4)
+
+Load before the run: `uptime` 1/5/15-minute averages 25.14 / 13.04 / 9.96 (high; other sessions active); after: 9.39 /
+13.85 / 13.47. No file timed out, so no single-file rerun was needed.
+
+| Command                      | Exit | Result                                  |
+| ---------------------------- | ---- | --------------------------------------- |
+| `bun fmt:check`              | 0    | clean                                   |
+| `bun lint`                   | 0    | 0 errors; test file length check passed |
+| `bun typecheck`              | 0    | 9/9 tasks                               |
+| `bun run test -- --continue` | 0    | 9/9 tasks                               |
+
+Per-package tests (`bun run test`): contracts 36 files / 208 tests; scripts 24 / 131; desktop 72 passed + 3 skipped files,
+429 passed + 6 skipped tests; mobile-web 41 / 212; shared 50 / 372; web 478 / 2959; server 1154 passed + 45 skipped
+files, 5056 passed + 104 skipped tests.
+
+Browser tests are not part of `bun run test`; the ones touched by this work pass (see Phase 3). The pre-existing
+`SettingsPanels.browser.tsx` failure (2 tests) reproduces at the base and is unrelated.
+
+## Acceptance criteria (self-review, AC12 deferred with Phase 5)
+
+| AC   | Status     | Evidence                                                                                                                                          |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1  | Met        | Codex (opt-in, D-9), Copilot, MCP (Claude, Cursor, Devin, Codex-remote, ACP-remote) and Pi bridge tests; output `modelChoice`; no-input path test |
+| AC2  | Met        | `createThread.modelChoice` immediate-start test                                                                                                   |
+| AC3  | Met (auto) | hold tests, `refresh` spy, picker/countdown browser tests; manual §8.4 check not performed                                                        |
+| AC4  | Met        | no-client, no-alternatives and `"parent"` cases in `modelChoice` tests                                                                            |
+| AC5  | Met        | `ThreadWatchReactor.modelChoice` (timer, startup sweep past/future, 30 s sweep); history hydration (D-2)                                          |
+| AC6  | Met        | every reason in `ThreadOrchestrationTools.modelChoice.test.ts`                                                                                    |
+| AC7  | Met        | `list_available_models` in every AC1 bridge; read-only; ranked usable models                                                                      |
+| AC8  | Met        | resolved activity, `get_thread_status.modelChoice`, notice and trunk card (reload shows only the request, D-7)                                    |
+| AC9  | Met        | stored decision reused on retry; deterministic `createdAt`                                                                                        |
+| AC10 | Met        | Phase 1 decider tests (user messages queue; `threadHasStarted` unchanged)                                                                         |
+| AC11 | Met        | no new top-level folder, event type or migration; nothing under `OpencodeV2/` changed; manifest check unchanged                                   |
+| AC12 | Deferred   | Phase 5 (separate release)                                                                                                                        |
+| AC13 | Met        | full gate above; every added or materially edited code file ≤ 400 lines                                                                           |
+
+Known limits: the mobile app's command allowlist does not include `thread.delegation.model-choice.pick`, so a mobile-only
+connected client cannot pick and the hold falls back after ≤ 10 s (the accepted presence false-positive cost). Provider
+sessions started before the upgrade keep their old tool schemas until restart (plan Phase 4 item 4).
