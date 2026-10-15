@@ -1,7 +1,6 @@
 import { randomBytes, sign, timingSafeEqual } from "node:crypto";
 import { Schema } from "effect";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
-import { runV2Cleanup } from "./Client.guard.ts";
 import { detachV2Enrollment } from "./Orchestration.enrollment.detach.ts";
 import {
   signV2ThreadEnvelope,
@@ -12,10 +11,6 @@ import {
 } from "./Orchestration.protocol.ts";
 import type { V2ThreadRecords } from "./Orchestration.records.ts";
 import type { OpencodeV2Client } from "./Client.ts";
-import {
-  validateV2DetachAcknowledgement,
-  validateV2LeaseInspection,
-} from "./Orchestration.enrollment.ack.ts";
 import { recoverV2PreviousEnrollment } from "./Orchestration.enrollment.recovery.ts";
 import { V2EnrollmentControls } from "./Orchestration.enrollment.controls.ts";
 import {

@@ -1,4 +1,3 @@
-import type { OpenCodeEvent } from "@opencode/client";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";

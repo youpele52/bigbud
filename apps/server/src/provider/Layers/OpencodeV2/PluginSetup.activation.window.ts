@@ -64,6 +64,6 @@ export class V2ActivationWindow {
     return this.pending.size > 0;
   }
   async drain() {
-    while (this.pending.size) await Promise.allSettled([...this.pending]);
+    while (this.pending.size) await Promise.allSettled(this.pending);
   }
 }

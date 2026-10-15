@@ -57,7 +57,8 @@ export const V2_NATIVE_QUALIFICATION_SUITE: Readonly<
 });
 
 /** v1 files deliberately not run by v2, with the reason and the covering suite file where one
- * exists. All but Catalog.native are Phase 4.1 retirement candidates (retired owned/private paths). */
+ * exists. All but Catalog.native (kept as a public-network smoke) were deleted in gap-closure Phase
+ * 4.1 because they only exercised retired owned/private paths. */
 export const V2_NATIVE_QUALIFICATION_EXCLUDED: Readonly<Record<string, string>> = Object.freeze({
   [`${DIR}/Runtime.tools.native.test.ts`]:
     "retired remote-session conformance (ssh workspace target, hidden local tools); the shared adapter cannot construct it. Shared tool schema: SharedService.context.native",

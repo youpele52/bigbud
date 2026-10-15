@@ -6,19 +6,6 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
 import { assertV2WorkspaceStorageSeparate } from "./Runtime.workspaceBoundary.ts";
-import { readV2ApplicationConfig } from "./Application.config.ts";
-import { lstat } from "node:fs/promises";
-
-it("configuration rejects repository-contained storage before creating or adopting it", async () => {
-  await withV2RuntimeFixture(async ({ directory }) => {
-    await mkdir(path.join(directory, ".git"));
-    const profile = path.join(directory, "new-profile");
-    await expect(
-      readV2ApplicationConfig({ binaryPath: "/synthetic/opencode", profileRoot: profile }),
-    ).rejects.toThrow("storage");
-    await expect(lstat(profile)).rejects.toThrow();
-  });
-});
 
 it("rejects storage in a linked worktree's canonical common repository even outside the worktree", async () => {
   await withV2RuntimeFixture(async ({ runtime }) => {

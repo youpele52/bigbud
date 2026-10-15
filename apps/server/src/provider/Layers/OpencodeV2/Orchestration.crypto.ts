@@ -41,7 +41,7 @@ export function openV2ThreadEncryptedRequest(value: unknown, privateKey: string)
     const input = value as Envelope;
     if (
       !input ||
-      Object.keys(input).sort().join() !== "ciphertext,ephemeralKey,iv,protocol,tag" ||
+      Object.keys(input).toSorted().join() !== "ciphertext,ephemeralKey,iv,protocol,tag" ||
       input.protocol !== protocol ||
       typeof input.ephemeralKey !== "string" ||
       !/^[A-Za-z0-9_-]{59}$/.test(input.ephemeralKey) ||
@@ -68,7 +68,7 @@ export function openV2ThreadEncryptedRequest(value: unknown, privateKey: string)
     };
     if (
       !decoded ||
-      Object.keys(decoded).sort().join() !== "payload,token" ||
+      Object.keys(decoded).toSorted().join() !== "payload,token" ||
       typeof decoded.token !== "string" ||
       !/^[a-f0-9]{64}$/.test(decoded.token)
     )

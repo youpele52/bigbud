@@ -36,16 +36,17 @@ it("validates JSONC without rewriting comments/legacy entries, resolves relative
   }
 });
 
+const document = (effect: string) => ({
+  type: "document",
+  info: { permissions: [{ action: "bigbud_thread_v1_*", resource: "*", effect }] },
+});
+
 it("native permission order is conserved, and a final deny is never granted by installation", async () => {
   const app = await makeV2ThreadPluginFixture();
   try {
     const root = path.join(app.root, "native-config");
     await mkdir(root);
     const authority = { signal: new AbortController().signal, assertCurrent: () => {} };
-    const document = (effect: string) => ({
-      type: "document",
-      info: { permissions: [{ action: "bigbud_thread_v1_*", resource: "*", effect }] },
-    });
     await expect(
       inspectV2PluginControls(
         [document("deny"), document("allow")] as Sources,

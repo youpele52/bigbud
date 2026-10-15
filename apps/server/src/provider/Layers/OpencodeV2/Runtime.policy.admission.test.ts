@@ -4,8 +4,6 @@ import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { makeV2TargetPreparation } from "./Application.targets.ts";
-import { makeV2RemoteAgentFixture } from "./Remote.fixture.ts";
 import { admissionCorrelation, learningAdmissionIdentity } from "./Admission.identity.ts";
 import { makeV2LearningReview } from "./Runtime.learning.ts";
 import { V2CodingBridge } from "./Coding.bridge.ts";
@@ -16,129 +14,101 @@ const modelSelection = {
   model: "synthetic-model",
   subProviderID: "synthetic-provider",
 } as const;
-for (const remote of [false, true]) {
-  it(`SQLite ${remote ? "synthetic remote" : "local"} supervised admission cannot become Auto edits on settings-driven owner restart; unchanged accepted/terminal policy deduplicates`, async () => {
-    await withV2RuntimeFixture(async ({ runtime: fixture, http, directory }) => {
-      http.autoComplete = false;
-      const hold = await fixture.options.manager.acquire(fixture.options.config);
-      const coding = await V2CodingBridge.open(
-        fixture.options.config.profileRoot,
-        await resolveV2FilePython(fixture.options.config.profileRoot),
-      );
-      const options = {
-        ...fixture.options,
-        codingBridge: coding,
-        enableLocalTools: true,
-        pollIntervalMs: 100000,
+// The retired SSH remote-workspace variant was removed with Application.targets.ts (gap closure 4.1).
+it(`SQLite local supervised admission cannot become Auto edits on settings-driven owner restart; unchanged accepted/terminal policy deduplicates`, async () => {
+  await withV2RuntimeFixture(async ({ runtime: fixture, http, directory }) => {
+    http.autoComplete = false;
+    const hold = await fixture.options.manager.acquire(fixture.options.config);
+    const coding = await V2CodingBridge.open(
+      fixture.options.config.profileRoot,
+      await resolveV2FilePython(fixture.options.config.profileRoot),
+    );
+    const options = {
+      ...fixture.options,
+      codingBridge: coding,
+      enableLocalTools: true,
+      pollIntervalMs: 100000,
+    };
+    const runtime = new OpencodeV2Runtime(options);
+    const threadId = ThreadId.makeUnsafe("policy-owner-false"),
+      input = {
+        threadId,
+        modelSelection,
+        requestMessageId: MessageId.makeUnsafe("policy-message-false"),
+        input: "same exact action",
       };
-      const agent = remote
-        ? await makeV2RemoteAgentFixture(directory, options.config.profileRoot)
-        : undefined;
-      const runtime = new OpencodeV2Runtime({
-        ...options,
-        ...(remote
-          ? {
-              prepareSession: makeV2TargetPreparation(
-                options,
-                options.config.profileRoot,
-                async () => agent!.client,
-              ),
-            }
-          : {}),
-      });
-      const threadId = ThreadId.makeUnsafe(`policy-owner-${remote}`),
-        input = {
-          threadId,
-          modelSelection,
-          requestMessageId: MessageId.makeUnsafe(`policy-message-${remote}`),
-          input: "same exact action",
-        };
-      const start = (runtimeMode: "approval-required" | "auto-accept-edits") =>
-        runtime.start({
-          threadId,
-          cwd: directory,
-          modelSelection,
-          runtimeMode,
-          ...(remote
-            ? {
-                workspaceExecutionTargetId:
-                  "ssh:host=synthetic.invalid&user=fixture&auth=ssh-key&transport=agent",
-                providerRuntimeExecutionTargetId: "local",
-              }
-            : {}),
-        });
-      try {
-        await start("approval-required");
-        const supervised = runtime.get(threadId).toolPolicy;
-        await runtime.send(input);
-        const row = runtime.get(threadId).row!;
-        expect(row.state).toBe("accepted");
-        await runtime.send(input);
-        expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
-        http.complete(runtime.get(threadId).native.id);
-        await runtime.reconcile(runtime.get(threadId));
-        expect(runtime.get(threadId).row?.state).toBe("terminal");
-        await runtime.send(input);
-        expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
-        await runtime.stop(threadId);
-        await start("auto-accept-edits");
-        if (remote) expect(runtime.get(threadId).toolPolicy).toEqual(supervised);
-        await expect(runtime.send(input)).rejects.toThrow();
-        expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
-        expect(
-          (
-            await Effect.runPromise(
-              options.journal.find({
-                namespace: "foreground",
-                ownerThreadId: threadId,
-                requestMessageId: input.requestMessageId,
-              }),
-            )
-          )?.fingerprint,
-        ).toBe(row.fingerprint);
-        await runtime.stop(threadId);
-        await start("approval-required");
-        await runtime.send(input);
-        expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
-        // Native-rule-only legacy hashes must fail closed, not be reinterpreted under the new canonical mode.
-        const identity = {
-          namespace: "foreground" as const,
-          ownerThreadId: threadId,
-          requestMessageId: MessageId.makeUnsafe(`legacy-policy-${remote}`),
-        };
-        const legacy = createHash("sha256")
-          .update(
-            JSON.stringify([
-              input.input,
-              modelSelection.subProviderID,
-              modelSelection.model,
-              null,
-              createHash("sha256").update("[]").digest("hex"),
-              JSON.stringify(supervised),
-            ]),
+    const start = (runtimeMode: "approval-required" | "auto-accept-edits") =>
+      runtime.start({ threadId, cwd: directory, modelSelection, runtimeMode });
+    try {
+      await start("approval-required");
+      const supervised = runtime.get(threadId).toolPolicy;
+      await runtime.send(input);
+      const row = runtime.get(threadId).row!;
+      expect(row.state).toBe("accepted");
+      await runtime.send(input);
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
+      http.complete(runtime.get(threadId).native.id);
+      await runtime.reconcile(runtime.get(threadId));
+      expect(runtime.get(threadId).row?.state).toBe("terminal");
+      await runtime.send(input);
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
+      await runtime.stop(threadId);
+      await start("auto-accept-edits");
+      await expect(runtime.send(input)).rejects.toThrow();
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
+      expect(
+        (
+          await Effect.runPromise(
+            options.journal.find({
+              namespace: "foreground",
+              ownerThreadId: threadId,
+              requestMessageId: input.requestMessageId,
+            }),
           )
-          .digest("hex");
-        await Effect.runPromise(
-          options.journal.reserve({
-            ...row,
-            ...identity,
-            ...admissionCorrelation(identity),
-            fingerprint: legacy,
-          }),
-        );
-        await expect(
-          runtime.send({ ...input, requestMessageId: identity.requestMessageId }),
-        ).rejects.toThrow();
-        expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
-        expect((await Effect.runPromise(options.journal.find(identity)))?.fingerprint).toBe(legacy);
-      } finally {
-        await runtime.close().catch(() => {});
-        coding.close();
-        await hold.release();
-      }
-    });
+        )?.fingerprint,
+      ).toBe(row.fingerprint);
+      await runtime.stop(threadId);
+      await start("approval-required");
+      await runtime.send(input);
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
+      // Native-rule-only legacy hashes must fail closed, not be reinterpreted under the new canonical mode.
+      const identity = {
+        namespace: "foreground" as const,
+        ownerThreadId: threadId,
+        requestMessageId: MessageId.makeUnsafe("legacy-policy-false"),
+      };
+      const legacy = createHash("sha256")
+        .update(
+          JSON.stringify([
+            input.input,
+            modelSelection.subProviderID,
+            modelSelection.model,
+            null,
+            createHash("sha256").update("[]").digest("hex"),
+            JSON.stringify(supervised),
+          ]),
+        )
+        .digest("hex");
+      await Effect.runPromise(
+        options.journal.reserve({
+          ...row,
+          ...identity,
+          ...admissionCorrelation(identity),
+          fingerprint: legacy,
+        }),
+      );
+      await expect(
+        runtime.send({ ...input, requestMessageId: identity.requestMessageId }),
+      ).rejects.toThrow();
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
+      expect((await Effect.runPromise(options.journal.find(identity)))?.fingerprint).toBe(legacy);
+    } finally {
+      await runtime.close().catch(() => {});
+      coding.close();
+      await hold.release();
+    }
   });
-}
+});
 
 it("SQLite learning terminal replay uses the disabled effective policy; native-rule-only legacy terminal hashes cannot be applied or regenerated", async () => {
   await withV2RuntimeFixture(async ({ runtime, directory, http }) => {

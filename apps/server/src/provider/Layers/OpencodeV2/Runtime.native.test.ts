@@ -170,6 +170,7 @@ it.skipIf(!binaryPath)(
                       calls,
                       status: runtime.get(threadId).session.status,
                       lastError: owner.session.lastError,
+                      // oxlint-disable-next-line no-map-spread -- diagnostics copy native messages; never mutate client results
                       messages: native.map((message) => ({
                         type: message.type,
                         id: message.id,

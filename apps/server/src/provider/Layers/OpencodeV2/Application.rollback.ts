@@ -12,6 +12,7 @@ export function warnV2SharedRollback(
 ) {
   if (!bindings) return Effect.succeed(snapshot);
   return bindings.hasRecords.pipe(
+    // oxlint-disable-next-line no-map-spread -- copy-on-write required; the snapshot is shared provider state
     Effect.map((present) =>
       present
         ? {

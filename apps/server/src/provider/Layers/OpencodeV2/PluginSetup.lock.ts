@@ -69,7 +69,7 @@ export async function acquireV2PluginPublicationLock(
         signature: string;
       };
       if (
-        Object.keys(owner).sort().join() !== "issuer,nonce,pid,root,signature" ||
+        Object.keys(owner).toSorted().join() !== "issuer,nonce,pid,root,signature" ||
         owner.root !== root ||
         owner.issuer !== artifact.issuer ||
         !Number.isSafeInteger(owner.pid) ||
@@ -82,6 +82,7 @@ export async function acquireV2PluginPublicationLock(
           Buffer.from(owner.signature, "base64url"),
         )
       )
+        // oxlint-disable-next-line preserve-caught-error -- Raw fs/lock causes may retain private paths; the message is the contract.
         throw new Error(
           "V2 required-plugin publication lock is foreign/invalid; existing evidence preserved.",
         );
@@ -92,11 +93,13 @@ export async function acquireV2PluginPublicationLock(
         exited = cause instanceof Error && "code" in cause && cause.code === "ESRCH";
       }
       if (!exited)
+        // oxlint-disable-next-line preserve-caught-error -- Raw fs/lock causes may retain private paths; the message is the contract.
         throw new Error(
           "V2 required-plugin publication is busy or its app owner is unconfirmed; retry without replacing files.",
         );
       authority.assertCurrent();
       authority.signal.throwIfAborted();
+      // oxlint-disable-next-line preserve-caught-error -- Raw fs/lock causes may retain private paths; the message is the contract.
       throw new Error(
         "V2 publication-lock-remediation-required: the signed exited-owner lock is retained. Automatic reclamation cannot conditionally unlink an inode; arrange independently safe manual remediation without clearing history or uncertain records.",
       );

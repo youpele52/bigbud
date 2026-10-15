@@ -125,6 +125,7 @@ export async function prepareV2TurnAttachments(
           mediaOptions,
         );
   } catch (error) {
+    // oxlint-disable-next-line preserve-caught-error -- Raw fs/media causes may retain private paths or file contents.
     throw new Error(
       `V2 attachment preparation failed before admission: ${error instanceof Error ? error.message : "reattach a supported file"}`,
     );

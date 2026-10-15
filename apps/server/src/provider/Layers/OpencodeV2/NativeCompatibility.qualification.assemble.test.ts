@@ -47,8 +47,11 @@ it("the frozen suite maps every scope to existing files exactly once", () => {
   expect(new Set(all).size).toBe(all.length);
   for (const file of all) expect(existsSync(path.join(serverRoot, file)), file).toBe(true);
   for (const file of Object.keys(V2_NATIVE_QUALIFICATION_EXCLUDED)) {
-    expect(existsSync(path.join(serverRoot, file)), file).toBe(true);
     expect(all).not.toContain(file);
+    // Only the public-network smoke survives; retired-path exclusions were deleted in Phase 4.1.
+    expect(existsSync(path.join(serverRoot, file)), file).toBe(
+      file.endsWith("/Catalog.native.test.ts"),
+    );
   }
   expect(V2_NATIVE_QUALIFICATION_SUITE_REVISION).toBe("opencode-v2-native-qualification-suite.v2");
 });

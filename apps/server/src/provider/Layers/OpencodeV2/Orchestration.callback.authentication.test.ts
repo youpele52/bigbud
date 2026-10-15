@@ -6,9 +6,11 @@ import { signV2ThreadCallbackResponse } from "./Orchestration.response.ts";
 import { v2ThreadOwnerDigest } from "./Orchestration.protocol.ts";
 import { decodeV2ThreadCallback } from "./Orchestration.callback.ts";
 
+const unchanged = (value: Record<string, unknown>) => value;
+
 it("even decryptable replies must bind the fresh challenge, exact request/result, owner and acknowledged lease", async () => {
   const app = await makeV2ThreadPluginFixture();
-  let mutation: (reply: Record<string, unknown>) => Record<string, unknown> = (value) => value;
+  let mutation: (reply: Record<string, unknown>) => Record<string, unknown> = unchanged;
   let captured: Record<string, unknown> | undefined;
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];

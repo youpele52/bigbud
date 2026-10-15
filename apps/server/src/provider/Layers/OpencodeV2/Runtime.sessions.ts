@@ -201,24 +201,25 @@ export async function createRuntimeSession(
           : undefined;
         let cursor: string | undefined;
         const cursors = new Set<string>();
-        for (let page = 0; !shared && page < 100; page++) {
-          const listing = await v2Request(
-            "session.list",
-            (signal) =>
-              lease.process.client.session.list(
-                { directory, limit: 200, ...(cursor ? { cursor } : {}) },
-                { signal },
-              ),
-            requests,
-          );
-          if (listing.data.length > 200) throw new Error("V2 session listing bound exceeded.");
-          found = listing.data.find((session) => session.id === nativeSessionId);
-          if (found || !listing.cursor.next) break;
-          cursor = listing.cursor.next;
-          if (cursors.has(cursor) || page === 99)
-            throw new Error("V2 incomplete session inventory.");
-          cursors.add(cursor);
-        }
+        if (!shared)
+          for (let page = 0; page < 100; page++) {
+            const listing = await v2Request(
+              "session.list",
+              (signal) =>
+                lease.process.client.session.list(
+                  { directory, limit: 200, ...(cursor ? { cursor } : {}) },
+                  { signal },
+                ),
+              requests,
+            );
+            if (listing.data.length > 200) throw new Error("V2 session listing bound exceeded.");
+            found = listing.data.find((session) => session.id === nativeSessionId);
+            if (found || !listing.cursor.next) break;
+            cursor = listing.cursor.next;
+            if (cursors.has(cursor) || page === 99)
+              throw new Error("V2 incomplete session inventory.");
+            cursors.add(cursor);
+          }
         if (found)
           native = decodeV2NativeSession(
             await v2Request(

@@ -170,6 +170,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           ? {
               nativeAgents: agents.data
                 .filter(({ hidden }) => !hidden)
+                // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
                 .map(({ id, name, description }) => ({
                   id,
                   name,
@@ -179,6 +180,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           : {}),
         ...(skills
           ? {
+              // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
               skills: skills.data.map(({ name, path, description }) => ({
                 name,
                 path,
@@ -207,6 +209,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           provider: "opencodeV2",
           enabled,
           checkedAt: new Date().toISOString(),
+          // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
           models: lastModels.map((model) => ({
             ...model,
             availability: "requires-setup" as const,

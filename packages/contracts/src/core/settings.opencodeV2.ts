@@ -9,6 +9,7 @@ export const OpencodeV2NativeServiceTrust = Schema.NullOr(
 export const OpencodeV2PluginConfigRoot = TrimmedString.check(
   Schema.isMaxLength(4096),
   Schema.isPattern(/^(?:$|\/|[a-zA-Z]:[\\/]|\\\\)/),
+  // oxlint-disable-next-line no-control-regex -- NUL is rejected deliberately in filesystem paths.
   Schema.isPattern(/^[^\0]*$/),
 );
 

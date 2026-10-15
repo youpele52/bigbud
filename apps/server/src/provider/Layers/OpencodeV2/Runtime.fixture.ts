@@ -25,6 +25,9 @@ import { OpencodeV2Runtime } from "./Runtime.ts";
 import { FixtureEvents } from "./Test.fixtures.ts";
 import type { V2IsolatedProcessConfig } from "./ServerManager.child.ts";
 
+const response = (data: unknown) =>
+  new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
+
 /** Real pinned Promise client against deterministic synthetic HTTP, backed by real SQLite. */
 export class V2RuntimeHttpFixture {
   readonly sessions = new Map<string, SessionInfo>();
@@ -92,8 +95,6 @@ export class V2RuntimeHttpFixture {
     if (pathname.includes("experimental/mcp")) return new Response(null, { status: 204 });
     const parts = pathname.split("/");
     const sessionId = parts[parts.indexOf("session") + 1] ?? "";
-    const response = (data: unknown) =>
-      new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
     if (pathname === "/api/permission/saved") return response({ data: [] });
     if (pathname === "/api/model") {
       const location = { directory: new URL(url).searchParams.get("location[directory]")! };

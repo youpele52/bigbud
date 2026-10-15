@@ -57,6 +57,7 @@ it("pure-handler boundary owns immutable JSON and rejects accessors/prototypes/n
     enumerable: true,
   });
   expect(() => v2ImmutableJson(array)).toThrow("accessor rejected");
+  // oxlint-disable-next-line no-new-array -- a sparse array of this length is the rejected input under test
   expect(() => v2ImmutableJson(new Array(32769))).toThrow("bounded dense plain JSON");
   expect(() => v2ImmutableJson(new Date())).toThrow("prototype rejected");
   expect(() => v2ImmutableJson(Infinity)).toThrow("not plain JSON");

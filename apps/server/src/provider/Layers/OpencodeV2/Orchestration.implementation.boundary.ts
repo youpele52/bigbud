@@ -63,6 +63,11 @@ export function v2CanonicalThreadAction(action: V2PureAction) {
       : action;
 }
 
+const v2DefinedFields = (value: object) =>
+  Object.entries(value)
+    .filter(([, item]) => item !== undefined)
+    .toSorted(([left], [right]) => left.localeCompare(right));
+
 /** Live strict compatibility boundary never silently drops/coerces fields or grants another action. */
 export function validateV2PreparedBody(
   action: V2PureAction,
@@ -85,13 +90,9 @@ export function validateV2PreparedBody(
     );
   const plain = v2ImmutableJson(body);
   const decoded = Schema.decodeUnknownSync(ThreadToolRequest)(plain, { onExcessProperty: "error" });
-  const fields = (value: object) =>
-    Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .toSorted(([left], [right]) => left.localeCompare(right));
   if (
     decoded.action !== v2CanonicalThreadAction(action) ||
-    JSON.stringify(fields(decoded)) !== JSON.stringify(fields(plain as object))
+    JSON.stringify(v2DefinedFields(decoded)) !== JSON.stringify(v2DefinedFields(plain as object))
   )
     throw new Error(
       "V2 pinned request is incompatible with the current canonical API; no reinterpretation.",

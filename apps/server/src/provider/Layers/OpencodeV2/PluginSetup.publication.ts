@@ -39,6 +39,8 @@ interface PublicationJob {
 }
 const jobs = new Map<string, PublicationJob>();
 
+const v2NoAbort = (): void => {};
+
 /** Compatible global publishers join one owned transaction; subscribers cannot cancel another's authority. */
 export async function publishV2ManagedPlugin(
   artifact: V2PluginSetupArtifact,
@@ -109,7 +111,7 @@ export async function publishV2ManagedPlugin(
   const signal = authority.waiterSignal
     ? AbortSignal.any([authority.signal, authority.waiterSignal])
     : authority.signal;
-  let abort: () => void = () => {};
+  let abort: () => void = v2NoAbort;
   const detached = new Promise<never>((_, reject) => {
     abort = () =>
       reject(

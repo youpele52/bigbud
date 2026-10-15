@@ -21,6 +21,7 @@ export function makeV2SharedTargetPreparation(
       !input.threadId ||
       Buffer.byteLength(`${input.threadId}.json`) > 255 ||
       path.basename(input.threadId) !== input.threadId ||
+      // oxlint-disable-next-line no-control-regex -- NUL is rejected deliberately in app auth file components
       /[\\\0]/.test(input.threadId) ||
       [".", ".."].includes(input.threadId)
     )

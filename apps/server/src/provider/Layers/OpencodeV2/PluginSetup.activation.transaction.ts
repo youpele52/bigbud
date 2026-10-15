@@ -241,6 +241,7 @@ async function activationAttempt(
         "V2 short gate expired; issued physical operations remain owned until settlement.",
       );
     if (error instanceof V2ActivationBusy && (physicalFsMutationIssued || publicationPrepared))
+      // oxlint-disable-next-line preserve-caught-error -- The busy signal is superseded; the uncertain-publication message is the contract.
       throw new Error(
         "V2 publication may already have been issued; no busy retry or rollback is authorized.",
       );

@@ -97,7 +97,7 @@ export class V2ThreadRecords {
     const record = JSON.parse(content) as SignedRecord;
     if (
       !record ||
-      Object.keys(record).sort().join() !== "revision,signature,value" ||
+      Object.keys(record).toSorted().join() !== "revision,signature,value" ||
       typeof record.revision !== "string" ||
       !/^[a-f0-9]{32}$/.test(record.revision) ||
       typeof record.signature !== "string" ||

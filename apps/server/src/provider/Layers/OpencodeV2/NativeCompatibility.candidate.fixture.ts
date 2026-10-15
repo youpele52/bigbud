@@ -93,7 +93,7 @@ export function makeV2OwnedCandidateEligibility(
     if (binding && binding.descriptor.generation !== observed)
       throw new Error("V2 candidate borrowed generation differs from the owned child.");
     binding?.assertCurrent();
-    const info = await incoming.server.info({ ...(signal ? { signal } : {}) });
+    const info = await incoming.server.info(signal ? { signal } : {});
     if (info.pid !== pid || info.version !== approval.nativeVersion)
       throw new Error("V2 candidate native health differs from its approved image.");
     const contract = await readV2SharedServiceJson(

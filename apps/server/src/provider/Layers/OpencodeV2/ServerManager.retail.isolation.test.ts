@@ -10,7 +10,6 @@ import {
   requireV2NativeIsolation,
   type V2NativeIsolationApproval,
 } from "./SharedService.native.isolation.fixture.ts";
-import { startOwnedV2SshProcess } from "./ServerManager.ssh.ts";
 
 const spawn = vi.hoisted(() =>
   vi.fn(() => {
@@ -54,7 +53,7 @@ async function syntheticApproval(root: string, executableBytes?: Buffer) {
   } satisfies V2NativeIsolationApproval;
 }
 
-it.each(["private", "shared", "version-helper", "ssh"] as const)(
+it.each(["private", "shared", "version-helper"] as const)(
   "%s fixture refuses before even retail --version without approved provenance",
   async (kind) => {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "v2-retail-refusal-")));
@@ -73,23 +72,14 @@ it.each(["private", "shared", "version-helper", "ssh"] as const)(
             })
           : kind === "shared"
             ? sharedServiceNativeFixture(binary)
-            : kind === "version-helper"
-              ? assertV2NativeFixtureVersion(
-                  {
-                    executablePath: binary,
-                    id: "caller-asserted-not-approved",
-                  } as V2NativeIsolationApproval,
-                  process.env,
-                  root,
-                )
-              : startOwnedV2SshProcess(
-                  {
-                    binaryPath: binary,
-                    profileRoot: root,
-                    runtimeTargetId: "ssh:host=synthetic.invalid&user=fixture&auth=ssh-key",
-                  },
-                  { protectedBootstrapConformance: true },
-                );
+            : assertV2NativeFixtureVersion(
+                {
+                  executablePath: binary,
+                  id: "caller-asserted-not-approved",
+                } as V2NativeIsolationApproval,
+                process.env,
+                root,
+              );
       await expect(result).rejects.toThrow();
       expect(spawn).not.toHaveBeenCalled();
     } finally {
