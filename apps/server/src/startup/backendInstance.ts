@@ -28,15 +28,19 @@ export interface BackendInstanceShape {
   readonly pid: number;
   readonly startedAt: string | null;
   readonly hostname: string;
+  /** Stable machine identity recorded in the lock, or null when the platform offers none. */
+  readonly machineId: string | null;
   readonly stateDir: string;
   readonly lockPath: string;
   /** Rejects unless the lock file still carries this instance's nonce, pid and host. */
   readonly assertHeld: () => Promise<void>;
-  /** Liveness of another recorded backend process, with the lock's proof rules. */
+  /** Liveness of another recorded backend process, with the lock's proof rules. The owner's own
+   * machine id (absent in older records) decides the host, never this instance's. */
   readonly classifyOwner: (owner: {
     readonly pid: number;
     readonly startedAt: string | null;
     readonly hostname: string;
+    readonly machineId?: string | null | undefined;
   }) => "live" | "dead" | "foreign-host";
 }
 
@@ -55,6 +59,7 @@ export function makeBackendInstance(
     pid: record.pid,
     startedAt: record.startedAt,
     hostname: record.hostname,
+    machineId: record.machineId ?? null,
     stateDir,
     lockPath: handle.lockPath,
     assertHeld: async () => {
@@ -70,7 +75,13 @@ export function makeBackendInstance(
     },
     classifyOwner: (owner) =>
       classifyStateDirLockOwner(
-        { ...record, pid: owner.pid, startedAt: owner.startedAt, hostname: owner.hostname },
+        {
+          ...record,
+          pid: owner.pid,
+          startedAt: owner.startedAt,
+          hostname: owner.hostname,
+          machineId: owner.machineId ?? null,
+        },
         probe,
       ),
   };

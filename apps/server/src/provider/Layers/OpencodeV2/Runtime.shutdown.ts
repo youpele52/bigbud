@@ -7,15 +7,16 @@ export function v2ShutdownSignal() {
   return AbortSignal.timeout(V2_THREAD_TOOLS_SHUTDOWN_MS);
 }
 
-/** Resolves when `work` settles or `signal` aborts, whichever is first; never rejects. */
+/** Resolves when `work` settles or `signal` aborts, whichever is first; never rejects. `work` is
+ * always observed, so a retirement that fails after the bound is never an unhandled rejection. */
 export function settleWithinShutdown(work: Promise<unknown>, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve) => {
     const done = () => {
       signal.removeEventListener("abort", done);
       resolve();
     };
+    work.then(done, done);
     if (signal.aborted) return done();
     signal.addEventListener("abort", done, { once: true });
-    work.then(done, done);
   });
 }

@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { Data } from "effect";
 
+import { machineIdentity } from "../utils/machineIdentity.ts";
 import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
 
 export const STATE_DIR_LOCK_FILENAME = "backend.lock";
@@ -30,6 +31,9 @@ export interface StateDirLockRecord {
   readonly startedAt: string | null;
   readonly port: number;
   readonly hostname: string;
+  /** Stable machine identity (`utils/machineIdentity.ts`); absent in older records or when the
+   * platform offers none. Hostnames change with the network on macOS; this does not. */
+  readonly machineId?: string | null;
   readonly acquiredAt: string;
   readonly nonce: string;
 }
@@ -43,6 +47,8 @@ export class StateDirLockError extends Data.TaggedError("StateDirLockError")<{
 export interface StateDirLockProbe {
   readonly pid: number;
   readonly hostname: () => string;
+  /** This machine's stable identity; absent or null keeps the hostname rule. */
+  readonly machineId?: () => string | null;
   readonly isAlive: (pid: number) => boolean;
   readonly startToken: (pid: number) => string | undefined;
 }
@@ -50,6 +56,7 @@ export interface StateDirLockProbe {
 export const defaultStateDirLockProbe: StateDirLockProbe = {
   pid: process.pid,
   hostname: () => os.hostname(),
+  machineId: machineIdentity,
   isAlive: (pid) => {
     try {
       process.kill(pid, 0);
@@ -75,6 +82,11 @@ export function parseStateDirLockRecord(raw: string): StateDirLockRecord | undef
       !(value.startedAt === null || typeof value.startedAt === "string") ||
       !Number.isSafeInteger(value.port) ||
       typeof value.hostname !== "string" ||
+      !(
+        value.machineId === undefined ||
+        value.machineId === null ||
+        typeof value.machineId === "string"
+      ) ||
       typeof value.acquiredAt !== "string" ||
       typeof value.nonce !== "string"
     )
@@ -85,13 +97,23 @@ export function parseStateDirLockRecord(raw: string): StateDirLockRecord | undef
   }
 }
 
+/** Same machine by stable machine id when both sides carry one; otherwise by hostname (older
+ * records, platforms without an id), which a network rename can defeat: then it fails closed. */
+export function isSameStateDirLockHost(
+  owner: Pick<StateDirLockRecord, "hostname" | "machineId">,
+  probe: StateDirLockProbe,
+): boolean {
+  const local = probe.machineId?.() ?? null;
+  return owner.machineId && local ? owner.machineId === local : owner.hostname === probe.hostname();
+}
+
 /** "dead" only with proof; anything unprovable is a live owner. Another host's record cannot be
  * checked from here at all ("foreign-host"), so it is refused like a live owner. */
 export function classifyStateDirLockOwner(
   owner: StateDirLockRecord,
   probe: StateDirLockProbe,
 ): "live" | "dead" | "foreign-host" {
-  if (owner.hostname !== probe.hostname()) return "foreign-host";
+  if (!isSameStateDirLockHost(owner, probe)) return "foreign-host";
   if (!probe.isAlive(owner.pid)) return "dead";
   // Only two comparable tokens that differ prove the PID was reused by an unrelated process.
   return compareProcessStartToken(owner.startedAt, probe.startToken(owner.pid)) === "different"
@@ -199,12 +221,14 @@ export async function acquireStateDirLock(input: {
   const lockPath = path.join(input.stateDir, STATE_DIR_LOCK_FILENAME);
   await fs.mkdir(input.stateDir, { recursive: true });
   const nonce = randomBytes(16).toString("hex");
+  const machineId = probe.machineId?.() ?? null;
   const record: StateDirLockRecord = {
     format: FORMAT,
     pid: probe.pid,
     startedAt: probe.startToken(probe.pid) ?? null,
     port: input.port,
     hostname: probe.hostname(),
+    ...(machineId ? { machineId } : {}),
     acquiredAt: (input.now?.() ?? new Date()).toISOString(),
     nonce,
   };
@@ -229,7 +253,7 @@ export async function acquireStateDirLock(input: {
     if (state === "foreign-host")
       throw new StateDirLockError({
         stateDir: input.stateDir,
-        message: `The bigbud backend lock ${lockPath} was written on host "${owner.hostname}" (pid ${owner.pid}, port ${owner.port}), not this host "${probe.hostname()}", so its owner cannot be checked. If no backend uses ${input.stateDir} (for example after a host rename), delete the lock; otherwise use a different BIGBUD_HOME.`,
+        message: `The bigbud backend lock ${lockPath} was written on host "${owner.hostname}" (pid ${owner.pid}, port ${owner.port}), not this host "${probe.hostname()}", so its owner cannot be checked. If this is the same machine, confirm no bigbud backend is running and remove ${lockPath} (hostnames can change with the network); otherwise use a different BIGBUD_HOME.`,
       });
     if (state === "live")
       throw new StateDirLockError({

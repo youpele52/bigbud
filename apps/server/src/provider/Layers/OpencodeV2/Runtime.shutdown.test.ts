@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { withV2ProductionThreadTools } from "./Orchestration.production.fixture.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
-import { V2_THREAD_TOOLS_SHUTDOWN_MS } from "./Runtime.shutdown.ts";
+import { settleWithinShutdown, V2_THREAD_TOOLS_SHUTDOWN_MS } from "./Runtime.shutdown.ts";
 
 type Signer = { root: string; privateKey: string; publicKey: string };
 const store = (artifact: unknown, name: "retirements" | "enrollments") => {
@@ -66,3 +66,19 @@ it("a busy owner at shutdown is never settled by an unproved retirement", async 
     expect(await states(artifact)).toEqual(["revoked"]);
   });
 }, 60_000);
+
+it("a retirement that fails after the shutdown bound expired is never an unhandled rejection", async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => void unhandled.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    // An owner whose teardown starts after the shared 5 s bound gets an already-aborted signal.
+    const expired = AbortSignal.abort(new Error("shutdown bound expired"));
+    const late = Promise.reject(new Error("detach aborted after the bound"));
+    await expect(settleWithinShutdown(late, expired)).resolves.toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", record);
+  }
+});

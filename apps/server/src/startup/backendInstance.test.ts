@@ -36,9 +36,20 @@ it("classifyOwner applies the lock's liveness proof to recorded backends", async
   try {
     const instance = makeBackendInstance(handle, stateDir);
     expect(instance.classifyOwner(handle.record)).toBe("live");
-    expect(instance.classifyOwner({ ...handle.record, hostname: "elsewhere" })).toBe(
-      "foreign-host",
-    );
+    // Another machine: a different machine id, or (older records without one) another hostname.
+    expect(
+      instance.classifyOwner({
+        ...handle.record,
+        hostname: "elsewhere",
+        machineId: `machine-v1:${"0".repeat(64)}`,
+      }),
+    ).toBe("foreign-host");
+    expect(
+      instance.classifyOwner({ ...handle.record, hostname: "elsewhere", machineId: undefined }),
+    ).toBe("foreign-host");
+    // This machine after a network rename: still checked by its pid and start token.
+    if (handle.record.machineId)
+      expect(instance.classifyOwner({ ...handle.record, hostname: "renamed" })).toBe("live");
     expect(instance.classifyOwner({ ...handle.record, pid: 2 ** 22 + 12345 })).toBe("dead");
   } finally {
     await handle.release();

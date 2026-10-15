@@ -9,12 +9,15 @@ export interface V2BackendInstance {
   readonly pid: number;
   readonly startedAt: string | null;
   readonly hostname: string;
+  /** Stable machine identity (absent when the platform offers none); hostnames can change. */
+  readonly machineId?: string | null;
   readonly stateDir: string;
   readonly assertHeld: () => Promise<void>;
   readonly classifyOwner: (owner: {
     readonly pid: number;
     readonly startedAt: string | null;
     readonly hostname: string;
+    readonly machineId?: string | null | undefined;
   }) => "live" | "dead" | "foreign-host";
 }
 
@@ -28,6 +31,8 @@ const OwnerMarker = Schema.Struct({
   pid: Schema.Int,
   startedAt: Schema.NullOr(Schema.String),
   hostname: Schema.String,
+  /** Absent in markers written before machine identity; then the hostname rule applies. */
+  machineId: Schema.optionalKey(Schema.String),
 });
 export type V2OwnerMarker = typeof OwnerMarker.Type;
 const ReceiptFence = Schema.Struct({
@@ -51,7 +56,7 @@ const strict = { onExcessProperty: "error" } as const;
 /** Written before the enrollment record exists, so every new owner is attributable. */
 export async function writeV2OwnerMarker(
   records: V2ThreadRecords,
-  instance: Pick<V2BackendInstance, "nonce" | "pid" | "startedAt" | "hostname">,
+  instance: Pick<V2BackendInstance, "nonce" | "pid" | "startedAt" | "hostname" | "machineId">,
   ownerDigest: string,
   enrollmentNonce: string,
 ) {
@@ -64,6 +69,7 @@ export async function writeV2OwnerMarker(
     pid: instance.pid,
     startedAt: instance.startedAt,
     hostname: instance.hostname,
+    ...(instance.machineId ? { machineId: instance.machineId } : {}),
   };
   const existing = await store.read(ownerKey(ownerDigest));
   if (existing) {
