@@ -5,10 +5,13 @@ import {
   DesktopSupervisorDeliveryCoordinator,
 } from "./desktopSupervisorDelivery.ts";
 
+/** The coordinator behind `DesktopSupervisorDeliveryTestLive`, for presence assertions. */
+export const desktopSupervisorDeliveryTestCoordinator = new DesktopSupervisorDeliveryCoordinator({
+  mode: "direct-unmanaged",
+  reasonCode: "standalone",
+});
+
 export const DesktopSupervisorDeliveryTestLive = Layer.succeed(
   DesktopSupervisorDelivery,
-  new DesktopSupervisorDeliveryCoordinator({
-    mode: "direct-unmanaged",
-    reasonCode: "standalone",
-  }),
+  desktopSupervisorDeliveryTestCoordinator,
 );

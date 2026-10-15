@@ -79,6 +79,19 @@ describe("create_thread without modelSelection", () => {
     expect(JSON.stringify(commands(first))).not.toContain("modelChoice");
     expect(commands(first)[0]).toMatchObject({ modelSelection: trunk });
   });
+
+  // L5: an empty request from any bridge means "no request", never a hold or picker.
+  it.each([null, {}])("treats modelSelection %j as absent", async (modelSelection) => {
+    const baseline = local();
+    const baselineResult = await create(baseline, {});
+    const system = local();
+    const result = await create(system, { modelSelection, modelSources: sources() });
+    expect(commands(system)).toEqual(commands(baseline));
+    expect(result).toEqual(baselineResult);
+    expect(system.storeResult.mock.calls.at(-1)?.[0].resultJson ?? null).toBe(
+      baseline.storeResult.mock.calls.at(-1)?.[0].resultJson ?? null,
+    );
+  });
 });
 
 describe("create_thread with modelSelection", () => {

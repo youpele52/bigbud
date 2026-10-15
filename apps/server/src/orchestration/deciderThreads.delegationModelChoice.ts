@@ -64,7 +64,19 @@ const decideHold = Effect.fn("decideDelegationModelChoiceHold")(function* (
   yield* requireThreadReadyForMutation({ thread, command });
   const choiceId = command.requestedActivity.payload.choiceId;
   const existing = deriveDelegatedModelChoiceRecord(thread.activities);
-  if (existing?.choiceId === choiceId) return [];
+  if (existing?.choiceId === choiceId) {
+    // The hold ran (its requested activity exists): the held message is queued, sent, or was
+    // deliberately cancelled, so a retry is a no-op. A resolution without a hold comes from the
+    // hold-failure fallback, which is done only once its turn started with this message (M2).
+    const held = thread.activities.some((activity) => activity.id === command.requestedActivity.id);
+    const sent = thread.messages.some((message) => message.id === command.prompt.messageId);
+    if (held || sent || (existing.status === "resolved" && existing.cancelled)) return [];
+    // A retry after a failed fallback start must continue the fallback, not report success.
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail: "The delegated model choice was resolved but no delegated message was sent.",
+    });
+  }
   if (thread.latestTurn !== null || existing !== null) {
     return yield* new OrchestrationCommandInvariantError({
       commandType: command.type,

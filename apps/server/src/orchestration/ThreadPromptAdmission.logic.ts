@@ -6,6 +6,7 @@ import type {
   OrchestrationReadModel,
   OrchestrationThread,
 } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import { resolvedHeldModelSelection } from "@bigbud/shared/delegatedModelChoice";
 import { Equal, Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -233,6 +234,9 @@ export function queuedPromptToTurnStartCommand(input: {
   readonly originSegments?: ThreadTurnStartCommand["message"]["originSegments"];
 }): ThreadTurnStartCommand {
   const { prompt, thread } = input;
+  // A held delegated message uses the model its resolved choice picked (L7).
+  const modelSelection =
+    resolvedHeldModelSelection(thread.activities, prompt.id) ?? prompt.modelSelection;
   return {
     type: "thread.turn.start",
     commandId: input.commandId,
@@ -247,7 +251,7 @@ export function queuedPromptToTurnStartCommand(input: {
         ? { originSegments: input.originSegments ?? prompt.originSegments }
         : {}),
     },
-    ...(prompt.modelSelection !== undefined ? { modelSelection: prompt.modelSelection } : {}),
+    ...(modelSelection !== undefined ? { modelSelection } : {}),
     ...(prompt.titleSeed !== undefined ? { titleSeed: prompt.titleSeed } : {}),
     runtimeMode: prompt.runtimeMode ?? thread.runtimeMode,
     interactionMode: prompt.interactionMode ?? thread.interactionMode,

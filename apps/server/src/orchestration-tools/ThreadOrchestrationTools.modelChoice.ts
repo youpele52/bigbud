@@ -57,6 +57,19 @@ export type ModelDecision = typeof ModelDecision.Type;
 
 const decodeRequested = Schema.decodeUnknownOption(RequestedModelSelection);
 
+/**
+ * `null`, `{}` or an object of only `undefined` fields means "no request" at every entry point,
+ * exactly like an omitted field: no hold, no picker, today's behavior (L5).
+ */
+export function isAbsentModelSelection(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  return (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => entry === undefined)
+  );
+}
+
 /** Lenient transport input to a bounded request; agent-set `options` are dropped (OD5). */
 export function parseRequestedModelSelection(value: unknown): RequestedModelSelection | null {
   return Option.getOrNull(decodeRequested(value));

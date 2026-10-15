@@ -137,3 +137,47 @@ describe("deriveModelChoiceCardRow", () => {
     });
   });
 });
+
+describe("agent-supplied model text (L10)", () => {
+  it("strips control, newline and bidi characters before display", () => {
+    const record: DelegatedModelChoiceRecord = {
+      status: "pending",
+      ...makeRequestedPayload({}),
+      requested: { provider: "cursor", model: "evil\u202Emodel\n\u0007\u2066x" },
+    };
+    expect(deriveModelChoiceNotice(record, 0).description).toBe(
+      "Requested evilmodelx isn't available (provider is hidden). Using gpt-5 now…",
+    );
+    expect(
+      deriveModelChoiceCardRow(
+        {
+          source: "linked",
+          summary: { requested: { provider: "cursor", model: "a\r\nb" }, status: "pending" },
+        },
+        null,
+      ),
+    ).toEqual({ kind: "requested", label: "Requested ab" });
+  });
+
+  it("never reads inherited properties as provider display names", () => {
+    const record: DelegatedModelChoiceRecord = {
+      status: "pending",
+      ...makeRequestedPayload({}),
+      requested: { provider: "constructor" },
+    };
+    expect(deriveModelChoiceNotice(record, 0).description).toBe(
+      "Requested constructor isn't available (provider is hidden). Using gpt-5 now…",
+    );
+  });
+
+  it("falls back to generic text when nothing printable remains", () => {
+    const record: DelegatedModelChoiceRecord = {
+      status: "pending",
+      ...makeRequestedPayload({}),
+      requested: { provider: "\u202E", model: "\n\u0000" },
+    };
+    expect(deriveModelChoiceNotice(record, 0).description).toBe(
+      "Requested model isn't available (provider is hidden). Using gpt-5 now…",
+    );
+  });
+});

@@ -6,6 +6,7 @@
  *
  * @module ThreadWatchReactor.modelChoice
  */
+import type { EventId } from "@bigbud/contracts";
 import { Clock, Effect, FiberMap, Schedule, Stream } from "effect";
 
 import type { ProjectionThreadActivityRepositoryShape } from "../../persistence/Services/ProjectionThreadActivities.ts";
@@ -15,6 +16,7 @@ import {
   MODEL_CHOICE_EXPIRE_ATTEMPTS,
   MODEL_CHOICE_SWEEP_BATCH,
   MODEL_CHOICE_SWEEP_INTERVAL_MS,
+  MODEL_CHOICE_SWEEP_MAX_AGE_MS,
   modelChoiceEventEffect,
   modelChoiceExpiryDelayMs,
   type PendingModelChoice,
@@ -68,19 +70,29 @@ export const startDelegatedModelChoiceSupervision = Effect.fn(
       );
     });
 
+  // Pages with a keyset cursor, so rows that keep failing never starve newer holds (M4).
   const sweep = Effect.gen(function* () {
-    const rows = yield* input.activityRepository.listPendingDelegatedModelChoiceRequests({
-      limit: MODEL_CHOICE_SWEEP_BATCH,
-    });
     const nowMs = yield* Clock.currentTimeMillis;
-    for (const row of rows) {
-      const choice = pendingModelChoiceFromRow(row);
-      if (choice === null || (yield* FiberMap.has(timers, choice.request.choiceId))) continue;
-      if (Date.parse(choice.request.deadlineAt) <= nowMs) {
-        yield* expire(choice, "restart-sweep");
-      } else {
-        yield* schedule(choice);
+    const since = new Date(nowMs - MODEL_CHOICE_SWEEP_MAX_AGE_MS).toISOString();
+    let after: { readonly createdAt: string; readonly activityId: EventId } | undefined;
+    for (;;) {
+      const rows = yield* input.activityRepository.listPendingDelegatedModelChoiceRequests({
+        limit: MODEL_CHOICE_SWEEP_BATCH,
+        since,
+        ...(after !== undefined ? { after } : {}),
+      });
+      for (const row of rows) {
+        const choice = pendingModelChoiceFromRow(row);
+        if (choice === null || (yield* FiberMap.has(timers, choice.request.choiceId))) continue;
+        if (Date.parse(choice.request.deadlineAt) <= nowMs) {
+          yield* expire(choice, "restart-sweep");
+        } else {
+          yield* schedule(choice);
+        }
       }
+      const last = rows.at(-1);
+      if (last === undefined || rows.length < MODEL_CHOICE_SWEEP_BATCH) break;
+      after = { createdAt: last.createdAt, activityId: last.activityId };
     }
   }).pipe(
     Effect.catchCause((cause) =>

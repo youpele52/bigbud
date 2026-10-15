@@ -33,7 +33,7 @@ import { useThreadSelectionStore } from "../stores/thread";
 import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
 import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
-import { migrateLocalSettingsToServer, updateServerSettings } from "../hooks/useSettings";
+import { migrateLocalSettingsToServer, persistServerSettings } from "../hooks/useSettings";
 import { migrateHiddenComposerProvidersToServer } from "../hooks/useSettings.storage";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
@@ -202,9 +202,10 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
   useEffect(() => {
     const loaded = getServerConfig();
     if (!serverConfigLoaded || !loaded || !readNativeApi()) return;
-    migrateHiddenComposerProvidersToServer({
+    // Awaited: the local list is dropped only after the server accepted it (retried next start).
+    void migrateHiddenComposerProvidersToServer({
       serverHiddenComposerProviders: loaded.settings.hiddenComposerProviders,
-      patchServer: (hiddenComposerProviders) => updateServerSettings({ hiddenComposerProviders }),
+      patchServer: (hiddenComposerProviders) => persistServerSettings({ hiddenComposerProviders }),
     });
   }, [serverConfigLoaded]);
 

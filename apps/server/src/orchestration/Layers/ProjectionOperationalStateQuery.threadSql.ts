@@ -1,3 +1,7 @@
+import {
+  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
+  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
+} from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -108,15 +112,33 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Result: ProjectionThreadActivityDbRowSchema,
     execute: ({ threadId, limit }) => sql`
       SELECT * FROM (
+        SELECT * FROM (
+          SELECT
+            activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
+            tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+          FROM projection_thread_activities
+          WHERE thread_id = ${threadId}
+          ORDER BY
+            CASE WHEN sequence IS NULL THEN 0 ELSE 1 END DESC,
+            sequence DESC, created_at DESC, activity_id DESC
+          LIMIT ${limit}
+        )
+        UNION
+        -- An unresolved delegated model choice always blocks dispatch, however old (H1).
         SELECT
-          activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
-          tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
-        FROM projection_thread_activities
-        WHERE thread_id = ${threadId}
-        ORDER BY
-          CASE WHEN sequence IS NULL THEN 0 ELSE 1 END DESC,
-          sequence DESC, created_at DESC, activity_id DESC
-        LIMIT ${limit}
+          r.activity_id AS "activityId", r.thread_id AS "threadId", r.turn_id AS "turnId",
+          r.tone, r.kind, r.summary, r.payload_json AS payload, r.sequence,
+          r.created_at AS "createdAt"
+        FROM projection_thread_activities r
+        WHERE r.thread_id = ${threadId}
+          AND r.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
+          AND NOT EXISTS (
+            SELECT 1 FROM projection_thread_activities v
+            WHERE v.thread_id = r.thread_id
+              AND v.kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
+              AND json_extract(v.payload_json, '$.choiceId') =
+                json_extract(r.payload_json, '$.choiceId')
+          )
       )
       ORDER BY
         CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,

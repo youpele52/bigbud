@@ -94,6 +94,10 @@ export type DeleteProjectionThreadActivitiesInput =
 
 export const ListPendingDelegatedModelChoiceRequestsInput = Schema.Struct({
   limit: NonNegativeInt,
+  /** Age cutoff (L6); holds resolve within seconds, so anything older is abandoned history. */
+  since: IsoDateTime,
+  /** Keyset cursor, so unresolvable rows can never starve a sweep page (M4). */
+  after: Schema.optional(Schema.Struct({ createdAt: IsoDateTime, activityId: EventId })),
 });
 export type ListPendingDelegatedModelChoiceRequestsInput =
   typeof ListPendingDelegatedModelChoiceRequestsInput.Type;
@@ -156,7 +160,12 @@ export interface ProjectionThreadActivityRepositoryShape {
   readonly listPendingDelegatedModelChoiceRequests: (
     input: ListPendingDelegatedModelChoiceRequestsInput,
   ) => Effect.Effect<
-    ReadonlyArray<{ readonly threadId: ThreadId; readonly payload: unknown }>,
+    ReadonlyArray<{
+      readonly threadId: ThreadId;
+      readonly activityId: EventId;
+      readonly createdAt: string;
+      readonly payload: unknown;
+    }>,
     ProjectionRepositoryError
   >;
 }

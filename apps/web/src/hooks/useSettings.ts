@@ -85,6 +85,11 @@ export function updateServerSettings(serverPatch: ServerSettingsPatch): void {
   void ensureNativeApi().server.updateSettings(serverPatch);
 }
 
+/** Persists via RPC and resolves only once the server accepted the patch. */
+export async function persistServerSettings(serverPatch: ServerSettingsPatch): Promise<void> {
+  applySettingsUpdated(await ensureNativeApi().server.updateSettings(serverPatch));
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 
 /**

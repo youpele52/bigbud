@@ -21,6 +21,7 @@ import {
   resolveDelegationModelDecision,
   startDelegatedFirstTurn,
 } from "./ThreadOrchestrationTools.createThread.modelChoice.ts";
+import { isAbsentModelSelection } from "./ThreadOrchestrationTools.modelChoice.ts";
 import {
   buildInitialDelegationPrompt,
   delegationError,
@@ -158,25 +159,23 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
             executionTargetId: callerThread.executionTargetId,
           }
         : {};
-    const decision =
-      input.modelSelection === undefined
-        ? undefined
-        : yield* resolveDelegationModelDecision({
-            repository: input.threadDelegationRepository,
-            delegation,
-            identity,
-            request: input.modelSelection,
-            sources: input.modelSources,
-            trunk: callerThread.modelSelection,
-            target:
-              targetProjectId === callerThread.projectId
-                ? callerExecutionTargets
-                : {
-                    providerRuntimeExecutionTargetId:
-                      targetProject.providerRuntimeExecutionTargetId,
-                    workspaceExecutionTargetId: targetProject.workspaceExecutionTargetId,
-                  },
-          });
+    const decision = isAbsentModelSelection(input.modelSelection)
+      ? undefined
+      : yield* resolveDelegationModelDecision({
+          repository: input.threadDelegationRepository,
+          delegation,
+          identity,
+          request: input.modelSelection,
+          sources: input.modelSources,
+          trunk: callerThread.modelSelection,
+          target:
+            targetProjectId === callerThread.projectId
+              ? callerExecutionTargets
+              : {
+                  providerRuntimeExecutionTargetId: targetProject.providerRuntimeExecutionTargetId,
+                  workspaceExecutionTargetId: targetProject.workspaceExecutionTargetId,
+                },
+        });
 
     yield* updateState("project_resolved");
     const createResult = yield* input.orchestrationEngine

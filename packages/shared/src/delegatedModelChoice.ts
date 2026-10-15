@@ -71,6 +71,23 @@ export function derivePendingDelegatedModelChoice(
   return pending;
 }
 
+/**
+ * The model a resolved choice picked for its held message, so a later queue flush (when another
+ * blocker kept the message queued) uses it instead of the fallback stored on the queued prompt.
+ */
+export function resolvedHeldModelSelection(
+  activities: ReadonlyArray<ModelChoiceActivity>,
+  messageId: string,
+): DelegationModelChoiceResolved["used"] | undefined {
+  const { requested, resolved } = collectChoices(activities);
+  for (const [choiceId, payload] of requested) {
+    if (payload.heldMessageId !== messageId) continue;
+    const resolution = resolved.get(choiceId);
+    if (resolution !== undefined && resolution.cancelled !== true) return resolution.used;
+  }
+  return undefined;
+}
+
 /** The pending choice, else the latest resolution (requested vs used), else `null`. */
 export function deriveDelegatedModelChoiceRecord(
   activities: ReadonlyArray<ModelChoiceActivity>,

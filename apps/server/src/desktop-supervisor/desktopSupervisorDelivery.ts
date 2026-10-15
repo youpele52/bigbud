@@ -21,7 +21,7 @@ import {
 import { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
 import { installSessionSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.session.ts";
 import { hasLiveDesktopSupervisorSession } from "./desktopSupervisorDelivery.identity.ts";
-import { DesktopSupervisorDeliveryPresence } from "./desktopSupervisorDelivery.presence.ts";
+import { hasOpenDeliveryConsumer } from "./desktopSupervisorDelivery.presence.ts";
 import type {
   DesktopSupervisorDeliveryShape,
   DesktopSupervisorOwner,
@@ -51,7 +51,6 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   private clientPromise: Promise<DesktopSupervisorOwner> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
-  private readonly presence = new DesktopSupervisorDeliveryPresence();
   private readonly ownerFactory: () => Promise<DesktopSupervisorOwner>;
 
   constructor(
@@ -122,11 +121,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   }
 
   hasOpenConsumer(): boolean {
-    return !this.closed && this.presence.hasOpenConsumer(this.authoritativeSessions.values());
-  }
-
-  retainExternalConsumer(): () => void {
-    return this.presence.retainExternal();
+    return !this.closed && hasOpenDeliveryConsumer(this.authoritativeSessions.values());
   }
 
   get retainedConsumerGenerationCount(): number {
@@ -278,7 +273,6 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.presence.clear();
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
     for (const session of new Set(this.sessions.values())) session.close();

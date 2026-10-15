@@ -73,13 +73,29 @@ export function modelChoiceRemainingMs(observedAtMs: number, nowMs: number): num
   return Math.max(0, DELEGATED_MODEL_CHOICE_HOLD_MS - Math.max(0, nowMs - observedAtMs));
 }
 
+// C0/C1 controls (including newlines) and bidi embedding, override and isolate marks.
+const UNSAFE_DISPLAY_CHARACTERS =
+  // oxlint-disable-next-line no-control-regex
+  /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+/** Agent-supplied text is shown inline, so it must not break lines or reorder the copy (L10). */
+function displayText(value: string | undefined): string | null {
+  const text = value?.replace(UNSAFE_DISPLAY_CHARACTERS, "").trim() ?? "";
+  return text.length > 0 ? text : null;
+}
+
 function requestedText(requested: RequestedModelSelection | null): string {
   if (requested === null) return "model";
-  if (requested.model !== undefined) return requested.model;
-  return (
-    (PROVIDER_DISPLAY_NAMES as Record<string, string | undefined>)[requested.provider] ??
-    requested.provider
-  );
+  const model = displayText(requested.model);
+  if (model !== null) return model;
+  if (Object.hasOwn(PROVIDER_DISPLAY_NAMES, requested.provider)) {
+    return (PROVIDER_DISPLAY_NAMES as Record<string, string>)[requested.provider]!;
+  }
+  return displayText(requested.provider) ?? "model";
+}
+
+function selectionText(selection: { readonly model: string }): string {
+  return displayText(selection.model) ?? "model";
 }
 
 function reasonText(reason: ModelChoiceUnusableReason | null): string {
@@ -110,14 +126,14 @@ function resolvedNotice(
     return {
       kind: "user-picked",
       tone: "success",
-      title: `You chose ${record.used.model} (requested ${requested} unavailable)`,
+      title: `You chose ${selectionText(record.used)} (requested ${requested} unavailable)`,
       description: null,
     };
   }
   return {
     kind: "fallback",
     tone: "warning",
-    title: `Requested ${requested} unavailable (${reasonText(record.reason)}); used ${record.used.model}`,
+    title: `Requested ${requested} unavailable (${reasonText(record.reason)}); used ${selectionText(record.used)}`,
     description: RESOLVED_BY_TEXT[record.resolvedBy] ?? null,
   };
 }
@@ -135,8 +151,8 @@ export function deriveModelChoiceNotice(
     title: "Choose a model for this thread",
     description:
       seconds > 0
-        ? `${unavailable} Choose a model — using ${record.fallback.model} in ${seconds}s.`
-        : `${unavailable} Using ${record.fallback.model} now…`,
+        ? `${unavailable} Choose a model — using ${selectionText(record.fallback)} in ${seconds}s.`
+        : `${unavailable} Using ${selectionText(record.fallback)} now…`,
   };
 }
 
@@ -179,7 +195,7 @@ export function deriveModelChoiceCardRow(
   return {
     kind: "resolved",
     tone: notice.tone === "success" ? "success" : "warning",
-    label: record.cancelled ? "Cancelled" : record.used.model,
+    label: record.cancelled ? "Cancelled" : selectionText(record.used),
     title: notice.title,
   };
 }

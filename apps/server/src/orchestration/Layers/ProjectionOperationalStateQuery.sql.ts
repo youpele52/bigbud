@@ -1,3 +1,7 @@
+import {
+  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
+  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
+} from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -177,6 +181,19 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
             SELECT 1 FROM projection_pending_user_inputs u
             WHERE u.thread_id = a.thread_id AND u.status = 'pending'
           )
+          -- A held delegated first turn must stay blocked after a restart (dispatch safety).
+          OR EXISTS (
+            SELECT 1 FROM projection_thread_activities r
+            WHERE r.thread_id = a.thread_id
+              AND r.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
+              AND NOT EXISTS (
+                SELECT 1 FROM projection_thread_activities v
+                WHERE v.thread_id = r.thread_id
+                  AND v.kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
+                  AND json_extract(v.payload_json, '$.choiceId') =
+                    json_extract(r.payload_json, '$.choiceId')
+              )
+          )
       )
       SELECT
         "activityId", "threadId", "turnId", tone, kind, summary, payload,
@@ -192,6 +209,8 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
               AND p.status = 'pending'
           )
         )
+        OR kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
+        OR kind = ${DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND}
         OR (
           kind = 'user-input.requested'
           AND EXISTS (

@@ -44,6 +44,7 @@ const harness = (input: {
     const dispatched = yield* Ref.make<ReadonlyArray<OrchestrationCommand>>([]);
     const attempts = yield* Ref.make(0);
     const rows = yield* Ref.make(input.rows ?? []);
+    const queries = yield* Ref.make<ReadonlyArray<{ since: string; after?: unknown }>>([]);
     yield* startDelegatedModelChoiceSupervision({
       orchestrationEngine: {
         streamDomainEvents: Stream.fromQueue(events),
@@ -57,13 +58,28 @@ const harness = (input: {
           }),
       },
       activityRepository: {
-        listPendingDelegatedModelChoiceRequests: () => Ref.get(rows),
+        // Pages like the SQL keyset query: ordered by (createdAt, activityId), after the cursor.
+        listPendingDelegatedModelChoiceRequests: (query) =>
+          Effect.gen(function* () {
+            yield* Ref.update(queries, (all) => [...all, query]);
+            const all = (yield* Ref.get(rows)).map((row, index) => ({
+              threadId: row.threadId,
+              payload: row.payload,
+              activityId: EventId.makeUnsafe(`row-${String(index).padStart(4, "0")}`),
+              createdAt: deadlineAt(0),
+            }));
+            const start =
+              query.after === undefined
+                ? 0
+                : all.findIndex((row) => row.activityId === query.after?.activityId) + 1;
+            return all.slice(start, start + query.limit);
+          }),
       },
     });
     const settle = Effect.gen(function* () {
       for (let index = 0; index < 5; index += 1) yield* Effect.yieldNow;
     });
-    return { events, dispatched, attempts, rows, settle };
+    return { events, dispatched, attempts, rows, queries, settle };
   });
 
 const expireOf = (commands: ReadonlyArray<OrchestrationCommand>) =>
@@ -159,6 +175,25 @@ it.effect("retries a failed expiry three times with backoff, then leaves it to t
       }
       assert.equal(yield* Ref.get(attempts), 4);
       assert.deepEqual(expireOf(yield* Ref.get(dispatched)), [["c-1", "timeout"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("pages through every pending row in one sweep, from a 7-day cutoff (M4, L6)", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      yield* TestClock.adjust("20 seconds");
+      const { dispatched, queries, settle } = yield* harness({
+        rows: Array.from({ length: 150 }, (_, index) => ({
+          threadId,
+          payload: payload(`stuck-${index}`, 1_000),
+        })),
+      });
+      yield* settle;
+      assert.equal((yield* Ref.get(dispatched)).length, 150);
+      const seen = yield* Ref.get(queries);
+      assert.isAbove(seen.length, 1);
+      assert.equal(seen[0]?.since, new Date(20_000 - 7 * 24 * 60 * 60 * 1000).toISOString());
     }),
   ).pipe(Effect.provide(TestClock.layer())),
 );

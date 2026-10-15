@@ -179,6 +179,36 @@ Browser tests are not part of `bun run test`; the ones touched by this work pass
 | AC12 | Deferred   | Phase 5 (separate release)                                                                                                                        |
 | AC13 | Met        | full gate above; every added or materially edited code file ≤ 400 lines                                                                           |
 
-Known limits: the mobile app's command allowlist does not include `thread.delegation.model-choice.pick`, so a mobile-only
-connected client cannot pick and the hold falls back after ≤ 10 s (the accepted presence false-positive cost). Provider
+Known limits: the mobile app's command allowlist does not include `thread.delegation.model-choice.pick`. Since the
+review fixes (D-16), a mobile-only client no longer counts as connected, so it falls back immediately; follow-up:
+mobile-web picker plus allowlist. Provider
 sessions started before the upgrade keep their old tool schemas until restart (plan Phase 4 item 4).
+
+## Review fixes (2026-10-15)
+
+Each behavior finding got a test that failed first. The fix landed only after the red run was recorded. Plan §12 records
+D-12–D-19, and §11 adds the three accepted items and the mobile follow-up.
+
+| Finding     | Test (red first)                                                                       | Red output                                                                          | Green |
+| ----------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----- |
+| H1          | `OrchestrationEngine.modelChoiceRecovery.test.ts`                                      | held prompt flushed at startup as a `queue-message:…` turn, not `delegated-message` | 1/1   |
+| H1          | `ProjectionOperationalStateQuery.modelChoice.test.ts` (fix reverted for the red run)   | `expected false to be true` (hold missing from the startup and per-thread window)   | 2/2   |
+| M2          | `deciderThreads.delegationModelChoice.recovery.test.ts`                                | `promise resolved "[]" instead of rejecting`                                        | 38/38 |
+| L7          | same file                                                                              | flush used the fallback `codex/gpt-5`, not the picked `claude-sonnet`               | 38/38 |
+| M3          | `useSettings.storage.test.ts`                                                          | `expected 'dropped' to be 'migrated'`; `expected 'migrated' to be 'failed'`         | 10/10 |
+| M4, L6      | `ProjectionThreads.modelChoice.test.ts`                                                | `expected [ 'o1', 'd0' ]` (old and deleting rows returned)                          | 3/3   |
+| M4, L6      | `ThreadWatchReactor.modelChoice.test.ts`                                               | `expected 100 to equal 150` (one page per sweep)                                    | 5/5   |
+| M5 (and L8) | `server.mobile.presence.ws.test.ts` (mobile subscriber vs `hasOpenConsumer()`)         | `[ false ]` expected, `[ true ]` received                                           | 8/8   |
+| L5          | `ThreadOrchestrationTools.createThread.modelChoice.test.ts` (`null`, `{}` vs no input) | 2 failed: child-linked activity gained `modelChoice: { status: "pending" }`         | 9/9   |
+| L9          | `Codex/Adapter.test.ts` (opt-in flipped to `false` for the red run, then restored)     | `expected [ 'list_notes', … ] to include 'list_available_models'`                   | 3/3   |
+| L10         | `ThreadModelChoiceNotice.logic.test.ts`                                                | 3 failed: raw `\u202E`/newline text; `function Object() { [native code] }`          | 9/9   |
+
+Accepted without code change (plan §11): a retry reuses the stored decision after settings change; the agent learns
+provider availability and recency (no secrets); runtime-mode guardrail parity is a pre-existing follow-up.
+
+Gates after the review fixes (2026-10-15): `bun fmt` 0; `bun lint` 0 (0 errors, no new warnings in touched code);
+`bun typecheck` 0 (9/9); `bun run --cwd apps/server thread-tools:manifest:check` 0; `OpencodeV2/` tree hash unchanged
+(`a56be2b3d…`); focused server suites 84 files / 408 tests, web 23 / 138, browser notice and card 2 / 7. Full
+`bun run test -- --continue` exit 0 (9/9 tasks): contracts 208, scripts 131, desktop 429 + 6 skipped, mobile-web 212,
+shared 372, web 2964, server 5065 + 104 skipped. Every touched code file is ≤ 400 lines (`server.mobile.ws.test.ts`
+split into `server.test.mobile.ts` helpers and `server.mobile.presence.ws.test.ts`).

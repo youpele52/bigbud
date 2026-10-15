@@ -4,7 +4,7 @@
  *
  * @module ProjectionThreads.modelChoice
  */
-import { IsoDateTime, ThreadId } from "@bigbud/contracts";
+import { EventId, IsoDateTime, ThreadId } from "@bigbud/contracts";
 import {
   DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
   DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
@@ -32,6 +32,8 @@ const RecentModelSelectionRow = Schema.Struct({
 
 const PendingRequestRow = Schema.Struct({
   threadId: ThreadId,
+  activityId: EventId,
+  createdAt: IsoDateTime,
   payload: Schema.fromJsonString(Schema.Unknown),
 });
 
@@ -76,12 +78,25 @@ export function makeListPendingDelegatedModelChoiceRequests(
   const query = SqlSchema.findAll({
     Request: ListPendingDelegatedModelChoiceRequestsInput,
     Result: PendingRequestRow,
-    execute: ({ limit }) => sql`
-      SELECT requested.thread_id AS "threadId", requested.payload_json AS payload
+    execute: ({ limit, since, after }) => sql`
+      SELECT
+        requested.thread_id AS "threadId", requested.activity_id AS "activityId",
+        requested.created_at AS "createdAt", requested.payload_json AS payload
       FROM projection_thread_activities requested
       JOIN projection_threads thread ON thread.thread_id = requested.thread_id
       WHERE requested.kind = ${DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND}
+        AND requested.created_at >= ${since}
         AND thread.deleted_at IS NULL
+        -- A deleting thread rejects resolution; its deletion removes the hold (M4).
+        AND thread.deleting_at IS NULL
+        AND (
+          ${after === undefined ? 1 : 0} = 1
+          OR requested.created_at > ${after?.createdAt ?? ""}
+          OR (
+            requested.created_at = ${after?.createdAt ?? ""}
+            AND requested.activity_id > ${after?.activityId ?? ""}
+          )
+        )
         AND NOT EXISTS (
           SELECT 1 FROM projection_thread_activities resolved
           WHERE resolved.thread_id = requested.thread_id

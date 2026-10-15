@@ -114,40 +114,73 @@ describe("hidden composer providers move to the server (OD1)", () => {
     };
   };
 
-  it("patches an empty server list once, then drops the local key", () => {
+  it("patches an empty server list once, then drops the local key", async () => {
     const { read: readRaw, storage } = makeStorage({
       [CLIENT_SETTINGS_STORAGE_KEY]: {
         terminalFontSize: 15,
         hiddenComposerProviders: ["copilot", "not-a-provider", "pi"],
       },
     });
-    const patchServer = vi.fn();
+    const patchServer = vi.fn(async (_hidden: ReadonlyArray<string>) => undefined);
     const migrate = () =>
       migrateHiddenComposerProvidersToServer({
         serverHiddenComposerProviders: [],
         patchServer,
         storage,
       });
-    expect(migrate()).toBe("migrated");
+    expect(await migrate()).toBe("migrated");
     expect(patchServer).toHaveBeenCalledWith(["copilot", "pi"]);
     expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({ terminalFontSize: 15 });
-    expect(migrate()).toBe("none");
+    expect(await migrate()).toBe("none");
     expect(patchServer).toHaveBeenCalledOnce();
   });
 
-  it("keeps a non-empty server list and still drops the local key", () => {
+  it("unions a differing local list into a non-empty server list (fails closed)", async () => {
     const { read: readRaw, storage } = makeStorage({
-      [CLIENT_SETTINGS_LEGACY_KEYS[0]]: { hiddenComposerProviders: ["copilot"] },
+      [CLIENT_SETTINGS_LEGACY_KEYS[0]]: { hiddenComposerProviders: ["copilot", "cursor"] },
     });
-    const patchServer = vi.fn();
+    const patchServer = vi.fn(async (_hidden: ReadonlyArray<string>) => undefined);
     expect(
-      migrateHiddenComposerProvidersToServer({
+      await migrateHiddenComposerProvidersToServer({
         serverHiddenComposerProviders: ["cursor"],
+        patchServer,
+        storage,
+      }),
+    ).toBe("migrated");
+    expect(patchServer).toHaveBeenCalledWith(["cursor", "copilot"]);
+    expect(readRaw(CLIENT_SETTINGS_LEGACY_KEYS[0])).toEqual({});
+  });
+
+  it("drops a local list the server already covers without patching", async () => {
+    const { read: readRaw, storage } = makeStorage({
+      [CLIENT_SETTINGS_STORAGE_KEY]: { hiddenComposerProviders: ["cursor"] },
+    });
+    const patchServer = vi.fn(async (_hidden: ReadonlyArray<string>) => undefined);
+    expect(
+      await migrateHiddenComposerProvidersToServer({
+        serverHiddenComposerProviders: ["cursor", "pi"],
         patchServer,
         storage,
       }),
     ).toBe("dropped");
     expect(patchServer).not.toHaveBeenCalled();
-    expect(readRaw(CLIENT_SETTINGS_LEGACY_KEYS[0])).toEqual({});
+    expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({});
+  });
+
+  it("keeps the local list when the server patch fails, so the next start retries", async () => {
+    const { read: readRaw, storage } = makeStorage({
+      [CLIENT_SETTINGS_STORAGE_KEY]: { hiddenComposerProviders: ["copilot"] },
+    });
+    const failing = vi.fn(async (_hidden: ReadonlyArray<string>) => {
+      throw new Error("offline");
+    });
+    expect(
+      await migrateHiddenComposerProvidersToServer({
+        serverHiddenComposerProviders: [],
+        patchServer: failing,
+        storage,
+      }),
+    ).toBe("failed");
+    expect(readRaw(CLIENT_SETTINGS_STORAGE_KEY)).toEqual({ hiddenComposerProviders: ["copilot"] });
   });
 });

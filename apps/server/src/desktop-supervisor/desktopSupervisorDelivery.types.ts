@@ -45,8 +45,6 @@ export interface DesktopSupervisorDeliveryShape {
     input: OrchestrationBaselineAckInput,
   ) => Promise<OrchestrationBaselineAckResult>;
   readonly close: () => Promise<void>;
-  /** Any open delivery consumer (desktop, web or mobile web): a user could answer now (OD6). */
+  /** Any open supervised delivery consumer (desktop or web, not mobile): a user could answer (OD6). */
   readonly hasOpenConsumer: () => boolean;
-  /** Counts a consumer that bypasses supervised delivery (the mobile route) until released. */
-  readonly retainExternalConsumer: () => () => void;
 }

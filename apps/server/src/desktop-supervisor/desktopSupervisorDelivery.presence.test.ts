@@ -26,23 +26,9 @@ describe("delivery presence (OD6)", () => {
     await coordinator.close();
   });
 
-  it("counts retained external consumers such as the mobile stream, released once", async () => {
-    const coordinator = standalone();
-    const release = coordinator.retainExternalConsumer();
-    const other = coordinator.retainExternalConsumer();
-    expect(coordinator.hasOpenConsumer()).toBe(true);
-    release();
-    release();
-    expect(coordinator.hasOpenConsumer()).toBe(true);
-    other();
-    expect(coordinator.hasOpenConsumer()).toBe(false);
-    await coordinator.close();
-  });
-
   it("reports no consumer after the coordinator closes", async () => {
     const coordinator = standalone();
     await open(coordinator, "consumer-1");
-    coordinator.retainExternalConsumer();
     await coordinator.close();
     expect(coordinator.hasOpenConsumer()).toBe(false);
   });

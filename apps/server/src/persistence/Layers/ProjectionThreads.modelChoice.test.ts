@@ -35,6 +35,9 @@ const setThread = (
     `;
   });
 
+const choices = (rows: ReadonlyArray<{ readonly payload: unknown }>) =>
+  rows.map((row) => (row.payload as { choiceId: string }).choiceId);
+
 layer("delegated model choice persistence reads", (it) => {
   it.effect("lists recently used models newest first, deduplicated, started threads only", () =>
     Effect.gen(function* () {
@@ -96,11 +99,52 @@ layer("delegated model choice persistence reads", (it) => {
       yield* add("done", "s2", "delegation.model-choice-resolved", "c2");
       yield* add("gone", "r3", "delegation.model-choice-requested", "c3");
       yield* sql`UPDATE projection_threads SET deleted_at = ${"2026-10-15T10:01:00.000Z"} WHERE thread_id = ${"gone"}`;
-      const pending = yield* activities.listPendingDelegatedModelChoiceRequests({ limit: 50 });
+      const pending = yield* activities.listPendingDelegatedModelChoiceRequests({
+        limit: 50,
+        since: "2026-10-01T00:00:00.000Z",
+      });
       assert.deepStrictEqual(
         pending.map((row) => [row.threadId, (row.payload as { choiceId: string }).choiceId]),
         [["held", "c1"]],
       );
+    }),
+  );
+
+  it.effect("skips deleting threads and old requests, and pages with a cursor (M4, L6)", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const activities = yield* ProjectionThreadActivityRepository;
+      const add = (threadId: string, id: string, choiceId: string, createdAt: string) =>
+        activities.upsert({
+          activityId: EventId.makeUnsafe(id),
+          threadId: ThreadId.makeUnsafe(threadId),
+          turnId: null,
+          tone: "info",
+          kind: "delegation.model-choice-requested",
+          summary: "requested",
+          payload: { choiceId },
+          createdAt,
+        });
+      for (const threadId of ["deleting", "old", "p1", "p2", "p3"]) {
+        yield* setThread(sql, threadId, { provider: "codex", model: "m" }, "2026-10-15T10:00:00Z");
+      }
+      yield* add("deleting", "q0", "d0", "2026-10-15T09:00:00.000Z");
+      yield* sql`UPDATE projection_threads SET deleting_at = ${"2026-10-15T10:01:00.000Z"} WHERE thread_id = ${"deleting"}`;
+      yield* add("old", "q1", "o1", "2026-09-01T00:00:00.000Z");
+      yield* add("p1", "q2", "n1", "2026-10-15T10:00:01.000Z");
+      yield* add("p2", "q3", "n2", "2026-10-15T10:00:02.000Z");
+      yield* add("p3", "q4", "n3", "2026-10-15T10:00:03.000Z");
+      const since = "2026-10-08T10:00:00.000Z";
+      const first = yield* activities.listPendingDelegatedModelChoiceRequests({ limit: 2, since });
+      // "c1" is the earlier test's still-pending hold on the shared database.
+      assert.deepStrictEqual(choices(first), ["c1", "n1"]);
+      const last = first.at(-1)!;
+      const next = yield* activities.listPendingDelegatedModelChoiceRequests({
+        limit: 2,
+        since,
+        after: { createdAt: last.createdAt, activityId: last.activityId },
+      });
+      assert.deepStrictEqual(choices(next), ["n2", "n3"]);
     }),
   );
 });
