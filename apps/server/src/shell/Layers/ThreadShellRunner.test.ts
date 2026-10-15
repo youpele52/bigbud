@@ -94,11 +94,10 @@ class BunTestPtyProcess implements PtyProcess {
   }
 }
 
-// Spawn through the production node-pty adapter, not raw node-pty: the published
-// node-pty tarball ships `spawn-helper` without the executable bit and only the adapter's
-// `ensureNodePtySpawnHelperExecutable` step repairs it. Raw spawns failed with
-// "posix_spawnp failed" whenever this file ran before any other NodePTY user in a fresh
-// install.
+// Spawn through the production node-pty adapter, not raw node-pty: node-pty 1.1.0 shipped
+// `spawn-helper` without the executable bit and only the adapter's
+// `ensureNodePtySpawnHelperExecutable` step repaired it (raw spawns failed with
+// "posix_spawnp failed" in a fresh install). The adapter is the code path production uses.
 const nodePtyAdapter = Effect.runPromise(
   Effect.gen(function* () {
     return yield* PtyAdapter;

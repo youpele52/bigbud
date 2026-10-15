@@ -180,3 +180,31 @@ Changed G2 fixtures. In `ProviderCommandReactor.sessionRecovery{,.replay}.test.t
 | AC3.4 | `EntityPurge.forkAttachments.test.ts`, `ProjectionPipeline.attachments.fork.test.ts`                                                                                                                                               |
 
 The D18 "model no longer offered" clause is superseded by the decision of 15 October 2026: there is no automatic trigger. The failure stays `invalid-request`, which the classifier tests show is never recovered or forked. The manual "Continue in a new thread" action (`ThreadRecoveryNotice.browser.tsx`) is how the user picks another model.
+
+## node-pty upgrade (1.1.0 → 1.2.0-beta.15)
+
+node-pty 1.1.0 on macOS never closed the pseudo-terminal master it opened in `pty.cc`, so every spawn leaked one `/dev/ptmx` fd for the life of the process. With `kern.tty.ptmx_max` at 511, a long-running Node or Electron backend eventually runs out of PTYs. `apps/server` now pins `node-pty` to exactly `1.2.0-beta.15`. Because it is a prerelease, the version is exact rather than a range. In `bun.lock`, only the node-pty entry changed; its dependency, `node-addon-api ^7.1.0`, is the same.
+
+### Red → green evidence
+
+`apps/server/src/terminal/Layers/NodePTY.leak.test.ts` spawns 10 PTYs through the production `NodePTY.layer`. Half of them exit on their own and half are killed with SIGKILL. It then makes 10 spawns that fail. After each batch it counts the process's open `/dev/ptmx`, `/dev/ttysN` and `/dev/pts/N` fds with `lsof` and checks the count against the baseline. The test is skipped on Windows and wherever `lsof` is missing.
+
+| Case                       | 1.1.0 (red)                       | 1.2.0-beta.15 (green) |
+| -------------------------- | --------------------------------- | --------------------- |
+| 10 exited or killed spawns | baseline 0 → 15 (10 ptmx + 5 tty) | 0 → 0                 |
+| 10 failed spawns           | 15 → 25 (10 ptmx)                 | 0 → 0                 |
+
+There was also a smoke test that loaded the pruned macOS-only beta layout under `ELECTRON_RUN_AS_NODE=1` with Electron 40.6.0 (Node 24.13.1, N-API 10). It ran 10 spawns, every one printed its output, and the PTY fd count went from 0 to 0.
+
+### Layout and API findings
+
+- The macOS prebuilds are still at `prebuilds/darwin-{arm64,x64}/{pty.node,spawn-helper}`. The tarball now ships `spawn-helper` as 0755, where 1.1.0 shipped it 0644. `ensureNodePtySpawnHelperExecutable` keeps the same candidate paths and stays in place for `build/Release` source builds.
+- `pty.node` is an N-API module: it exports `napi_register_module_v1` and imports only `napi_*` symbols. It is ABI-stable across Node `^22.16 || ^23.11 || >=24.10` and Electron's Node, so the desktop build's `npmRebuild: false` still holds. Under Bun, the server uses `BunPTY`, so node-pty is only loaded under Node or Electron.
+- New in the tarball: `prebuilds/linux-{x64,arm64}/pty.node` (Linux installs no longer need node-gyp) and Windows ConPTY files under `prebuilds/win32-*/conpty/`. The `deps/winpty` directory and the Windows `pty.node` (winpty) are gone. `pruneMacServerRuntimeArtifacts` was run on the beta layout and kept only the `darwin-*` prebuilds. Its `deps/winpty` entry no longer matches anything and does no harm.
+- Typings: `resize` gains an optional `pixelSize` argument, and `useConpty` is deprecated and ignored. bigbud uses neither. `spawn` options, `onData`, `onExit` and `kill` are unchanged, and `argsToCommandLine` on Windows behaves the same, so the WSL pre-quoted string path is unaffected.
+
+### Unverified
+
+- Windows ConPTY at runtime: the build machine is macOS. winpty has been removed, so ConPTY is now the only backend on Windows.
+- Full desktop packaging (`electron-builder`, `npm install --production` into the staged server, signing). The scripts' unit tests pass, and the prune step and the Electron smoke test were run by hand.
+- Linux runtime with the new prebuilds.
