@@ -12,11 +12,13 @@ import { currentV2RequestContext } from "./Client.guard.ts";
 import { guardV2Publication, validV2Publication } from "./Runtime.publication.ts";
 import { runV2Caller } from "./Runtime.caller.ts";
 import { V2ActivationDeferred } from "./PluginSetup.activation.errors.ts";
+import { bindV2SettlementLogServices } from "./Runtime.settlement.log.ts";
 
 /** Real local adapter factory. Explicit isolated harness inputs, not preview enablement. */
 export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* (
   options: Omit<V2IsolatedRuntimeOptions, "emit">,
 ) {
+  bindV2SettlementLogServices(yield* Effect.services());
   const events = yield* PubSub.bounded<ProviderRuntimeEvent>(256);
   let closing = false;
   const shutdownEvents = Effect.sync(() => {

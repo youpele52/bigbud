@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { processStartToken } from "../utils/processStartToken.ts";
+import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
 
 export interface RemoteAgentControllerIdentity {
   readonly id: string;
@@ -25,8 +25,10 @@ export async function isRemoteAgentControllerAlive(
   if (identity.id === controller.id) return true;
   try {
     process.kill(identity.pid, 0);
-    const startedAt = processStartToken(identity.pid);
-    return startedAt === undefined || startedAt === identity.startedAt;
+    // Only comparable tokens that differ prove PID reuse; legacy or unobtainable ones fail closed.
+    return (
+      compareProcessStartToken(identity.startedAt, processStartToken(identity.pid)) !== "different"
+    );
   } catch (cause) {
     return cause instanceof Error && "code" in cause && cause.code === "EPERM";
   }

@@ -6,9 +6,14 @@ import type { V2ThreadReceipts } from "./Orchestration.receipts.ts";
 import * as Effect from "effect/Effect";
 import { V2ActivationBusy } from "./PluginSetup.activation.errors.ts";
 import { v2Request } from "./Client.ts";
+import { v2OrchestrationInvocationId } from "./Execution.orchestration.ts";
+import { isThreadToolInvocationInFlight } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
 
 /** H1 repair: a dispatched callback that failed is released only with exact native-drain proof plus
- * a durable receipt read or a later interrupt acknowledgement. Unreadable evidence keeps it owned. */
+ * durable receipt evidence or a later interrupt acknowledgement. Unreadable evidence keeps it owned.
+ * A "completed" receipt is terminal. "reserved" or "absent" is proof only while no canonical
+ * handler or dispatch for the invocation is still in flight in this server process: the bigbud
+ * route may outlive the caller's request timeout. */
 export async function reconcileV2BridgeExecutions(
   runtime: OpencodeV2Runtime,
   session: V2RuntimeSession,
@@ -34,8 +39,10 @@ export async function reconcileV2BridgeExecutions(
     let receiptDurable = false;
     if (nativeDrained && entry.receiptKey)
       try {
-        await receipts.durableState(entry.receiptKey);
-        receiptDurable = true;
+        const state = await receipts.durableState(entry.receiptKey);
+        receiptDurable =
+          state === "completed" ||
+          !isThreadToolInvocationInFlight(v2OrchestrationInvocationId(entry.receiptKey));
       } catch {
         receiptDurable = false; // Unreadable/invalid receipt evidence is never proof.
       }

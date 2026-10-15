@@ -4,6 +4,8 @@ import { settleV2RuntimeReservation } from "./Runtime.activation.ts";
 import { repairV2RetainedReservation } from "./Runtime.settlement.ts";
 import { nextV2SettlementSequence, V2ActiveExecutions } from "./Execution.owners.ts";
 import { reconcileV2BridgeExecutions } from "./Orchestration.bridge.activation.ts";
+import { v2OrchestrationInvocationId } from "./Execution.orchestration.ts";
+import { enterThreadToolInvocation } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
 
 type Fixture = Parameters<Parameters<typeof withV2SettlementFixture>[0]>[0];
 type DurableState = Awaited<
@@ -151,6 +153,36 @@ it("an interrupt acknowledged before the failure is not proof for that later fai
     } finally {
       delete f.owner.coding;
       delete f.owner.interruptAcknowledgedSequence;
+    }
+  });
+});
+
+it.each([
+  ["reserved receipt with its canonical handler still in flight", "reserved", true, "coding-busy"],
+  ["reserved receipt whose canonical handler has finished", "reserved", false, undefined],
+  ["absent receipt", "absent", false, undefined],
+  ["terminal receipt", "completed", false, undefined],
+] as const)("H1 in-flight evidence: %s", async (_label, state, handlerInFlight, expected) => {
+  await withV2SettlementFixture(async (f) => {
+    await f.send("first");
+    f.setActive(false);
+    // The real in-process route ledger: the bigbud handler outlived the caller's request timeout.
+    const leave = handlerInFlight
+      ? enterThreadToolInvocation(v2OrchestrationInvocationId("receipt-key"))
+      : undefined;
+    const active = await failDispatchedCallback(f, async () => state);
+    try {
+      expect(await settleV2RuntimeReservation(f.runtime, f.owner)).toBe(expected);
+      expect(active.busyCount()).toBe(expected ? 1 : 0);
+      if (leave) {
+        expect(f.owner.activation?.token).toBeDefined();
+        leave(); // Only the handler's real end releases; no timer participates.
+        expect(await settleV2RuntimeReservation(f.runtime, f.owner)).toBeUndefined();
+        expect(active.busyCount()).toBe(0);
+      }
+    } finally {
+      leave?.();
+      delete f.owner.coding;
     }
   });
 });

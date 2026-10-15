@@ -6,6 +6,7 @@ import {
   type ThreadOrchestrationHttpConfig,
 } from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import { createThreadOrchestrationBridge } from "../../../orchestration-tools/orchestrationMcpBridge.ts";
+import { beginThreadToolDispatch } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
 
 export const V2_ORCHESTRATION_ACTIONS = [
   "rename",
@@ -25,6 +26,10 @@ export const V2_ORCHESTRATION_ACTIONS = [
   "get_system_resources",
 ] as const;
 
+/** Canonical invocation id for a serialized invocation identity (the durable receipt key). */
+export const v2OrchestrationInvocationId = (receiptKey: string) =>
+  `v2-tool:${createHash("sha256").update(receiptKey).digest("hex")}`;
+
 /** Existing canonical HTTP tool dispatch is the bigbud-level route, not a native fork/subagent API. */
 export function prepareV2OrchestrationRequest(body: unknown, identity: readonly string[]) {
   const request = Schema.decodeUnknownSync(ThreadToolRequest)(body);
@@ -33,7 +38,7 @@ export function prepareV2OrchestrationRequest(body: unknown, identity: readonly 
     request.workspacePath !== undefined
   )
     throw new Error("V2 orchestration action is not supported.");
-  const invocationId = `v2-tool:${createHash("sha256").update(JSON.stringify(identity)).digest("hex")}`;
+  const invocationId = v2OrchestrationInvocationId(JSON.stringify(identity));
   const sourceMessageId = `mcp-source:${createHash("sha256").update(invocationId).digest("hex")}`;
   const prepared = { ...request, invocationId, sourceMessageId };
   if (Buffer.byteLength(JSON.stringify(prepared)) > 32768)
@@ -64,6 +69,20 @@ export async function callV2PreparedOrchestration(
   const validate = await beforeRequest();
   validate();
   signal?.throwIfAborted();
+  // This server's own route enters the same invocation; an abandoned dispatch is fenced there.
+  const settle = beginThreadToolDispatch(request.invocationId);
+  try {
+    return await fetchV2Orchestration(config, request, signal);
+  } finally {
+    settle();
+  }
+}
+
+async function fetchV2Orchestration(
+  config: ThreadOrchestrationHttpConfig,
+  request: ReturnType<typeof prepareV2OrchestrationRequest>,
+  signal?: AbortSignal,
+) {
   const response = await fetch(
     `http://${config.host}:${config.port}${THREAD_ORCHESTRATION_API_PATH}`,
     {

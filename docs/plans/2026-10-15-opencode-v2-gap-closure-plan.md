@@ -315,3 +315,14 @@ The 50 skips break down as:
 - The CLI maintenance commands do not take the state-directory lock.
 - `bun dev:server` crashes under Bun 1.3.14 on a static `node:sqlite` import in the Cursor `Provider.usageLimits.credentials.ts` (commit `bbb65462ca`). This is pre-existing and unrelated to this plan.
 - Phase 4.1: retire the four retired-path excluded files (`Runtime.tools`, `Runtime.model`, `Execution.application`, `Execution.lifecycle`). Keep `Catalog.native` as a smoke, or port it to the shared path if a public-network job is ever approved. Drop the `ssh` case in `ServerManager.retail.isolation.test.ts`.
+
+### Independent review findings (Leg 7, appended 2026-10-15)
+
+These change plan-level semantics; earlier text is kept as written.
+
+- **Phase 2.1 lock identity.** Owner liveness now uses a versioned, environment-independent start token (`start-v2:`; Linux `/proc/<pid>/stat` field 22 plus boot id, other POSIX `ps lstart` under `LC_ALL=C TZ=UTC`). Only two comparable tokens that differ prove PID reuse. Locks written by older builds fail closed unless the owner PID is gone. Another host's lock is refused with a message naming that host. The remote-agent controller uses the same comparison.
+- **H1 receipt evidence.** "Durable receipt" now means a `completed` receipt, or a `reserved`/`absent` receipt while no canonical handler or dispatch for that invocation is in flight in this server process (in-process ledger `threadToolInvocationFlights.ts`). A dispatch abandoned before the route started it is fenced and refused on arrival. There is still no timer.
+- **Phase 1 assembly.** Each scope report must have run exactly its frozen suite file set.
+- Settlement diagnostics log through the server's own logger and level.
+
+Evidence: [live-send diagnosis](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md) "Independent review fixes" and [qualification ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md) "Leg 7".

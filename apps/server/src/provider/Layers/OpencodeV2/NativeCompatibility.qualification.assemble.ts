@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { V2_NATIVE_CONTRACT_DIGEST } from "./NativeCompatibility.contract.ts";
 import { v2NativeQualificationResultsDigest } from "./NativeCompatibility.evidence.ts";
 import {
+  V2_NATIVE_QUALIFICATION_SUITE,
   V2_NATIVE_QUALIFICATION_SUITE_REVISION,
   V2_NATIVE_QUALIFICATION_TARGET as TARGET,
 } from "./NativeCompatibility.qualification.suite.ts";
@@ -108,8 +109,34 @@ export function v2QualificationApproval(input: {
   };
 }
 
-/** One scope from a vitest JSON report: every test must execute and pass (skipped: 0). */
+/** Report test-file names (absolute on the runner) as suite paths relative to apps/server. */
+const suiteRelative = (name: string) => {
+  const normalized = name.replaceAll("\\", "/");
+  const index = normalized.lastIndexOf("/apps/server/");
+  return index === -1 ? normalized : normalized.slice(index + "/apps/server/".length);
+};
+
+/** The report must have run exactly the frozen scope file set: no subset, no extra file. */
+function assertV2QualificationScopeFiles(scope: Scope, parsed: Record<string, unknown>) {
+  const results = Array.isArray(parsed.testResults) ? (parsed.testResults as unknown[]) : [];
+  const ran = results.map((result) =>
+    result && typeof result === "object" && typeof (result as { name?: unknown }).name === "string"
+      ? suiteRelative((result as { name: string }).name)
+      : "",
+  );
+  const expected = V2_NATIVE_QUALIFICATION_SUITE[scope];
+  const missing = expected.filter((file) => !ran.includes(file));
+  const extra = ran.filter((file) => !expected.includes(file));
+  if (missing.length || extra.length || new Set(ran).size !== ran.length)
+    throw new Error(
+      `Qualification scope ${scope} did not run its exact file set (missing: ${missing.join(", ") || "none"}; unexpected: ${extra.join(", ") || "none"}; files=${ran.length}).`,
+    );
+}
+
+/** One scope from a vitest JSON report: exactly the frozen file set, and every test must execute
+ * and pass (skipped: 0). */
 export function v2QualificationScopeResult(
+  scope: Scope,
   report: string,
   context: {
     readonly testedBinarySha256: string;
@@ -126,6 +153,7 @@ export function v2QualificationScopeResult(
     throw new Error(
       `Qualification scope did not fully pass (tests=${tests}, failures=${failures}, skipped=${skipped}).`,
     );
+  assertV2QualificationScopeFiles(scope, parsed);
   // Key order mirrors the evidence schema so the results digest is stable after decoding.
   return {
     status: "passed" as const,
@@ -169,7 +197,7 @@ export function v2QualificationEvidencePacket(input: {
   const results = Object.fromEntries(
     V2_NATIVE_QUALIFICATION_SCOPES.map((scope) => [
       scope,
-      v2QualificationScopeResult(input.reports[scope], context),
+      v2QualificationScopeResult(scope, input.reports[scope], context),
     ]),
   ) as Record<Scope, ReturnType<typeof v2QualificationScopeResult>>;
   const record = {

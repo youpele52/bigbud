@@ -17,7 +17,7 @@ import path from "node:path";
 
 import { Data, Effect, Layer } from "effect";
 
-import { processStartToken } from "../utils/processStartToken.ts";
+import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
 import { ServerConfig } from "./config.ts";
 
 export const STATE_DIR_LOCK_FILENAME = "backend.lock";
@@ -26,7 +26,8 @@ const FORMAT = "bigbud.backend-lock.v1";
 export interface StateDirLockRecord {
   readonly format: typeof FORMAT;
   readonly pid: number;
-  /** Process start token (`ps lstart`), or null when unobtainable on this platform. */
+  /** Environment-independent process start token, or null when unobtainable on this platform.
+   * Tokens written by older builds are not comparable and therefore never prove PID reuse. */
   readonly startedAt: string | null;
   readonly port: number;
   readonly hostname: string;
@@ -85,17 +86,18 @@ export function parseStateDirLockRecord(raw: string): StateDirLockRecord | undef
   }
 }
 
-/** "dead" only with proof; anything unprovable is treated as a live owner. */
+/** "dead" only with proof; anything unprovable is a live owner. Another host's record cannot be
+ * checked from here at all ("foreign-host"), so it is refused like a live owner. */
 export function classifyStateDirLockOwner(
   owner: StateDirLockRecord,
   probe: StateDirLockProbe,
-): "live" | "dead" {
-  if (owner.hostname !== probe.hostname()) return "live";
+): "live" | "dead" | "foreign-host" {
+  if (owner.hostname !== probe.hostname()) return "foreign-host";
   if (!probe.isAlive(owner.pid)) return "dead";
-  const current = probe.startToken(owner.pid);
-  if (owner.startedAt !== null && current !== undefined && current !== owner.startedAt)
-    return "dead"; // The PID was reused by an unrelated process.
-  return "live";
+  // Only two comparable tokens that differ prove the PID was reused by an unrelated process.
+  return compareProcessStartToken(owner.startedAt, probe.startToken(owner.pid)) === "different"
+    ? "dead"
+    : "live";
 }
 
 /** Exclusive create with complete content; falls back to `wx` where hard links are unsupported. */
@@ -160,11 +162,25 @@ async function readIfPresent(filename: string) {
   }
 }
 
+/** Atomically capture the file under a private name, then delete it only if it is still the
+ * expected record; a successor captured by a lost race is restored with an exclusive link. */
 async function unlinkIfUnchanged(filename: string, expected: string) {
   if ((await readIfPresent(filename)) !== expected) return;
-  await fs.unlink(filename).catch((cause: unknown) => {
-    if (errorCode(cause) !== "ENOENT") throw cause;
-  });
+  const captured = `${filename}.${randomBytes(8).toString("hex")}.stale`;
+  try {
+    await fs.rename(filename, captured);
+  } catch (cause) {
+    if (errorCode(cause) === "ENOENT") return;
+    throw cause;
+  }
+  try {
+    if ((await readIfPresent(captured)) !== expected)
+      await fs.link(captured, filename).catch((cause: unknown) => {
+        if (errorCode(cause) !== "EEXIST") throw cause;
+      });
+  } finally {
+    await fs.unlink(captured).catch(() => {});
+  }
 }
 
 export interface StateDirLockHandle {
@@ -210,7 +226,13 @@ export async function acquireStateDirLock(input: {
         stateDir: input.stateDir,
         message: `The bigbud backend lock ${lockPath} is unreadable. If no bigbud backend is running, delete it; otherwise use a different BIGBUD_HOME.`,
       });
-    if (classifyStateDirLockOwner(owner, probe) === "live")
+    const state = classifyStateDirLockOwner(owner, probe);
+    if (state === "foreign-host")
+      throw new StateDirLockError({
+        stateDir: input.stateDir,
+        message: `The bigbud backend lock ${lockPath} was written on host "${owner.hostname}" (pid ${owner.pid}, port ${owner.port}), not this host "${probe.hostname()}", so its owner cannot be checked. If no backend uses ${input.stateDir} (for example after a host rename), delete the lock; otherwise use a different BIGBUD_HOME.`,
+      });
+    if (state === "live")
       throw new StateDirLockError({
         stateDir: input.stateDir,
         message: `Another bigbud backend (pid ${owner.pid}, port ${owner.port}) owns ${input.stateDir}; stop it or use a different BIGBUD_HOME.`,

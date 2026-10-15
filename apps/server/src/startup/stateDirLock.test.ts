@@ -13,8 +13,11 @@ import {
   type StateDirLockProbe,
   type StateDirLockRecord,
 } from "./stateDirLock.ts";
+import { PROCESS_START_TOKEN_PREFIX } from "../utils/processStartToken.ts";
 
 const HOST = "fixture-host";
+/** A comparable (current-format) synthetic start token. */
+const T = (value: string) => `${PROCESS_START_TOKEN_PREFIX}test:${value}`;
 
 /** Synthetic process table: pid -> start token (undefined = alive but unobtainable). */
 function makeProbe(pid: number, table: Map<number, string | undefined>): StateDirLockProbe {
@@ -22,7 +25,10 @@ function makeProbe(pid: number, table: Map<number, string | undefined>): StateDi
     pid,
     hostname: () => HOST,
     isAlive: (candidate) => table.has(candidate),
-    startToken: (candidate) => table.get(candidate),
+    startToken: (candidate) => {
+      const value = table.get(candidate);
+      return value === undefined ? undefined : T(value);
+    },
   };
 }
 
@@ -43,7 +49,7 @@ const writeRecord = (record: Partial<StateDirLockRecord>) =>
     JSON.stringify({
       format: "bigbud.backend-lock.v1",
       pid: 41,
-      startedAt: "start-41",
+      startedAt: T("start-41"),
       port: 3773,
       hostname: HOST,
       acquiredAt: "2026-10-15T00:00:00.000Z",
@@ -64,7 +70,7 @@ describe("acquireStateDirLock", () => {
     });
     expect(await readRecord()).toMatchObject({
       pid: 100,
-      startedAt: "start-100",
+      startedAt: T("start-100"),
       port: 3774,
       hostname: HOST,
       nonce: handle.record.nonce,
@@ -99,7 +105,7 @@ describe("acquireStateDirLock", () => {
       ]),
     ],
   ])("atomically replaces a dead owner: %s", async (_label, table) => {
-    await writeRecord({ pid: 41, startedAt: "start-41" });
+    await writeRecord({ pid: 41, startedAt: T("start-41") });
     const handle = await acquireStateDirLock({
       stateDir,
       port: 3774,
@@ -111,9 +117,11 @@ describe("acquireStateDirLock", () => {
   });
 
   it.each([
-    ["the live PID's start time is unobtainable", { startedAt: "start-41" }, undefined],
+    ["the live PID's start time is unobtainable", { startedAt: T("start-41") }, undefined],
     ["the record has no start time", { startedAt: null }, "start-41"],
-    ["the owner is on another host", { hostname: "other-host" }, "start-41"],
+    // Written by an older build: TZ/locale-dependent `ps lstart` text is never comparable.
+    ["the record has a legacy start token", { startedAt: "Thu_Oct_15_05:47:29_2026" }, "other"],
+    ["the record has a placeholder start token", { startedAt: "pid:41" }, "other"],
   ] as const)("fails closed when %s", async (_label, record, liveToken) => {
     await writeRecord(record);
     const table = new Map<number, string | undefined>([
@@ -123,6 +131,27 @@ describe("acquireStateDirLock", () => {
     await expect(
       acquireStateDirLock({ stateDir, port: 3774, probe: makeProbe(100, table) }),
     ).rejects.toThrow("Another bigbud backend (pid 41, port 3773)");
+  });
+
+  it("names a foreign host explicitly instead of a misleading live owner", async () => {
+    await writeRecord({ hostname: "renamed-host" });
+    const table = new Map([[100, "start-100"]]); // PID 41 is not alive here, but it is not ours.
+    await expect(
+      acquireStateDirLock({ stateDir, port: 3774, probe: makeProbe(100, table) }),
+    ).rejects.toThrow(`was written on host "renamed-host" (pid 41, port 3773), not this host`);
+    expect((await readRecord()).nonce).toBe("previous-owner");
+  });
+
+  it("replaces a legacy-token record only when its PID is genuinely gone", async () => {
+    await writeRecord({ startedAt: "Thu_Oct_15_05:47:29_2026" });
+    const handle = await acquireStateDirLock({
+      stateDir,
+      port: 3774,
+      probe: makeProbe(100, new Map([[100, "start-100"]])),
+    });
+    expect((await readRecord()).nonce).toBe(handle.record.nonce);
+    expect(await leftovers()).toEqual([]);
+    await handle.release();
   });
 
   it("refuses an unreadable lock instead of guessing", async () => {

@@ -11,6 +11,7 @@ import {
   v2QualificationEvidencePacket,
   v2QualificationExpectedEnv,
   v2QualificationProvisioningRecord,
+  v2QualificationScopeResult,
 } from "./NativeCompatibility.qualification.assemble.ts";
 import {
   V2_NATIVE_QUALIFICATION_EXCLUDED,
@@ -23,7 +24,15 @@ import { validateV2NativeIsolationApproval } from "./SharedService.native.isolat
 
 const serverRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const hex = (c: string) => c.repeat(64);
-const report = (tests: number, pending = 0, failed = 0) =>
+type Scope = (typeof V2_NATIVE_QUALIFICATION_SCOPES)[number];
+/** Vitest JSON reports name each test file by its absolute path on the runner. */
+const runnerPath = (file: string) => `/Users/runner/work/bigbud/bigbud/apps/server/${file}`;
+const report = (
+  tests: number,
+  pending = 0,
+  failed = 0,
+  files: readonly string[] = V2_NATIVE_QUALIFICATION_SUITE["packaged-ab"],
+) =>
   JSON.stringify({
     numTotalTests: tests,
     numPassedTests: tests - pending - failed,
@@ -31,11 +40,13 @@ const report = (tests: number, pending = 0, failed = 0) =>
     numPendingTests: pending,
     numTodoTests: 0,
     success: failed === 0,
-    testResults: [],
+    testResults: files.map((file) => ({ name: runnerPath(file), status: "passed" })),
   });
-const reports = Object.fromEntries(V2_NATIVE_QUALIFICATION_SCOPES.map((s) => [s, report(3)])) as {
-  [K in (typeof V2_NATIVE_QUALIFICATION_SCOPES)[number]]: string;
-};
+const scopeReport = (scope: Scope, files = V2_NATIVE_QUALIFICATION_SUITE[scope]) =>
+  report(3, 0, 0, files);
+const reports = Object.fromEntries(
+  V2_NATIVE_QUALIFICATION_SCOPES.map((s) => [s, scopeReport(s)]),
+) as { [K in Scope]: string };
 
 it("the frozen suite maps every scope to existing files exactly once", () => {
   expect(Object.keys(V2_NATIVE_QUALIFICATION_SUITE).toSorted()).toEqual(
@@ -116,6 +127,46 @@ it("assembles a packet the promotion validator accepts only with three distinct 
       reports: { ...reports, "isolation-hooks": report(3, 0, 1) },
     }),
   ).toThrow("failures=1");
+});
+
+it("accepts a scope report only for exactly its frozen file set", () => {
+  const scope = "api-transport-admission";
+  const suite = V2_NATIVE_QUALIFICATION_SUITE[scope];
+  const context = { testedBinarySha256: hex("1"), sourceSnapshotDigest: hex("2") };
+  const result = (files: readonly string[]) =>
+    v2QualificationScopeResult(scope, report(3, 0, 0, files), {
+      ...context,
+      environmentEvidenceDigest: hex("3"),
+    });
+  expect(result(suite).status).toBe("passed");
+  // Relative names (a local run from apps/server) normalize to the same set.
+  expect(
+    v2QualificationScopeResult(
+      scope,
+      JSON.stringify({
+        ...JSON.parse(scopeReport(scope)),
+        testResults: suite.map((name) => ({ name })),
+      }),
+      { ...context, environmentEvidenceDigest: hex("3") },
+    ).status,
+  ).toBe("passed");
+  expect(() => result(suite.slice(1))).toThrow(`missing: ${suite[0]}; unexpected: none`);
+  const other = V2_NATIVE_QUALIFICATION_SUITE["packaged-ab"][0]!;
+  expect(() => result([...suite, other])).toThrow(`missing: none; unexpected: ${other}`);
+  expect(() => result([...suite, suite[0]!])).toThrow("did not run its exact file set");
+  expect(() => result([])).toThrow(`Qualification scope ${scope} did not run its exact file set`);
+  // A scope's report cannot stand in for another scope.
+  expect(() =>
+    v2QualificationEvidencePacket({
+      reports: { ...reports, [scope]: scopeReport("isolation-hooks") },
+      binaryBefore: TARGET.executableSha256,
+      binaryAfter: TARGET.executableSha256,
+      sourceSnapshotDigest: hex("1"),
+      environmentEvidenceDigest: hex("2"),
+      bootstrapGeneratorSourceDigest: hex("3"),
+      completedAt: "2026-10-16T00:00:00.000Z",
+    }),
+  ).toThrow(`Qualification scope ${scope} did not run its exact file set`);
 });
 
 it("builds a structurally valid approval only for the npm-verified image", () => {

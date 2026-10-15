@@ -16,7 +16,7 @@ vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
 }));
 
 /** Holds before and after promotion without editing: empty, or exactly the reviewed 2.0.29 record. */
-it("the release registry is empty or holds exactly the darwin/arm64 2.0.29 suite-v1 record", async () => {
+it("the release registry is empty or holds exactly the darwin/arm64 2.0.29 record of the current suite revision", async () => {
   const actual = await vi.importActual<
     typeof import("./NativeCompatibility.qualification.registry.ts")
   >("./NativeCompatibility.qualification.registry.ts");

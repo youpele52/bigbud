@@ -225,3 +225,11 @@ Leg 5 (suite v2, B1 resolved):
 | Per-scope file lists via `assembleThreadToolNativeQualification.ts files <scope>`, plus YAML parse                                | 0    | Every scope non-empty; 3 jobs, qualification job 21 steps                                                                     |
 
 No full root `bun run test` was rerun, because changes are confined to `apps/server/src/provider/Layers/OpencodeV2`, `apps/server/scripts`, root `scripts/` and `.github`.
+
+## Leg 7: assembler checks the exact scope file set (independent review, LOW)
+
+`v2QualificationScopeResult(scope, report, context)` now also requires the vitest JSON report's `testResults[].name` set to equal `V2_NATIVE_QUALIFICATION_SUITE[scope]` exactly. A missing file (subset), an unexpected file, a duplicate entry or another scope's report is refused with `Qualification scope <scope> did not run its exact file set (missing: …; unexpected: …; files=N)`. Names are normalized from the runner's absolute paths by taking the part after the last `/apps/server/`; a local run that reports `/…/apps/server/src/…` names the same way (checked against a real `--reporter=json` output). Relative names are accepted unchanged. The count/skip/failure checks run first, so their messages are unchanged.
+
+- Tests: `NativeCompatibility.qualification.assemble.test.ts` "accepts a scope report only for exactly its frozen file set" (exact set, relative names, subset, extra, duplicate, empty, cross-scope packet). Synthetic reports in the existing tests now carry their scope's real file list.
+- `NativeCompatibility.qualification.test.ts`: the stale "suite-v1" test title now reads "record of the current suite revision". The assertion already used `V2_NATIVE_QUALIFICATION_SUITE_REVISION`.
+- No generator closure file changed: build `qualifiedRecords: 0`, `generatorSourceDigest 3321f844…` (unchanged); the implementation manifest check passed without regeneration.

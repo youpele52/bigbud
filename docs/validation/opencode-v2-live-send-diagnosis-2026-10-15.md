@@ -142,3 +142,37 @@ Every code file is at most 400 lines. `Runtime.ts` (397 lines) was not touched.
 - The `bun dev:server` / `bun run --cwd apps/server dev` break under Bun (`node:sqlite`) predates this series and is unrelated; it is out of scope.
 - CLI maintenance commands do not take the backend lock (follow-up).
 - Review debt: self-review only. Independent top-level reviews are still required at G4.
+
+## Independent review fixes (Leg 7, 2026-10-15)
+
+### Start token is now environment-independent (HIGH)
+
+The token in the lock record and in the remote-agent controller identity came from `ps -o lstart=` under the caller's own `TZ`/`LC_*`. The same process therefore had different tokens under different environments (orchestrator check: `Thu Oct 15 05:47:29 2026` locally, `03:47:29` under `TZ=UTC`, `Do. 15 Okt.` under `LC_ALL=de_DE.UTF-8`). A second backend started under another environment would have classified a live owner as "PID reused" and displaced its lock.
+
+- `apps/server/src/utils/processStartToken.ts` now emits versioned tokens (prefix `start-v2:`). On Linux the token is `/proc/<pid>/stat` field 22 (start ticks since boot) plus `/proc/sys/kernel/random/boot_id`. On other POSIX systems it is `ps -o lstart=` run with a fixed environment (`PATH` kept, `LC_ALL=C`, `LANG=C`, `TZ=UTC`).
+- `compareProcessStartToken(recorded, current)` returns `same`, `different` or `unknown`. Only `different` (two comparable tokens of one scheme that differ) proves PID reuse. Legacy tokens (no prefix, for example `Thu_Oct_15_03:10:04_2026` in the step-1 row above), `pid:` placeholders, missing tokens and scheme mismatches are `unknown`.
+- `classifyStateDirLockOwner` returns `live`, `dead` or `foreign-host`. A lock written by an older build therefore **fails closed**: it is refused while its PID is alive and replaced only when the PID is genuinely gone (ESRCH).
+- `isRemoteAgentControllerAlive` uses the same comparison. A live PID with a legacy or placeholder token counts as alive (fail closed). A reservation owned by a pre-fix controller whose PID was reused stays unreclaimable until that PID exits.
+- Real (non-injected) test: `processStartToken.test.ts` reads the token for the test process from two child processes, one under `TZ=UTC LC_ALL=C` and one under `TZ=Asia/Tokyo LC_ALL=de_DE.UTF-8`, and asserts they are equal. `remoteAgentController.test.ts` uses a real spawned process to cover a matching token, a differing comparable token, legacy/placeholder tokens and an exited PID.
+
+### Lock refusal names a foreign host; atomic clearing (LOW)
+
+- A record written on another host now gets its own message: `The bigbud backend lock <path> was written on host "<h>" (pid N, port P), not this host "<h2>", so its owner cannot be checked. If no backend uses <stateDir> (for example after a host rename), delete the lock; otherwise use a different BIGBUD_HOME.`
+- `unlinkIfUnchanged` (used for stale owners, orphaned takeovers and release) renames the file to a private `<name>.<random>.stale` name, re-reads it, and unlinks it only if it is still the expected record. If a lost race captured a successor's file, it is restored with an exclusive `link` (an `EEXIST` means a newer owner already exists, which is kept).
+
+### Receipt evidence requires no in-flight canonical handler (MEDIUM)
+
+Before this fix, `receiptDurable` was true for any successful receipt read, including `reserved` and `absent`. After the 10 s `AbortSignal.timeout` in `Execution.orchestration.ts`, the bigbud-side handler (for example `create_thread`) can still be running in this same server process: the HTTP fiber is interrupted on client abort, but only after its uninterruptible regions finish. Once the native session drained, the uncertain entry could be released and the next send admitted while that effect was still in flight.
+
+- New `apps/server/src/orchestration-tools/threadToolInvocationFlights.ts` is an in-process ledger keyed by invocation id. The V2 caller opens a dispatch before `fetch`. The `/api/internal/thread-tools` route enters the invocation right after decoding the body, before any effectful handler, and leaves it through `Effect.ensuring` when the handler fiber has ended (success, failure or interruption).
+- A dispatch that settled before the route entered it is **fenced**: if the request arrives later, the route answers 409 and runs nothing. Both sides run on one JavaScript thread, so each transition is atomic. Fences are bounded by count (1024, oldest first); no timer is involved.
+- `reconcileV2BridgeExecutions` now sets `receiptDurable` only for a `completed` receipt, or for `reserved`/`absent` while `isThreadToolInvocationInFlight(v2OrchestrationInvocationId(receiptKey))` is false. The invocation id is derived from the receipt key by the same function `prepareV2OrchestrationRequest` uses.
+- Assumption (stated in code): the canonical endpoint is this server's own loopback port (`prepareV2Orchestration` passes the server port). A handler wrapping a non-Effect promise that ignores interruption could outlive its fiber. The ledger tracks the fiber, which is the strongest in-process signal available.
+- Tests:
+  - `Runtime.settlement.hold.test.ts` "H1 in-flight evidence" uses the real ledger. A `reserved` receipt with its handler in flight stays held as `coding-busy`, and releases only after the handler leaves. A `reserved` receipt with the handler finished releases. `absent` releases. A terminal (`completed`) receipt releases.
+  - `threadToolInvocationFlights.test.ts` covers the ledger itself.
+  - `http.threadTools.invocationFlight.test.ts` covers the route: an abandoned invocation gets 409 without running the dispatcher, and a blocked handler stays in flight until it ends.
+
+### Settlement diagnostics use the server logger (LOW)
+
+`logV2SettlementDiagnostic` previously ran `Effect.runFork` on the default runtime, which ignored the server's logger and log level. `makeV2RuntimeAdapter` now binds its services (`Effect.services()`), and the helper uses `Effect.runForkWith(services)`. `Runtime.settlement.log.test.ts` shows that a bound logger receives the line and that a bound `MinimumLogLevel` of `Error` suppresses it.

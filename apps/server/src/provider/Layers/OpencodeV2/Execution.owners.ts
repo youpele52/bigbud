@@ -2,7 +2,7 @@
 export interface V2ExecutionSettlementEvidence {
   /** The exact native session is absent from `session.active`. */
   readonly nativeDrained: boolean;
-  /** The invocation's durable receipt state was read authoritatively (never re-executed). */
+  /** Terminal receipt, or a non-terminal one with no canonical handler still in flight (never re-executed). */
   readonly receiptDurable: boolean;
   /** A native interrupt was acknowledged after this execution failed. */
   readonly interruptAcknowledged: boolean;
