@@ -50,7 +50,7 @@ describe("Send now on an idle thread", () => {
   });
 });
 
-describe("Send now persists the composer's settings first", () => {
+describe("Send now persists the composer's settings before an idle release", () => {
   const ids = [MessageId.makeUnsafe("held")];
   const run = (overrides: Partial<Parameters<typeof sendNowQueuedPrompts>[0]>) => {
     const order: string[] = [];
@@ -79,10 +79,10 @@ describe("Send now persists the composer's settings first", () => {
     expect(calls.flush).toHaveBeenCalledWith(ids);
   });
 
-  it("awaits the persist before an interrupt whose settlement flushes later", async () => {
+  it("never persists mid-turn: a runtime-mode change would restart the session under the interrupt", async () => {
     const { done, order } = run({ activeTurnInProgress: true });
     await done;
-    expect(order).toEqual(["persist", "interrupt"]);
+    expect(order).toEqual(["interrupt"]);
   });
 
   it("sends nothing and reports the error when persisting fails", async () => {

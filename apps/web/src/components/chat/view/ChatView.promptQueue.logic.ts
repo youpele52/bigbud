@@ -113,8 +113,9 @@ export function buildSendNowFlushCommand(input: {
 }
 
 /**
- * "Send now": persist the composer's settings, then either interrupt the running turn (the server
- * flushes the queue on settlement with the thread's settings) or release the idle queue. If the
+ * "Send now": interrupt the running turn (the server flushes the queue on settlement), or persist
+ * the composer's settings and then release the idle queue. Settings are never persisted mid-turn:
+ * a runtime-mode change restarts the provider session and would race the interrupt. If the
  * settings cannot be saved, nothing is sent and the error is reported.
  */
 export async function sendNowQueuedPrompts(input: {
@@ -127,11 +128,11 @@ export async function sendNowQueuedPrompts(input: {
 }): Promise<void> {
   if (input.queuedPromptIds.length === 0) return;
   try {
-    await input.persistSettingsBeforeRelease?.();
     if (input.activeTurnInProgress) {
       await input.interrupt(input.queuedPromptIds);
       return;
     }
+    await input.persistSettingsBeforeRelease?.();
     await input.flush(input.queuedPromptIds);
   } catch (error) {
     input.onError(promptQueueErrorMessage(error));
