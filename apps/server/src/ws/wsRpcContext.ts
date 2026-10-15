@@ -58,6 +58,7 @@ import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/PluginRegistry";
 import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
+import { observeConfigStage, validateServerConfig } from "./wsConfigDiagnostics";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
@@ -246,20 +247,15 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     );
 
     const loadServerConfig = Effect.gen(function* () {
-      const keybindingsConfig = yield* keybindings.loadConfigState;
-      const providers = yield* providerRegistry.getProviders;
-      const discovery = yield* discoveryRegistry.getCatalog;
-      const rawSettings = yield* serverSettings.getSettings;
+      const keybindingsConfig = yield* observeConfigStage(
+        "keybindings",
+        keybindings.loadConfigState,
+      );
+      const providers = yield* observeConfigStage("providers", providerRegistry.getProviders);
+      const discovery = yield* observeConfigStage("discovery", discoveryRegistry.getCatalog);
+      const rawSettings = yield* observeConfigStage("settings", serverSettings.getSettings);
       const settings = resolveTextGenByProbeStatus(rawSettings, providers);
       const remoteAgentEnabled = isRemoteAgentConfigured();
-
-      const skillBreakdown = new Map<string, number>();
-      for (const skill of discovery.skills) {
-        skillBreakdown.set(skill.provider, (skillBreakdown.get(skill.provider) ?? 0) + 1);
-      }
-      yield* Effect.logInfo(
-        `[RPC] loadServerConfig → ${discovery.skills.length} skills, ${discovery.agents.length} agents. Provider breakdown: ${JSON.stringify([...skillBreakdown.entries()])}`,
-      );
 
       return {
         cwd: config.cwd,
@@ -291,7 +287,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
         },
         settings,
       };
-    });
+    }).pipe(Effect.flatMap(validateServerConfig));
 
     return {
       activateCliProxy,

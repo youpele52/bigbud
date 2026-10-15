@@ -1,0 +1,141 @@
+import "../index.css";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render } from "vitest-browser-react";
+
+import { resetServerStateForTests, setServerConfigSnapshot } from "../rpc/serverState";
+import { serverConfigFixture } from "../rpc/serverConfig.test.fixture";
+import {
+  beginServerConfigReadiness,
+  updateServerConfigReadiness,
+} from "../rpc/serverConfigReadiness";
+import {
+  recordWsConnectionAttempt,
+  recordWsConnectionOpened,
+  resetWsConnectionStateForTests,
+} from "../rpc/wsConnectionState";
+import { WebSocketConnectionSurface } from "./WebSocketConnectionSurface";
+import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
+import { registerServerConfigRetry } from "../rpc/serverConfigReadiness";
+import { recordWsProtocolRecovery } from "../rpc/wsConnectionState";
+
+const mocks = vi.hoisted(() => ({
+  reconnect: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+}));
+vi.mock("../rpc/wsRpcClient", () => ({ getWsRpcClient: () => ({ reconnect: mocks.reconnect }) }));
+
+// Only the native startup IPC boundary is mocked. The surface, readiness and config atoms are real.
+vi.mock("./DesktopBackendStartupCoordinator", () => ({
+  useDesktopBackendStartupState: () => null,
+}));
+
+beforeEach(() => {
+  resetServerStateForTests();
+  resetWsConnectionStateForTests();
+});
+afterEach(() => {
+  resetServerStateForTests();
+  resetWsConnectionStateForTests();
+  mocks.reconnect.mockClear();
+});
+
+describe("real config readiness surface", () => {
+  it("renders the normal shell during the initial config grace period", async () => {
+    const screen = await render(
+      <AppAtomRegistryProvider>
+        <WebSocketConnectionSurface>
+          <main>Normal shell</main>
+        </WebSocketConnectionSurface>
+      </AppAtomRegistryProvider>,
+    );
+    await expect.element(screen.getByText("Normal shell")).toBeVisible();
+  });
+
+  it("reports a config failure while honestly describing an open socket and redacting details", async () => {
+    recordWsConnectionAttempt("ws://user:password@localhost:3020/ws?token=private-token");
+    recordWsConnectionOpened();
+    const generation = beginServerConfigReadiness(false);
+    updateServerConfigReadiness(generation, {
+      fallback: "failed",
+      failure: "fallback_failed",
+      stream: "exhausted",
+      failures: 3,
+    });
+    const screen = await render(
+      <AppAtomRegistryProvider>
+        <WebSocketConnectionSurface>
+          <main>Normal shell</main>
+        </WebSocketConnectionSurface>
+      </AppAtomRegistryProvider>,
+    );
+    await expect.element(screen.getByText("Server configuration unavailable")).toBeVisible();
+    await expect.element(screen.getByText("Connected; configuration pending")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Retry configuration" })).toBeVisible();
+    expect(document.body.textContent).not.toContain("private-token");
+    expect(document.body.textContent).not.toContain("password");
+    expect(document.body.textContent).not.toContain("Opening WebSocket");
+  });
+
+  it("keeps a loaded shell available during a later config failure", async () => {
+    setServerConfigSnapshot(serverConfigFixture);
+    const generation = beginServerConfigReadiness(true);
+    updateServerConfigReadiness(generation, {
+      stream: "exhausted",
+      failure: "subscription_failed",
+    });
+    const screen = await render(
+      <AppAtomRegistryProvider>
+        <WebSocketConnectionSurface>
+          <main>Retained shell</main>
+        </WebSocketConnectionSurface>
+      </AppAtomRegistryProvider>,
+    );
+    await expect.element(screen.getByText("Retained shell")).toBeVisible();
+    expect(document.body.textContent).not.toContain("Server configuration unavailable");
+  });
+
+  it("offers logical retry for a confirmed fallback failure even before stream exhaustion", async () => {
+    recordWsConnectionAttempt("ws://localhost:3020/ws");
+    recordWsConnectionOpened();
+    const generation = beginServerConfigReadiness(false);
+    updateServerConfigReadiness(generation, { fallback: "failed", failure: "fallback_failed" });
+    const retry = vi.fn();
+    const stop = registerServerConfigRetry(generation, retry);
+    try {
+      const screen = await render(
+        <AppAtomRegistryProvider>
+          <WebSocketConnectionSurface>
+            <main>Shell</main>
+          </WebSocketConnectionSurface>
+        </AppAtomRegistryProvider>,
+      );
+      await screen.getByRole("button", { name: "Retry configuration" }).click();
+      expect(retry).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
+  });
+
+  it("offers physical reconnect without reload and re-establishes a stopped config owner", async () => {
+    recordWsConnectionAttempt("ws://localhost:3020/ws");
+    recordWsConnectionOpened();
+    recordWsProtocolRecovery(true);
+    const generation = beginServerConfigReadiness(false);
+    updateServerConfigReadiness(generation, { stream: "exhausted", failure: "protocol_failed" });
+    const retry = vi.fn();
+    const stop = registerServerConfigRetry(generation, retry, () => true);
+    try {
+      const screen = await render(
+        <AppAtomRegistryProvider>
+          <WebSocketConnectionSurface>
+            <main>Shell</main>
+          </WebSocketConnectionSurface>
+        </AppAtomRegistryProvider>,
+      );
+      await screen.getByRole("button", { name: "Reconnect", exact: true }).click();
+      await vi.waitFor(() => expect(retry).toHaveBeenCalledOnce());
+      expect(mocks.reconnect).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
+  });
+});

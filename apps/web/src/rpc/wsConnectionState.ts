@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/unstable/reactivity";
 
 import { appAtomRegistry } from "./atomRegistry";
+import { socketDiagnosticUrl } from "./wsConnectionDiagnostics";
 
 export type WsConnectionUiState = "connected" | "connecting" | "error" | "offline" | "reconnecting";
 export type WsReconnectPhase = "attempting" | "exhausted" | "idle" | "waiting";
@@ -106,7 +107,7 @@ export function recordWsConnectionAttempt(socketUrl: string): WsConnectionStatus
     phase: "connecting",
     reconnectAttemptCount: current.phase === "connected" ? 1 : current.reconnectAttemptCount + 1,
     reconnectPhase: "attempting",
-    socketUrl,
+    socketUrl: socketDiagnosticUrl(socketUrl),
   }));
 }
 
@@ -159,6 +160,19 @@ export function resetWsReconnectBackoff(): WsConnectionStatus {
     nextRetryAt: null,
     reconnectAttemptCount: 0,
     reconnectPhase: "idle",
+  }));
+}
+
+/** Protocol retirement owns its recovery schedule, rather than the stalled-socket watchdog. */
+export function recordWsProtocolRecovery(exhausted: boolean): WsConnectionStatus {
+  return updateWsConnectionStatus((current) => ({
+    ...current,
+    phase: "disconnected",
+    disconnectedAt: current.disconnectedAt ?? isoNow(),
+    lastError: exhausted ? "WebSocket RPC recovery exhausted." : "WebSocket RPC session failed.",
+    lastErrorAt: isoNow(),
+    nextRetryAt: null,
+    reconnectPhase: exhausted ? "exhausted" : "attempting",
   }));
 }
 

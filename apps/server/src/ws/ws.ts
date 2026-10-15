@@ -50,6 +50,7 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         retentionMutationAuthorization.layer,
       );
       const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
+        disableFatalDefects: true,
         spanPrefix: "ws.rpc",
         spanAttributes: {
           "rpc.transport": "websocket",

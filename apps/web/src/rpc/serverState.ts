@@ -19,6 +19,7 @@ import { useCallback, useRef } from "react";
 
 import type { WsRpcClient } from "./wsRpcClient";
 import { appAtomRegistry, resetAppAtomRegistryForTests } from "./atomRegistry";
+import { startServerConfigSync } from "./serverState.configSync";
 
 export type ServerConfigUpdateSource = ServerConfigStreamEvent["type"];
 
@@ -200,36 +201,12 @@ export function onProvidersUpdated(
 }
 
 export function startServerStateSync(client: ServerStateClient): () => void {
-  let disposed = false;
-  const cleanups = [
-    client.subscribeLifecycle((event) => {
-      if (event.type === "welcome") {
-        emitWelcome(event.payload);
-      }
-    }),
-    client.subscribeConfig((event) => {
-      applyServerConfigEvent(event);
-    }),
-  ];
-
-  if (getServerConfig() === null) {
-    void client
-      .getConfig()
-      .then((config) => {
-        if (disposed || getServerConfig() !== null) {
-          return;
-        }
-        setServerConfigSnapshot(config);
-      })
-      .catch(() => undefined);
-  }
-
-  return () => {
-    disposed = true;
-    for (const cleanup of cleanups) {
-      cleanup();
-    }
-  };
+  return startServerConfigSync(client, {
+    getConfig: getServerConfig,
+    setSnapshot: setServerConfigSnapshot,
+    applyEvent: applyServerConfigEvent,
+    emitWelcome,
+  });
 }
 
 export function resetServerStateForTests() {

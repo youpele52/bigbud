@@ -238,6 +238,9 @@
     "electron",
     "node-pty",
   ],
+  "patchedDependencies": {
+    "effect@4.0.0-beta.43": "patches/effect@4.0.0-beta.43.patch",
+  },
   "overrides": {
     "@effect/platform-node-shared": "4.0.0-beta.43",
   },

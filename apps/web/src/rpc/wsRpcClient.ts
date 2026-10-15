@@ -8,6 +8,7 @@ import { randomUUID } from "~/lib/utils";
 
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
+import { requestServerConfig } from "./wsRpcClient.config";
 import {
   type GitRunStackedActionOptions,
   type StreamSubscriptionOptions,
@@ -221,7 +222,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     server: {
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
-      getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
+      getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
         transport.request((client) => client[WS_METHODS.serverRefreshProviders]({})),
       activateCliProxy: () =>

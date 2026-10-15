@@ -3,6 +3,10 @@ import { AlertTriangle, CloudOff, LoaderCircle, RotateCw } from "lucide-react";
 import { APP_DISPLAY_NAME, APP_SERVER_NAME } from "../config/branding";
 import { type WsConnectionStatus, type WsConnectionUiState } from "../rpc/wsConnectionState";
 import { Button } from "./ui/button";
+import type { ServerConfigReadiness } from "../rpc/serverConfigReadiness";
+import { retryServerConfigSync } from "../rpc/serverConfigReadiness";
+import { socketDiagnosticUrl } from "../rpc/wsConnectionDiagnostics";
+import { reconnectConfigurationFromUi } from "./WebSocketConnectionSurface.configRecovery";
 import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 const connectionTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -24,11 +28,23 @@ export function formatConnectionMoment(isoDate: string | null): string | null {
 function buildBlockingCopy(
   uiState: WsConnectionUiState,
   status: WsConnectionStatus,
+  configReadiness?: ServerConfigReadiness,
 ): {
   readonly description: string;
   readonly eyebrow: string;
   readonly title: string;
 } {
+  if (uiState === "connected") {
+    const failed =
+      configReadiness?.fallback === "failed" || configReadiness?.stream === "exhausted";
+    return {
+      description: failed
+        ? "The WebSocket is connected, but the server configuration could not be loaded. Automatic recovery is bounded; reload the app to try again."
+        : "The WebSocket is connected. Waiting for the first valid server configuration snapshot.",
+      eyebrow: failed ? "Configuration Error" : "Loading Configuration",
+      title: failed ? "Server configuration unavailable" : "Waiting for server configuration",
+    };
+  }
   if (uiState === "connecting") {
     return {
       description: `Opening the WebSocket connection to the ${APP_DISPLAY_NAME} server and waiting for the initial config snapshot.`,
@@ -47,7 +63,7 @@ function buildBlockingCopy(
 
   if (status.lastError?.trim()) {
     return {
-      description: `${status.lastError} Verify that the ${APP_SERVER_NAME} is running and reachable, then reload the app if needed.`,
+      description: `The WebSocket connection failed. Verify that the ${APP_SERVER_NAME} is running and reachable, then reload the app if needed.`,
       eyebrow: "Connection Error",
       title: `Cannot reach the ${APP_SERVER_NAME}`,
     };
@@ -60,7 +76,11 @@ function buildBlockingCopy(
   };
 }
 
-function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectionUiState): string {
+export function buildConnectionDetails(
+  status: WsConnectionStatus,
+  uiState: WsConnectionUiState,
+  configReadiness?: ServerConfigReadiness,
+): string {
   const details = [
     `state: ${uiState}`,
     `online: ${status.online ? "yes" : "no"}`,
@@ -68,7 +88,7 @@ function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectio
   ];
 
   if (status.socketUrl) {
-    details.push(`socket: ${status.socketUrl}`);
+    details.push(`socket: ${socketDiagnosticUrl(status.socketUrl)}`);
   }
   if (status.connectedAt) {
     details.push(`connectedAt: ${status.connectedAt}`);
@@ -80,13 +100,24 @@ function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectio
     details.push(`lastErrorAt: ${status.lastErrorAt}`);
   }
   if (status.lastError) {
-    details.push(`lastError: ${status.lastError}`);
+    details.push("lastError: WebSocket connection failed");
   }
   if (status.closeCode !== null) {
     details.push(`closeCode: ${status.closeCode}`);
   }
   if (status.closeReason) {
-    details.push(`closeReason: ${status.closeReason}`);
+    details.push("closeReason: provided by server (content omitted)");
+  }
+
+  if (configReadiness) {
+    details.push(
+      `configStream: ${configReadiness.stream}`,
+      `configFallback: ${configReadiness.fallback}`,
+      `configFailures: ${configReadiness.failures}/${configReadiness.maxFailures}`,
+      `configSnapshot: ${configReadiness.hasSnapshot ? "loaded" : "never initialized"}`,
+    );
+    if (configReadiness.failure) details.push(`configFailure: ${configReadiness.failure}`);
+    if (configReadiness.failureAt) details.push(`configFailureAt: ${configReadiness.failureAt}`);
   }
 
   return details.join("\n");
@@ -163,10 +194,12 @@ export function WebSocketBlockingState({
   status,
   uiState,
   desktopStartup,
+  configReadiness,
 }: {
   readonly status: WsConnectionStatus;
   readonly uiState: WsConnectionUiState;
   readonly desktopStartup: DesktopBackendStartupState | null;
+  readonly configReadiness?: ServerConfigReadiness;
 }) {
   const technicalDetails = desktopStartup ? buildStartupTechnicalDetails(desktopStartup) : null;
   const copy =
@@ -194,7 +227,7 @@ export function WebSocketBlockingState({
                 eyebrow: "Starting Session",
                 title: "Starting bigbud",
               }
-            : buildBlockingCopy(uiState, status);
+            : buildBlockingCopy(uiState, status, configReadiness);
   const disconnectedAt = formatConnectionMoment(status.disconnectedAt ?? status.lastErrorAt);
   const Icon =
     desktopStartup?.status === "failed" || desktopStartup?.status === "timedOut"
@@ -206,7 +239,12 @@ export function WebSocketBlockingState({
           : AlertTriangle;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
+    <div
+      data-testid="connection-blocking-state"
+      data-transport-state={status.phase}
+      data-config-state={configReadiness?.stream ?? "pending"}
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6"
+    >
       <div className="pointer-events-none absolute inset-0 opacity-90">
         <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(48rem_18rem_at_top,color-mix(in_srgb,var(--color-amber-500)_16%,transparent),transparent)]" />
         <div className="absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_92%,var(--color-black))_0%,var(--background)_56%)]" />
@@ -241,11 +279,13 @@ export function WebSocketBlockingState({
               Connection
             </p>
             <p className="mt-1 font-medium text-foreground">
-              {uiState === "connecting"
-                ? "Opening WebSocket"
-                : uiState === "offline"
-                  ? "Waiting for network"
-                  : "Retrying server connection"}
+              {uiState === "connected"
+                ? "Connected; configuration pending"
+                : uiState === "connecting"
+                  ? "Opening WebSocket"
+                  : uiState === "offline"
+                    ? "Waiting for network"
+                    : "Retrying server connection"}
             </p>
           </div>
           <div>
@@ -257,6 +297,19 @@ export function WebSocketBlockingState({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
+          {status.phase === "connected" &&
+          (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed") ? (
+            <Button size="sm" onClick={() => retryServerConfigSync()}>
+              <RotateCw />
+              Retry configuration
+            </Button>
+          ) : null}
+          {status.phase !== "connected" ? (
+            <Button size="sm" onClick={reconnectConfigurationFromUi}>
+              <RotateCw />
+              Reconnect
+            </Button>
+          ) : null}
           <Button size="sm" onClick={() => window.location.reload()}>
             <RotateCw />
             Reload app
@@ -269,7 +322,7 @@ export function WebSocketBlockingState({
             <span className="hidden group-open:inline">Hide connection details</span>
           </summary>
           <pre className="max-h-56 overflow-auto border-t border-border/70 bg-background/80 px-3 py-2 text-xs text-foreground/85">
-            {buildConnectionDetails(status, uiState)}
+            {buildConnectionDetails(status, uiState, configReadiness)}
           </pre>
         </details>
         {technicalDetails ? (

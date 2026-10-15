@@ -90,12 +90,14 @@ import type {
 
 import type { WsRpcProtocolClient } from "./protocol";
 import type { SubscriptionRetryDelay } from "./wsTransport.retry";
+import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly initialApplication?: WsInitialApplicationDeadline;
   readonly retryDelay?: SubscriptionRetryDelay;
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
