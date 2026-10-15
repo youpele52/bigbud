@@ -37,6 +37,15 @@ export const V2NativeQualificationEvidence = Schema.Struct({
   ),
 });
 
+/** Immutable digest over every scope result in canonical scope order (assembly and validation). */
+export function v2NativeQualificationResultsDigest(
+  results: Readonly<Record<(typeof V2_NATIVE_QUALIFICATION_SCOPES)[number], unknown>>,
+) {
+  return createHash("sha256")
+    .update(JSON.stringify(V2_NATIVE_QUALIFICATION_SCOPES.map((scope) => [scope, results[scope]])))
+    .digest("hex");
+}
+
 /** Offline promotion preparation: all scopes and independent reviews must describe the same
  * frozen source/environment/image. It prints metadata only and cannot modify the runtime registry. */
 export function prepareV2NativeQualificationRecord(value: unknown) {
@@ -63,12 +72,7 @@ export function prepareV2NativeQualificationRecord(value: unknown) {
       throw new Error(
         "V2 native qualification scope belongs to another source/image/environment; no promotion.",
       );
-  const resultsDigest = createHash("sha256")
-    .update(
-      JSON.stringify(V2_NATIVE_QUALIFICATION_SCOPES.map((scope) => [scope, packet.results[scope]])),
-    )
-    .digest("hex");
-  if (resultsDigest !== record.resultsDigest)
+  if (v2NativeQualificationResultsDigest(packet.results) !== record.resultsDigest)
     throw new Error("V2 native qualification immutable results digest mismatch.");
   return validateV2NativeQualificationRegistry([record], []).qualified.get(
     v2NativeEvidenceKey(record.nativeVersion, record.platform, record.arch),

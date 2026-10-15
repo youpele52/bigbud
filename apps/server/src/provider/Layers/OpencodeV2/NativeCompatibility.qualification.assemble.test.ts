@@ -1,0 +1,146 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "vitest";
+import { prepareV2NativeQualificationRecord } from "./NativeCompatibility.evidence.ts";
+import {
+  canonicalJson,
+  v2QualificationApproval,
+  v2QualificationEnvironmentEvidence,
+  v2QualificationEvidencePacket,
+  v2QualificationExpectedEnv,
+  v2QualificationProvisioningRecord,
+} from "./NativeCompatibility.qualification.assemble.ts";
+import {
+  V2_NATIVE_QUALIFICATION_BLOCKED,
+  V2_NATIVE_QUALIFICATION_SUITE,
+  V2_NATIVE_QUALIFICATION_SUITE_REVISION,
+  V2_NATIVE_QUALIFICATION_TARGET as TARGET,
+} from "./NativeCompatibility.qualification.suite.ts";
+import { V2_NATIVE_QUALIFICATION_SCOPES } from "./NativeCompatibility.types.ts";
+import { validateV2NativeIsolationApproval } from "./SharedService.native.isolation.fixture.ts";
+
+const serverRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+const hex = (c: string) => c.repeat(64);
+const report = (tests: number, pending = 0, failed = 0) =>
+  JSON.stringify({
+    numTotalTests: tests,
+    numPassedTests: tests - pending - failed,
+    numFailedTests: failed,
+    numPendingTests: pending,
+    numTodoTests: 0,
+    success: failed === 0,
+    testResults: [],
+  });
+const reports = Object.fromEntries(V2_NATIVE_QUALIFICATION_SCOPES.map((s) => [s, report(3)])) as {
+  [K in (typeof V2_NATIVE_QUALIFICATION_SCOPES)[number]]: string;
+};
+
+it("the frozen suite maps every scope to existing files exactly once", () => {
+  expect(Object.keys(V2_NATIVE_QUALIFICATION_SUITE).toSorted()).toEqual(
+    [...V2_NATIVE_QUALIFICATION_SCOPES].toSorted(),
+  );
+  const all = Object.values(V2_NATIVE_QUALIFICATION_SUITE).flat();
+  expect(new Set(all).size).toBe(all.length);
+  for (const file of all) expect(existsSync(path.join(serverRoot, file)), file).toBe(true);
+  for (const file of Object.keys(V2_NATIVE_QUALIFICATION_BLOCKED)) expect(all).toContain(file);
+  expect(V2_NATIVE_QUALIFICATION_SUITE_REVISION).toBe("opencode-v2-native-qualification-suite.v1");
+});
+
+it("assembles a packet the promotion validator accepts only with three distinct reviews", () => {
+  const input = {
+    reports,
+    binaryBefore: TARGET.executableSha256,
+    binaryAfter: TARGET.executableSha256,
+    sourceSnapshotDigest: hex("1"),
+    environmentEvidenceDigest: hex("2"),
+    bootstrapGeneratorSourceDigest: hex("3"),
+    completedAt: "2026-10-16T00:00:00.000Z",
+  };
+  expect(() => prepareV2NativeQualificationRecord(v2QualificationEvidencePacket(input))).toThrow();
+  const review = (reviewer: string) =>
+    ({ status: "passed", reviewer, sourceSnapshotDigest: hex("1") }) as const;
+  const reviews = {
+    code: review("ses_a"),
+    security: review("ses_b"),
+    requirements: review("ses_c"),
+  };
+  const record = prepareV2NativeQualificationRecord(
+    JSON.parse(JSON.stringify(v2QualificationEvidencePacket({ ...input, reviews }))),
+  );
+  expect(record).toMatchObject({
+    nativeVersion: "2.0.29",
+    platform: "darwin",
+    arch: "arm64",
+    suiteRevision: V2_NATIVE_QUALIFICATION_SUITE_REVISION,
+    nativeSourceCommit: TARGET.nativeSourceCommit,
+    semanticProfile: "v2-system-global-config-v1",
+    testedBinarySha256: TARGET.executableSha256,
+  });
+  const same = { ...reviews, requirements: review("ses_a") };
+  expect(() =>
+    prepareV2NativeQualificationRecord(v2QualificationEvidencePacket({ ...input, reviews: same })),
+  ).toThrow("review identity");
+  expect(() =>
+    v2QualificationEvidencePacket({
+      ...input,
+      reports: { ...reports, "packaged-ab": report(3, 1) },
+    }),
+  ).toThrow("skipped=1");
+  expect(() =>
+    v2QualificationEvidencePacket({
+      ...input,
+      reports: { ...reports, "isolation-hooks": report(3, 0, 1) },
+    }),
+  ).toThrow("failures=1");
+});
+
+it("builds a structurally valid approval only for the npm-verified image", () => {
+  const approval = v2QualificationApproval({
+    imageDigest: hex("4"),
+    environmentEvidenceDigest: hex("5"),
+    executableSha256: TARGET.executableSha256,
+  });
+  expect(() => validateV2NativeIsolationApproval(approval)).not.toThrow();
+  expect(approval.executablePath.startsWith(`${approval.fixtureRoot}/`)).toBe(true);
+  expect(() =>
+    v2QualificationApproval({
+      imageDigest: hex("4"),
+      environmentEvidenceDigest: hex("5"),
+      executableSha256: hex("6"),
+    }),
+  ).toThrow("npm-verified");
+});
+
+it("environment and runner evidence are canonical and refuse drift", () => {
+  const tools = { egressProfileSha256: hex("7"), bun: "1.3.14", node: "v24.0.0" };
+  const env = v2QualificationExpectedEnv(hex("8"));
+  expect(env.TMPDIR.startsWith(`${TARGET.fixtureRoot}/`)).toBe(true);
+  const first = v2QualificationEnvironmentEvidence(env, tools);
+  const reordered = Object.fromEntries(Object.entries(env).toReversed());
+  expect(v2QualificationEnvironmentEvidence(reordered, tools).digest).toBe(first.digest);
+  expect(first.evidence.env).not.toHaveProperty(
+    "BIGBUD_OPENCODE_V2_CANDIDATE_SOURCE_SNAPSHOT_DIGEST",
+  );
+  expect(() =>
+    v2QualificationEnvironmentEvidence(
+      { ...env, BIGBUD_OPENCODE_V2_NATIVE_MACHINE_ID: undefined },
+      tools,
+    ),
+  ).toThrow("NATIVE_MACHINE_ID");
+  const runner = {
+    imageOS: "macos15",
+    imageVersion: "20261012.1",
+    productVersion: "15.6",
+    buildVersion: "24G84",
+    xcode: "Xcode 16.4",
+    machine: "arm64",
+    egressProfileSha256: hex("7"),
+  };
+  const image = v2QualificationProvisioningRecord(runner);
+  expect(image.bytes).toBe(`${canonicalJson(image.record)}\n`);
+  expect(
+    v2QualificationProvisioningRecord({ ...runner, imageVersion: "20261019.1" }).digest,
+  ).not.toBe(image.digest);
+  expect(() => v2QualificationProvisioningRecord({ ...runner, xcode: "" })).toThrow("incomplete");
+});

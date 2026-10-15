@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   resolveV2NativeQualification,
   selectV2NativeQualification,
@@ -7,9 +7,36 @@ import {
 import { syntheticV2QualificationRecord } from "./NativeCompatibility.qualification.fixture.ts";
 import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
 import { V2_NATIVE_QUALIFICATION_SCOPES } from "./NativeCompatibility.types.ts";
+import { V2_NATIVE_QUALIFICATION_SUITE_REVISION } from "./NativeCompatibility.qualification.suite.ts";
 
-it.each(["2.0.0", "2.0.25", "2.0.26", "2.0.27", "2.0.28", "2.1.0", "2.999.999"])(
-  "the empty production registry cannot claim completed semantic qualification for %s",
+// Empty-registry behavior is proven on a mocked empty registry, independent of promotion.
+vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
+  V2_NATIVE_RELEASE_QUALIFICATIONS: [],
+  V2_NATIVE_RELEASE_INCOMPATIBILITIES: [],
+}));
+
+/** Holds before and after promotion without editing: empty, or exactly the reviewed 2.0.29 record. */
+it("the release registry is empty or holds exactly the darwin/arm64 2.0.29 suite-v1 record", async () => {
+  const actual = await vi.importActual<
+    typeof import("./NativeCompatibility.qualification.registry.ts")
+  >("./NativeCompatibility.qualification.registry.ts");
+  const registry = validateV2NativeQualificationRegistry(
+    actual.V2_NATIVE_RELEASE_QUALIFICATIONS,
+    actual.V2_NATIVE_RELEASE_INCOMPATIBILITIES,
+  );
+  expect(registry.incompatible.size).toBe(0);
+  expect(registry.qualified.size).toBeLessThanOrEqual(1);
+  for (const { record } of registry.qualified.values())
+    expect(record).toMatchObject({
+      nativeVersion: "2.0.29",
+      platform: "darwin",
+      arch: "arm64",
+      suiteRevision: V2_NATIVE_QUALIFICATION_SUITE_REVISION,
+    });
+});
+
+it.each(["2.0.0", "2.0.25", "2.0.26", "2.0.27", "2.0.28", "2.0.29", "2.1.0", "2.999.999"])(
+  "an empty registry cannot claim completed semantic qualification for %s",
   (version) => {
     expect(() =>
       resolveV2NativeQualification(version, V2_COMPATIBILITY_DIGEST, "darwin", "arm64"),

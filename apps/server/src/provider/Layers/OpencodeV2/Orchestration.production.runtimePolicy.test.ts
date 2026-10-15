@@ -1,10 +1,16 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { withV2ProductionThreadTools } from "./Orchestration.production.fixture.ts";
 import { V2_NATIVE_RELEASE_QUALIFICATIONS } from "./NativeCompatibility.qualification.registry.ts";
+
+// Runtime-checked policy is proven on a mocked empty registry, independent of promotion.
+vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
+  V2_NATIVE_RELEASE_QUALIFICATIONS: [],
+  V2_NATIVE_RELEASE_INCOMPATIBILITIES: [],
+}));
 import { v2NativeProofMetadata, v2NativeReadyNotice } from "./NativeCompatibility.status.ts";
 
-it.each(["2.0.28", "2.9.123"])(
+it.each(["2.0.28", "2.0.29", "2.9.123"])(
   "empty qualification registry permits runtime-verified %s canonical HTTP/SQLite flow with warning",
   async (version) => {
     expect(V2_NATIVE_RELEASE_QUALIFICATIONS).toHaveLength(0);

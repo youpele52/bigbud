@@ -4,6 +4,7 @@ import { lstat, realpath, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { closeOwnedChild } from "./ServerManager.child.ts";
+import { V2_NATIVE_ISOLATION_APPROVALS } from "./SharedService.native.isolation.approvals.ts";
 
 export interface V2NativeIsolationApproval {
   readonly id: string;
@@ -22,9 +23,6 @@ export interface V2NativeIsolationApproval {
   readonly loopbackOnlyEgress: true;
 }
 
-// Parent-approved clean-runner records only. HOME overrides and environment assertions cannot
-// create these records; none is approved yet. This catalog is test-only, never production policy.
-const approvals: readonly V2NativeIsolationApproval[] = Object.freeze([]);
 const hex = /^[a-f0-9]{64}$/;
 const inside = (root: string, candidate: string) =>
   candidate.startsWith(`${root}${path.sep}`) && path.resolve(candidate) === candidate;
@@ -62,7 +60,7 @@ export async function requireV2NativeIsolation(
   binary: string,
   approvalId = process.env.BIGBUD_OPENCODE_V2_NATIVE_APPROVAL_ID,
 ) {
-  const approval = approvals.find((entry) => entry.id === approvalId);
+  const approval = V2_NATIVE_ISOLATION_APPROVALS.find((entry) => entry.id === approvalId);
   if (!approval)
     throw new Error(
       "V2 native qualification requires an approved clean macOS ARM64 environment before any retail launch (including --version); HOME/XDG alone is not isolation.",
