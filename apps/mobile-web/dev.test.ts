@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { mobileDiscoveryPlugin } from "../web/src/dev/mobileDiscoveryPlugin";
 import { listenMobileDevServer, parseMobileDevPort } from "./dev.listener.ts";
+import { coordinatedTestPort } from "./dev.coordination.test.helpers.ts";
 import { mobileDevRegistryPlugin } from "./dev.registry.ts";
 
 let root: string;
@@ -70,6 +71,16 @@ async function block(port = 0, host = "127.0.0.1"): Promise<Server> {
   return server;
 }
 
+// Ensures a port is occupied. Any existing occupant (including another process that
+// took the port after the listener's availability probe) satisfies the test's intent.
+async function occupy(port: number, host?: string): Promise<void> {
+  try {
+    await block(port, host);
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE") throw error;
+  }
+}
+
 async function start(port: number, sibling?: number, options = config()) {
   const server = await listenMobileDevServer(port, sibling, options);
   viteServers.push(server);
@@ -88,9 +99,7 @@ describe("mobile Vite development listener", () => {
   });
 
   it("handles occupation after Vite creation and skips a sibling at the initial port", async () => {
-    const initial = await block();
-    const requested = portOf(initial);
-    await new Promise<void>((resolve) => initial.close(() => resolve()));
+    const requested = await coordinatedTestPort();
     let first = true;
     const options = config();
     options.plugins?.push({
@@ -98,7 +107,7 @@ describe("mobile Vite development listener", () => {
       async configureServer(server) {
         if (!first) return;
         first = false;
-        await block(server.config.server.port);
+        await occupy(server.config.server.port);
       },
     });
     const { port } = await start(requested, requested, options);
@@ -136,12 +145,7 @@ describe("mobile Vite development listener", () => {
       async configureServer(server) {
         attempts.push(server);
         if (attempts.length > 3 || server.config.server.port === requested) return;
-        try {
-          await block(server.config.server.port, "0.0.0.0");
-        } catch (error) {
-          if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE")
-            throw error;
-        }
+        await occupy(server.config.server.port, "0.0.0.0");
       },
     });
     const { server, port } = await start(requested, undefined, options);
@@ -159,12 +163,7 @@ describe("mobile Vite development listener", () => {
 
   it("fails cleanly at the port ceiling and rejects malformed ports", async () => {
     await expect(listenMobileDevServer(65535, 65535, config())).rejects.toThrow("65535");
-    try {
-      await block(65535);
-    } catch (error) {
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE")
-        throw error;
-    }
+    await occupy(65535);
     await expect(listenMobileDevServer(65535, undefined, config())).rejects.toThrow("65535");
     expect(parseMobileDevPort(undefined, 5740)).toBe(5740);
     for (const value of ["", "0", "65536", "1.5", "invalid"]) {
@@ -173,8 +172,8 @@ describe("mobile Vite development listener", () => {
   });
 
   it("republishes a new nonce on Vite restart and removes only the closed listener", async () => {
-    const occupied = await block();
-    const first = await start(portOf(occupied));
+    // Restart rebinds first.port after releasing it, so keep it out of the ephemeral range.
+    const first = await start(await coordinatedTestPort());
     const second = await start(first.port);
     await expect.poll(async () => (await readdir(registry.directory)).length).toBe(2);
     const before = await fetch(`http://127.0.0.1:${first.port}${MOBILE_DEV_HEALTH_PATH}`).then(
