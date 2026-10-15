@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";

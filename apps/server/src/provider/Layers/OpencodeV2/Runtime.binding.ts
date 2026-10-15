@@ -43,7 +43,7 @@ export async function resolveV2RuntimeBinding(
         authorization.syntheticDirectory !== input.cwd))
   )
     throw new Error("V2 remote runtime/workspace is not verified.");
-  if (!input.cwd) throw new Error("V2 requires an isolated workspace.");
+  if (!input.cwd) throw new Error("V2 requires a native Location workspace.");
   const root = options.config.sharedService
     ? options.config.sharedService.registrationFile
     : runtimeTarget !== "local"

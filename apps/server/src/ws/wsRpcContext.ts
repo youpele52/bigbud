@@ -1,4 +1,5 @@
-import { Effect, FileSystem, Option, Stream } from "effect";
+import { Effect, FileSystem, Option, Stream, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { GitCommandError } from "@bigbud/contracts";
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
 
@@ -62,6 +63,10 @@ import { observeConfigStage, validateServerConfig } from "./wsConfigDiagnostics"
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
+import { makeV2ThreadToolsSetup } from "../provider/Layers/OpencodeV2/ThreadToolsSetup.ts";
+import { ProviderSessionRuntimeRepositoryLive } from "../persistence/Layers/ProviderSessionRuntime.ts";
+import { ProviderTurnAdmissionsLive } from "../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../persistence/Layers/OpencodeV2SharedBindings.ts";
 import {
   RemoteAgentUpdateCoordinator,
   type RemoteAgentUpdateCoordinatorShape,
@@ -115,6 +120,18 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const fileSystem = yield* FileSystem.FileSystem;
     const resolveBootstrapWorktreeIdentity = yield* makeBootstrapWorktreeIdentityResolver;
     const handoffJobs = yield* makeServerHandoffJobs;
+    const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
+    const v2ThreadToolsSetup = yield* Option.isSome(sql)
+      ? makeV2ThreadToolsSetup().pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              ProviderSessionRuntimeRepositoryLive,
+              ProviderTurnAdmissionsLive,
+              OpencodeV2SharedBindingsLive,
+            ).pipe(Layer.provide(Layer.succeed(SqlClient.SqlClient, sql.value))),
+          ),
+        )
+      : makeV2ThreadToolsSetup();
     const threadRetentionOption = yield* Effect.serviceOption(ThreadRetention);
     const pluginRegistryOption = yield* Effect.serviceOption(PluginRegistry);
     const pluginRegistry: PluginRegistryShape = Option.getOrElse(pluginRegistryOption, () => ({
@@ -305,6 +322,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       gitStatus,
       gitStatusBroadcaster,
       handoffJobs,
+      v2ThreadToolsSetup,
       keybindings,
       lifecycleEvents,
       loadServerConfig,

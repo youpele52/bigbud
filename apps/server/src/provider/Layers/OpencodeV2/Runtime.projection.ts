@@ -9,7 +9,10 @@ import { createHash } from "node:crypto";
 import { V2_MEDIA_RESPONSE_BYTES } from "./Media.limits.ts";
 
 /** Sequence order comes from native message projection, never wall-clock sorting. */
-export async function readV2Messages(session: V2RuntimeSession): Promise<SessionMessageInfo[]> {
+export async function readV2Messages(
+  session: V2RuntimeSession,
+  cancellation?: AbortSignal,
+): Promise<SessionMessageInfo[]> {
   const messages: SessionMessageInfo[] = [];
   const cursors = new Set<string>();
   let cursor: string | undefined;
@@ -17,16 +20,19 @@ export async function readV2Messages(session: V2RuntimeSession): Promise<Session
   let limit = 100;
   for (let page = 0; page < 10000; page++) {
     const read = () =>
-      v2Request("message.list", (signal) =>
-        session.lease.process.client.message.list(
-          {
-            sessionID: session.native.id,
-            order: "asc",
-            limit,
-            ...(cursor ? { cursor } : {}),
-          },
-          { signal },
-        ),
+      v2Request(
+        "message.list",
+        (signal) =>
+          session.lease.process.client.message.list(
+            {
+              sessionID: session.native.id,
+              order: "asc",
+              limit,
+              ...(cursor ? { cursor } : {}),
+            },
+            { signal },
+          ),
+        cancellation ? { signal: cancellation } : {},
       );
     // Retained media can overflow a multi-message page after restart. Reads may narrow their page, never re-admit or retry a mutation.
     const result = await read().catch((error) => {

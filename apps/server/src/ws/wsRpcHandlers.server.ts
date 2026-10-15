@@ -19,9 +19,18 @@ import type { WsRpcContext } from "./wsRpcContext";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { makeServerConfigUpdateStream } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
+import type { ServerOpencodeV2ThreadToolsSetupInput } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
 
 export function makeServerWsRpcHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.serverGetOpencodeV2ThreadToolsSetup]: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetOpencodeV2ThreadToolsSetup,
+        context.v2ThreadToolsSetup.get(input),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverPing]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverPing,

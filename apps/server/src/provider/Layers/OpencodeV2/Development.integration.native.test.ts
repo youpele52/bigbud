@@ -14,7 +14,8 @@ import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/Provider
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { makeV2DevelopmentRegistration } from "./Development.composition.ts";
+import { makeV2IsolatedApplicationFixtureRegistration } from "./Application.fixture.ts";
 import { makeAdapterLookup } from "../ProviderAdapterRegistry.ts";
 import { V2_DEVELOPMENT_MARKER } from "./Development.config.ts";
 import { makeBackgroundReviews } from "../ProviderService.backgroundReview.ts";
@@ -30,7 +31,7 @@ vi.mock("./Catalog.public.ts", async (original) => ({
   makeV2PublicCatalogLoader: () => async () => ({ models: [], stale: false }),
 }));
 it.skipIf(!binary).each([false, true])(
-  "routes V2 through real composition, journal and canonical stream (application=%s)",
+  "routes explicit isolated qualification through journal and canonical stream (application fixture=%s)",
   async (application) => {
     let requests = 0;
     let transient = false;
@@ -122,11 +123,9 @@ it.skipIf(!binary).each([false, true])(
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
-            const registrations = yield* composeOptionalProviders(
-              [],
-              application ? {} : environment,
-            );
-            const registration = registrations.find((value) => value.provider === "opencodeV2")!;
+            const registration = yield* application
+              ? makeV2IsolatedApplicationFixtureRegistration()
+              : makeV2DevelopmentRegistration(environment);
             const registry = makeAdapterLookup([registration.adapterService]);
             const adapter = yield* registry.getByProvider("opencodeV2");
             expect(adapter).toBe(registration.adapterService);
@@ -317,7 +316,11 @@ it.skipIf(!binary).each([false, true])(
           }).pipe(
             Effect.provide(persistence),
             Effect.provideService(ServerSettingsService, settingsService),
-            Effect.provideService(ServerConfig, { attachmentsDir } as ServerConfigShape),
+            Effect.provideService(ServerConfig, {
+              attachmentsDir,
+              stateDir: profileRoot,
+              port: 0,
+            } as ServerConfigShape),
           ),
         ),
       );

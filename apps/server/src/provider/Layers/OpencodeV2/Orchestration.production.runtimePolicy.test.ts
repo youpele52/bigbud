@@ -1,0 +1,66 @@
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { expect, it } from "vitest";
+import { withV2ProductionThreadTools } from "./Orchestration.production.fixture.ts";
+import { V2_NATIVE_RELEASE_QUALIFICATIONS } from "./NativeCompatibility.qualification.registry.ts";
+import { v2NativeProofMetadata, v2NativeReadyNotice } from "./NativeCompatibility.status.ts";
+
+it.each(["2.0.28", "2.9.123"])(
+  "empty qualification registry permits runtime-verified %s canonical HTTP/SQLite flow with warning",
+  async (version) => {
+    expect(V2_NATIVE_RELEASE_QUALIFICATIONS).toHaveLength(0);
+    await withV2ProductionThreadTools(
+      async (f) => {
+        const proof = await f.runtimeProof();
+        expect(proof.evidenceKind).toBe("runtime-checked");
+        expect(proof).not.toHaveProperty("qualificationRecordId");
+        expect(v2NativeProofMetadata(proof).qualificationState).toBe("unqualified");
+        expect(v2NativeReadyNotice("unqualified", "Verified")).toMatchObject({
+          severity: "warning",
+          message: expect.stringContaining("semantic qualification is incomplete"),
+        });
+        const created = (await f.invoke(
+          "create_thread",
+          {
+            title: "Runtime checked child",
+            task: "Owned synthetic canonical task",
+            watchForCompletion: false,
+          },
+          "runtime-create",
+        )) as { ok: boolean; result: { childThreadId: string } };
+        expect(created.ok).toBe(true);
+        const target = ThreadId.makeUnsafe(created.result.childThreadId);
+        expect(
+          await f.invoke(
+            "send_thread_message",
+            { threadId: target, message: "runtime checked send" },
+            "runtime-send",
+          ),
+        ).toMatchObject({ ok: true });
+        expect(await f.invoke("get_thread_status", { threadId: target })).toMatchObject({
+          ok: true,
+        });
+        expect(await f.invoke("list_threads", {})).toMatchObject({ ok: true });
+        expect(
+          await f.invoke("rename_thread", {
+            targetThreadId: target,
+            title: "Runtime checked renamed",
+          }),
+        ).toMatchObject({ ok: true, title: "Runtime checked renamed" });
+        const before = (await f.canonical.run(f.canonical.engine.getReadModel())).snapshotSequence;
+        await f.invoke(
+          "send_thread_message",
+          { threadId: target, message: "runtime checked send" },
+          "runtime-send",
+        );
+        expect((await f.canonical.run(f.canonical.engine.getReadModel())).snapshotSequence).toBe(
+          before,
+        );
+        await expect(
+          f.invoke("send_thread_message", { threadId: target, message: "changed" }, "runtime-send"),
+        ).rejects.toThrow();
+      },
+      "full-access",
+      version,
+    );
+  },
+);

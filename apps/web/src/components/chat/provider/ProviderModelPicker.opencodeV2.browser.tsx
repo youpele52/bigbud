@@ -2,11 +2,24 @@ import "../../../index.css";
 import type { ServerProvider } from "@bigbud/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { page } from "vitest/browser";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { getCustomModelOptionsByProvider } from "../../../models/provider";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { RECENTLY_USED_MODELS_STORAGE_KEY } from "../../../models/recentlyUsedModels";
+
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(async () => {}),
+  routesByPath: { "/settings/providers": {} } as Record<string, unknown>,
+}));
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
+  useRouter: () => mocks,
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.routesByPath = { "/settings/providers": {} };
+});
 
 function snapshotFixture(): ServerProvider {
   return {
@@ -38,7 +51,7 @@ function snapshotFixture(): ServerProvider {
   };
 }
 
-it("exposes a separate unavailable V2 entry without selecting a model", async () => {
+it("opens targeted setup for an unavailable V2 entry without selecting a model", async () => {
   const snapshot = { ...snapshotFixture(), installed: false, models: [] };
   const options = getCustomModelOptionsByProvider(
     DEFAULT_UNIFIED_SETTINGS,
@@ -62,11 +75,129 @@ it("exposes a separate unavailable V2 entry without selecting a model", async ()
   );
   try {
     await page.getByRole("button").click();
-    await expect.element(page.getByRole("menuitem", { name: /OpenCode/i })).toBeInTheDocument();
+    await page.getByRole("menuitem", { name: /Set up OpenCode/i }).click();
+    expect(mocks.navigate).toHaveBeenLastCalledWith({
+      href: "/settings/providers?providers=%5B%22opencodeV2%22%5D",
+    });
     expect(onChange).not.toHaveBeenCalled();
   } finally {
     await screen.unmount();
     host.remove();
+  }
+});
+
+it("shows consent guidance and setup for an empty locked V2 picker without selecting a model", async () => {
+  const message = "Native service trust consent required";
+  const snapshot: ServerProvider = {
+    ...snapshotFixture(),
+    status: "warning",
+    auth: { status: "unknown" },
+    models: [],
+    message,
+  };
+  const change = vi.fn();
+  const screen = await render(
+    <ProviderModelPicker
+      provider="opencodeV2"
+      model="synthetic"
+      lockedProvider="opencodeV2"
+      providers={[snapshot]}
+      modelOptionsByProvider={getCustomModelOptionsByProvider(
+        DEFAULT_UNIFIED_SETTINGS,
+        [snapshot],
+        "codex",
+        "gpt-5.4",
+      )}
+      onProviderModelChange={change}
+    />,
+  );
+  try {
+    await page.getByRole("button").click();
+    await expect.element(page.getByRole("status")).toHaveTextContent(message);
+    await page.getByRole("menuitem", { name: /Set up OpenCode/ }).click();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+      href: "/settings/providers?providers=%5B%22opencodeV2%22%5D",
+    });
+    expect(change).not.toHaveBeenCalled();
+  } finally {
+    await screen.unmount();
+  }
+});
+
+it.each([null, "opencodeV2"] as const)(
+  "keeps unsupported remote V2 unavailable with lock %s rather than advertising local setup",
+  async (lockedProvider) => {
+    const snapshot: ServerProvider = { ...snapshotFixture(), status: "warning", models: [] };
+    const change = vi.fn();
+    const screen = await render(
+      <ProviderModelPicker
+        provider="codex"
+        model="gpt-5.4"
+        lockedProvider={lockedProvider}
+        workspaceExecutionTargetId="ssh:fixture"
+        providers={[snapshot]}
+        modelOptionsByProvider={getCustomModelOptionsByProvider(
+          DEFAULT_UNIFIED_SETTINGS,
+          [snapshot],
+          "codex",
+          "gpt-5.4",
+        )}
+        onProviderModelChange={change}
+      />,
+    );
+    try {
+      await page.getByRole("button").click();
+      if (lockedProvider === "opencodeV2") {
+        await expect
+          .element(page.getByRole("status"))
+          .toHaveTextContent("Provider does not support a remote workspace with a local runtime");
+      } else {
+        await expect
+          .element(page.getByRole("menuitem", { name: /OpenCode Provider does not support/ }))
+          .toBeDisabled();
+      }
+      await expect
+        .element(page.getByRole("menuitem", { name: /Set up OpenCode/ }))
+        .not.toBeInTheDocument();
+      expect(change).not.toHaveBeenCalled();
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  },
+);
+
+it("directs mobile users to desktop/web setup rather than navigating to a missing route", async () => {
+  mocks.routesByPath = {};
+  const snapshot: ServerProvider = { ...snapshotFixture(), status: "warning", models: [] };
+  const change = vi.fn();
+  const screen = await render(
+    <ProviderModelPicker
+      provider="codex"
+      model="gpt-5.4"
+      lockedProvider={null}
+      providers={[snapshot]}
+      modelOptionsByProvider={getCustomModelOptionsByProvider(
+        DEFAULT_UNIFIED_SETTINGS,
+        [snapshot],
+        "codex",
+        "gpt-5.4",
+      )}
+      onProviderModelChange={change}
+    />,
+  );
+  try {
+    await page.getByRole("button").click();
+    await expect
+      .element(page.getByText(/Review OpenCode setup and native service trust/))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("menuitem", { name: /Set up OpenCode/ }))
+      .not.toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(change).not.toHaveBeenCalled();
+  } finally {
+    await screen.unmount();
   }
 });
 
@@ -201,7 +332,7 @@ it("browses grouped full-catalog models with setup guidance, search and exact-su
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
     await expect
       .element(page.getByRole("menuitemradio").first())
-      .toHaveTextContent("Provider not connected");
+      .toHaveTextContent("Native availability unverified");
     await page.getByPlaceholder("Search models").fill("OpenAI");
     await expect.element(page.getByText("Recently used", { exact: true })).not.toBeInTheDocument();
     await expect.element(page.getByText("Anthropic", { exact: true })).not.toBeInTheDocument();

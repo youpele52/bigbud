@@ -139,6 +139,7 @@ import {
 } from "./rpc.browser";
 
 export { WS_METHODS };
+import { WsServerOpencodeV2ThreadToolsSetupRpc } from "./rpc.opencodeV2ThreadToolsSetup";
 export * from "./rpc.automation";
 export * from "./rpc.browser";
 export * from "./rpc.core";
@@ -150,6 +151,7 @@ export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsServerOpencodeV2ThreadToolsSetupRpc,
   WsPluginsGitAvailabilityRpc,
   WsPluginsListCatalogRpc,
   WsPluginsGetRpc,

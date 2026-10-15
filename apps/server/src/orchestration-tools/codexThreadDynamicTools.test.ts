@@ -217,6 +217,7 @@ describe("codexThreadDynamicTools", () => {
         namespace: "bigbud_orchestration",
         tool: "rename_thread",
         requestId: 18,
+        sourceMessageId: "source-message",
         arguments: { title: "Renamed" },
       });
       expect(renameResult.success).toBe(true);
@@ -289,6 +290,8 @@ describe("codexThreadDynamicTools", () => {
           kind: "rename",
           threadId,
           title: "Renamed",
+          invocationId: "18",
+          sourceMessageId: MessageId.makeUnsafe("source-message"),
         },
         {
           kind: "status",

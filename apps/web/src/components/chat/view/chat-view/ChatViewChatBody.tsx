@@ -28,6 +28,10 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.logic";
+import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
+import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
+import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
+import { StatusBanner } from "~/components/common/StatusBanner";
 
 interface ChatViewChatBodyProps {
   readonly base: ChatViewBaseState;
@@ -53,6 +57,20 @@ export function ChatViewChatBody({
   onOpenOrchestra,
 }: ChatViewChatBodyProps) {
   const { branchThread } = useThreadActions();
+  const openCodeSetup = useOpenCodeRuntimeSetup({
+    status: composer.activeProviderStatus,
+    settings: base.settings.providers.opencodeV2,
+    directory: composer.gitCwd ?? workspaceRoot,
+    threadId: base.isServerThread ? base.activeThread?.id : undefined,
+    threadError: base.activeThread?.error,
+  });
+  const retainedHistory = useOpencodeV2RetainedHistory(
+    base.isServerThread && base.activeThread?.modelSelection.provider === "opencodeV2"
+      ? base.activeThread.id
+      : undefined,
+    composer.gitCwd ?? workspaceRoot,
+    JSON.stringify(base.settings.providers.opencodeV2),
+  );
   const mainActivityVisible =
     thread.isWorking || thread.isCompacting || thread.showMemoryReviewStatus;
   const activityPresentation = resolveAgentActivityPresentation({
@@ -81,7 +99,20 @@ export function ChatViewChatBody({
       {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
         <LegacyOpencodeNotice />
       ) : null}
-      <ProviderStatusBanner status={composer.activeProviderStatus} />
+      <ProviderStatusBanner
+        status={composer.activeProviderStatus}
+        runtimeVerified={openCodeSetup.verified}
+      />
+      {openCodeSetup.error ? (
+        <div className="pt-3 mx-auto max-w-3xl">
+          <StatusBanner
+            variant={openCodeSetup.severity}
+            title="OpenCode setup"
+            description={openCodeSetup.error}
+          />
+        </div>
+      ) : null}
+      {retainedHistory ? <OpencodeV2RetainedHistoryNotice message={retainedHistory} /> : null}
       <ContextWindowWarningBanner
         threadId={base.activeThread!.id}
         usage={thread.activeContextWindow}
@@ -92,13 +123,15 @@ export function ChatViewChatBody({
         error={base.activeThread!.error}
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
       />
-      <AccessModeInfoBanner
-        threadId={base.threadId}
-        provider={composer.selectedProvider}
-        runtimeMode={base.runtimeMode}
-        accessModeChangeId={runtime.accessModeChangeId}
-        connectionMode={base.settings.providers.opencodeV2.connectionMode ?? "shared"}
-      />
+      {!retainedHistory ? (
+        <AccessModeInfoBanner
+          threadId={base.threadId}
+          provider={composer.selectedProvider}
+          runtimeMode={base.runtimeMode}
+          accessModeChangeId={runtime.accessModeChangeId}
+          connectionMode="shared"
+        />
+      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -260,15 +293,17 @@ export function ChatViewChatBody({
             ) : null}
           </div>
 
-          <ChatViewMainComposer
-            base={base}
-            composer={composer}
-            thread={thread}
-            runtime={runtime}
-            interactions={interactions}
-            onOpenOrchestra={onOpenOrchestra}
-            onOpenReplySource={handleOpenReplySource}
-          />
+          {!retainedHistory ? (
+            <ChatViewMainComposer
+              base={base}
+              composer={composer}
+              thread={thread}
+              runtime={runtime}
+              interactions={interactions}
+              onOpenOrchestra={onOpenOrchestra}
+              onOpenReplySource={handleOpenReplySource}
+            />
+          ) : null}
 
           <BranchToolbar
             threadId={base.activeThread!.id}

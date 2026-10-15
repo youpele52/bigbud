@@ -7,6 +7,13 @@ import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 import { makeOwnedClient } from "./Client.ts";
 import { readV2NativeCatalog } from "./Catalog.native.ts";
+import { rememberV2OwnedRetailChild } from "./SharedService.native.child.fixture.ts";
+import {
+  requireV2NativeIsolation,
+  verifyV2NativeFixtureImage,
+  v2NativeFixtureEnvironment,
+  assertV2NativeFixtureVersion,
+} from "./SharedService.native.isolation.fixture.ts";
 import {
   readV2SharedRegistration,
   v2SharedRegistrationFile,
@@ -34,19 +41,25 @@ async function waitForNativeFixtureCatalog(file: string, workspace: string) {
     .toBe(true);
 }
 
-/** Real registered service in disposable HOME/XDG/DB only, never an installed TUI service. */
+/** Retail qualification requires independently approved clean-machine provenance before any launch. */
 export async function sharedServiceNativeFixture(
   binary: string,
   prepareConfig?: (file: string) => Promise<void>,
   databaseName = "opencode.db",
 ) {
-  const fixture = await makeV2CodingNativeFixture();
+  const approval = await requireV2NativeIsolation(binary);
+  const fixture = await makeV2CodingNativeFixture(32000, approval.fixtureRoot);
   await ownV2WindowsFixture(fixture.profile);
-  const env = await isolatedEnvironment({
-    binaryPath: binary,
-    profileRoot: fixture.profile,
-    runtimeTargetId: "local",
-  });
+  const env = v2NativeFixtureEnvironment(
+    approval,
+    fixture.profile,
+    fixture.workspace,
+    await isolatedEnvironment({
+      binaryPath: binary,
+      profileRoot: fixture.profile,
+      runtimeTargetId: "local",
+    }),
+  );
   const globalConfig = path.join(fixture.profile, "config", "opencode", "opencode.json");
   // Windows native builds do not consistently discover the XDG config override. Use the documented
   // project config in this disposable workspace; production discovers metadata through the API.
@@ -73,6 +86,12 @@ export async function sharedServiceNativeFixture(
     "---\nname: example\ndescription: Disposable qualification skill\n---\nSynthetic read-only instructions.\n",
   );
   fixture.state.textOnlyDelegated = true;
+  try {
+    await assertV2NativeFixtureVersion(approval, env, fixture.profile);
+  } catch (error) {
+    await fixture.close();
+    throw error;
+  }
   let child = spawn(binary, ["serve", "--service", "--hostname=127.0.0.1", "--port=0"], {
     env: { ...env, OPENCODE_CONFIG_PROJECT_DISABLE: "0" },
     cwd: fixture.profile,
@@ -111,17 +130,34 @@ export async function sharedServiceNativeFixture(
         { timeout: 15000 },
       )
       .toBe(true);
+    const registration = await readV2SharedRegistration(file);
+    const info = await makeOwnedClient({
+      endpoint: registration.endpoint.url,
+      password: registration.endpoint.auth!.password,
+    }).server.info();
+    if (
+      registration.version !== approval.nativeVersion ||
+      info.version !== approval.nativeVersion ||
+      info.pid !== child.pid
+    )
+      throw new Error(
+        "V2 retail image/registration/health identity mismatch; no qualification pass.",
+      );
+    await verifyV2NativeFixtureImage(approval);
     // A nonempty built-in catalog is not proof that the disposable provider/config has settled.
     await waitForNativeFixtureCatalog(file, fixture.workspace);
     await ownV2WindowsFixture(fixture.profile);
+    await rememberV2OwnedRetailChild(child, approval, file, path.dirname(configFile));
     return {
       ...fixture,
       file,
+      approval,
       get child() {
         return child;
       },
       configFile,
       async restart(copyHistory: boolean | "empty" = false) {
+        await requireV2NativeIsolation(binary, approval.id);
         // Only this fixture-owned process/profile; never use native service lifecycle discovery.
         await closeOwnedChild(child);
         if (child.exitCode === null && child.signalCode === null)
@@ -163,10 +199,15 @@ export async function sharedServiceNativeFixture(
           )
           .toBe(child.pid);
         await waitForNativeFixtureCatalog(file, fixture.workspace);
+        await rememberV2OwnedRetailChild(child, approval, file, path.dirname(configFile));
       },
       async close() {
         await closeOwnedChild(child);
-        await fixture.close();
+        try {
+          await verifyV2NativeFixtureImage(approval);
+        } finally {
+          await fixture.close();
+        }
       },
     };
   } catch (error) {

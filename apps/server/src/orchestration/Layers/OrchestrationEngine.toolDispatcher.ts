@@ -15,9 +15,9 @@ import {
   createThreadViaOrchestration,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
   listPinnedThreadsViaOrchestration as listPinnedThreadsViaThreadTools,
-  renameThreadViaOrchestration as renameThreadViaThreadTools,
   setThreadPinnedViaOrchestration as setThreadPinnedViaThreadTools,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
+import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.rename.ts";
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
@@ -61,10 +61,10 @@ export function installOrchestrationEngineToolDispatchers(input: {
         }
       : {}),
     rename: (request) =>
-      renameThreadViaThreadTools({
+      renameThreadViaOrchestration({
         orchestrationEngine: input.engine,
-        threadId: request.threadId,
-        title: request.title,
+        threadDelegationRepository: input.threadDelegationRepository,
+        ...request,
       }),
     archive: (request) =>
       archiveThreadViaThreadTools({

@@ -14,7 +14,7 @@ import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import * as RemoteDefaults from "../../../remote-agent/remoteAgentDefault.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2IsolatedApplicationFixtureRegistration as makeV2ApplicationRegistration } from "./Application.fixture.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 import { makeV2RemoteAgentFixture } from "./Remote.fixture.ts";
 

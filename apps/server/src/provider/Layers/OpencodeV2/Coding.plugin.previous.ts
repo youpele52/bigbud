@@ -1,28 +1,11 @@
-import { toJsonSchemaObject } from "../../../git/Utils.ts";
-import { ThreadToolRequest } from "../../../ws/http.threadTools.schema.ts";
-import { V2_ORCHESTRATION_ACTIONS } from "./Execution.orchestration.ts";
-
-const orchestrationSchema = toJsonSchemaObject(ThreadToolRequest) as {
-  properties: Record<string, unknown>;
-};
-const requestFields = { ...orchestrationSchema.properties };
-for (const name of Object.keys(requestFields)) {
-  if (
-    name === "invocationId" ||
-    name === "sourceMessageId" ||
-    name === "workspacePath" ||
-    name.startsWith("remote")
-  )
-    delete requestFields[name];
-}
-requestFields.action = { type: "string", enum: V2_ORCHESTRATION_ACTIONS };
+import { V2_PREVIOUS_CODING_REQUEST_SCHEMA } from "./Coding.plugin.previous.schema.ts";
 const fields = {
   path: { type: "string" },
   content: { type: "string" },
   oldText: { type: "string" },
   newText: { type: "string" },
   command: { type: "string" },
-  request: { ...orchestrationSchema, properties: requestFields },
+  request: V2_PREVIOUS_CODING_REQUEST_SCHEMA,
 };
 
 /** Frozen native-access-era template, accepted only for byte-exact owned upgrades. Never install it. */

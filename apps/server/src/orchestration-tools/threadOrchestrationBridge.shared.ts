@@ -26,7 +26,8 @@ export interface ThreadOrchestrationSessionBridgeInput {
 
 export const THREAD_ORCHESTRATION_API_PATH = "/api/internal/thread-tools";
 
-export const RENAME_THREAD_TOOL_DESCRIPTION = "Rename the current BigBud thread.";
+export const RENAME_THREAD_TOOL_DESCRIPTION =
+  "Rename canonical bigbud thread metadata, not a native provider session. Omit targetThreadId for the current thread. Rename another thread only when the current user explicitly requests it; only current-project threads and directly delegated children are eligible, with existing approvals. Attached history alone does not authorize renaming.";
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 

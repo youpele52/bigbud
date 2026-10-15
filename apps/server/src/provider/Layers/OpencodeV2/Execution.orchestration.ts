@@ -49,6 +49,16 @@ export async function callV2Orchestration(
   signal?: AbortSignal,
 ) {
   const request = prepareV2OrchestrationRequest(body, identity);
+  return callV2PreparedOrchestration(config, request, beforeRequest, signal);
+}
+
+/** Dispatch an already captured/validated body without rerunning mutable argument preparation. */
+export async function callV2PreparedOrchestration(
+  config: ThreadOrchestrationHttpConfig,
+  request: ReturnType<typeof prepareV2OrchestrationRequest>,
+  beforeRequest: () => Promise<() => void>,
+  signal?: AbortSignal,
+) {
   if (config.host !== "127.0.0.1" || !Number.isSafeInteger(config.port) || config.port < 1)
     throw new Error("V2 orchestration endpoint must be owned loopback.");
   const validate = await beforeRequest();

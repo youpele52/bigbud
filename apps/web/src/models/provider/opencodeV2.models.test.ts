@@ -100,9 +100,8 @@ describe("independent V2 preview model/UI boundaries", () => {
     expect(PROVIDER_OPTIONS.some((option) => option.value === "opencodeV2")).toBe(true);
     const cards = buildProviderCards({ serverProviders: [], settings: DEFAULT_UNIFIED_SETTINGS });
     expect(cards.filter((card) => card.provider === "opencodeV2")).toHaveLength(1);
-    expect(cards.find((card) => card.provider === "opencodeV2")?.homePathKey).toBe(
-      "opencodeV2ProfileRoot",
-    );
+    // Production borrows the native shared service; private binary/profile controls are retired.
+    expect(cards.find((card) => card.provider === "opencodeV2")?.homePathKey).toBeUndefined();
     expect(getDefaultModelSelection([snapshot]).provider).not.toBe("opencodeV2");
     expect(resolveSelectableProvider([snapshot], null)).not.toBe("opencodeV2");
     expect(resolveSelectableProvider([snapshot], "opencodeV2")).toBe("opencodeV2");

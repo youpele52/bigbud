@@ -1,4 +1,5 @@
 import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
 
 export const V2_RECOMMENDED_RUNTIME_VERSION = "2.0.26";
 
@@ -8,21 +9,12 @@ export const V2_SHARED_RUNTIME_QUALIFICATIONS = {
   "2.0.26": { fixture: "SharedService.native.test.ts", scope: "native-api-transport" },
 } as const;
 
-export const V2_MINIMUM_RUNTIME_VERSION = "2.0.24";
-
 /** Release evidence is not an allowlist; every accepted service also passes protocol checks. */
 export function assertV2SharedQualifiedVersion(version: string): void {
-  const parts = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
-  const numbers = parts?.slice(1).map(Number);
-  if (
-    !numbers ||
-    numbers.some((part) => !Number.isSafeInteger(part)) ||
-    numbers[0] !== 2 ||
-    (numbers[1] === 0 && numbers[2]! < 24)
-  )
+  if (!parseV2CanonicalCandidate(version))
     throw new V2SharedServiceError(
       "compatibility",
-      `OpenCode ${/^\d+\.\d+\.\d+$/.test(version) ? version : "unknown version"} is unsupported. Shared mode requires stable V2 ${V2_MINIMUM_RUNTIME_VERSION} or newer with compatible APIs (not V3); bigbud never updates or replaces your service.`,
+      `OpenCode ${/^\d+\.\d+\.\d+$/.test(version) ? version : "unknown version"} is unsupported. Shared mode requires stable V2 with compatible APIs (not V1, V3 or prereleases); bigbud never updates or replaces your service.`,
       /^2\.\d+\.\d+$/.test(version) ? version : undefined,
     );
 }

@@ -39,6 +39,61 @@ const request = (id: string): V2AdmissionRequest => ({
 
 it.layer(layer)("OpenCode v2 admission write-before-dispatch", (it) => {
   it.effect(
+    "rejects a stale caller before reserve but retains a reserve physically issued before loss",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* ProviderTurnAdmissions;
+        const previous = yield* admitV2Turn(request("preserved-prior"));
+        let current = false,
+          reserves = 0,
+          sends = 0;
+        const input = {
+          ...request("pre-reserve-cancel"),
+          isCurrent: () => current,
+          dispatch: () =>
+            Effect.sync(() => {
+              sends++;
+              return true;
+            }),
+        };
+        const observed = {
+          ...journal,
+          reserve: (value: Parameters<typeof journal.reserve>[0]) => {
+            reserves++;
+            return journal.reserve(value).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  current = false;
+                }),
+              ),
+            );
+          },
+        };
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              admitV2Turn(input).pipe(Effect.provideService(ProviderTurnAdmissions, observed)),
+            ),
+          ),
+        );
+        assert.strictEqual(reserves, 0);
+        assert.strictEqual(sends, 0);
+        assert.isUndefined(yield* journal.find(input.identity));
+        current = true;
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              admitV2Turn(input).pipe(Effect.provideService(ProviderTurnAdmissions, observed)),
+            ),
+          ),
+        );
+        assert.strictEqual(reserves, 1);
+        assert.strictEqual(sends, 0);
+        assert.strictEqual((yield* journal.find(input.identity))?.state, "reserved");
+        assert.deepEqual(yield* journal.find(previous), previous);
+      }),
+  );
+  it.effect(
     "failed durable intent writes prevent RPC, while failed accepted writes retain uncertainty",
     () =>
       Effect.gen(function* () {

@@ -30,8 +30,14 @@ export interface ThreadOrchestrationToolDispatcherShape {
   ) => Effect.Effect<Record<string, unknown>, Error>;
   readonly rename: (input: {
     readonly threadId: ThreadId;
+    readonly targetThreadId?: ThreadId;
     readonly title: string;
-  }) => Effect.Effect<{ readonly title: string }, Error>;
+    readonly invocationId?: string;
+    readonly sourceMessageId?: MessageId;
+  }) => Effect.Effect<
+    { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string },
+    Error
+  >;
   readonly archive: (input: {
     readonly threadId: ThreadId;
   }) => Effect.Effect<{ readonly archived: true }, Error>;

@@ -9,7 +9,7 @@ import { cloneElement } from "react";
 
 const noop = () => {};
 
-it("defaults to shared native discovery and exposes private paths only in advanced isolated mode", async () => {
+it("exposes shared native setup only and preserves retained isolated configuration as read-only", async () => {
   const card = buildProviderCards({ settings: DEFAULT_UNIFIED_SETTINGS, serverProviders: [] }).find(
     (value) => value.provider === "opencodeV2",
   )!;
@@ -42,25 +42,32 @@ it("defaults to shared native discovery and exposes private paths only in advanc
   const screen = await render(content);
   try {
     await expect.element(page.getByRole("heading", { name: "OpenCode" })).toBeInTheDocument();
-    await expect.element(page.getByRole("textbox", { name: /binary path/ })).toBeDisabled();
+    await expect
+      .element(page.getByRole("textbox", { name: /binary path/ }))
+      .not.toBeInTheDocument();
     expect(binary).not.toHaveBeenCalled();
     await expect
       .element(page.getByRole("textbox", { name: /Dedicated V2 profile path/ }))
       .not.toBeInTheDocument();
-    await page
-      .getByRole("combobox", { name: "OpenCode connection mode" })
-      .selectOptions("isolated");
-    expect(mode).toHaveBeenLastCalledWith("isolated");
+    await expect
+      .element(page.getByRole("combobox", { name: "OpenCode connection mode" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Retry setup", includeHidden: true }))
+      .not.toBeVisible();
+    await page.getByText("Thread tools & setup", { exact: true }).click();
+    await expect.element(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
     await screen.rerender(cloneElement(content, { connectionMode: "isolated" }));
-    await expect.element(page.getByRole("textbox", { name: /binary path/ })).toBeEnabled();
     await expect
       .element(page.getByRole("textbox", { name: /binary path/ }))
-      .toHaveValue("/saved/opencode");
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByRole("textbox", { name: /Dedicated V2 profile path/ }))
-      .toHaveValue("/saved/profile");
-    await page.getByRole("textbox", { name: /binary path/ }).fill("/other/opencode");
-    expect(binary).toHaveBeenLastCalledWith("/other/opencode");
+      .not.toBeInTheDocument();
+    await page.getByRole("button", { name: "Use shared native service for new chats" }).click();
+    expect(mode).toHaveBeenLastCalledWith("shared");
+    expect(binary).not.toHaveBeenCalled();
+    expect(profile).not.toHaveBeenCalled();
     await page.getByRole("switch", { name: "Enable OpenCode" }).click();
     expect(enable.mock.calls[0]?.[0]).toBe(false);
   } finally {

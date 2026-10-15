@@ -5,6 +5,7 @@ import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
 import { Button } from "../../ui/button";
+import { OpenCodeSetupMenuItem } from "./ProviderModelPicker.setup";
 import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
@@ -22,6 +23,8 @@ export function ModelList({
   options,
   recentOptions,
   loading = false,
+  unavailableMessage,
+  allowOpenCodeSetup = false,
   onSelect,
   onBack,
   searchbarClassName,
@@ -35,6 +38,7 @@ export function ModelList({
   recentOptions?: ReadonlyArray<ModelOption> | undefined;
   loading?: boolean;
   unavailableMessage?: string | undefined;
+  allowOpenCodeSetup?: boolean;
   activationAction?: { readonly busy: boolean; readonly onClick: () => void } | undefined;
   onSelect: (value: string) => void;
   onBack?: () => void;
@@ -47,6 +51,8 @@ export function ModelList({
   const inputRef = useRef<HTMLInputElement>(null);
   const listBodyRef = useRef<HTMLDivElement>(null);
   const hasSearchQuery = query.trim().length > 0;
+  const setupLabel =
+    provider === "opencodeV2" ? "Native availability unverified" : "Provider not connected";
 
   const visibleOptions = useMemo(
     () => visibleModelOptionsForPicker(provider, options, recentOptions, query),
@@ -135,9 +141,7 @@ export function ModelList({
                 >
                   <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
                   {modelOption.availability === "requires-setup" ? (
-                    <span className="ms-auto text-xs text-muted-foreground">
-                      Provider not connected
-                    </span>
+                    <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                   ) : null}
                 </MenuRadioItem>
               ))}
@@ -161,9 +165,7 @@ export function ModelList({
                   >
                     <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
                     {modelOption.availability === "requires-setup" ? (
-                      <span className="ms-auto text-xs text-muted-foreground">
-                        Provider not connected
-                      </span>
+                      <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                     ) : null}
                   </MenuRadioItem>
                 ))}
@@ -179,15 +181,23 @@ export function ModelList({
                 >
                   <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
                   {modelOption.availability === "requires-setup" ? (
-                    <span className="ms-auto text-xs text-muted-foreground">
-                      Provider not connected
-                    </span>
+                    <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                   ) : null}
                 </MenuRadioItem>
               ))}
             </MenuGroup>
           ) : null}
         </MenuRadioGroup>
+        {provider === "opencodeV2" && options.length === 0 && !loading ? (
+          <>
+            {unavailableMessage ? (
+              <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+                {unavailableMessage}
+              </p>
+            ) : null}
+            {allowOpenCodeSetup ? <OpenCodeSetupMenuItem message={unavailableMessage} /> : null}
+          </>
+        ) : null}
         {modelList.hasMore ? (
           <Button variant="ghost" size="sm" className="w-full text-xs" onClick={modelList.loadMore}>
             Show more models

@@ -115,6 +115,7 @@ export async function createThreadOrchestrationBridge(
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,
         threadId: input.threadId,
+        token,
       });
       await rm(bridgeDir, { recursive: true, force: true });
     },

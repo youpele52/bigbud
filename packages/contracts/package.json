@@ -55,6 +55,8 @@
     },
     "./server/rpc.retention": "./src/server/rpc.retention.ts",
     "./server/server": "./src/server/server.ts",
+    "./server/server.opencodeV2ThreadToolsSetup": "./src/server/server.opencodeV2ThreadToolsSetup.ts",
+    "./server/rpc.opencodeV2ThreadToolsSetup": "./src/server/rpc.opencodeV2ThreadToolsSetup.ts",
     "./server/ipc.terminal": "./src/server/ipc.terminal.ts",
     "./terminal-owner/primitives": "./src/terminal-owner/primitives.ts",
     "./terminal-owner/identity": "./src/terminal-owner/identity.ts",

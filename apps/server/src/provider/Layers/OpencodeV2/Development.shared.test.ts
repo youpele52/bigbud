@@ -4,8 +4,9 @@ import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
+import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
 
-it("refreshes native account metadata without credential reads, preserves native models and keeps old qualified runtime ready", async () => {
+it("refreshes native account metadata without credential reads, preserves native models and discloses an unqualified runtime as a usable warning", async () => {
   await withV2RuntimeFixture(async ({ runtime, http, directory }) => {
     vi.spyOn(http.client.server, "info").mockResolvedValue({ version: "2.0.24" } as Awaited<
       ReturnType<typeof http.client.server.info>
@@ -34,11 +35,15 @@ it("refreshes native account metadata without credential reads, preserves native
             async () => ({ models: [], stale: false }),
           );
           const initial = yield* provider.refresh;
+          // Missing semantic qualification is disclosed in amber, not a gate (10-14 plan §1a).
           expect(initial).toMatchObject({
-            status: "ready",
+            status: "warning",
             auth: { status: "unknown" },
             runtimeUpdateRecommended: "2.0.26",
           });
+          expect(initial.message).toContain(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+          expect(initial.models.length).toBeGreaterThan(0);
+          expect(initial.models.every((model) => model.availability === "available")).toBe(true);
           integration.mockResolvedValue({
             location: { directory },
             data: [
@@ -82,7 +87,9 @@ it("refreshes native account metadata without credential reads, preserves native
           });
           const refreshed = yield* provider.refresh;
           expect(refreshed.auth).toEqual({ status: "unknown" });
-          expect(refreshed.status).toBe("ready"); // Account unknown does not make configured/free models unusable.
+          // Account unknown does not make configured/free models unusable; only the disclosure remains.
+          expect(refreshed.status).toBe("warning");
+          expect(refreshed.message).toBe(initial.message);
           expect(refreshed.models).toEqual(initial.models);
           expect(http.calls.some((call) => /credential|connect/.test(call.pathname))).toBe(false);
         }).pipe(

@@ -6,6 +6,8 @@ import { runAuthorizedV2, runV2RequestContext, runV2Cleanup } from "./Client.gua
 import { makeV2Client, v2Request } from "./Client.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { deferred, FixtureEvents } from "./Test.fixtures.ts";
+import { V2ThreadToolsActivation } from "./PluginSetup.activation.ts";
+import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 
 const transport = "/synthetic/service.json";
 const enabled = {
@@ -47,6 +49,26 @@ it("missing synchronous settings authority fails closed and scope disposal canno
   authority.close();
   expect(permit.signal.aborted).toBe(true);
   expect(() => permit.assertCurrent()).toThrow("revision");
+});
+
+it("an uninitialized older settings snapshot does not crash dormant layer creation or grant native authority", () => {
+  const authority = new V2ConsentAuthority({
+    currentSnapshot: (() => ({})) as NonNullable<
+      ConstructorParameters<typeof V2ConsentAuthority>[0]["currentSnapshot"]
+    >,
+  });
+  expect(() => authority.capture()).toThrow("consent");
+  expect(() => authority.capture(true)).toThrow("consent");
+  authority.close();
+});
+
+it("a dormant coordinator tolerates uninitialized proxy fixtures without granting consent or failing scope close", async () => {
+  const coordinator = new V2ThreadToolsActivation({
+    currentSnapshot: () => ({}),
+    onSnapshotChange: () => ({}),
+  } as unknown as ServerSettingsShape);
+  expect(() => coordinator.consent.capture()).toThrow("consent");
+  await expect(coordinator.close()).resolves.toBeUndefined();
 });
 
 it("a late native response after revoke/regrant is discarded and its body cancelled, without automatic retry", async () => {

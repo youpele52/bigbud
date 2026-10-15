@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { sharedServiceTestRegistration } from "./SharedService.test.fixture.ts";

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Effect, PubSub, Stream } from "effect";
 import { expect, it } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, ThreadId } from "@bigbud/contracts";
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { composeActivatedFixtureProviders as composeOptionalProviders } from "./Application.activation.fixture.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
@@ -16,7 +16,7 @@ const disabledSettings = {
   },
 };
 
-it("registers V2 without env flags, honors settings edits, and rejects missing/incompatible binaries independently of V1", async () => {
+it("registers shared-only V2 without development flags and rejects retained isolated settings without ever executing their binary", async () => {
   await withV2RuntimeFixture(async ({ runtime }) => {
     const parent = await realpath(runtime.options.config.profileRoot);
     const incompatible = path.join(parent, "incompatible");
@@ -27,7 +27,9 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
         Effect.scoped(
           Effect.gen(function* () {
             const settings = yield* ServerSettingsService;
-            const registrations = yield* composeOptionalProviders([], {});
+            const registrations = yield* composeOptionalProviders([], {
+              BIGBUD_ENABLE_OPENCODE_V2_DEVELOPMENT: "1",
+            });
             const registration = registrations[0]!;
             expect(registration.capabilities.needsBuiltinsDisabled).toBe(false);
             expect(registration.capabilities.supportsRemoteProviderRuntime).toBe(false);
@@ -55,7 +57,7 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
               status: "warning",
               models: [],
             });
-            expect(snapshot.message).toContain("2.0.26");
+            expect(snapshot.message).toContain("retired-isolated");
             const started = yield* registration.adapterService
               .startSession({
                 threadId: ThreadId.makeUnsafe("not-ready"),
@@ -76,7 +78,7 @@ it("registers V2 without env flags, honors settings edits, and rejects missing/i
               providers: { opencodeV2: { binaryPath: "/another/v2" } },
             });
             expect((yield* registration.providerService.refresh).message).toContain(
-              "Restart bigbud",
+              "retired-isolated",
             );
             yield* settings.updateSettings({ providers: { opencodeV2: { enabled: false } } });
             expect((yield* registration.providerService.refresh).enabled).toBe(false);

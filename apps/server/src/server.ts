@@ -17,6 +17,7 @@ import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/Provide
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
 import { OptionalProviderCompositionLive } from "./provider/Layers/OptionalProviderComposition.ts";
+import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
@@ -302,7 +303,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProjectionPersistenceLayerLive),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
-  Layer.provideMerge(TerminalLayerLive),
+  Layer.provideMerge(Layer.mergeAll(ThreadToolsActivationLive, TerminalLayerLive)),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
   Layer.provideMerge(PluginRegistryLive),

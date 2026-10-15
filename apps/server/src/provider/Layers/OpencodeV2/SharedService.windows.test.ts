@@ -30,6 +30,12 @@ let count = 0;
 readline.createInterface({input: process.stdin}).on("line", line => {
   if (line === "HELLO\\t1") { process.stdout.write(${hello} + "\\n"); return; }
   if (line === "SILENT") return;
+  if (line === "HOLD") {
+    require("node:fs").writeFileSync(${JSON.stringify(checking)}, "issued");
+    const interval = setInterval(() => {}, 1000);
+    process.on("SIGTERM", () => setTimeout(() => { clearInterval(interval); process.exit(0); }, 100));
+    return;
+  }
   if (line === "OVERSIZE") { process.stdout.write("x".repeat(1048578)); return; }
   if (line === "MISSING") { process.stdout.write("ERR\\tmissing\\n"); return; }
   const value = "OK\\t" + ++count + "\\n";
@@ -129,6 +135,37 @@ it.skipIf(process.platform === "win32")(
     const fixture = await peer('"OK\\t0"');
     try {
       await expect(fixture.inspector.request("READ\t00")).rejects.toThrow("incompatible");
+    } finally {
+      await fixture.close();
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "physical mutation closure waits for helper exit and reports uncertainty, never a false cancellation",
+  async () => {
+    const fixture = await peer();
+    let settled = false;
+    try {
+      const work = fixture.inspector
+        .request("HOLD", () => {})
+        .finally(() => {
+          settled = true;
+        });
+      const rejected = expect(work).rejects.toMatchObject({ code: "EUNCERTAIN" });
+      await expect
+        .poll(() =>
+          stat(fixture.checking).then(
+            () => true,
+            () => false,
+          ),
+        )
+        .toBe(true);
+      fixture.inspector.close();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await rejected;
+      expect(settled).toBe(true);
     } finally {
       await fixture.close();
     }

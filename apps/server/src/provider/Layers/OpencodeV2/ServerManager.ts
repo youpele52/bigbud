@@ -6,11 +6,7 @@ import type { V2ConsentAuthority } from "./Application.consent.ts";
 import { V2UnconfirmedProcessStartup, v2ProcessExited } from "./ServerManager.lifecycle.ts";
 
 import { OpencodeV2EventHub, validateV2EventHubBounds } from "./EventHub.ts";
-import {
-  startOwnedV2Process,
-  type OwnedV2Process,
-  type V2ProcessConfig,
-} from "./ServerManager.child.ts";
+import type { OwnedV2Process, V2ProcessConfig } from "./ServerManager.types.ts";
 
 interface Entry {
   readonly storageKey: string;
@@ -43,7 +39,7 @@ export class OpencodeV2ServerManager {
 
   constructor(
     private readonly options: {
-      readonly start?: (config: V2ProcessConfig) => Promise<OwnedV2Process>;
+      readonly start: (config: V2ProcessConfig) => Promise<OwnedV2Process>;
       readonly maxProcesses: number;
       readonly maxOwners: number;
       readonly maxQueuedEvents: number;
@@ -132,7 +128,9 @@ export class OpencodeV2ServerManager {
       }
       const start = Promise.resolve().then(() => {
         authority?.permit.assertCurrent();
-        return (this.options.start ?? startOwnedV2Process)(config);
+        if (!this.options.start)
+          throw new Error("V2 process acquisition requires an explicit owner factory.");
+        return this.options.start(config);
       });
       entry = {
         storageKey,

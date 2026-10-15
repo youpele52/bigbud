@@ -100,6 +100,7 @@ export const WS_METHODS = {
   serverExportThreadContext: "server.exportThreadContext",
   serverStartHandoffJob: "server.startHandoffJob",
   serverGetHandoffJob: "server.getHandoffJob",
+  serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",

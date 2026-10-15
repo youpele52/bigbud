@@ -12,7 +12,7 @@ import {
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2IsolatedApplicationFixtureRegistration as makeV2ApplicationRegistration } from "./Application.fixture.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;

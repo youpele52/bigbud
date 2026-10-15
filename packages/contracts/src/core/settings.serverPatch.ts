@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import { GreetingName } from "./settings.greeting";
+import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -179,7 +180,8 @@ export const ServerSettingsPatch = Schema.Struct({
           profileRoot: Schema.optionalKey(Schema.String),
           connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),
           serviceFile: Schema.optionalKey(Schema.String),
-          nativeServiceTrust: Schema.optionalKey(Schema.NullOr(Schema.Literal("host-user-v1"))),
+          nativeServiceTrust: Schema.optionalKey(OpencodeV2NativeServiceTrust),
+          nativePluginConfigRoot: Schema.optionalKey(OpencodeV2PluginConfigRoot),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

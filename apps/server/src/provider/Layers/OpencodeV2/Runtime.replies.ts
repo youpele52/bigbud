@@ -60,6 +60,11 @@ export async function respondV2Permission(
   decision: Parameters<typeof replyV2Permission>[2],
 ) {
   const owner = runtime.get(threadId);
+  if (id.startsWith("bbv2-thread:"))
+    return runtime.withSession(threadId, () => {
+      if (!runtime.options.threadBridge) throw new Error("V2 canonical thread bridge unavailable.");
+      return runtime.options.threadBridge.reply(runtime, owner, id, decision);
+    });
   if (id.startsWith("bbv2-code:"))
     return runtime.withSession(threadId, () => {
       if (!runtime.options.codingBridge) throw new Error("V2 coding bridge unavailable.");
@@ -94,6 +99,7 @@ export function v2ReplyGuard(
   options: V2IsolatedRuntimeOptions,
   sessions: Map<ThreadId, V2RuntimeSession>,
   owner: V2RuntimeSession,
+  cancellation?: AbortSignal,
 ) {
   const generation = owner.lease.generation;
   const epoch = owner.epoch;
@@ -115,7 +121,7 @@ export function v2ReplyGuard(
   };
   return async () => {
     await options.authorizeExecution?.();
-    await assertV2SharedSessionOwner(owner);
+    await assertV2SharedSessionOwner(owner, true, cancellation);
     validate();
     return validate;
   };

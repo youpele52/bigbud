@@ -1,11 +1,16 @@
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 import { v2ApplicationConfigKey } from "./Application.configKey.ts";
+import {
+  hasOpencodeV2NativeTrust,
+  hasOpencodeV2ManagedPluginTrust,
+} from "@bigbud/shared/opencodeNativeTrust";
 
 export interface V2ConsentPermit {
   readonly revision: number;
   readonly signal: AbortSignal;
   readonly assertCurrent: () => void;
+  readonly assertNativeConfigRead?: () => void;
   readonly release: () => void;
 }
 
@@ -21,16 +26,18 @@ export class V2ConsentAuthority {
     private readonly settings: Pick<ServerSettingsShape, "currentSnapshot" | "onSnapshotChange">,
   ) {
     this.accept();
-    this.unsubscribe = settings.onSnapshotChange?.(() => this.accept()) ?? (() => {});
+    const unsubscribe = settings.onSnapshotChange?.(() => this.accept());
+    this.unsubscribe = typeof unsubscribe === "function" ? unsubscribe : () => {};
   }
 
   private accept() {
-    const config = this.settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+    const config = this.settings.currentSnapshot?.()?.settings?.providers?.opencodeV2;
     const key = config
       ? JSON.stringify([
           config.enabled,
           v2ApplicationConfigKey(config),
           config.nativeServiceTrust ?? null,
+          config.nativePluginConfigRoot?.trim() ?? "",
         ])
       : "";
     if (key === this.key) return;
@@ -41,13 +48,13 @@ export class V2ConsentAuthority {
   }
 
   capture(healthOnly = false): V2ConsentPermit {
-    const config = this.settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+    const config = this.settings.currentSnapshot?.()?.settings?.providers?.opencodeV2;
     if (
       this.closed ||
       !config?.enabled ||
       (!healthOnly &&
         resolveOpencodeV2ConnectionMode(config) === "shared" &&
-        config.nativeServiceTrust !== "host-user-v1")
+        !hasOpencodeV2NativeTrust(config))
     )
       throw new Error(
         "V2 native service trust consent is required; no Location activation or execution.",
@@ -58,6 +65,20 @@ export class V2ConsentAuthority {
     return {
       revision,
       signal: controller.signal,
+      assertNativeConfigRead: () => {
+        if (
+          this.closed ||
+          revision !== this.revision ||
+          controller.signal.aborted ||
+          healthOnly ||
+          !hasOpencodeV2ManagedPluginTrust(
+            this.settings.currentSnapshot?.()?.settings?.providers?.opencodeV2 ?? {},
+          )
+        )
+          throw new Error(
+            "V2 expanded managed-plugin acknowledgement is required before native configuration reads.",
+          );
+      },
       assertCurrent: () => {
         if (this.closed || revision !== this.revision || controller.signal.aborted)
           throw new Error(
@@ -75,5 +96,9 @@ export class V2ConsentAuthority {
     this.unsubscribe();
     for (const controller of this.pending) controller.abort();
     this.pending.clear();
+  }
+
+  currentRevision() {
+    return this.revision;
   }
 }

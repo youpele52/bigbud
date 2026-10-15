@@ -1,14 +1,50 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { V2ConsentPermit, V2ConsentAuthority } from "./Application.consent.ts";
+import { runDetachedV2Caller, captureV2CallerGuard } from "./Runtime.caller.ts";
 
 export interface V2RequestContext {
   readonly transport: string;
   readonly permit: V2ConsentPermit;
   readonly intent: "execute" | "health" | "cleanup";
   readonly nativeSessionId?: string;
+  readonly operationSignal?: AbortSignal;
+  readonly operationGuard?: () => void;
+  readonly observeOperation?: (operation: Promise<unknown>) => void;
+  readonly orchestration?: import("./Client.guard.orchestration.ts").V2RpcAuthority;
 }
 const contexts = new AsyncLocalStorage<V2RequestContext>();
 export const currentV2RequestContext = () => contexts.getStore();
+export interface V2OperationAuthority {
+  readonly signal: AbortSignal;
+  readonly assertCurrent: () => void;
+}
+
+/** Capture consent, the short operation fence and explicit caller authority before any hop.
+ * This is a mutation fence only: it creates no transport/config/native execution permission. */
+export function captureV2OperationAuthority(extra?: V2OperationAuthority): V2OperationAuthority {
+  const context = contexts.getStore(),
+    caller = context?.intent === "cleanup" ? () => {} : captureV2CallerGuard();
+  const signals = [context?.permit.signal, context?.operationSignal, extra?.signal].filter(
+    (signal): signal is AbortSignal => !!signal,
+  );
+  const signal = signals.length ? AbortSignal.any(signals) : new AbortController().signal;
+  return {
+    signal,
+    assertCurrent: () => {
+      context?.permit.assertCurrent();
+      context?.operationGuard?.();
+      extra?.assertCurrent();
+      signal.throwIfAborted();
+      caller();
+    },
+  };
+}
+export function assertV2OperationCurrent() {
+  const context = contexts.getStore();
+  context?.permit.assertCurrent();
+  context?.operationSignal?.throwIfAborted();
+  context?.operationGuard?.();
+}
 export const runV2RequestContext = <T>(context: V2RequestContext, run: () => T): T =>
   contexts.run(context, run);
 
@@ -18,6 +54,18 @@ export function assertV2RequestContext(transport: string, url: URL, method: stri
   if (!context || context.transport !== transport)
     throw new Error("V2 shared request authority missing/mismatched.");
   context.permit.assertCurrent();
+  context.operationSignal?.throwIfAborted();
+  context.operationGuard?.();
+  if (url.pathname === "/api/config") {
+    if (context.intent !== "execute" || !context.permit.assertNativeConfigRead)
+      throw new Error("V2 native configuration-read authority is missing.");
+    context.permit.assertNativeConfigRead();
+  }
+  if (url.pathname.startsWith("/api/rpc/")) {
+    if (!context.orchestration || context.intent === "health")
+      throw new Error("V2 shared RPC authority missing.");
+    return context;
+  }
   if (
     context.intent === "health" &&
     (method !== "GET" || !["/api/info", "/openapi.json"].includes(url.pathname))
@@ -68,14 +116,36 @@ export function runV2Cleanup<T>(
   transport: string | undefined,
   nativeSessionId: string,
   run: () => Promise<T>,
+  signal?: AbortSignal,
 ) {
-  if (!transport) return run();
+  if (!transport) return runDetachedV2Caller(run);
   const controller = new AbortController();
+  const operationSignal = signal ?? contexts.getStore()?.operationSignal;
+  const cleanupSignal = operationSignal
+    ? AbortSignal.any([controller.signal, operationSignal])
+    : controller.signal;
   const permit: V2ConsentPermit = {
     revision: -1,
-    signal: controller.signal,
-    assertCurrent: () => controller.signal.throwIfAborted(),
+    signal: cleanupSignal,
+    assertCurrent: () => cleanupSignal.throwIfAborted(),
     release: () => {},
   };
-  return contexts.run({ transport, permit, intent: "cleanup", nativeSessionId }, run);
+  return runDetachedV2Caller(() =>
+    contexts.run(
+      {
+        transport,
+        permit,
+        intent: "cleanup",
+        nativeSessionId,
+        ...(operationSignal ? { operationSignal } : {}),
+        ...(contexts.getStore()?.operationGuard
+          ? { operationGuard: contexts.getStore()!.operationGuard }
+          : {}),
+        ...(contexts.getStore()?.observeOperation
+          ? { observeOperation: contexts.getStore()!.observeOperation }
+          : {}),
+      },
+      run,
+    ),
+  );
 }

@@ -43,6 +43,7 @@ export async function createPiOrchestrationBridge(
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,
         threadId: input.threadId,
+        token,
       });
       await rm(bridgeDir, { recursive: true, force: true });
     },

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, ThreadId } from "@bigbud/contracts";
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { composeActivatedFixtureProviders as composeOptionalProviders } from "./Application.activation.fixture.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
@@ -11,7 +11,7 @@ import { V2_DEVELOPMENT_MARKER } from "./Development.config.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
 import { makeDormantOpencodeV2Provider } from "./Provider.ts";
 
-it("disabled flag preserves registrations; missing configuration remains nonblocking and cannot execute", async () => {
+it("retired development environment flags cannot change production registration or enable private execution", async () => {
   await withV2RuntimeFixture(async ({ runtime }) => {
     const previous = [
       {
@@ -38,7 +38,8 @@ it("disabled flag preserves registrations; missing configuration remains nonbloc
         expect(registrations[0]).toBe(previous[0]);
         const v2 = registrations[1]!;
         const snapshot = yield* v2.providerService.getSnapshot;
-        expect(snapshot.enabled).toBe(false);
+        expect(snapshot.enabled).toBe(DEFAULT_SERVER_SETTINGS.providers.opencodeV2.enabled);
+        expect(snapshot.developmentOnly).toBeUndefined();
         expect(snapshot.models).toEqual([]);
         const result = yield* v2.adapterService
           .startSession({

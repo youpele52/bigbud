@@ -18,7 +18,7 @@ const selection = {
 };
 
 for (const namespace of ["foreground", "learning"] as const) {
-  it(`frozen pre-API tool-enabled ${namespace} IDs/hash/policy/attachment bytes and journal revision survive exact replay; cursor conflicts mutate nothing`, async () => {
+  it(`frozen unproved pre-API ${namespace} IDs/hash/policy/attachment bytes and journal remain read-only without native access or replay`, async () => {
     vi.stubEnv("XDG_DATA_HOME", "/frozen/data");
     vi.stubEnv("XDG_CONFIG_HOME", "/frozen/config");
     vi.stubEnv("XDG_STATE_HOME", "/frozen/state");
@@ -162,7 +162,7 @@ for (const namespace of ["foreground", "learning"] as const) {
               ...input,
               resumeCursor: { ...cursor, nativeSessionId: "ses_conflicting_cursor" },
             }),
-          ).rejects.toThrow("retained shared history conflicts");
+          ).rejects.toThrow("unsupported-retained-binding");
           expect(http.calls).toHaveLength(before);
           expect(
             await Effect.runPromise(runtime.options.sharedBindings!.find(threadId)),
@@ -170,11 +170,11 @@ for (const namespace of ["foreground", "learning"] as const) {
           expect(
             JSON.stringify(await Effect.runPromise(runtime.options.journal.latestBound(threadId))),
           ).toBe(journalBytes);
-          const saved = await shared.start({ ...input, resumeCursor: cursor });
-          expect(saved.resumeCursor).toMatchObject(cursor);
-          expect(shared.get(threadId).toolPolicy).toEqual(legacyPolicy);
-          expect(shared.get(threadId).executionPolicy).toEqual(frozen.executionPolicy);
-          await shared.send(send);
+          await expect(shared.start({ ...input, resumeCursor: cursor })).rejects.toThrow(
+            "unsupported-retained-binding",
+          );
+          expect(http.calls).toHaveLength(before);
+          expect(http.sessions.get(native.id)).toEqual(native);
           expect(
             JSON.stringify(await Effect.runPromise(runtime.options.journal.latestBound(threadId))),
           ).toBe(journalBytes);

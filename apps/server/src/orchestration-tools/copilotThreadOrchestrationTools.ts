@@ -38,6 +38,7 @@ import {
 } from "./threadPlanTrackingTool.shared.ts";
 import type { AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { createCopilotAgentWorkspaceTools } from "./copilotAgentWorkspaceTools.ts";
+import { RenameThreadArguments, RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 
 function successResult(message: string): ToolResultObject {
   return {
@@ -62,7 +63,11 @@ export function createCopilotThreadOrchestrationTools(input: {
     tool: AgentWorkspaceToolName,
     args: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
-  readonly renameThread: (title: string) => Promise<{ readonly title: string }>;
+  readonly renameThread: (
+    title: string,
+    targetThreadId?: string,
+    invocationId?: string,
+  ) => Promise<{ readonly title: string }>;
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
   readonly listPinnedThreads: () => Promise<Record<string, unknown>>;
@@ -114,17 +119,11 @@ export function createCopilotThreadOrchestrationTools(input: {
     {
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "New thread title" },
-        },
-        required: ["title"],
-        additionalProperties: false,
-      },
-      handler: async ({ title }) => {
+      parameters: RENAME_THREAD_TOOL_PARAMETERS,
+      handler: async (args, invocation) => {
         try {
-          const result = await input.renameThread(title ?? "");
+          const { title, targetThreadId } = Schema.decodeUnknownSync(RenameThreadArguments)(args);
+          const result = await input.renameThread(title, targetThreadId, invocation.toolCallId);
           return successResult(`Renamed thread to "${result.title}".`);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to rename thread.";

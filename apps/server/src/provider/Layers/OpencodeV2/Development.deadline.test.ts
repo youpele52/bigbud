@@ -3,7 +3,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { makeV2DevelopmentRegistration } from "./Development.composition.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
@@ -16,7 +16,7 @@ const inspect = vi.hoisted(() =>
 );
 vi.mock("./ProfileIsolation.mjs", () => ({ inspectPrivateV2Profile: inspect }));
 
-it("overall inspection deadline makes V2 unavailable, retains CLIProxy, and fences late validation publication", async () => {
+it("explicit isolated fixture inspection deadline makes V2 unavailable and fences late validation publication", async () => {
   await withV2RuntimeFixture(async ({ runtime, directory }) => {
     const root = await realpath(runtime.options.config.profileRoot);
     await writeFile(
@@ -47,12 +47,12 @@ it("overall inspection deadline makes V2 unavailable, retains CLIProxy, and fenc
     try {
       const pending = Effect.runPromise(
         Effect.scoped(
-          composeOptionalProviders([cliProxy], {
+          makeV2DevelopmentRegistration({
             BIGBUD_ENABLE_OPENCODE_V2_DEVELOPMENT: "1",
             BIGBUD_OPENCODE_V2_BINARY: path.join(root, "never-launch"),
             BIGBUD_OPENCODE_V2_PROFILE_ROOT: root,
             BIGBUD_OPENCODE_V2_WORKSPACE: directory,
-          }),
+          }).pipe(Effect.map((registration) => [cliProxy, registration])),
         ).pipe(
           Effect.provideService(ProviderTurnAdmissions, runtime.options.journal),
           Effect.provideService(ServerSettingsService, {

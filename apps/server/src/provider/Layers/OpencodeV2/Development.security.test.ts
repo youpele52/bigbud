@@ -8,7 +8,7 @@ import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { readV2DevelopmentConfig, V2_DEVELOPMENT_MARKER } from "./Development.config.ts";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { makeV2DevelopmentRegistration } from "./Development.composition.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
 import { makeDormantOpencodeV2Provider } from "./Provider.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
@@ -30,7 +30,7 @@ const previous = [
 ];
 
 it.skipIf(process.platform === "win32")(
-  "rejects marked writable roots/config/plugin replacement before any executable launch, retaining CLIProxy",
+  "explicit isolated fixture rejects marked writable roots/config/plugin replacement before any executable launch, retaining CLIProxy",
   async () => {
     await withV2RuntimeFixture(async ({ runtime, directory }) => {
       const root = await realpath(runtime.options.config.profileRoot);
@@ -72,7 +72,10 @@ it.skipIf(process.platform === "win32")(
           await Effect.runPromise(
             Effect.scoped(
               Effect.gen(function* () {
-                const registrations = yield* composeOptionalProviders(previous, environment);
+                const registrations = [
+                  ...previous,
+                  yield* makeV2DevelopmentRegistration(environment),
+                ];
                 expect(registrations[0]).toBe(previous[0]);
                 expect((yield* registrations[1]!.providerService.getSnapshot).enabled).toBe(false);
               }),
@@ -137,7 +140,7 @@ it.skipIf(process.platform === "win32")(
 );
 
 it.skipIf(process.platform === "win32")(
-  "a FIFO ownership marker cannot block aggregate optional composition or CLIProxy",
+  "a FIFO ownership marker cannot block explicit isolated fixture composition or CLIProxy",
   async () => {
     await withV2RuntimeFixture(async ({ runtime, directory }) => {
       const root = await realpath(runtime.options.config.profileRoot);
@@ -151,12 +154,12 @@ it.skipIf(process.platform === "win32")(
       try {
         const registrations = await Effect.runPromise(
           Effect.scoped(
-            composeOptionalProviders(previous, {
+            makeV2DevelopmentRegistration({
               BIGBUD_ENABLE_OPENCODE_V2_DEVELOPMENT: "1",
               BIGBUD_OPENCODE_V2_BINARY: path.join(root, "never-launch"),
               BIGBUD_OPENCODE_V2_PROFILE_ROOT: root,
               BIGBUD_OPENCODE_V2_WORKSPACE: directory,
-            }),
+            }).pipe(Effect.map((registration) => [...previous, registration])),
           ).pipe(
             Effect.provideService(ProviderTurnAdmissions, runtime.options.journal),
             Effect.provideService(ServerSettingsService, {

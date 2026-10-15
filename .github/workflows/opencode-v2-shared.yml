@@ -46,10 +46,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Bun architecture mismatch"); console.log(Bun.version, process.platform, process.arch)'
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Build read-only native helper
+      - name: Portable candidate and configuration namespace checks
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/NativeCompatibility.platform.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.sources.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.qualification.test.ts
+      - name: Build bounded native helper
         id: helper-build
         run: cargo build --locked --package bigbud-remote-agent
-      - name: Exercise read-only native helper
+      - name: Exercise native metadata protocol
         run: cargo test --locked --package bigbud-remote-agent --test inspect_local
       - name: Diagnose disposable fixture ACL boundaries
         if: ${{ always() && hashFiles('target/debug/bigbud-remote-agent.exe') != '' }}
@@ -77,6 +83,13 @@ jobs:
           src/provider/Layers/OpencodeV2/SharedService.context.native.test.ts
           src/provider/Layers/OpencodeV2/SharedService.model.routing.native.test.ts
           src/provider/Layers/OpencodeV2/SharedService.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/NativeFiles.windows.test.ts
+          src/provider/Layers/OpencodeV2/NativeFiles.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/PluginSetup.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.identity.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.identity.native.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.windows.test.ts
           src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
           src/provider/Layers/OpencodeV2/SharedService.protocol.test.ts
           src/provider/Layers/OpencodeV2/SharedService.protocol.direction.test.ts
@@ -131,3 +144,7 @@ jobs:
           src/provider/Layers/OpencodeV2/EventHub.connection.test.ts
           src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
           src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.platform.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.sources.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.qualification.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.linux.test.ts

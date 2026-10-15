@@ -6,6 +6,7 @@ import type { V2RuntimeSession } from "./Runtime.types.ts";
 export class V2StartAttempt {
   readonly controller = new AbortController();
   owner: V2RuntimeSession | undefined;
+  phase: "setup-wait" | "reserved" | "native-running" | "uncertain" | "settled" = "setup-wait";
 }
 
 export async function recoverV2Session(runtime: OpencodeV2Runtime, owner: V2RuntimeSession) {

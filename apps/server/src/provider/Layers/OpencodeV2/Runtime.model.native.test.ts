@@ -7,7 +7,7 @@ import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTu
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;

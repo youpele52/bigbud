@@ -149,6 +149,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     writeHandoffDocument: vi.fn(),
     startHandoffJob: vi.fn(),
     getHandoffJob: vi.fn(),
+    getOpencodeV2ThreadToolsSetup: vi.fn(),
     createMobileRemotePairing: vi.fn(),
     listMobileRemoteSessions: vi.fn(),
     revokeMobileRemoteSession: vi.fn(),

@@ -14,13 +14,14 @@ import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { resolveV2SharedConnection } from "./SharedService.descriptor.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { readV2NativeCatalog } from "./Catalog.native.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -47,7 +48,15 @@ if (process.env.BIGBUD_OPENCODE_V2_REQUIRED_NATIVE === "1" && (!binary || !versi
 it.skipIf(!binary || !version)(
   "shared application qualifies replay, native tools, disable/rebind and active TUI sibling preservation",
   async () => {
-    const fixture = await sharedServiceNativeFixture(binary!);
+    const appFixture = await makeV2ThreadPluginFixture();
+    const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
+      const config = JSON.parse(await readFile(file, "utf8"));
+      config.plugins = [appFixture.artifact.pluginUri];
+      await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await appFixture.close();
+      throw error;
+    });
     try {
       const configBefore = await readFile(fixture.configFile);
       const serviceBefore = await readFile(fixture.file);
@@ -57,7 +66,7 @@ it.skipIf(!binary || !version)(
         password: discovery.registration.endpoint.auth!.password,
       });
       const model = { providerID: "bigbud-v2-fixture", id: "synthetic-model" };
-      const stateDir = path.join(path.dirname(fixture.workspace), "bigbud-state");
+      const stateDir = appFixture.root;
       const attachmentsDir = path.join(stateDir, "uploads");
       await mkdir(attachmentsDir, { recursive: true, mode: 0o700 });
       const attachment = {
@@ -103,7 +112,8 @@ it.skipIf(!binary || !version)(
             binaryPath: "",
             profileRoot: "",
             serviceFile: fixture.file,
-            nativeServiceTrust: "host-user-v1" as const,
+            nativeServiceTrust: "managed-thread-tools-v2" as const,
+            nativePluginConfigRoot: path.dirname(fixture.configFile),
           },
         },
       };
@@ -268,6 +278,7 @@ it.skipIf(!binary || !version)(
       await expect(access(path.join(fixture.profile, ".bigbud-opencode-v2"))).rejects.toThrow();
     } finally {
       await fixture.close();
+      await appFixture.close();
     }
   },
   60000,

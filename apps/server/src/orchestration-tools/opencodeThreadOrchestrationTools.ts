@@ -43,10 +43,14 @@ function renderOrchestrationToolSource(input: {
 export function renderOpencodeRenameThreadToolSource(): string {
   return renderOrchestrationToolSource({
     description: RENAME_THREAD_TOOL_DESCRIPTION,
-    argsSource: ['    title: tool.schema.string().describe("New thread title"),'].join("\n"),
+    argsSource: [
+      '    title: tool.schema.string().describe("New thread title"),',
+      '    targetThreadId: tool.schema.string().optional().describe("Canonical target thread ID; omit for the current thread"),',
+    ].join("\n"),
     executeBody: [
       "const result = await runtime.renameThread({",
       "  title: String(args.title ?? ''),",
+      "  ...(args.targetThreadId !== undefined ? { targetThreadId: args.targetThreadId } : {}),",
       "});",
       "return result.message;",
     ],
@@ -152,6 +156,7 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "    action: 'rename',",
     "    threadId: resolveCurrentThreadId(),",
     "    title,",
+    "    ...(input.targetThreadId !== undefined ? { targetThreadId: input.targetThreadId } : {}),",
     "  });",
     '  return { message: `Renamed thread to "${result.title ?? title}".` };',
     "}",

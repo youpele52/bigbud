@@ -7,11 +7,13 @@ import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { startOwnedV2SshProcess } from "./ServerManager.ssh.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { FixtureEvents } from "./Test.fixtures.ts";
+import { makeV2SyntheticExecutableFixture } from "./ServerManager.synthetic.fixture.ts";
 
 for (const kind of ["ENOENT", "EACCES"] as const) {
   it(`actual local SSH spawn ${kind} is proven prestart, permits corrected same-profile retry and confirmed shutdown`, async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-ssh-prestart-"));
     const executable = path.join(directory, "ssh");
+    const synthetic = await makeV2SyntheticExecutableFixture(directory);
     if (kind === "EACCES") await writeFile(executable, "#!/bin/sh\nexit 0\n", { mode: 0o600 });
     const source = new FixtureEvents();
     let corrected = false,
@@ -28,6 +30,7 @@ for (const kind of ["ENOENT", "EACCES"] as const) {
         if (!corrected)
           return startOwnedV2SshProcess(config, {
             protectedBootstrapConformance: true,
+            synthetic: synthetic.grant,
             spawn: ((_command: string, args: string[], options: Parameters<typeof spawn>[2]) =>
               spawn(executable, args, options)) as unknown as typeof spawn,
           });
@@ -49,9 +52,8 @@ for (const kind of ["ENOENT", "EACCES"] as const) {
       },
     });
     const config = {
+      ...synthetic.config,
       runtimeTargetId: "ssh:host=fixture.invalid&user=fixture&auth=ssh-key",
-      binaryPath: "/native/v2",
-      profileRoot: "/same/profile",
     };
     try {
       await expect(manager.acquire(config)).rejects.toThrow("acquisition failed");

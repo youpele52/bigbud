@@ -61,11 +61,15 @@ const Operation = Schema.Struct({
 });
 
 /** Read-only shape checks supplement, never replace, real-runtime qualification. */
-export function assertV2SharedCapabilities(value: unknown, version: string): void {
+export function assertV2SharedCapabilities(
+  value: unknown,
+  version: string,
+  sharedReader?: ReturnType<typeof makeV2SchemaReader>,
+): void {
   try {
     const contract = Schema.decodeUnknownSync(Contract)(value);
     if (!contract.openapi.startsWith("3.")) throw new Error("OpenAPI version.");
-    const read = makeV2SchemaReader(contract.components.schemas);
+    const read = sharedReader ?? makeV2SchemaReader(contract.components.schemas);
     for (const [method, route, id] of V2_SHARED_REQUIRED_OPERATIONS) {
       if (!contract.paths[route]?.[method])
         throw new V2SharedServiceError(

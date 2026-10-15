@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureNativeApi } from "../../rpc/nativeApi";
+import { hasOpencodeV2ManagedPluginTrust } from "@bigbud/shared/opencodeNativeTrust";
+import { useUiStateStore } from "../../stores/ui/ui.store";
+import { toastManager } from "../ui/toast";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useServerProviders } from "../../rpc/serverState";
@@ -42,6 +45,35 @@ export function ProvidersSettingsSection({
     Partial<Record<ProviderKind, string | null>>
   >({});
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
+  const [nativeSetupRequest, setNativeSetupRequest] = useState(0);
+  const setupThreadId = useUiStateStore((state) => state.lastActiveThreadId) ?? undefined;
+  const nativeConsentRequest = useRef(0);
+  async function acknowledgeNativeSetup(enabled: boolean) {
+    const request = ++nativeConsentRequest.current;
+    try {
+      const accepted = await ensureNativeApi().server.updateSettings({
+        providers: {
+          opencodeV2: {
+            nativeServiceTrust: enabled ? "managed-thread-tools-v2" : null,
+          },
+        },
+      });
+      if (
+        request === nativeConsentRequest.current &&
+        enabled &&
+        accepted.providers.opencodeV2.enabled &&
+        hasOpencodeV2ManagedPluginTrust(accepted.providers.opencodeV2)
+      )
+        setNativeSetupRequest((value) => value + 1);
+    } catch {
+      toastManager.add({
+        type: "error",
+        title: "Native acknowledgement was not saved",
+        description:
+          "Required plugin setup has not been requested. Retry after checking the connection.",
+      });
+    }
+  }
   const refreshingRef = useRef(false);
   const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
 
@@ -192,20 +224,17 @@ export function ProvidersSettingsSection({
                 },
               })
             }
-            nativeServiceConsented={
-              settings.providers.opencodeV2.nativeServiceTrust === "host-user-v1"
-            }
-            onNativeServiceConsentChange={(enabled) =>
-              updateSettings({
-                providers: {
-                  ...settings.providers,
-                  opencodeV2: {
-                    ...settings.providers.opencodeV2,
-                    nativeServiceTrust: enabled ? "host-user-v1" : null,
-                  },
-                },
-              })
-            }
+            nativeServiceConsented={hasOpencodeV2ManagedPluginTrust(settings.providers.opencodeV2)}
+            onNativeServiceConsentChange={(enabled) => void acknowledgeNativeSetup(enabled)}
+            nativeSetupRequest={nativeSetupRequest}
+            setupThreadId={setupThreadId}
+            nativePluginConfigRoot={settings.providers.opencodeV2.nativePluginConfigRoot ?? ""}
+            onNativePluginConfigRootChange={async (nativePluginConfigRoot) => {
+              nativeConsentRequest.current++;
+              await ensureNativeApi().server.updateSettings({
+                providers: { opencodeV2: { nativePluginConfigRoot } },
+              });
+            }}
             serviceFile={settings.providers.opencodeV2.serviceFile ?? ""}
             onServiceFileChange={(serviceFile) =>
               updateSettings({
@@ -243,7 +272,13 @@ export function ProvidersSettingsSection({
                   ...settings.providers,
                   [card.provider]: {
                     ...DEFAULT_UNIFIED_SETTINGS.providers[card.provider],
-                    ...(card.provider === "opencodeV2" ? { nativeServiceTrust: null } : {}),
+                    ...(card.provider === "opencodeV2"
+                      ? {
+                          ...settings.providers.opencodeV2,
+                          enabled: DEFAULT_UNIFIED_SETTINGS.providers.opencodeV2.enabled,
+                          nativeServiceTrust: null,
+                        }
+                      : {}),
                   },
                 },
               });
@@ -254,6 +289,26 @@ export function ProvidersSettingsSection({
             }
             isActivatingCliProxy={card.provider === "cliProxy" ? isActivatingCliProxy : false}
             onToggleEnabled={(checked) => {
+              if (
+                card.provider === "opencodeV2" &&
+                checked &&
+                hasOpencodeV2ManagedPluginTrust(settings.providers.opencodeV2)
+              ) {
+                void ensureNativeApi()
+                  .server.updateSettings({ providers: { opencodeV2: { enabled: true } } })
+                  .then((accepted) => {
+                    if (hasOpencodeV2ManagedPluginTrust(accepted.providers.opencodeV2))
+                      setNativeSetupRequest((value) => value + 1);
+                  })
+                  .catch(() =>
+                    toastManager.add({
+                      type: "error",
+                      title: "OpenCode v2 was not enabled",
+                      description: "Required plugin setup has not been requested.",
+                    }),
+                  );
+                return;
+              }
               const shouldClearModelSelection = shouldClearTextGenerationSelection({
                 settings,
                 serverProviders,
@@ -303,9 +358,7 @@ export function ProvidersSettingsSection({
               updateSettings({
                 providers: {
                   ...settings.providers,
-                  ...(card.provider === "opencodeV2"
-                    ? { opencodeV2: { ...settings.providers.opencodeV2, profileRoot: value } }
-                    : { codex: { ...settings.providers.codex, homePath: value } }),
+                  codex: { ...settings.providers.codex, homePath: value },
                 },
               })
             }

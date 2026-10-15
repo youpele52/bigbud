@@ -12,7 +12,7 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
-import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
+import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
 import {
   buildInitialDelegationPrompt,
   delegationError,
@@ -20,7 +20,6 @@ import {
   notifyDelegationLinked,
   stableThreadToolId,
 } from "./ThreadOrchestrationTools.origins.ts";
-import { lockThreadTitle } from "./ThreadTitleLock.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`agent:${tag}:${crypto.randomUUID()}`);
@@ -245,28 +244,6 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
   },
 );
 
-export const renameThreadViaOrchestration = Effect.fn("renameThreadViaOrchestration")(
-  function* (input: {
-    readonly orchestrationEngine: OrchestrationEngineShape;
-    readonly threadId: ThreadId;
-    readonly title: string;
-  }) {
-    const trimmed = input.title.trim();
-    if (trimmed.length === 0) {
-      return yield* Effect.fail(new Error("Thread title cannot be empty."));
-    }
-
-    yield* input.orchestrationEngine.dispatch({
-      type: "thread.meta.update",
-      commandId: agentThreadCommandId("thread-rename"),
-      threadId: input.threadId,
-      title: trimmed,
-    });
-    lockThreadTitle(input.threadId);
-    return { title: trimmed } as const;
-  },
-);
-
 export const archiveThreadViaOrchestration = Effect.fn("archiveThreadViaOrchestration")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
@@ -288,21 +265,9 @@ export const getThreadStatusViaOrchestration = Effect.fn("getThreadStatusViaOrch
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
   }) {
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const callerThread = readModel.threads.find((thread) => thread.id === input.callerThreadId);
-    if (!callerThread || callerThread.deletedAt !== null) {
-      return yield* Effect.fail(new Error("Caller thread could not be resolved."));
-    }
-
-    const targetThread = readModel.threads.find((thread) => thread.id === input.threadId);
-    if (!targetThread || targetThread.deletedAt !== null) {
-      return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
-    }
-
-    yield* requireThreadCoordinationAccess({
-      threadDelegationRepository: input.threadDelegationRepository,
-      callerThread,
-      targetThread,
+    const { targetThread } = yield* resolveThreadToolParticipants({
+      ...input,
+      operation: "status",
     });
 
     return resolveThreadWorkflowStatus(targetThread);

@@ -4,6 +4,49 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
 import { sharedV2FixtureOptions } from "./SharedService.binding.fixture.ts";
+import { realpath } from "node:fs/promises";
+
+it("retired isolated and unknown retained cursors stay read-only before acquisition, without writing replacement binding evidence", async () => {
+  await withV2RuntimeFixture(async ({ runtime, http, directory }) => {
+    const shared = new OpencodeV2Runtime(sharedV2FixtureOptions(runtime, http));
+    try {
+      for (const connectionMode of ["isolated", undefined]) {
+        const threadId = ThreadId.makeUnsafe(`retained-${connectionMode ?? "unknown"}`);
+        const cursor = {
+          provider: "opencodeV2",
+          nativeSessionId: "original-native",
+          storageIdentity: "original-private-storage",
+          directory: await realpath(directory),
+          ...(connectionMode ? { connectionMode } : {}),
+        };
+        const original = JSON.stringify(cursor);
+        await expect(
+          shared.start({
+            threadId,
+            cwd: directory,
+            runtimeMode: "approval-required",
+            modelSelection: {
+              provider: "opencodeV2",
+              subProviderID: "synthetic-provider",
+              model: "synthetic-model",
+            },
+            resumeCursor: cursor,
+          }),
+        ).rejects.toThrow(/read-only|unsupported-retained-binding/);
+        expect(JSON.stringify(cursor)).toBe(original);
+        expect(
+          await Effect.runPromise(runtime.options.sharedBindings!.find(threadId)),
+        ).toBeUndefined();
+        expect(
+          await Effect.runPromise(runtime.options.journal.latestBound(threadId)),
+        ).toBeUndefined();
+      }
+      expect(http.calls).toHaveLength(0);
+    } finally {
+      await shared.close();
+    }
+  });
+});
 
 it("retained shared lost-create evidence blocks isolated acquisition without cursor or journal before any native request", async () => {
   await withV2RuntimeFixture(async ({ runtime, http, directory }) => {

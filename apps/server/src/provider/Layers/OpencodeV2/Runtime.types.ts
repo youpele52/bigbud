@@ -11,13 +11,21 @@ import type { V2ProcessLease, OpencodeV2ServerManager } from "./ServerManager.ts
 import type { V2ProcessConfig } from "./ServerManager.child.ts";
 
 export interface V2RuntimeSession {
+  activation?: {
+    readonly gate: import("./PluginSetup.activation.gate.ts").V2ActivationGate;
+    readonly stamp: import("./PluginSetup.activation.gate.ts").V2ReadyStamp;
+    token?: import("./PluginSetup.activation.gate.ts").V2ExecutionReservation | undefined;
+    phase: "startup" | "turn" | "uncertain" | "settled";
+  };
   readonly consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
   readonly sharedTransport?: string;
   readonly resources?: V2SessionResources;
+  threadToolsReady?: boolean;
   coding?: {
     readonly pending: () => ProviderRuntimeEvent[];
     readonly revoke: () => void;
     readonly cancelActive: () => Promise<void>;
+    readonly busyCount?: () => number;
   };
   readonly threadId: ThreadId;
   readonly native: SessionInfo;
@@ -62,6 +70,11 @@ export interface V2RuntimeSession {
 }
 
 export interface V2SessionResources {
+  readonly renewCanonicalAuth?: () => Promise<void>;
+  readonly activateCanonicalTools?: () => Promise<
+    Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth">
+  >;
+  onThreadToolsCleanup?: () => Promise<void>;
   readonly orchestration?: import("../../../orchestration-tools/threadOrchestrationBridge.shared.ts").ThreadOrchestrationHttpConfig;
   readonly cleanup: () => Promise<void>;
   readonly codingFiles?: import("./Coding.files.ts").V2CodingTarget;
@@ -78,6 +91,24 @@ export interface V2SessionResources {
 
 /** Explicit harness authorization; never inferred from saved provider enabled settings. */
 export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessConfig> {
+  readonly activation?: {
+    readonly coordinator: import("./PluginSetup.activation.ts").V2ThreadToolsActivation;
+    readonly beforeSharedHistory?: (scope: {
+      storageIdentity: string;
+      nativeSessionId: string;
+      threadId: string;
+      directory: string;
+    }) => Promise<void>;
+    readonly awaitReady: (
+      client: import("./Client.ts").OpencodeV2Client,
+      directory: string,
+      signal: AbortSignal | undefined,
+      hidden: boolean,
+    ) => Promise<{
+      gate: import("./PluginSetup.activation.gate.ts").V2ActivationGate;
+      stamp: import("./PluginSetup.activation.gate.ts").V2ReadyStamp;
+    }>;
+  };
   readonly prepareSession?: (
     input: V2StartInput,
     signal: AbortSignal,
@@ -88,6 +119,15 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
     resources: V2SessionResources;
   }>;
   readonly codingBridge?: import("./Coding.bridge.ts").V2CodingBridge;
+  readonly threadBridge?: Pick<
+    import("./Orchestration.bridge.ts").V2ThreadBridge,
+    "attach" | "ensure" | "reply" | "close"
+  >;
+  readonly threadToolsPreflight?: (
+    client: import("./Client.ts").OpencodeV2Client,
+    directory: string,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   readonly manager: OpencodeV2ServerManager;
   readonly config: C;
   readonly journal: ProviderTurnAdmissionsShape;

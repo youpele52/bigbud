@@ -13,7 +13,7 @@ import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/Provider
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2IsolatedApplicationFixtureRegistration as makeV2ApplicationRegistration } from "./Application.fixture.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
 import { makeV2NativeDelegationFixture } from "./Execution.delegation.fixture.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";

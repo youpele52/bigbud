@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read, Write};
 
-const MAX_REQUEST: u64 = 131_072;
+const MAX_REQUEST: u64 = 300_000;
 
 #[cfg(any(windows, test))]
 pub(super) fn hex(bytes: &[u8]) -> String {
@@ -32,6 +32,34 @@ fn dispatch(line: &str, ready: &mut bool) -> io::Result<String> {
         .split_once('\t')
         .ok_or_else(|| io::Error::other("invalid request"))?;
     match command {
+        "FS" => {
+            #[cfg(windows)]
+            return super::fs::dispatch(value);
+            #[cfg(not(windows))]
+            Err(io::Error::other("unsupported platform"))
+        }
+        "CAPABILITIES" if value == "1" => {
+            #[cfg(windows)]
+            return Ok("OK\tboot=1\tdirectory-identity=1\tprivate-files=1\tread-lease=1".into());
+            #[cfg(not(windows))]
+            Ok("OK".into())
+        }
+        "DIRECTORY" => {
+            let path = String::from_utf8(unhex(value)?).map_err(io::Error::other)?;
+            #[cfg(windows)]
+            return super::file::inspect_directory(&path).map(|id| format!("OK\t{id}"));
+            #[cfg(not(windows))]
+            {
+                let _ = path;
+                Err(io::Error::other("unsupported platform"))
+            }
+        }
+        "BOOT" if value == "1" => {
+            #[cfg(windows)]
+            return super::boot::observe();
+            #[cfg(not(windows))]
+            Err(io::Error::other("unsupported platform"))
+        }
         "READ" => {
             let bytes = unhex(value)?;
             let path = String::from_utf8(bytes).map_err(io::Error::other)?;
@@ -52,6 +80,8 @@ pub fn run_stdio() -> io::Result<()> {
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     let mut ready = false;
+    #[cfg(windows)]
+    let mut lease = None;
     loop {
         let mut bytes = Vec::new();
         let count = input
@@ -67,11 +97,26 @@ pub fn run_stdio() -> io::Result<()> {
         bytes.pop();
         let reply = std::str::from_utf8(&bytes)
             .map_err(io::Error::other)
-            .and_then(|line| dispatch(line, &mut ready));
+            .and_then(|line| {
+                #[cfg(windows)]
+                if ready && line.starts_with("FS\t1\tLEASE_") {
+                    return super::fs_lease::dispatch(line, &mut lease);
+                }
+                dispatch(line, &mut ready)
+            });
         match reply {
-            Ok(value) if value.len() <= 1_048_576 => writeln!(output, "{value}")?,
+            Ok(value) if value.len() <= 2_100_000 => writeln!(output, "{value}")?,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 writeln!(output, "ERR\tmissing")?
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                writeln!(output, "ERR\texists")?
+            }
+            Err(error) if error.to_string() == "publication uncertain" => {
+                writeln!(output, "ERR\tuncertain")?
+            }
+            Err(error) if error.to_string() == "identity conflict" => {
+                writeln!(output, "ERR\tconflict")?
             }
             Err(error) => {
                 // A finite diagnostic vocabulary only; never serialize arbitrary error text/paths.
@@ -100,9 +145,10 @@ pub fn run_stdio() -> io::Result<()> {
 mod tests {
     use super::*;
     #[test]
-    fn protocol_is_versioned_and_read_only() {
+    fn protocol_is_versioned_and_rejects_unscoped_operations() {
         let mut ready = false;
         assert!(dispatch("PROCESS\t1", &mut ready).is_err());
+        assert!(dispatch("FS\t1\tDIR\t00\tprivate\t-", &mut ready).is_err());
         assert!(dispatch("HELLO\t2", &mut ready).is_err());
         assert_eq!(
             dispatch("HELLO\t1", &mut ready).ok().as_deref(),
@@ -115,6 +161,11 @@ mod tests {
             "PROCESS\t1",
             "PROCESS\t-1",
             "READ\txx",
+            "DIRECTORY\txx",
+            "BOOT\t2",
+            "CAPABILITIES\t2",
+            "FS\t2\tCREATE",
+            "FS\t1\tCREATE\t00\t-\t00\t00\t00",
             "HELLO\t1",
         ] {
             assert!(dispatch(request, &mut ready).is_err());
@@ -123,5 +174,6 @@ mod tests {
             unhex(&hex(b"private\0bytes")).ok(),
             Some(b"private\0bytes".to_vec())
         );
+        assert!(dispatch("CAPABILITIES\t1", &mut ready).is_ok());
     }
 }

@@ -37,6 +37,7 @@ import {
   defaultThreadId,
 } from "./server.test.fixtures.ts";
 import { ServerSettingsService } from "./ws/serverSettings.ts";
+import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { BootstrapCommandLockLive } from "./ws/wsBootstrap.lock.ts";
 import { RemoteWorkspaceRuntime } from "./workspace-runtime/Services/WorkspaceRuntime.ts";
 import type { BuildAppUnderTestOptions } from "./server.test.app.types.ts";
@@ -96,14 +97,18 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
         }),
       ),
       Layer.provide(
-        Layer.mock(ServerSettingsService)({
-          start: Effect.void,
-          ready: Effect.void,
-          getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
-          updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
-          streamChanges: Stream.empty,
-          ...options?.layers?.serverSettings,
-        }),
+        ThreadToolsActivationLive.pipe(
+          Layer.provideMerge(
+            Layer.mock(ServerSettingsService)({
+              start: Effect.void,
+              ready: Effect.void,
+              getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+              updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
+              streamChanges: Stream.empty,
+              ...options?.layers?.serverSettings,
+            }),
+          ),
+        ),
       ),
       Layer.provide(
         Layer.mergeAll(

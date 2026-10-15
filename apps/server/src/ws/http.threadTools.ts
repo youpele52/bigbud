@@ -28,6 +28,7 @@ import {
   handleListThreadsAction,
 } from "./http.threadTools.reads.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
+import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
@@ -297,26 +298,7 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     }
 
     if (body.action === "rename") {
-      if (body.threadId === undefined || body.threadId !== authRecord.threadId) {
-        return yield* new ThreadToolRequestError({
-          status: body.threadId === undefined ? 400 : 401,
-          message:
-            body.threadId === undefined
-              ? "Current thread ID is required."
-              : "Unauthorized thread tool request.",
-        });
-      }
-      const title = body.title?.trim() ?? "";
-      const result = yield* dispatcher.rename({ threadId, title }).pipe(
-        Effect.mapError(
-          (error) =>
-            new ThreadToolRequestError({
-              status: 400,
-              message: error instanceof Error ? error.message : "Failed to rename thread.",
-            }),
-        ),
-      );
-      return yield* HttpServerResponse.json({ ok: true, title: result.title });
+      return yield* handleRenameThreadAction({ dispatcher, callerThreadId: threadId, body });
     }
 
     if (body.action === "computer_use") {

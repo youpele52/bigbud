@@ -4,6 +4,7 @@ import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { v2ReplyGuard } from "./Runtime.replies.ts";
 import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { assertV2CallerCurrent } from "./Runtime.caller.ts";
 
 /** Native execution mutations require a live canonical owner as well as exact process/settings ownership. */
 export function v2ExecutionGuard(
@@ -13,9 +14,16 @@ export function v2ExecutionGuard(
 ) {
   const guard = v2ReplyGuard(runtime.options, runtime.sessions, session);
   return async () => {
+    assertV2CallerCurrent();
     if (session.localTools)
       await assertV2NoSavedGrants(session.lease.process.client, session.native);
     await Effect.runPromise(runtime.options.journal.assertOwnerAvailable(canonicalOwnerThreadId));
-    return guard();
+    assertV2CallerCurrent();
+    const validate = await guard();
+    assertV2CallerCurrent();
+    return () => {
+      assertV2CallerCurrent();
+      validate();
+    };
   };
 }

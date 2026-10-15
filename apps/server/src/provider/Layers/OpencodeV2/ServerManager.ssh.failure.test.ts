@@ -5,8 +5,14 @@ import { expect, it } from "vitest";
 import { startOwnedV2SshProcess } from "./ServerManager.ssh.ts";
 import { V2UnconfirmedProcessStartup } from "./ServerManager.lifecycle.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { makeV2SyntheticExecutableFixture } from "./ServerManager.synthetic.fixture.ts";
 
 it("actual SSH constructor failure after native readiness retains its observer/namespace after bounded transport close", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "v2-ssh-observer-fixture-")),
+    synthetic = await makeV2SyntheticExecutableFixture(root);
   const children: ChildProcess[] = [];
   let nonce = "";
   const fakeSpawn = ((_command: string, args: string[]) => {
@@ -36,9 +42,8 @@ it("actual SSH constructor failure after native readiness retains its observer/n
     return child;
   }) as unknown as typeof spawn;
   const config = {
+    ...synthetic.config,
     runtimeTargetId: "ssh:host=fixture.invalid&user=fixture&auth=ssh-key",
-    binaryPath: "/native/v2",
-    profileRoot: "/owned/profile",
   };
   let retained: V2UnconfirmedProcessStartup | undefined;
   const manager = new OpencodeV2ServerManager({
@@ -52,6 +57,7 @@ it("actual SSH constructor failure after native readiness retains its observer/n
         return await startOwnedV2SshProcess(config, {
           protectedBootstrapConformance: true,
           spawn: fakeSpawn,
+          synthetic: synthetic.grant,
         });
       } catch (error) {
         if (error instanceof V2UnconfirmedProcessStartup) retained = error;
@@ -81,5 +87,6 @@ it("actual SSH constructor failure after native readiness retains its observer/n
     expect((manager as unknown as { entries: Map<string, unknown> }).entries.size).toBe(0);
   } finally {
     await manager.close();
+    await rm(root, { recursive: true, force: true });
   }
 });

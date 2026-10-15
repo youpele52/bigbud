@@ -40,7 +40,7 @@ export async function assertV2ModelAvailable(
       !model.variants.some(({ id }) => id === requested.variant))
   )
     throw new Error(
-      "OpenCode v2 selected model/variant is not currently available. Connect/configure its exact subprovider in the dedicated V2 profile, then refresh. No prompt or fallback was sent.",
+      "OpenCode v2 selected model/variant is not currently available. Connect/configure its exact subprovider in OpenCode for the selected connection mode and chat Location, then refresh. No prompt or fallback was sent.",
     );
   return model;
 }

@@ -4,7 +4,7 @@ import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTu
 import { readV2DevelopmentConfig } from "./Development.config.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { makeIsolatedOpencodeV2Adapter } from "./Adapter.execution.ts";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
 import { makeDormantOpencodeV2Provider } from "./Provider.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";

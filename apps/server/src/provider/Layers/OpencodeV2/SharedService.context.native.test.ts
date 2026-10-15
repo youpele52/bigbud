@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Layer } from "effect";
 import { expect, it, vi } from "vitest";
@@ -9,10 +9,12 @@ import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { makeOwnedClient } from "./Client.ts";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
+import { V2_THREAD_ACTIONS } from "./Orchestration.protocol.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -40,7 +42,15 @@ function tools(request: Record<string, unknown>) {
 it.skipIf(!binary || !version)(
   "keeps native Build base instructions, skills and tools while app context is additive and subagent ownership remains denied",
   async () => {
-    const fixture = await sharedServiceNativeFixture(binary!);
+    const appFixture = await makeV2ThreadPluginFixture();
+    const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
+      const config = JSON.parse(await readFile(file, "utf8"));
+      config.plugins = [appFixture.artifact.pluginUri];
+      await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await appFixture.close();
+      throw error;
+    });
     try {
       const configBefore = await readFile(fixture.configFile);
       const serviceBefore = await readFile(fixture.file);
@@ -79,7 +89,8 @@ it.skipIf(!binary || !version)(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
-              nativeServiceTrust: "host-user-v1",
+              nativeServiceTrust: "managed-thread-tools-v2",
+              nativePluginConfigRoot: path.dirname(fixture.configFile),
             },
           },
         }),
@@ -137,7 +148,12 @@ it.skipIf(!binary || !version)(
             expect(JSON.stringify(base)).not.toContain("Selected bigbud access mode");
             expect(tools(baseline)).toContain("subagent");
             expect(tools(actual)).not.toContain("subagent");
-            expect(tools(actual)).toEqual(tools(baseline).filter((name) => name !== "subagent"));
+            expect(tools(actual)).toEqual(
+              [
+                ...tools(baseline).filter((name) => name !== "subagent"),
+                ...V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`),
+              ].toSorted(),
+            );
             const native = yield* Effect.promise(() => client.session.get({ sessionID: nativeId }));
             expect(native.agent).toBeUndefined();
             expect(native.permissions).toContainEqual({
@@ -162,7 +178,7 @@ it.skipIf(!binary || !version)(
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,
-            stateDir: path.join(fixture.profile, "bigbud-state"),
+            stateDir: appFixture.root,
             port: 0,
           } as typeof ServerConfig.Service),
         ),
@@ -173,6 +189,7 @@ it.skipIf(!binary || !version)(
       expect(await readFile(fixture.file)).toEqual(serviceBefore);
     } finally {
       await fixture.close();
+      await appFixture.close();
     }
   },
   60000,

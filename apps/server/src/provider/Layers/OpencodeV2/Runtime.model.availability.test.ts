@@ -23,7 +23,7 @@ it("rejects an unavailable catalog selection before journaling or an uncertain n
     const requestMessageId = MessageId.makeUnsafe("not-admitted");
     await expect(
       runtime.send({ threadId, requestMessageId, input: "no prompt", modelSelection }),
-    ).rejects.toThrow("Connect/configure");
+    ).rejects.toThrow("selected connection mode and chat Location");
     expect(http.calls.some(({ pathname }) => pathname.endsWith("/prompt"))).toBe(false);
     expect(
       await Effect.runPromise(

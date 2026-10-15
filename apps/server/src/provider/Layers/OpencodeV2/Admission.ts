@@ -47,6 +47,11 @@ export const admitV2Turn = Effect.fn("admitV2Turn")(function* (request: V2Admiss
     );
   }
   const journal = yield* ProviderTurnAdmissions;
+  // A reserve call is a new durable operation, not a read-only ownership observation.
+  if (!request.isCurrent())
+    return yield* new V2AdmissionUnconfirmed({
+      detail: "Admission ownership fence is no longer current; no reservation was issued.",
+    });
   let row = yield* journal.reserve({
     ...request.identity,
     binding: request.binding,

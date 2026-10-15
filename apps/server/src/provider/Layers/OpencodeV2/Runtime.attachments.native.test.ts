@@ -8,7 +8,7 @@ import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;

@@ -5,6 +5,7 @@ import {
   OpencodeV2SharedBindings,
   OpencodeV2SharedBinding,
   OpencodeV2SharedBindingConflict,
+  V2_SHARED_BINDING_CONFLICT_DETAILS,
 } from "../Services/OpencodeV2SharedBindings.ts";
 
 /** Immutable material plus SQL CAS; neither a TTL nor runtime deletion releases intent. */
@@ -30,9 +31,9 @@ export const OpencodeV2SharedBindingsLive = Layer.effect(
       );
       return rows[0] ? yield* decode(rows[0]) : undefined;
     });
-    const conflict = () =>
+    const conflict = (reason: keyof typeof V2_SHARED_BINDING_CONFLICT_DETAILS) =>
       new OpencodeV2SharedBindingConflict({
-        detail: "Shared binding material/state conflict; history retained, no replay.",
+        detail: V2_SHARED_BINDING_CONFLICT_DETAILS[reason],
       });
     return {
       find,
@@ -48,7 +49,7 @@ export const OpencodeV2SharedBindingsLive = Layer.effect(
               state: "reserved",
               revision: 0,
             }),
-          catch: conflict,
+          catch: () => conflict("invalidMaterial"),
         });
         const serialized = JSON.stringify(material);
         yield* sql`INSERT INTO opencode_v2_shared_bindings (thread_id, material_json, state, revision)
@@ -56,14 +57,14 @@ export const OpencodeV2SharedBindingsLive = Layer.effect(
           Effect.mapError(toPersistenceSqlError("OpencodeV2SharedBindings.reserve")),
         );
         const row = yield* find(input.threadId);
-        if (!row) return yield* conflict();
+        if (!row) return yield* conflict("missingReservation");
         const { state: _s, revision: _r, ...existing } = row;
-        if (JSON.stringify(existing) !== serialized) return yield* conflict();
+        if (JSON.stringify(existing) !== serialized) return yield* conflict("materialMismatch");
         return row;
       }),
       transition: Effect.fn("OpencodeV2SharedBindings.transition")(function* (row, state) {
         if (row.state === state || (state === "dispatch-intent" && row.state !== "reserved"))
-          return yield* conflict();
+          return yield* conflict("invalidTransition");
         const { state: _state, revision: _revision, ...material } = row;
         const updated =
           yield* sql<Row>`UPDATE opencode_v2_shared_bindings SET state = ${state}, revision = revision + 1
@@ -72,7 +73,7 @@ export const OpencodeV2SharedBindingsLive = Layer.effect(
         RETURNING material_json AS "materialJson", state, revision`.pipe(
             Effect.mapError(toPersistenceSqlError("OpencodeV2SharedBindings.transition")),
           );
-        if (!updated[0]) return yield* conflict();
+        if (!updated[0]) return yield* conflict("staleTransition");
         return yield* decode(updated[0]);
       }),
       hasRecords: sql<{

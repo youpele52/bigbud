@@ -2,7 +2,7 @@ import { Effect, Stream } from "effect";
 import { expect, it } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, ServerSettingsError } from "@bigbud/contracts";
 
-import { composeOptionalProviders } from "../OptionalProviderComposition.ts";
+import { composeActivatedFixtureProviders as composeOptionalProviders } from "./Application.activation.fixture.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 

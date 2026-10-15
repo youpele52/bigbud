@@ -15,7 +15,7 @@ const modelSelection = {
   model: "synthetic-model",
 };
 
-it("mode-fences tagged isolated cursors but adopts exact untagged legacy IDs and immutable admissions", async () => {
+it("keeps tagged isolated and unproved legacy admissions read-only with immutable attachment bytes", async () => {
   await withV2RuntimeFixture(async ({ runtime, directory, http }) => {
     const attachmentsDir = path.join(directory, "uploads");
     const attachmentAdmissionsDir = path.join(
@@ -58,13 +58,11 @@ it("mode-fences tagged isolated cursors but adopts exact untagged legacy IDs and
       "isolated history",
     );
     expect(http.calls).toHaveLength(calls);
-    const adopted = await shared.start(input); // Legacy journal has no original mode provenance.
-    expect(adopted.resumeCursor).toMatchObject({
-      nativeSessionId: original!.binding.nativeSessionId,
-      storageIdentity: original!.binding.storageIdentity,
-      connectionMode: "shared",
-    });
-    await shared.send(send);
+    await expect(shared.start(input)).rejects.toThrow("unsupported-retained-binding");
+    expect(http.calls).toHaveLength(calls);
+    expect(
+      await Effect.runPromise(runtime.options.sharedBindings!.find(input.threadId)),
+    ).toBeUndefined();
     expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
     expect(await Effect.runPromise(runtime.options.journal.latestBound(input.threadId))).toEqual(
       original,
@@ -73,7 +71,6 @@ it("mode-fences tagged isolated cursors but adopts exact untagged legacy IDs and
     expect(
       http.calls.filter((call) => call.method === "POST" && call.pathname === "/api/session"),
     ).toHaveLength(1);
-    await shared.stop(input.threadId);
     await shared.close();
   });
 });
@@ -153,7 +150,7 @@ it("an API-aware restart verifies surviving no-cursor create intent without disp
   });
 });
 
-it("failed cursor-only legacy adoption cannot become fresh creation when the caller later omits its cursor", async () => {
+it("unproved cursor-only legacy history remains read-only across restart without binding migration", async () => {
   await withV2RuntimeFixture(async ({ runtime, directory, http }) => {
     const input = {
       threadId: ThreadId.makeUnsafe("cursor-only-legacy"),
@@ -174,17 +171,15 @@ it("failed cursor-only legacy adoption cannot become fresh creation when the cal
     http.sessions.clear();
     const first = new OpencodeV2Runtime(sharedOptions(runtime, http));
     await expect(first.start({ ...input, resumeCursor: legacy })).rejects.toThrow(
-      "retained creation/admission intent",
+      "unsupported-retained-binding",
     );
     const binding = await Effect.runPromise(runtime.options.sharedBindings!.find(input.threadId));
-    expect(binding).toMatchObject({
-      state: "reserved",
-      identityKind: "adopted-legacy-v1",
-      nativeSessionId: legacy.nativeSessionId,
-    });
+    expect(binding).toBeUndefined();
     const restarted = new OpencodeV2Runtime(sharedOptions(runtime, http));
     try {
-      await expect(restarted.start(input)).rejects.toThrow("retained creation/admission intent");
+      await expect(restarted.start({ ...input, resumeCursor: legacy })).rejects.toThrow(
+        "unsupported-retained-binding",
+      );
       expect(await Effect.runPromise(runtime.options.sharedBindings!.find(input.threadId))).toEqual(
         binding,
       );

@@ -16,6 +16,10 @@ import { renderV2CodingPlugin } from "./Coding.plugin.ts";
 import { renderV2LegacyCodingPlugin } from "./Coding.plugin.legacy.ts";
 import { renderV2PreviousCodingPlugin } from "./Coding.plugin.previous.ts";
 import { V2UnconfirmedProcessStartup } from "./ServerManager.lifecycle.ts";
+import {
+  verifyV2SyntheticNodeFixture,
+  type V2SyntheticLauncherGrant,
+} from "./ServerManager.synthetic.authorization.ts";
 
 export async function v2SshBootstrapInvocation(targetId: string) {
   const target = parseSshExecutionTarget(targetId);
@@ -30,7 +34,8 @@ export async function v2SshBootstrapInvocation(targetId: string) {
   });
 }
 
-/** Embed the shared isolation policy in the fixed remote program, without remote module lookup. */
+/** Embed only fixed release-owned modules, without filesystem/remote module lookup. Each
+ * embedded module retains its source boundary and the formal 400-line output limit. */
 export async function v2SshBootstrapProgram(): Promise<string> {
   const script = await readFile(
     new URL("./ServerManager.ssh.bootstrap.mjs", import.meta.url),
@@ -41,22 +46,22 @@ export async function v2SshBootstrapProgram(): Promise<string> {
     new URL("./ProfileIsolation.windows.mjs", import.meta.url),
     "utf8",
   );
-  const program =
-    windows
-      .replace(/^import .*from "node:child_process";$/m, "")
-      .replace('import path from "node:path";', "")
-      .replaceAll("export ", "") +
-    "\n" +
-    isolation
-      .replace(/^import .*from "\.\/ProfileIsolation\.windows\.mjs";$/m, "")
-      .replace(
-        "export async function inspectPrivateV2Profile",
-        "async function inspectPrivateV2Profile",
-      ) +
-    "\n" +
-    script
-      .replace('import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";', "")
-      .replace('import path from "node:path";', "");
+  const moduleUri = (source: string) => {
+    if (source.split("\n").length > 400)
+      throw new Error("V2 fixed fixture module exceeds its source line boundary.");
+    return `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  };
+  const profile = moduleUri(
+    isolation.replace('"./ProfileIsolation.windows.mjs"', JSON.stringify(moduleUri(windows))),
+  );
+  const synthetic = moduleUri(
+    await readFile(new URL("./ServerManager.synthetic.source.mjs", import.meta.url), "utf8"),
+  );
+  const program = script
+    .replace('"./ProfileIsolation.mjs"', JSON.stringify(profile))
+    .replace('"./ServerManager.synthetic.source.mjs"', JSON.stringify(synthetic));
+  if (program.split("\n").length > 400)
+    throw new Error("V2 fixed fixture entry exceeds its source line boundary.");
   return program;
 }
 
@@ -79,10 +84,19 @@ async function localPort(): Promise<number> {
 /** Real protected-stdin bootstrap + loopback tunnel, gated until host/platform conformance is supplied. */
 export async function startOwnedV2SshProcess(
   config: V2ProcessConfig,
-  gate: { readonly protectedBootstrapConformance: boolean; readonly spawn?: typeof spawn },
+  gate: {
+    readonly protectedBootstrapConformance: boolean;
+    readonly spawn?: typeof spawn;
+    readonly synthetic?: V2SyntheticLauncherGrant;
+  },
 ): Promise<OwnedV2Process> {
   if (!gate.protectedBootstrapConformance)
     throw new Error("V2 protected SSH bootstrap conformance is unavailable.");
+  if (!gate.synthetic || !gate.spawn || config.sharedService)
+    throw new Error(
+      "V2 retail SSH bootstrap has no approved remote machine provenance; no SSH/native process was launched.",
+    );
+  await verifyV2SyntheticNodeFixture(gate.synthetic, { ...config, runtimeTargetId: "local" });
   const invocation = await v2SshBootstrapInvocation(config.runtimeTargetId);
   const target = parseSshExecutionTarget(config.runtimeTargetId)!;
   const password = randomBytes(32).toString("base64url");

@@ -1,7 +1,6 @@
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -9,15 +8,18 @@ import {
   startOwnedV2Process,
   type OwnedV2Process,
 } from "./ServerManager.child.ts";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { OpencodeV2DevelopmentSessions } from "./DevelopmentSessions.ts";
 import { makeNoExecutionAdmissionTransport } from "./Adapter.admission.ts";
 import { Effect } from "effect";
 import { ThreadId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 import { admissionCorrelation } from "./Admission.identity.ts";
+import { makeV2SyntheticExecutableFixture } from "./ServerManager.synthetic.fixture.ts";
+import type { V2SyntheticLauncherGrant } from "./ServerManager.synthetic.authorization.ts";
 
 const roots: string[] = [];
 const processes: OwnedV2Process[] = [];
+const grants = new WeakMap<object, V2SyntheticLauncherGrant>();
 afterEach(async () => {
   await Promise.all(processes.splice(0).map((process) => process.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -25,20 +27,9 @@ afterEach(async () => {
 async function config() {
   const root = await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-synthetic-"));
   roots.push(root);
-  const binaryPath = path.join(root, "fixture-v2");
-  await copyFile(
-    fileURLToPath(new URL("./ServerManager.fixture.mjs", import.meta.url)),
-    binaryPath,
-  );
-  await chmod(binaryPath, 0o700);
-  return {
-    runtimeTargetId: "local",
-    binaryPath,
-    profileRoot: path.join(
-      await import("node:fs/promises").then((fs) => fs.realpath(root)),
-      "profile",
-    ),
-  };
+  const fixture = await makeV2SyntheticExecutableFixture(root);
+  grants.set(fixture.config, fixture.grant);
+  return fixture.config;
 }
 
 describe.skipIf(process.platform === "win32")(
@@ -46,7 +37,7 @@ describe.skipIf(process.platform === "win32")(
   () => {
     it("owns an authenticated loopback endpoint/stdin lease and preserves synthetic history on close", async () => {
       const input = await config();
-      const process = await startOwnedV2Process(input);
+      const process = await startOwnedV2Process(input, grants.get(input));
       processes.push(process);
       expect(process.isRunning()).toBe(true);
       expect((await process.client.server.info()).version).toBe("2.0.26");
@@ -77,6 +68,7 @@ describe.skipIf(process.platform === "win32")(
       await mkdir(input.profileRoot, { mode: 0o700 });
       await mkdir(path.join(input.profileRoot, "workspace"), { recursive: true });
       const manager = new OpencodeV2ServerManager({
+        start: (config) => startOwnedV2Process(config, grants.get(input)),
         maxProcesses: 1,
         maxOwners: 32,
         maxQueuedEvents: 4,

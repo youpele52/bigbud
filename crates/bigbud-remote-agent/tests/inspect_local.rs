@@ -91,7 +91,7 @@ fn inspection_capability_probe_preserves_check_identity_without_creating_state()
 }
 
 #[test]
-fn inspect_local_protocol_is_read_only_and_versioned() -> io::Result<()> {
+fn inspect_local_protocol_is_versioned_and_rejects_unscoped_operations() -> io::Result<()> {
     let mut probe = Probe::open()?;
     probe.expect_reply("PROCESS\t1", "ERR")?;
     probe.expect_reply("HELLO\t2", "ERR")?;

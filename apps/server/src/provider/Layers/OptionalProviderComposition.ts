@@ -7,7 +7,6 @@ import {
 import { CliProxyCompositionLive } from "./CliProxy/Composition.ts";
 import { makeDormantOpencodeV2Adapter } from "./OpencodeV2/Adapter.ts";
 import { makeDormantOpencodeV2Provider } from "./OpencodeV2/Provider.ts";
-import { makeV2DevelopmentRegistration } from "./OpencodeV2/Development.composition.ts";
 import { makeV2ApplicationRegistration } from "./OpencodeV2/Application.composition.ts";
 import { ProviderTurnAdmissionsLive } from "../../persistence/Layers/ProviderTurnAdmissions.ts";
 import { OpencodeV2SharedBindingsLive } from "../../persistence/Layers/OpencodeV2SharedBindings.ts";
@@ -42,16 +41,11 @@ export function appendDormantOpencodeV2(
 
 export const composeOptionalProviders = Effect.fn("composeOptionalProviders")(function* (
   registrations: ReadonlyArray<OptionalProviderRegistration>,
-  environment: NodeJS.ProcessEnv = process.env,
+  _environment: NodeJS.ProcessEnv = process.env,
 ) {
   if (registrations.some((registration) => registration.provider === "opencodeV2"))
     throw new Error("OpenCode v2 is already registered.");
-  return [
-    ...registrations,
-    yield* environment.BIGBUD_ENABLE_OPENCODE_V2_DEVELOPMENT === "1"
-      ? makeV2DevelopmentRegistration(environment)
-      : makeV2ApplicationRegistration(),
-  ];
+  return [...registrations, yield* makeV2ApplicationRegistration()];
 });
 
 export const OptionalProviderCompositionLive = Layer.effect(

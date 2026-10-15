@@ -7,7 +7,7 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 
 pub(super) struct Sid(Vec<u32>);
 impl Sid {
-    fn pointer(&self) -> PSID {
+    pub(super) fn pointer(&self) -> PSID {
         self.0.as_ptr().cast_mut().cast()
     }
     fn matches(&self, other: PSID) -> bool {
@@ -94,6 +94,15 @@ impl Drop for Descriptor {
 
 /// Check the opened object, not a pathname sampled separately from the eventual read.
 pub(super) fn private_file(handle: HANDLE, ancestor: bool, owner_only: bool) -> io::Result<()> {
+    check(handle, ancestor, owner_only, false)
+}
+
+/// Public configuration may be readable, but data/append writes remain owner-only.
+pub(super) fn readable_file(handle: HANDLE) -> io::Result<()> {
+    check(handle, false, false, true)
+}
+
+fn check(handle: HANDLE, ancestor: bool, owner_only: bool, public_read: bool) -> io::Result<()> {
     let user = current_user()?;
     let system = well_known(WinLocalSystemSid)?;
     let admins = well_known(WinBuiltinAdministratorsSid)?;
@@ -162,8 +171,8 @@ pub(super) fn private_file(handle: HANDLE, ancestor: bool, owner_only: bool) -> 
                 || admins.matches(sid)
                 || (ancestor && installer.matches(sid));
             // Ancestors may be readable, but untrusted principals cannot replace children or mutate ACLs.
-            let mutation = 0x10000000 | 0x40000000 | 0x000d0150;
-            if !trusted && (!ancestor || ace.Mask & mutation != 0) {
+            let mutation = 0x10000000 | 0x40000000 | 0x000d0150 | if ancestor { 0 } else { 0x6 };
+            if !trusted && (!(ancestor || public_read) || ace.Mask & mutation != 0) {
                 return Err(io::Error::other("untrusted access"));
             }
         }

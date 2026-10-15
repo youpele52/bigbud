@@ -113,22 +113,26 @@ export async function dispatchV2Turn(
   const native = await v2Request("session.get", (signal) =>
     session.lease.process.client.session.get({ sessionID: session.native.id }, { signal }),
   );
+  validateOwner();
   assertV2Model(native.model, session.model);
   let text = validateV2TurnInput(session, input);
   // Replays fingerprint their original requested selection, never the session's later model.
   let requestedModel = v2TurnModel(session, input);
   const existing = await Effect.runPromise(options.journal.find(identity));
+  validateOwner();
   if (!existing)
     await assertV2ModelAvailable(
       session.lease.process.client,
       session.native.location.directory,
       requestedModel,
     );
+  validateOwner();
   const entries = v2InstructionEntries(session);
   let instructionRevision = v2InstructionRevision(entries);
   if (existing) {
     // Replays must not refresh context or reinterpret historical pre-instruction admissions.
     const originalMessages = await readV2Messages(session);
+    validateOwner();
     const original = originalMessages.find((message) => message.id === existing.nativeAdmissionId);
     const inbox = original
       ? undefined
@@ -140,6 +144,7 @@ export async function dispatchV2Turn(
             ),
           )
         ).find((item) => item.id === existing.nativeAdmissionId);
+    validateOwner();
     const metadata =
       original?.type === "user"
         ? original.metadata
@@ -226,6 +231,7 @@ export async function dispatchV2Turn(
     new V2AdmissionUnconfirmed({
       detail: "V2 admission unconfirmed; no automatic resend. New work may duplicate execution.",
     });
+  validateOwner();
   return Effect.runPromise(
     admitV2Turn({
       identity,
@@ -249,24 +255,29 @@ export async function dispatchV2Turn(
             if (!isCurrent()) throw failure();
             const ack = await v2Request("session.prompt", (signal) => {
               validate();
-              return session.lease.process.client.session.prompt(
-                {
-                  sessionID: session.native.id,
-                  id: row.nativeAdmissionId,
-                  text,
-                  files: media.files,
-                  metadata: {
-                    bigbud_fingerprint: fingerprint,
-                    ...(instructionRevision
-                      ? { bigbud_instruction_revision: instructionRevision }
-                      : {}),
-                    ...(references ? { bigbud_attachment_references: references } : {}),
+              const prompt = () =>
+                session.lease.process.client.session.prompt(
+                  {
+                    sessionID: session.native.id,
+                    id: row.nativeAdmissionId,
+                    text,
+                    files: media.files,
+                    metadata: {
+                      bigbud_fingerprint: fingerprint,
+                      ...(instructionRevision
+                        ? { bigbud_instruction_revision: instructionRevision }
+                        : {}),
+                      ...(references ? { bigbud_attachment_references: references } : {}),
+                    },
+                    delivery: "queue",
+                    resume: true,
                   },
-                  delivery: "queue",
-                  resume: true,
-                },
-                { signal },
-              );
+                  { signal },
+                );
+              const activation = session.activation;
+              return activation?.token
+                ? activation.gate.dispatch(activation.token, prompt)
+                : prompt();
             });
             validate();
             validateOwner();

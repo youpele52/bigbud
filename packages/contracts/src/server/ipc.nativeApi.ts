@@ -220,6 +220,9 @@ export interface NativeApi {
       input: Handoff.ServerStartHandoffJobInput,
     ) => Promise<Handoff.ServerHandoffJob>;
     getHandoffJob: (input: Handoff.ServerGetHandoffJobInput) => Promise<Handoff.ServerHandoffJob>;
+    getOpencodeV2ThreadToolsSetup: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
     createMobileRemotePairing: (
       input: Mobile.ServerCreateMobileRemotePairingInput,
     ) => Promise<Mobile.ServerMobileRemotePairing>;
@@ -300,3 +303,7 @@ export interface NativeApi {
     ) => () => void;
   };
 }
+import type {
+  ServerOpencodeV2ThreadToolsSetupInput,
+  ServerOpencodeV2ThreadToolsSetupResult,
+} from "./server.opencodeV2ThreadToolsSetup";

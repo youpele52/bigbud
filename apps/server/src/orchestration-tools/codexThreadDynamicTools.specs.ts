@@ -23,6 +23,7 @@ import {
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 
 export const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 
@@ -62,12 +63,7 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
-      inputSchema: {
-        type: "object",
-        properties: { title: { type: "string", description: "New thread title" } },
-        required: ["title"],
-        additionalProperties: false,
-      },
+      inputSchema: RENAME_THREAD_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

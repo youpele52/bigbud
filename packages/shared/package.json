@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./opencodeNativeTrust": {
+      "types": "./src/opencodeNativeTrust.ts",
+      "import": "./src/opencodeNativeTrust.ts"
+    },
+    "./opencodeAdvisory": {
+      "types": "./src/opencodeAdvisory.ts",
+      "import": "./src/opencodeAdvisory.ts"
+    },
     "./terminalExecutionTarget": {
       "types": "./src/terminalExecutionTarget.ts",
       "import": "./src/terminalExecutionTarget.ts"

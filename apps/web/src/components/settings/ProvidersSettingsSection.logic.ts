@@ -10,6 +10,7 @@ import { Equal } from "effect";
 import { MAX_CUSTOM_MODEL_LENGTH, resolveAppModelSelectionState } from "../../models/provider";
 import { formatRelativeTime } from "../../utils/timestamp";
 import type { ProviderCardData } from "./ProviderCard";
+import { getOpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
 import {
   PROVIDER_DESCRIPTORS,
   PUBLIC_PROVIDER_DESCRIPTORS,
@@ -208,8 +209,15 @@ export function buildProviderCards(input: {
     );
     const providerConfig = input.settings.providers[providerSettings.provider];
     const defaultProviderConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
-    const statusKey = liveProvider?.status ?? (providerConfig.enabled ? "warning" : "disabled");
-    const summary = getProviderSummary(liveProvider);
+    const native =
+      providerSettings.provider === "opencodeV2"
+        ? getOpenCodeSettingsStatus(liveProvider, providerConfig.enabled)
+        : undefined;
+    const statusKey =
+      native?.statusKey ??
+      liveProvider?.status ??
+      (providerConfig.enabled ? "warning" : "disabled");
+    const summary = native?.summary ?? getProviderSummary(liveProvider);
     const customModels =
       "customModels" in providerConfig
         ? providerConfig.customModels
@@ -242,6 +250,7 @@ export function buildProviderCards(input: {
       providerConfig,
       statusStyle: PROVIDER_STATUS_STYLES[statusKey],
       summary,
+      nativeStatus: native?.status,
       versionLabel: getProviderVersionLabel(liveProvider?.version),
     };
   });

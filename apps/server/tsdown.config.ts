@@ -43,7 +43,6 @@ export default defineConfig({
   outDir: "dist",
   // import.meta.url resolves beside the bundled server, not the original source tree.
   copy: [
-    { from: "src/provider/Layers/OpencodeV2/ServerManager.ssh.bootstrap.mjs", to: "dist" },
     { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.mjs", to: "dist" },
     { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.windows.mjs", to: "dist" },
   ],

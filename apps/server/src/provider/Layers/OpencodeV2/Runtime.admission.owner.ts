@@ -11,6 +11,7 @@ export function captureV2AdmissionOwner(runtime: OpencodeV2Runtime, owner: V2Run
   const nativeId = owner.native.id,
     context = currentV2RequestContext();
   return () => {
+    if (owner.activation?.token) owner.activation.gate.assertReservation(owner.activation.token);
     context?.permit.assertCurrent();
     owner.consentPermit?.assertCurrent();
     if (

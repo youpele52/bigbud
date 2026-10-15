@@ -5,7 +5,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { capturedModelSelectionError } from "../../../orchestration/Layers/ProviderCommandReactorSessionOps.settings.ts";
 import { makeAdapterLookup } from "../ProviderAdapterRegistry.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { makeIsolatedOpencodeV2Adapter } from "./Adapter.execution.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";

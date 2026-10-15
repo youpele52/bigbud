@@ -270,6 +270,9 @@ export interface WsRpcClient {
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
     readonly startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
     readonly getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
+    readonly getOpencodeV2ThreadToolsSetup: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
     readonly createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
@@ -353,3 +356,7 @@ export interface WsRpcClient {
     ) => () => void;
   };
 }
+import type {
+  ServerOpencodeV2ThreadToolsSetupInput,
+  ServerOpencodeV2ThreadToolsSetupResult,
+} from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";

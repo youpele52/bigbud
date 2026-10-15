@@ -20,7 +20,7 @@ it("configured V2 runtime artifacts include their relative dependencies and load
       sources.push(await readFile(copy.from, "utf8"));
       await copyFile(copy.from, path.join(directory, filename));
     }
-    expect(names.has("ServerManager.ssh.bootstrap.mjs")).toBe(true);
+    expect(names.has("ServerManager.ssh.bootstrap.mjs")).toBe(false);
     expect(names.has("ProfileIsolation.mjs")).toBe(true);
     for (const source of sources)
       for (const dependency of source.matchAll(/from "\.\/([^"]+\.mjs)"/g))

@@ -33,7 +33,7 @@ it.skipIf(process.platform === "win32")(
       binary = path.join(root, "fixture.mjs");
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await copyFile(fileURLToPath(new URL("./ServerManager.fixture.mjs", import.meta.url)), binary);
-    await chmod(binary, 0o700);
+    await chmod(binary, 0o400);
     await writeFile(
       path.join(profile, ".bigbud-opencode-v2-development"),
       "bigbud-opencode-v2-disposable-v1\n",

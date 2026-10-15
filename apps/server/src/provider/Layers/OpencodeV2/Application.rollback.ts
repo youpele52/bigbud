@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import type { ServerProvider } from "@bigbud/contracts";
+import { OPENCODE_RETAINED_HISTORY_ADVISORY } from "@bigbud/shared/opencodeAdvisory";
 import type { OpencodeV2SharedBindingsShape } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 
-export const V2_SHARED_DOWNGRADE_WARNING =
-  "Logical native history is retained. Do not run shared execution in an older build without shared-binding recovery. Before downgrade, durably disable OpenCode v2, drain bigbud and stop the application; preserve all binding/admission records and attachments. Native service shutdown is not required.";
+export const V2_SHARED_DOWNGRADE_WARNING = OPENCODE_RETAINED_HISTORY_ADVISORY;
 
 /** The common disabled setting is the rollback boundary, not an interlock on older binaries. */
 export function warnV2SharedRollback(

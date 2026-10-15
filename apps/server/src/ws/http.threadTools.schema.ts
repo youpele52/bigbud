@@ -21,6 +21,7 @@ export const ThreadToolRequest = Schema.Struct({
     "get_system_resources",
   ]),
   threadId: Schema.optional(Schema.String),
+  targetThreadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   computerUseAction: Schema.optional(Schema.Unknown),
   browserAction: Schema.optional(Schema.Unknown),

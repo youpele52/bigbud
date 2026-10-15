@@ -9,7 +9,7 @@ import { borrowV2SharedService } from "./SharedService.connection.ts";
 
 vi.mock("./SharedService.connection.ts", () => ({ borrowV2SharedService: vi.fn() }));
 
-it("adopts no-cursor hidden learning only after exact API verification, conserving job identity and terminal journal", async () => {
+it("retains unproved isolated hidden learning locally without adopting or replaying its terminal journal", async () => {
   await withV2RuntimeFixture(async ({ runtime, http, directory }) => {
     const request = {
       ownerThreadId: ThreadId.makeUnsafe("learning-legacy-owner"),
@@ -23,7 +23,7 @@ it("adopts no-cursor hidden learning only after exact API verification, conservi
       input: "retained review",
     };
     const identity = learningAdmissionIdentity(request.ownerThreadId, request.jobId);
-    const first = await Effect.runPromise(makeV2LearningReview(runtime)(request));
+    await Effect.runPromise(makeV2LearningReview(runtime)(request));
     const original = await Effect.runPromise(runtime.options.journal.find(identity.identity));
     const close = vi.fn(async () => {});
     vi.mocked(borrowV2SharedService).mockResolvedValue({
@@ -47,20 +47,18 @@ it("adopts no-cursor hidden learning only after exact API verification, conservi
     });
     const acquire = vi.spyOn(runtime.options.manager, "acquire");
     try {
-      expect(await Effect.runPromise(makeV2LearningReview(shared)(request))).toBe(first);
+      expect(
+        (await Effect.runPromise(makeV2LearningReview(shared)(request).pipe(Effect.result)))._tag,
+      ).toBe("Failure");
       expect(await Effect.runPromise(runtime.options.journal.find(identity.identity))).toEqual(
         original,
       );
       expect(
         await Effect.runPromise(runtime.options.sharedBindings!.find(identity.threadId)),
-      ).toMatchObject({
-        nativeSessionId: original!.binding.nativeSessionId,
-        storageIdentity: original!.binding.storageIdentity,
-        identityKind: "adopted-legacy-v1",
-        state: "verified",
-      });
+      ).toBeUndefined();
       expect(acquire).not.toHaveBeenCalled();
-      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).not.toHaveBeenCalled();
+      expect(borrowV2SharedService).not.toHaveBeenCalled();
       http.sessions.delete(original!.binding.nativeSessionId);
       expect(
         (await Effect.runPromise(makeV2LearningReview(shared)(request).pipe(Effect.result)))._tag,

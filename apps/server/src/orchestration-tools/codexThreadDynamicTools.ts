@@ -26,6 +26,7 @@ import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog
 import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.ts";
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
+import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
 
 export { createCodexThreadOrchestrationDynamicTools } from "./codexThreadDynamicTools.specs.ts";
 
@@ -137,13 +138,22 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         };
       }
       case "rename_thread": {
-        const argRecord =
-          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
-        const title = typeof argRecord?.title === "string" ? argRecord.title.trim() : "";
+        const renameArgs = Schema.decodeUnknownSync(RenameThreadArguments)(args);
+        const title = renameArgs.title.trim();
         if (title.length === 0) {
           throw new Error("Thread title cannot be empty.");
         }
-        const result = await Effect.runPromise(dispatcher.rename({ threadId, title }));
+        const result = await Effect.runPromise(
+          dispatcher.rename({
+            threadId,
+            title,
+            ...(renameArgs.targetThreadId !== undefined
+              ? { targetThreadId: ThreadId.makeUnsafe(renameArgs.targetThreadId.trim()) }
+              : {}),
+            invocationId: String(requestId),
+            sourceMessageId: MessageId.makeUnsafe(requestSource ?? sourceMessageId),
+          }),
+        );
         return {
           contentItems: [inputText(`Renamed thread to "${result.title}".`)],
           success: true,

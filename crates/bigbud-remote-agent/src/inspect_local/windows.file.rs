@@ -26,7 +26,7 @@ use windows_sys::Win32::{
     System::IO::IO_STATUS_BLOCK,
 };
 
-fn relative(parent: &File, name: &OsStr, read: bool) -> io::Result<File> {
+fn relative(parent: &File, name: &OsStr, read: bool, pinned: bool) -> io::Result<File> {
     let mut name: Vec<u16> = name.encode_wide().collect();
     let bytes = u16::try_from(name.len() * 2).map_err(io::Error::other)?;
     let unicode = UNICODE_STRING {
@@ -56,7 +56,7 @@ fn relative(parent: &File, name: &OsStr, read: bool) -> io::Result<File> {
             &mut status,
             ptr::null(),
             0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | if pinned { 0 } else { FILE_SHARE_DELETE },
             FILE_OPEN,
             FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
             ptr::null(),
@@ -78,6 +78,24 @@ fn relative(parent: &File, name: &OsStr, read: bool) -> io::Result<File> {
 
 /// Walk relative to retained directory handles; no reparse point can redirect a checked ancestor.
 pub(super) fn open_checked(path: &str, read: bool, private: bool) -> io::Result<File> {
+    let mut chain = open_chain(path, read, private, false)?;
+    let file = chain.pop().ok_or_else(|| io::Error::other("empty chain"))?;
+    let info = file.metadata()?;
+    if !info.is_file() || info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::Error::other("regular file required"));
+    }
+    if private {
+        security::private_file(file.as_raw_handle(), false, false)?;
+    }
+    Ok(file)
+}
+
+pub(super) fn open_chain(
+    path: &str,
+    read: bool,
+    private: bool,
+    pinned: bool,
+) -> io::Result<Vec<File>> {
     let path = Path::new(path);
     if !path.is_absolute() {
         return Err(io::Error::other("absolute path required"));
@@ -91,16 +109,18 @@ pub(super) fn open_checked(path: &str, read: bool, private: bool) -> io::Result<
     {
         return Err(io::Error::other("invalid root"));
     }
-    let root = Path::new(prefix.as_os_str()).join("\\");
-    let mut file = std::fs::OpenOptions::new()
+    let mut root = prefix.as_os_str().to_os_string();
+    root.push("\\");
+    let file = std::fs::OpenOptions::new()
         .access_mode(FILE_READ_ATTRIBUTES | READ_CONTROL)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | if pinned { 0 } else { FILE_SHARE_DELETE })
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(root)?;
     let names: Vec<_> = parts.collect();
     if names.is_empty() || names.len() > 256 {
         return Err(io::Error::other("path bound"));
     }
+    let mut chain = vec![file];
     for (index, part) in names.iter().enumerate() {
         if !matches!(part, Component::Normal(_))
             || part
@@ -110,22 +130,50 @@ pub(super) fn open_checked(path: &str, read: bool, private: bool) -> io::Result<
         {
             return Err(io::Error::other("invalid component"));
         }
-        if file.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        let file = chain
+            .last()
+            .ok_or_else(|| io::Error::other("empty chain"))?;
+        let info = file.metadata()?;
+        if !info.is_dir() || info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             return Err(io::Error::other("reparse rejected"));
         }
         if private {
             security::private_file(file.as_raw_handle(), true, false)?;
         }
-        file = relative(&file, part.as_os_str(), read && index + 1 == names.len())?;
+        chain.push(relative(
+            file,
+            part.as_os_str(),
+            read && index + 1 == names.len(),
+            pinned,
+        )?);
     }
+    Ok(chain)
+}
+
+/// Inspect a user-owned directory while retaining non-delete-sharing ancestor handles.
+/// The returned snapshot is identity evidence only, never authority for a later path-based write.
+pub(super) fn inspect_directory(path: &str) -> io::Result<String> {
+    let chain = open_chain(path, false, true, true)?;
+    let file = chain
+        .last()
+        .ok_or_else(|| io::Error::other("empty chain"))?;
     let info = file.metadata()?;
-    if !info.is_file() || info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-        return Err(io::Error::other("regular file required"));
+    if !info.is_dir() || info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::Error::other("directory required"));
     }
-    if private {
-        security::private_file(file.as_raw_handle(), false, false)?;
+    security::private_file(file.as_raw_handle(), false, true)?;
+    security::private_file(file.as_raw_handle(), true, false)?;
+    let id = identity(file)?;
+    for ancestor in &chain {
+        security::private_file(ancestor.as_raw_handle(), true, false)?;
+        if ancestor.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(io::Error::other("reparse rejected"));
+        }
     }
-    Ok(file)
+    if identity(file)? != id {
+        return Err(io::Error::other("directory identity changed"));
+    }
+    Ok(id)
 }
 
 pub(super) fn read_private(path: &str) -> io::Result<Vec<u8>> {

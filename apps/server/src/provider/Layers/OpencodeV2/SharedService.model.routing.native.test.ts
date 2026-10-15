@@ -26,11 +26,12 @@ import {
   makeSettingsHarness,
   threadId,
 } from "../../../orchestration/Layers/ProviderCommandReactorSessionOps.settings.test.helpers.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { makeV2Client } from "./Client.ts";
 import { readV2SharedRegistration } from "./SharedService.registration.ts";
 import { Service } from "@opencode/client/service";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -52,8 +53,10 @@ const version = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_VERSION;
 it.skipIf(!binary || !version)(
   "routes captured cross-subprovider model/variant switching through application, ProviderService and orchestration without replacing history",
   async () => {
+    const appFixture = await makeV2ThreadPluginFixture();
     const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
       const config = JSON.parse(await readFile(file, "utf8"));
+      config.plugins = [appFixture.artifact.pluginUri];
       config.providers["bigbud-v2-fixture-next"] = {
         ...config.providers["bigbud-v2-fixture"],
         models: {
@@ -65,6 +68,9 @@ it.skipIf(!binary || !version)(
         },
       };
       await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await appFixture.close();
+      throw error;
     });
     try {
       const configBefore = await readFile(fixture.configFile);
@@ -81,7 +87,8 @@ it.skipIf(!binary || !version)(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
-              nativeServiceTrust: "host-user-v1",
+              nativeServiceTrust: "managed-thread-tools-v2",
+              nativePluginConfigRoot: path.dirname(fixture.configFile),
             },
           },
         }),
@@ -251,7 +258,7 @@ it.skipIf(!binary || !version)(
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,
-            stateDir: path.join(fixture.profile, "bigbud-state"),
+            stateDir: appFixture.root,
             port: 0,
           } as typeof ServerConfig.Service),
           Effect.provide(NodeServices.layer),
@@ -263,6 +270,7 @@ it.skipIf(!binary || !version)(
       expect(await readFile(fixture.file)).toEqual(registrationBefore);
     } finally {
       await fixture.close();
+      await appFixture.close();
     }
   },
   60000,

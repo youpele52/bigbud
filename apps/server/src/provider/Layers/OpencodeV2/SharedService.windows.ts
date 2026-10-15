@@ -8,34 +8,69 @@ export function decodeInspectionHex(value: string): string {
   return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(value, "hex"));
 }
 
-/** One bounded read-only helper connection; never spawns the user's executable. */
+/** One bounded native helper connection; never spawns the user's executable. */
 export class V2WindowsInspector {
   private child: ChildProcessWithoutNullStreams | undefined;
   private queue = Promise.resolve();
   private waiting = 0;
   private idle: ReturnType<typeof setTimeout> | undefined;
   private pending:
-    | { resolve: (value: string[]) => void; reject: (error: Error) => void }
+    | { resolve: (value: string[]) => void; reject: (error: Error) => void; physical: boolean }
     | undefined;
   private bytes = Buffer.alloc(0);
   private preflight: AbortController | undefined;
 
-  constructor(private readonly binary = resolveLocalWorkspaceWatchAgentBinary) {}
+  constructor(
+    private readonly binary = resolveLocalWorkspaceWatchAgentBinary,
+    private readonly bounds: { request: number; response: number; keepAlive?: boolean } = {
+      request: 131_070,
+      response: 1_048_577,
+    },
+  ) {}
+
+  /** A lease never survives helper replacement/exit; checking this creates no new connection. */
+  captureConnectionGuard() {
+    const child = this.child;
+    if (!child) throw new Error("V2 native file lease unavailable.");
+    return () => {
+      if (this.child !== child || child.exitCode !== null || child.signalCode !== null)
+        throw new Error("V2 native file lease lost; no continuation is authorized.");
+    };
+  }
 
   close() {
     this.preflight?.abort();
     clearTimeout(this.idle);
     const child = this.child;
     this.child = undefined;
-    this.pending?.reject(new Error("Native read-only inspection unavailable."));
+    const pending = this.pending;
+    const failure = pending?.physical
+      ? Object.assign(new Error("V2 native file operation outcome uncertain; evidence retained."), {
+          code: "EUNCERTAIN",
+        })
+      : new Error("Native read-only inspection unavailable.");
+    if (pending?.physical && child && child.exitCode === null && child.signalCode === null) {
+      // Killing our helper is not settlement. Keep the physical promise owned until confirmed exit.
+      const escalation = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      }, 250);
+      child.once("exit", () => {
+        clearTimeout(escalation);
+        pending.reject(failure);
+      });
+    } else pending?.reject(failure);
     this.pending = undefined;
     this.bytes = Buffer.alloc(0);
     child?.stdin.end();
-    child?.kill(); // Only bigbud's owned read-only helper, never the inspected service.
+    child?.kill(); // Only bigbud's owned helper, never the inspected service.
   }
 
-  private exchange(command: string, deadline = Date.now() + 5000): Promise<string[]> {
-    if (Buffer.byteLength(command) > 131_070 || command.includes("\n"))
+  private exchange(
+    command: string,
+    deadline = Date.now() + 5000,
+    issuance?: () => void,
+  ): Promise<string[]> {
+    if (Buffer.byteLength(command) > this.bounds.request || command.includes("\n"))
       return Promise.reject(new Error("Native inspection request bound exceeded."));
     return new Promise((resolve, reject) => {
       const remaining = deadline - Date.now();
@@ -43,8 +78,17 @@ export class V2WindowsInspector {
         reject(new Error("Native inspection deadline exceeded."));
         return;
       }
-      const timer = setTimeout(() => this.close(), remaining);
+      // Issued mutations are joined even after the caller's observation/consent window expires.
+      const timer = setTimeout(() => this.close(), issuance ? 30_000 : remaining);
+      try {
+        issuance?.();
+      } catch (error) {
+        clearTimeout(timer);
+        reject(error);
+        return;
+      }
       this.pending = {
+        physical: !!issuance,
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -91,7 +135,7 @@ export class V2WindowsInspector {
     });
     child.stdout.on("data", (chunk: Buffer) => {
       if (this.child !== child) return;
-      if (this.bytes.length + chunk.length > 1_048_577) {
+      if (this.bytes.length + chunk.length > this.bounds.response) {
         this.close();
         return;
       }
@@ -109,6 +153,12 @@ export class V2WindowsInspector {
       if (fields.shift() !== "OK") {
         const error: NodeJS.ErrnoException = new Error("Native read-only inspection rejected.");
         if (fields.length === 1 && fields[0] === "missing") error.code = "ENOENT";
+        if (fields.length === 1 && fields[0] === "exists") error.code = "EEXIST";
+        if (fields.length === 1 && fields[0] === "conflict") error.code = "ESTALE";
+        if (fields.length === 1 && fields[0] === "uncertain") {
+          error.code = "EUNCERTAIN";
+          error.message = "V2 native file publication outcome uncertain; evidence retained.";
+        }
         pending.reject(error);
       } else pending.resolve(fields);
     });
@@ -119,7 +169,7 @@ export class V2WindowsInspector {
     }
   }
 
-  request(command: string): Promise<string[]> {
+  request(command: string, issuance?: () => void): Promise<string[]> {
     if (this.waiting >= 32)
       return Promise.reject(new Error("Native inspection capacity exceeded."));
     this.waiting++;
@@ -132,7 +182,7 @@ export class V2WindowsInspector {
       this.child?.ref();
       for (const stream of [this.child?.stdin, this.child?.stdout, this.child?.stderr])
         (stream as { ref?: () => void } | undefined)?.ref?.();
-      return await this.exchange(command, deadline);
+      return await this.exchange(command, deadline, issuance);
     });
     this.queue = work.then(
       () => {},
@@ -140,7 +190,7 @@ export class V2WindowsInspector {
     );
     return work.finally(() => {
       this.waiting--;
-      if (this.waiting === 0) {
+      if (this.waiting === 0 && !this.bounds.keepAlive) {
         this.idle = setTimeout(() => this.close(), 30_000);
         this.idle.unref();
         this.child?.unref();

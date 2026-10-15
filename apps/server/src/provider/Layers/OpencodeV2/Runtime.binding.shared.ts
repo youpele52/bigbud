@@ -14,7 +14,16 @@ export async function retainedSharedIdentity(
   const journal = await Effect.runPromise(options.journal.latestBound(input.threadId));
   const cursor = input.resumeCursor === undefined ? undefined : decodeV2Cursor(input.resumeCursor);
   if (cursor?.connectionMode === "isolated")
-    throw new Error("V2 isolated history cannot be rebound to shared mode.");
+    throw new Error("V2 retired-isolated history is read-only; no shared replacement or replay.");
+  if (
+    (cursor || journal) &&
+    !row &&
+    (cursor?.connectionMode !== "shared" ||
+      cursor.storageIdentity !== options.config.sharedService?.storageIdentity)
+  )
+    throw new Error(
+      "V2 unsupported-retained-binding: shared native ownership cannot be proved; history remains read-only.",
+    );
   const candidates = [
     ...(row ? [row] : []),
     ...(journal ? [{ ...journal.binding, directory: journal.binding.location }] : []),

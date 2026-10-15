@@ -1,4 +1,5 @@
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
+import { hasOpencodeV2NativeTrust } from "@bigbud/shared/opencodeNativeTrust";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 
@@ -8,7 +9,7 @@ export function invalidatedV2Snapshot(settings: Pick<ServerSettingsShape, "curre
   const consentRequired =
     config &&
     resolveOpencodeV2ConnectionMode(config) === "shared" &&
-    config.nativeServiceTrust !== "host-user-v1";
+    !hasOpencodeV2NativeTrust(config);
   return {
     ...buildServerProvider({
       provider: "opencodeV2",

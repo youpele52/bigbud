@@ -1,6 +1,12 @@
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { Service } from "@opencode/client/service";
-import { assertV2RequestContext, currentV2RequestContext } from "./Client.guard.ts";
+import {
+  assertV2RequestContext,
+  currentV2RequestContext,
+  assertV2OperationCurrent,
+} from "./Client.guard.ts";
+import { assertV2OrchestrationRpc } from "./Client.guard.orchestration.ts";
+import { guardV2CallerFetch } from "./Runtime.caller.ts";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
@@ -48,12 +54,21 @@ export function makeV2Client(input: {
             init?.method ?? (request instanceof Request ? request.method : "GET"),
           )
         : undefined;
+      if (context && url.pathname.startsWith("/api/rpc/"))
+        await assertV2OrchestrationRpc(context, url, request, init);
       const originalSignal =
         init?.signal ?? (request instanceof Request ? request.signal : undefined);
       const signal = context
         ? AbortSignal.any([context.permit.signal, ...(originalSignal ? [originalSignal] : [])])
         : originalSignal;
       signal?.throwIfAborted();
+      currentV2RequestContext()?.operationSignal?.throwIfAborted();
+      assertV2OperationCurrent();
+      if (currentV2RequestContext()?.intent !== "cleanup")
+        guardV2CallerFetch(
+          url,
+          init?.method ?? (request instanceof Request ? request.method : "GET"),
+        );
       return fetchImplementation(request, {
         ...init,
         ...(signal ? { signal } : {}),
@@ -101,13 +116,22 @@ export async function v2Request<T>(
     const context = currentV2RequestContext();
     context?.permit.assertCurrent();
     const signal = context
-      ? AbortSignal.any([context.permit.signal, ...(options.signal ? [options.signal] : [])])
+      ? AbortSignal.any([
+          context.permit.signal,
+          ...(context.operationSignal ? [context.operationSignal] : []),
+          ...(options.signal ? [options.signal] : []),
+        ])
       : options.signal;
     const result = await runWithAbortableDeadline({
       operation,
       timeoutMs: options.timeoutMs ?? 10_000,
       ...(signal ? { signal } : {}),
-      run,
+      run: (abort) => {
+        assertV2OperationCurrent();
+        const physical = run(abort);
+        context?.observeOperation?.(physical);
+        return physical;
+      },
     });
     context?.permit.assertCurrent();
     return result;

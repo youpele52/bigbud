@@ -7,6 +7,7 @@ import {
 } from "./SharedService.registration.ts";
 import { resolveV2SharedConnection, type V2SharedConnection } from "./SharedService.descriptor.ts";
 import type { OwnedV2Process } from "./ServerManager.child.ts";
+import { bindV2NativeCompatibility } from "./NativeCompatibility.binding.ts";
 
 /** Borrow only a verified storage/generation. Closing releases our client, never the daemon. */
 export async function borrowV2SharedService(expected: V2SharedConnection): Promise<OwnedV2Process> {
@@ -39,14 +40,21 @@ export async function borrowV2SharedService(expected: V2SharedConnection): Promi
       throw new Error("V2 shared service generation changed; no automatic resend.");
     }
   };
+  const client = makeV2Client({
+    endpoint: registration.endpoint.url,
+    headers: Service.headers(registration.endpoint),
+    beforeRequest: validate,
+    sharedTransport: expected.registrationFile,
+  });
+  bindV2NativeCompatibility(client, {
+    descriptor: actual,
+    assertCurrent: () => {
+      if (closed || unavailable) throw new Error("V2 shared connection is detached.");
+    },
+  });
   return {
     ownership: "borrowed",
-    client: makeV2Client({
-      endpoint: registration.endpoint.url,
-      headers: Service.headers(registration.endpoint),
-      beforeRequest: validate,
-      sharedTransport: expected.registrationFile,
-    }),
+    client,
     isRunning: () => !closed && !unavailable,
     hasExited: () => false, // Subscription disposal/health loss is never physical exit proof.
     onDeath: () => () => {},

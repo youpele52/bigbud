@@ -13,6 +13,7 @@ import { constants as pluginConstants } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
+import { verifyV2SyntheticSource } from "./ServerManager.synthetic.source.mjs";
 
 let buffered = "";
 let started = false;
@@ -62,6 +63,9 @@ process.stdin.on("data", async (chunk) => {
     if (input.nonce !== undefined && !/^[A-Za-z0-9_-]{43}$/.test(input.nonce))
       throw new Error("lease nonce rejected");
     nonce = input.nonce;
+    // No approved remote retail environment exists. This legacy standalone program may
+    // execute only the byte-verified owned Node protocol fixture, never a native CLI image.
+    const launch = await verifyV2SyntheticSource(input.binaryPath, input.profileRoot);
     let created = false;
     try {
       await mkdir(input.profileRoot, { mode: 0o700 });
@@ -182,7 +186,10 @@ process.stdin.on("data", async (chunk) => {
     }
     if (stopping) throw new Error("lease ended during profile inspection");
     const env = {
-      PATH: process.env.PATH,
+      PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+      TMPDIR: input.profileRoot,
+      TMP: input.profileRoot,
+      TEMP: input.profileRoot,
       HOME: input.profileRoot,
       XDG_CONFIG_HOME: path.join(input.profileRoot, "config"),
       XDG_DATA_HOME: path.join(input.profileRoot, "data"),
@@ -195,7 +202,7 @@ process.stdin.on("data", async (chunk) => {
       OPENCODE_PASSWORD: input.password,
     };
     input.password = "";
-    const version = spawnSync(input.binaryPath, ["--version"], {
+    const version = spawnSync(launch.executable, [...launch.prefix, "--version"], {
       env,
       cwd: input.profileRoot,
       shell: false,
@@ -205,12 +212,17 @@ process.stdin.on("data", async (chunk) => {
     if (version.status !== 0 || !/^(?:opencode v)?2\.0\.26\s*$/.test(String(version.stdout)))
       throw new Error("version rejected");
     if (stopping) throw new Error("lease ended");
-    child = spawn(input.binaryPath, ["serve", "--stdio", "--hostname=127.0.0.1", "--port=0"], {
-      env,
-      cwd: input.profileRoot,
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
-    });
+    await verifyV2SyntheticSource(input.binaryPath, input.profileRoot);
+    child = spawn(
+      launch.executable,
+      [...launch.prefix, "serve", "--stdio", "--hostname=127.0.0.1", "--port=0"],
+      {
+        env,
+        cwd: input.profileRoot,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+      },
+    );
     env.OPENCODE_PASSWORD = "";
     child.stderr.resume();
     child.stdin.on("error", () => {});

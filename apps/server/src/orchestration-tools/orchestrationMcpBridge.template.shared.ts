@@ -1,3 +1,4 @@
+import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
   COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH,
   COMPUTER_USE_APP_NAME_MAX_CHARS,
@@ -71,14 +72,7 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "  {",
   '    name: "rename_thread",',
   `    description: ${JSON.stringify(RENAME_THREAD_TOOL_DESCRIPTION)},`,
-  "    inputSchema: {",
-  '      type: "object",',
-  "      properties: {",
-  '        title: { type: "string", description: "New thread title" },',
-  "      },",
-  '      required: ["title"],',
-  "      additionalProperties: false,",
-  "    },",
+  `    inputSchema: ${JSON.stringify(RENAME_THREAD_TOOL_PARAMETERS)},`,
   "  },",
   "  {",
   '    name: "computer_use",',

@@ -32,7 +32,19 @@ export function createCopilotOrchestrationToolSurface(input: {
             asRecord(workspaceDispatch({ callerThreadId: threadId, tool, arguments: args })),
         }
       : {}),
-    renameThread: (title) => Effect.runPromise(dispatcher.rename({ threadId, title })),
+    renameThread: (title, targetThreadId, invocationId) =>
+      Effect.runPromise(
+        dispatcher.rename({
+          threadId,
+          title,
+          ...(targetThreadId !== undefined
+            ? { targetThreadId: ThreadId.makeUnsafe(targetThreadId.trim()) }
+            : {}),
+          ...(invocationId !== undefined
+            ? { invocationId, sourceMessageId: MessageId.makeUnsafe(invocationId) }
+            : {}),
+        }),
+      ),
     archiveThread: () => Effect.runPromise(dispatcher.archive({ threadId }).pipe(Effect.asVoid)),
     getThreadStatus: (targetThreadId) =>
       asRecord(

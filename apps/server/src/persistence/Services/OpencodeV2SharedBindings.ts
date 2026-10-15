@@ -16,6 +16,17 @@ export const OpencodeV2SharedBinding = Schema.Struct({
   revision: Schema.Number,
 });
 export type OpencodeV2SharedBinding = typeof OpencodeV2SharedBinding.Type;
+export const V2_SHARED_BINDING_CONFLICT_DETAILS = {
+  legacy: "Shared binding material/state conflict; history retained, no replay.",
+  invalidMaterial: "Shared binding reservation material is invalid; history retained, no replay.",
+  missingReservation: "Shared binding reservation is unavailable; history retained, no replay.",
+  materialMismatch:
+    "Shared binding reservation differs from retained material; history retained, no replay.",
+  invalidTransition:
+    "Shared binding transition is not permitted from its retained state; history retained, no replay.",
+  staleTransition:
+    "Shared binding transition lost its exact revision/material check; history retained, no replay.",
+} as const;
 export class OpencodeV2SharedBindingConflict extends Schema.TaggedErrorClass<OpencodeV2SharedBindingConflict>()(
   "OpencodeV2SharedBindingConflict",
   { detail: Schema.String },

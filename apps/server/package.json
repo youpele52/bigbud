@@ -16,7 +16,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/bin.ts",
-    "build": "node scripts/cli.ts build",
+    "build": "bun run thread-tools:manifest:check && bun run thread-tools:native-qualification:check && node scripts/cli.ts build",
+    "thread-tools:manifest": "bun scripts/generateThreadToolImplementationManifest.ts",
+    "thread-tools:manifest:check": "bun scripts/generateThreadToolImplementationManifest.ts --check",
+    "thread-tools:native-qualification:check": "bun scripts/checkThreadToolNativeQualifications.ts --check",
+    "thread-tools:native-qualification:prepare": "bun scripts/prepareThreadToolNativeQualification.ts",
     "start": "node dist/bin.mjs",
     "prepare": "node -e \"if (process.env.CF_PAGES || process.env.CLOUDFLARE) process.exit(0); process.exit(require('child_process').spawnSync('effect-language-service', ['patch'], { stdio: 'inherit', shell: true }).status ?? 1)\"",
     "prepack": "node scripts/verifyWorkspaceAgentPackage.ts",

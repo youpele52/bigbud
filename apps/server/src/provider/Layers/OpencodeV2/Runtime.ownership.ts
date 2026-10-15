@@ -5,10 +5,13 @@ import { v2Request } from "./Client.ts";
 export async function assertV2SharedSessionOwner(
   owner: V2RuntimeSession,
   checkPolicy = true,
+  cancellation?: AbortSignal,
 ): Promise<void> {
   if (owner.lease.process.ownership !== "borrowed") return;
-  const native = await v2Request("owned session.verify", (signal) =>
-    owner.lease.process.client.session.get({ sessionID: owner.native.id }, { signal }),
+  const native = await v2Request(
+    "owned session.verify",
+    (signal) => owner.lease.process.client.session.get({ sessionID: owner.native.id }, { signal }),
+    cancellation ? { signal: cancellation } : {},
   );
   if (
     native.id !== owner.native.id ||
@@ -16,6 +19,7 @@ export async function assertV2SharedSessionOwner(
     native.metadata?.bigbud_provider !== "opencodeV2" ||
     native.metadata.bigbud_thread !== owner.threadId ||
     native.metadata.bigbud_storage !== owner.storageIdentity ||
+    Boolean(native.parentID || native.fork) ||
     (checkPolicy && JSON.stringify(native.permissions) !== JSON.stringify(owner.toolPolicy))
   )
     throw new Error(

@@ -1,4 +1,10 @@
 import { Effect } from "effect";
+import { settleV2RuntimeReservation } from "./Runtime.activation.ts";
+import {
+  shouldPollV2Runtime,
+  hasV2RetainedReservation,
+  repairV2RetainedReservation,
+} from "./Runtime.settlement.ts";
 import type {
   ProviderSendTurnInput,
   ProviderSessionStartInput,
@@ -37,6 +43,10 @@ import { watchV2OutputPublication } from "./Runtime.publication.failure.ts";
 export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
   readonly sessions = new Map<ThreadId, V2RuntimeSession>();
   private readonly starting = new Map<ThreadId, V2StartAttempt>();
+  /** Retiring an owner cannot discard an in-progress native session creation. */
+  hasPendingStart(threadId: ThreadId) {
+    return this.starting.has(threadId);
+  }
   readonly teardown: V2RuntimeTeardown;
   readonly mutations = new V2RuntimeMutations();
   private readonly timer: ReturnType<typeof setInterval>;
@@ -59,15 +69,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       throw new Error("V2 runtime bounds rejected.");
     this.timer = setInterval(() => {
       for (const session of this.sessions.values()) {
-        if (session.admissionInFlight) continue;
-        if (
-          session.stopped
-            ? needsV2FinalRepair(session)
-            : session.row &&
-              (session.row.state !== "terminal" ||
-                !session.terminalDelivered ||
-                session.lease.hub.isDirty(session.native.id))
-        ) {
+        if (shouldPollV2Runtime(session)) {
           this.scheduleRepair(session, false);
         }
       }
@@ -180,6 +182,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
         attempt.controller.signal,
         disableTools,
       );
+      if (created.activation?.token) attempt.phase = "reserved";
       session = {
         ...created,
         ...(this.options.config.sharedService
@@ -241,11 +244,22 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       attempt.owner = owner;
       // Startup repair participates in the same queue as hub/poll/user operations.
       await this.exclusive(owner, () => recoverV2Session(this, owner));
+      await this.options.threadBridge?.attach(owner, this);
+      if (owner.activation?.token && owner.row?.state !== "terminal" && owner.row) {
+        owner.activation.gate.nativeRunning(owner.activation.token);
+        attempt.phase = "native-running";
+      }
+      await settleV2RuntimeReservation(this, owner);
+      if (!owner.activation?.token) attempt.phase = "settled";
       attempt.controller.signal.throwIfAborted();
       currentV2RequestContext()?.permit.assertCurrent();
       owner.consentPermit?.assertCurrent();
       return owner.session;
     } catch (error) {
+      if (session?.activation?.token) {
+        session.activation.phase = "uncertain";
+        attempt.phase = "uncertain";
+      }
       if (session) {
         session.stopped = true;
         session.coding?.revoke();
@@ -303,7 +317,18 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
 
   async reconcile(session: V2RuntimeSession) {
     session.consentPermit?.assertCurrent();
-    return this.authorized(() => reconcileV2Runtime(this, session));
+    return this.authorized(async () => {
+      if (
+        hasV2RetainedReservation(session) &&
+        !needsV2FinalRepair(session) &&
+        !session.publicationUnconfirmed &&
+        !session.lease.hub.isDirty(session.native.id)
+      )
+        return repairV2RetainedReservation(this, session);
+      const result = await reconcileV2Runtime(this, session);
+      await settleV2RuntimeReservation(this, session);
+      return result;
+    });
   }
 
   private async processLost(session: V2RuntimeSession) {

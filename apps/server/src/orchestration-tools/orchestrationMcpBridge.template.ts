@@ -97,7 +97,7 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "    case 'rename_thread': {",
     "      const title = String(args?.title ?? '').trim();",
     "      if (title.length === 0) throw new Error('Thread title cannot be empty.');",
-    "      const result = await callOrchestrationTool({ action: 'rename', threadId, title });",
+    "      const result = await callOrchestrationTool({ action: 'rename', threadId, title, ...(args?.targetThreadId !== undefined ? { targetThreadId: args.targetThreadId } : {}), invocationId, sourceMessageId: sourceMessageId(invocationId) });",
     '      return { content: textContent(`Renamed thread to "${result.title ?? title}".`) };',
     "    }",
     "    case 'archive_thread': {",

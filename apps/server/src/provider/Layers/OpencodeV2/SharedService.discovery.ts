@@ -4,6 +4,7 @@ import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
 import { boundV2Response } from "./Client.response.ts";
 import { makeV2Client } from "./Client.ts";
+import { currentV2RequestContext, assertV2OperationCurrent } from "./Client.guard.ts";
 import { assertV2SharedCapabilities } from "./SharedService.capabilities.ts";
 import { assertV2SharedQualifiedVersion } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
@@ -30,18 +31,22 @@ export async function readV2SharedServiceJson(
       timeoutMs: 5000,
       ...(options.signal ? { signal: options.signal } : {}),
       run: async (signal) => {
+        assertV2OperationCurrent();
         if (route === "/api/info")
           return makeV2Client({
             endpoint: origin,
             headers: Service.headers(registration.endpoint),
             ...(options.fetch ? { fetch: options.fetch } : {}),
           }).server.info({ signal });
-        const response = await (options.fetch ?? globalThis.fetch)(new URL(route, origin), {
+        const physical = (options.fetch ?? globalThis.fetch)(new URL(route, origin), {
           method: "GET",
           headers: Service.headers(registration.endpoint),
           redirect: "error",
           signal,
         });
+        currentV2RequestContext()?.observeOperation?.(physical);
+        const response = await physical;
+        assertV2OperationCurrent();
         if (!response.ok) {
           await response.body?.cancel();
           throw new Error("Service is not ready.");

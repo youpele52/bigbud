@@ -10,7 +10,7 @@ const noop = () => {};
 
 function createProps(isOpen: boolean) {
   const card = buildProviderCards({ settings: DEFAULT_UNIFIED_SETTINGS, serverProviders: [] }).find(
-    (value) => value.provider === "opencode",
+    (value) => value.provider === "codex",
   )!;
   const readSlug = vi.fn();
   return {

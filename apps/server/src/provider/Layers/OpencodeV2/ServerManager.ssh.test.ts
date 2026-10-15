@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { makeOwnedClient } from "./Client.ts";
 import { closeOwnedChild } from "./ServerManager.child.ts";
-import { v2SshBootstrapInvocation } from "./ServerManager.ssh.ts";
+import { v2SshBootstrapInvocation, v2SshBootstrapProgram } from "./ServerManager.ssh.ts";
 
 it("keeps secret payload out of SSH argv and requires strict host-key checking", async () => {
   const invocation = await v2SshBootstrapInvocation(
@@ -16,6 +16,17 @@ it("keeps secret payload out of SSH argv and requires strict host-key checking",
   expect(invocation.args.join(" ")).not.toContain("disposable-secret");
   expect(invocation.args.at(-1)).toContain("node");
   // Invocation construction only: this test never connects to a host or reads an SSH key.
+});
+
+it("the fixed synthetic SSH entry and every embedded release-owned module respect the 400-line boundary", async () => {
+  const sources = [await v2SshBootstrapProgram()];
+  for (let index = 0; index < sources.length; index++) {
+    expect(sources[index]!.split("\n").length).toBeLessThanOrEqual(400);
+    for (const match of sources[index]!.matchAll(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/g))
+      sources.push(Buffer.from(match[1]!, "base64").toString("utf8"));
+    expect(sources.length).toBeLessThanOrEqual(4);
+  }
+  expect(sources).toHaveLength(4);
 });
 
 it.skipIf(process.platform === "win32")(
@@ -29,7 +40,7 @@ it.skipIf(process.platform === "win32")(
       fileURLToPath(new URL("./ServerManager.fixture.mjs", import.meta.url)),
       binaryPath,
     );
-    await chmod(binaryPath, 0o700);
+    await chmod(binaryPath, 0o400);
     await writeFile(
       path.join(root, ".bigbud-opencode-v2-development"),
       "bigbud-opencode-v2-disposable-v1\n",
