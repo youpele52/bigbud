@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
+import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 import { startupActivityWindowStatement } from "./ProjectionOperationalStateQuery.sql.ts";
 
 const layer = it.layer(
@@ -120,6 +121,24 @@ layer("operational state keeps unresolved delegated model choices (H1)", (it) =>
         }
       }
       assert.isTrue(plan.some((row) => row.detail.includes("MATERIALIZE model_choice_unresolved")));
+    }),
+  );
+
+  // A lazy thread load must not scan every model-choice activity in the database: the
+  // materialized CTEs are scoped to the thread and searched through a thread_id index.
+  it.effect("scopes the per-thread model-choice CTEs to the loaded thread", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const [text, params] = sql`
+        WITH ${unresolvedModelChoiceRequestsCtes(sql, "thread-held")}
+        SELECT activity_id FROM model_choice_unresolved
+      `.compile();
+      const plan = yield* sql.unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${text}`, params);
+      const activityReads = plan.filter((row) =>
+        /^(SCAN|SEARCH) (projection_thread_activities|requested)\b/.test(row.detail),
+      );
+      assert.isAbove(activityReads.length, 0);
+      for (const row of activityReads) assert.include(row.detail, "thread_id=?");
     }),
   );
 });

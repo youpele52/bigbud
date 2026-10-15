@@ -108,7 +108,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Request: ThreadWindowRequest,
     Result: ProjectionThreadActivityDbRowSchema,
     execute: ({ threadId, limit }) => sql`
-      WITH ${unresolvedModelChoiceRequestsCtes(sql)}
+      WITH ${unresolvedModelChoiceRequestsCtes(sql, threadId)}
       SELECT * FROM (
         SELECT * FROM (
           SELECT

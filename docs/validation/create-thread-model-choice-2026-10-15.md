@@ -242,3 +242,9 @@ touched file); `bun typecheck` 0 (9/9); `thread-tools:manifest:check` 0; nothing
 server 76 files / 380 tests, contracts 98, web 32. Full `bun run test -- --continue` exit 0 (9/9 tasks): contracts 208,
 scripts 131, desktop 429 + 6 skipped, mobile-web 212, shared 372, web 2965, server 5073 + 104 skipped. Every touched
 code file is ≤ 400 lines.
+
+## Round 3 review fix (2026-10-16)
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| MEDIUM: lazy per-thread activity load built the global model-choice CTEs (a filter outside a `MATERIALIZED` CTE cannot reach inside), scanning every model-choice activity on each thread load | `unresolvedModelChoiceRequestsCtes(sql, threadId?)` scopes both CTEs to the thread; `ProjectionOperationalStateQuery.threadSql.ts` passes `threadId`. Startup window and sweep stay global by design. | New plan test "scopes the per-thread model-choice CTEs to the loaded thread": red with the unscoped call (`expected 'SEARCH projection_thread_activities U…' to include 'thread_id=?'`), green scoped. Related suites 5 files / 14 tests pass. |
