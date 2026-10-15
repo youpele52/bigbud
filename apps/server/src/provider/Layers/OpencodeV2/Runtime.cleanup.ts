@@ -8,15 +8,17 @@ import { runV2Cleanup } from "./Client.guard.ts";
 export async function releaseV2Session(
   session: V2RuntimeSession,
   observe?: (operation: Promise<unknown>) => void,
+  shutdown?: AbortSignal,
 ) {
   return runV2Cleanup(session.sharedTransport, session.native.id, () =>
-    releaseOwnedV2Session(session, observe),
+    releaseOwnedV2Session(session, observe, shutdown),
   );
 }
 
 async function releaseOwnedV2Session(
   session: V2RuntimeSession,
   observe?: (operation: Promise<unknown>) => void,
+  shutdown?: AbortSignal,
 ) {
   try {
     if (!session.lease.process.isRunning()) {
@@ -56,6 +58,6 @@ async function releaseOwnedV2Session(
     });
   } finally {
     session.consentPermit?.release();
-    await releaseV2PreparedSession(session);
+    await releaseV2PreparedSession(session, shutdown);
   }
 }

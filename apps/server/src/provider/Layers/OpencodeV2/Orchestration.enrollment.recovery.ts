@@ -11,11 +11,18 @@ import {
   validateV2LeaseInspection,
   type V2EnrollmentAcknowledgement,
 } from "./Orchestration.enrollment.ack.ts";
+import {
+  settleV2PreviousRetirement,
+  type V2DeadBackendContext,
+} from "./Orchestration.enrollment.deadBackend.ts";
 
-/** A new broker cannot mutate history or detach an unfenced foreign owner to manufacture readiness. */
+/** A new broker cannot mutate history or detach an unfenced foreign owner to manufacture readiness.
+ * Only a dead-backend context (this process holds the state-directory lock) may retire an owner
+ * whose backend is provably dead and whose exact native session is inactive. */
 export async function assertV2PreviousHistoryRetired(
   records: V2ThreadRecords,
   scope: { storageIdentity: string; nativeSessionId: string; threadId: string; directory: string },
+  deadBackend?: V2DeadBackendContext,
 ) {
   const saved = await records.read(
     JSON.stringify([scope.storageIdentity, scope.nativeSessionId, scope.threadId]),
@@ -31,15 +38,18 @@ export async function assertV2PreviousHistoryRetired(
     owner.directory !== scope.directory
   )
     throw new Error("V2 previous canonical owner scope is unconfirmed; history remains unchanged.");
-  await (
-    await V2EnrollmentRetirement.open(records)
-  ).assertSettled({
-    wireProtocol: owner.protocol,
-    ownerDigest: previous.digest,
-    enrollmentNonce: owner.enrollmentNonce,
-    directory: owner.directory,
-    nativeSessionId: owner.nativeSessionId,
-  });
+  await settleV2PreviousRetirement(
+    records,
+    saved,
+    {
+      wireProtocol: owner.protocol,
+      ownerDigest: previous.digest,
+      enrollmentNonce: owner.enrollmentNonce,
+      directory: owner.directory,
+      nativeSessionId: owner.nativeSessionId,
+    },
+    deadBackend,
+  );
 }
 
 /** Fresh exact cleanup never creates authority to prove whether an old owner existed or physically exited. */
@@ -52,6 +62,7 @@ export async function recoverV2PreviousEnrollment(
     operation: "inspect" | "detach",
     owner: V2AnyEnrollmentOwner,
   ) => Promise<V2EnrollmentAcknowledgement>,
+  deadBackend?: V2DeadBackendContext,
 ) {
   const previous = decodeV2EnrollmentRecord(saved.value),
     owner = previous.owner;
@@ -73,7 +84,7 @@ export async function recoverV2PreviousEnrollment(
       nativeSessionId: owner.nativeSessionId,
     };
   if (previous.state !== "revoked") {
-    await retirement.assertSettled(identity);
+    await settleV2PreviousRetirement(records, saved, identity, deadBackend);
     return;
   }
   const phase = await retirement.begin(identity, saved);
@@ -94,5 +105,5 @@ export async function recoverV2PreviousEnrollment(
         current.transportGeneration,
       );
     });
-  await retirement.assertSettled(identity);
+  await settleV2PreviousRetirement(records, saved, identity, deadBackend);
 }

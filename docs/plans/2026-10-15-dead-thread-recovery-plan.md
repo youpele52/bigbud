@@ -1,7 +1,7 @@
 # Dead thread recovery: OpenCode V2 dead-backend retirement, in-place recovery, fork fallback
 
 **Date:** 15 October, 2026
-**Status:** Ready for implementation
+**Status:** In progress (Phase 1 implemented in staging worktree `fix/dead-thread-recovery`; Phases 2–3 pending)
 **Owner:** bigbud server/provider maintainers (implementation agent on branch `fix/dead-thread-recovery`)
 
 **Inspected tree:** worktree `.claude/worktrees/dead-thread-recovery`, branch `fix/dead-thread-recovery` at `228464334` (clean). The guide's status list has no "Ready for implementation"; the requester asked for it explicitly, so it is used here and replaced by "In progress"/"Implemented" as phases land.
@@ -102,6 +102,16 @@ See Problem for line references. More context:
 - **D17. Pending message.** It is auto-submitted in the fork only when its failure class proves it was never admitted: `session-dead` from session start or a typed pre-dispatch error. Otherwise the fork opens with the message as a composer draft (web), and the user resends it. Source events are immutable, so the source keeps the message with a "Continued in …" activity.
 - **D18. Auto-fork triggers.** Only after D12 is exhausted, or when recovery is impossible: `sessionRecovery: unsupported`, no resume state, or the thread's model is no longer offered. The fork keeps the provider. If the model is gone, it uses the provider default and the notice says so. It never forks automatically for `auth-or-quota`, `invalid-request` or `unsafe-to-replay`, or when the provider itself is disabled or unavailable; those cases offer only the manual action.
 - **D19. Persistence.** Migration `128_ProjectionThreadsForkOrigin.ts` is additive: nullable `fork_point_message_id`, `fork_reason`, `fork_failure_event_id` on `projection_threads`. The source reuses `parent_thread_*`, so there are no new FK columns. Register it in `Migrations.ts` (import plus `migrationEntries`). Migration 127 and `OpencodeV2SharedBindings` stay as they are.
+
+**Addendum, 15 October 2026 (Phase 1 implementation).** These notes amend the decisions above; the original text stays as written.
+
+- **Q1 accepted.** A live retirement proof may carry the optional `deadBackendReceiptFence: {instance, digest}` with `receiptsSettled: false`. At settlement, every reserved receipt must be covered by the sealed reboot checkpoint or by this instance's fence; any other reserved receipt (reserved by the live instance) still blocks. Later reads re-verify the signed fence and reboot seal by digest and do not recompute coverage, because fenced receipts belong to dead processes. Proofs without a fence keep the original `proved()` rule, byte-identical. The logic lives in `Orchestration.receipts.fence.ts` and `Orchestration.enrollment.retirement.deadBackend.ts`. R1 is resolved by this.
+- **Correction to Problem item 2 and D10.** Graceful shutdown already detaches. `Runtime.close()` → `teardown.drain()` → `stop()` → `releaseV2Session` → `releaseV2PreparedSession` → `onThreadToolsCleanup` detaches with the normal proof; a pre-change test passed without any code change. Records stay `active` only when a backend dies without finalizers (SIGKILL, crash, watcher hard kill), when the proof is unproved, or when the unbounded drain is killed. Task 1.7 therefore bounds this existing path rather than adding a new one. `V2RuntimeTeardown.beginShutdown()` creates one shared 5 s signal, and `releaseV2Session` → `releaseV2PreparedSession` → `onThreadToolsCleanup(signal)` resolves at the bound and swallows failure, leaving signed records for dead-backend recovery. `bridge.close()` is unchanged.
+- **D6 implementation choices.**
+  - Recovery does not rewrite the dead owner's enrollment to `revoked`. The retirement phase carries the truth, and rewriting would invalidate the revision `startExclusive` already read. Retries resume from `retiring` or `detach-acknowledged`.
+  - Recovery is single-flight per retirement identity within the process.
+  - The context exists only when `BackendInstance` is provided, the realpath of its `stateDir` equals the thread-tools state directory, and the per-instance fence exists. Attribution markers are written whenever the lock holder matches.
+- **D4 detail.** `supersededRebootCheckpointDigest` is stored on the retirement record, not in the proof. `StateDirLockLive` moved to `startup/backendInstance.ts`, which provides `BackendInstance`, to avoid an import cycle.
 
 ## Definition of Done
 
@@ -278,7 +288,7 @@ Commands:
 
 ## Risks And Decision Gates
 
-- **R1. Unfenced dead-backend receipts still block live settlement (pre-existing, item 4).** After Phase 1 such threads recover at the next restart, but in-process detach and bootstrap replacement (`Orchestration.bridge.ts:242-245`) stay blocked while that receipt exists. Accepting the per-instance fence in the _live_ proof would fix this, but it changes live proof rules, so it needs explicit approval (open question Q1). Default: unchanged.
+- **R1. Unfenced dead-backend receipts still block live settlement (pre-existing, item 4).** After Phase 1 such threads recover at the next restart, but in-process detach and bootstrap replacement (`Orchestration.bridge.ts:242-245`) stay blocked while that receipt exists. Accepting the per-instance fence in the _live_ proof would fix this, but it changes live proof rules, so it needs explicit approval (open question Q1). Default: unchanged. _Resolved 2026-10-15: Q1 accepted and implemented; see the Decisions addendum._
 - **R2. Point-in-time native inactivity.** Between `session.active()` and settlement, only someone driving the bigbud-owned native session directly in the OpenCode TUI could start a turn. The window matches the existing `nativeDrained` checks (`bridge.activation.ts:25-36`). Accepted and documented.
 - **R3. Legacy owners without a marker plus a manually deleted lock.** A still-running old backend could have its live enrollment detached. Its native turn is protected by R2's check, and its later callbacks fail closed. This is accepted only for pre-upgrade records. New records always carry a marker (D3b).
 - **R4. Legacy v1 inspect/detach.** If the installed plugin no longer answers `bigbud.thread.v1` cleanup, those threads keep failing with the D9 "native unconfirmed" text. Evidence for the user's two v1 threads suggests the reboot seal settles them first (Problem 3). Verify in AC1.8.

@@ -12,6 +12,7 @@ import {
 import type { V2ThreadRecords } from "./Orchestration.records.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { recoverV2PreviousEnrollment } from "./Orchestration.enrollment.recovery.ts";
+import type { V2DeadBackendContext } from "./Orchestration.enrollment.deadBackend.ts";
 import { V2EnrollmentControls } from "./Orchestration.enrollment.controls.ts";
 import {
   V2EnrollmentRetirement,
@@ -43,6 +44,10 @@ export interface V2EnrollmentOptions {
   readonly transport: string;
   readonly assertCurrent: () => void;
   readonly retirementProof?: (signal?: AbortSignal) => Promise<V2RetirementProof>;
+  /** Present only while this process holds the state-directory lock for these records. */
+  readonly deadBackend?: V2DeadBackendContext | undefined;
+  /** Attributes the new owner to this backend instance before its record first persists. */
+  readonly recordOwner?: ((digest: string, enrollmentNonce: string) => Promise<void>) | undefined;
 }
 
 /** Acknowledged authority and pending renewal are distinct; signed request deadlines are never owner identity. */
@@ -234,10 +239,13 @@ export class V2ThreadEnrollment {
         this.options.owner,
         this.options.transport,
         (operation, owner) => this.rpc(operation, owner),
+        this.options.deadBackend,
       );
       this.options.assertCurrent();
       this.version = saved.revision;
     }
+    await this.options.recordOwner?.(this.digest, this.options.owner.enrollmentNonce);
+    this.options.assertCurrent();
     this.record = { ...this.record, pending: { revision: 1, expiry: Date.now() + 55000 } };
     await this.persist();
     this.options.assertCurrent();

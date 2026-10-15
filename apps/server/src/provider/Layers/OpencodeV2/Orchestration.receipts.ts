@@ -1,6 +1,7 @@
 import type { V2ThreadRecords } from "./Orchestration.records.ts";
 import { decodeV2ThreadReceipt } from "./Orchestration.receipts.schema.ts";
-import { v2RebootReceiptEvidence } from "./RebootRecovery.proof.ts";
+import { v2ReceiptRetirementEvidence } from "./Orchestration.receipts.fence.ts";
+import type { V2ReceiptFence } from "./Orchestration.instances.ts";
 
 export interface V2ReceiptMetadata {
   readonly implementationDigest: string;
@@ -14,7 +15,11 @@ export class V2ThreadReceipts {
     string,
     { fingerprint: string; operation: Promise<{ content: string }> }
   >();
-  constructor(private readonly records: V2ThreadRecords) {}
+  constructor(
+    private readonly records: V2ThreadRecords,
+    /** This backend instance's dead-backend fence, when it holds the state-directory lock. */
+    private readonly fence?: V2ReceiptFence,
+  ) {}
 
   /** Semantic uncertainty is never cleared by physical retirement. */
   async unsettledCount() {
@@ -26,9 +31,10 @@ export class V2ThreadReceipts {
     return count;
   }
 
-  /** Distinct reboot-fenced physical evidence; receiptsSettled stays false for unknown outcomes. */
+  /** Distinct reboot- or dead-backend-fenced physical evidence; receiptsSettled stays false for
+   * unknown outcomes. */
   retirementEvidence() {
-    return v2RebootReceiptEvidence(this.records);
+    return v2ReceiptRetirementEvidence(this.records, this.fence);
   }
 
   /** Authoritative durable state for settlement evidence. "absent" means no reservation was written,

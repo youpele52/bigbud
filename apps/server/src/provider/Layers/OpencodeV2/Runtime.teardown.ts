@@ -8,6 +8,7 @@ import {
   needsV2FinalRepair,
   queueV2FinalEvents,
 } from "./Runtime.finalization.ts";
+import { v2ShutdownSignal } from "./Runtime.shutdown.ts";
 
 interface Teardown {
   readonly owner: V2RuntimeSession;
@@ -24,6 +25,8 @@ interface Teardown {
 export class V2RuntimeTeardown {
   private readonly owners = new Map<ThreadId, Teardown>();
   private shuttingDown = false;
+  /** One shared bound for every owner's thread-tools retirement during shutdown. */
+  private shutdownSignal: AbortSignal | undefined;
 
   constructor(
     private readonly runtime: {
@@ -67,6 +70,7 @@ export class V2RuntimeTeardown {
 
   beginShutdown(): void {
     this.shuttingDown = true;
+    this.shutdownSignal ??= v2ShutdownSignal();
     for (const record of this.owners.values()) this.settle(record);
   }
 
@@ -145,7 +149,11 @@ export class V2RuntimeTeardown {
         this.runtime.serialize(owner, async () => {
           let cleanupError: unknown;
           try {
-            await releaseV2Session(owner, (request) => this.observe(record, request));
+            await releaseV2Session(
+              owner,
+              (request) => this.observe(record, request),
+              this.shutdownSignal,
+            );
           } catch (error) {
             // Without a still-observed operation that can settle, cleanup uncertainty
             // needs generation death rather than a speculative successful rebind.

@@ -27,6 +27,9 @@ import {
   reconcileV2BridgeExecutions,
   registerV2BridgeActivation,
 } from "./Orchestration.bridge.activation.ts";
+import type { V2DeadBackendContext } from "./Orchestration.enrollment.deadBackend.ts";
+import type { OpencodeV2Client } from "./Client.ts";
+import { settleWithinShutdown } from "./Runtime.shutdown.ts";
 
 export interface Owner {
   readonly runtime: OpencodeV2Runtime;
@@ -62,6 +65,11 @@ export interface V2ThreadBridgeOptions {
   }>;
   readonly implementations?: V2ThreadImplementationRegistry;
   readonly selectImplementation?: () => Promise<V2ThreadImplementation>;
+  readonly deadBackend?: (
+    client: OpencodeV2Client,
+    transport: string | undefined,
+  ) => V2DeadBackendContext | undefined;
+  readonly recordOwner?: (digest: string, enrollmentNonce: string) => Promise<void>;
 }
 
 /** Narrow canonical authority only. No file/shell/native-fork operations enter this shared bridge. */
@@ -142,6 +150,11 @@ export class V2ThreadBridge {
       client: session.lease.process.client,
       transport: session.sharedTransport,
       assertCurrent,
+      deadBackend: this.options.deadBackend?.(
+        session.lease.process.client,
+        session.sharedTransport,
+      ),
+      recordOwner: this.options.recordOwner,
       retirementProof: (signal) =>
         v2BridgeRetirementProof(
           runtime,
@@ -203,17 +216,20 @@ export class V2ThreadBridge {
     const abort = () => revoke();
     session.consentPermit.signal.addEventListener("abort", abort, { once: true });
     owner.releaseListener = () => session.consentPermit!.signal.removeEventListener("abort", abort);
-    session.resources.onThreadToolsCleanup = async () => {
+    const retire = async (signal?: AbortSignal) => {
       revoke();
       await owner.active.cancel();
       session.consentPermit!.signal.removeEventListener("abort", abort);
-      const settled = await enrollment.detach();
+      const settled = await enrollment.detach(signal);
       if (settled) {
         owner.unregisterActivation?.();
         if (this.owners.get(session.native.id) === owner) this.owners.delete(session.native.id);
         owner.releaseImplementation();
       }
     };
+    // Shutdown passes a bound: a miss or failure leaves signed records for dead-backend recovery.
+    session.resources.onThreadToolsCleanup = (signal) =>
+      signal ? settleWithinShutdown(retire(signal), signal) : retire();
     try {
       await enrollment.start();
       session.threadToolsReady = true;

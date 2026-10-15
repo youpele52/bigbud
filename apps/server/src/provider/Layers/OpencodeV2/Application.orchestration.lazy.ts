@@ -3,12 +3,14 @@ import type { V2ThreadBridge } from "./Orchestration.bridge.ts";
 import type { V2ThreadToolsActivation } from "./PluginSetup.activation.ts";
 import type { V2ActivationJobScope } from "./PluginSetup.activation.jobs.ts";
 import { assertV2PreviousHistoryRetired } from "./Orchestration.enrollment.recovery.ts";
+import type { V2BackendInstance } from "./Orchestration.instances.ts";
 
 /** Required execution infrastructure is lazy, not optional: catalog discovery stays truthful when setup/storage fails. */
 export function makeV2RequiredOrchestration(
   stateDir: string,
   activation: V2ThreadToolsActivation,
   descriptor: V2ActivationJobScope["descriptor"],
+  backend?: V2BackendInstance,
 ) {
   const setup: Parameters<typeof makeV2ApplicationOrchestration>[1] = (
     artifact,
@@ -20,7 +22,13 @@ export function makeV2RequiredOrchestration(
   let closed = false;
   const acquire = async () => {
     if (closed) throw new Error("V2 required thread-tools broker is closed.");
-    initialized ??= makeV2ApplicationOrchestration(stateDir, setup, activation.nativeEligibility)
+    initialized ??= makeV2ApplicationOrchestration(
+      stateDir,
+      setup,
+      activation.nativeEligibility,
+      undefined,
+      backend,
+    )
       .then(async (value) => {
         if (closed) {
           await value.close();
@@ -49,12 +57,25 @@ export function makeV2RequiredOrchestration(
     bridge,
     activation: {
       coordinator: activation,
-      beforeSharedHistory: async (scope: {
+      beforeSharedHistory: async ({
+        client,
+        transport,
+        ...scope
+      }: {
         storageIdentity: string;
         nativeSessionId: string;
         threadId: string;
         directory: string;
-      }) => assertV2PreviousHistoryRetired((await acquire()).records, scope),
+        client?: Parameters<V2ThreadBridge["attach"]>[0]["lease"]["process"]["client"];
+        transport?: string;
+      }) => {
+        const broker = await acquire();
+        return assertV2PreviousHistoryRetired(
+          broker.records,
+          scope,
+          client ? broker.deadBackend?.(client, transport) : undefined,
+        );
+      },
       awaitReady: async (
         client: Parameters<
           Awaited<ReturnType<typeof makeV2ApplicationOrchestration>>["preflight"]

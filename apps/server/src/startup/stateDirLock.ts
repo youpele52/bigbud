@@ -15,10 +15,9 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { Data, Effect, Layer } from "effect";
+import { Data } from "effect";
 
 import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
-import { ServerConfig } from "./config.ts";
 
 export const STATE_DIR_LOCK_FILENAME = "backend.lock";
 const FORMAT = "bigbud.backend-lock.v1";
@@ -251,24 +250,3 @@ export async function releaseStateDirLock(lockPath: string, nonce: string) {
   if (raw === undefined || parseStateDirLockRecord(raw)?.nonce !== nonce) return; // Successor kept.
   await unlinkIfUnchanged(lockPath, raw);
 }
-
-/** Held for the server layer's lifetime; built before HTTP listening and persistence. */
-export const StateDirLockLive = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig;
-    yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () => acquireStateDirLock({ stateDir: config.stateDir, port: config.port }),
-        catch: (cause) =>
-          cause instanceof StateDirLockError
-            ? cause
-            : new StateDirLockError({
-                stateDir: config.stateDir,
-                message: `Could not acquire the bigbud backend lock in ${config.stateDir}.`,
-                cause,
-              }),
-      }),
-      (handle) => Effect.promise(() => handle.release().catch(() => {})),
-    );
-  }),
-);

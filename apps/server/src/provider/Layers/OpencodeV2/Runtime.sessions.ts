@@ -150,6 +150,8 @@ export async function createRuntimeSession(
             nativeSessionId,
             threadId: input.threadId,
             directory,
+            client: lease.process.client,
+            transport: options.config.sharedService.registrationFile,
           });
         shared = options.config.sharedService
           ? await prepareSharedCreation(

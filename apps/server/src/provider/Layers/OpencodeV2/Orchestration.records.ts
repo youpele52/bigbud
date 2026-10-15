@@ -38,7 +38,8 @@ export class V2ThreadRecords {
       | "installations"
       | "retirements"
       | "implementations"
-      | "recovery",
+      | "recovery"
+      | "instances",
     privateKey: string,
     publicKey: string,
   ) {
@@ -50,7 +51,9 @@ export class V2ThreadRecords {
   }
 
   /** Same issuer/private namespace, never a new signer or native storage authority. */
-  sibling(name: "retirements" | "implementations" | "recovery" | "enrollments" | "receipts") {
+  sibling(
+    name: "retirements" | "implementations" | "recovery" | "enrollments" | "receipts" | "instances",
+  ) {
     return V2ThreadRecords.open(
       path.dirname(this.directory),
       name,

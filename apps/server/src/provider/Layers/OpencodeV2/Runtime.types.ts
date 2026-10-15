@@ -78,7 +78,8 @@ export interface V2SessionResources {
   readonly activateCanonicalTools?: () => Promise<
     Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth">
   >;
-  onThreadToolsCleanup?: () => Promise<void>;
+  /** A shutdown signal bounds the retirement and swallows its failure (records stay recoverable). */
+  onThreadToolsCleanup?: (shutdown?: AbortSignal) => Promise<void>;
   readonly orchestration?: import("../../../orchestration-tools/threadOrchestrationBridge.shared.ts").ThreadOrchestrationHttpConfig;
   readonly cleanup: () => Promise<void>;
   readonly codingFiles?: import("./Coding.files.ts").V2CodingTarget;
@@ -102,6 +103,9 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
       nativeSessionId: string;
       threadId: string;
       directory: string;
+      /** Native access for dead-backend retirement of a provably dead previous owner. */
+      client?: import("./Client.ts").OpencodeV2Client;
+      transport?: string;
     }) => Promise<void>;
     readonly awaitReady: (
       client: import("./Client.ts").OpencodeV2Client,

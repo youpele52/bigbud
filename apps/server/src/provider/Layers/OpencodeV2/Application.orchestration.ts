@@ -15,6 +15,8 @@ import {
   verifyV2NativeEligibility,
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
+import { prepareV2DeadBackendRecovery } from "./Orchestration.enrollment.deadBackend.ts";
+import type { V2BackendInstance } from "./Orchestration.instances.ts";
 
 /** Emitted assets are app-owned; the required preflight decides explicitly authorized setup, never reload. */
 export async function makeV2ApplicationOrchestration(
@@ -27,6 +29,7 @@ export async function makeV2ApplicationOrchestration(
   ) => Promise<unknown>,
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   configRoot?: string,
+  backend?: V2BackendInstance,
 ) {
   const artifact = await exportV2ThreadArtifact(stateDir);
   const implementations = new V2ThreadImplementationRegistry();
@@ -37,8 +40,16 @@ export async function makeV2ApplicationOrchestration(
     artifact.privateKey,
     artifact.publicKey,
   );
+  // Before the bridge exists: no receipt reserved by this instance can enter its fence.
+  const recovery = await prepareV2DeadBackendRecovery({
+    stateDir,
+    instance: backend,
+    records,
+    privateKey: artifact.privateKey,
+  });
   const receipts = new V2ThreadReceipts(
     await V2ThreadRecords.open(artifact.root, "receipts", artifact.privateKey, artifact.publicKey),
+    recovery?.fence,
   );
   let bridge: V2ThreadBridge | undefined;
   const transport = await openV2ThreadTransport(async (body, signal) => {
@@ -67,6 +78,7 @@ export async function makeV2ApplicationOrchestration(
     selectImplementation: () => implementationSelection.refresh(),
     records,
     receipts,
+    ...(recovery ? { deadBackend: recovery.context, recordOwner: recovery.recordOwner } : {}),
     callbackUrl: transport.url,
     preflight: async (session) => {
       const installed = session.activation
@@ -99,6 +111,7 @@ export async function makeV2ApplicationOrchestration(
     artifact,
     implementationSelection,
     records,
+    deadBackend: recovery?.context,
     preflight: (
       client: Parameters<typeof verifyV2ThreadTools>[1],
       directory: string,

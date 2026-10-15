@@ -18,6 +18,7 @@ import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { ServerConfig } from "../../../startup/config.ts";
+import { BackendInstance } from "../../../startup/backendInstance.ts";
 import { inspectV2Admissions, startV2AdmissionMaintenance } from "./Application.maintenance.ts";
 import { makeV2SharedTargetPreparation } from "./Application.targets.shared.ts";
 import { makeV2RequiredOrchestration } from "./Application.orchestration.lazy.ts";
@@ -50,6 +51,8 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
     const activation = yield* ThreadToolsActivation;
     const consent = activation.consent;
     const serverConfig = yield* Effect.serviceOption(ServerConfig);
+    // Absent outside the server (tests/CLI): dead-backend recovery stays disabled (fail closed).
+    const backend = Option.getOrUndefined(yield* Effect.serviceOption(BackendInstance));
     const scope = yield* Effect.scope;
     const permit = yield* Semaphore.make(1);
     const events = yield* PubSub.bounded<ProviderRuntimeEvent>(256);
@@ -125,6 +128,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           serverConfig.value.stateDir,
           activation,
           config.process.sharedService,
+          backend,
         );
         yield* Effect.addFinalizer(() => Effect.promise(() => orchestration.close())).pipe(
           Scope.provide(scope),

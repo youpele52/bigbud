@@ -50,10 +50,11 @@ export async function prepareV2RuntimeSession(
 /** Local target resources and the native lease settle independently, even when either fails. */
 export async function releaseV2PreparedSession(
   session: Pick<V2RuntimeSession, "resources" | "lease">,
+  shutdown?: AbortSignal,
 ) {
   try {
     try {
-      await session.resources?.onThreadToolsCleanup?.();
+      await session.resources?.onThreadToolsCleanup?.(shutdown);
     } finally {
       await session.resources?.cleanup();
     }

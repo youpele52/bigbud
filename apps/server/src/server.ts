@@ -4,7 +4,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
-import { StateDirLockLive } from "./startup/stateDirLock";
+import { StateDirLockLive } from "./startup/backendInstance";
 import { fixPath } from "./utils/os-jank";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
