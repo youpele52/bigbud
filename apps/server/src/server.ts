@@ -4,6 +4,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
+import { StateDirLockLive } from "./startup/stateDirLock";
 import { fixPath } from "./utils/os-jank";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
@@ -357,6 +358,9 @@ export const makeServerLayer = Layer.unwrap(
     return serverApplicationLayer.pipe(
       Layer.provideMerge(RuntimeServicesLive),
       Layer.provideMerge(HttpServerLive),
+      // One backend per state directory: acquired before the port binds and persistence opens,
+      // released after both close.
+      Layer.provide(StateDirLockLive),
       Layer.provide(ObservabilityLive),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provideMerge(PlatformServicesLive),

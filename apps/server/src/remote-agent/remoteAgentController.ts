@@ -1,22 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+
+import { processStartToken } from "../utils/processStartToken.ts";
 
 export interface RemoteAgentControllerIdentity {
   readonly id: string;
   readonly pid: number;
   readonly startedAt: string;
-}
-
-function processStartToken(pid: number): string | undefined {
-  try {
-    const value = execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return value ? value.replaceAll(/\s+/g, "_") : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 const controller: RemoteAgentControllerIdentity = {
