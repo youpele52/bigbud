@@ -57,3 +57,7 @@ Before native-removal implementation, provide either an upstream conditional/tre
 6. Stop/archive/shutdown produce zero removal calls. Failed native cleanup remains pending; only exact verified removal marks physical cleanup done.
 
 Fresh planner delegation was unavailable (`Subagent depth limit reached (1)`). This is direct design work, not independently accepted `Ready for implementation` clearance. The blocked destructive gate must be resolved before implementing native deletion; independent Phase A/C/D work is unaffected.
+
+## Addendum 2026-10-15
+
+Status stays **Draft**. **Deferred, see gap-closure plan D5** ([gap-closure plan](./2026-10-15-opencode-v2-gap-closure-plan.md), "Deferred work"). No deletion gate was implemented. `Runtime.deletion.contract.native.test.ts` records the native removal semantics this design depends on: removal recurses into `parentID` children and keeps forks and independently created sessions. It now runs in suite v2 of the 2.0.29 qualification, which has not yet been executed.

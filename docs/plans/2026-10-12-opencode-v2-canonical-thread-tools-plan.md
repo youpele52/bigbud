@@ -323,3 +323,13 @@ After shared-plugin implementation, run `bun fmt`, `bun lint`, `bun typecheck`, 
 No product/packaging/history decision remains delegated to the user as a blocker to app-source implementation. Required bridge, shared-only production topology, portable artifact, default compatible enrollment, and preserved incompatible-history classification are fixed above. Native installation/activation itself remains an explicit future user/manual setup action, not permission inferred from source approval. Independent engineering review and disposable native conformance are gates, not live-user operations.
 
 - Should this work receive a stable bigbud note/Kanban reference? None was supplied; this does not block implementation.
+
+## Addendum 2026-10-15 (gap closure)
+
+The remaining validation for this plan moved into the [gap-closure plan](./2026-10-15-opencode-v2-gap-closure-plan.md). The retired private, SSH and coding-transport modules were deleted in its Phase 4.1. Native qualification and the live turn are pending.
+
+- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
+- [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
+- [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.
+- [Final ledger draft](../validation/opencode-v2-gap-closure-final-2026-10-15.md): Definition of Done status.

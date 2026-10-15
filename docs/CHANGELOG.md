@@ -31,6 +31,16 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Follow work across chats:** Open linked child chats and see whether delegated work is running, idle, failed, or unavailable, so you can follow the wider task.
 - **Know where an instruction came from:** Messages from other chats, assignments, handoffs, and automated follow-ups show their source, with links back to verified source conversations.
 
+### OpenCode, Using Your Own Service
+
+- **Use the OpenCode you already run:** bigbud connects to your running OpenCode 2 service on macOS with Apple silicon, so there’s no second sign-in. bigbud never starts, stops, or reconfigures that service.
+- **Approve once, clearly:** A one-time **Trust native service execution** acknowledgement explains what bigbud may do through your OpenCode service before anything runs.
+- **Let your agent work with your chats:** bigbud automatically sets up its thread tools so the agent can create a chat, send it a message, check its status, list chats, and rename them. Setup checks each project location and tells you when something needs attention.
+- **Stop and keep going:** Fixed an issue where, after a turn ended, OpenCode chats could refuse new messages with “prior physical admission remains owned”. bigbud now explains which step is still settling.
+- **Know what you’re running:** OpenCode releases bigbud hasn’t yet fully qualified still work, but show an amber notice so you know.
+- **No more clashing backends:** If a second bigbud backend tries to use the same data folder, it now refuses to start. Its message names the backend already running, so two backends never write to the same history.
+- **Not yet supported:** Native OpenCode execution on Windows or Linux, free-tier models that return HTTP 403, and images larger than 10 MiB.
+
 ### Easier-to-Read Chat Tables
 
 - **Read wide tables without squeezing the columns:** Scroll tables horizontally within your chat to see the information that would otherwise be cut off.

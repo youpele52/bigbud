@@ -284,3 +284,16 @@ Independent reviewer `ses_ec96f72ebffecOy7x1Rj2RhUXR` accepted revision SHA-256 
 **Settled:** V2-only contract candidates; qualification mandatory before canonical execution; macOS ARM64 scope; client 2.0.26 retained; no live-native actions, fallback service or new security feeds. Do not reask the user to choose broad compatibility or qualification policy.
 
 **Remaining blockers:** parent independent plan rereview; approved/proven hermetic retail qualification environment; actual complete 26/28 semantic and final-source evidence. The latter two prevent native qualification/release, not drafting source contracts. There is no claim that current partial source is green.
+
+## Addendum 2026-10-15 (gap closure)
+
+**Status (2026-10-15 addendum):** the implementation has landed on `opencode-v2/gap-closure`. 2.0.29 native qualification (G1) and the documented live turn (G3) are **pending**. Status is not set to Implemented until both ledgers exist.
+
+- §1a "runtime checks + warning" is the shipped policy. Unqualified retail releases run with an amber notice, and Phase 0.1 aligned the tests with it.
+- The §7.1 hermetic gate is implemented as a GitHub-hosted `macos-15` job (`macos-arm64-qualification`) with a per-process seatbelt egress profile, recorded as evidence and not attestation. Accepting hosted runners (A3) is still the user's decision.
+
+- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
+- [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
+- [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.
+- [Final ledger draft](../validation/opencode-v2-gap-closure-final-2026-10-15.md): Definition of Done status.

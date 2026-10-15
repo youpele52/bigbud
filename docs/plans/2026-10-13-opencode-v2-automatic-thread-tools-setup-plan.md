@@ -83,3 +83,15 @@ Use dot-notation modules under `provider/Layers/OpencodeV2/PluginSetup.*`, each 
 | Completion                               | Serialized `bun fmt`, `bun lint`, `bun typecheck`, `bun run test` (never `bun test`), relevant browser/native checks, ≤400-line audit, immutable v3 full-worktree manifest/delta and parent independent code/security/requirements reviews. |
 
 Qualified native scope remains **macOS ARM64 2.0.26/2.0.27 with disposable services and synthetic vendors**. Broad discovery is not automatic-installation/execution qualification. No v3 completion or inherited v2-green claim is permitted until the new gates pass.
+
+## Addendum 2026-10-15 (gap closure)
+
+**Status (2026-10-15 addendum):** the implementation has landed on `opencode-v2/gap-closure`. 2.0.29 native qualification (G1) and the documented live turn (G3) are **pending**. Status is not set to Implemented until both ledgers exist.
+
+Automatic setup ships as implemented. The live setup-to-turn evidence (expanded trust, `ready` in two Locations, a thread-tool round trip, an interrupt and a next send) is the Phase 3 runbook below and has not yet been executed. See the [gap-closure plan](./2026-10-15-opencode-v2-gap-closure-plan.md).
+
+- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
+- [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
+- [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.
+- [Final ledger draft](../validation/opencode-v2-gap-closure-final-2026-10-15.md): Definition of Done status.

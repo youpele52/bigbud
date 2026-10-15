@@ -358,3 +358,13 @@ The parent's root job is neither polled nor treated as cancelled by this plan. P
 - **Internal review pass 2 — repeated after corrections:** reread actual startup/send/journal, consent-finalizer, callback/preparation/receipt and legacy-detach code. Corrected the dispatch helper to take a thunk (mark before side effects); separated startup reservation from namespace-queue lifetime; retained filesystem writer ownership after a timed-out physical mutation; specified root layer sharing, exact legacy cleanup-only behavior, result persistence after interpretation and per-Location expected-epoch fencing. Source/build digest is explicitly not runtime attestation. Native conformance remains future evidence, not claimed completion.
 - **Independent review:** initial nested reviewer calls were blocked by depth limit (1). Parent subsequently ran `plan-reviewer` session `ses_ec96f72ebffecOy7x1Rj2RhUXR`, which initially returned **NOT READY** with five technical findings. Its independent rereview accepted revision SHA-256 `17fb2ae82052e55f723be49e357eb16e0070364ff870ef7b62e1cdb31fd06aa0` as **READY/GREEN**, closing all five findings with no remaining user questions. The parent then updated only this review record and the status above; implementation contracts are unchanged. All 227 frozen-v3 source files remain unchanged. Implementation, native conformance, source reviews and release validation are separate subsequent gates.
 - **Technical go/no-go:** before broad integration, prove step 2 on both disposable binaries. Failure requires a reviewed amendment; no guessed API or weaker safety fallback. No source implementation has been performed by this planner.
+
+## Addendum 2026-10-15 (gap closure)
+
+The native conformance gates continue in the [gap-closure plan](../plans/2026-10-15-opencode-v2-gap-closure-plan.md). Registry promotion is metadata-only: the bootstrap `generatorSourceDigest` (`3321f844…`) is unchanged by every gap-closure change so far and must stay unchanged at promotion. Native qualification of 2.0.29 is prepared and pending.
+
+- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
+- [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
+- [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.
+- [Final ledger draft](../validation/opencode-v2-gap-closure-final-2026-10-15.md): Definition of Done status.
