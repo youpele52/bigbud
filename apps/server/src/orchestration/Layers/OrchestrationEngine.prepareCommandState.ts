@@ -53,7 +53,10 @@ export function makePrepareCommandState<HydrationError>(input: {
         command.message.replyToMessageId !== undefined) ||
       sourceThreadId === targetThreadId ||
       command.type === "thread.checkpoint.revert" ||
-      command.type === "thread.revert.complete";
+      command.type === "thread.revert.complete" ||
+      // The startup window omits idle threads' activities; a held choice must be visible.
+      command.type === "thread.delegation.model-choice.expire" ||
+      command.type === "thread.delegation.model-choice.pick";
     return Effect.gen(function* () {
       yield* input.threadStateHydrator!.load(
         targetThreadId,

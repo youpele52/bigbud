@@ -84,6 +84,10 @@
       "types": "./src/threadFork.ts",
       "import": "./src/threadFork.ts"
     },
+    "./delegatedModelChoice": {
+      "types": "./src/delegatedModelChoice.ts",
+      "import": "./src/delegatedModelChoice.ts"
+    },
     "./providerAttachments": {
       "types": "./src/providerAttachments.ts",
       "import": "./src/providerAttachments.ts"

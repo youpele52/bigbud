@@ -5,6 +5,7 @@ import {
   resolveThreadWorkflowStatus,
   serializeThreadWorkflowStatusMarkdown,
 } from "./ThreadWorkflowStatus.logic.ts";
+import { requestedPayload } from "./deciderThreads.delegationModelChoice.test.helpers.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 
@@ -175,5 +176,51 @@ describe("ThreadWorkflowStatus.logic", () => {
 
     expect(markdown).toContain("Workflow status:");
     expect(markdown).toContain("get_thread_status");
+  });
+
+  it("reports a held delegated first turn as connecting with requested vs used", () => {
+    const requested = {
+      id: "choice-requested" as never,
+      tone: "info" as const,
+      kind: "delegation.model-choice-requested",
+      summary: "Choose a model",
+      payload: requestedPayload,
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    const pending = resolveThreadWorkflowStatus(makeThread({ activities: [requested] }));
+    expect(pending.workflowStatus).toBe("connecting");
+    expect(pending.isAgentActive).toBe(true);
+    expect(pending.isWorkflowComplete).toBe(false);
+    expect(pending.modelChoice).toMatchObject({
+      status: "pending",
+      requested: requestedPayload.requested,
+      used: requestedPayload.fallback,
+      reason: "provider-hidden",
+    });
+    const resolved = resolveThreadWorkflowStatus(
+      makeThread({
+        activities: [
+          requested,
+          {
+            ...requested,
+            id: "choice-resolved" as never,
+            kind: "delegation.model-choice-resolved",
+            payload: {
+              choiceId: requestedPayload.choiceId,
+              requested: requestedPayload.requested,
+              fallback: requestedPayload.fallback,
+              reason: requestedPayload.reason,
+              used: requestedPayload.options[1]!.selection,
+              outcome: "user-picked",
+              resolvedBy: "user",
+            },
+          },
+        ],
+      }),
+    );
+    expect(resolved.workflowStatus).toBe("idle");
+    expect(resolved.modelChoice).toMatchObject({ status: "resolved", outcome: "user-picked" });
+    expect(resolveThreadWorkflowStatus(makeThread())).not.toHaveProperty("modelChoice");
   });
 });

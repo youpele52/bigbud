@@ -13,6 +13,12 @@ import {
   PROVIDER_RECOVERING_SESSION_REASON,
   PROVIDER_STALLED_SESSION_REASON,
 } from "@bigbud/contracts/constants/providerRuntime.constant";
+import { deriveDelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelChoice";
+
+import {
+  toThreadModelChoiceStatus,
+  type ThreadModelChoiceStatus,
+} from "./ThreadWorkflowStatus.modelChoice.logic.ts";
 
 export type ThreadWorkflowStatusLabel =
   | "archived"
@@ -42,6 +48,8 @@ export interface ThreadWorkflowStatusSnapshot {
   readonly hasActionableProposedPlan: boolean;
   readonly lastAssistantExcerpt: string | null;
   readonly updatedAt: string;
+  /** Delegated model choice, requested vs used; present only for tributaries that requested one. */
+  readonly modelChoice?: ThreadModelChoiceStatus;
 }
 
 function compareActivitiesByOrder(
@@ -219,6 +227,7 @@ export function resolveThreadWorkflowStatus(
 ): ThreadWorkflowStatusSnapshot {
   const hasPendingApprovals = derivePendingApprovals(thread.activities).length > 0;
   const hasPendingUserInput = derivePendingUserInputs(thread.activities).length > 0;
+  const modelChoice = deriveDelegatedModelChoiceRecord(thread.activities);
   const latestProposedPlan = findLatestProposedPlan(
     thread.proposedPlans,
     thread.latestTurn?.turnId ?? null,
@@ -247,7 +256,8 @@ export function resolveThreadWorkflowStatus(
     workflowStatus = "awaiting_approval";
   } else if (hasPendingUserInput) {
     workflowStatus = "awaiting_input";
-  } else if (session?.status === "starting") {
+  } else if (session?.status === "starting" || modelChoice?.status === "pending") {
+    // A held delegated first turn is about to start, so the agent counts as active.
     workflowStatus = "connecting";
   } else if (session?.status === "running") {
     workflowStatus = isSessionCompacting(session) ? "compacting" : "working";
@@ -286,6 +296,7 @@ export function resolveThreadWorkflowStatus(
     hasActionableProposedPlan: actionableProposedPlan,
     lastAssistantExcerpt: excerptAssistantMessage(thread.messages),
     updatedAt: thread.updatedAt,
+    ...(modelChoice !== null ? { modelChoice: toThreadModelChoiceStatus(modelChoice) } : {}),
   };
 }
 

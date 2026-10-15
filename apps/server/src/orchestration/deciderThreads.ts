@@ -18,6 +18,7 @@ import {
 import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThreads.turn.ts";
 import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
 import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
+import { decideDelegationModelChoiceCommand } from "./deciderThreads.delegationModelChoice.ts";
 
 const LIFECYCLE_TYPES = new Set([
   "thread.create",
@@ -64,6 +65,13 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
   }
   if (command.type === "thread.fork") {
     return yield* decideThreadForkCommand({ command, readModel });
+  }
+  if (
+    command.type === "thread.delegation.model-choice.hold" ||
+    command.type === "thread.delegation.model-choice.expire" ||
+    command.type === "thread.delegation.model-choice.pick"
+  ) {
+    return yield* decideDelegationModelChoiceCommand({ command, readModel });
   }
   if (command.type === "thread.task.upsert" || command.type === "thread.task.remove") {
     return yield* decideThreadTaskCommand({ command, readModel });

@@ -303,3 +303,12 @@ D1–D10 change only with evidence.
 - The model rules and list tool are `ThreadOrchestrationTools.modelChoice.ts` and `ThreadOrchestrationTools.listAvailableModels.ts`. The shared schemas live in `threadOrchestrationBridge.shared.ts`.
 - The linked activity, the `get_thread_status` payload, `DelegatedChildrenCard`, the thread context and the capability catalog are extended rather than paralleled.
 - The only new pieces are two commands in the existing thread command family (needed for atomic first-wins resolution) and one contracts schema module (because the existing files are at the 400-line limit).
+
+## 12. Deviations (implementation, 2026-10-15)
+
+Recorded by the implementer against `plan/terminal-rust-gpu-reliability@6a6e27052`. None changes a settled user-facing decision.
+
+- **D-1 (2026-10-15) One shared derivation.** `derivePendingDelegatedModelChoice` / `deriveDelegatedModelChoiceRecord` live once in `packages/shared/src/delegatedModelChoice.ts` (subpath `@bigbud/shared/delegatedModelChoice`, the `threadFork` precedent) and are used by the decider, `ThreadDispatchSafety`, `ThreadWorkflowStatus` and the web, instead of two copies next to each `derivePendingApprovals`.
+- **D-2 (2026-10-15) Resolution loads full thread history (A6, server side).** The startup operational window loads no activities for idle threads, so after a restart the pending choice would be invisible to the decider. `thread.delegation.model-choice.expire|pick` are added to `historyRequired` in `OrchestrationEngine.prepareCommandState.ts`, so resolution always sees the requested activity (no SQL or migration change).
+- **D-3 (2026-10-15) Model sources are installed from one server layer (A5).** `makeWsRpcContext` is built once per server for the desktop/web route but once per connection for the mobile route, so a finalizer there would uninstall the sources when a mobile client disconnects. Sources are installed by a dedicated layer merged into the server application layer in `server.ts`, as the plan's A5 fallback prescribes.
+- **D-4 (2026-10-15) Hold command field name.** The hold command carries the delegated message as `prompt` (not `message`), so existing `"message" in command` narrowings over the command union keep meaning "a user message with attachments".

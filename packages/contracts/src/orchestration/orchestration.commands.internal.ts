@@ -23,6 +23,10 @@ import {
   OrchestrationThreadActivity,
   OrchestrationTurnControlOperation,
 } from "./orchestration.thread";
+import {
+  ThreadDelegationModelChoiceExpireCommand,
+  ThreadDelegationModelChoiceHoldCommand,
+} from "./orchestration.delegationModelChoice";
 
 const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
 
@@ -221,5 +225,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadTaskUpsertCommand,
   ThreadTaskRemoveCommand,
   ThreadRevertCompleteCommand,
+  ThreadDelegationModelChoiceHoldCommand,
+  ThreadDelegationModelChoiceExpireCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

@@ -32,6 +32,7 @@ import {
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
 import * as MessageOrigin from "./orchestration.messageOrigin";
 import { ThreadForkCommand } from "./orchestration.fork";
+import { ThreadDelegationModelChoicePickCommand } from "./orchestration.delegationModelChoice";
 import {
   ClientThreadMessageSubmitCommand,
   ThreadMessageSubmitCommand,
@@ -340,6 +341,7 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectDeleteCommand,
   ThreadCreateCommand,
   ThreadForkCommand,
+  ThreadDelegationModelChoicePickCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
@@ -372,6 +374,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectDeleteCommand,
   ThreadCreateCommand,
   ThreadForkCommand,
+  ThreadDelegationModelChoicePickCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
