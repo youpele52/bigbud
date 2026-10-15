@@ -53,6 +53,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
     const serverConfig = yield* Effect.serviceOption(ServerConfig);
     // Absent outside the server (tests/CLI): dead-backend recovery stays disabled (fail closed).
     const backend = Option.getOrUndefined(yield* Effect.serviceOption(BackendInstance));
+    // Once per composition; no lock identity is logged.
+    yield* Effect.logInfo(
+      `OpenCode V2 dead-backend recovery ${backend ? "enabled" : "disabled (no backend instance)"}`,
+    );
     const scope = yield* Effect.scope;
     const permit = yield* Semaphore.make(1);
     const events = yield* PubSub.bounded<ProviderRuntimeEvent>(256);

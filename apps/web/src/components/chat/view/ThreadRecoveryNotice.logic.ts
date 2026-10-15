@@ -1,4 +1,5 @@
 import type { ThreadTurnStartRequest } from "../../../models/types/app.types";
+import { FORK_ONLY_FAILURE_CLASSES, type ServerTurnFailure } from "./ThreadRecoveryNotice.failure";
 
 /**
  * UI threshold only, not a timeout: after this long without a started turn the thread shows
@@ -7,14 +8,6 @@ import type { ThreadTurnStartRequest } from "../../../models/types/app.types";
 export const RECONNECTING_NOTICE_DELAY_MS = 5_000;
 /** How long a green/amber outcome stays visible after the turn started. */
 export const RECOVERED_NOTICE_VISIBLE_MS = 6_000;
-export const PROVIDER_SESSION_RECOVERY_ACTIVITY_KIND = "provider.session.recovery";
-export const TURN_START_FAILED_ACTIVITY_KIND = "provider.turn.start.failed";
-/** Failure classes in-place recovery cannot fix; only a new thread continues (plan D16). */
-const FORK_ONLY_FAILURE_CLASSES = new Set([
-  "session-dead",
-  "unsafe-to-replay",
-  "provider-unavailable",
-]);
 
 export type ThreadRecoveryNoticeKind = "reconnecting" | "recovered" | "degraded" | "failed";
 /** Alert variants per AGENTS.md: blue working, green done, amber warning, red failure. */
@@ -35,10 +28,30 @@ export interface ThreadRecoveryNoticeDerivation {
   readonly nextChangeInMs: number | null;
 }
 
-interface RecoveryActivity {
-  readonly kind: string;
-  readonly payload: unknown;
-  readonly createdAt: string;
+/**
+ * When this browser first saw a request and its settlement. Every duration is measured on this
+ * one clock; server and command timestamps are never subtracted from the browser's time (D21).
+ */
+export interface TurnStartRequestClock {
+  readonly requestKey: string;
+  readonly observedAtMs: number;
+  readonly settledObservedAtMs: number | null;
+}
+
+/** Keeps the first observation of a request, and records its settlement once. */
+export function observeTurnStartRequest(
+  previous: TurnStartRequestClock | undefined,
+  request: ThreadTurnStartRequest | null | undefined,
+  nowMs: number,
+): TurnStartRequestClock | null {
+  if (!request) return null;
+  const requestKey = `${request.messageId}\0${request.requestedAt}`;
+  const current =
+    previous?.requestKey === requestKey
+      ? previous
+      : { requestKey, observedAtMs: nowMs, settledObservedAtMs: null };
+  if (request.outcome === "pending" || current.settledObservedAtMs !== null) return current;
+  return { ...current, settledObservedAtMs: nowMs };
 }
 
 const NOTICE_TONES: Record<ThreadRecoveryNoticeKind, ThreadRecoveryNoticeTone> = {
@@ -61,40 +74,36 @@ const notice = (kind: ThreadRecoveryNoticeKind, description: string): ThreadReco
   canContinueInNewThread: kind === "reconnecting" || kind === "failed",
 });
 
-const failureClassOf = (activity: RecoveryActivity | undefined) => {
-  const payload = activity?.payload as { failureClass?: unknown } | null | undefined;
-  return typeof payload?.failureClass === "string" ? payload.failureClass : undefined;
-};
+const failedNotice = (failureClass: string): ThreadRecoveryNoticeDerivation => ({
+  notice: notice(
+    "failed",
+    failureClass === "provider-unavailable"
+      ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
+      : FORK_ONLY_FAILURE_CLASSES.has(failureClass)
+        ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
+        : "The turn did not start. See the error above for details.",
+  ),
+  nextChangeInMs: null,
+});
 
-const recoveryStep = (activity: RecoveryActivity) => {
-  const payload = activity.payload as { step?: unknown; outcome?: unknown } | null;
-  return {
-    step: typeof payload?.step === "string" ? payload.step : undefined,
-    outcome: typeof payload?.outcome === "string" ? payload.outcome : undefined,
-  };
-};
-
-/** Pure state machine for the thread's reconnecting notice. */
+/**
+ * Pure state machine for the thread's reconnecting notice. A live request drives the blue and
+ * green states; a failure comes from server state, so a fork-only failure survives a reload.
+ */
 export function deriveThreadRecoveryNotice(input: {
   readonly request: ThreadTurnStartRequest | null | undefined;
-  readonly activities: ReadonlyArray<RecoveryActivity>;
+  readonly clock: TurnStartRequestClock | null;
+  readonly failure: ServerTurnFailure | null;
   readonly nowMs: number;
 }): ThreadRecoveryNoticeDerivation {
-  const { request } = input;
-  if (!request) return { notice: null, nextChangeInMs: null };
-  const requestedAtMs = Date.parse(request.requestedAt);
-  const steps = input.activities
-    .filter(
-      (activity) =>
-        activity.kind === PROVIDER_SESSION_RECOVERY_ACTIVITY_KIND &&
-        Date.parse(activity.createdAt) >= requestedAtMs,
-    )
-    .map(recoveryStep);
-  const settledAtMs = request.settledAt === null ? input.nowMs : Date.parse(request.settledAt);
-  const waitedMs = settledAtMs - requestedAtMs;
+  const { request, failure, nowMs } = input;
+  const steps = request?.recoverySteps ?? [];
+  const observedAtMs = input.clock?.observedAtMs ?? nowMs;
+  const settledAtMs = input.clock?.settledObservedAtMs ?? nowMs;
+  const waitedMs = settledAtMs - observedAtMs;
   const slow = steps.length > 0 || waitedMs >= RECONNECTING_NOTICE_DELAY_MS;
 
-  if (request.outcome === "pending") {
+  if (request?.outcome === "pending") {
     if (!slow) {
       return { notice: null, nextChangeInMs: RECONNECTING_NOTICE_DELAY_MS - waitedMs };
     }
@@ -107,29 +116,15 @@ export function deriveThreadRecoveryNotice(input: {
           : "The provider has not started this turn yet; waiting for it to respond.";
     return { notice: notice("reconnecting", description), nextChangeInMs: null };
   }
-  if (request.outcome === "failed") {
-    const latestFailure = input.activities.findLast(
-      (activity) =>
-        activity.kind === TURN_START_FAILED_ACTIVITY_KIND &&
-        Date.parse(activity.createdAt) >= requestedAtMs,
-    );
-    const failureClass = failureClassOf(latestFailure) ?? "";
-    const forkOnly = FORK_ONLY_FAILURE_CLASSES.has(failureClass);
-    if (!slow && !forkOnly) return { notice: null, nextChangeInMs: null };
-    return {
-      notice: notice(
-        "failed",
-        failureClass === "provider-unavailable"
-          ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
-          : forkOnly
-            ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
-            : "The turn did not start. See the error above for details.",
-      ),
-      nextChangeInMs: null,
-    };
+  const retried = request?.outcome === "started" && request.messageId === failure?.pendingMessageId;
+  if ((failure !== null && !retried) || request?.outcome === "failed") {
+    const failureClass = retried ? "" : (failure?.failureClass ?? "");
+    const shown =
+      FORK_ONLY_FAILURE_CLASSES.has(failureClass) || (request?.outcome === "failed" && slow);
+    return shown ? failedNotice(failureClass) : { notice: null, nextChangeInMs: null };
   }
-  if (!slow) return { notice: null, nextChangeInMs: null };
-  const remainingMs = settledAtMs + RECOVERED_NOTICE_VISIBLE_MS - input.nowMs;
+  if (!request || !slow) return { notice: null, nextChangeInMs: null };
+  const remainingMs = settledAtMs + RECOVERED_NOTICE_VISIBLE_MS - nowMs;
   if (remainingMs <= 0) return { notice: null, nextChangeInMs: null };
   const degraded = steps.some(
     (entry) => entry.step === "fresh-replay" && entry.outcome === "succeeded",

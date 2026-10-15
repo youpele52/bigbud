@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Thread } from "../../../models/types/app.types";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
+import { observeThreadTurnStartRequest } from "./ThreadRecoveryNotice.clock";
+import { deriveServerTurnFailure } from "./ThreadRecoveryNotice.failure";
 import {
   deriveThreadRecoveryNotice,
   type ThreadRecoveryNoticeTone,
@@ -18,27 +20,33 @@ const NOTICE_ICONS: Record<ThreadRecoveryNoticeTone, typeof CircleCheckIcon> = {
 
 /**
  * Blue "Reconnecting…" after 5 s without a started turn; green, amber or red outcome after.
- * While waiting or after a failure it offers "Continue in a new thread" (server-side fork).
+ * While waiting or after a failure it offers "Continue in a new thread" (server-side fork); a
+ * fork-only failure is read from server state, so the offer survives a reload.
  */
 export function ThreadRecoveryNotice({
   thread,
   onContinueInNewThread,
   continuePending = false,
 }: {
-  readonly thread: Pick<Thread, "turnStartRequest" | "activities">;
+  readonly thread: Pick<Thread, "id" | "turnStartRequest" | "messages" | "activities">;
   /** Omitted when the thread already continued in a fork. */
   readonly onContinueInNewThread?: (() => void) | undefined;
   readonly continuePending?: boolean;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const { id: threadId, turnStartRequest, messages, activities } = thread;
+  // Durations use only this browser's clock: when it first saw the request and its settlement.
+  const clock = useMemo(
+    () => observeThreadTurnStartRequest(threadId, turnStartRequest, Date.now()),
+    [threadId, turnStartRequest],
+  );
+  const failure = useMemo(
+    () => deriveServerTurnFailure({ messages, activities }),
+    [messages, activities],
+  );
   const { notice, nextChangeInMs } = useMemo(
-    () =>
-      deriveThreadRecoveryNotice({
-        request: thread.turnStartRequest,
-        activities: thread.activities,
-        nowMs,
-      }),
-    [nowMs, thread.activities, thread.turnStartRequest],
+    () => deriveThreadRecoveryNotice({ request: turnStartRequest, clock, failure, nowMs }),
+    [clock, failure, nowMs, turnStartRequest],
   );
 
   useEffect(() => {
@@ -48,7 +56,7 @@ export function ThreadRecoveryNotice({
   }, [nextChangeInMs]);
 
   // A new request restarts the clock from the current time.
-  useEffect(() => setNowMs(Date.now()), [thread.turnStartRequest]);
+  useEffect(() => setNowMs(Date.now()), [turnStartRequest]);
 
   if (!notice) return null;
   const Icon = NOTICE_ICONS[notice.tone];

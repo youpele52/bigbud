@@ -158,11 +158,19 @@ export interface Project {
 }
 
 /** Client view of the latest turn-start request; drives the reconnecting notice. */
+/** A `provider.session.recovery` step the server reported while this request was current. */
+export interface ThreadTurnStartRecoveryStep {
+  readonly step: string;
+  readonly outcome: string;
+}
+
 export interface ThreadTurnStartRequest {
   messageId: MessageId;
   requestedAt: string;
   outcome: "pending" | "started" | "failed";
   settledAt: string | null;
+  /** Attached by arrival order, never by comparing the server's and the request's clocks. */
+  recoverySteps: ReadonlyArray<ThreadTurnStartRecoveryStep>;
 }
 
 export interface Thread {

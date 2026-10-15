@@ -1,11 +1,11 @@
 import "../../../index.css";
 
-import type { MessageId, OrchestrationThreadActivity } from "@bigbud/contracts";
+import type { MessageId, OrchestrationThreadActivity, ThreadId } from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import type { ThreadTurnStartRequest } from "../../../models/types/app.types";
+import type { ChatMessage, ThreadTurnStartRequest } from "../../../models/types/app.types";
 import { ThreadRecoveryNotice } from "./ThreadRecoveryNotice";
 
 const pending = (requestedAt: string): ThreadTurnStartRequest => ({
@@ -13,6 +13,7 @@ const pending = (requestedAt: string): ThreadTurnStartRequest => ({
   requestedAt,
   outcome: "pending",
   settledAt: null,
+  recoverySteps: [],
 });
 
 describe("ThreadRecoveryNotice", () => {
@@ -26,7 +27,13 @@ describe("ThreadRecoveryNotice", () => {
     vi.setSystemTime(new Date("2026-10-15T10:00:00.000Z"));
     await render(
       <ThreadRecoveryNotice
-        thread={{ turnStartRequest: pending("2026-10-15T10:00:00.000Z"), activities: [] }}
+        thread={{
+          id: "thread-wait" as ThreadId,
+          // The request's command clock is an hour behind; the wait uses the browser clock only.
+          turnStartRequest: pending("2026-10-15T09:00:00.000Z"),
+          messages: [],
+          activities: [],
+        }}
       />,
     );
     await expect.element(page.getByText("Reconnecting…")).not.toBeInTheDocument();
@@ -40,17 +47,23 @@ describe("ThreadRecoveryNotice", () => {
     await expect.element(page.getByText("Reconnecting…")).toBeVisible();
   });
 
-  it("offers continuing in a new thread after a failure in-place recovery cannot fix", async () => {
-    const requestedAt = new Date(Date.now() - 1_000).toISOString();
+  it("offers continuing in a new thread from server state alone (after a reload)", async () => {
+    const createdAt = "2026-10-15T10:00:00.000Z";
+    const message: ChatMessage = {
+      id: "user-1" as MessageId,
+      role: "user",
+      text: "hello",
+      turnId: null,
+      createdAt,
+      streaming: false,
+    };
     const onContinue = vi.fn();
     await render(
       <ThreadRecoveryNotice
         thread={{
-          turnStartRequest: {
-            ...pending(requestedAt),
-            outcome: "failed",
-            settledAt: new Date().toISOString(),
-          },
+          id: "thread-reload" as ThreadId,
+          turnStartRequest: undefined,
+          messages: [message],
           activities: [
             {
               id: "failure-1",
@@ -59,7 +72,7 @@ describe("ThreadRecoveryNotice", () => {
               summary: "Provider turn start failed",
               payload: { failureClass: "session-dead" },
               turnId: null,
-              createdAt: new Date(Date.now() - 500).toISOString(),
+              createdAt,
             } as unknown as OrchestrationThreadActivity,
           ],
         }}
@@ -72,26 +85,21 @@ describe("ThreadRecoveryNotice", () => {
   });
 
   it("shows the amber fresh-session outcome after a recovered start", async () => {
-    const requestedAt = new Date(Date.now() - 2_000).toISOString();
-    const activity = (outcome: string) =>
-      ({
-        id: `activity-${outcome}`,
-        tone: "info",
-        kind: "provider.session.recovery",
-        summary: "Recovery",
-        payload: { step: "fresh-replay", outcome },
-        turnId: null,
-        createdAt: new Date(Date.now() - 1_000).toISOString(),
-      }) as unknown as OrchestrationThreadActivity;
     await render(
       <ThreadRecoveryNotice
         thread={{
+          id: "thread-amber" as ThreadId,
           turnStartRequest: {
-            ...pending(requestedAt),
+            ...pending("2026-10-15T10:00:00.000Z"),
             outcome: "started",
-            settledAt: new Date().toISOString(),
+            settledAt: "2026-10-15T10:00:02.000Z",
+            recoverySteps: [
+              { step: "fresh-replay", outcome: "started" },
+              { step: "fresh-replay", outcome: "succeeded" },
+            ],
           },
-          activities: [activity("started"), activity("succeeded")],
+          messages: [],
+          activities: [],
         }}
       />,
     );

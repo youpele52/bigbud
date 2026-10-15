@@ -1,7 +1,8 @@
-import type { CommandId, MessageId, ThreadId } from "@bigbud/contracts";
+import type { CommandId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCarryToContinuedThreadCommand,
   buildContinueInNewThreadCommand,
   deriveForkOriginNotice,
   deriveSourceForkNotice,
@@ -9,6 +10,16 @@ import {
 
 const activity = (kind: string, createdAt: string, payload: unknown, id = `${kind}-${createdAt}`) =>
   ({ id, kind, payload, createdAt, tone: "info", summary: kind, turnId: null }) as never;
+const user = (id: string, createdAt: string) =>
+  ({ id, role: "user", turnId: null, createdAt }) as never;
+const failed = (id: string, createdAt: string, failureClass: string) =>
+  activity("provider.turn.start.failed", createdAt, { failureClass }, id);
+const autoFork = (createdAt: string, pendingMessageId: string) =>
+  activity("thread.forked", createdAt, {
+    forkThreadId: "auto-fork",
+    reason: "recovery-failed",
+    pendingMessageId,
+  });
 
 describe("fork notices", () => {
   it("names the source in a forked thread and explains the pending message", () => {
@@ -28,38 +39,99 @@ describe("fork notices", () => {
   });
 
   it("links a source thread to its newest fork made after the latest user message", () => {
-    const thread = {
-      messages: [{ role: "user", createdAt: "2026-10-15T10:00:00.000Z" }],
-      activities: [
-        activity("thread.forked", "2026-10-15T09:00:00.000Z", { forkThreadId: "old" }),
-        activity("thread.forked", "2026-10-15T10:00:05.000Z", {
-          forkThreadId: "fork-2",
-          reason: "recovery-failed",
-        }),
-      ],
-    } as never;
-    expect(deriveSourceForkNotice(thread)).toEqual({ forkThreadId: "fork-2", automatic: true });
-    expect(
-      deriveSourceForkNotice({
-        messages: [{ role: "user", createdAt: "2026-10-15T11:00:00.000Z" }],
-        activities: (thread as { activities: unknown[] }).activities,
-      } as never),
-    ).toBeNull();
+    const activities = [
+      activity("thread.forked", "2026-10-15T09:00:00.000Z", {
+        forkThreadId: "old",
+        reason: "manual",
+      }),
+      activity("thread.forked", "2026-10-15T10:00:05.000Z", {
+        forkThreadId: "fork-2",
+        reason: "manual",
+      }),
+    ];
+    const thread = { messages: [user("m-1", "2026-10-15T10:00:00.000Z")], activities } as never;
+    expect(deriveSourceForkNotice(thread)).toEqual({
+      forkThreadId: "fork-2",
+      automatic: false,
+      carry: null,
+    });
+    const later = { messages: [user("m-2", "2026-10-15T11:00:00.000Z")], activities } as never;
+    expect(deriveSourceForkNotice(later)).toBeNull();
   });
 
-  it("builds a manual fork command for the pending request and its failure", () => {
+  it("keeps linking the automatic fork while the source stays dead and offers the carry", () => {
+    const thread = {
+      id: "source-1",
+      messages: [user("m-1", "2026-10-15T10:00:00.000Z"), user("m-2", "2026-10-15T11:00:00.000Z")],
+      activities: [
+        failed("failure-1", "2026-10-15T10:00:00.000Z", "session-dead"),
+        autoFork("2026-10-15T10:00:01.000Z", "m-1"),
+        failed("failure-2", "2026-10-15T11:00:00.000Z", "session-dead"),
+      ],
+    } as never;
+    const notice = deriveSourceForkNotice(thread);
+    expect(notice).toEqual({
+      forkThreadId: "auto-fork",
+      automatic: true,
+      carry: { pendingMessageId: "m-2", failureEventId: "failure-2" },
+    });
+    expect(
+      buildCarryToContinuedThreadCommand({
+        sourceThreadId: "source-1" as ThreadId,
+        forkThreadId: notice!.forkThreadId,
+        carry: notice!.carry!,
+        commandId: "cmd-carry" as CommandId,
+        createdAt: "2026-10-15T11:01:00.000Z",
+      }),
+    ).toEqual({
+      type: "thread.fork",
+      commandId: "cmd-carry",
+      sourceThreadId: "source-1",
+      threadId: "auto-fork",
+      reason: "manual",
+      failureEventId: "failure-2",
+      pendingMessageId: "m-2",
+      createdAt: "2026-10-15T11:01:00.000Z",
+    });
+  });
+
+  it("offers the carry even when the server's fork timestamp is ahead of the browser's message", () => {
+    const thread = {
+      messages: [user("m-1", "2026-10-15T10:00:00.000Z"), user("m-2", "2026-10-15T11:00:00.000Z")],
+      activities: [
+        autoFork("2026-10-15T12:00:00.000Z", "m-1"),
+        failed("failure-2", "2026-10-15T11:00:00.000Z", "session-dead"),
+      ],
+    } as never;
+    expect(deriveSourceForkNotice(thread)?.carry).toEqual({
+      pendingMessageId: "m-2",
+      failureEventId: "failure-2",
+    });
+  });
+
+  it("never offers the carry for an uncertain message", () => {
+    const thread = {
+      messages: [user("m-1", "2026-10-15T10:00:00.000Z"), user("m-2", "2026-10-15T11:00:00.000Z")],
+      activities: [
+        autoFork("2026-10-15T10:00:01.000Z", "m-1"),
+        failed("failure-2", "2026-10-15T11:00:00.000Z", "unsafe-to-replay"),
+      ],
+    } as never;
+    expect(deriveSourceForkNotice(thread)).toMatchObject({
+      forkThreadId: "auto-fork",
+      carry: null,
+    });
+  });
+
+  it("builds the manual fork command from server state, without a client request (reload)", () => {
     const command = buildContinueInNewThreadCommand({
       thread: {
         id: "source-1" as ThreadId,
-        turnStartRequest: {
-          messageId: "user-9" as MessageId,
-          requestedAt: "2026-10-15T10:00:00.000Z",
-          outcome: "failed",
-          settledAt: "2026-10-15T10:00:09.000Z",
-        },
+        turnStartRequest: undefined,
+        messages: [user("user-9", "2026-10-15T10:00:00.000Z")],
         activities: [
-          activity("provider.turn.start.failed", "2026-10-15T09:00:00.000Z", {}, "old-failure"),
-          activity("provider.turn.start.failed", "2026-10-15T10:00:09.000Z", {}, "failure-9"),
+          failed("old-failure", "2026-10-15T09:00:00.000Z", "session-dead"),
+          failed("failure-9", "2026-10-15T10:00:00.000Z", "unsafe-to-replay"),
         ],
       },
       commandId: "cmd-1" as CommandId,

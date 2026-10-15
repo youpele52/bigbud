@@ -28,6 +28,7 @@ import {
 } from "./events.store.threads.runtime.messages";
 import {
   clearPendingTurnStartRequest,
+  recordTurnStartRecoveryStep,
   settleTurnStartRequest,
 } from "./events.store.threads.turnStartRequest";
 
@@ -358,6 +359,12 @@ export function applyThreadRuntimeEvent(
           {
             ...thread,
             activities,
+            // A redelivered activity (same id) is not a new step.
+            turnStartRequest: thread.activities.some(
+              (activity) => activity.id === event.payload.activity.id,
+            )
+              ? thread.turnStartRequest
+              : recordTurnStartRecoveryStep(thread.turnStartRequest, event.payload.activity),
             error: providerTurnStartError ?? thread.error,
             updatedAt: event.occurredAt,
           },

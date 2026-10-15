@@ -186,7 +186,10 @@ export const withTurnStartRecovery = <A, E, R>(input: {
         });
         yield* providerService.stopSession({ threadId });
         input.states.delete(threadId);
-        return yield* input.attempt(undefined, newTurnStartDispatchPhase());
+        // Same phase-checked path: a retry that fails after dispatch is reported, never resent.
+        const retried = yield* tracked();
+        if (Result.isSuccess(retried.result)) return retried.result.success;
+        return yield* Effect.fail(retried.result.failure);
       });
     }),
   );

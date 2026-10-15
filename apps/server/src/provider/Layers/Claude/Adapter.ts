@@ -27,6 +27,7 @@ import {
   type ClaudeSessionContext,
   type ClaudeTurnState,
 } from "./Adapter.types.ts";
+import { isLiveClaudeSession } from "./Adapter.sessionLookup.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
@@ -100,14 +101,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         new ProviderAdapterSessionNotFoundError({
           provider: PROVIDER,
           threadId,
+          failureClass: "session-dead",
         }),
       );
     }
-    if (context.stopped || context.session.status === "closed") {
+    // Checked before anything is written, so the turn never started (plan D12).
+    if (!isLiveClaudeSession(context)) {
       return Effect.fail(
         new ProviderAdapterSessionClosedError({
           provider: PROVIDER,
           threadId,
+          failureClass: "session-dead",
         }),
       );
     }
@@ -328,7 +332,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const hasSession: ClaudeAdapterShape["hasSession"] = (threadId) =>
     Effect.sync(() => {
       const context = sessions.get(threadId);
-      return context !== undefined && !context.stopped;
+      return context !== undefined && isLiveClaudeSession(context);
     });
 
   const stopAll: ClaudeAdapterShape["stopAll"] = () =>

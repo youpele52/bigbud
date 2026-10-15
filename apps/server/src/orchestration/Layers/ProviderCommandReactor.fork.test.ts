@@ -64,6 +64,23 @@ describe("ProviderCommandReactor automatic fork fallback", () => {
     expect(forkSend).toContain("second question");
   });
 
+  it("forks at most once while the source stays dead; later failed sends keep that fork", async () => {
+    const harness = await createHarness({ sessionRecovery: "resume-restart" });
+    await completeFirstTurn(harness);
+    harness.sendTurn.mockImplementation(sessionDead as never);
+    await dispatchTurn(harness, "second", "second question");
+    await waitFor(async () => (await forks(harness)).length > 0);
+    await quiet();
+    await dispatchTurn(harness, "third", "third question");
+    await waitFor(async () => (await failures(harness)).length > 1);
+    await quiet();
+
+    expect(await forks(harness)).toHaveLength(1);
+    // The later message stays in the source; the user decides whether it follows the fork.
+    const fork = (await forks(harness))[0]!;
+    expect(fork.messages.some((message) => message.text === "third question")).toBe(false);
+  });
+
   it("never forks an automatic fork again before it answered on its own (clock-independent)", () => {
     const future = new Date(Date.now() + 3_600_000).toISOString();
     const fork = {

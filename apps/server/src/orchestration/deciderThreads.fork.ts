@@ -28,6 +28,7 @@ import {
   requireThreadAbsent,
 } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+import { decideForkPendingCarry, findCarryTargetFork } from "./deciderThreads.fork.carry.ts";
 import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
 import {
   copyForkActivities,
@@ -51,6 +52,10 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
   readonly readModel: OrchestrationReadModel;
 }): Effect.fn.Return<ReadonlyArray<DecidedEvent>, OrchestrationCommandInvariantError> {
   const source = yield* requireThread({ readModel, command, threadId: command.sourceThreadId });
+  const carryTarget = findCarryTargetFork({ readModel, source, command });
+  if (carryTarget !== undefined) {
+    return yield* decideForkPendingCarry({ command, readModel, source, fork: carryTarget });
+  }
   if (isForkAlreadyRecorded({ readModel, source, command })) return [];
   yield* requireThreadReadyForMutation({ thread: source, command });
   yield* requireProjectNotDeleting({ readModel, command, projectId: source.projectId });

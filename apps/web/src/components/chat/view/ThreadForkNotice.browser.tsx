@@ -8,8 +8,9 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
 import { page } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import type { Thread } from "../../../models/types/app.types";
@@ -17,8 +18,13 @@ import { ThreadForkNotice } from "./ThreadForkNotice";
 
 type NoticeThread = Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
 
-async function renderAt(thread: NoticeThread) {
-  const root = createRootRoute({ component: () => <ThreadForkNotice thread={thread} /> });
+async function renderAt(
+  thread: NoticeThread,
+  onCarry?: ComponentProps<typeof ThreadForkNotice>["onCarryToContinuedThread"],
+) {
+  const root = createRootRoute({
+    component: () => <ThreadForkNotice thread={thread} onCarryToContinuedThread={onCarry} />,
+  });
   const index = createRoute({ getParentRoute: () => root, path: "/" });
   const threadRoute = createRoute({ getParentRoute: () => root, path: "/$threadId" });
   const router = createRouter({
@@ -29,6 +35,9 @@ async function renderAt(thread: NoticeThread) {
   await render(<RouterProvider router={router} />);
   return router;
 }
+
+const activity = (id: string, kind: string, createdAt: string, payload: unknown) =>
+  ({ id, tone: "info", kind, summary: kind, payload, turnId: null, createdAt }) as never;
 
 describe("ThreadForkNotice", () => {
   afterEach(() => {
@@ -72,7 +81,40 @@ describe("ThreadForkNotice", () => {
     await expect
       .element(page.getByText("This thread could not be resumed and continued in a new thread"))
       .toBeVisible();
-    await page.getByRole("link", { name: "Open the new thread" }).click();
+    await page.getByRole("link", { name: "Open the continued thread" }).click();
     expect(router.state.location.pathname).toBe("/fork-1");
+  });
+
+  it("offers sending a later never-admitted message to the existing automatic fork", async () => {
+    const onCarry = vi.fn();
+    const at = "2026-10-15T10:00:00.000Z";
+    const later = "2026-10-15T11:00:00.000Z";
+    await renderAt(
+      {
+        messages: [
+          { id: "m-1", role: "user", text: "a", turnId: null, createdAt: at, streaming: false },
+          { id: "m-2", role: "user", text: "b", turnId: null, createdAt: later, streaming: false },
+        ] as never,
+        activities: [
+          activity("forked-1", "thread.forked", at, {
+            forkThreadId: "fork-1",
+            reason: "recovery-failed",
+            pendingMessageId: "m-1",
+          }),
+          activity("failure-2", "provider.turn.start.failed", later, {
+            failureClass: "session-dead",
+          }),
+        ],
+      },
+      onCarry,
+    );
+    await expect
+      .element(page.getByRole("link", { name: "Open the continued thread" }))
+      .toBeVisible();
+    await page.getByRole("button", { name: "Send this message to the continued thread" }).click();
+    expect(onCarry).toHaveBeenCalledWith("fork-1", {
+      pendingMessageId: "m-2",
+      failureEventId: "failure-2",
+    });
   });
 });

@@ -1,12 +1,13 @@
-import type { CommandId, ThreadId } from "@bigbud/contracts";
+import type { CommandId, EventId, MessageId, ThreadId } from "@bigbud/contracts";
 import {
   THREAD_FORKED_ACTIVITY_KIND,
   type ThreadForkCommand,
   type ThreadForkOrigin,
 } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
+import { findLiveAutomaticFork } from "@bigbud/shared/threadFork";
 
 import type { Thread } from "../../../models/types/app.types";
-import { TURN_START_FAILED_ACTIVITY_KIND } from "./ThreadRecoveryNotice.logic";
+import { deriveServerTurnFailure } from "./ThreadRecoveryNotice.failure";
 
 export interface ForkOriginNotice {
   readonly sourceThreadId: ThreadId;
@@ -38,59 +39,120 @@ export function deriveForkOriginNotice(input: {
   };
 }
 
+/** A later never-admitted message the user may send to the source's existing fork (D20). */
+export interface ForkCarry {
+  readonly pendingMessageId: MessageId;
+  readonly failureEventId: string;
+}
+
 export interface SourceForkNotice {
   readonly forkThreadId: ThreadId;
   readonly automatic: boolean;
+  readonly carry: ForkCarry | null;
 }
+
+type LineageThread = Pick<Thread, "messages" | "activities">;
 
 const payloadOf = (activity: { readonly payload: unknown }) =>
   typeof activity.payload === "object" && activity.payload !== null
     ? (activity.payload as Record<string, unknown>)
     : {};
 
-/** Shown in a source: links the newest fork made since the latest user message. */
-export function deriveSourceForkNotice(
-  thread: Pick<Thread, "messages" | "activities">,
-): SourceForkNotice | null {
-  const latestUserAt = thread.messages.findLast((message) => message.role === "user")?.createdAt;
-  const forked = thread.activities.findLast(
+/** Only a failure that proves the message never reached a provider may follow the fork. */
+function deriveForkCarry(thread: LineageThread): ForkCarry | null {
+  const failure = deriveServerTurnFailure(thread);
+  if (failure?.failureClass !== "session-dead") return null;
+  const carried = thread.activities.some(
     (activity) =>
       activity.kind === THREAD_FORKED_ACTIVITY_KIND &&
+      payloadOf(activity).pendingMessageId === failure.pendingMessageId,
+  );
+  return carried
+    ? null
+    : { pendingMessageId: failure.pendingMessageId, failureEventId: failure.failureEventId };
+}
+
+/**
+ * Shown in a source: links the newest manual fork made since the latest user message (both on
+ * the browser's command clock), else the automatic fork the source continued in while it stays
+ * dead (one automatic fork, D20; decided by message order, not the server's fork timestamp).
+ */
+export function deriveSourceForkNotice(thread: LineageThread): SourceForkNotice | null {
+  const latestUserAt = thread.messages.findLast((message) => message.role === "user")?.createdAt;
+  const manual = thread.activities.findLast(
+    (activity) =>
+      activity.kind === THREAD_FORKED_ACTIVITY_KIND &&
+      payloadOf(activity).reason === "manual" &&
+      typeof payloadOf(activity).forkThreadId === "string" &&
       (latestUserAt === undefined || activity.createdAt >= latestUserAt),
   );
-  if (!forked) return null;
-  const payload = payloadOf(forked);
-  if (typeof payload.forkThreadId !== "string") return null;
+  if (manual !== undefined) {
+    return {
+      forkThreadId: payloadOf(manual).forkThreadId as ThreadId,
+      automatic: false,
+      carry: null,
+    };
+  }
+  const live = findLiveAutomaticFork(thread);
+  if (live === null) return null;
   return {
-    forkThreadId: payload.forkThreadId as ThreadId,
-    automatic: payload.reason !== "manual",
+    forkThreadId: live.forkThreadId as ThreadId,
+    automatic: true,
+    carry: deriveForkCarry(thread),
   };
 }
 
-/** The manual "Continue in a new thread" command for the source's pending request. */
+type ContinueSource = Pick<Thread, "id" | "turnStartRequest" | "messages" | "activities">;
+
+/**
+ * The message "Continue in a new thread" takes along. It comes from server state, so it survives a
+ * reload; a live request still waiting supplies it before any failure exists.
+ */
+export function resolveContinuePendingMessageId(thread: ContinueSource): MessageId | undefined {
+  const failure = deriveServerTurnFailure(thread);
+  const request = thread.turnStartRequest;
+  return (
+    failure?.pendingMessageId ?? (request?.outcome === "pending" ? request.messageId : undefined)
+  );
+}
+
+/** The manual "Continue in a new thread" command for the source's pending message and failure. */
 export function buildContinueInNewThreadCommand(input: {
-  readonly thread: Pick<Thread, "id" | "turnStartRequest" | "activities">;
+  readonly thread: ContinueSource;
   readonly commandId: CommandId;
   readonly threadId: ThreadId;
   readonly createdAt: string;
 }): ThreadForkCommand {
-  const request = input.thread.turnStartRequest ?? null;
-  const failure =
-    request === null
-      ? undefined
-      : input.thread.activities.findLast(
-          (activity) =>
-            activity.kind === TURN_START_FAILED_ACTIVITY_KIND &&
-            activity.createdAt >= request.requestedAt,
-        );
+  const failure = deriveServerTurnFailure(input.thread);
+  const pendingMessageId = resolveContinuePendingMessageId(input.thread);
   return {
     type: "thread.fork",
     commandId: input.commandId,
     sourceThreadId: input.thread.id,
     threadId: input.threadId,
     reason: "manual",
-    ...(failure ? { failureEventId: failure.id } : {}),
-    ...(request && request.outcome !== "started" ? { pendingMessageId: request.messageId } : {}),
+    ...(failure ? { failureEventId: failure.failureEventId as EventId } : {}),
+    ...(pendingMessageId !== undefined ? { pendingMessageId } : {}),
+    createdAt: input.createdAt,
+  };
+}
+
+/** "Send this message to the continued thread": carry it into the existing fork (D20). */
+export function buildCarryToContinuedThreadCommand(input: {
+  readonly sourceThreadId: ThreadId;
+  readonly forkThreadId: ThreadId;
+  readonly carry: ForkCarry;
+  readonly commandId: CommandId;
+  readonly createdAt: string;
+}): ThreadForkCommand {
+  return {
+    type: "thread.fork",
+    commandId: input.commandId,
+    sourceThreadId: input.sourceThreadId,
+    threadId: input.forkThreadId,
+    reason: "manual",
+    failureEventId: input.carry.failureEventId as EventId,
+    pendingMessageId: input.carry.pendingMessageId,
     createdAt: input.createdAt,
   };
 }

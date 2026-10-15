@@ -1,4 +1,4 @@
-import { MessageId, TurnId } from "@bigbud/contracts";
+import { EventId, MessageId, TurnId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import { applyOrchestrationEvents } from "./events.store";
@@ -42,6 +42,7 @@ describe("turn-start request tracking for the reconnecting notice", () => {
       requestedAt: "2026-10-15T10:00:00.000Z",
       outcome: "pending",
       settledAt: null,
+      recoverySteps: [],
     });
   });
 
@@ -90,5 +91,37 @@ describe("turn-start request tracking for the reconnecting notice", () => {
       createdAt: "2026-10-15T10:00:02.000Z",
     });
     expect(request([requested, interrupt])).toBeNull();
+  });
+
+  it("attaches recovery steps to the current request by order, never by comparing clocks", () => {
+    // The server clock is an hour behind the request's command clock; the step still belongs here.
+    const step = (id: string, stepName: string, outcome: string) =>
+      makeEvent("thread.activity-appended", {
+        threadId: thread.id,
+        activity: {
+          id: EventId.makeUnsafe(id),
+          tone: "info",
+          kind: "provider.session.recovery",
+          summary: "Recovery step",
+          payload: { step: stepName, outcome },
+          turnId: null,
+          createdAt: "2026-10-15T09:00:00.000Z",
+        },
+      });
+    expect(request([step("early", "revive", "started")])).toBeUndefined();
+    expect(
+      request([
+        requested,
+        step("a", "fresh-replay", "started"),
+        session("running", "turn-1"),
+        step("b", "fresh-replay", "succeeded"),
+      ]),
+    ).toMatchObject({
+      outcome: "started",
+      recoverySteps: [
+        { step: "fresh-replay", outcome: "started" },
+        { step: "fresh-replay", outcome: "succeeded" },
+      ],
+    });
   });
 });

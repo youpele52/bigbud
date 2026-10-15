@@ -14,6 +14,7 @@ import {
   type OrchestrationThread,
   ThreadId,
 } from "@bigbud/contracts";
+import { findLiveAutomaticFork } from "@bigbud/shared/threadFork";
 import { Cause, Effect } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
@@ -59,7 +60,16 @@ export function makeRequestAutomaticFork(input: {
         "history",
       );
       if (!source || isUnprovenAutomaticFork(source)) return;
-      // A fork never switches provider, so an unavailable provider cannot continue either.
+      // At most one automatic fork while the source stays dead (D20): later failed sends keep
+      // that fork, and the user decides whether their message follows it.
+      const live = findLiveAutomaticFork(source);
+      if (live !== null) {
+        return yield* Effect.logInfo("source already continued in an automatic fork", {
+          threadId: request.sourceThreadId,
+          forkThreadId: live.forkThreadId,
+        });
+      }
+      // An automatic fork keeps the provider, so an unavailable provider cannot continue either.
       const available = yield* input.providerService
         .getCapabilities(source.modelSelection.provider)
         .pipe(

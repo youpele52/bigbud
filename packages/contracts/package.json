@@ -35,6 +35,7 @@
     },
     "./orchestration/*": "./src/orchestration/*",
     "./orchestration/orchestration.catalog": "./src/orchestration/orchestration.catalog.ts",
+    "./orchestration/orchestration.fork": "./src/orchestration/orchestration.fork.ts",
     "./orchestration/orchestration.search": "./src/orchestration/orchestration.search.ts",
     "./orchestration/orchestration.provider": "./src/orchestration/orchestration.provider.ts",
     "./orchestration/providerTurnLiveness": "./src/orchestration/providerTurnLiveness.ts",

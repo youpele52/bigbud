@@ -17,6 +17,7 @@ import {
   ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../../Errors.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CliProxyAdapter, type CliProxyAdapterShape } from "../../Services/CliProxy/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
@@ -83,21 +84,17 @@ function requireCliProxyModelSelection(
   return Effect.succeed({ provider: PROVIDER, model: candidate.model.trim() });
 }
 
-function requireCliProxySession(
+export function requireCliProxySession(
   sessions: ReadonlyArray<ProviderSession>,
   threadId: ThreadId,
 ): Effect.Effect<ProviderSession, ProviderAdapterSessionNotFoundError> {
-  const session = sessions.find(
-    (candidate) => candidate.threadId === threadId && candidate.status !== "closed",
-  );
-  return session
-    ? Effect.succeed(session)
-    : Effect.fail(
-        new ProviderAdapterSessionNotFoundError({
-          provider: PROVIDER,
-          threadId,
-        }),
-      );
+  return requireLiveAdapterSession({
+    provider: PROVIDER,
+    threadId,
+    session: sessions.find(
+      (candidate) => candidate.threadId === threadId && candidate.status !== "closed",
+    ),
+  });
 }
 
 export function toClaudeSendTurnInput(input: ProviderSendTurnInput): ProviderSendTurnInput {

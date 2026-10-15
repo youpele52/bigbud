@@ -1,21 +1,34 @@
+import type { ThreadId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { GitForkIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import { deriveForkOriginNotice, deriveSourceForkNotice } from "./ThreadForkNotice.logic";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { Button } from "../../ui/button";
+import {
+  deriveForkOriginNotice,
+  deriveSourceForkNotice,
+  type ForkCarry,
+} from "./ThreadForkNotice.logic";
 
 const LINK_CLASS = "font-medium text-foreground underline underline-offset-2 hover:no-underline";
 
 /**
  * Fork lineage notices: a fork names its source (with a link), and a source links the fork it
- * continued in. Blue (info): informational, nothing failed in this thread.
+ * continued in. Blue (info): informational. While the source stays dead, a later message that
+ * never reached the provider may follow the existing fork, only when the user asks (D20).
  */
 export function ThreadForkNotice({
   thread,
+  onCarryToContinuedThread,
+  carryPending = false,
 }: {
   readonly thread: Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
+  readonly onCarryToContinuedThread?:
+    | ((forkThreadId: ThreadId, carry: ForkCarry) => void)
+    | undefined;
+  readonly carryPending?: boolean;
 }) {
   const origin = useMemo(
     () =>
@@ -28,6 +41,7 @@ export function ThreadForkNotice({
     [messages, activities],
   );
   if (!origin && !sourceFork) return null;
+  const carry = sourceFork?.carry ?? null;
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
       {origin ? (
@@ -59,9 +73,22 @@ export function ThreadForkNotice({
               params={{ threadId: sourceFork.forkThreadId }}
               className={LINK_CLASS}
             >
-              Open the new thread
+              Open the continued thread
             </Link>
+            {carry ? " Your latest message did not reach the provider." : null}
           </AlertDescription>
+          {carry && onCarryToContinuedThread ? (
+            <AlertAction>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={carryPending}
+                onClick={() => onCarryToContinuedThread(sourceFork.forkThreadId, carry)}
+              >
+                Send this message to the continued thread
+              </Button>
+            </AlertAction>
+          ) : null}
         </Alert>
       ) : null}
     </div>

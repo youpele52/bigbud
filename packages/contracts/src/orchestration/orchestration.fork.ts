@@ -54,7 +54,10 @@ export const ThreadForkCommand = Schema.Struct({
   reason: ThreadForkReason,
   failureEventId: Schema.optional(EventId),
   pendingMessageId: Schema.optional(MessageId),
-  /** Same provider as the source only; a fork never switches provider. */
+  /**
+   * Defaults to the source's selection. An automatic fork keeps the source provider; a manual
+   * fork may switch provider with the user's explicit selection.
+   */
   modelSelection: Schema.optional(ModelSelection),
   createdAt: IsoDateTime,
 });

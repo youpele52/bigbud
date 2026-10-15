@@ -80,6 +80,10 @@
       "types": "./src/providerLifecycle.ts",
       "import": "./src/providerLifecycle.ts"
     },
+    "./threadFork": {
+      "types": "./src/threadFork.ts",
+      "import": "./src/threadFork.ts"
+    },
     "./providerAttachments": {
       "types": "./src/providerAttachments.ts",
       "import": "./src/providerAttachments.ts"
