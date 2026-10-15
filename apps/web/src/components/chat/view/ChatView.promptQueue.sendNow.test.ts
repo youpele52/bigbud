@@ -1,9 +1,10 @@
 import { CommandId, MessageId, ThreadId, TurnId } from "@bigbud/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildSendNowFlushCommand,
   buildSendNowInterruptCommand,
+  sendNowQueuedPrompts,
 } from "./ChatView.promptQueue.logic";
 
 describe("Send now interrupt intent", () => {
@@ -46,5 +47,51 @@ describe("Send now on an idle thread", () => {
       userRelease: true,
       createdAt: "2026-08-11T00:00:00.000Z",
     });
+  });
+});
+
+describe("Send now persists the composer's settings first", () => {
+  const ids = [MessageId.makeUnsafe("held")];
+  const run = (overrides: Partial<Parameters<typeof sendNowQueuedPrompts>[0]>) => {
+    const order: string[] = [];
+    const calls = {
+      interrupt: vi.fn(async () => void order.push("interrupt")),
+      flush: vi.fn(async () => void order.push("flush")),
+      onError: vi.fn(),
+    };
+    const done = sendNowQueuedPrompts({
+      queuedPromptIds: ids,
+      activeTurnInProgress: false,
+      persistSettingsBeforeRelease: async () => {
+        await Promise.resolve();
+        order.push("persist");
+      },
+      ...calls,
+      ...overrides,
+    });
+    return { done, order, calls };
+  };
+
+  it("awaits the persist before the release flush", async () => {
+    const { done, order, calls } = run({});
+    await done;
+    expect(order).toEqual(["persist", "flush"]);
+    expect(calls.flush).toHaveBeenCalledWith(ids);
+  });
+
+  it("awaits the persist before an interrupt whose settlement flushes later", async () => {
+    const { done, order } = run({ activeTurnInProgress: true });
+    await done;
+    expect(order).toEqual(["persist", "interrupt"]);
+  });
+
+  it("sends nothing and reports the error when persisting fails", async () => {
+    const { done, calls } = run({
+      persistSettingsBeforeRelease: () => Promise.reject(new Error("model update rejected")),
+    });
+    await done;
+    expect(calls.flush).not.toHaveBeenCalled();
+    expect(calls.interrupt).not.toHaveBeenCalled();
+    expect(calls.onError).toHaveBeenCalledWith("model update rejected");
   });
 });

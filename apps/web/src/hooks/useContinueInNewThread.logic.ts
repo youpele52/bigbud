@@ -4,11 +4,13 @@ import { THREAD_FORKED_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orc
 import type { Thread } from "../models/types/app.types";
 import { useStore } from "../stores/main";
 
-type NavigationThread = Pick<Thread, "id" | "activities">;
+type NavigationThread = Pick<Thread, "id" | "activities" | "deletingAt">;
 /** Loaded threads plus the sidebar summaries, which also list threads not loaded in full. */
 interface NavigationState {
   readonly threads: ReadonlyArray<NavigationThread>;
-  readonly sidebarThreadsById?: Readonly<Record<string, unknown>> | undefined;
+  readonly sidebarThreadsById?:
+    | Readonly<Record<string, { readonly deletingAt?: string | null } | undefined>>
+    | undefined;
 }
 interface ThreadStore {
   readonly getState: () => NavigationState;
@@ -19,6 +21,15 @@ interface ThreadStore {
 export interface ContinuedForkRequest {
   readonly pendingMessageId?: string | undefined;
   readonly failureEventId?: string | undefined;
+}
+
+/** The store marks a thread being deleted; a fully deleted one is simply gone. */
+function isThreadDeleting(state: NavigationState, threadId: string): boolean {
+  const deletingAt =
+    state.threads.find((thread) => thread.id === threadId)?.deletingAt ??
+    state.sidebarThreadsById?.[threadId]?.deletingAt ??
+    null;
+  return deletingAt !== null;
 }
 
 /** The newest fork the source recorded for this same message or failure. */
@@ -58,7 +69,11 @@ export function resolveContinuedThreadId(
     input.threads.some((thread) => thread.id === threadId);
   if (known(input.requestedThreadId)) return input.requestedThreadId;
   const source = input.threads.find((thread) => thread.id === input.sourceThreadId);
-  return recordedForkFor(source, input.command, known);
+  return recordedForkFor(
+    source,
+    input.command,
+    (threadId) => known(threadId) && !isThreadDeleting(input, threadId),
+  );
 }
 
 /** Resolves once the store shows the continued thread, or null after `timeoutMs`. */
@@ -85,10 +100,15 @@ export function waitForContinuedThread(
       if (target) finish(target);
     });
     // The server recorded a fork for this message that this browser has not loaded: open it (the
-    // route loads it) instead of reporting that nothing appeared.
+    // route loads it) instead of reporting that nothing appeared. A fork the store shows as being
+    // deleted is skipped. A fully deleted fork leaves no trace in the store, so if the new fork's
+    // events take longer than the wait, that deleted fork can still be opened (accepted residual).
     const timer = globalThis.setTimeout(() => {
-      const source = store.getState().threads.find((thread) => thread.id === input.sourceThreadId);
-      finish(recordedForkFor(source, input.command, () => true));
+      const state = store.getState();
+      const source = state.threads.find((thread) => thread.id === input.sourceThreadId);
+      finish(
+        recordedForkFor(source, input.command, (threadId) => !isThreadDeleting(state, threadId)),
+      );
     }, input.timeoutMs ?? 5_000);
   });
 }

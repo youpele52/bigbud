@@ -198,6 +198,17 @@ Resolved (2026-10-15): "Send now" releases a held queue through the user-only `u
 - Red: `expected [] to deeply equal [ …(3) ]` (held fork) and `expected undefined to be 'thread.queued-prompts-flushed'` (after Stop) (`dtr-u-red.log`); web `buildSendNowFlushCommand is not a function` (`dtr-u-red-web.log`).
 - Green: `deciderThreads.turn.queue.userRelease.test.ts` (4: held fork with the current model, after Stop, no flag still `[]`, a reservation or a running thread still `[]`), `ChatView.promptQueue.sendNow.test.ts`, and `ChatView.promptQueue.rejections.browser.tsx`.
 
+Blocking review of `cf2c96fd8` (2026-10-15):
+
+- **"Send now" ignored the fork composer's model.**
+  - Red: `sendNowQueuedPrompts` did not exist, so all 3 ordering tests failed (`dtr-v1-red-web.log`).
+  - Green: `ChatView.promptQueue.sendNow.test.ts`. The save is awaited before the flush and before the interrupt; a failed save sends nothing and reports the error.
+  - `deciderThreads.fork.heldModel.test.ts` now follows the real path: `thread.meta.update`, then a flush with `userRelease` while `queueHold` is still set. The turn starts on `claudeAgent`.
+  - Browser: the `thread.meta.update` dispatch comes before the flush (`ChatView.promptQueue.rejections.browser.tsx`).
+- **The fallback could open a deleted fork.**
+  - Red: `expected 'deleting-fork' to be null` (`dtr-v2-red.log`); green afterwards.
+  - Forks marked `deletingAt` are skipped. A fully deleted fork remains an accepted residual (see the plan).
+
 ## Final summary: acceptance criteria → tests
 
 | AC    | Tests                                                                                                                                                                                                                                                                         |

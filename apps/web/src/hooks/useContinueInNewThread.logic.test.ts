@@ -59,6 +59,23 @@ describe("continued thread navigation target", () => {
     ).resolves.toBe("unloaded-fork");
   });
 
+  it("never opens a fork the store shows as being deleted, before or after the wait", async () => {
+    const deleting = forked("deleting-fork", { pendingMessageId: "m-2" });
+    const marked = { id: "deleting-fork", activities: [], deletingAt: "2026-10-15T10:00:01.000Z" };
+    expect(resolve([source([deleting]), marked])).toBeNull();
+    const state = {
+      threads: [source([deleting])],
+      sidebarThreadsById: { "deleting-fork": { deletingAt: "2026-10-15T10:00:01.000Z" } },
+    };
+    const store = { getState: () => state, subscribe: () => () => undefined };
+    await expect(
+      waitForContinuedThread(
+        { sourceThreadId: SOURCE, requestedThreadId: REQUESTED, command, timeoutMs: 10 },
+        store as never,
+      ),
+    ).resolves.toBeNull();
+  });
+
   it("waits for the store to show the fork and gives up after the timeout", async () => {
     let state = { threads: [source()], sidebarThreadsById: {} };
     const listeners = new Set<(next: typeof state) => void>();

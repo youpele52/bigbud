@@ -1,7 +1,6 @@
-import { CommandId, ThreadId } from "@bigbud/contracts";
+import { CommandId, MessageId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { makeQueuedPromptFlushCommand } from "./QueuedPromptFlush.logic.ts";
 import {
   activity,
   apply,
@@ -54,28 +53,28 @@ describe("a held message follows the fork's current model selection", () => {
         modelSelection: CLAUDE,
       }),
     );
-    // The hold lifts when the user sends from the fork (a turn start clears it); the queue then
-    // flushes the held message with the thread's current selection.
-    const lifted = {
-      ...switched,
-      threads: switched.threads.map((thread) =>
-        thread.id === FORK ? Object.assign({}, thread, { queueHold: false }) : thread,
-      ),
-    };
-    const flush = makeQueuedPromptFlushCommand({
+    // "Send now": the web persists the picker (the meta.update above), then flushes with the
+    // user's release while the hold is still set.
+    const held = switched.threads.find((thread) => thread.id === FORK);
+    expect(held?.queueHold).toBe(true);
+    const released = await run(switched, {
+      type: "thread.queued-prompt.flush",
+      commandId: CommandId.makeUnsafe("cmd-send-now"),
       threadId: FORK,
-      readModel: lifted,
+      messageIds: [held?.queuedPrompts?.[0]?.id],
+      messageId: MessageId.makeUnsafe("send-now"),
+      userRelease: true,
       createdAt: NOW,
     });
-    expect(flush).not.toBeNull();
-    const released = await run(lifted, flush);
     const requested = released.find((event) => event.type === "thread.turn-start-requested");
     expect(requested?.payload).toMatchObject({ threadId: FORK });
     expect(
       (requested?.payload as { modelSelection?: unknown } | undefined)?.modelSelection,
     ).toBeUndefined();
-    const after = await apply(lifted, released);
-    expect(after.threads.find((thread) => thread.id === FORK)?.modelSelection).toEqual(CLAUDE);
+    const after = (await apply(switched, released)).threads.find((thread) => thread.id === FORK);
+    expect(after?.modelSelection).toEqual(CLAUDE);
+    // The turn starts on the picked provider.
+    expect(after?.session?.providerName).toBe("claudeAgent");
   });
 
   it("an immediately sent message still uses the parent thread's model", async () => {

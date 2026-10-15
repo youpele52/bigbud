@@ -151,6 +151,17 @@ export function useChatViewPromptQueue({
     onInterrupt: runtime.turnActions.onInterrupt,
     onError: (message) => runtime.setThreadError(base.threadId, message),
     newId: base.randomUUID,
+    // Same settings a composer send persists, so "Send now" runs on the picker's choice.
+    persistSettingsBeforeRelease: base.isServerThread
+      ? () =>
+          runtime.persistThreadSettingsForNextTurn({
+            threadId: base.threadId,
+            createdAt: new Date().toISOString(),
+            ...(composer.selectedModel ? { modelSelection: composer.selectedModelSelection } : {}),
+            runtimeMode: base.runtimeMode,
+            interactionMode: base.interactionMode,
+          })
+      : undefined,
   });
 
   queueComposerPromptRef.current = promptQueue.queuePrompt;
