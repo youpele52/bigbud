@@ -36,6 +36,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
       "rename_thread",
       "archive_thread",
       "create_thread",
+      "list_available_models",
       "list_threads",
       "list_pinned_threads",
       "pin_thread",

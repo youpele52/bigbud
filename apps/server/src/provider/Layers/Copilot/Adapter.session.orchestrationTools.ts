@@ -21,6 +21,7 @@ export function createCopilotOrchestrationToolSurface(input: {
   const { dispatcher, threadId } = input;
   const listThreadsDispatch = dispatcher.listThreads;
   const workspaceDispatch = dispatcher.workspace;
+  const listAvailableModelsDispatch = dispatcher.listAvailableModels;
   return createCopilotThreadOrchestrationTools({
     getSystemResources: () =>
       dispatcher.getSystemResources
@@ -85,7 +86,15 @@ export function createCopilotOrchestrationToolSurface(input: {
       ),
     computerUse: (action) => asRecord(dispatcher.computerUse({ threadId, action })),
     browser: (action) => asRecord(dispatcher.browser({ threadId, action })),
-    createThread: ({ invocationId, sourceMessageId, title, task, projectId, watchForCompletion }) =>
+    createThread: ({
+      invocationId,
+      sourceMessageId,
+      title,
+      task,
+      projectId,
+      watchForCompletion,
+      modelSelection,
+    }) =>
       asRecord(
         dispatcher.createThread?.({
           callerThreadId: threadId,
@@ -95,8 +104,20 @@ export function createCopilotOrchestrationToolSurface(input: {
           task,
           ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
           watchForCompletion,
+          ...(modelSelection !== undefined ? { modelSelection } : {}),
         }) ?? Effect.fail(new Error("Thread creation is not ready.")),
       ),
+    ...(listAvailableModelsDispatch
+      ? {
+          listAvailableModels: ({ limit }: { readonly limit?: number }) =>
+            asRecord(
+              listAvailableModelsDispatch({
+                callerThreadId: threadId,
+                ...(limit !== undefined ? { limit } : {}),
+              }),
+            ),
+        }
+      : {}),
     sendThreadMessage: ({ threadId: targetThreadId, message, delivery, invocationId }) =>
       asRecord(
         dispatcher.sendMessage?.({

@@ -114,7 +114,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             })
           : undefined;
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
-      const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools();
+      const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools({
+        delegatedModelChoice: true,
+      });
       const mergedConfigArgs = mergeCodexConfigArgs(
         remoteWorkspaceBridge?.configArgs,
         orchestrationConfig,

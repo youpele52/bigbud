@@ -189,6 +189,10 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
                 task,
                 ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
                 watchForCompletion: argRecord?.watchForCompletion === true,
+                // Raw: the server validates it and falls back rather than failing (Goal 11).
+                ...(argRecord?.modelSelection !== undefined
+                  ? { modelSelection: argRecord.modelSelection }
+                  : {}),
               })
             : Effect.fail(new Error("Thread creation is not ready.")),
         );
@@ -196,6 +200,19 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           contentItems: [inputText(JSON.stringify(result, null, 2))],
           success: true,
         };
+      }
+      case "list_available_models": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const result = await Effect.runPromise(
+          dispatcher.listAvailableModels
+            ? dispatcher.listAvailableModels({
+                callerThreadId: threadId,
+                ...(typeof argRecord?.limit === "number" ? { limit: argRecord.limit } : {}),
+              })
+            : Effect.fail(new Error("Model listing is not ready.")),
+        );
+        return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }
       case "get_thread_status": {
         const argRecord =

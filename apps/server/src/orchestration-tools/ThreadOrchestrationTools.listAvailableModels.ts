@@ -11,9 +11,10 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
 import { loadModelChoiceContext } from "./ThreadOrchestrationTools.modelChoice.context.ts";
 import { listRankedUsableModels } from "./ThreadOrchestrationTools.modelChoice.usable.ts";
-
-export const LIST_AVAILABLE_MODELS_DEFAULT_LIMIT = 50;
-export const LIST_AVAILABLE_MODELS_MAX_LIMIT = 200;
+import {
+  LIST_AVAILABLE_MODELS_DEFAULT_LIMIT,
+  LIST_AVAILABLE_MODELS_MAX_LIMIT,
+} from "./threadOrchestrationBridge.shared.ts";
 
 export const listAvailableModelsViaOrchestration = Effect.fn("listAvailableModelsViaOrchestration")(
   function* (input: {

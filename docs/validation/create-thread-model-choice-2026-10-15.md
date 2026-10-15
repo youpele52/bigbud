@@ -113,3 +113,31 @@ Gate commands (all exit 0 unless noted):
 - Manual check §8.4 (live providers, kill-and-restart, closed clients): **not performed** (no live provider session in
   this environment); covered only by the automated tests above.
 - Deviations: D-7 (web-only card mirror), D-8 (copy uses model ids; countdown excluded from the live region).
+
+## Phase 4 — tool surface in the non-V2 bridges
+
+Red → green (tests written first):
+
+| Test                                                                                    | Red                                       | Green |
+| --------------------------------------------------------------------------------------- | ----------------------------------------- | ----- |
+| `apps/server … codexThreadDynamicTools.modelChoice.test.ts`                             | 2 failed (no shared schema, no list tool) | 3/3   |
+| `apps/server … copilotThreadOrchestrationTools.modelChoice.test.ts`                     | 3 failed                                  | 3/3   |
+| `apps/server … orchestrationMcpBridge.modelChoice.test.ts` (spawns the rendered bridge) | 3 failed                                  | 3/3   |
+| `apps/server … PiOrchestrationBridge.test.ts` (1 new case)                              | 1 failed                                  | 4/4   |
+| `apps/server … ProviderCommandReactorSessionOps.threadContext.test.ts` (1 new case)     | 1 failed                                  | 5/5   |
+| `apps/server … capabilities/CapabilityCatalog.test.ts` (1 new case)                     | 1 failed                                  | pass  |
+
+The red run recorded 11 failed / 13 passed across the 6 files. While going green, 4 more failures appeared and were fixed
+in the implementation or as expected test updates: the LP summary budget (short `summary` on the two tracks), the search
+ranking for "create delegated child thread" (track wording), the MCP test's `maxLength` literal (now the shared JSON
+schema), the Pi `execute` signature, and the Claude `allowedTools` list (new read-only tool). `OpencodeV2/
+Orchestration.implementation.test.ts` then failed because V2's frozen specs must equal the Codex base surface; resolved
+without touching V2 by keeping the v1 surface as the Codex default (deviation D-9).
+
+Gate commands (all exit 0):
+
+- §8.5 plus neighbours: `bun run --cwd apps/server vitest run src/orchestration-tools src/capabilities src/orchestration/Layers/ProviderCommandReactorSessionOps src/orchestration/Layers/ProviderCommandReactor src/provider/Layers/Copilot src/provider/Layers/Codex src/provider/Layers/OpencodeV2 src/provider/Layers/Pi src/provider/Layers/Claude src/provider/Layers/Opencode src/ws` — 468 files passed, 30 skipped (pre-existing native/integration skips); 2002 tests passed, 40 skipped. Includes `codexThreadDynamicTools`, `copilotThreadOrchestrationTools`, `orchestrationMcpBridge`, `orchestrationMcpBridge.allowedTools`, `PiOrchestrationBridge`, `mcpInvocationIdentity.integration` and `CapabilityCatalog`.
+- `bun run --cwd apps/server thread-tools:manifest:check` 0; no change under `apps/server/src/provider/Layers/OpencodeV2/`.
+- `bun fmt` 0, `bun lint` 0, `bun run --cwd apps/server typecheck` 0.
+- Line counts: every new/edited code file ≤ 400 (`copilotThreadOrchestrationTools.ts` 396 → 148 after the split; largest edited `Claude/Adapter.test.ts` 380).
+- Deviations: D-9 (v1 surface frozen, Codex opts in), D-10 (lenient `modelSelection` schema), D-11 (pre-approval and catalog wording, Copilot split).

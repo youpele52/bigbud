@@ -25,7 +25,28 @@ export function prependThreadContextToProviderInput(input: {
   readonly computerUseEnabled?: boolean;
   readonly agentBrowserPreference?: AgentBrowserPreference;
   readonly serverMode?: "web" | "desktop";
+  /** False where the bridge has no model choice yet (OpenCode V2 until plan Phase 5). */
+  readonly supportsDelegatedModelChoice?: boolean;
 }): string {
+  const modelChoice = input.supportsDelegatedModelChoice !== false;
+  const modelChoiceLines = modelChoice
+    ? [
+        "To request a provider and model for a new thread, call `list_available_models` and pass one as `modelSelection` to `create_thread`; omit it to use your own model.",
+        "bigbud uses the requested model only when the user can use it; otherwise the new thread uses your model, and the user may pick another within about 10 seconds. `create_thread` never fails or waits because of `modelSelection`; its result reports the model requested and the model used.",
+      ]
+    : [];
+  const mcpToolNames = [
+    "rename_thread",
+    "archive_thread",
+    "create_thread",
+    ...(modelChoice ? ["list_available_models"] : []),
+    "send_thread_message",
+    "get_thread_status",
+    "list_pinned_threads",
+    "pin_thread",
+  ]
+    .map((name) => `\`${name}\``)
+    .join(", ");
   const computerUseLines =
     input.computerUseEnabled === false
       ? [
@@ -60,6 +81,7 @@ export function prependThreadContextToProviderInput(input: {
     "To archive the current thread, call the `archive_thread` tool.",
     "To create a standalone bigbud thread, call the `create_thread` tool with a title and a self-contained task that includes all necessary context.",
     "Omit `projectId` to target the current project; only provide an explicitly authorized `projectId` for another project.",
+    ...modelChoiceLines,
     "An accepted `create_thread` request means the request was accepted, not that the child agent has started. Use `get_thread_status` with the returned thread ID to poll startup and workflow progress.",
     "If startup is delayed, continue polling with `get_thread_status`; retry `create_thread` only when the request was rejected or no acceptance was received, and avoid duplicating an accepted child.",
     "To check whether another thread's agent is still active, call `get_thread_status` with that thread's ID. It can access current-project threads and your directly delegated children, not arbitrary cross-project threads.",
@@ -67,7 +89,7 @@ export function prependThreadContextToProviderInput(input: {
     "To pin a thread, call `pin_thread` with that thread's ID. Only use this when the user explicitly asks to pin a thread.",
     "To unpin a thread, call `unpin_thread` with that thread's ID. Only use this when the user explicitly asks to unpin a thread.",
     BIGBUD_PLAN_TRACKING_TOOL_INSTRUCTION,
-    "If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with `rename_thread`, `archive_thread`, `create_thread`, `send_thread_message`, `get_thread_status`, `list_pinned_threads`, `pin_thread`, or `unpin_thread`.",
+    `If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with ${mcpToolNames}, or \`unpin_thread\`.`,
     ...computerUseLines,
     ...browserPreferenceLines,
     "You must not delete threads.",

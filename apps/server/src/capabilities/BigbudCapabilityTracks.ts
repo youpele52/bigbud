@@ -5,6 +5,7 @@ import {
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+  LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -34,6 +35,7 @@ const threadToolTrack = (input: {
   readonly examples: ReadonlyArray<string>;
   readonly antiPatterns: ReadonlyArray<string>;
   readonly relatedCapabilityIds?: ReadonlyArray<string>;
+  readonly availability?: ReadonlyArray<string>;
 }): CapabilityTrack => ({
   id: input.id,
   displayName: input.displayName,
@@ -42,7 +44,9 @@ const threadToolTrack = (input: {
   triggers: input.triggers,
   outcome: normalizeBrand(input.description),
   risk: input.risk,
-  availability: ["Available when the thread orchestration bridge is configured."],
+  availability: input.availability ?? [
+    "Available when the thread orchestration bridge is configured.",
+  ],
   prerequisites: ["An active bigbud thread tool session."],
   relatedCapabilityIds: input.relatedCapabilityIds ?? [],
   source: "bigbud orchestration tool definition",
@@ -129,17 +133,40 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     id: "thread.create",
     displayName: "Create standalone thread",
     description: CREATE_THREAD_TOOL_DESCRIPTION,
+    summary: "Create a standalone bigbud thread and optionally watch it for completion.",
     triggers: ["Independent work should run in a standalone thread."],
     risk: "mutating",
     workflow:
-      "Call create_thread once with a title and self-contained task. Poll the accepted child with get_thread_status.",
-    permissions: "Use another project only when explicitly authorized.",
-    examples: ["Create a child thread to investigate the server failure."],
+      "Call create_thread once with a title and self-contained task. Where create_thread offers modelSelection, you may pass a provider and model from list_available_models; omit it to use your own model. Poll the accepted child with get_thread_status, which reports the model requested and the model used.",
+    permissions:
+      "Use another project only when explicitly authorized. Only models the user can use are accepted; otherwise the child uses your model.",
+    examples: [
+      "Create a child thread to investigate the server failure.",
+      'Delegate to a listed model: create_thread({ title: "Audit", task: "...", modelSelection: { provider: "claudeAgent", model: "claude-sonnet" } }).',
+    ],
     antiPatterns: [
       "Do not assume the child inherits the parent transcript.",
       "Do not duplicate an accepted child.",
+      "Do not retry create_thread to change the model; the result already reports the model used.",
     ],
-    relatedCapabilityIds: ["thread.status"],
+    relatedCapabilityIds: ["thread.status", "thread.models.list"],
+  }),
+  threadToolTrack({
+    id: "thread.models.list",
+    displayName: "List available models",
+    description: LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION,
+    summary: "List models the user can use for a new thread.",
+    triggers: ["New work would be better served by a different provider or model."],
+    risk: "read-only",
+    workflow:
+      "Call list_available_models, pick a listed provider and model, and pass it as modelSelection to create_thread. An empty list means agent model choice is off.",
+    permissions: "Read-only. Lists only models the user has enabled, trusted and signed in to.",
+    examples: ["List the models available for a delegated research thread."],
+    antiPatterns: ["Do not request a model that is not listed; it falls back to your model."],
+    availability: [
+      "Available when the thread orchestration bridge offers list_available_models (not in OpenCode V2 yet).",
+    ],
+    relatedCapabilityIds: ["thread.create"],
   }),
   threadToolTrack({
     id: "thread.message.send",

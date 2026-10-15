@@ -2,6 +2,7 @@ import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
+import { providerSupportsDelegatedModelChoice } from "../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import { OrchestrationCommandInvariantError } from "../Errors.ts";
 import { buildResumedTurnInput, toNonEmptyProviderInput } from "./ProviderCommandReactorHelpers.ts";
 import {
@@ -166,6 +167,7 @@ export const sendTurnAttempt = (
           computerUseEnabled: serverSettings.computerUseEnabled,
           agentBrowserPreference: serverSettings.agentBrowserPreference,
           serverMode: services.serverConfig.mode,
+          supportsDelegatedModelChoice: providerSupportsDelegatedModelChoice(modelForTurn.provider),
         });
     const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
       providerInputText: providerInputWithCurrentThread ?? "",
