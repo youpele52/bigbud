@@ -21,10 +21,13 @@ const LINK_CLASS = "font-medium text-foreground underline underline-offset-2 hov
  */
 export function ThreadForkNotice({
   thread,
+  isForkPresent,
   onCarryToContinuedThread,
   carryPending = false,
 }: {
   readonly thread: Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
+  /** Deleted or unknown forks are not linked (see `useForkPresence`). */
+  readonly isForkPresent: (forkThreadId: string) => boolean;
   readonly onCarryToContinuedThread?:
     | ((forkThreadId: ThreadId, carry: ForkCarry) => void)
     | undefined;
@@ -37,8 +40,8 @@ export function ThreadForkNotice({
   );
   const { messages, activities } = thread;
   const sourceFork = useMemo(
-    () => deriveSourceForkNotice({ messages, activities }),
-    [messages, activities],
+    () => deriveSourceForkNotice({ messages, activities }, isForkPresent),
+    [messages, activities, isForkPresent],
   );
   if (!origin && !sourceFork) return null;
   const carry = sourceFork?.carry ?? null;

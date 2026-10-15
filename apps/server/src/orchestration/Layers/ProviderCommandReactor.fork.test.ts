@@ -52,6 +52,8 @@ describe("ProviderCommandReactor automatic fork fallback", () => {
     const fork = created[0]!;
     const failure = (await failures(harness))[0]!;
     expect(fork.id).toBe(autoForkThreadId(THREAD, failure.id));
+    // The failure names its own message, so delivery never borrows another message's class.
+    expect(failure.payload).toMatchObject({ messageId: "user-second" });
     expect(fork.forkOrigin).toMatchObject({
       reason: "recovery-failed",
       failureEventId: failure.id,
@@ -79,6 +81,32 @@ describe("ProviderCommandReactor automatic fork fallback", () => {
     // The later message stays in the source; the user decides whether it follows the fork.
     const fork = (await forks(harness))[0]!;
     expect(fork.messages.some((message) => message.text === "third question")).toBe(false);
+  });
+
+  it("forks once more after the user deleted the automatic fork", async () => {
+    const harness = await createHarness({ sessionRecovery: "resume-restart" });
+    await completeFirstTurn(harness);
+    harness.sendTurn.mockImplementation(sessionDead as never);
+    await dispatchTurn(harness, "second", "second question");
+    await waitFor(async () => (await forks(harness)).length > 0);
+    await quiet();
+    const deleted = (await forks(harness))[0]!;
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.makeUnsafe("cmd-delete-fork"),
+        threadId: deleted.id,
+      }),
+    );
+    const live = async () => (await forks(harness)).filter((thread) => thread.deletedAt === null);
+    await waitFor(async () => (await live()).length === 0);
+    await dispatchTurn(harness, "third", "third question");
+    await waitFor(async () => (await live()).length > 0);
+    await quiet();
+
+    const replacement = await live();
+    expect(replacement).toHaveLength(1);
+    expect(replacement[0]?.id).not.toBe(deleted.id);
   });
 
   it("never forks an automatic fork again before it answered on its own (clock-independent)", () => {

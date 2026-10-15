@@ -76,16 +76,23 @@ function deriveForkCarry(thread: LineageThread): ForkCarry | null {
  * Shown in a source: links the newest manual fork made since the latest user message (both on
  * the browser's command clock), else the automatic fork the source continued in while it stays
  * dead (one automatic fork, D20; decided by message order, not the server's fork timestamp).
+ * Deleted or unknown forks are ignored, so the manual action comes back.
  */
-export function deriveSourceForkNotice(thread: LineageThread): SourceForkNotice | null {
+export function deriveSourceForkNotice(
+  thread: LineageThread,
+  isForkPresent: (forkThreadId: string) => boolean,
+): SourceForkNotice | null {
   const latestUserAt = thread.messages.findLast((message) => message.role === "user")?.createdAt;
-  const manual = thread.activities.findLast(
-    (activity) =>
-      activity.kind === THREAD_FORKED_ACTIVITY_KIND &&
-      payloadOf(activity).reason === "manual" &&
-      typeof payloadOf(activity).forkThreadId === "string" &&
-      (latestUserAt === undefined || activity.createdAt >= latestUserAt),
-  );
+  const manual = thread.activities.findLast((activity) => {
+    if (activity.kind !== THREAD_FORKED_ACTIVITY_KIND) return false;
+    const payload = payloadOf(activity);
+    return (
+      payload.reason === "manual" &&
+      typeof payload.forkThreadId === "string" &&
+      isForkPresent(payload.forkThreadId) &&
+      (latestUserAt === undefined || activity.createdAt >= latestUserAt)
+    );
+  });
   if (manual !== undefined) {
     return {
       forkThreadId: payloadOf(manual).forkThreadId as ThreadId,
@@ -93,7 +100,7 @@ export function deriveSourceForkNotice(thread: LineageThread): SourceForkNotice 
       carry: null,
     };
   }
-  const live = findLiveAutomaticFork(thread);
+  const live = findLiveAutomaticFork(thread, isForkPresent);
   if (live === null) return null;
   return {
     forkThreadId: live.forkThreadId as ThreadId,

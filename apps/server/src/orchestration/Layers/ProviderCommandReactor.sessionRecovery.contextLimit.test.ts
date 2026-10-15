@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ProviderAdapterRequestError,
   ProviderAdapterSessionClosedError,
+  ProviderAdapterSessionNotFoundError,
 } from "../../provider/Errors.ts";
 import {
   createHarness,
@@ -47,6 +48,27 @@ describe("ProviderCommandReactor context-limit retry", () => {
     expect((await failures(harness))[0]?.payload).toMatchObject({
       failureClass: "unsafe-to-replay",
     });
+    const threads = (await Effect.runPromise(harness.engine.getReadModel())).threads;
+    expect(threads.filter((thread) => thread.forkOrigin !== undefined)).toEqual([]);
+  });
+
+  it("ignores a failed stop of the old session: the retry runs, nothing is recorded or forked", async () => {
+    const harness = await createHarness({ sessionRecovery: "resume-restart" });
+    await completeFirstTurn(harness);
+    harness.sendTurn.mockImplementationOnce(contextLimit as never);
+    harness.stopSession.mockImplementationOnce((() =>
+      Effect.fail(
+        new ProviderAdapterSessionNotFoundError({
+          provider: "codex",
+          threadId: THREAD,
+          failureClass: "session-dead",
+        }),
+      )) as never);
+    await dispatchTurn(harness, "second", "second question");
+    await waitFor(() => sourceSends(harness).length === 3);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(await failures(harness)).toEqual([]);
     const threads = (await Effect.runPromise(harness.engine.getReadModel())).threads;
     expect(threads.filter((thread) => thread.forkOrigin !== undefined)).toEqual([]);
   });

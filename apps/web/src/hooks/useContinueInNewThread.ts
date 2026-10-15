@@ -50,6 +50,7 @@ export function useContinueInNewThread(thread: ForkSource) {
         const target = await waitForContinuedThread({
           sourceThreadId: thread.id,
           requestedThreadId: command.threadId,
+          command,
         });
         if (!target) throw new Error("The continued thread did not appear. Try again in a moment.");
         await navigate({ to: "/$threadId", params: { threadId: target } });

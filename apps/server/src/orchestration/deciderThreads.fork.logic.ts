@@ -25,8 +25,10 @@ import {
   type ThreadForkCommand,
   type ThreadForkPendingDelivery,
 } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
-
-const TURN_START_FAILED_ACTIVITY_KIND = "provider.turn.start.failed";
+import {
+  findOwnTurnStartFailure,
+  TURN_START_FAILED_ACTIVITY_KIND,
+} from "@bigbud/shared/threadFork";
 
 /** Recovery bookkeeping belongs to the source's failed session, never to the fork. */
 const NON_COPIED_ACTIVITY_KINDS = new Set<string>([
@@ -49,7 +51,26 @@ function payloadField(activity: OrchestrationThreadActivity, key: string): unkno
     : undefined;
 }
 
-/** True when this exact fork already happened (same fork id, failure, or pending message). */
+/** A fork counts while its thread exists and is not deleted or being deleted. */
+export function isForkThreadPresent(thread: OrchestrationThread | undefined): boolean {
+  return thread !== undefined && thread.deletedAt === null && (thread.deletingAt ?? null) === null;
+}
+
+/** Fork thread ids named by the source's lineage activities (hydrated before deciding). */
+export function forkLineageThreadIds(source: OrchestrationThread): ReadonlyArray<ThreadId> {
+  return source.activities.flatMap((activity) => {
+    const forkThreadId = payloadField(activity, "forkThreadId");
+    return activity.kind === THREAD_FORKED_ACTIVITY_KIND && typeof forkThreadId === "string"
+      ? [forkThreadId as ThreadId]
+      : [];
+  });
+}
+
+/**
+ * True when this exact fork already happened (same fork id, or the same failure or pending
+ * message forked into a thread that still exists). A deleted fork no longer counts, so the user
+ * can continue that message again (D20).
+ */
 export function isForkAlreadyRecorded(input: {
   readonly readModel: OrchestrationReadModel;
   readonly source: OrchestrationThread;
@@ -62,6 +83,9 @@ export function isForkAlreadyRecorded(input: {
   }
   return source.activities.some((activity) => {
     if (activity.kind !== THREAD_FORKED_ACTIVITY_KIND) return false;
+    const forkThreadId = payloadField(activity, "forkThreadId");
+    const fork = input.readModel.threads.find((thread) => thread.id === forkThreadId);
+    if (!isForkThreadPresent(fork)) return false;
     const failureEventId = payloadField(activity, "failureEventId");
     const pendingMessageId = payloadField(activity, "pendingMessageId");
     return (
@@ -196,19 +220,16 @@ export function copyForkTasks(
 }
 
 /**
- * The pending message is sent in the fork only when the source's latest turn-start failure since
- * it was written proves it never reached a provider (`session-dead`); otherwise it is held.
+ * The pending message is sent in the fork only when its own turn-start failure proves it never
+ * reached a provider (`session-dead`, classified before dispatch); otherwise it is held. Another
+ * message's failure never decides it (a later `session-dead` must not resend an uncertain one).
  */
 export function resolvePendingDelivery(
   source: OrchestrationThread,
   pending: OrchestrationMessage,
 ): ThreadForkPendingDelivery {
-  const latestFailure = source.activities.findLast(
-    (activity) =>
-      activity.kind === TURN_START_FAILED_ACTIVITY_KIND && activity.createdAt >= pending.createdAt,
-  );
-  return latestFailure !== undefined &&
-    payloadField(latestFailure, "failureClass") === "session-dead"
+  const own = findOwnTurnStartFailure(source, pending.id);
+  return own !== undefined && payloadField(own, "failureClass") === "session-dead"
     ? "sent"
     : "held";
 }

@@ -12,24 +12,38 @@ interface ThreadStore {
   ) => () => void;
 }
 
+/** What the dispatched `thread.fork` was for; the server keeps an existing fork for the same. */
+export interface ContinuedForkRequest {
+  readonly pendingMessageId?: string | undefined;
+  readonly failureEventId?: string | undefined;
+}
+
 /**
- * The thread to open after "Continue in a new thread": the requested fork once it exists, or the
- * fork the server kept instead (a fork already recorded for this source), never an unused id.
+ * The thread to open after "Continue in a new thread" or a carry: the requested fork once it
+ * exists, or the fork the server kept for this same message or failure (a no-op decision). Never
+ * an unused id, an older fork made for something else, or a fork the store does not show.
  */
 export function resolveContinuedThreadId(input: {
   readonly sourceThreadId: ThreadId;
   readonly requestedThreadId: ThreadId;
+  readonly command: ContinuedForkRequest;
   readonly threads: ReadonlyArray<NavigationThread>;
 }): ThreadId | null {
-  if (input.threads.some((thread) => thread.id === input.requestedThreadId)) {
-    return input.requestedThreadId;
-  }
+  const { command } = input;
+  const exists = (threadId: unknown) => input.threads.some((thread) => thread.id === threadId);
+  if (exists(input.requestedThreadId)) return input.requestedThreadId;
   const source = input.threads.find((thread) => thread.id === input.sourceThreadId);
-  const forked = source?.activities.findLast(
-    (activity) => activity.kind === THREAD_FORKED_ACTIVITY_KIND,
-  );
-  const payload = forked?.payload as { forkThreadId?: unknown } | null | undefined;
-  return typeof payload?.forkThreadId === "string" ? (payload.forkThreadId as ThreadId) : null;
+  const kept = source?.activities.findLast((activity) => {
+    if (activity.kind !== THREAD_FORKED_ACTIVITY_KIND) return false;
+    const payload = activity.payload as Record<string, unknown> | null;
+    const sameRequest =
+      (command.pendingMessageId !== undefined &&
+        payload?.pendingMessageId === command.pendingMessageId) ||
+      (command.failureEventId !== undefined && payload?.failureEventId === command.failureEventId);
+    return sameRequest && exists(payload?.forkThreadId);
+  });
+  const forkThreadId = (kept?.payload as { forkThreadId?: unknown } | undefined)?.forkThreadId;
+  return typeof forkThreadId === "string" ? (forkThreadId as ThreadId) : null;
 }
 
 /** Resolves once the store shows the continued thread, or null after `timeoutMs`. */
@@ -37,6 +51,7 @@ export function waitForContinuedThread(
   input: {
     readonly sourceThreadId: ThreadId;
     readonly requestedThreadId: ThreadId;
+    readonly command: ContinuedForkRequest;
     readonly timeoutMs?: number;
   },
   store: ThreadStore = useStore as unknown as ThreadStore,

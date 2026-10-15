@@ -38,6 +38,17 @@ describe("deriveServerTurnFailure (server state only)", () => {
     expect(derive(messages, activities)).toBeNull();
   });
 
+  it("binds by message id: another message's failure never applies", () => {
+    const messages = [
+      user("m-1", "2026-10-15T10:00:00.000Z"),
+      user("m-2", "2026-10-15T10:01:00.000Z"),
+    ];
+    const late = { ...failure("f-1", "2026-10-15T10:05:00.000Z"), payload: { messageId: "m-1" } };
+    expect(
+      derive(messages, [{ ...late, payload: { ...late.payload, failureClass: "session-dead" } }]),
+    ).toBeNull();
+  });
+
   it("is cleared once a turn started after the message (message order, not clocks)", () => {
     // The assistant row carries the server clock, which is behind the command clock here.
     const messages = [

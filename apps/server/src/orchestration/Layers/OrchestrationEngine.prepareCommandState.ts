@@ -1,6 +1,7 @@
 import type { OrchestrationCommand, OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { forkLineageThreadIds } from "../deciderThreads.fork.logic.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandProcessing.ts";
 
 type ThreadStateHydrator<HydrationError> = {
@@ -30,7 +31,13 @@ export function makePrepareCommandState<HydrationError>(input: {
       // The fork copies settled history from its source, so the source needs full history.
       return Effect.gen(function* () {
         yield* input.threadStateHydrator!.load(command.threadId, "operational");
-        yield* input.threadStateHydrator!.load(command.sourceThreadId, "history");
+        const source = yield* input.threadStateHydrator!.load(command.sourceThreadId, "history");
+        // Earlier forks decide idempotency only while they still exist (deleted ones do not).
+        for (const forkThreadId of new Set(source ? forkLineageThreadIds(source) : [])) {
+          if (forkThreadId !== command.threadId) {
+            yield* input.threadStateHydrator!.load(forkThreadId, "operational");
+          }
+        }
       });
     }
     const aggregate = commandToAggregateRef(command);

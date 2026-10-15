@@ -159,6 +159,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         detail,
         failureClass: "invalid-request",
         createdAt: event.payload.createdAt,
+        messageId: event.payload.messageId,
       });
       return;
     }

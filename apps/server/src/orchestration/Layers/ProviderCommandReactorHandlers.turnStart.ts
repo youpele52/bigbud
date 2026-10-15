@@ -24,6 +24,7 @@ type RecordTurnStartFailure = (input: {
   readonly detail: string;
   readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
+  readonly messageId?: MessageId;
   readonly activityId?: EventId;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
 
@@ -102,6 +103,7 @@ export function makeHandleTurnStartFailure(input: {
         detail,
         failureClass,
         createdAt: failure.event.payload.createdAt,
+        messageId: failure.message.id,
         activityId,
       });
       // Bounded in-place recovery already ran; still session-dead means it cannot resume (D16).
@@ -139,6 +141,7 @@ export function makeHandleTurnStartFailure(input: {
           detail: `${detail} Failed to queue the follow-up prompt: ${formatProviderServiceCauseDetail(queueCause)}`,
           failureClass,
           createdAt: failure.event.payload.createdAt,
+          messageId: failure.message.id,
         }),
       ),
       Effect.asVoid,

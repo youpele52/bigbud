@@ -106,7 +106,8 @@ export const withTurnStartRecovery = <A, E, R>(input: {
       );
   };
 
-  // Stopping removes the dead binding so the next attempt starts a new runtime session.
+  // Stopping removes the old binding so the next attempt starts a new runtime session; a failed
+  // stop is ignored because the next attempt reports its own outcome.
   const discardDeadSession = Effect.suspend(() => providerService.stopSession({ threadId })).pipe(
     Effect.ignore,
     Effect.andThen(Effect.sync(() => void input.states.delete(threadId))),
@@ -184,8 +185,8 @@ export const withTurnStartRecovery = <A, E, R>(input: {
         yield* Effect.logWarning("recovering provider session after context-limit failure", {
           threadId,
         });
-        yield* providerService.stopSession({ threadId });
-        input.states.delete(threadId);
+        // A failed stop must not become the turn's failure (it could classify session-dead).
+        yield* discardDeadSession;
         // Same phase-checked path: a retry that fails after dispatch is reported, never resent.
         const retried = yield* tracked();
         if (Result.isSuccess(retried.result)) return retried.result.success;

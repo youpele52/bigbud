@@ -1,4 +1,4 @@
-import { EventId, ThreadId, type TurnId } from "@bigbud/contracts";
+import { EventId, type MessageId, ThreadId, type TurnId } from "@bigbud/contracts";
 import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Effect } from "effect";
 
@@ -20,6 +20,8 @@ export type ProviderFailureActivityInput = {
   readonly createdAt: string;
   readonly requestId?: string;
   readonly failureClass?: TurnStartFailureClass;
+  /** The user message whose turn start failed; a fork reads only that message's failure. */
+  readonly messageId?: MessageId;
   /** Deterministic id so a fork can name the failure it continues from. */
   readonly activityId?: EventId;
 };
@@ -30,6 +32,7 @@ export type TurnStartFailureInput = {
   readonly detail: string;
   readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
+  readonly messageId?: MessageId;
   readonly activityId?: EventId;
 };
 
@@ -53,6 +56,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
           detail: input.detail,
           ...(input.requestId ? { requestId: input.requestId } : {}),
           ...(input.failureClass ? { failureClass: input.failureClass } : {}),
+          ...(input.messageId ? { messageId: input.messageId } : {}),
         },
         turnId: input.turnId,
         createdAt: input.createdAt,
@@ -83,6 +87,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
         failureClass: input.failureClass,
         turnId: null,
         createdAt: input.createdAt,
+        ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
         ...(input.activityId !== undefined ? { activityId: input.activityId } : {}),
       });
     });

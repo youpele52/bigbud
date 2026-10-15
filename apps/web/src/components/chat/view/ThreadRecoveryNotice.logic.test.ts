@@ -118,6 +118,12 @@ describe("deriveThreadRecoveryNotice", () => {
     expect(notice?.description).toMatch(/not available/i);
   });
 
+  it("offers the manual new-thread action for a rejected request such as a retired model", () => {
+    const notice = derive(null, 0, { failure: failureOf("invalid-request") }).notice;
+    expect(notice).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });
+    expect(notice?.description).toMatch(/model/i);
+  });
+
   it("a started retry of the failed message replaces the failure notice", () => {
     const options = { settledAfterMs: 800, failure: failureOf("session-dead") };
     expect(derive(request("started"), 1_000, options).notice).toBeNull();

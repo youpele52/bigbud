@@ -1,5 +1,9 @@
 import type { ThreadTurnStartRequest } from "../../../models/types/app.types";
-import { FORK_ONLY_FAILURE_CLASSES, type ServerTurnFailure } from "./ThreadRecoveryNotice.failure";
+import {
+  isForkOnlyFailureClass,
+  MANUAL_CONTINUE_FAILURE_CLASSES,
+  type ServerTurnFailure,
+} from "./ThreadRecoveryNotice.failure";
 
 /**
  * UI threshold only, not a timeout: after this long without a started turn the thread shows
@@ -79,9 +83,11 @@ const failedNotice = (failureClass: string): ThreadRecoveryNoticeDerivation => (
     "failed",
     failureClass === "provider-unavailable"
       ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
-      : FORK_ONLY_FAILURE_CLASSES.has(failureClass)
+      : isForkOnlyFailureClass(failureClass)
         ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
-        : "The turn did not start. See the error above for details.",
+        : failureClass === "invalid-request"
+          ? "The provider rejected this request (for example, the model is no longer offered). See the error above, or continue in a new thread and pick another model."
+          : "The turn did not start. See the error above for details.",
   ),
   nextChangeInMs: null,
 });
@@ -120,7 +126,7 @@ export function deriveThreadRecoveryNotice(input: {
   if ((failure !== null && !retried) || request?.outcome === "failed") {
     const failureClass = retried ? "" : (failure?.failureClass ?? "");
     const shown =
-      FORK_ONLY_FAILURE_CLASSES.has(failureClass) || (request?.outcome === "failed" && slow);
+      MANUAL_CONTINUE_FAILURE_CLASSES.has(failureClass) || (request?.outcome === "failed" && slow);
     return shown ? failedNotice(failureClass) : { notice: null, nextChangeInMs: null };
   }
   if (!request || !slow) return { notice: null, nextChangeInMs: null };

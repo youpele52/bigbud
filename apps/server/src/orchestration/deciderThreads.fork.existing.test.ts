@@ -66,6 +66,26 @@ describe("thread.fork into the source's existing fork", () => {
     expect(await decide(next, carry)).toEqual([]);
   });
 
+  it("continues in a new fork once the earlier fork for the same message was deleted", async () => {
+    const forked = await forkedSource("session-dead");
+    const model = {
+      ...forked,
+      threads: forked.threads.map((thread) =>
+        thread.id === "fork-thread"
+          ? Object.assign({}, thread, { deletedAt: "2026-10-15T11:00:00.000Z" })
+          : thread,
+      ),
+    };
+    const again = forkCommand({
+      threadId: "fork-new",
+      commandId: "cmd-fork-new",
+      pendingMessageId: "user-pending",
+      failureEventId: "failure-1",
+    });
+    const events = await decide(model, again);
+    expect(events.find((event) => event.type === "thread.created")?.aggregateId).toBe("fork-new");
+  });
+
   it("refuses to carry a message that may already have reached the provider", async () => {
     const model = await forkedSource("unsafe-to-replay");
     await expect(decide(model, carry)).rejects.toThrow(/may already have reached/i);

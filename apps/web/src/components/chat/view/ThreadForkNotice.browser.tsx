@@ -21,9 +21,16 @@ type NoticeThread = Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "a
 async function renderAt(
   thread: NoticeThread,
   onCarry?: ComponentProps<typeof ThreadForkNotice>["onCarryToContinuedThread"],
+  isForkPresent: (forkThreadId: string) => boolean = () => true,
 ) {
   const root = createRootRoute({
-    component: () => <ThreadForkNotice thread={thread} onCarryToContinuedThread={onCarry} />,
+    component: () => (
+      <ThreadForkNotice
+        thread={thread}
+        isForkPresent={isForkPresent}
+        onCarryToContinuedThread={onCarry}
+      />
+    ),
   });
   const index = createRoute({ getParentRoute: () => root, path: "/" });
   const threadRoute = createRoute({ getParentRoute: () => root, path: "/$threadId" });
@@ -83,6 +90,25 @@ describe("ThreadForkNotice", () => {
       .toBeVisible();
     await page.getByRole("link", { name: "Open the continued thread" }).click();
     expect(router.state.location.pathname).toBe("/fork-1");
+  });
+
+  it("links nothing once the fork was deleted", async () => {
+    await renderAt(
+      {
+        messages: [],
+        activities: [
+          activity("forked-1", "thread.forked", "2026-10-15T10:00:00.000Z", {
+            forkThreadId: "fork-1",
+            reason: "recovery-failed",
+          }),
+        ],
+      },
+      undefined,
+      () => false,
+    );
+    await expect
+      .element(page.getByRole("link", { name: "Open the continued thread" }))
+      .not.toBeInTheDocument();
   });
 
   it("offers sending a later never-admitted message to the existing automatic fork", async () => {

@@ -14,7 +14,7 @@ import {
   type OrchestrationThread,
   ThreadId,
 } from "@bigbud/contracts";
-import { findLiveAutomaticFork } from "@bigbud/shared/threadFork";
+import { automaticForkThreadIds, findLiveAutomaticFork } from "@bigbud/shared/threadFork";
 import { Cause, Effect } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
@@ -22,6 +22,7 @@ import {
   ensureOrchestrationThreadState,
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
+import { isForkThreadPresent } from "../deciderThreads.fork.logic.ts";
 
 /** Same source and failure always name the same fork thread (uuid-shaped). */
 export function autoForkThreadId(sourceThreadId: ThreadId, failureEventId: EventId): ThreadId {
@@ -61,8 +62,18 @@ export function makeRequestAutomaticFork(input: {
       );
       if (!source || isUnprovenAutomaticFork(source)) return;
       // At most one automatic fork while the source stays dead (D20): later failed sends keep
-      // that fork, and the user decides whether their message follows it.
-      const live = findLiveAutomaticFork(source);
+      // that fork, and the user decides whether their message follows it. A deleted fork does not
+      // count, so the source may fork once more.
+      const present = new Set<string>();
+      for (const forkThreadId of new Set(automaticForkThreadIds(source))) {
+        const fork = yield* ensureOrchestrationThreadState(
+          input.orchestrationEngine,
+          ThreadId.makeUnsafe(forkThreadId),
+          "operational",
+        );
+        if (isForkThreadPresent(fork)) present.add(forkThreadId);
+      }
+      const live = findLiveAutomaticFork(source, (forkThreadId) => present.has(forkThreadId));
       if (live !== null) {
         return yield* Effect.logInfo("source already continued in an automatic fork", {
           threadId: request.sourceThreadId,

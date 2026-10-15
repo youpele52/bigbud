@@ -185,6 +185,12 @@ See Problem for line references. More context:
   - Every duration (the 5 s threshold and the green/amber visibility) is measured on one browser clock: when this browser first saw the request and its settlement. Neither server nor command timestamps are subtracted from the browser's `Date.now()`. Server timestamps cannot be compared with the browser's time without a skew estimate, so this replaces the review's suggested server-clock basis.
   - The manual fork command takes the pending message and the failure id from the same server state.
 
+**Addendum, 15 October 2026 (second review follow-up).**
+
+- **D17 binding.** A pending message's delivery uses only its own turn-start failure. Failure activities now record `payload.messageId` (additive). A legacy failure without it counts only from the message up to the next user message. So a later message's `session-dead` never resends an earlier uncertain message, for a new fork or a carry (`findOwnTurnStartFailure` in `@bigbud/shared/threadFork`).
+- **D20 deleted forks.** A deleted or missing fork does not count. The reactor and the decider check the server read model; before a `thread.fork` is decided, the source's lineage forks are hydrated. The web checks the store, because deleted threads leave it. The source can then fork automatically once more, and "Continue in a new thread" reappears.
+- **D18 UI.** `invalid-request` (for example, a model that is no longer offered) shows the manual "Continue in a new thread" action. This applies to the UI only; it is never forked automatically.
+
 ## Definition of Done
 
 All phases are merged and, on one SHA:

@@ -1,14 +1,27 @@
 import type { MessageId } from "@bigbud/contracts";
+import { findOwnTurnStartFailure } from "@bigbud/shared/threadFork";
 
 import type { ChatMessage } from "../../../models/types/app.types";
 
-export const TURN_START_FAILED_ACTIVITY_KIND = "provider.turn.start.failed";
 /** Failure classes in-place recovery cannot fix; only a new thread continues (plan D16). */
-export const FORK_ONLY_FAILURE_CLASSES: ReadonlySet<string> = new Set([
+const FORK_ONLY_FAILURE_CLASSES: ReadonlySet<string> = new Set([
   "session-dead",
   "unsafe-to-replay",
   "provider-unavailable",
 ]);
+
+/**
+ * UI only: failures whose notice offers the manual "Continue in a new thread". Adds
+ * `invalid-request` (for example a model no longer offered, D18 decision): the user picks another
+ * model in the new thread. The server never forks it automatically.
+ */
+export const MANUAL_CONTINUE_FAILURE_CLASSES: ReadonlySet<string> = new Set([
+  ...FORK_ONLY_FAILURE_CLASSES,
+  "invalid-request",
+]);
+
+export const isForkOnlyFailureClass = (failureClass: string) =>
+  FORK_ONLY_FAILURE_CLASSES.has(failureClass);
 
 /** The latest user message's turn-start failure, read from server state only (plan D21). */
 export interface ServerTurnFailure {
@@ -26,9 +39,10 @@ interface FailureActivity {
 }
 
 /**
- * Survives a reload: the failure activity and the user message share the turn-start command's
- * timestamp, so comparing them never mixes clocks. A turn of the thread answering after that
- * message (message order, not timestamps) clears the failure.
+ * Survives a reload. The failure is that message's own (`findOwnTurnStartFailure`: bound by
+ * message id, or for legacy rows by the turn-start command's timestamp, which the message shares),
+ * so it never mixes clocks. A turn of the thread answering after that message (message order, not
+ * timestamps) clears it.
  */
 export function deriveServerTurnFailure(thread: {
   readonly messages: ReadonlyArray<Pick<ChatMessage, "id" | "role" | "turnId" | "createdAt">>;
@@ -44,10 +58,7 @@ export function deriveServerTurnFailure(thread: {
         message.role === "assistant" && message.turnId !== null && message.turnId !== undefined,
     );
   if (answered) return null;
-  const failure = thread.activities.findLast(
-    (activity) =>
-      activity.kind === TURN_START_FAILED_ACTIVITY_KIND && activity.createdAt >= pending.createdAt,
-  );
+  const failure = findOwnTurnStartFailure(thread, pending.id);
   if (failure === undefined) return null;
   const payload = failure.payload as { failureClass?: unknown } | null | undefined;
   return {

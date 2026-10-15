@@ -5,38 +5,39 @@ import { resolveContinuedThreadId, waitForContinuedThread } from "./useContinueI
 
 const SOURCE = "source-1" as ThreadId;
 const REQUESTED = "client-fork" as ThreadId;
-const forked = (forkThreadId: string) =>
+const forked = (forkThreadId: string, lineage: Record<string, unknown> = {}) =>
   ({
     id: `forked-${forkThreadId}`,
     kind: "thread.forked",
-    payload: { forkThreadId, reason: "recovery-failed" },
+    payload: { forkThreadId, reason: "recovery-failed", ...lineage },
     createdAt: "2026-10-15T10:00:00.000Z",
   }) as never;
 const source = (activities: unknown[] = []) => ({ id: SOURCE, activities }) as never;
+const fork = (id: string) => ({ id, activities: [] }) as never;
+const command = { pendingMessageId: "m-2", failureEventId: "failure-2" };
+const resolve = (threads: unknown[]) =>
+  resolveContinuedThreadId({
+    sourceThreadId: SOURCE,
+    requestedThreadId: REQUESTED,
+    command,
+    threads: threads as never,
+  });
 
 describe("continued thread navigation target", () => {
   it("opens the requested fork once it exists", () => {
-    const threads = [source(), { id: REQUESTED, activities: [] } as never];
-    expect(
-      resolveContinuedThreadId({ sourceThreadId: SOURCE, requestedThreadId: REQUESTED, threads }),
-    ).toBe(REQUESTED);
+    expect(resolve([source(), fork(REQUESTED)])).toBe(REQUESTED);
   });
 
-  it("opens the existing automatic fork when the server kept that one instead", () => {
-    const threads = [source([forked("auto-fork")])];
-    expect(
-      resolveContinuedThreadId({ sourceThreadId: SOURCE, requestedThreadId: REQUESTED, threads }),
-    ).toBe("auto-fork");
+  it("opens the fork the server kept for this same message instead", () => {
+    const kept = forked("auto-fork", { pendingMessageId: "m-2" });
+    expect(resolve([source([kept]), fork("auto-fork")])).toBe("auto-fork");
   });
 
-  it("never returns an unused client id", () => {
-    expect(
-      resolveContinuedThreadId({
-        sourceThreadId: SOURCE,
-        requestedThreadId: REQUESTED,
-        threads: [source()],
-      }),
-    ).toBeNull();
+  it("never opens an older fork made for another message, nor a missing one", () => {
+    const stale = forked("old-fork", { pendingMessageId: "m-1", failureEventId: "failure-1" });
+    expect(resolve([source([stale]), fork("old-fork")])).toBeNull();
+    const deleted = forked("gone-fork", { pendingMessageId: "m-2" });
+    expect(resolve([source([deleted])])).toBeNull();
   });
 
   it("waits for the store to show the fork and gives up after the timeout", async () => {
@@ -50,15 +51,22 @@ describe("continued thread navigation target", () => {
       },
     };
     const waiting = waitForContinuedThread(
-      { sourceThreadId: SOURCE, requestedThreadId: REQUESTED, timeoutMs: 1_000 },
+      { sourceThreadId: SOURCE, requestedThreadId: REQUESTED, command, timeoutMs: 1_000 },
       store as never,
     );
-    state = { threads: [source([forked("auto-fork")])] };
+    state = {
+      threads: [source([forked("auto-fork", { failureEventId: "failure-2" })]), fork("auto-fork")],
+    };
     for (const listener of listeners) listener(state);
     await expect(waiting).resolves.toBe("auto-fork");
     await expect(
       waitForContinuedThread(
-        { sourceThreadId: "other" as ThreadId, requestedThreadId: REQUESTED, timeoutMs: 10 },
+        {
+          sourceThreadId: "other" as ThreadId,
+          requestedThreadId: REQUESTED,
+          command,
+          timeoutMs: 10,
+        },
         store as never,
       ),
     ).resolves.toBeNull();

@@ -21,6 +21,8 @@ const autoFork = (createdAt: string, pendingMessageId: string) =>
     pendingMessageId,
   });
 
+const present = () => true;
+
 describe("fork notices", () => {
   it("names the source in a forked thread and explains the pending message", () => {
     expect(deriveForkOriginNotice({ forkOrigin: undefined, parentThread: undefined })).toBeNull();
@@ -50,13 +52,13 @@ describe("fork notices", () => {
       }),
     ];
     const thread = { messages: [user("m-1", "2026-10-15T10:00:00.000Z")], activities } as never;
-    expect(deriveSourceForkNotice(thread)).toEqual({
+    expect(deriveSourceForkNotice(thread, present)).toEqual({
       forkThreadId: "fork-2",
       automatic: false,
       carry: null,
     });
     const later = { messages: [user("m-2", "2026-10-15T11:00:00.000Z")], activities } as never;
-    expect(deriveSourceForkNotice(later)).toBeNull();
+    expect(deriveSourceForkNotice(later, present)).toBeNull();
   });
 
   it("keeps linking the automatic fork while the source stays dead and offers the carry", () => {
@@ -69,7 +71,7 @@ describe("fork notices", () => {
         failed("failure-2", "2026-10-15T11:00:00.000Z", "session-dead"),
       ],
     } as never;
-    const notice = deriveSourceForkNotice(thread);
+    const notice = deriveSourceForkNotice(thread, present);
     expect(notice).toEqual({
       forkThreadId: "auto-fork",
       automatic: true,
@@ -103,10 +105,26 @@ describe("fork notices", () => {
         failed("failure-2", "2026-10-15T11:00:00.000Z", "session-dead"),
       ],
     } as never;
-    expect(deriveSourceForkNotice(thread)?.carry).toEqual({
+    expect(deriveSourceForkNotice(thread, present)?.carry).toEqual({
       pendingMessageId: "m-2",
       failureEventId: "failure-2",
     });
+  });
+
+  it("ignores a deleted fork: no link, and the manual action comes back", () => {
+    const activities = [
+      autoFork("2026-10-15T10:00:01.000Z", "m-1"),
+      activity("thread.forked", "2026-10-15T10:00:02.000Z", {
+        forkThreadId: "manual-fork",
+        reason: "manual",
+      }),
+    ];
+    const thread = { messages: [user("m-1", "2026-10-15T10:00:00.000Z")], activities } as never;
+    expect(deriveSourceForkNotice(thread, present)?.forkThreadId).toBe("manual-fork");
+    expect(deriveSourceForkNotice(thread, (id) => id === "auto-fork")?.forkThreadId).toBe(
+      "auto-fork",
+    );
+    expect(deriveSourceForkNotice(thread, () => false)).toBeNull();
   });
 
   it("never offers the carry for an uncertain message", () => {
@@ -117,7 +135,7 @@ describe("fork notices", () => {
         failed("failure-2", "2026-10-15T11:00:00.000Z", "unsafe-to-replay"),
       ],
     } as never;
-    expect(deriveSourceForkNotice(thread)).toMatchObject({
+    expect(deriveSourceForkNotice(thread, present)).toMatchObject({
       forkThreadId: "auto-fork",
       carry: null,
     });
