@@ -18,6 +18,8 @@ import {
 
 const request = (detail: string) =>
   new ProviderAdapterRequestError({ provider: "codex", method: "turn/start", detail });
+const process = (detail: string) =>
+  new ProviderAdapterProcessError({ provider: "codex", threadId: "t", detail });
 const validation = (issue: string) =>
   new ProviderAdapterValidationError({ provider: "codex", operation: "sendTurn", issue });
 
@@ -51,11 +53,38 @@ describe("classifyTurnStartFailure", () => {
         "OpenCode v2 operation failed or remains unconfirmed; no automatic resend or provider fallback.",
       ),
     ],
+    ["provider-unavailable", process("spawn codex ENOENT")],
+    ["provider-unavailable", process("spawn /usr/local/bin/claude EACCES")],
+    ["provider-unavailable", request("Codex CLI (`codex`) is not installed or not on PATH.")],
+    ["provider-unavailable", validation("Cursor is disabled in bigbud settings.")],
+    ["provider-unavailable", request("Command not found: cli-proxy-api")],
+    ["unknown", request("ENOENT: no such file or directory, open '/tmp/attachment.png'")],
     ["unknown", request("Something unexpected happened")],
     ["unknown", new Error("boom")],
   ] as const)("classifies %s", (expected, error) => {
     expect(classifyTurnStartFailure(error)).toBe(expected);
     expect(classifyTurnStartFailure(Cause.fail(error))).toBe(expected);
+  });
+
+  it("never yields a resendable class for an unproven failure after dispatch", () => {
+    const dispatched = { dispatched: true };
+    const before = { dispatched: false };
+    const plain = new Error("Connection is closed.");
+    expect(classifyTurnStartFailure(plain, before)).toBe("session-dead");
+    expect(classifyTurnStartFailure(plain, dispatched)).toBe("unsafe-to-replay");
+    expect(classifyTurnStartFailure(Cause.fail(plain), dispatched)).toBe("unsafe-to-replay");
+    const closed = new ProviderAdapterSessionClosedError({ provider: "codex", threadId: "t" });
+    expect(classifyTurnStartFailure(closed, dispatched)).toBe("unsafe-to-replay");
+    const marked = new ProviderAdapterSessionClosedError({
+      provider: "cursor",
+      threadId: "t",
+      failureClass: "session-dead",
+    });
+    expect(classifyTurnStartFailure(marked, dispatched)).toBe("session-dead");
+    expect(
+      classifyTurnStartFailure(new ProviderSessionNotFoundError({ threadId: "t" }), dispatched),
+    ).toBe("session-dead");
+    expect(classifyTurnStartFailure(request("401 Unauthorized"), dispatched)).toBe("auth-or-quota");
   });
 
   it("prefers the adapter's explicit class over every pattern", () => {

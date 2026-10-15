@@ -17,6 +17,7 @@ import {
 } from "./deciderThreads.lifecycle.ts";
 import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThreads.turn.ts";
 import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
+import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
 
 const LIFECYCLE_TYPES = new Set([
   "thread.create",
@@ -60,6 +61,9 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
       command: command as ThreadLifecycleCommand,
       readModel,
     });
+  }
+  if (command.type === "thread.fork") {
+    return yield* decideThreadForkCommand({ command, readModel });
   }
   if (command.type === "thread.task.upsert" || command.type === "thread.task.remove") {
     return yield* decideThreadTaskCommand({ command, readModel });

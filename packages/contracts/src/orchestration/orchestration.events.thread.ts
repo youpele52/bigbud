@@ -15,6 +15,7 @@ import {
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
 import { TurnStartFailureClass } from "./orchestration.turnFailure";
+import { ThreadForkOrigin } from "./orchestration.fork";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -61,6 +62,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   parentThread: Schema.optional(ParentThreadReference),
+  /** Present only on server-side forks; older events decode without it. */
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

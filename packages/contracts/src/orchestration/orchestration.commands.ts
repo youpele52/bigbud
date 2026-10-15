@@ -3,14 +3,16 @@ import {
   ClientOrchestrationCommand as ClientOrchestrationCommandSchema,
   DispatchableClientOrchestrationCommand as DispatchableClientOrchestrationCommandSchema,
   ProjectCreateCommand,
-  ClientThreadMessageSubmitCommand,
   ThreadPinCommand,
   ThreadShellRunCommand,
-  ThreadMessageSubmitCommand,
-  ThreadTurnStartBootstrap as ThreadTurnStartBootstrapSchema,
   ThreadTurnStartCommand,
   ThreadUnpinCommand,
 } from "./orchestration.commands.client";
+import { ThreadTurnStartBootstrap as ThreadTurnStartBootstrapSchema } from "./orchestration.commands.client.bootstrap";
+import {
+  ClientThreadMessageSubmitCommand,
+  ThreadMessageSubmitCommand,
+} from "./orchestration.commands.client.messageSubmit";
 import { InternalOrchestrationCommand as InternalOrchestrationCommandSchema } from "./orchestration.commands.internal";
 
 export const ClientOrchestrationCommand = ClientOrchestrationCommandSchema;

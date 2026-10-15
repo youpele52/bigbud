@@ -18,7 +18,8 @@ import { requirePiSession } from "./Adapter.methods.session.ts";
 import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";
 import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
-import { toMessage } from "./Adapter.utils.ts";
+import { isPiProcessAlive, toMessage } from "./Adapter.utils.ts";
+import { promptDispatchFailureClass } from "../../providerTurnDispatch.ts";
 import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
 
 export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
@@ -77,6 +78,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
 
+    const aliveBeforeDispatch = isPiProcessAlive(session.process);
     yield* Effect.tryPromise({
       try: () =>
         session.process.request({
@@ -85,13 +87,19 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
           ...(images.length > 0 ? { images } : {}),
           ...(queuedWhileRunning ? { streamingBehavior: "steer" as const } : {}),
         }),
-      catch: (cause) =>
-        new ProviderAdapterRequestError({
+      catch: (cause) => {
+        const failureClass = promptDispatchFailureClass({
+          aliveBeforeDispatch,
+          aliveAfterFailure: isPiProcessAlive(session.process),
+        });
+        return new ProviderAdapterRequestError({
           provider: PROVIDER,
           method: "prompt",
           detail: toMessage(cause, "Failed to send Pi turn."),
+          ...(failureClass ? { failureClass } : {}),
           cause,
-        }),
+        });
+      },
     }).pipe(
       Effect.tapError((error) =>
         Effect.logError("Pi prompt RPC request failed", {

@@ -18,6 +18,7 @@ import {
   sendInput,
   sessionDead,
   settle,
+  sourceSends,
   startInput,
 } from "./ProviderCommandReactor.sessionRecovery.test.helpers.ts";
 
@@ -75,7 +76,7 @@ describe("ProviderCommandReactor in-place session recovery", () => {
     await waitFor(async () => (await failures(harness)).length > 0);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    expect(harness.sendTurn.mock.calls).toHaveLength(4); // first turn + attempt + revive + fresh
+    expect(sourceSends(harness)).toHaveLength(4); // first turn + attempt + revive + fresh
     const recorded = await failures(harness);
     expect(recorded).toHaveLength(1);
     expect(recorded[0]?.payload).toMatchObject({ failureClass: "session-dead" });

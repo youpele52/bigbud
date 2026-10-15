@@ -55,8 +55,9 @@ describe("turn-start failure classification per provider adapter", () => {
     expect(classify(toCodexRequestError(THREAD, "turn/start", new Error("401 Unauthorized")))).toBe(
       "auth-or-quota",
     );
+    // A missing binary is not a dead session: never recovered or forked automatically (D18).
     expect(classify(toCodexStartSessionError(THREAD, new Error("spawn codex ENOENT")))).toBe(
-      "session-dead",
+      "provider-unavailable",
     );
   });
 

@@ -193,6 +193,7 @@ function mapThreadRow(
     session: groupedRows.sessionsByThread.get(row.threadId) ?? null,
     watchingThreads: groupedRows.watchingThreadsByWatcher.get(row.threadId) ?? [],
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
+    ...(row.forkOrigin ? { forkOrigin: row.forkOrigin } : {}),
   };
 }
 

@@ -161,7 +161,8 @@ describe("ProviderCommandReactor", () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
-    // Process errors are session-dead: revive and fresh replay also fail before one failure lands.
+    // A process error raised by the send itself may follow dispatch and the adapter did not mark
+    // it pre-dispatch: unsafe to replay, so it is recorded once and never resent.
     harness.sendTurn.mockImplementation((() =>
       Effect.fail(
         new ProviderAdapterProcessError({
@@ -207,10 +208,11 @@ describe("ProviderCommandReactor", () => {
       summary: "Provider turn start failed",
       payload: {
         detail: "Failed to start Pi RPC process.",
-        failureClass: "session-dead",
+        failureClass: "unsafe-to-replay",
       },
     });
-    expect(harness.sendTurn.mock.calls).toHaveLength(3);
+    await new Promise((resolve) => setTimeout(resolve, 300)); // Prove no resend follows.
+    expect(harness.sendTurn.mock.calls).toHaveLength(1);
   });
 
   it("retries a context-limit failure once in a fresh session", async () => {

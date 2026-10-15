@@ -8,6 +8,13 @@ export const RECONNECTING_NOTICE_DELAY_MS = 5_000;
 /** How long a green/amber outcome stays visible after the turn started. */
 export const RECOVERED_NOTICE_VISIBLE_MS = 6_000;
 export const PROVIDER_SESSION_RECOVERY_ACTIVITY_KIND = "provider.session.recovery";
+export const TURN_START_FAILED_ACTIVITY_KIND = "provider.turn.start.failed";
+/** Failure classes in-place recovery cannot fix; only a new thread continues (plan D16). */
+const FORK_ONLY_FAILURE_CLASSES = new Set([
+  "session-dead",
+  "unsafe-to-replay",
+  "provider-unavailable",
+]);
 
 export type ThreadRecoveryNoticeKind = "reconnecting" | "recovered" | "degraded" | "failed";
 /** Alert variants per AGENTS.md: blue working, green done, amber warning, red failure. */
@@ -18,6 +25,8 @@ export interface ThreadRecoveryNotice {
   readonly tone: ThreadRecoveryNoticeTone;
   readonly title: string;
   readonly description: string;
+  /** Offer "Continue in a new thread" (server-side fork) while waiting or after a failure. */
+  readonly canContinueInNewThread: boolean;
 }
 
 export interface ThreadRecoveryNoticeDerivation {
@@ -49,7 +58,13 @@ const notice = (kind: ThreadRecoveryNoticeKind, description: string): ThreadReco
     failed: "Could not reconnect",
   }[kind],
   description,
+  canContinueInNewThread: kind === "reconnecting" || kind === "failed",
 });
+
+const failureClassOf = (activity: RecoveryActivity | undefined) => {
+  const payload = activity?.payload as { failureClass?: unknown } | null | undefined;
+  return typeof payload?.failureClass === "string" ? payload.failureClass : undefined;
+};
 
 const recoveryStep = (activity: RecoveryActivity) => {
   const payload = activity.payload as { step?: unknown; outcome?: unknown } | null;
@@ -92,13 +107,28 @@ export function deriveThreadRecoveryNotice(input: {
           : "The provider has not started this turn yet; waiting for it to respond.";
     return { notice: notice("reconnecting", description), nextChangeInMs: null };
   }
-  if (!slow) return { notice: null, nextChangeInMs: null };
   if (request.outcome === "failed") {
+    const latestFailure = input.activities.findLast(
+      (activity) =>
+        activity.kind === TURN_START_FAILED_ACTIVITY_KIND &&
+        Date.parse(activity.createdAt) >= requestedAtMs,
+    );
+    const failureClass = failureClassOf(latestFailure) ?? "";
+    const forkOnly = FORK_ONLY_FAILURE_CLASSES.has(failureClass);
+    if (!slow && !forkOnly) return { notice: null, nextChangeInMs: null };
     return {
-      notice: notice("failed", "The turn did not start. See the error above for details."),
+      notice: notice(
+        "failed",
+        failureClass === "provider-unavailable"
+          ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
+          : forkOnly
+            ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
+            : "The turn did not start. See the error above for details.",
+      ),
       nextChangeInMs: null,
     };
   }
+  if (!slow) return { notice: null, nextChangeInMs: null };
   const remainingMs = settledAtMs + RECOVERED_NOTICE_VISIBLE_MS - input.nowMs;
   if (remainingMs <= 0) return { notice: null, nextChangeInMs: null };
   const degraded = steps.some(

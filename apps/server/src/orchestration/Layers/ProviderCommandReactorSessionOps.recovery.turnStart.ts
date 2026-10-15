@@ -8,6 +8,14 @@ import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.t
 import type { ProviderCapabilityContextState } from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
+import {
+  isResendableTurnStartFailure,
+  reportUnprovenSessionDead,
+} from "./ProviderCommandReactorSessionOps.recovery.dispatch.ts";
+import {
+  newTurnStartDispatchPhase,
+  type TurnStartDispatchPhase,
+} from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
 
 /** How a recovery attempt must (re)establish the provider session before sending. */
 export type TurnStartRecoveryAttempt =
@@ -39,9 +47,11 @@ const RECOVERY_SUMMARIES: Record<RecoveryStep, Record<RecoveryOutcome, string>> 
 
 /**
  * Runs a turn-start attempt with bounded recovery (plan D12). `context-limit` gets one retry in a
- * fresh session. `session-dead` gets at most one revive (resume the same provider session) and one
- * fresh session with transcript replay. Every other class fails unchanged. Never loops: at most
- * two extra attempts per call, and the reactor handles each turn-start request once.
+ * fresh session. A `session-dead` failure proven to precede dispatch (see `.recovery.dispatch.ts`)
+ * gets at most one revive (resume the same provider session) and one fresh session with transcript
+ * replay; an unproven one is reported `unsafe-to-replay`, so a turn is never sent twice. Every other
+ * class fails unchanged. Never loops: at most two extra attempts per call, and the reactor handles
+ * each turn-start request once.
  */
 export const withTurnStartRecovery = <A, E, R>(input: {
   readonly threadId: ThreadId;
@@ -49,7 +59,10 @@ export const withTurnStartRecovery = <A, E, R>(input: {
   readonly providerService: ProviderServiceShape;
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly states: Map<string, ProviderCapabilityContextState>;
-  readonly attempt: (recovery?: TurnStartRecoveryAttempt) => Effect.Effect<A, E, R>;
+  readonly attempt: (
+    recovery: TurnStartRecoveryAttempt | undefined,
+    phase: TurnStartDispatchPhase,
+  ) => Effect.Effect<A, E, R>;
 }): Effect.Effect<A, E | ProviderServiceError, R> => {
   const { threadId, providerService } = input;
 
@@ -99,14 +112,30 @@ export const withTurnStartRecovery = <A, E, R>(input: {
     Effect.andThen(Effect.sync(() => void input.states.delete(threadId))),
   );
 
+  /** Runs one attempt; a failure that may have been dispatched is reported unsafe-to-replay. */
+  const tracked = (recovery?: TurnStartRecoveryAttempt) => {
+    const phase = newTurnStartDispatchPhase();
+    return Effect.suspend(() => input.attempt(recovery, phase)).pipe(
+      Effect.result,
+      Effect.map((result) =>
+        Result.isSuccess(result)
+          ? { result, resendable: false }
+          : {
+              result: Result.fail(reportUnprovenSessionDead(result.failure, phase)),
+              resendable: isResendableTurnStartFailure(result.failure, phase),
+            },
+      ),
+    );
+  };
+
   const runStep = (step: RecoveryStep, recovery: TurnStartRecoveryAttempt) =>
     Effect.gen(function* () {
       yield* appendRecovery(step, "started");
-      const result = yield* input.attempt(recovery).pipe(Effect.result);
-      yield* Result.isSuccess(result)
+      const attempt = yield* tracked(recovery);
+      yield* Result.isSuccess(attempt.result)
         ? appendRecovery(step, "succeeded")
-        : appendRecovery(step, "failed", classifyTurnStartFailure(result.failure));
-      return result;
+        : appendRecovery(step, "failed", classifyTurnStartFailure(attempt.result.failure));
+      return attempt;
     });
 
   const recoverDeadSession = (error: E) =>
@@ -133,32 +162,31 @@ export const withTurnStartRecovery = <A, E, R>(input: {
         recoveryMode !== "unsupported"
       ) {
         const revived = yield* runStep("revive", { mode: "revive", resumeCursor });
-        if (Result.isSuccess(revived)) return revived.success;
-        failure = revived.failure;
-        const reviveClass = classifyTurnStartFailure(failure);
-        if (reviveClass !== "session-dead" && reviveClass !== "unknown") {
-          return yield* Effect.fail(failure);
-        }
+        if (Result.isSuccess(revived.result)) return revived.result.success;
+        failure = revived.result.failure;
+        // Only a failure proven to precede dispatch is resent; `unknown` never is.
+        if (!revived.resendable) return yield* Effect.fail(failure);
         yield* discardDeadSession;
       }
       if (FRESH_REPLAY_EXCLUDED_PROVIDERS.has(input.provider)) return yield* Effect.fail(failure);
       const fresh = yield* runStep("fresh-replay", { mode: "fresh" });
-      if (Result.isSuccess(fresh)) return fresh.success;
-      return yield* Effect.fail(fresh.failure);
+      if (Result.isSuccess(fresh.result)) return fresh.result.success;
+      return yield* Effect.fail(fresh.result.failure);
     });
 
-  return input.attempt().pipe(
-    Effect.catch((error) => {
-      const failureClass = classifyTurnStartFailure(error);
-      if (failureClass === "session-dead") return recoverDeadSession(error);
-      if (failureClass !== "context-limit") return Effect.fail(error);
+  return tracked().pipe(
+    Effect.flatMap(({ result, resendable }) => {
+      if (Result.isSuccess(result)) return Effect.succeed(result.success);
+      const error = result.failure;
+      if (resendable) return recoverDeadSession(error);
+      if (classifyTurnStartFailure(error) !== "context-limit") return Effect.fail(error);
       return Effect.gen(function* () {
         yield* Effect.logWarning("recovering provider session after context-limit failure", {
           threadId,
         });
         yield* providerService.stopSession({ threadId });
         input.states.delete(threadId);
-        return yield* input.attempt();
+        return yield* input.attempt(undefined, newTurnStartDispatchPhase());
       });
     }),
   );

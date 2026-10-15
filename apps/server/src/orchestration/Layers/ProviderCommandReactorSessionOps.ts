@@ -250,11 +250,11 @@ export const sendTurnForThread = (services: SessionOpServices) =>
       providerService: services.providerService,
       orchestrationEngine: services.orchestrationEngine,
       states: services.capabilityContextStates,
-      attempt: (recovery) =>
+      attempt: (recovery, dispatch) =>
         sendTurnAttempt(
           services,
           ensureSessionForThread(services),
-        )({ ...effectiveInput, ...(recovery ? { recovery } : {}) }),
+        )({ ...effectiveInput, ...(recovery ? { recovery } : {}), dispatch }),
     });
   });
 

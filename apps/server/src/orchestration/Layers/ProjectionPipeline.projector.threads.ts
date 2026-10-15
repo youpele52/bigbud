@@ -91,11 +91,15 @@ export function makeThreadsProjector(
           ...(event.payload.parentThread !== undefined
             ? { parentThread: event.payload.parentThread }
             : {}),
+          ...(event.payload.forkOrigin !== undefined
+            ? { forkOrigin: event.payload.forkOrigin }
+            : {}),
           latestTurnId: null,
           queuedPrompts: [],
           pendingInterruptFlushIntent: null,
           pendingTurnControlOperation: null,
-          queueHold: false,
+          // A fork holding the source's uncertain message starts with its queue held (plan D17).
+          queueHold: event.payload.forkOrigin?.pendingDelivery === "held",
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           lastActivityAt: event.payload.updatedAt,

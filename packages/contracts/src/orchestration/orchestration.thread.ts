@@ -24,6 +24,7 @@ import { ChatAttachment } from "./orchestration.attachments";
 import { ModelSelection } from "./orchestration.provider";
 import { OrchestrationProject } from "./orchestration.project";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
+import { ThreadForkOrigin } from "./orchestration.fork";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -372,6 +373,7 @@ export const OrchestrationThread = Schema.Struct({
   deletingAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   parentThread: Schema.optional(ParentThreadReference),
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
   // Optional for snapshots created before durable task projection was introduced.

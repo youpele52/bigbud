@@ -55,6 +55,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
           'threadId', parent_thread_id, 'title', parent_thread_title,
           'projectId', COALESCE(parent_thread_project_id, project_id)
         ) END AS "parentThread",
+        CASE WHEN fork_reason IS NULL THEN NULL ELSE json_object('forkPointMessageId', fork_point_message_id, 'reason', fork_reason, 'failureEventId', fork_failure_event_id) END AS "forkOrigin",
         latest_turn_id AS "latestTurnId", created_at AS "createdAt", updated_at AS "updatedAt",
         last_activity_at AS "lastActivityAt",
         queued_prompts_json AS "queuedPrompts",

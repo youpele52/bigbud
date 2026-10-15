@@ -26,6 +26,13 @@ export function makePrepareCommandState<HydrationError>(input: {
         }
       });
     }
+    if (command.type === "thread.fork") {
+      // The fork copies settled history from its source, so the source needs full history.
+      return Effect.gen(function* () {
+        yield* input.threadStateHydrator!.load(command.threadId, "operational");
+        yield* input.threadStateHydrator!.load(command.sourceThreadId, "history");
+      });
+    }
     const aggregate = commandToAggregateRef(command);
     if (aggregate.aggregateKind !== "thread") return Effect.void;
     const targetThreadId = aggregate.aggregateId as ThreadId;

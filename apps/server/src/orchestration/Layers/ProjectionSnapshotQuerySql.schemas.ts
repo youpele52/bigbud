@@ -17,6 +17,7 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
+import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -51,6 +52,8 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
+    // Optional: only the snapshot and operational thread queries select fork lineage.
+    forkOrigin: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadForkOrigin))),
     queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
     pendingInterruptFlushIntent: Schema.NullOr(
       Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),

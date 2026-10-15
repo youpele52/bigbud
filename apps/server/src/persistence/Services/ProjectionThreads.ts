@@ -23,6 +23,7 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
+import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import type * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -46,6 +47,8 @@ export const ProjectionThread = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   parentThread: Schema.optional(ParentThreadReference),
+  /** Fork lineage; written once at creation and kept by later upserts. */
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   latestTurnId: Schema.NullOr(TurnId),
   queuedPrompts: Schema.Array(OrchestrationQueuedPrompt),
   pendingInterruptFlushIntent: Schema.optional(

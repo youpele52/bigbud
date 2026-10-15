@@ -11,7 +11,10 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
-import { mapAcpPromptToAdapterError } from "../../acp/AcpAdapterSupport.ts";
+import {
+  assertAcpAgentAliveBeforePrompt,
+  mapAcpPromptToAdapterError,
+} from "../../acp/AcpAdapterSupport.ts";
 import { type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
 import {
   type DevinEventStamp,
@@ -93,6 +96,8 @@ export function makeSendTurnEffect(
       });
     }
 
+    // An exit observed before dispatch means the turn never started (session-dead, recoverable).
+    yield* assertAcpAgentAliveBeforePrompt(PROVIDER, input.threadId, ctx.acp);
     ctx.activeTurnId = turnId;
     ctx.lastPlanFingerprint = undefined;
     ctx.session = {

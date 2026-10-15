@@ -18,6 +18,7 @@ import {
   sendInput,
   sessionDead,
   settle,
+  sourceSends,
   THREAD,
 } from "./ProviderCommandReactor.sessionRecovery.test.helpers.ts";
 import { settleActiveTurn } from "./ProviderCommandReactor.test.settleTurn.ts";
@@ -80,7 +81,7 @@ describe("ProviderCommandReactor fresh-session transcript replay", () => {
     await dispatchTurn(harness, "second", "second question").catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    expect(harness.sendTurn.mock.calls).toHaveLength(4);
+    expect(sourceSends(harness)).toHaveLength(4);
     expect(await failures(harness)).toHaveLength(1);
   });
 

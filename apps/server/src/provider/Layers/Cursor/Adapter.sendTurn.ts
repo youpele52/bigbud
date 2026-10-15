@@ -11,7 +11,10 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
-import { mapAcpPromptToAdapterError } from "../../acp/AcpAdapterSupport.ts";
+import {
+  assertAcpAgentAliveBeforePrompt,
+  mapAcpPromptToAdapterError,
+} from "../../acp/AcpAdapterSupport.ts";
 import { type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
 import {
   type CursorEventStamp,
@@ -99,6 +102,8 @@ export function makeSendTurnEffect(
       });
     }
 
+    // An exit observed before dispatch means the turn never started (session-dead, recoverable).
+    yield* assertAcpAgentAliveBeforePrompt(PROVIDER, input.threadId, ctx.acp);
     ctx.activeTurnId = turnId;
     ctx.lastPlanFingerprint = undefined;
     ctx.session = {

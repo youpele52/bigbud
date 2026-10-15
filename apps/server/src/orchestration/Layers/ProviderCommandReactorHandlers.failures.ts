@@ -20,6 +20,8 @@ export type ProviderFailureActivityInput = {
   readonly createdAt: string;
   readonly requestId?: string;
   readonly failureClass?: TurnStartFailureClass;
+  /** Deterministic id so a fork can name the failure it continues from. */
+  readonly activityId?: EventId;
 };
 
 export type TurnStartFailureInput = {
@@ -28,6 +30,7 @@ export type TurnStartFailureInput = {
   readonly detail: string;
   readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
+  readonly activityId?: EventId;
 };
 
 const normalizeTurnStartFailureDetail = (detail: string): string => {
@@ -42,7 +45,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
       commandId: serverCommandId("provider-failure-activity"),
       threadId: input.threadId,
       activity: {
-        id: EventId.makeUnsafe(crypto.randomUUID()),
+        id: input.activityId ?? EventId.makeUnsafe(crypto.randomUUID()),
         tone: "error",
         kind: input.kind,
         summary: input.summary,
@@ -80,6 +83,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
         failureClass: input.failureClass,
         turnId: null,
         createdAt: input.createdAt,
+        ...(input.activityId !== undefined ? { activityId: input.activityId } : {}),
       });
     });
 

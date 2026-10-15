@@ -13,6 +13,7 @@ import {
   failures,
   recoveries,
   sessionDead,
+  sourceSends,
 } from "./ProviderCommandReactor.sessionRecovery.test.helpers.ts";
 import {
   createHarness,
@@ -70,7 +71,7 @@ describe("gate G2a: OpenCode V2 fresh-session replay", () => {
     await waitFor(async () => (await failures(harness)).length > 0);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    expect(harness.sendTurn.mock.calls).toHaveLength(3); // first turn + attempt + revive
+    expect(sourceSends(harness)).toHaveLength(3); // first turn + attempt + revive
     expect(await failures(harness)).toHaveLength(1);
     const steps = (await recoveries(harness)).map((entry) => `${entry.step}:${entry.outcome}`);
     expect(steps).toEqual(["revive:started", "revive:failed"]);

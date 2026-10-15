@@ -32,6 +32,14 @@ describe("turn-start failure classification on the wire", () => {
     expect(command).toMatchObject({ failureClass: "auth-or-quota" });
   });
 
+  it("accepts provider-unavailable (missing binary or disabled provider)", () => {
+    const event = Schema.decodeUnknownSync(ThreadTurnStartFailedPayload)({
+      ...base,
+      failureClass: "provider-unavailable",
+    });
+    expect(event.failureClass).toBe("provider-unavailable");
+  });
+
   it("rejects unknown classes", () => {
     expect(() =>
       Schema.decodeUnknownSync(ThreadTurnStartFailedPayload)({ ...base, failureClass: "flaky" }),

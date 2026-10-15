@@ -56,6 +56,7 @@ import {
   PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
 } from "./ProjectionPipeline.baseline.coordination.ts";
 import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
+import { keepAttachmentsSharedWithOtherThreads } from "./ProjectionPipeline.attachments.shared.ts";
 import { writeStartupStatus } from "../../startup/startupStatus.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
@@ -119,16 +120,18 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       );
 
       if (!runSideEffects) return;
-      yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("failed to apply projected attachment side-effects", {
-            projector: projector.name,
-            sequence: event.sequence,
-            eventType: event.type,
-            cause,
-          }),
-        ),
-      );
+      yield* keepAttachmentsSharedWithOtherThreads(sql, attachmentSideEffects)
+        .pipe(Effect.andThen(runAttachmentSideEffects(attachmentSideEffects)))
+        .pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("failed to apply projected attachment side-effects", {
+              projector: projector.name,
+              sequence: event.sequence,
+              eventType: event.type,
+              cause,
+            }),
+          ),
+        );
     });
 
     const projectorNames = Object.values(ORCHESTRATION_PROJECTOR_NAMES);

@@ -20,6 +20,7 @@ import type {
 } from "@bigbud/contracts";
 import type { ThreadDetailDelegatedChild } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
+import type { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import {
   DEFAULT_RUNTIME_MODE as _DEFAULT_RUNTIME_MODE,
@@ -175,6 +176,8 @@ export interface Thread {
     threadId: ThreadId;
     title: string;
   };
+  /** Present only on server-side forks. */
+  forkOrigin?: ThreadForkOrigin;
   title: string;
   purpose?: OrchestrationThreadPurpose;
   elevatorSummary?: string | null;

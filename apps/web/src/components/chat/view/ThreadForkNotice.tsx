@@ -1,0 +1,69 @@
+import { Link } from "@tanstack/react-router";
+import { GitForkIcon } from "lucide-react";
+import { useMemo } from "react";
+
+import type { Thread } from "../../../models/types/app.types";
+import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
+import { deriveForkOriginNotice, deriveSourceForkNotice } from "./ThreadForkNotice.logic";
+
+const LINK_CLASS = "font-medium text-foreground underline underline-offset-2 hover:no-underline";
+
+/**
+ * Fork lineage notices: a fork names its source (with a link), and a source links the fork it
+ * continued in. Blue (info): informational, nothing failed in this thread.
+ */
+export function ThreadForkNotice({
+  thread,
+}: {
+  readonly thread: Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
+}) {
+  const origin = useMemo(
+    () =>
+      deriveForkOriginNotice({ forkOrigin: thread.forkOrigin, parentThread: thread.parentThread }),
+    [thread.forkOrigin, thread.parentThread],
+  );
+  const { messages, activities } = thread;
+  const sourceFork = useMemo(
+    () => deriveSourceForkNotice({ messages, activities }),
+    [messages, activities],
+  );
+  if (!origin && !sourceFork) return null;
+  return (
+    <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
+      {origin ? (
+        <Alert variant="info" role="status" data-fork-notice="origin">
+          <GitForkIcon aria-hidden />
+          <AlertTitle>
+            Continued from{" "}
+            <Link
+              to="/$threadId"
+              params={{ threadId: origin.sourceThreadId }}
+              className={LINK_CLASS}
+            >
+              {origin.sourceTitle}
+            </Link>
+          </AlertTitle>
+          <AlertDescription className="text-xs">{origin.description}</AlertDescription>
+        </Alert>
+      ) : sourceFork ? (
+        <Alert variant="info" role="status" data-fork-notice="source">
+          <GitForkIcon aria-hidden />
+          <AlertTitle>
+            {sourceFork.automatic
+              ? "This thread could not be resumed and continued in a new thread"
+              : "This thread continued in a new thread"}
+          </AlertTitle>
+          <AlertDescription className="text-xs">
+            <Link
+              to="/$threadId"
+              params={{ threadId: sourceFork.forkThreadId }}
+              className={LINK_CLASS}
+            >
+              Open the new thread
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  );
+}

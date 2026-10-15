@@ -192,6 +192,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
       thread.workspaceExecutionTargetId ?? thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
+    ...(thread.forkOrigin ? { forkOrigin: thread.forkOrigin } : {}),
     title: thread.title,
     purpose: thread.purpose ?? "standard",
     elevatorSummary: thread.elevatorSummary,

@@ -1,7 +1,7 @@
 # Dead thread recovery: OpenCode V2 dead-backend retirement, in-place recovery, fork fallback
 
 **Date:** 15 October, 2026
-**Status:** In progress (Phases 1–2 implemented in staging worktree `fix/dead-thread-recovery`; Phase 3 pending)
+**Status:** Implemented (pending user AC1.8 check)
 **Owner:** bigbud server/provider maintainers (implementation agent on branch `fix/dead-thread-recovery`)
 
 **Inspected tree:** worktree `.claude/worktrees/dead-thread-recovery`, branch `fix/dead-thread-recovery` at `228464334` (clean). The guide's status list has no "Ready for implementation"; the requester asked for it explicitly, so it is used here and replaced by "In progress"/"Implemented" as phases land.
@@ -136,6 +136,43 @@ See Problem for line references. More context:
   - is cleared by an interrupt, a session stop, or a re-queue as a prompt.
 
   `ThreadRecoveryNotice` renders in `ChatViewChatBody.tsx` (`role="status"`, `aria-live="polite"`). It appears only after the 5 s display threshold, or once the server reports a recovery step. Green or amber stays visible for 6 s after the turn starts; red stays until the next request.
+
+**Addendum, 15 October 2026 (Phase 2 follow-up: process exits observed before dispatch).** This replaces the ACP trade-off in the Phase 2 addendum, which was not accepted. Goal: every provider recovers dead threads.
+
+- **Rule.** A turn whose agent process exit was observed before the prompt was dispatched never started. It is `session-dead`, and the bounded in-place recovery (D12) handles it. Only an exit observed after dispatch stays `unsafe-to-replay`.
+- **ACP adapters (Cursor, Devin).**
+  - `AcpSessionRuntimeShape.isAlive` reads `child.isRunning`; an unknown status counts as alive.
+  - `assertAcpAgentAliveBeforePrompt` runs immediately before `turn.started` and `session/prompt`. If the exit was already observed, it fails with `ProviderAdapterSessionClosedError{failureClass: "session-dead"}` and emits no `turn.started`.
+  - A process exit reported by the prompt itself stays `unsafe-to-replay`, because the process was alive when the prompt was dispatched.
+- **Pi.** Its prompt request has the same shape (one process, a request per prompt). The adapter samples `isPiProcessAlive` before dispatch and again on failure. The shared `promptDispatchFailureClass` (`provider/providerTurnDispatch.ts`) maps the samples:
+  - dead before dispatch → `session-dead`;
+  - alive before but dead after → `unsafe-to-replay`;
+  - alive both times → no adapter class.
+- **Not affected.**
+  - OpenCode V1/Kilocode fork the prompt after `sendTurn` returns, so a dead transport surfaces at the next `requireSession` as `session-dead`.
+  - Codex, Claude and Copilot fail at request admission, as classified in Phase 2.
+- **Tests.**
+  - Written red first: `provider/acp/AcpSendTurn.liveness.test.ts` (both ACP adapters, before and after dispatch) and `Pi/Adapter.methods.turnStartFailure.test.ts`.
+
+**Addendum, 15 October 2026 (Phase 3 implementation decisions).**
+
+- **Lineage.** `forkOrigin` is `{forkPointMessageId, reason, failureEventId, pendingDelivery?}`. `forkPointMessageId` is the id of the last copied _source_ message (null when nothing was copied). `failureEventId` is the id of the source's `provider.turn.start.failed` activity. The reactor now gives that activity the deterministic id `turn-start-failed:<turn-start-requested eventId>`. `pendingDelivery` (`sent` | `held`) exists on the creation event only. Migration 128 persists the first three fields, and the projection upsert uses `COALESCE`, so later upserts never erase lineage. The snapshot and operational thread reads return it.
+- **Uncertain turn.** A latest turn that is `running` is uncertain. A latest turn that is not `completed` is uncertain only if it was requested at or after the pending (otherwise latest) user message. This is needed because `thread.turn-start-failed` marks the _previous_ settled turn as `error`. Messages and activities of an uncertain turn are not copied. Streaming messages, the pending message and trailing unanswered user messages are not copied either.
+- **Caps and ids.** Newest 200 messages, 499 activities plus one `thread.fork-origin` activity (500), 50 plans and 500 tasks (`THREAD_FORK_CAPS`). Copies get deterministic new ids (`<kind>-fork-<sha256(forkId, sourceId)>`) and `turnId: null`. Task parent and blocker references are remapped inside the copied set and dropped otherwise. Attachments keep their ids; before pruning its files, a thread now keeps every file another thread's messages or queued prompts still reference (`ProjectionPipeline.attachments.shared.ts`).
+- **Idempotency.** The command is a no-op when the fork id already exists as a fork of the source, or when the source already has a `thread.forked` activity with the same `failureEventId` or `pendingMessageId`. Automatic forks use `autoForkThreadId(source, failureEventId)` and the command id `server:thread-fork:<failureEventId>`. The web reuses one command id and fork id per pending request.
+- **Provider.** An automatic fork keeps the source provider; a `modelSelection` naming another provider is rejected for it. Only a manual fork with the user's explicit `modelSelection` may switch provider (the web action does not offer a provider choice yet). Legacy OpenCode threads are rejected with the read-only message.
+- **D17 deviation.** The never-admitted case (`session-dead`) is sent in the fork with its attachments. Otherwise the message becomes a held queued prompt (`queueHold: true`) instead of a composer draft, because composer drafts cannot carry server-stored attachments. The user sends it from the queue. Nothing is replayed automatically; this covers V2 `unsafe-to-replay`.
+- **D18 scope.** The reactor forks automatically when the final class after bounded recovery (D12) is `session-dead`. That covers recovery exhausted, `sessionRecovery: unsupported`, missing resume state, and V2 after a failed revive. It skips the fork when the provider's capabilities cannot be read (provider unavailable).
+  - **D18 clarification (provider unavailable).** A new failure class `provider-unavailable` covers a missing or non-executable binary (`spawn … ENOENT`/`EACCES`, "is not installed", "not on PATH", "command not found") and a provider disabled in settings. These used to classify as `session-dead`, so every send would have been recovered and then forked. `provider-unavailable` is never recovered or forked automatically. The notice shows it at once, explains it, and offers only the manual "Continue in a new thread" action.
+  - A fork never forks again automatically until it has answered in a turn of its own. Copied messages carry `turnId: null`, so the check does not depend on clocks. (A timestamp-based first version chained 10 forks in a test whose fixtures were future-dated.)
+  - The "model no longer offered" trigger is superseded; see the next addendum.
+- **Web.** `ThreadRecoveryNotice` offers "Continue in a new thread" while reconnecting or after a failure. It also shows a fast failure whose class is `session-dead`, `unsafe-to-replay` or `provider-unavailable`. `ThreadForkNotice` names the source in a fork and links a source to its fork. `thread.created` now also maps `parentThread` in the web store, which matches what the snapshot already provides.
+
+**Addendum, 15 October 2026 (D18 model clause and post-dispatch reporting).**
+
+- **Model no longer offered (supersedes the D18 model clause).** Decision: there is no automatic trigger. The failure stays `invalid-request`, so it is never recovered or forked automatically. The thread notice offers the manual "Continue in a new thread" action, and the user picks the model there.
+- **Post-dispatch reporting.** `classifyTurnStartFailure(error, phase)` is the single source of truth. Any `session-dead` failure after dispatch that is not proven to precede it is reported `unsafe-to-replay`, including a plain non-adapter error. Adapter errors carry the class themselves; other errors are wrapped in `TurnStartReclassifiedError`. Such a failure is never resent and never forked automatically.
+- **Module layout.** The phase type and the "proven before dispatch" rule live in `ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts`. Both the classifier and `.recovery.dispatch.ts` import it, so there is no import cycle between them.
 
 ## Definition of Done
 

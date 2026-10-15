@@ -40,6 +40,37 @@ describe("ThreadRecoveryNotice", () => {
     await expect.element(page.getByText("Reconnecting…")).toBeVisible();
   });
 
+  it("offers continuing in a new thread after a failure in-place recovery cannot fix", async () => {
+    const requestedAt = new Date(Date.now() - 1_000).toISOString();
+    const onContinue = vi.fn();
+    await render(
+      <ThreadRecoveryNotice
+        thread={{
+          turnStartRequest: {
+            ...pending(requestedAt),
+            outcome: "failed",
+            settledAt: new Date().toISOString(),
+          },
+          activities: [
+            {
+              id: "failure-1",
+              tone: "error",
+              kind: "provider.turn.start.failed",
+              summary: "Provider turn start failed",
+              payload: { failureClass: "session-dead" },
+              turnId: null,
+              createdAt: new Date(Date.now() - 500).toISOString(),
+            } as unknown as OrchestrationThreadActivity,
+          ],
+        }}
+        onContinueInNewThread={onContinue}
+      />,
+    );
+    await expect.element(page.getByText("Could not reconnect")).toBeVisible();
+    await page.getByRole("button", { name: "Continue in a new thread" }).click();
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the amber fresh-session outcome after a recovered start", async () => {
     const requestedAt = new Date(Date.now() - 2_000).toISOString();
     const activity = (outcome: string) =>

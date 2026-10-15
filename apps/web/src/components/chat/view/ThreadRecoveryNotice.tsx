@@ -2,7 +2,8 @@ import { CircleCheckIcon, LoaderCircleIcon, TriangleAlertIcon, XCircleIcon } fro
 import { useEffect, useMemo, useState } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { Button } from "../../ui/button";
 import {
   deriveThreadRecoveryNotice,
   type ThreadRecoveryNoticeTone,
@@ -15,11 +16,19 @@ const NOTICE_ICONS: Record<ThreadRecoveryNoticeTone, typeof CircleCheckIcon> = {
   error: XCircleIcon,
 };
 
-/** Blue "Reconnecting…" after 5 s without a started turn; green, amber or red outcome after. */
+/**
+ * Blue "Reconnecting…" after 5 s without a started turn; green, amber or red outcome after.
+ * While waiting or after a failure it offers "Continue in a new thread" (server-side fork).
+ */
 export function ThreadRecoveryNotice({
   thread,
+  onContinueInNewThread,
+  continuePending = false,
 }: {
   readonly thread: Pick<Thread, "turnStartRequest" | "activities">;
+  /** Omitted when the thread already continued in a fork. */
+  readonly onContinueInNewThread?: (() => void) | undefined;
+  readonly continuePending?: boolean;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const { notice, nextChangeInMs } = useMemo(
@@ -54,6 +63,18 @@ export function ThreadRecoveryNotice({
         <Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />
         <AlertTitle>{notice.title}</AlertTitle>
         <AlertDescription className="text-xs">{notice.description}</AlertDescription>
+        {notice.canContinueInNewThread && onContinueInNewThread ? (
+          <AlertAction>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={continuePending}
+              onClick={onContinueInNewThread}
+            >
+              Continue in a new thread
+            </Button>
+          </AlertAction>
+        ) : null}
       </Alert>
     </div>
   );

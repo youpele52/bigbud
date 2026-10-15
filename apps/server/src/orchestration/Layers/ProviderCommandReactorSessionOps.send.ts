@@ -24,6 +24,7 @@ import type {
 } from "./ProviderCommandReactorSessionOps.types.ts";
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
 import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
+import type { TurnStartDispatchPhase } from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
 
 export const sendTurnAttempt = (
   services: SessionOpServices,
@@ -31,7 +32,11 @@ export const sendTurnAttempt = (
 ) =>
   Effect.fn("sendTurnAttempt")(function* (
     input: SendTurnForThreadInput &
-      ResolvedTurnExecutionSettings & { readonly recovery?: TurnStartRecoveryAttempt },
+      ResolvedTurnExecutionSettings & {
+        readonly recovery?: TurnStartRecoveryAttempt;
+        /** Marked immediately before the provider send: later failures may have been accepted. */
+        readonly dispatch?: TurnStartDispatchPhase;
+      },
   ) {
     const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
@@ -177,6 +182,7 @@ export const sendTurnAttempt = (
         (modelForTurn.provider === "opencodeV2" && attachment.type === "path"),
     );
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    if (input.dispatch) input.dispatch.dispatched = true;
     const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
       ...(input.requestMessageId !== undefined ? { requestMessageId: input.requestMessageId } : {}),

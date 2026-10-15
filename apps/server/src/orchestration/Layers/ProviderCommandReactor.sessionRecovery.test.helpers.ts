@@ -17,8 +17,15 @@ import { settleActiveTurn } from "./ProviderCommandReactor.test.settleTurn.ts";
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 export const THREAD = ThreadId.makeUnsafe("thread-1");
+/** The adapter proves the session was dead before dispatch, so recovery may resend. */
 export const sessionDead = () =>
-  Effect.fail(new ProviderAdapterSessionClosedError({ provider: "codex", threadId: THREAD }));
+  Effect.fail(
+    new ProviderAdapterSessionClosedError({
+      provider: "codex",
+      threadId: THREAD,
+      failureClass: "session-dead",
+    }),
+  );
 
 export async function completeFirstTurn(harness: Harness) {
   await dispatchTurn(harness, "first", "first question");
@@ -80,6 +87,11 @@ export const recoveries = async (harness: Harness) =>
   (await activities(harness))
     .filter((entry) => entry.kind === "provider.session.recovery")
     .map((entry) => entry.payload as { step: string; outcome: string });
+/** Provider sends for the source thread; an automatic fork (D18) sends on its own thread. */
+export const sourceSends = (harness: Harness) =>
+  harness.sendTurn.mock.calls.filter(
+    (call) => (call[0] as { threadId?: unknown } | undefined)?.threadId === THREAD,
+  );
 export const sendInput = (harness: Harness, index: number) =>
   (harness.sendTurn.mock.calls[index]?.[0] as { input?: string } | undefined)?.input ?? "";
 export const startInput = (harness: Harness, index: number) =>

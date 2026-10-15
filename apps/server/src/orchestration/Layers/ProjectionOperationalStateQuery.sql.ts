@@ -65,6 +65,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           'threadId', t.parent_thread_id, 'title', t.parent_thread_title,
           'projectId', COALESCE(t.parent_thread_project_id, t.project_id)
         ) END AS "parentThread",
+        CASE WHEN t.fork_reason IS NULL THEN NULL ELSE json_object('forkPointMessageId', t.fork_point_message_id, 'reason', t.fork_reason, 'failureEventId', t.fork_failure_event_id) END AS "forkOrigin",
         t.latest_turn_id AS "latestTurnId", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
         t.last_activity_at AS "lastActivityAt",
         t.queued_prompts_json AS "queuedPrompts",

@@ -4,6 +4,7 @@ export * from "./orchestration.attachments";
 export * from "./orchestration.project";
 export * from "./orchestration.thread";
 export * from "./orchestration.turnFailure";
+export * from "./orchestration.fork";
 export * from "./orchestration.thinking";
 export * from "./orchestration.commands";
 export * from "./orchestration.events";

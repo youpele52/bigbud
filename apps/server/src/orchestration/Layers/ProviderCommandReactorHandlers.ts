@@ -57,6 +57,7 @@ import {
 } from "./ProviderCommandReactorHandlers.events.ts";
 import { makeProviderCommandSessionStateHelpers } from "./ProviderCommandReactorHandlers.sessionState.ts";
 import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.turnStart.ts";
+import { makeRequestAutomaticFork } from "./ProviderCommandReactorHandlers.fork.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -88,6 +89,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const handleTurnStartFailure = makeHandleTurnStartFailure({
     orchestrationEngine,
     recordTurnStartFailure,
+    requestAutomaticFork: makeRequestAutomaticFork({ orchestrationEngine, providerService }),
   });
 
   const { assertRuntimeStartAllowed, resolveThread, setThreadSession } =

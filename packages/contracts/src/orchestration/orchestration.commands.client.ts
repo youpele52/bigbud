@@ -31,13 +31,8 @@ import {
 } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
 import * as MessageOrigin from "./orchestration.messageOrigin";
+import { ThreadForkCommand } from "./orchestration.fork";
 import {
-  ClientThreadMessageSubmitCommand,
-  ThreadMessageSubmitCommand,
-} from "./orchestration.commands.client.messageSubmit";
-
-export { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
-export {
   ClientThreadMessageSubmitCommand,
   ThreadMessageSubmitCommand,
 } from "./orchestration.commands.client.messageSubmit";
@@ -342,6 +337,7 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
+  ThreadForkCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
@@ -373,6 +369,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
+  ThreadForkCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,

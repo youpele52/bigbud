@@ -82,6 +82,50 @@ describe("deriveThreadRecoveryNotice", () => {
     });
   });
 
+  it("offers continuing in a new thread while reconnecting or after a failure", () => {
+    expect(derive(request(), 5_000).notice?.canContinueInNewThread).toBe(true);
+    expect(derive(request("failed", 6_000), 7_000).notice?.canContinueInNewThread).toBe(true);
+    expect(derive(request("started", 7_000), 8_000).notice?.canContinueInNewThread).toBe(false);
+  });
+
+  it("shows a fast failure the thread cannot recover from in place (fork is the only path)", () => {
+    const failure = {
+      kind: "provider.turn.start.failed",
+      payload: { failureClass: "unsafe-to-replay" },
+      createdAt: iso(500),
+    };
+    expect(
+      deriveThreadRecoveryNotice({
+        request: request("failed", 800),
+        activities: [failure],
+        nowMs: T0 + 1_000,
+      }).notice,
+    ).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });
+    expect(
+      deriveThreadRecoveryNotice({
+        request: request("failed", 800),
+        activities: [{ ...failure, payload: { failureClass: "auth-or-quota" } }],
+        nowMs: T0 + 1_000,
+      }).notice,
+    ).toBeNull();
+  });
+
+  it("explains an unavailable provider and offers only the manual new-thread action", () => {
+    const notice = deriveThreadRecoveryNotice({
+      request: request("failed", 800),
+      activities: [
+        {
+          kind: "provider.turn.start.failed",
+          payload: { failureClass: "provider-unavailable" },
+          createdAt: iso(500),
+        },
+      ],
+      nowMs: T0 + 1_000,
+    }).notice;
+    expect(notice).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });
+    expect(notice?.description).toMatch(/not available/i);
+  });
+
   it("never shows anything for fast starts or fast failures", () => {
     expect(derive(request("started", 800), 1_000).notice).toBeNull();
     expect(derive(request("failed", 800), 1_000).notice).toBeNull();

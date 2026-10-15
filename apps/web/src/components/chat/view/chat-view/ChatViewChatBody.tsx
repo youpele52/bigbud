@@ -32,7 +32,7 @@ import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
 import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
 import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
 import { StatusBanner } from "~/components/common/StatusBanner";
-import { ThreadRecoveryNotice } from "../ThreadRecoveryNotice";
+import { ThreadRecoveryNotices } from "../ThreadRecoveryNotices";
 
 interface ChatViewChatBodyProps {
   readonly base: ChatViewBaseState;
@@ -125,7 +125,7 @@ export function ChatViewChatBody({
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
       />
       {base.isServerThread && base.activeThread ? (
-        <ThreadRecoveryNotice thread={base.activeThread} />
+        <ThreadRecoveryNotices thread={base.activeThread} />
       ) : null}
       {!retainedHistory ? (
         <AccessModeInfoBanner
@@ -155,7 +155,8 @@ export function ChatViewChatBody({
                 onTouchEnd={runtime.scrollBehavior.onMessagesTouchEnd}
                 onTouchCancel={runtime.scrollBehavior.onMessagesTouchEnd}
               >
-                {base.activeThread?.parentThread ? (
+                {/* A fork names its source in its own notice. */}
+                {base.activeThread?.parentThread && !base.activeThread.forkOrigin ? (
                   <div className="mb-4 flex items-center gap-3">
                     <span className="h-px flex-1 bg-border" />
                     <Link

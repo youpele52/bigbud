@@ -22,6 +22,8 @@ vi.mock("../../scroller/ThreadReaderOutline", () => ({ ThreadReaderOutline: () =
 vi.mock("./ChatViewComposer", () => ({ ChatViewComposer: () => "composer-controls" }));
 vi.mock("../../side-chat/SideChatHost", () => ({ SideChatHost: () => null }));
 vi.mock("../../side-chat/sideChat.actions", () => ({ openSideChat: vi.fn() }));
+// Router-bound recovery and fork notices are covered by their own tests.
+vi.mock("../ThreadRecoveryNotices", () => ({ ThreadRecoveryNotices: () => null }));
 
 function makeProps(provider: "opencode" | "opencodeV2") {
   return {

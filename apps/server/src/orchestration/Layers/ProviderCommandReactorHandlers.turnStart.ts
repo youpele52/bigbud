@@ -1,4 +1,10 @@
-import { CommandId, type OrchestrationMessage, type ThreadId } from "@bigbud/contracts";
+import {
+  CommandId,
+  EventId,
+  type MessageId,
+  type OrchestrationMessage,
+  type ThreadId,
+} from "@bigbud/contracts";
 import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Cause, Effect } from "effect";
 
@@ -18,7 +24,15 @@ type RecordTurnStartFailure = (input: {
   readonly detail: string;
   readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
+  readonly activityId?: EventId;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
+
+type RequestAutomaticFork = (input: {
+  readonly sourceThreadId: ThreadId;
+  readonly failureEventId: EventId;
+  readonly pendingMessageId: MessageId;
+  readonly createdAt: string;
+}) => Effect.Effect<void>;
 
 function canQueueTurnStart(input: {
   readonly event: TurnStartRequestedEvent;
@@ -67,6 +81,7 @@ function queueTurnStart(input: {
 export function makeHandleTurnStartFailure(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly recordTurnStartFailure: RecordTurnStartFailure;
+  readonly requestAutomaticFork?: RequestAutomaticFork;
 }) {
   return (failure: {
     readonly event: TurnStartRequestedEvent;
@@ -79,13 +94,29 @@ export function makeHandleTurnStartFailure(input: {
       failureClass !== "busy" ||
       !canQueueTurnStart({ event: failure.event, message: failure.message })
     ) {
-      return input.recordTurnStartFailure({
-        threadId: failure.event.payload.threadId,
+      const threadId = failure.event.payload.threadId;
+      const activityId = EventId.makeUnsafe(`turn-start-failed:${failure.event.eventId}`);
+      const recorded = input.recordTurnStartFailure({
+        threadId,
         context: "provider-turn-start",
         detail,
         failureClass,
         createdAt: failure.event.payload.createdAt,
+        activityId,
       });
+      // Bounded in-place recovery already ran; still session-dead means it cannot resume (D16).
+      const requestAutomaticFork = input.requestAutomaticFork;
+      if (failureClass !== "session-dead" || requestAutomaticFork === undefined) return recorded;
+      return recorded.pipe(
+        Effect.andThen(
+          requestAutomaticFork({
+            sourceThreadId: threadId,
+            failureEventId: activityId,
+            pendingMessageId: failure.message.id,
+            createdAt: new Date().toISOString(),
+          }),
+        ),
+      );
     }
 
     return queueTurnStart({

@@ -11,6 +11,8 @@ import { Schema } from "effect";
  * - auth-or-quota: authentication, authorization, quota or billing; never auto-recovered.
  * - invalid-request: the request itself is invalid; never auto-recovered.
  * - unsafe-to-replay: automatic action is unsafe (outcome may be uncertain); user action needed.
+ * - provider-unavailable: the provider binary is missing or not executable, or the provider is
+ *   disabled; never auto-recovered or auto-forked (the user may continue in a new thread).
  * - unknown: none of the above.
  */
 export const TurnStartFailureClass = Schema.Literals([
@@ -20,6 +22,7 @@ export const TurnStartFailureClass = Schema.Literals([
   "auth-or-quota",
   "invalid-request",
   "unsafe-to-replay",
+  "provider-unavailable",
   "unknown",
 ]);
 export type TurnStartFailureClass = typeof TurnStartFailureClass.Type;
