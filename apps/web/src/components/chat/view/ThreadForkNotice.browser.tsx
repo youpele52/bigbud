@@ -92,6 +92,29 @@ describe("ThreadForkNotice", () => {
     expect(router.state.location.pathname).toBe("/fork-1");
   });
 
+  it("warns in amber when the message was sent again after a deleted fork received it", async () => {
+    await renderAt({
+      forkOrigin: {
+        forkPointMessageId: null,
+        reason: "manual",
+        failureEventId: null,
+        pendingDelivery: "sent",
+      },
+      parentThread: { threadId: "source-1" as ThreadId, title: "Long running work" },
+      messages: [],
+      activities: [
+        activity("origin-1", "thread.fork-origin", "2026-10-15T10:00:00.000Z", {
+          pendingDelivery: "sent",
+          redelivered: true,
+        }),
+      ],
+    });
+    const status = page.getByRole("status");
+    await expect.element(status).toHaveAttribute("data-fork-notice", "origin");
+    await expect.element(status).toHaveAttribute("data-tone", "warning");
+    await expect.element(page.getByText(/workspace changes it made may be repeated/)).toBeVisible();
+  });
+
   it("links nothing once the fork was deleted", async () => {
     await renderAt(
       {

@@ -85,6 +85,28 @@ export function buildSteerCommand(input: {
   };
 }
 
+/**
+ * "Send now" on an idle thread. It is the user's own send, so it also releases a held queue (a
+ * fork's held message, or a queue held after Stop); automatic flushes never carry `userRelease`.
+ */
+export function buildSendNowFlushCommand(input: {
+  readonly threadId: ThreadId;
+  readonly commandId: CommandId;
+  readonly messageIds: ReadonlyArray<MessageId>;
+  readonly messageId: MessageId;
+  readonly createdAt: string;
+}) {
+  return {
+    type: "thread.queued-prompt.flush" as const,
+    commandId: input.commandId,
+    threadId: input.threadId,
+    messageIds: [...input.messageIds],
+    messageId: input.messageId,
+    userRelease: true,
+    createdAt: input.createdAt,
+  };
+}
+
 export function buildComposerFollowUpCommand(input: {
   readonly threadId: ThreadId;
   readonly commandId: CommandId;
@@ -166,14 +188,15 @@ export function usePromptQueue(input: UsePromptQueueInput) {
         });
         return;
       }
-      await readNativeApi()?.orchestration.dispatchCommand({
-        type: "thread.queued-prompt.flush",
-        commandId: newCommandId(),
-        threadId: input.threadId,
-        messageIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
-        messageId: newMessageId(),
-        createdAt: new Date().toISOString(),
-      });
+      await readNativeApi()?.orchestration.dispatchCommand(
+        buildSendNowFlushCommand({
+          commandId: newCommandId(),
+          threadId: input.threadId,
+          messageIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
+          messageId: newMessageId(),
+          createdAt: new Date().toISOString(),
+        }),
+      );
     } catch (error) {
       input.onError(promptQueueErrorMessage(error));
     }

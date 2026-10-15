@@ -15,12 +15,13 @@ const forked = (forkThreadId: string, lineage: Record<string, unknown> = {}) =>
 const source = (activities: unknown[] = []) => ({ id: SOURCE, activities }) as never;
 const fork = (id: string) => ({ id, activities: [] }) as never;
 const command = { pendingMessageId: "m-2", failureEventId: "failure-2" };
-const resolve = (threads: unknown[]) =>
+const resolve = (threads: unknown[], sidebarIds: string[] = []) =>
   resolveContinuedThreadId({
     sourceThreadId: SOURCE,
     requestedThreadId: REQUESTED,
     command,
     threads: threads as never,
+    sidebarThreadsById: Object.fromEntries(sidebarIds.map((id) => [id, { id }])) as never,
   });
 
 describe("continued thread navigation target", () => {
@@ -40,8 +41,26 @@ describe("continued thread navigation target", () => {
     expect(resolve([source([deleted])])).toBeNull();
   });
 
+  it("finds a fork the browser knows only from the sidebar summaries", () => {
+    expect(resolve([source()], [REQUESTED])).toBe(REQUESTED);
+    const kept = forked("auto-fork", { pendingMessageId: "m-2" });
+    expect(resolve([source([kept])], ["auto-fork"])).toBe("auto-fork");
+  });
+
+  it("after the wait, opens the fork the server recorded for this message even if not loaded", async () => {
+    const kept = forked("unloaded-fork", { pendingMessageId: "m-2" });
+    const state = { threads: [source([kept])], sidebarThreadsById: {} };
+    const store = { getState: () => state, subscribe: () => () => undefined };
+    await expect(
+      waitForContinuedThread(
+        { sourceThreadId: SOURCE, requestedThreadId: REQUESTED, command, timeoutMs: 10 },
+        store as never,
+      ),
+    ).resolves.toBe("unloaded-fork");
+  });
+
   it("waits for the store to show the fork and gives up after the timeout", async () => {
-    let state = { threads: [source()] };
+    let state = { threads: [source()], sidebarThreadsById: {} };
     const listeners = new Set<(next: typeof state) => void>();
     const store = {
       getState: () => state,
@@ -56,6 +75,7 @@ describe("continued thread navigation target", () => {
     );
     state = {
       threads: [source([forked("auto-fork", { failureEventId: "failure-2" })]), fork("auto-fork")],
+      sidebarThreadsById: {},
     };
     for (const listener of listeners) listener(state);
     await expect(waiting).resolves.toBe("auto-fork");

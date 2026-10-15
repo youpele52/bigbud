@@ -233,3 +233,19 @@ export function resolvePendingDelivery(
     ? "sent"
     : "held";
 }
+
+/**
+ * True when an earlier fork (now deleted, or the decider would have kept it) already received this
+ * message. Sending it again may repeat its workspace changes, since forks share the worktree.
+ */
+export function wasPendingDeliveredBefore(
+  source: OrchestrationThread,
+  pendingMessageId: MessageId,
+): boolean {
+  return source.activities.some(
+    (activity) =>
+      activity.kind === THREAD_FORKED_ACTIVITY_KIND &&
+      payloadField(activity, "pendingMessageId") === pendingMessageId &&
+      payloadField(activity, "pendingDelivery") === "sent",
+  );
+}

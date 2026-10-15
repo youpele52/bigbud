@@ -204,6 +204,8 @@ export const ThreadQueuedPromptFlushCommand = Schema.Struct({
   messageIds: Schema.Array(MessageId),
   messageId: MessageId,
   acknowledged: Schema.optional(Schema.Boolean),
+  /** The user's "Send now": releases a held queue (`queueHold`). The server never sets it. */
+  userRelease: Schema.optional(Schema.Boolean),
   consumeOnly: Schema.optional(Schema.Boolean),
   controlOperationId: Schema.optional(CommandId),
   createdAt: IsoDateTime,

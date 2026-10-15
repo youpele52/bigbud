@@ -124,6 +124,7 @@ describe("usePromptQueue command rejection", () => {
     expect(dispatchCommand.mock.calls[1]?.[0]).toMatchObject({
       type: "thread.queued-prompt.flush",
       messageIds: ["prompt-1"],
+      userRelease: true,
     });
   });
 

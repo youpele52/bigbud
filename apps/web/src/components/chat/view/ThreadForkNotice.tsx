@@ -33,12 +33,16 @@ export function ThreadForkNotice({
     | undefined;
   readonly carryPending?: boolean;
 }) {
+  const { messages, activities } = thread;
   const origin = useMemo(
     () =>
-      deriveForkOriginNotice({ forkOrigin: thread.forkOrigin, parentThread: thread.parentThread }),
-    [thread.forkOrigin, thread.parentThread],
+      deriveForkOriginNotice({
+        forkOrigin: thread.forkOrigin,
+        parentThread: thread.parentThread,
+        activities,
+      }),
+    [thread.forkOrigin, thread.parentThread, activities],
   );
-  const { messages, activities } = thread;
   const sourceFork = useMemo(
     () => deriveSourceForkNotice({ messages, activities }, isForkPresent),
     [messages, activities, isForkPresent],
@@ -48,7 +52,12 @@ export function ThreadForkNotice({
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
       {origin ? (
-        <Alert variant="info" role="status" data-fork-notice="origin">
+        <Alert
+          variant={origin.tone}
+          role="status"
+          data-fork-notice="origin"
+          data-tone={origin.tone}
+        >
           <GitForkIcon aria-hidden />
           <AlertTitle>
             Continued from{" "}

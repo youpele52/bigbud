@@ -84,6 +84,18 @@ describe("thread.fork into the source's existing fork", () => {
     });
     const events = await decide(model, again);
     expect(events.find((event) => event.type === "thread.created")?.aggregateId).toBe("fork-new");
+    // The deleted fork already received it, so the new fork records that it was sent again.
+    const origin = events.find(
+      (event) =>
+        event.type === "thread.activity-appended" &&
+        (event.payload as { activity: { kind: string } }).activity.kind === "thread.fork-origin",
+    );
+    expect(
+      (origin?.payload as { activity: { payload: unknown } } | undefined)?.activity.payload,
+    ).toMatchObject({
+      pendingDelivery: "sent",
+      redelivered: true,
+    });
   });
 
   it("refuses to carry a message that may already have reached the provider", async () => {

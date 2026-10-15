@@ -191,6 +191,13 @@ See Problem for line references. More context:
 - **D20 deleted forks.** A deleted or missing fork does not count. The reactor and the decider check the server read model; before a `thread.fork` is decided, the source's lineage forks are hydrated. The web checks the store, because deleted threads leave it. The source can then fork automatically once more, and "Continue in a new thread" reappears.
 - **D18 UI.** `invalid-request` (for example, a model that is no longer offered) shows the manual "Continue in a new thread" action. This applies to the UI only; it is never forked automatically.
 
+**Addendum, 15 October 2026 (final review, user-confirmed product rules).**
+
+- **Forks stay provider-unlocked.** A held message is queued without a model, runtime mode or interaction mode. When it is released, it uses whatever the user picked in the fork's composer, which starts as the source's selection. The fork stays unstarted (no `latestTurn`, no session). An automatic fork that sends at once keeps the parent's model.
+- **Navigation.** The web opens a fork it knows from the sidebar summaries, not only from loaded threads. If the wait ends and the server has recorded a fork for this same message, the web opens that fork instead of showing an error.
+- **Repeated delivery (D20).** A message is sometimes sent again in a new fork after a deleted fork already received it. The new fork's lineage records `redelivered: true`, and its notice is amber: the message was sent again, and any workspace changes it made may be repeated.
+- **Resolved 2026-10-15: "Send now" releases a held queue.** `queueHold` means "never auto-send; the user sends", and "Send now" is that user send. On an idle thread the web flush now carries `userRelease: true`, a new optional field on the client `thread.queued-prompt.flush` command. `acknowledged` was not reused, because the server sets it for provider acknowledgements. `consumableQueuedPrefix` lets only such a flush pass a hold; every other guard still applies (archived or deleted thread, active reservation, interrupt-intent mismatch, confirmed idle). No server producer sets the flag, so lifecycle and automatic flushes still never send a held queue. This covers a held fork and a queue held after Stop. Before this fix, a composer send on an idle held thread (`thread.turn.start`) sent the new message and cleared the hold, so the held message went out after it. A `thread.message.submit` with `delivery: "auto"` on a held thread only queued.
+
 ## Definition of Done
 
 All phases are merged and, on one SHA:

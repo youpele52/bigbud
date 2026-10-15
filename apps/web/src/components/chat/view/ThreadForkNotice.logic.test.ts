@@ -25,7 +25,9 @@ const present = () => true;
 
 describe("fork notices", () => {
   it("names the source in a forked thread and explains the pending message", () => {
-    expect(deriveForkOriginNotice({ forkOrigin: undefined, parentThread: undefined })).toBeNull();
+    expect(
+      deriveForkOriginNotice({ forkOrigin: undefined, parentThread: undefined, activities: [] }),
+    ).toBeNull();
     const notice = deriveForkOriginNotice({
       parentThread: { threadId: "source-1" as ThreadId, title: "Long running work" },
       forkOrigin: {
@@ -34,10 +36,36 @@ describe("fork notices", () => {
         failureEventId: null,
         pendingDelivery: "held",
       },
+      activities: [],
     });
     expect(notice).toMatchObject({ sourceThreadId: "source-1", sourceTitle: "Long running work" });
     expect(notice?.description).toMatch(/could not be resumed/i);
     expect(notice?.description).toMatch(/queue/i);
+  });
+
+  it("warns in amber when the message was sent again after an earlier fork received it", () => {
+    const input = {
+      parentThread: { threadId: "source-1" as ThreadId, title: "Work" },
+      forkOrigin: {
+        forkPointMessageId: null,
+        reason: "manual" as const,
+        failureEventId: null,
+        pendingDelivery: "sent" as const,
+      },
+    };
+    expect(deriveForkOriginNotice({ ...input, activities: [] })?.tone).toBe("info");
+    const notice = deriveForkOriginNotice({
+      ...input,
+      activities: [
+        activity("thread.fork-origin", "2026-10-15T10:00:00.000Z", {
+          pendingDelivery: "sent",
+          redelivered: true,
+        }),
+      ],
+    });
+    expect(notice?.tone).toBe("warning");
+    expect(notice?.description).toMatch(/sent again/i);
+    expect(notice?.description).toMatch(/workspace changes/i);
   });
 
   it("links a source thread to its newest fork made after the latest user message", () => {

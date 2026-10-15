@@ -5,11 +5,14 @@ import type { Thread } from "../models/types/app.types";
 import { useStore } from "../stores/main";
 
 type NavigationThread = Pick<Thread, "id" | "activities">;
+/** Loaded threads plus the sidebar summaries, which also list threads not loaded in full. */
+interface NavigationState {
+  readonly threads: ReadonlyArray<NavigationThread>;
+  readonly sidebarThreadsById?: Readonly<Record<string, unknown>> | undefined;
+}
 interface ThreadStore {
-  readonly getState: () => { readonly threads: ReadonlyArray<NavigationThread> };
-  readonly subscribe: (
-    listener: (state: { readonly threads: ReadonlyArray<NavigationThread> }) => void,
-  ) => () => void;
+  readonly getState: () => NavigationState;
+  readonly subscribe: (listener: (state: NavigationState) => void) => () => void;
 }
 
 /** What the dispatched `thread.fork` was for; the server keeps an existing fork for the same. */
@@ -18,21 +21,12 @@ export interface ContinuedForkRequest {
   readonly failureEventId?: string | undefined;
 }
 
-/**
- * The thread to open after "Continue in a new thread" or a carry: the requested fork once it
- * exists, or the fork the server kept for this same message or failure (a no-op decision). Never
- * an unused id, an older fork made for something else, or a fork the store does not show.
- */
-export function resolveContinuedThreadId(input: {
-  readonly sourceThreadId: ThreadId;
-  readonly requestedThreadId: ThreadId;
-  readonly command: ContinuedForkRequest;
-  readonly threads: ReadonlyArray<NavigationThread>;
-}): ThreadId | null {
-  const { command } = input;
-  const exists = (threadId: unknown) => input.threads.some((thread) => thread.id === threadId);
-  if (exists(input.requestedThreadId)) return input.requestedThreadId;
-  const source = input.threads.find((thread) => thread.id === input.sourceThreadId);
+/** The newest fork the source recorded for this same message or failure. */
+function recordedForkFor(
+  source: NavigationThread | undefined,
+  command: ContinuedForkRequest,
+  accept: (forkThreadId: string) => boolean,
+): ThreadId | null {
   const kept = source?.activities.findLast((activity) => {
     if (activity.kind !== THREAD_FORKED_ACTIVITY_KIND) return false;
     const payload = activity.payload as Record<string, unknown> | null;
@@ -40,10 +34,31 @@ export function resolveContinuedThreadId(input: {
       (command.pendingMessageId !== undefined &&
         payload?.pendingMessageId === command.pendingMessageId) ||
       (command.failureEventId !== undefined && payload?.failureEventId === command.failureEventId);
-    return sameRequest && exists(payload?.forkThreadId);
+    return sameRequest && typeof payload?.forkThreadId === "string" && accept(payload.forkThreadId);
   });
   const forkThreadId = (kept?.payload as { forkThreadId?: unknown } | undefined)?.forkThreadId;
   return typeof forkThreadId === "string" ? (forkThreadId as ThreadId) : null;
+}
+
+/**
+ * The thread to open after "Continue in a new thread" or a carry: the requested fork once the
+ * browser knows it (loaded or in the sidebar summaries), or the fork the server kept for this same
+ * message or failure (a no-op decision). Never an unused id or an older fork made for something
+ * else.
+ */
+export function resolveContinuedThreadId(
+  input: NavigationState & {
+    readonly sourceThreadId: ThreadId;
+    readonly requestedThreadId: ThreadId;
+    readonly command: ContinuedForkRequest;
+  },
+): ThreadId | null {
+  const known = (threadId: string) =>
+    input.sidebarThreadsById?.[threadId] !== undefined ||
+    input.threads.some((thread) => thread.id === threadId);
+  if (known(input.requestedThreadId)) return input.requestedThreadId;
+  const source = input.threads.find((thread) => thread.id === input.sourceThreadId);
+  return recordedForkFor(source, input.command, known);
 }
 
 /** Resolves once the store shows the continued thread, or null after `timeoutMs`. */
@@ -56,9 +71,8 @@ export function waitForContinuedThread(
   },
   store: ThreadStore = useStore as unknown as ThreadStore,
 ): Promise<ThreadId | null> {
-  const resolve = (threads: ReadonlyArray<NavigationThread>) =>
-    resolveContinuedThreadId({ ...input, threads });
-  const immediate = resolve(store.getState().threads);
+  const resolve = (state: NavigationState) => resolveContinuedThreadId({ ...input, ...state });
+  const immediate = resolve(store.getState());
   if (immediate) return Promise.resolve(immediate);
   return new Promise((done) => {
     const finish = (result: ThreadId | null) => {
@@ -67,9 +81,14 @@ export function waitForContinuedThread(
       done(result);
     };
     const unsubscribe = store.subscribe((state) => {
-      const target = resolve(state.threads);
+      const target = resolve(state);
       if (target) finish(target);
     });
-    const timer = globalThis.setTimeout(() => finish(null), input.timeoutMs ?? 5_000);
+    // The server recorded a fork for this message that this browser has not loaded: open it (the
+    // route loads it) instead of reporting that nothing appeared.
+    const timer = globalThis.setTimeout(() => {
+      const source = store.getState().threads.find((thread) => thread.id === input.sourceThreadId);
+      finish(recordedForkFor(source, input.command, () => true));
+    }, input.timeoutMs ?? 5_000);
   });
 }

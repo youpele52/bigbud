@@ -39,6 +39,7 @@ import {
   isForkAlreadyRecorded,
   resolvePendingDelivery,
   selectForkMessages,
+  wasPendingDeliveredBefore,
 } from "./deciderThreads.fork.logic.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 
@@ -107,6 +108,9 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
     failureEventId: command.failureEventId ?? null,
     forkPointMessageId: forkOrigin.forkPointMessageId,
     pendingDelivery: pendingDelivery ?? null,
+    ...(pendingDelivery === "sent" && pending && wasPendingDeliveredBefore(source, pending.id)
+      ? { redelivered: true }
+      : {}),
   };
 
   const events: DecidedEvent[] = [
@@ -207,10 +211,9 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
             id: messageId,
             text: pending.text.trim(),
             createdAt: command.createdAt,
+            // No model or modes are pinned: the fork stays unlocked, and on release the message
+            // uses whatever the user picked in the fork's composer (it starts as the source's).
             ...(attachments.length > 0 ? { attachments } : {}),
-            modelSelection,
-            runtimeMode: source.runtimeMode,
-            interactionMode: source.interactionMode,
           },
           queuePosition: 1,
         }),
