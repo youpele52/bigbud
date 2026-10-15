@@ -2,9 +2,17 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Effect, Layer } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { PtyExitEvent, PtyProcess, PtySpawnInput } from "../../terminal/Services/PTY";
+import * as NodePTY from "../../terminal/Layers/NodePTY";
+import {
+  PtyAdapter,
+  type PtyExitEvent,
+  type PtyProcess,
+  type PtySpawnInput,
+} from "../../terminal/Services/PTY";
 import { PersistentThreadPtyShellRunner } from "./ThreadShellRunner";
 
 class BunTestPtyProcess implements PtyProcess {
@@ -86,44 +94,16 @@ class BunTestPtyProcess implements PtyProcess {
   }
 }
 
-class NodeTestPtyProcess implements PtyProcess {
-  constructor(private readonly process: import("node-pty").IPty) {}
-
-  get pid(): number {
-    return this.process.pid;
-  }
-
-  write(data: string): void {
-    this.process.write(data);
-  }
-
-  resize(cols: number, rows: number): void {
-    this.process.resize(cols, rows);
-  }
-
-  kill(signal?: string): void {
-    this.process.kill(signal);
-  }
-
-  onData(callback: (data: string) => void): () => void {
-    const disposable = this.process.onData(callback);
-    return () => {
-      disposable.dispose();
-    };
-  }
-
-  onExit(callback: (event: PtyExitEvent) => void): () => void {
-    const disposable = this.process.onExit((event) => {
-      callback({
-        exitCode: event.exitCode,
-        signal: event.signal ?? null,
-      });
-    });
-    return () => {
-      disposable.dispose();
-    };
-  }
-}
+// Spawn through the production node-pty adapter, not raw node-pty: the published
+// node-pty tarball ships `spawn-helper` without the executable bit and only the adapter's
+// `ensureNodePtySpawnHelperExecutable` step repairs it. Raw spawns failed with
+// "posix_spawnp failed" whenever this file ran before any other NodePTY user in a fresh
+// install.
+const nodePtyAdapter = Effect.runPromise(
+  Effect.gen(function* () {
+    return yield* PtyAdapter;
+  }).pipe(Effect.provide(NodePTY.layer.pipe(Layer.provide(NodeServices.layer)))),
+);
 
 async function spawnTestPty(input: PtySpawnInput): Promise<PtyProcess> {
   if (typeof Bun !== "undefined" && process.platform !== "win32") {
@@ -143,16 +123,8 @@ async function spawnTestPty(input: PtySpawnInput): Promise<PtyProcess> {
     return processHandle;
   }
 
-  const nodePty = await import("node-pty");
-  return new NodeTestPtyProcess(
-    nodePty.spawn(input.shell, input.args ?? [], {
-      cwd: input.cwd,
-      cols: input.cols,
-      rows: input.rows,
-      env: input.env,
-      name: process.platform === "win32" ? "xterm-color" : "xterm-256color",
-    }),
-  );
+  const adapter = await nodePtyAdapter;
+  return Effect.runPromise(adapter.spawn(input));
 }
 
 const tempDirs = new Set<string>();
@@ -253,6 +225,9 @@ describe.skipIf(process.platform === "win32" || !existsSync("/bin/zsh"))(
             chunks.push(chunk);
           },
         });
+        // Mark handled now so an early assertion failure below cannot also surface as an
+        // unhandled rejection; `await resultPromise` still observes any failure.
+        void resultPromise.catch(() => undefined);
 
         await new Promise((resolve) => setTimeout(resolve, 150));
         expect(chunks.join("")).toContain("alpha");
