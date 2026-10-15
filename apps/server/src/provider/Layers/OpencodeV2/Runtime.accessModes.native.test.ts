@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Layer, Stream } from "effect";
-import { expect, it } from "vitest";
+import { Effect, Stream } from "effect";
+import { expect, it, vi } from "vitest";
 import {
   ThreadId,
   MessageId,
@@ -9,44 +9,64 @@ import {
   DEFAULT_SERVER_SETTINGS,
   type ProviderRuntimeEvent,
 } from "@bigbud/contracts";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
-import { makeV2IsolatedApplicationFixtureRegistration as makeV2ApplicationRegistration } from "./Application.fixture.ts";
-import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { ServerConfig } from "../../../startup/config.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import { v2SharedNativePersistence } from "./SharedService.native.runtime.fixture.ts";
 
-const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+vi.mock("./Catalog.public.ts", async (original) => ({
+  ...(await original<typeof import("./Catalog.public.ts")>()),
+  makeV2PublicCatalogLoader: () => async () => ({ models: [], stale: false }),
+}));
+
+// Production shared application path: the approval-gated retail fixture's registered service with
+// the required thread-tools plugin installed, borrowed through managed native trust (never launched).
+const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 for (const mode of ["approval-required", "auto-accept-edits", "full-access"] as const) {
   it.skipIf(!binary)(
     `normal pinned application ${mode} executes its actual policy, including native pipelines only with the appropriate trust`,
     async () => {
-      const fixture = await makeV2CodingNativeFixture(mode === "full-access" ? 4000000 : 32000);
-      await writeFile(
-        path.join(fixture.profile, ".bigbud-opencode-v2"),
-        "bigbud-opencode-v2-owned-v1\n",
-        { mode: 0o600 },
-      );
-      fixture.state.tool = mode === "auto-accept-edits" ? "bigbud_write" : "shell";
+      const appFixture = await makeV2ThreadPluginFixture();
+      const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
+        const config = JSON.parse(await readFile(file, "utf8"));
+        config.plugins = [appFixture.artifact.pluginUri];
+        config.providers["bigbud-v2-fixture"].models["synthetic-model"].limit.context =
+          mode === "full-access" ? 4000000 : 32000;
+        await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+      }).catch(async (error) => {
+        await appFixture.close();
+        throw error;
+      });
+      // Shared mode has no bigbud coding-bridge tools; the bounded edit uses native `write`.
+      fixture.state.tool = mode === "auto-accept-edits" ? "write" : "shell";
       fixture.state.input =
         mode === "auto-accept-edits"
-          ? { path: "result.txt", content: "AUTOMATIC BOUNDED EDIT" }
+          ? { path: path.join(fixture.workspace, "result.txt"), content: "AUTOMATIC BOUNDED EDIT" }
           : {
               command: "printf 'trusted native pipeline' | tr a-z A-Z > result.txt",
               description: "Exact approved pipeline",
               timeout: 5000,
             };
-      const settings = {
-        ...DEFAULT_SERVER_SETTINGS,
-        providers: {
-          ...DEFAULT_SERVER_SETTINGS.providers,
-          opencodeV2: {
-            enabled: true,
-            binaryPath: binary!,
-            profileRoot: fixture.profile,
-            connectionMode: "isolated" as const,
+      const settings = await Effect.runPromise(
+        makeTestSettings({
+          ...DEFAULT_SERVER_SETTINGS,
+          providers: {
+            ...DEFAULT_SERVER_SETTINGS.providers,
+            opencodeV2: {
+              enabled: true,
+              binaryPath: "",
+              profileRoot: "",
+              connectionMode: "shared",
+              serviceFile: fixture.file,
+              nativeServiceTrust: "managed-thread-tools-v2",
+              nativePluginConfigRoot: path.dirname(fixture.configFile),
+            },
           },
-        },
-      };
+        }),
+      );
       try {
         await Effect.runPromise(
           Effect.scoped(
@@ -137,18 +157,20 @@ for (const mode of ["approval-required", "auto-accept-edits", "full-access"] as 
               }
               yield* adapter.stopAll();
             }).pipe(
-              Effect.provide(
-                ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory)),
-              ),
-              Effect.provideService(ServerSettingsService, {
-                getSettings: Effect.succeed(settings),
-                streamChanges: Stream.empty,
-              } as unknown as typeof ServerSettingsService.Service),
+              Effect.provide(v2SharedNativePersistence),
+              Effect.provideService(ServerSettingsService, settings),
+              Effect.provideService(ServerConfig, {
+                cwd: fixture.workspace,
+                stateDir: appFixture.root,
+                attachmentsDir: path.join(appFixture.root, "attachments"),
+                port: 0,
+              } as typeof ServerConfig.Service),
             ),
           ),
         );
       } finally {
         await fixture.close();
+        await appFixture.close();
       }
     },
     45000,

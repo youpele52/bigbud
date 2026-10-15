@@ -1,13 +1,17 @@
 import type { V2_NATIVE_QUALIFICATION_SCOPES } from "./NativeCompatibility.types.ts";
 
 /** Frozen suite identity recorded as `record.suiteRevision`. Changing the file list below requires a
- * new revision string; old evidence is never relabeled. Test/tooling metadata only. */
-export const V2_NATIVE_QUALIFICATION_SUITE_REVISION = "opencode-v2-native-qualification-suite.v1";
+ * new revision string; old evidence is never relabeled. Test/tooling metadata only.
+ * v1 was the 2026-10-15 plan §1.2 list; v2 (Amendment 2026-10-15) runs every scope on the shared
+ * production path only: owned-launcher files were ported to the approval-gated shared fixture or
+ * excluded below. v1 never executed. */
+export const V2_NATIVE_QUALIFICATION_SUITE_REVISION = "opencode-v2-native-qualification-suite.v2";
 
 const DIR = "src/provider/Layers/OpencodeV2";
 const files = (...names: string[]) => Object.freeze(names.map((name) => `${DIR}/${name}`));
 
-/** Scope -> vitest files (relative to apps/server), per the 2026-10-15 gap-closure plan §1.2. */
+/** Scope -> vitest files (relative to apps/server). Every file obtains its native service through
+ * `sharedServiceNativeFixture` (approval-gated retail child, borrowed) or is a non-native unit test. */
 export const V2_NATIVE_QUALIFICATION_SUITE: Readonly<
   Record<(typeof V2_NATIVE_QUALIFICATION_SCOPES)[number], readonly string[]>
 > = Object.freeze({
@@ -15,21 +19,17 @@ export const V2_NATIVE_QUALIFICATION_SUITE: Readonly<
     "SharedService.native.test.ts",
     "SharedService.application.native.test.ts",
     "SharedService.logical.native.test.ts",
-    "SharedService.context.native.test.ts",
-    "SharedService.model.routing.native.test.ts",
     "Runtime.native.test.ts",
   ),
   "native-tool-schema-catalog-permissions": files(
-    "Runtime.tools.native.test.ts",
+    "SharedService.context.native.test.ts",
+    "SharedService.model.routing.native.test.ts",
     "Runtime.permissions.native.test.ts",
-    "Catalog.native.test.ts",
     "Orchestration.approval.native.test.ts",
-    "Runtime.model.native.test.ts",
   ),
   "isolation-hooks": files(
     "SharedService.native.isolation.test.ts",
-    "Execution.application.native.test.ts",
-    "Execution.lifecycle.native.test.ts",
+    "ServerManager.retail.isolation.test.ts",
     "Runtime.accessModes.native.test.ts",
   ),
   "rpc-crypto-cancellation": files(
@@ -56,27 +56,19 @@ export const V2_NATIVE_QUALIFICATION_SUITE: Readonly<
   "packaged-ab": files("Orchestration.production.packaged.test.ts", "Packaging.artifacts.test.ts"),
 });
 
-/** Files in the plan's mapping that cannot pass against a retail 2.0.29 image as written: the
- * private owned-process launcher requires exactly CLI 2.0.26 (`assertDevelopmentVersion`), and the
- * public catalog smoke needs internet egress. Recorded so the qualification run fails visibly
- * instead of being silently narrowed; resolving them is a plan decision (see the 2.0.29 ledger). */
-export const V2_NATIVE_QUALIFICATION_BLOCKED: Readonly<Record<string, string>> = Object.freeze({
-  [`${DIR}/Runtime.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.tools.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.permissions.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
+/** v1 files deliberately not run by v2, with the reason and the covering suite file where one
+ * exists. All but Catalog.native are Phase 4.1 retirement candidates (retired owned/private paths). */
+export const V2_NATIVE_QUALIFICATION_EXCLUDED: Readonly<Record<string, string>> = Object.freeze({
+  [`${DIR}/Runtime.tools.native.test.ts`]:
+    "retired remote-session conformance (ssh workspace target, hidden local tools); the shared adapter cannot construct it. Shared tool schema: SharedService.context.native",
   [`${DIR}/Catalog.native.test.ts`]:
-    "private owned-process launcher pins CLI 2.0.26; public catalog smoke needs internet egress",
-  [`${DIR}/Runtime.model.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
+    "public-network catalog smoke (BIGBUD_OPENCODE_V2_PUBLIC_CATALOG_SMOKE=1), incompatible with loopback-only egress; kept as a separate non-qualification test",
+  [`${DIR}/Runtime.model.native.test.ts`]:
+    "covered on the shared path by SharedService.model.routing.native (model/variant switch keeps session and history, original replay not resent)",
   [`${DIR}/Execution.application.native.test.ts`]:
-    "private owned-process launcher pins CLI 2.0.26; nested seatbelt under the egress sandbox",
+    "retired isolated coding bridge (bigbud_shell/bigbud_orchestration, seatbelt executor) that the shared adapter omits; canonical child creation: Orchestration.approval.native and Orchestration.production.native",
   [`${DIR}/Execution.lifecycle.native.test.ts`]:
-    "private owned-process launcher pins CLI 2.0.26; nested seatbelt under the egress sandbox",
-  [`${DIR}/Runtime.accessModes.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.deletion.contract.native.test.ts`]:
-    "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.load.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.context.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
-  [`${DIR}/Runtime.attachments.native.test.ts`]: "private owned-process launcher pins CLI 2.0.26",
+    "retired isolated contained-executor teardown (bigbud_shell, seatbelt) that the shared adapter omits; shared interrupt/teardown: Runtime.native and Orchestration.lifecycle.native",
 });
 
 /** Values fixed at preparation time (npm metadata, upstream tag, approved runner layout). */

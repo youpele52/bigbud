@@ -1,27 +1,19 @@
 import { expect, it } from "vitest";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
-import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import { makeV2SharedNativeRuntimeHarness } from "./SharedService.native.runtime.fixture.ts";
 
-const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 
 it.skipIf(!binary)(
   "exact native removal recursively deletes parentID children but retains forks and independently created bigbud children",
   async () => {
-    const fixture = await makeV2CodingNativeFixture();
+    const fixture = await sharedServiceNativeFixture(binary!);
     fixture.state.textOnlyDelegated = true;
-    const manager = new OpencodeV2ServerManager({
-      maxProcesses: 1,
-      maxOwners: 25,
-      maxQueuedEvents: 128,
-      maxEventBytes: 2_000_000,
-      consumerTimeoutMs: 15000,
-    });
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
+    const { config, manager } = await harness.runtimeOptions();
     try {
-      const lease = await manager.acquire({
-        binaryPath: binary!,
-        profileRoot: fixture.profile,
-        runtimeTargetId: "local",
-      });
+      const lease = await manager.acquire(config);
       try {
         const client = lease.process.client;
         const input = {
@@ -69,6 +61,7 @@ it.skipIf(!binary)(
       }
     } finally {
       await manager.close();
+      harness.close();
       await fixture.close();
     }
   },

@@ -1,18 +1,21 @@
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, realpath, writeFile, rm } from "node:fs/promises";
-import os from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import {
+  makeV2SharedNativeRuntimeHarness,
+  v2SharedNativePersistence,
+} from "./SharedService.native.runtime.fixture.ts";
 
-const binaryPath = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binaryPath = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 
 /** Native CLI concurrency against held disposable model streams, not real-provider budget approval. */
 it.skipIf(!binaryPath)(
@@ -66,34 +69,30 @@ it.skipIf(!binaryPath)(
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("fixture endpoint missing");
-    const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "v2-native-load-")));
-    const workspace = path.join(root, "workspace");
-    const profile = path.join(root, "profile");
-    await mkdir(profile, { mode: 0o700 });
-    await mkdir(workspace, { mode: 0o700 });
-    await mkdir(path.join(profile, "config", "opencode"), { recursive: true, mode: 0o700 });
-    await writeFile(
-      path.join(profile, "config", "opencode", "opencode.json"),
-      JSON.stringify({
-        providers: {
-          "bigbud-load-fixture": {
-            package: "@opencode/ai/providers/openai-compatible",
-            settings: {
-              baseURL: `http://127.0.0.1:${address.port}/v1`,
-              apiKey: "disposable-synthetic-only",
-            },
-            models: {
-              "synthetic-model": {
-                name: "synthetic-model",
-                limit: { context: 32000, output: 4000 },
-              },
-            },
+    // The load provider is added beside the fixture's disposable provider in the same config.
+    const fixture = await sharedServiceNativeFixture(binaryPath!, async (file) => {
+      const config = JSON.parse(await readFile(file, "utf8"));
+      config.providers["bigbud-load-fixture"] = {
+        package: "@opencode/ai/providers/openai-compatible",
+        settings: {
+          baseURL: `http://127.0.0.1:${address.port}/v1`,
+          apiKey: "disposable-synthetic-only",
+        },
+        models: {
+          "synthetic-model": {
+            name: "synthetic-model",
+            limit: { context: 32000, output: 4000 },
           },
         },
-      }),
-      { mode: 0o600 },
-    );
-    const layer = ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory));
+      };
+      await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      throw error;
+    });
+    const workspace = fixture.workspace;
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
     const baseline = { rssBytes: process.memoryUsage().rss, cpu: process.cpuUsage() };
     const began = performance.now();
     try {
@@ -101,18 +100,13 @@ it.skipIf(!binaryPath)(
         Effect.scoped(
           Effect.gen(function* () {
             const journal = yield* ProviderTurnAdmissions;
+            const sharedBindings = yield* OpencodeV2SharedBindings;
             yield* Effect.promise(async () => {
               const events: ProviderRuntimeEvent[] = [];
               const runtime = new OpencodeV2Runtime({
-                manager: new OpencodeV2ServerManager({
-                  maxProcesses: 1,
-                  maxOwners: 32,
-                  maxQueuedEvents: 256,
-                  maxEventBytes: 2000000,
-                  consumerTimeoutMs: 15000,
-                }),
-                config: { binaryPath: binaryPath!, profileRoot: profile, runtimeTargetId: "local" },
+                ...(await harness.runtimeOptions({ maxOwners: 32, maxQueuedEvents: 256 })),
                 journal,
+                sharedBindings,
                 emit: async (event) => {
                   events.push(event);
                 },
@@ -208,12 +202,13 @@ it.skipIf(!binaryPath)(
               }
             });
           }),
-        ).pipe(Effect.provide(layer)),
+        ).pipe(Effect.provide(v2SharedNativePersistence)),
       );
     } finally {
+      harness.close();
+      await fixture.close();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await rm(root, { recursive: true, force: true });
     }
   },
   90000,

@@ -229,3 +229,89 @@ The seven Definition of Done items, each cross-referenced from `docs/validation/
 2. Is `2.0.29` the release to promote, or should the user first upgrade to a newer stable (D8 then applies immediately)?
 3. Should a Kanban card be created to track the deferred table (none exists today)?
 4. Instance lock strictness: refuse (recommended) or warn-only when a second backend targets the same state directory?
+
+## Amendment 2026-10-15 (implementation findings)
+
+Appended after Phases 0–2 and the Phase 1 code preparation. Earlier text is unchanged. Ledgers:
+
+- [Phase 0](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md)
+- [Phase 2](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md)
+- [Phase 1 preparation](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md)
+
+Recorded decisions: instance lock refuses; GitHub-hosted `macos-15` is used for code preparation (A3 still awaits the user's acceptance); 2.0.29 is the release to promote.
+
+### B1: §1.2 mapping corrected (suite v1 → v2)
+
+Twelve v1 files launched through the private owned-process launcher. That path is `ServerManager.fixture.ts` / `Application.fixture.ts` → `startOwnedV2Process` → `assertDevelopmentVersion`, which accepts only CLI 2.0.26, so these files could never pass against a 2.0.29 image. The private path is also not the production path (non-goals: shared-only).
+
+Each file was resolved individually:
+
+- **PORT:** the file keeps its assertions and obtains its native service only through the approval-gated `sharedServiceNativeFixture`, borrowed through the production manager `start`.
+- **EXCLUDE:** the file only exercises a retired path, or a named shared-path file in the same scope covers it. Excluded files are Phase 4.1 retirement candidates, except `Catalog.native`.
+
+| File                             | Decision | One-line justification                                                                                                                                                     |
+| -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime.native                   | PORT     | Only native Runtime evidence for `failed`/`interrupted` outcomes, 25-owner capacity and idempotent learning review on a borrowed transport                                 |
+| Runtime.permissions.native       | PORT     | Only native evidence that a reject closes every pending request and that saved native grants block send and resume (gate active on the shared path)                        |
+| Runtime.accessModes.native       | PORT     | Only native evidence that all three access modes enforce real native policy on the shared application. The bounded edit uses native `write`                                |
+| Runtime.deletion.contract.native | PORT     | Only native evidence that native removal never cascades into forks or independent sessions (shared history retention)                                                      |
+| Runtime.load.native              | PORT     | Only native evidence for 25 simultaneous generating sessions with terminal repair and no replay redispatch                                                                 |
+| Runtime.context.native           | PORT     | Only native evidence that instruction revisions survive a native restart and that unsupported forms are cancelled. Restart is proven by `fixture.restart()` plus a new PID |
+| Runtime.attachments.native       | PORT     | Only native evidence for image delivery and attachment replay without resend after a native restart                                                                        |
+| Runtime.tools.native             | EXCLUDE  | Retired remote-session conformance (`ssh:` workspace target). Shared tool schema is covered by `SharedService.context.native` (moved into this scope)                      |
+| Runtime.model.native             | EXCLUDE  | Covered by `SharedService.model.routing.native` (moved into this scope)                                                                                                    |
+| Execution.application.native     | EXCLUDE  | Retired isolated coding bridge and seatbelt executor, which the shared adapter omits. Covered by `Orchestration.approval.native` and `Orchestration.production.native`     |
+| Execution.lifecycle.native       | EXCLUDE  | Retired contained-executor teardown. Covered by `Runtime.native` and `Orchestration.lifecycle.native`                                                                      |
+| Catalog.native                   | EXCLUDE  | Needs public internet. Kept as a separate non-qualification smoke                                                                                                          |
+
+Final v2 mapping (`NativeCompatibility.qualification.suite.ts`, 26 files; every scope non-empty):
+
+- `api-transport-admission`: `SharedService.native`, `SharedService.application.native`, `SharedService.logical.native`, `Runtime.native`.
+- `native-tool-schema-catalog-permissions`: `SharedService.context.native`, `SharedService.model.routing.native`, `Runtime.permissions.native`, `Orchestration.approval.native`.
+- `isolation-hooks`: `SharedService.native.isolation.test.ts`, `ServerManager.retail.isolation.test.ts` (added), `Runtime.accessModes.native`.
+- `rpc-crypto-cancellation`: unchanged.
+- `history-receipt-approval-integration`: `SharedService.history.native`, `Orchestration.lifecycle.native`, `Runtime.deletion.contract.native`, `Runtime.load.native`.
+- `source-config-autoload`: unchanged.
+- `two-location-lifecycle`: `Orchestration.stable.native`, `Runtime.context.native`, `Runtime.attachments.native`.
+- `packaged-ab`: unchanged.
+
+The ported files are unexecuted until the runner run, because the developer Mac is ineligible for retail launches.
+
+### B2: egress
+
+A whole-host `sudo pfctl` loopback-only rule would sever a hosted runner's own connection to GitHub. It is replaced by the per-process seatbelt profile `scripts/opencode-v2-qualification-egress.sb`, applied with `sandbox-exec -f` around each scope run. Its SHA-256 is part of the environment and runner evidence. Accepted as evidence, not attestation.
+
+### B3: approval id
+
+`gh-macos-15-arm64-opencode-2.0.29` fails the approval schema `^[a-z0-9-]{1,100}$`. The accepted id is `gh-macos-15-arm64-opencode-2-0-29`.
+
+### B4: trigger
+
+`workflow_dispatch` is only available once the workflow is on the default branch. The job therefore also runs on a push to `task/opencode-v2-qualify-*`; ordinary `task/opencode-v2-*` pushes never run it. After merge it runs on dispatch with `qualification: true`. Accepted.
+
+### Phase 2 departures (accepted as implemented)
+
+- The lock is wired in `server.ts` `makeServerLayer` (`Layer.provide(StateDirLockLive)`, built before `HttpServerLive` and every persistence layer) instead of `serverRuntimeStartup.bootstrap.ts`.
+- A dead owner is replaced under an exclusive `backend.lock.takeover` mutex plus a fresh exclusive create, not temp + rename, because rename-over is non-exclusive.
+- Startup refuses (fails closed) when the owner's start time is unreadable or missing, so PID reuse cannot be ruled out (for example on Windows).
+
+### Corrected V2 totals
+
+The plan's "1,048 pass / 286 files" used a different selection. The focused `src/provider/Layers/OpencodeV2` run measured the following:
+
+| Run                    | Files                         | Tests                         |
+| ---------------------- | ----------------------------- | ----------------------------- |
+| Phase 0                | 254 (217 passed / 37 skipped) | 948 (898 passed / 50 skipped) |
+| Phase 1 preparation    | 256 (219 / 37)                | 974 (924 / 50)                |
+| Suite v2 (B1 resolved) | 256 (219 / 37)                | 975 (925 / 50)                |
+
+The 50 skips break down as:
+
+- 47 in the 37 `*.native*` files, expected without an approval record;
+- 3 platform-gated: `Development.security.test.ts` and `SharedService.packaging.test.ts` (win32 only), and `RebootRecovery.host.linux.test.ts` (Linux only).
+
+### Open follow-ups
+
+- The CLI maintenance commands do not take the state-directory lock.
+- `bun dev:server` crashes under Bun 1.3.14 on a static `node:sqlite` import in the Cursor `Provider.usageLimits.credentials.ts` (commit `bbb65462ca`). This is pre-existing and unrelated to this plan.
+- Phase 4.1: retire the four retired-path excluded files (`Runtime.tools`, `Runtime.model`, `Execution.application`, `Execution.lifecycle`). Keep `Catalog.native` as a smoke, or port it to the shared path if a public-network job is ever approved. Drop the `ssh` case in `ServerManager.retail.isolation.test.ts`.

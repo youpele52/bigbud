@@ -1,43 +1,38 @@
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
-import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import {
+  makeV2SharedNativeRuntimeHarness,
+  v2SharedNativePersistence,
+} from "./SharedService.native.runtime.fixture.ts";
 import { v2InstructionEntries, v2InstructionRevision } from "./Runtime.instructions.ts";
 import { pendingV2Interactions } from "./Runtime.interactions.ts";
 
-const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 
 it.skipIf(!binary)(
   "pinned native instructions survive process restart, refresh only for new admissions and cancel unsupported forms",
   async () => {
-    const fixture = await makeV2CodingNativeFixture();
+    const fixture = await sharedServiceNativeFixture(binary!);
     fixture.state.textOnlyDelegated = true;
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
     const runtimes: OpencodeV2Runtime[] = [];
     try {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const journal = yield* ProviderTurnAdmissions;
-            const createRuntime = () => {
+            const sharedBindings = yield* OpencodeV2SharedBindings;
+            const createRuntime = async () => {
               const runtime = new OpencodeV2Runtime({
-                manager: new OpencodeV2ServerManager({
-                  maxProcesses: 1,
-                  maxOwners: 25,
-                  maxQueuedEvents: 128,
-                  maxEventBytes: 2_000_000,
-                  consumerTimeoutMs: 15_000,
-                }),
+                ...(await harness.runtimeOptions()),
                 journal,
-                config: {
-                  binaryPath: binary!,
-                  profileRoot: fixture.profile,
-                  runtimeTargetId: "local",
-                },
+                sharedBindings,
                 emit: async () => {},
                 pollIntervalMs: 100,
                 allowLocalWorkspace: true,
@@ -63,7 +58,7 @@ it.skipIf(!binary)(
                 requestMessageId: MessageId.makeUnsafe("native-instruction-first"),
                 input: "delegated_thread_provenance: synthetic instruction qualification",
               };
-              const firstRuntime = createRuntime();
+              const firstRuntime = await createRuntime();
               await firstRuntime.start(start);
               const firstOwner = firstRuntime.get(start.threadId);
               const client = firstOwner.lease.process.client;
@@ -84,9 +79,13 @@ it.skipIf(!binary)(
               });
               const nativeId = firstOwner.native.id;
               await firstRuntime.close();
-              expect(firstOwner.lease.process.hasExited?.()).toBe(true);
+              // A borrowed connection never claims process exit: restart the fixture-owned native
+              // child itself (same database) and prove the physical process changed.
+              const firstPid = fixture.child.pid;
+              await fixture.restart();
+              expect(fixture.child.pid).not.toBe(firstPid);
 
-              const restarted = createRuntime();
+              const restarted = await createRuntime();
               await restarted.start({ ...start, resumeCursor: first.resumeCursor });
               const owner = restarted.get(start.threadId);
               expect(owner.native.id).toBe(nativeId);
@@ -129,13 +128,12 @@ it.skipIf(!binary)(
                 await owner.lease.process.client.session.form.list({ sessionID: nativeId }),
               ).toEqual([]);
             });
-          }).pipe(
-            Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
-          ),
+          }).pipe(Effect.provide(v2SharedNativePersistence)),
         ),
       );
     } finally {
       await Promise.all(runtimes.map((runtime) => runtime.close()));
+      harness.close();
       await fixture.close();
     }
   },

@@ -1,31 +1,37 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
-import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import {
+  makeV2SharedNativeRuntimeHarness,
+  v2SharedNativePersistence,
+} from "./SharedService.native.runtime.fixture.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
 
-const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 it.skipIf(!binary || process.platform !== "darwin")(
-  "pinned 2.0.26 delivers small managed text/native images and replays after process restart without source reads or resend",
+  "pinned native delivers small managed text/native images and replays after process restart without source reads or resend",
   async () => {
-    const fixture = await makeV2CodingNativeFixture();
-    const configPath = path.join(fixture.profile, "config", "opencode", "opencode.json");
-    const config = JSON.parse(await readFile(configPath, "utf8"));
-    config.providers["bigbud-v2-fixture"].models["synthetic-model"].capabilities = {
-      tools: false,
-      input: ["text", "image"],
-      output: ["text"],
-    };
-    await writeFile(configPath, JSON.stringify(config));
-    const attachmentsDir = path.join(fixture.profile, "attachments");
-    await mkdir(attachmentsDir, { mode: 0o700 });
+    const fixture = await sharedServiceNativeFixture(binary!, async (configPath) => {
+      const config = JSON.parse(await readFile(configPath, "utf8"));
+      config.providers["bigbud-v2-fixture"].models["synthetic-model"].capabilities = {
+        tools: false,
+        input: ["text", "image"],
+        output: ["text"],
+      };
+      await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+    });
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
+    // App-owned state beside (never inside) the native profile, as production composes it.
+    const stateDir = path.join(path.dirname(fixture.profile), "bigbud-state");
+    const attachmentsDir = path.join(stateDir, "attachments");
+    await mkdir(attachmentsDir, { recursive: true, mode: 0o700 });
     const bytes = await readFile(
       new URL("../../../../../web/public/favicon-16x16.png", import.meta.url),
     );
@@ -50,27 +56,17 @@ it.skipIf(!binary || process.platform !== "darwin")(
       resolveAttachmentPath({ attachmentsDir, attachment: document })!,
       "document context",
     );
-    const layer = ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory));
     try {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const journal = yield* ProviderTurnAdmissions;
             const runtime = new OpencodeV2Runtime({
-              manager: new OpencodeV2ServerManager({
-                maxProcesses: 1,
-                maxOwners: 25,
-                maxQueuedEvents: 128,
-                maxEventBytes: 2000000,
-                consumerTimeoutMs: 15000,
-              }),
+              ...(yield* Effect.promise(() => harness.runtimeOptions())),
               journal,
-              config: {
-                binaryPath: binary!,
-                profileRoot: fixture.profile,
-                runtimeTargetId: "local",
-              },
+              sharedBindings: yield* OpencodeV2SharedBindings,
               attachmentsDir,
+              attachmentAdmissionsDir: path.join(stateDir, "opencode-v2-attachment-admissions"),
               allowLocalWorkspace: true,
               pollIntervalMs: 100,
               emit: async () => {},
@@ -115,15 +111,14 @@ it.skipIf(!binary || process.platform !== "darwin")(
                 rm(resolveAttachmentPath({ attachmentsDir, attachment: document })!),
               );
               yield* Effect.promise(() => runtime.close());
+              // Physical restart of the fixture-owned native child (same database); the new
+              // generation is rebound through a fresh borrowed manager, as after a bigbud restart.
+              const firstPid = fixture.child.pid;
+              yield* Effect.promise(() => fixture.restart());
+              expect(fixture.child.pid).not.toBe(firstPid);
               const restarted = new OpencodeV2Runtime({
                 ...runtime.options,
-                manager: new OpencodeV2ServerManager({
-                  maxProcesses: 1,
-                  maxOwners: 25,
-                  maxQueuedEvents: 128,
-                  maxEventBytes: 2000000,
-                  consumerTimeoutMs: 15000,
-                }),
+                ...(yield* Effect.promise(() => harness.runtimeOptions())),
               });
               try {
                 yield* Effect.promise(() =>
@@ -143,10 +138,11 @@ it.skipIf(!binary || process.platform !== "darwin")(
             } finally {
               yield* Effect.promise(() => runtime.close());
             }
-          }).pipe(Effect.provide(layer)),
+          }).pipe(Effect.provide(v2SharedNativePersistence)),
         ),
       );
     } finally {
+      harness.close();
       await fixture.close();
     }
   },

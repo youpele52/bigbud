@@ -1,22 +1,24 @@
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { Effect, Layer } from "effect";
+import { readFile, writeFile } from "node:fs/promises";
+import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import {
+  makeV2SharedNativeRuntimeHarness,
+  v2SharedNativePersistence,
+} from "./SharedService.native.runtime.fixture.ts";
 import { readV2Messages } from "./Runtime.projection.ts";
 import { pendingV2Interactions } from "./Runtime.interactions.ts";
 import { makeV2LearningReview } from "./Runtime.learning.ts";
 import { validateSyntheticV2Learning } from "./Runtime.learning.fixture.ts";
 
-const binaryPath = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binaryPath = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 
 /** Opt-in real CLI, synthetic loopback model only. Never discovers an existing profile/credential. */
 it.skipIf(!binaryPath)(
@@ -80,44 +82,20 @@ it.skipIf(!binaryPath)(
     await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
     const address = modelServer.address();
     if (!address || typeof address === "string") throw new Error("Synthetic endpoint unavailable.");
-    const root = await realpath(
-      await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-native-execution-")),
-    );
-    const directory = path.join(root, "workspace");
-    const profile = path.join(root, "profile");
-    await mkdir(profile, { mode: 0o700 });
-    await mkdir(directory);
-    await mkdir(path.join(profile, "config", "opencode"), { recursive: true });
-    await writeFile(
-      path.join(profile, "config", "opencode", "opencode.json"),
-      JSON.stringify({
-        providers: {
-          "bigbud-v2-fixture": {
-            name: "synthetic",
-            package: "@opencode/ai/providers/openai-compatible",
-            settings: {
-              baseURL: `http://127.0.0.1:${address.port}/v1`,
-              apiKey: "disposable-synthetic-only",
-            },
-            models: {
-              "synthetic-model": {
-                name: "synthetic-model",
-                limit: { context: 32000, output: 4000 },
-              },
-            },
-          },
-        },
-        permissions: [{ action: "*", resource: "*", effect: "deny" }],
-      }),
-    );
-    const manager = new OpencodeV2ServerManager({
-      maxProcesses: 1,
-      maxOwners: 25,
-      maxQueuedEvents: 128,
-      maxEventBytes: 2000000,
-      consumerTimeoutMs: 15000,
+    // Only the disposable provider endpoint is redirected to this test's controllable model.
+    const fixture = await sharedServiceNativeFixture(binaryPath!, async (file) => {
+      const config = JSON.parse(await readFile(file, "utf8"));
+      config.providers["bigbud-v2-fixture"].settings.baseURL =
+        `http://127.0.0.1:${address.port}/v1`;
+      config.permissions = [{ action: "*", resource: "*", effect: "deny" }];
+      await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await new Promise<void>((resolve) => modelServer.close(() => resolve()));
+      throw error;
     });
-    const layer = ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory));
+    const directory = fixture.workspace;
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
+    const { manager, ...shared } = await harness.runtimeOptions();
     try {
       await Effect.runPromise(
         Effect.scoped(
@@ -125,9 +103,10 @@ it.skipIf(!binaryPath)(
             const journal = yield* ProviderTurnAdmissions;
             const events: ProviderRuntimeEvent[] = [];
             const runtime = new OpencodeV2Runtime({
+              ...shared,
               manager,
               journal,
-              config: { binaryPath: binaryPath!, profileRoot: profile, runtimeTargetId: "local" },
+              sharedBindings: yield* OpencodeV2SharedBindings,
               emit: async (event) => {
                 events.push(event);
               },
@@ -333,15 +312,16 @@ it.skipIf(!binaryPath)(
             } finally {
               yield* Effect.promise(() => runtime.close());
             }
-          }).pipe(Effect.provide(layer)),
+          }).pipe(Effect.provide(v2SharedNativePersistence)),
         ),
       );
     } finally {
       hold = false;
       for (const finish of pending.splice(0)) finish();
       await manager.close();
+      harness.close();
+      await fixture.close();
       await new Promise<void>((resolve) => modelServer.close(() => resolve()));
-      await rm(root, { recursive: true, force: true });
     }
   },
   60000,

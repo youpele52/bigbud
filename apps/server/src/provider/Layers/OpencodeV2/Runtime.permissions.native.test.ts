@@ -1,30 +1,29 @@
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
 import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
-import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
-import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
-import { makeV2CodingNativeFixture } from "./Coding.native.fixture.ts";
+import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
+import {
+  makeV2SharedNativeRuntimeHarness,
+  v2SharedNativePersistence,
+} from "./SharedService.native.runtime.fixture.ts";
 import { pendingV2Interactions } from "./Runtime.interactions.ts";
 import { v2ResumeCursor } from "./Runtime.sessions.ts";
 
-const binary = process.env.BIGBUD_OPENCODE_V2_TEST_BINARY;
+// Shared path: the approval-gated retail fixture's registered service, borrowed (never launched).
+const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 
 it.skipIf(!binary)(
   "exact native reject closes every pending request and saved grants cannot silently broaden resumed owned policy",
   async () => {
-    const fixture = await makeV2CodingNativeFixture();
-    const manager = new OpencodeV2ServerManager({
-      maxProcesses: 1,
-      maxOwners: 25,
-      maxQueuedEvents: 128,
-      maxEventBytes: 2_000_000,
-      consumerTimeoutMs: 15000,
-    });
+    const fixture = await sharedServiceNativeFixture(binary!);
+    const harness = await makeV2SharedNativeRuntimeHarness(fixture);
+    const shared = await harness.runtimeOptions();
+    const manager = shared.manager;
     try {
       // Native saved grants are project-scoped: copy existing local history into the disposable workspace.
       // No checkout, staging, new commit or network/remote host is involved.
@@ -47,13 +46,9 @@ it.skipIf(!binary)(
           Effect.gen(function* () {
             const journal = yield* ProviderTurnAdmissions;
             const runtime = new OpencodeV2Runtime({
-              manager,
+              ...shared,
               journal,
-              config: {
-                binaryPath: binary!,
-                profileRoot: fixture.profile,
-                runtimeTargetId: "local",
-              },
+              sharedBindings: yield* OpencodeV2SharedBindings,
               emit: async () => {},
               allowLocalWorkspace: true,
               enableLocalTools: true,
@@ -204,13 +199,12 @@ it.skipIf(!binary)(
                 await runtime.close();
               }
             });
-          }).pipe(
-            Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
-          ),
+          }).pipe(Effect.provide(v2SharedNativePersistence)),
         ),
       );
     } finally {
       await manager.close();
+      harness.close();
       await fixture.close();
     }
   },

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -12,7 +13,7 @@ import {
   v2QualificationProvisioningRecord,
 } from "./NativeCompatibility.qualification.assemble.ts";
 import {
-  V2_NATIVE_QUALIFICATION_BLOCKED,
+  V2_NATIVE_QUALIFICATION_EXCLUDED,
   V2_NATIVE_QUALIFICATION_SUITE,
   V2_NATIVE_QUALIFICATION_SUITE_REVISION,
   V2_NATIVE_QUALIFICATION_TARGET as TARGET,
@@ -40,11 +41,30 @@ it("the frozen suite maps every scope to existing files exactly once", () => {
   expect(Object.keys(V2_NATIVE_QUALIFICATION_SUITE).toSorted()).toEqual(
     [...V2_NATIVE_QUALIFICATION_SCOPES].toSorted(),
   );
+  for (const scope of V2_NATIVE_QUALIFICATION_SCOPES)
+    expect(V2_NATIVE_QUALIFICATION_SUITE[scope].length, scope).toBeGreaterThan(0);
   const all = Object.values(V2_NATIVE_QUALIFICATION_SUITE).flat();
   expect(new Set(all).size).toBe(all.length);
   for (const file of all) expect(existsSync(path.join(serverRoot, file)), file).toBe(true);
-  for (const file of Object.keys(V2_NATIVE_QUALIFICATION_BLOCKED)) expect(all).toContain(file);
-  expect(V2_NATIVE_QUALIFICATION_SUITE_REVISION).toBe("opencode-v2-native-qualification-suite.v1");
+  for (const file of Object.keys(V2_NATIVE_QUALIFICATION_EXCLUDED)) {
+    expect(existsSync(path.join(serverRoot, file)), file).toBe(true);
+    expect(all).not.toContain(file);
+  }
+  expect(V2_NATIVE_QUALIFICATION_SUITE_REVISION).toBe("opencode-v2-native-qualification-suite.v2");
+});
+
+it("every native suite file runs on the shared production path, never the private launcher", async () => {
+  const native = Object.values(V2_NATIVE_QUALIFICATION_SUITE)
+    .flat()
+    .filter((file) => file.endsWith(".native.test.ts"));
+  expect(native.length).toBeGreaterThan(0);
+  for (const file of native) {
+    const source = await readFile(path.join(serverRoot, file), "utf8");
+    expect(source, file).toContain("BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY");
+    expect(source, file).not.toMatch(
+      /ServerManager\.fixture|Application\.fixture\.ts|startOwnedV2Process|makeV2CodingNativeFixture|BIGBUD_OPENCODE_V2_TEST_BINARY|PUBLIC_CATALOG_SMOKE/,
+    );
+  }
 });
 
 it("assembles a packet the promotion validator accepts only with three distinct reviews", () => {

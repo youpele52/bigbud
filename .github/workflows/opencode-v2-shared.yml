@@ -158,6 +158,8 @@ jobs:
   # Mode comes from the committed approvals catalog: without an approval it provisions (download,
   # hash, image/environment evidence and the approval record to commit, no retail launch); with one
   # it verifies the runner still matches and runs all eight scopes under loopback-only egress.
+  # Scope file lists come from V2_NATIVE_QUALIFICATION_SUITE (suite v2, shared production path only).
+  # The public-network Catalog.native smoke is excluded from qualification by design.
   macos-arm64-qualification:
     name: Native qualification macOS 15 ARM64 OpenCode 2.0.29
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.qualification) || (github.event_name == 'push' && startsWith(github.ref_name, 'task/opencode-v2-qualify-')) }}
