@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { ThreadTurnStartRequest } from "../../../models/types/app.types";
 import {
   MAX_TURN_START_OBSERVATIONS,
+  modelChoiceObservationCount,
+  observeModelChoice,
   observeThreadTurnStartRequest,
   turnStartObservationCount,
 } from "./ThreadRecoveryNotice.clock";
@@ -34,5 +36,16 @@ describe("browser-clock observations per thread", () => {
     const before = turnStartObservationCount();
     observeThreadTurnStartRequest(threadId, null, 2);
     expect(turnStartObservationCount()).toBe(before - 1);
+  });
+});
+
+describe("browser-clock observations per model choice", () => {
+  it("keeps the first sighting of a choice across remounts and stays bounded", () => {
+    expect(observeModelChoice("choice-a", 100)).toBe(100);
+    expect(observeModelChoice("choice-a", 5_000)).toBe(100);
+    for (let index = 0; index < MAX_TURN_START_OBSERVATIONS + 10; index += 1) {
+      observeModelChoice(`choice-${index}`, index);
+    }
+    expect(modelChoiceObservationCount()).toBe(MAX_TURN_START_OBSERVATIONS);
   });
 });

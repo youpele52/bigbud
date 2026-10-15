@@ -68,7 +68,7 @@ describe("thread.delegation.model-choice.pick and expire", () => {
     ]);
     expect(payloadOf(events, "thread.turn-start-requested")?.modelSelection).toEqual(alternative);
     const resolved = (
-      payloadOf(events, "thread.activity-appended")?.activity as { payload: unknown }
+      payloadOf(events, "thread.activity-appended")!.activity as { payload: unknown }
     ).payload;
     expect(resolved).toMatchObject({
       used: alternative,
@@ -137,7 +137,7 @@ describe("thread.delegation.model-choice.pick and expire", () => {
     const removedEvents = await decide(removed, expireCommand());
     expect(types(removedEvents)).toEqual(["thread.activity-appended", "thread.meta-updated"]);
     expect(
-      (payloadOf(removedEvents, "thread.activity-appended")?.activity as { payload: unknown })
+      (payloadOf(removedEvents, "thread.activity-appended")!.activity as { payload: unknown })
         .payload,
     ).toMatchObject({ cancelled: true });
 

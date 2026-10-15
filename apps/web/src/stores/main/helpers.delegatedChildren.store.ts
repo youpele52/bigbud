@@ -1,4 +1,5 @@
-import type { Thread } from "../../models/types";
+import { deriveThreadModelChoice } from "../../logic/session/session.activity.modelChoice.logic";
+import type { DelegatedChildSummary, Thread } from "../../models/types";
 
 function workflowState(thread: Thread) {
   if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
@@ -12,6 +13,14 @@ function workflowState(thread: Thread) {
     return "working" as const;
   }
   return "idle" as const;
+}
+
+/** The tributary's own record wins; otherwise the linked summary already on the item stays. */
+function modelChoice(item: DelegatedChildSummary, child: Thread) {
+  const record = child.activities ? deriveThreadModelChoice(child.activities) : null;
+  if (record === null)
+    return item.modelChoice === undefined ? {} : { modelChoice: item.modelChoice };
+  return { modelChoice: { source: "tributary" as const, record } };
 }
 
 /** Refresh hydrated parent summaries whenever a loaded delegated child changes. */
@@ -30,6 +39,7 @@ export function syncDelegatedChildSummaries(threads: Thread[], child: Thread): T
               projectId: child.projectId,
               workflowState: workflowState(child),
               updatedAt: child.updatedAt ?? child.session?.updatedAt ?? item.updatedAt,
+              ...modelChoice(item, child),
             }
           : item,
       ),

@@ -1,8 +1,7 @@
-import type { ThreadDetailDelegatedChild } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
+import type { DelegatedChildSummary } from "../../../models/types/app.types";
+import { DelegatedChildRow } from "./DelegatedChildRow";
 
-import { ThreadOriginLink } from "../messages/ThreadOriginLink";
-
-export function DelegatedChildrenCard(props: { items: ReadonlyArray<ThreadDetailDelegatedChild> }) {
+export function DelegatedChildrenCard(props: { items: ReadonlyArray<DelegatedChildSummary> }) {
   if (props.items.length === 0) return null;
   return (
     <section
@@ -14,14 +13,7 @@ export function DelegatedChildrenCard(props: { items: ReadonlyArray<ThreadDetail
       </div>
       <div className="space-y-1 p-1">
         {props.items.map((child) => (
-          <div key={child.threadId} className="flex items-center justify-between gap-2">
-            <ThreadOriginLink
-              threadId={child.threadId}
-              title={child.title}
-              available={child.workflowState !== "unavailable"}
-            />
-            <span className="text-xs capitalize text-muted-foreground">{child.workflowState}</span>
-          </div>
+          <DelegatedChildRow key={child.threadId} child={child} />
         ))}
       </div>
     </section>

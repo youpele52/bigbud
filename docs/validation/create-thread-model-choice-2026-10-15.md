@@ -78,3 +78,38 @@ Gate commands (all exit 0):
 - Line counts: every new/edited code file ≤ 400 (largest: `desktopSupervisorDelivery.ts` 399, `desktopSupervisorDelivery.test.ts` 396, `ProjectionThreads.ts` 392).
 - Retry fix: every command and the linked activity use `delegation.createdAt`; the create-thread fixture pins `createdAt`, and the retry-from-`thread_accepted` case reuses the stored decision with no conflict.
 - Deviations: D-5 (sweep without the 1 h cutoff), D-6 (settings section placement).
+
+## Phase 3 — web notice, picker, trunk card
+
+Red → green:
+
+| Test                                                                                   | Red                                     | Green |
+| -------------------------------------------------------------------------------------- | --------------------------------------- | ----- |
+| `apps/web … logic/session/session.activity.modelChoice.logic.test.ts` (incl. work log) | exit 1, module not found                | 4/4   |
+| `apps/web … components/chat/view/ThreadModelChoiceNotice.logic.test.ts`                | exit 1, module not found                | 6/6   |
+| `apps/web … stores/main/helpers.delegatedChildren.store.test.ts` (1 new case)          | 1 failed (no mirror)                    | 2/2   |
+| `apps/web … stores/main/events.store.delegations.test.ts` (1 new case, +1 later)       | 1 failed (summary not read)             | 4/4   |
+| `apps/web … components/chat/view/ThreadRecoveryNotice.clock.test.ts` (1 new case)      | 1 failed (`observeModelChoice` missing) | 3/3   |
+
+Written after the components (no recorded red): `ThreadModelChoiceNotice.browser.tsx` (5/5: polite blue
+status, countdown on the browser clock despite an hour-old server timestamp, 12 options + Show all, pick
+dispatch and disabled-while-in-flight, green and amber lines, 375 px viewport without overflow) and
+`DelegatedChildrenCard.browser.tsx` (2/2: pending row countdown opens the same picker and picks for the child;
+green/amber resolved model; "Requested X" after a reload). The first browser run failed 2 tests because
+multi-second countdowns need one fake-timer step per second (each render schedules the next tick); the tests
+now step per second.
+
+Gate commands (all exit 0 unless noted):
+
+- `bun run --cwd apps/web vitest run` — 478 files, 2959 passed (includes the §8.3 unit files).
+- `bun run --cwd apps/web test:browser src/components/chat/view/ThreadModelChoiceNotice.browser.tsx src/components/chat/agents/DelegatedChildrenCard.browser.tsx src/components/chat/view/ThreadRecoveryNotice.browser.tsx` — 3 files, 10 passed.
+- `bun run --cwd packages/shared vitest run` — 50 files, 372 passed.
+- `bun fmt` 0, `bun lint` 0 (no warnings in files touched by this work), `bun typecheck` 0 (9/9).
+- Pre-existing, unrelated: `SettingsPanels.browser.tsx` "ProvidersSettingsPanel route expansion" fails 2 tests; reproduced
+  identically at the base `6a6e27052` (detached checkout of a temporary WIP commit, then restored).
+- Composer (item 4): the hold uses the standard queued-prompt event, so the held message appears in the composer queue
+  like any queued prompt; no web change.
+- Line counts: every new/edited code file ≤ 400 (largest `app.types.ts` 280).
+- Manual check §8.4 (live providers, kill-and-restart, closed clients): **not performed** (no live provider session in
+  this environment); covered only by the automated tests above.
+- Deviations: D-7 (web-only card mirror), D-8 (copy uses model ids; countdown excluded from the live region).

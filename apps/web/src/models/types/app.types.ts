@@ -19,6 +19,8 @@ import type {
   RuntimeMode,
 } from "@bigbud/contracts";
 import type { ThreadDetailDelegatedChild } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
+import type { DelegationModelChoiceLinkedSummary } from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
+import type { DelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelChoice";
 import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import type { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
@@ -173,6 +175,19 @@ export interface ThreadTurnStartRequest {
   recoverySteps: ReadonlyArray<ThreadTurnStartRecoveryStep>;
 }
 
+/**
+ * A delegated child's model choice as the trunk sees it: the full record mirrored from a loaded
+ * tributary, else the summary on the trunk's own `delegation.child-linked` activity.
+ */
+export type DelegatedChildModelChoice =
+  | { readonly source: "tributary"; readonly record: DelegatedModelChoiceRecord }
+  | { readonly source: "linked"; readonly summary: DelegationModelChoiceLinkedSummary };
+
+/** The server's delegated-child summary plus the web-only model choice mirror (never sent). */
+export type DelegatedChildSummary = ThreadDetailDelegatedChild & {
+  readonly modelChoice?: DelegatedChildModelChoice;
+};
+
 export interface Thread {
   id: ThreadId;
   codexThreadId: string | null;
@@ -197,7 +212,7 @@ export interface Thread {
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   providerAgents?: OrchestrationTask[];
-  delegatedChildren?: ThreadDetailDelegatedChild[];
+  delegatedChildren?: DelegatedChildSummary[];
   queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;
   queueHold?: boolean;

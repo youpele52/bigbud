@@ -5,6 +5,7 @@ import type { Thread } from "../../../models/types/app.types";
 import { ThreadForkNotice } from "./ThreadForkNotice";
 import { deriveSourceForkNotice } from "./ThreadForkNotice.logic";
 import { useForkPresence } from "./ThreadForkNotice.presence";
+import { ThreadModelChoiceNotice } from "./ThreadModelChoiceNotice";
 import { ThreadRecoveryNotice } from "./ThreadRecoveryNotice";
 
 /** Recovery status plus fork lineage for a server thread (plan D15-D17, D20-D21). */
@@ -32,6 +33,7 @@ export function ThreadRecoveryNotices({ thread }: { readonly thread: Thread }) {
         onContinueInNewThread={alreadyForked ? undefined : () => void continueInNewThread()}
         continuePending={pending}
       />
+      <ThreadModelChoiceNotice thread={thread} />
     </>
   );
 }

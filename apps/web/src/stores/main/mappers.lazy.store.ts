@@ -13,6 +13,7 @@ import {
   toLegacyProvider,
   toLegacySessionStatus,
 } from "./mappers.store";
+import { hydrateDelegatedChildModelChoices } from "./events.store.delegations";
 import { buildLatestTurn } from "./helpers.store";
 
 export function mapProjectSummary(project: ProjectSummary): Project {
@@ -230,7 +231,11 @@ export function mergeThreadDetail(
           .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
     delegatedChildren: loadingOlder
       ? (thread.delegatedChildren ?? [])
-      : [...(detail.delegatedChildren ?? [])],
+      : hydrateDelegatedChildModelChoices(
+          detail.delegatedChildren ?? [],
+          thread.delegatedChildren,
+          activities,
+        ),
     turnDiffSummaries: loadingOlder ? thread.turnDiffSummaries : turnDiffSummaries,
   };
 }
