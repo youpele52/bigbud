@@ -3,6 +3,7 @@ import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestr
 
 import { CompactActivityGroup } from "~/components/chat/common/CompactActivityGroup";
 import { SubagentRow } from "./SubagentRow";
+import type { SubagentStopHandler } from "./SubagentRow.stop";
 import { hierarchicalSubagents } from "./SubagentsCard.hierarchy";
 import { visibleSubagents } from "./subagentPresentation.logic";
 
@@ -10,6 +11,8 @@ export function SubagentsCard(props: {
   agents: ReadonlyArray<OrchestrationTask>;
   /** Shared chat clock; live elapsed time advances with it. Defaults to render time. */
   nowIso?: string | undefined;
+  /** Per-subagent Stop; set only when the active provider supports it. */
+  onStopSubagent?: SubagentStopHandler | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   if (props.agents.length === 0) return null;
@@ -42,6 +45,7 @@ export function SubagentsCard(props: {
               depth={row.depth}
               parentLabel={row.parentLabel}
               nowMs={nowMs}
+              onStop={props.onStopSubagent}
             />
           ))}
         </div>

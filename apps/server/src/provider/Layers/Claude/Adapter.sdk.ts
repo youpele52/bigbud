@@ -18,6 +18,7 @@ export type ClaudeQueryControlSurface = Pick<
   | "setMcpServers"
   | "setModel"
   | "setPermissionMode"
+  | "stopTask"
   | "toggleMcpServer"
 >;
 

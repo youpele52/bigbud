@@ -237,9 +237,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     };
   });
 
-  const { interruptTurn, mcp, readThread, rollbackThread } = makeClaudeControlOperations({
-    requireSession,
-  });
+  const { interruptTurn, mcp, readThread, rollbackThread, stopSubagent } =
+    makeClaudeControlOperations({ requireSession });
 
   const respondToRequest: ClaudeAdapterShape["respondToRequest"] = Effect.fn("respondToRequest")(
     function* (threadId, requestId, decision) {
@@ -370,6 +369,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
+    stopSubagent,
     inspectActiveTurn: unavailableActiveTurnInspection("claudeAgent"),
     readThread,
     rollbackThread,

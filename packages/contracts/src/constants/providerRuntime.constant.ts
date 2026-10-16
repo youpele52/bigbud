@@ -46,6 +46,7 @@ export const RUNTIME_SESSION_STATES = [
  * - `closed`: Thread has been closed
  * - `compacted`: Thread has been compacted
  * - `error`: Thread encountered an error
+ * - `reset`: The provider cleared its native conversation (bigbud history is kept)
  */
 export const RUNTIME_THREAD_STATES = [
   "active",
@@ -54,6 +55,7 @@ export const RUNTIME_THREAD_STATES = [
   "closed",
   "compacted",
   "error",
+  "reset",
 ] as const;
 
 /**

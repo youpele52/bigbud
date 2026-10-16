@@ -26,3 +26,8 @@ export const ComputerUseCheckInIntervalMs = Schema.Int.check(
 export const ComputerUseActionTimeoutMs = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MIN),
 ).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MAX));
+
+/** Claude Code subagent cap (`CLAUDE_CODE_MAX_*`, integer >= 1); null keeps the CLI default. */
+export const ClaudeSubagentCap = Schema.NullOr(
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 64 })),
+);

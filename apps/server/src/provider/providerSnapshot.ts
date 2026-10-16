@@ -11,6 +11,7 @@ import type {
 } from "@bigbud/contracts";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { compareCodexCliVersions, MINIMUM_CODEX_CLI_VERSION } from "./codexCliVersion.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "./providerSubagents.capabilities.ts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { normalizeModelSlug } from "@bigbud/shared/model";
@@ -207,6 +208,7 @@ export function buildServerProvider(input: {
     // the explicit interrupt-and-continue strategy.
     supportsSteer: input.provider !== "opencodeV2",
     supportsAttachments: providerAttachmentPolicy(input.provider).supported,
+    ...(PROVIDER_SUBAGENT_CAPABILITIES[input.provider].stop === true ? { subagentStop: true } : {}),
     turnControl: {
       nativeSteer,
       interruptTarget: input.provider === "codex" ? "exact-turn" : "current-session",

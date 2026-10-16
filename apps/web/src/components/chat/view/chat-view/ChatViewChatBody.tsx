@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useThreadActions } from "~/hooks/useThreadActions";
 import BranchToolbar from "~/components/git/BranchToolbar";
@@ -13,6 +13,7 @@ import { AccessModeInfoBanner } from "../../common/AccessModeInfoBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { DelegatedChildrenCard } from "../../agents/DelegatedChildrenCard";
 import { ChatAgentActivityFeed } from "../../agents/ChatAgentActivityFeed";
+import { makeSubagentStopHandler } from "../../agents/SubagentRow.stop";
 import { isFreshActiveProviderAgent } from "../../agents/agentActivity.presentation";
 import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
@@ -87,6 +88,14 @@ export function ChatViewChatBody({
     handleReplyToMessage,
     userTurnAnchors,
   } = useChatViewContentHandlers({ base, runtime, thread });
+  const stopSubagentThreadId =
+    base.isServerThread && composer.activeProviderStatus?.subagentStop === true
+      ? base.activeThread?.id
+      : undefined;
+  const onStopSubagent = useMemo(
+    () => (stopSubagentThreadId ? makeSubagentStopHandler(stopSubagentThreadId) : undefined),
+    [stopSubagentThreadId],
+  );
   const onUseHandoffFromBanner = useCallback(() => {
     if (!base.activeThread) return;
     void interactions.onCreateHandoffBranch(
@@ -235,6 +244,7 @@ export function ChatViewChatBody({
                 <ChatAgentActivityFeed
                   agents={base.activeThread!.providerAgents ?? []}
                   nowIso={thread.nowIso}
+                  onStopSubagent={onStopSubagent}
                 />
               </div>
 

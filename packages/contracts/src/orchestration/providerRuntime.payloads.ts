@@ -344,6 +344,8 @@ export type FilesPersistedPayload = typeof FilesPersistedPayload.Type;
 export const RuntimeWarningPayload = Schema.Struct({
   message: TrimmedNonEmptyStringSchema,
   detail: Schema.optional(Schema.Unknown),
+  /** Additive: `error` shows the warning on the red error surface without failing the session. */
+  severity: Schema.optional(Schema.Literals(["warning", "error"])),
 });
 export type RuntimeWarningPayload = typeof RuntimeWarningPayload.Type;
 

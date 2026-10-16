@@ -232,6 +232,14 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       forwardSubagentText,
       ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
       ...(harness?.environment ? { environment: harness.environment } : {}),
+      ...(harness
+        ? {}
+        : {
+            subagentCaps: {
+              maxSpawnDepth: claudeSettings.maxSubagentSpawnDepth ?? null,
+              maxConcurrent: claudeSettings.maxConcurrentSubagents ?? null,
+            },
+          }),
     });
     const queryRuntime = yield* Effect.try({
       try: () =>

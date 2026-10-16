@@ -42,6 +42,8 @@ export interface ProviderSubagentCapability {
   readonly evidence: string;
   /** Test files (relative to `apps/server/src`) proving the mapping or the gate. */
   readonly tests: ReadonlyArray<string>;
+  /** Per-subagent Stop through the adapter's `stopSubagent` (D3). */
+  readonly stop?: boolean;
 }
 
 const OPENCODE_V1_CHILDREN: ProviderSubagentCapability = {
@@ -86,7 +88,9 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
     tests: [
       "provider/Layers/Claude/Adapter.stream.subagents.replay.test.ts",
       "provider/Layers/Claude/Adapter.stream.subagents.test.ts",
+      "provider/Layers/Claude/Adapter.controls.subagents.test.ts",
     ],
+    stop: true,
   },
   cliProxy: {
     support: "gated",

@@ -11,6 +11,7 @@ import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
+import { makeWsRpcSubagentHandlers } from "./wsRpcHandlers.subagents";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcPluginHandlers } from "./wsRpcHandlers.plugins";
@@ -35,6 +36,7 @@ const makeWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
         ...makeWsRpcNotesHandlers(context),
         ...makeWsRpcTeachHandlers(context),
         ...makeWsRpcUsageHandlers(context),
+        ...makeWsRpcSubagentHandlers(context),
         ...makeWsRpcGitTerminalHandlers(context),
         ...makeWsRpcPluginHandlers(context),
       });

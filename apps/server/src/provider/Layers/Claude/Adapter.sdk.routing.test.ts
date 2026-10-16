@@ -65,7 +65,8 @@ describe("Claude SDK normalized message routing", () => {
           "runtime.warning",
           "model.rerouted",
           "runtime.warning",
-          "runtime.warning",
+          // commands_changed refreshes the command list (6.2) instead of warning.
+          "session.configured",
           "mcp.oauth.completed",
         ],
       );

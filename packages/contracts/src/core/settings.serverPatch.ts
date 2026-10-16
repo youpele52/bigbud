@@ -15,6 +15,7 @@ import {
 } from "./model";
 import {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   ComputerUseActionTimeoutMs,
   ComputerUseCheckInIntervalMs,
   DelegatedThreadModelChoice,
@@ -166,6 +167,8 @@ export const ServerSettingsPatch = Schema.Struct({
               nativeFork: Schema.optionalKey(Schema.Boolean),
             }),
           ),
+          maxSubagentSpawnDepth: Schema.optionalKey(ClaudeSubagentCap),
+          maxConcurrentSubagents: Schema.optionalKey(ClaudeSubagentCap),
         }),
       ),
       cliProxy: Schema.optionalKey(

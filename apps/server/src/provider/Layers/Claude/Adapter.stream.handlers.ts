@@ -323,6 +323,10 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
       case "system":
         yield* systemHandlers.handleSystemMessage(context, message);
         return;
+      case "conversation_reset":
+      case "prompt_suggestion":
+        yield* systemHandlers.handleTopLevelMessage(context, message);
+        return;
       case "tool_progress":
       case "tool_use_summary":
       case "auth_status":

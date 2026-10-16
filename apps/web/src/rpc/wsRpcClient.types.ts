@@ -44,6 +44,7 @@ import {
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
   type ServerGetUsageSummaryInput,
+  type ProviderStopSubagentInput,
   type ServerListAllAutomationsInput,
   type ServerListAllAutomationsResult,
   type ServerListAutomationRunsInput,
@@ -311,6 +312,7 @@ export interface WsRpcClient {
     readonly getUsageSummary: (
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
+    readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };

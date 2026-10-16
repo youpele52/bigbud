@@ -202,6 +202,8 @@ export const ServerProvider = Schema.Struct({
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
   supportsSteer: Schema.optional(Schema.Boolean),
   supportsAttachments: Schema.optional(Schema.Boolean),
+  /** Per-subagent Stop is available (Stop-all is separate and unchanged). */
+  subagentStop: Schema.optional(Schema.Boolean),
   turnControl: Schema.optional(
     Schema.Struct({
       nativeSteer: Schema.Boolean,

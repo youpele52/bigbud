@@ -132,6 +132,12 @@ export interface ProviderAdapterShape<TError> {
     turnId?: TurnId,
   ) => Effect.Effect<void, TError>;
 
+  /**
+   * Stop one running provider subagent by its native task ID. Present only when
+   * `capabilities.subagents.stop` is declared; Stop-all is `interruptTurn`.
+   */
+  readonly stopSubagent?: (threadId: ThreadId, nativeTaskId: string) => Effect.Effect<void, TError>;
+
   /** Authoritative provider-native inspection, or `unavailable` when unsupported. */
   readonly inspectActiveTurn: (
     threadId: ThreadId,

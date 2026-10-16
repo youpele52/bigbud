@@ -34,6 +34,8 @@ export interface SessionStartDeps {
               readonly forwardedSubagentText: boolean;
               readonly mcpControls: boolean;
             };
+            readonly maxSubagentSpawnDepth?: number | null;
+            readonly maxConcurrentSubagents?: number | null;
           };
         };
       },

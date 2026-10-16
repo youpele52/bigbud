@@ -17,6 +17,7 @@ import { ProviderModelCatalog } from "./ProviderCard.modelCatalog";
 import { ProviderNativeTrust } from "./ProviderCard.nativeTrust";
 import { ProviderThreadToolsSetup } from "./ProviderThreadToolsSetup";
 import { ProviderNativeStatus } from "./ProviderCard.nativeStatus";
+import { ClaudeSubagentCapsSettings } from "./ProviderCard.claudeSubagentCaps";
 import type { OpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
 
 export type ProviderCardData = {
@@ -254,6 +255,8 @@ export function ProviderCard({
                 </label>
               </div>
             ) : null}
+
+            {card.provider === "claudeAgent" ? <ClaudeSubagentCapsSettings /> : null}
 
             {card.homePathKey && card.provider !== "opencodeV2" ? (
               <div className="border-t border-border/60 px-4 py-3 sm:px-5">

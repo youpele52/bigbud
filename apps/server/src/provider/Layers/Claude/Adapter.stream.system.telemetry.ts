@@ -9,6 +9,7 @@ import { PROVIDER } from "./Adapter.types.ts";
 import { asCanonicalTurnId, nativeProviderRefs, sdkNativeMethod } from "./Adapter.utils.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import type { SubagentHandlers } from "./Adapter.stream.subagents.ts";
+import { claudeRateLimitWarning, decodeClaudeRateLimits } from "./Adapter.stream.rateLimits.ts";
 
 export function makeSdkTelemetryHandler(deps: {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -64,11 +65,29 @@ export function makeSdkTelemetryHandler(deps: {
         },
       });
     } else if (message.type === "rate_limit_event") {
-      yield* deps.turn.emitRuntimeWarning(
-        context,
-        "Claude rate-limit status changed.",
-        claudeSdkDiagnostic(message),
-      );
+      const rateLimits = decodeClaudeRateLimits(message);
+      if (!rateLimits) {
+        yield* deps.turn.emitRuntimeWarning(
+          context,
+          "Invalid Claude rate-limit message.",
+          claudeSdkDiagnostic(message),
+        );
+        return;
+      }
+      yield* deps.offerRuntimeEvent(context, {
+        ...base,
+        type: "account.rate-limits.updated",
+        payload: { rateLimits },
+      });
+      const warning = claudeRateLimitWarning(rateLimits);
+      if (warning) {
+        yield* deps.turn.emitRuntimeWarning(
+          context,
+          warning,
+          { rateLimits },
+          rateLimits.status === "rejected" ? "error" : undefined,
+        );
+      }
     }
   });
 }

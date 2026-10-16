@@ -74,6 +74,7 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
     options?: Parameters<ClaudeQueryRuntime["rewindFiles"]>[1];
   }> = [];
   public readonly setModelCalls: Array<string | undefined> = [];
+  public readonly stopTaskCalls: Array<string> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
   public readonly setMaxThinkingTokensCalls: Array<
     Parameters<ClaudeQueryRuntime["setMaxThinkingTokens"]>
@@ -208,6 +209,11 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
     this.rewindFilesCalls.push({ userMessageId, ...(options ? { options } : {}) });
     this.throwControlFailure("rewindFiles");
     return this.rewindFilesResult;
+  };
+
+  readonly stopTask: ClaudeQueryRuntime["stopTask"] = async (taskId) => {
+    this.stopTaskCalls.push(taskId);
+    this.throwControlFailure("stopTask");
   };
 
   readonly setModel: ClaudeQueryRuntime["setModel"] = async (model) => {

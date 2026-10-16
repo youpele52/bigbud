@@ -20,6 +20,7 @@ import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
 import {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   ComputerUseActionTimeoutMs,
   ComputerUseCheckInIntervalMs,
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
@@ -32,6 +33,7 @@ export * from "./settings.serverPatch";
 export * from "./settings.threadRetention";
 export {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   COMPUTER_USE_ACTION_TIMEOUT_MS_MAX,
   COMPUTER_USE_ACTION_TIMEOUT_MS_MIN,
   COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX,
@@ -174,6 +176,8 @@ export const ClaudeSettings = Schema.Struct({
   binaryPath: makeBinaryPathSetting("claude"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
   rollout: ClaudeRolloutSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  maxSubagentSpawnDepth: ClaudeSubagentCap.pipe(Schema.withDecodingDefault(() => null)),
+  maxConcurrentSubagents: ClaudeSubagentCap.pipe(Schema.withDecodingDefault(() => null)),
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 

@@ -22,6 +22,7 @@ import { isClaudeTaskSystemMessage, makeTaskSystemHandler } from "./Adapter.stre
 import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../providerMcp.ts";
 import { makeSdkTelemetryHandler } from "./Adapter.stream.system.telemetry.ts";
 import type { SubagentHandlers } from "./Adapter.stream.subagents.ts";
+import { countClaudeSdkMessage, makeMiscSystemHandlers } from "./Adapter.stream.system.misc.ts";
 
 export interface SystemHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -50,6 +51,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
     );
   });
 
+  const misc = makeMiscSystemHandlers({ offerRuntimeEvent, turn });
   const handleTaskSystemMessage = makeTaskSystemHandler({
     makeEventStamp,
     offerRuntimeEvent,
@@ -86,7 +88,13 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           ...base,
           type: "session.configured",
           payload: {
-            config: { sdkVersion: CLAUDE_AGENT_SDK_VERSION, mcpServerCount: status.length },
+            config: {
+              sdkVersion: CLAUDE_AGENT_SDK_VERSION,
+              mcpServerCount: status.length,
+              ...(typeof message.claude_code_version === "string"
+                ? { claudeCodeVersion: message.claude_code_version.slice(0, 40) }
+                : {}),
+            },
           },
         });
         const mcpStamp = yield* makeEventStamp();
@@ -196,8 +204,11 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       case "commands_changed": {
         const commands = decodeClaudeCommandsChangedMessage(message);
         if (!commands) return yield* invalid(context, message);
-        yield* turn.emitRuntimeWarning(context, "Claude command list changed.", {
-          commandCount: commands.commands.length,
+        // ClaudeProviderRefreshReactor refreshes the provider's slash commands from this.
+        yield* offerRuntimeEvent(context, {
+          ...base,
+          type: "session.configured",
+          payload: { config: { commandsChanged: true, commandCount: commands.commands.length } },
         });
         return;
       }
@@ -229,6 +240,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         return;
       }
       default:
+        if (yield* misc.handleMiscSystemMessage(context, message, base)) return;
         yield* turn.emitRuntimeWarning(
           context,
           `Unhandled Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} system message '${claudeSdkMessageLabel(message)}'.`,
@@ -236,6 +248,28 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         );
     }
   });
-  return { handleSystemMessage, handleSdkTelemetryMessage };
+
+  /** Top-level `conversation_reset` and `prompt_suggestion` frames. */
+  const handleTopLevelMessage = Effect.fn("handleClaudeTopLevelMessage")(function* (
+    context: ClaudeSessionContext,
+    message: SDKMessage,
+  ) {
+    const stamp = yield* makeEventStamp();
+    const base = {
+      eventId: stamp.eventId,
+      provider: PROVIDER,
+      createdAt: stamp.createdAt,
+      threadId: context.session.threadId,
+      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+      providerRefs: nativeProviderRefs(context),
+      raw: claudeSdkRuntimeRaw(message, sdkNativeMethod(message)),
+    };
+    if (message.type === "conversation_reset") {
+      return yield* misc.handleConversationReset(context, message, base);
+    }
+    // promptSuggestions is not enabled; a suggestion is dropped and never auto-sent.
+    yield* countClaudeSdkMessage("prompt_suggestion");
+  });
+  return { handleSystemMessage, handleSdkTelemetryMessage, handleTopLevelMessage };
 };
 export type SystemHandlers = ReturnType<typeof makeSystemHandlers>;
