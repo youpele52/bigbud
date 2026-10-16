@@ -192,6 +192,14 @@
       "types": "./src/providerRuntime.ts",
       "import": "./src/providerRuntime.ts"
     },
+    "./promptSuggestion": {
+      "types": "./src/promptSuggestion.ts",
+      "import": "./src/promptSuggestion.ts"
+    },
+    "./providerSubagents": {
+      "types": "./src/providerSubagents.ts",
+      "import": "./src/providerSubagents.ts"
+    },
     "./workLog": {
       "types": "./src/workLog.ts",
       "import": "./src/workLog.ts"

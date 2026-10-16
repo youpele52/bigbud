@@ -25,6 +25,7 @@ import type {
 import type { Effect } from "effect";
 import type { Stream } from "effect";
 import type { ProviderServiceShape } from "./ProviderService.ts";
+import type { ProviderSubagentCapability } from "../providerSubagents.capabilities.ts";
 
 export interface ProviderMcpOperations<TError> {
   readonly refresh: (
@@ -75,6 +76,16 @@ export interface ProviderAdapterCapabilities {
   readonly supportsSteer?: boolean;
   /** Structured execution strengths used by the provider-neutral turn controller. */
   readonly turnControl?: ProviderTurnControlCapabilities;
+  /**
+   * Native subagent support. Every production adapter must set its
+   * `PROVIDER_SUBAGENT_CAPABILITIES` entry (enforced by the conformance test).
+   */
+  readonly subagents?: ProviderSubagentCapability;
+  /**
+   * The provider emits its own `turn.prompt-suggestion` after a settled turn. Without it,
+   * bigbud generates one with the thread's model when the user allows it (Phase 7).
+   */
+  readonly nativePromptSuggestions?: boolean;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -125,6 +136,12 @@ export interface ProviderAdapterShape<TError> {
     input: string,
     turnId?: TurnId,
   ) => Effect.Effect<void, TError>;
+
+  /**
+   * Stop one running provider subagent by its native task ID. Present only when
+   * `capabilities.subagents.stop` is declared; Stop-all is `interruptTurn`.
+   */
+  readonly stopSubagent?: (threadId: ThreadId, nativeTaskId: string) => Effect.Effect<void, TError>;
 
   /** Authoritative provider-native inspection, or `unavailable` when unsupported. */
   readonly inspectActiveTurn: (

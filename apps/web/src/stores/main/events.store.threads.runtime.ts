@@ -19,7 +19,11 @@ import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.const
 import { PROVIDER_CHECKING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 import { applyDelegationLinkedActivity } from "./events.store.delegations";
 import { applyDelegatedChildRuntimeEvent } from "./events.store.delegatedRuntime";
-import { demoteProviderAgentsForSession } from "./events.store.providerAgents";
+import {
+  demoteProviderAgentsForSession,
+  removeProviderAgent,
+  upsertProviderAgent,
+} from "./events.store.providerAgents";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import {
   buildThreadMessageLatestTurn,
@@ -42,17 +46,12 @@ export function applyThreadRuntimeEvent(
       if (event.payload.task.kind !== "providerSubagent") return state;
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
-        providerAgents: [
-          ...(thread.providerAgents ?? []).filter((agent) => agent.id !== event.payload.task.id),
-          event.payload.task,
-        ],
+        providerAgents: upsertProviderAgent(thread.providerAgents, event.payload.task),
       }));
     case "thread.task-removed":
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
-        providerAgents: (thread.providerAgents ?? []).filter(
-          (agent) => agent.id !== event.payload.taskId,
-        ),
+        providerAgents: removeProviderAgent(thread.providerAgents, event.payload.taskId),
       }));
     case "thread.message-sent": {
       const nextState = updateThreadState(state, event.payload.threadId, (thread) => {

@@ -1,6 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
@@ -19,6 +19,7 @@ import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
+import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -68,6 +69,20 @@ export function ChatViewComposer({
   const [isRecording, setIsRecording] = useState(false);
   const micRef = useRef<ComposerMicButtonHandle>(null);
   const activeReplyTarget = base.composerDraft.replyTarget;
+  const suggestionThread = base.isServerThread ? base.activeThread : undefined;
+  const suggestionBlocked =
+    thread.isComposerApprovalState ||
+    thread.isOpencodePendingUserInputMode ||
+    thread.showPlanFollowUpPrompt ||
+    base.composerDraft.shellMode;
+  const promptSuggestion = useMemo(
+    () =>
+      suggestionThread && !suggestionBlocked
+        ? (deriveVisiblePromptSuggestion(suggestionThread, base.settings.promptSuggestions)
+            ?.suggestion ?? null)
+        : null,
+    [suggestionThread, suggestionBlocked, base.settings.promptSuggestions],
+  );
   const {
     insertMention,
     onMicTranscript,
@@ -203,6 +218,7 @@ export function ChatViewComposer({
               onChange={interactions.composerCommandHandlers.onPromptChange}
               onCommandKeyDown={interactions.composerCommandHandlers.onComposerCommandKey}
               onPaste={interactions.onComposerPaste}
+              promptSuggestion={promptSuggestion}
               placeholder={
                 thread.isComposerApprovalState
                   ? (thread.activePendingApproval?.detail ??

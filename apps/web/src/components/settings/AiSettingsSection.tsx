@@ -11,6 +11,7 @@ import { ProviderModelPicker } from "../chat/provider/ProviderModelPicker";
 import { TraitsPicker } from "../chat/provider/TraitsPicker";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { PromptSuggestionSettingsRows } from "./AiSettingsSection.promptSuggestions";
 
 export function AiSettingsSection() {
   const settings = useSettings();
@@ -88,6 +89,8 @@ export function AiSettingsSection() {
           />
         }
       />
+
+      <PromptSuggestionSettingsRows />
 
       <SettingsRow
         title="Text generation model"

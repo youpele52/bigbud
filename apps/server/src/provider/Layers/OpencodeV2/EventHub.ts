@@ -3,6 +3,7 @@ import type { OpenCodeEvent } from "@opencode/client";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { checkedV2EventConnection } from "./EventHub.connection.ts";
 import { isV2LocationlessExecutionStart } from "./EventHub.hints.ts";
+import { V2ChildIndex, isV2ChildHintEvent, v2CreatedChild } from "./EventHub.children.ts";
 
 export interface V2EventOwner {
   readonly nativeSessionId: string;
@@ -12,6 +13,8 @@ export interface V2EventOwner {
   readonly onDirty: (reason: "gap" | "overflow" | "ambiguous" | "consumer-failed") => void;
   /** Request a fresh caller-owned read after an aborted delivery has finished unwinding. */
   readonly onDrained?: () => void;
+  /** A known native child changed; the owner may refresh its read-only observer. */
+  readonly onChildHint?: () => void;
 }
 
 type Owner = V2EventOwner & {
@@ -47,6 +50,7 @@ export function validateV2EventHubBounds(input: {
 /** Single process stream, bounded per-owner buffers, no guessed Location routing. */
 export class OpencodeV2EventHub {
   private readonly owners = new Map<string, Owner>();
+  private readonly children = new V2ChildIndex();
   private controller: AbortController | undefined;
   private task: Promise<void> | undefined;
   private closed = false;
@@ -90,8 +94,10 @@ export class OpencodeV2EventHub {
       record.active = false;
       record.delivery.abort();
       record.queue.length = 0;
-      if (this.owners.get(owner.nativeSessionId) === record)
+      if (this.owners.get(owner.nativeSessionId) === record) {
         this.owners.delete(owner.nativeSessionId);
+        this.children.forget(owner.nativeSessionId);
+      }
     };
   }
 
@@ -116,6 +122,12 @@ export class OpencodeV2EventHub {
   /** Resume only after caller-owned authoritative repair and fencing have completed. */
   generation(nativeSessionId: string): number | undefined {
     return this.owners.get(nativeSessionId)?.dirtyGeneration;
+  }
+
+  /** Children returned by an owner's own observer read; bounded per owner. */
+  noteChildren(ownerSessionId: string, childIds: ReadonlyArray<string>): void {
+    if (this.closed || !this.owners.has(ownerSessionId)) return;
+    for (const childId of childIds) this.children.learn(ownerSessionId, childId);
   }
 
   isDirty(nativeSessionId: string): boolean {
@@ -151,6 +163,21 @@ export class OpencodeV2EventHub {
     }
   }
 
+  /** Unknown IDs stay dropped; a known child only nudges its owner, never delivers content. */
+  private hintChild(event: OpenCodeEvent, sessionID: string): void {
+    const created = v2CreatedChild(event);
+    if (created?.childId === sessionID && this.owners.has(created.parentId))
+      this.children.learn(created.parentId, created.childId);
+    const ownerId = this.children.ownerOf(sessionID);
+    const owner = ownerId === undefined ? undefined : this.owners.get(ownerId);
+    if (!owner?.active || !owner.onChildHint || !isV2ChildHintEvent(event)) return;
+    try {
+      owner.onChildHint();
+    } catch {
+      /* A hint is advisory; the parent's own reconcile still observes children. */
+    }
+  }
+
   private async consume(controller: AbortController): Promise<void> {
     try {
       const source = this.input.requireMarker
@@ -165,7 +192,10 @@ export class OpencodeV2EventHub {
         const sessionID = envelope.data?.sessionID ?? envelope.data?.form?.sessionID;
         if (typeof sessionID !== "string") continue;
         const owner = this.owners.get(sessionID);
-        if (!owner) continue;
+        if (!owner) {
+          this.hintChild(event, sessionID);
+          continue;
+        }
         // The pinned native start notification is allowed to omit Location. Never route it
         // as owned content or infer a source gap from this explicitly optional hint.
         if (isV2LocationlessExecutionStart(event, sessionID)) continue;
@@ -233,6 +263,7 @@ export class OpencodeV2EventHub {
       owner.queue.length = 0;
     }
     this.owners.clear();
+    this.children.clear();
     await runWithAbortableDeadline({
       operation: "OpenCode v2 stream cleanup",
       timeoutMs: 1000,

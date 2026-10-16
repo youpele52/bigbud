@@ -18,6 +18,7 @@ import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
+import { isClaudeAgentTool, type SubagentHandlers } from "./Adapter.stream.subagents.ts";
 import { taskCreateResultId } from "./Adapter.tasks.reducer.parse.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 
@@ -30,10 +31,11 @@ interface MessageSpecificHandlerDeps {
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
+  readonly subagents: SubagentHandlers;
 }
 
 export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) => {
-  const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn } = deps;
+  const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn, subagents } = deps;
 
   const handleUserMessage = Effect.fn("handleUserMessage")(function* (
     context: ClaudeSessionContext,
@@ -47,6 +49,11 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       context.queuedUserMessageIds.delete(message.uuid);
     }
 
+    if (message.parent_tool_use_id) {
+      // A subagent's own tool results update its steps; they never touch main-thread tools.
+      yield* subagents.handleSubagentUser(context, message);
+      return;
+    }
     if (context.turnState) {
       context.turnState.items.push(message.message);
     }
@@ -131,6 +138,9 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         raw: claudeSdkRuntimeRaw(message, "claude/user"),
       });
 
+      if (isClaudeAgentTool(tool.toolName)) {
+        yield* subagents.recordAgentToolOutput(context, tool.itemId, message.tool_use_result);
+      }
       const result = asRecord(message.tool_use_result) ?? tryParseJsonRecord(toolResult.text);
       const createdTaskId =
         tool.toolName === "TaskCreate" && !toolResult.isError
@@ -179,24 +189,8 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
             })
             .join("\n")
         : "";
+      yield* subagents.handleSubagentAssistant(context, message, summary);
       if (summary.length > 0) {
-        const childTask = Array.from(context.taskState.tasks.values()).find(
-          (task) =>
-            task.subagentType === "agent" &&
-            (task.sourceToolUseId === message.parent_tool_use_id ||
-              task.parentToolUseId === message.parent_tool_use_id),
-        );
-        if (childTask && context.providerSubagentsSupported) {
-          yield* updateClaudeTaskPlan({
-            context,
-            toolUseId: message.parent_tool_use_id,
-            toolName: "task_updated",
-            input: { task_id: childTask.id, progress_summary: summary.slice(0, 500) },
-            now: yield* nowIso,
-            makeEventStamp,
-            offerRuntimeEvent,
-          });
-        }
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent(context, {
           type: "tool.progress",

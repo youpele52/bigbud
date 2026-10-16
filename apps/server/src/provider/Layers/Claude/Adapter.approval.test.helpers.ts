@@ -7,7 +7,8 @@ import type {
   UnstampedProviderRuntimeEvent,
 } from "./Adapter.types.ts";
 import { makeClaudeTaskState } from "./Adapter.tasks.ts";
-import { FakeClaudeQuery, THREAD_ID } from "./Adapter.test.helpers.ts";
+import { THREAD_ID } from "./Adapter.test.helpers.ts";
+import { FakeClaudeQuery } from "./Adapter.test.helpers.query.ts";
 
 /** Fully typed request-owner fixture; query transport is not used by callback tests. */
 export const makeApprovalTestHarness = Effect.fn("makeApprovalTestHarness")(function* (
@@ -60,6 +61,9 @@ export const makeApprovalTestHarness = Effect.fn("makeApprovalTestHarness")(func
     requiredMcpServerNames: new Set(),
     modernTaskExposure: true,
     providerSubagentsSupported: true,
+    forwardSubagentText: false,
+    agentModels: undefined,
+    agentToolInputs: new Map(),
     mcpControlsEnabled: true,
     refreshMcpStatuses: undefined,
     stopped: false,

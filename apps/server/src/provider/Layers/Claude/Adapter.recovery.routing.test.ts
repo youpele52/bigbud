@@ -14,8 +14,8 @@ import { ProviderAdapterRegistry } from "../../Services/ProviderAdapterRegistry.
 import { ProviderService } from "../../Services/ProviderService.ts";
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import { makeClaudeAdapterLive } from "./Adapter.ts";
+import { FakeClaudeQuery } from "./Adapter.test.helpers.query.ts";
 import {
-  FakeClaudeQuery,
   makeDeterministicRandomService,
   readFirstPromptText,
   THREAD_ID,

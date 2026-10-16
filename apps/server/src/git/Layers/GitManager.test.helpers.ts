@@ -53,6 +53,7 @@ export interface FakeGitTextGeneration {
     transcript: string;
     modelSelection: ModelSelection;
   }) => Effect.Effect<{ summary: string }, TextGenerationError>;
+  generatePromptSuggestion: TextGenerationShape["generatePromptSuggestion"];
 }
 
 function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): TextGenerationShape {
@@ -79,6 +80,10 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
     generateThreadElevatorSummary: () =>
       Effect.succeed({
         summary: "Update workflow details",
+      }),
+    generatePromptSuggestion: () =>
+      Effect.succeed({
+        suggestion: "Add tests for the stacked workflow",
       }),
     ...overrides,
   };
@@ -139,6 +144,7 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
             }),
         ),
       ),
+    generatePromptSuggestion: (input) => implementation.generatePromptSuggestion(input),
   };
 }
 

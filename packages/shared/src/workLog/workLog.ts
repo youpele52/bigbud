@@ -15,13 +15,15 @@ import {
   DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
   DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
 } from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 import { extractWorkLogPayloadDetails } from "./workLog.payload";
 
-/** Rendered by the delegated-thread model choice notice instead of the work log. */
+/** Rendered by the model choice notice or the composer's prompt suggestion, not the work log. */
 const NOTICE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
   DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
   DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
+  PROMPT_SUGGESTION_ACTIVITY_KIND,
 ]);
 
 export interface WorkLogEntry {

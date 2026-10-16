@@ -7,6 +7,7 @@ import {
   type ProviderCommandReactorShape,
 } from "../Services/ProviderCommandReactor.ts";
 import { makeProviderCommandHandlers } from "./ProviderCommandReactorHandlers.ts";
+import { makePromptSuggestionReactorStart } from "./PromptSuggestionReactor.live.ts";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 
@@ -33,6 +34,7 @@ import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const handlers = yield* makeProviderCommandHandlers;
+  const startPromptSuggestions = yield* makePromptSuggestionReactorStart;
   const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
@@ -100,6 +102,8 @@ const make = Effect.gen(function* () {
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, processEvent),
     );
+    // Generated prompt suggestions (Phase 7) run beside, never inside, the intent workers.
+    yield* startPromptSuggestions();
     yield* Effect.yieldNow;
 
     let cursorAt = "";

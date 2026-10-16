@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, RuntimeTaskId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+
+import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSubagents.ts";
 
 import type { ActivePiSession } from "./Adapter.types.ts";
 import { eventBase, isRecord, normalizeString } from "./Adapter.utils.ts";
 import type { PiRpcExtensionUIRequest } from "./RpcProcess.ts";
+import {
+  forgetPiAsyncSubagentSteps,
+  piAsyncSubagentSteps,
+} from "./Adapter.stream.asyncSubagents.steps.ts";
 
 const WIDGET_KEY = "subagent-async";
 const WIDGET_PREFIX = "PI_SUBAGENT_ASYNC_JSON:";
@@ -136,6 +142,9 @@ function parseWidget(message: PiRpcExtensionUIRequest) {
   };
 }
 
+const asyncTaskId = (session: ActivePiSession, nativeId: string) =>
+  providerSubagentTaskId("pi", session.threadId, session.sessionEpoch, `async:${nativeId}`);
+
 function taskStatus(
   state: AsyncState,
 ): "pending" | "inProgress" | "completed" | "failed" | "stopped" {
@@ -192,59 +201,72 @@ export function mapPiAsyncSubagentWidget(
         const status = taskStatus(node.state);
         const observedOrdinal = (observedOrdinals.get(session) ?? 0) + 1;
         observedOrdinals.set(session, observedOrdinal);
-        events.push({
-          ...eventBase({
-            eventId: EventId.makeUnsafe(randomUUID()),
-            createdAt,
-            threadId: session.threadId,
-            sessionEpoch: session.sessionEpoch,
-            ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
-            raw: {
-              source: "pi.rpc.event",
-              messageType: "extension_ui_request",
-              payload: { widgetKey: WIDGET_KEY, nodeId: nativeId },
-            },
-          }),
-          type: "task.updated",
-          payload: {
-            taskId: RuntimeTaskId.makeUnsafe(
-              `pi:${session.threadId}:${session.sessionEpoch}:async:${nativeId}`,
-            ),
-            kind: "providerSubagent",
-            nativeId,
-            activityFresh: status === "inProgress",
-            status,
-            subject: node.label,
-            background: true,
-            ...(parentId ? { parentAgentId: parentId } : {}),
-            ...(node.activity?.currentTool ? { lastToolName: node.activity.currentTool } : {}),
-            ...(node.activity?.toolCount !== undefined || node.activity?.turnCount !== undefined
-              ? {
-                  usage: {
-                    ...(node.activity.toolCount !== undefined
-                      ? { toolCalls: node.activity.toolCount }
-                      : {}),
-                    ...(node.activity.turnCount !== undefined
-                      ? { turns: node.activity.turnCount }
-                      : {}),
-                  },
-                }
-              : {}),
-            ...(node.state === "paused" || node.state === "partial" || node.state === "rejected"
-              ? { terminalReason: node.state }
-              : {}),
-            source: "background",
-            freshness: {
-              sessionEpoch: String(session.sessionEpoch),
-              sourcePriority: 3,
-              providerRevision: generatedAt,
-              providerTimestamp: createdAt,
-              observedOrdinal,
-            },
-            createdAt: new Date(node.startedAt ?? generatedAt).toISOString(),
-            ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
-          },
+        const recentSteps = piAsyncSubagentSteps({
+          session,
+          nativeId,
+          currentTool: node.activity?.currentTool,
+          status,
+          at: new Date(node.updatedAt ?? generatedAt).toISOString(),
+          revision: generatedAt,
         });
+        const terminal = status === "completed" || status === "failed" || status === "stopped";
+        events.push(
+          providerSubagentEvent(
+            eventBase({
+              eventId: EventId.makeUnsafe(randomUUID()),
+              createdAt,
+              threadId: session.threadId,
+              sessionEpoch: session.sessionEpoch,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw: {
+                source: "pi.rpc.event",
+                messageType: "extension_ui_request",
+                payload: { widgetKey: WIDGET_KEY, nodeId: nativeId },
+              },
+            }),
+            {
+              taskId: asyncTaskId(session, nativeId),
+              nativeId,
+              status,
+              subject: node.label,
+              background: true,
+              ...(parentId ? { parentAgentId: parentId } : {}),
+              lastToolName: node.activity?.currentTool,
+              ...(recentSteps ? { recentSteps } : {}),
+              ...(node.activity?.toolCount !== undefined
+                ? { metrics: { toolUses: node.activity.toolCount } }
+                : {}),
+              ...(node.activity?.toolCount !== undefined || node.activity?.turnCount !== undefined
+                ? {
+                    usage: {
+                      ...(node.activity.toolCount !== undefined
+                        ? { toolCalls: node.activity.toolCount }
+                        : {}),
+                      ...(node.activity.turnCount !== undefined
+                        ? { turns: node.activity.turnCount }
+                        : {}),
+                    },
+                  }
+                : {}),
+              ...(node.state === "paused" || node.state === "partial" || node.state === "rejected"
+                ? { terminalReason: node.state }
+                : {}),
+              ...(terminal
+                ? { endedAt: new Date(node.updatedAt ?? generatedAt).toISOString() }
+                : {}),
+              source: "background",
+              freshness: {
+                sessionEpoch: String(session.sessionEpoch),
+                sourcePriority: 3,
+                providerRevision: generatedAt,
+                providerTimestamp: createdAt,
+                observedOrdinal,
+              },
+              createdAt: new Date(node.startedAt ?? generatedAt).toISOString(),
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+            },
+          ),
+        );
       }
     }
     if (visited >= MAX_AGENTS) return;
@@ -264,6 +286,7 @@ export function mapPiAsyncSubagentWidget(
   for (const nativeId of prior.keys()) {
     if (seen.has(nativeId)) continue;
     prior.delete(nativeId);
+    forgetPiAsyncSubagentSteps(session, nativeId);
     const observedOrdinal = (observedOrdinals.get(session) ?? 0) + 1;
     observedOrdinals.set(session, observedOrdinal);
     events.push({
@@ -281,9 +304,7 @@ export function mapPiAsyncSubagentWidget(
       }),
       type: "task.removed",
       payload: {
-        taskId: RuntimeTaskId.makeUnsafe(
-          `pi:${session.threadId}:${session.sessionEpoch}:async:${nativeId}`,
-        ),
+        taskId: asyncTaskId(session, nativeId),
         source: "background",
         replacement: "snapshot",
         freshness: {

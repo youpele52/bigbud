@@ -88,6 +88,10 @@ const make = Effect.fn("make")(function* () {
   };
 
   const processRuntimeEvent = makeRuntimeEventProcessor(processorServices, cacheHelpers);
+  // Shutdown boundary: persist throttled provider-subagent progress before the scope closes.
+  yield* Effect.addFinalizer(() =>
+    processRuntimeEvent.flushPendingSubagentUpserts.pipe(Effect.ignore),
+  );
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;
 

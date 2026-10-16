@@ -62,6 +62,7 @@ import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
+import { makeStopSubagent } from "./ProviderService.subagentStop.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -222,6 +223,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     analytics,
   });
   const steerTurn = makeSteerTurn({ resolveRoutableSession });
+  const stopSubagent = makeStopSubagent({ resolveRoutableSession });
 
   const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
 
@@ -364,6 +366,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopSubagent,
     inspectActiveTurn,
     listActiveTurnLiveness,
     recordTurnInspection,

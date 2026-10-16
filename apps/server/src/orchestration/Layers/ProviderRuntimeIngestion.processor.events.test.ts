@@ -6,6 +6,7 @@ import {
   resolveRuntimeTaskIdentity,
   scopedProviderSubagentId,
 } from "./ProviderRuntimeIngestion.tasks.identity.ts";
+import { isDuplicateClaudeLifecycleUpsert } from "./ProviderRuntimeIngestion.tasks.map.ts";
 
 const existingAgent: OrchestrationTask = {
   id: RuntimeTaskId.makeUnsafe("thread-a:7:child-1"),
@@ -91,5 +92,36 @@ describe("provider runtime task identity", () => {
       nativeId: "child-1",
       previous: existingAgent,
     });
+  });
+});
+
+describe("duplicate Claude lifecycle upserts", () => {
+  const lifecycle = (provider: "claudeAgent" | "pi" | "copilot", type = "task.progress") =>
+    ({ type, provider }) as Parameters<typeof isDuplicateClaudeLifecycleUpsert>[0];
+
+  it("skips Claude lifecycle events for a task another source owns", () => {
+    for (const type of ["task.started", "task.progress", "task.completed"]) {
+      expect(isDuplicateClaudeLifecycleUpsert(lifecycle("claudeAgent", type), existingAgent)).toBe(
+        true,
+      );
+    }
+  });
+
+  it("keeps Claude lifecycle events for new or lifecycle-owned tasks and task.updated", () => {
+    expect(isDuplicateClaudeLifecycleUpsert(lifecycle("claudeAgent"), undefined)).toBe(false);
+    expect(
+      isDuplicateClaudeLifecycleUpsert(lifecycle("claudeAgent"), {
+        ...existingAgent,
+        source: "lifecycle",
+      }),
+    ).toBe(false);
+    expect(
+      isDuplicateClaudeLifecycleUpsert(lifecycle("claudeAgent", "task.updated"), existingAgent),
+    ).toBe(false);
+  });
+
+  it("leaves every other provider's lifecycle upsert unchanged", () => {
+    expect(isDuplicateClaudeLifecycleUpsert(lifecycle("pi"), existingAgent)).toBe(false);
+    expect(isDuplicateClaudeLifecycleUpsert(lifecycle("copilot"), existingAgent)).toBe(false);
   });
 });

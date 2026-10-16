@@ -257,13 +257,13 @@ describe("ProvidersSettingsPanel route expansion", () => {
     await render(
       <QueryClientProvider client={queryClient}>
         <AppAtomRegistryProvider>
-          <ProvidersSettingsPanel expandedProviders={["opencode", "kilocode"]} />
+          <ProvidersSettingsPanel expandedProviders={["pi", "kilocode"]} />
         </AppAtomRegistryProvider>
       </QueryClientProvider>,
     );
 
     await vi.waitFor(() => {
-      expect(document.getElementById("provider-install-opencode-binary-path")).not.toBeNull();
+      expect(document.getElementById("provider-install-pi-binary-path")).not.toBeNull();
       expect(document.getElementById("provider-install-kilocode-binary-path")).not.toBeNull();
       expect(document.getElementById("provider-install-codex-binary-path")).toBeNull();
     });
@@ -285,13 +285,13 @@ describe("ProvidersSettingsPanel route expansion", () => {
       await screen.rerender(
         <QueryClientProvider client={queryClient}>
           <AppAtomRegistryProvider>
-            <ProvidersSettingsPanel expandedProviders={["opencode"]} />
+            <ProvidersSettingsPanel expandedProviders={["pi"]} />
           </AppAtomRegistryProvider>
         </QueryClientProvider>,
       );
 
       await vi.waitFor(() => {
-        expect(document.getElementById("provider-install-opencode-binary-path")).not.toBeNull();
+        expect(document.getElementById("provider-install-pi-binary-path")).not.toBeNull();
         expect(document.getElementById("provider-install-kilocode-binary-path")).toBeNull();
       });
     } finally {

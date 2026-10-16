@@ -1,6 +1,9 @@
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 
-import { isFreshActiveProviderAgent } from "../../agents/agentActivity.presentation";
+import {
+  hasFreshActiveProviderAgent,
+  isFreshActiveProviderAgent,
+} from "../../agents/agentActivity.presentation";
 
 export function resolveAgentActivityPresentation(input: {
   readonly mainActive: boolean;
@@ -20,4 +23,15 @@ export function resolveAgentActivityPresentation(input: {
     };
   }
   return { visible: false, tone: "main" as const, verb: input.mainVerb, freshAgents };
+}
+
+/**
+ * The elapsed-time clock ticks while the main turn works or any fresh subagent is active,
+ * so a background subagent keeps counting after its parent turn ends.
+ */
+export function shouldTickElapsedClock(input: {
+  readonly mainWorking: boolean;
+  readonly agents: ReadonlyArray<OrchestrationTask> | undefined;
+}): boolean {
+  return input.mainWorking || hasFreshActiveProviderAgent(input.agents);
 }

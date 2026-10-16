@@ -18,7 +18,10 @@ export function hierarchicalSubagents(
   const children = new Map<OrchestrationTask, OrchestrationTask[]>();
   const roots: OrchestrationTask[] = [];
   for (const agent of agents) {
-    const parent = agent.parentAgentId ? byIdentity.get(agent.parentAgentId) : undefined;
+    // Nest by the native parent task first, then by the provider's parent agent identity.
+    const parent =
+      (agent.parentTaskId ? byIdentity.get(agent.parentTaskId) : undefined) ??
+      (agent.parentAgentId ? byIdentity.get(agent.parentAgentId) : undefined);
     if (!parent || parent === agent) roots.push(agent);
     else children.set(parent, [...(children.get(parent) ?? []), agent]);
   }

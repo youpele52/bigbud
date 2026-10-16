@@ -44,6 +44,7 @@ import type * as RemoteRestart from "./server.remoteRestart";
 import type * as Handoff from "./server.handoff";
 import type * as Retention from "./threadRetention";
 import type * as Teach from "./teach";
+import type * as Subagents from "./subagents";
 import type * as Usage from "./usage";
 
 export interface NativeApi {
@@ -263,6 +264,8 @@ export interface NativeApi {
     getUsageSummary: (
       input: Usage.ServerGetUsageSummaryInput,
     ) => Promise<Usage.ServerUsageSummaryResult>;
+    /** Stop one running provider subagent; Stop-all is unchanged. */
+    stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
   };
   orchestration: {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;

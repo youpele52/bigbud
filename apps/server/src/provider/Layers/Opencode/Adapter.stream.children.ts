@@ -1,23 +1,28 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, RuntimeTaskId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { EventId, type ProviderKind, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import type { Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
 
+import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSubagents.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase } from "./Adapter.stream.utils.ts";
+import {
+  childMetrics,
+  recordChildAssistant,
+  recordChildToolPart,
+  type ChildActivity,
+} from "./Adapter.stream.children.activity.ts";
 
 const MAX_CHILDREN = 32;
 const MAX_PROGRESS_LENGTH = 500;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
 type ChildStatus = "pending" | "inProgress" | "completed" | "failed" | "stopped";
-type ChildActivity = {
-  assistantMessageId?: string;
-  progressPartId?: string;
-  progressSummary?: string;
-  progressEmittedAt?: number;
-  lastToolName?: string;
-  terminalReason?: string;
-};
+
+/** Child sessions are tracked only for providers that declare native subagent support. */
+export function tracksChildSessions(provider: ProviderKind): boolean {
+  return PROVIDER_SUBAGENT_CAPABILITIES[provider].support === "native";
+}
 
 function taskCreatedAt(child: Session, observedAt: string) {
   const timestamp = child.time?.created;
@@ -26,7 +31,10 @@ function taskCreatedAt(child: Session, observedAt: string) {
   return Number.isNaN(date.getTime()) ? observedAt : date.toISOString();
 }
 
-export function makeChildSessionTracker(session: ActiveOpencodeSession) {
+export function makeChildSessionTracker(
+  session: ActiveOpencodeSession,
+  provider: "opencode" | "kilocode" = "opencode",
+) {
   const children = new Map<string, Session>();
   const statuses = new Map<string, ChildStatus>();
   const activity = new Map<string, ChildActivity>();
@@ -36,13 +44,15 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
     const observedAt = new Date().toISOString();
     const childActivity = activity.get(child.id);
     const progressSummary = childActivity?.progressSummary?.trim();
-    return {
-      ...eventBase({
+    const metrics = childActivity ? childMetrics(childActivity) : undefined;
+    const terminal = status === "completed" || status === "failed" || status === "stopped";
+    return providerSubagentEvent(
+      eventBase({
         eventId: EventId.makeUnsafe(randomUUID()),
         createdAt: observedAt,
         threadId: session.threadId,
         sessionEpoch: session.sessionEpoch,
-        provider: "opencode",
+        provider,
         ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
         raw: {
           source: "opencode.sdk.session-event",
@@ -50,21 +60,20 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
           payload: { sessionID: child.id },
         },
       }),
-      type: "task.updated",
-      payload: {
-        taskId: RuntimeTaskId.makeUnsafe(
-          `opencode:${session.threadId}:${session.sessionEpoch}:${child.id}`,
-        ),
-        kind: "providerSubagent",
+      {
+        taskId: providerSubagentTaskId(provider, session.threadId, session.sessionEpoch, child.id),
         nativeId: child.id,
-        activityFresh: status === "inProgress",
         status,
-        subject: (child.agent || child.title || "Subagent").slice(0, 120),
-        ...(child.title ? { description: child.title.slice(0, 500) } : {}),
-        ...(child.parentID ? { parentAgentId: child.parentID } : {}),
-        ...(progressSummary ? { progressSummary } : {}),
-        ...(childActivity?.lastToolName ? { lastToolName: childActivity.lastToolName } : {}),
-        ...(childActivity?.terminalReason ? { terminalReason: childActivity.terminalReason } : {}),
+        subject: child.agent || child.title,
+        description: child.title,
+        parentAgentId: child.parentID,
+        progressSummary,
+        lastToolName: childActivity?.lastToolName,
+        terminalReason: childActivity?.terminalReason,
+        model: childActivity?.model,
+        ...(metrics ? { metrics } : {}),
+        ...(childActivity?.steps ? { recentSteps: childActivity.steps } : {}),
+        ...(terminal ? { endedAt: observedAt } : {}),
         source: "lifecycle",
         freshness: {
           sessionEpoch: String(session.sessionEpoch),
@@ -75,7 +84,15 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
         createdAt: taskCreatedAt(child, observedAt),
         ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
       },
-    };
+    );
+  }
+
+  /** Model, usage or step changes keep the current status; only pending becomes active. */
+  function activityUpdate(id: string): ReadonlyArray<ProviderRuntimeEvent> {
+    const current = statuses.get(id) ?? "pending";
+    const status = current === "pending" ? "inProgress" : current;
+    statuses.set(id, status);
+    return [update(children.get(id)!, status)];
   }
 
   async function refresh(): Promise<ReadonlyArray<ProviderRuntimeEvent>> {
@@ -142,11 +159,13 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
     if (event.type === "message.updated") {
       const message = properties.info as Message | undefined;
       const childActivity = activity.get(id);
-      if (childActivity) {
-        if (message?.role === "assistant") childActivity.assistantMessageId = message.id;
-        else delete childActivity.assistantMessageId;
+      if (!childActivity) return [];
+      if (message?.role !== "assistant") {
+        delete childActivity.assistantMessageId;
+        return [];
       }
-      return [];
+      childActivity.assistantMessageId = message.id;
+      return recordChildAssistant(childActivity, message) ? activityUpdate(id) : [];
     }
     if (event.type === "message.part.delta") {
       const childActivity = activity.get(id);
@@ -193,6 +212,7 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
           childActivity.lastToolName = lastToolName;
           changed = true;
         }
+        if (recordChildToolPart(childActivity, part, new Date().toISOString())) changed = true;
       }
       if (!changed) return [];
       statuses.set(id, "inProgress");

@@ -22,7 +22,7 @@ describe("Claude SDK normalized message routing", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
-      const eventsFiber = yield* Stream.take(adapter.streamEvents, 19).pipe(
+      const eventsFiber = yield* Stream.take(adapter.streamEvents, 18).pipe(
         Stream.runCollect,
         Effect.forkChild,
       );
@@ -51,20 +51,22 @@ describe("Claude SDK normalized message routing", () => {
           "session.configured",
           "session.state.changed",
           "thread.started",
-          "task.started",
+          // Each snapshot precedes its lifecycle copy, which ingestion then skips.
           "task.updated",
-          "thread.token-usage.updated",
+          "task.started",
+          // Task usage is the task's own metric; it never updates the thread context meter.
+          "task.updated",
           "task.progress",
           "task.updated",
           "task.completed",
-          "task.updated",
           "hook.started",
           "hook.progress",
           "hook.completed",
           "runtime.warning",
           "model.rerouted",
           "runtime.warning",
-          "runtime.warning",
+          // commands_changed refreshes the command list (6.2) instead of warning.
+          "session.configured",
           "mcp.oauth.completed",
         ],
       );
@@ -109,7 +111,7 @@ describe("Claude SDK normalized message routing", () => {
       assert.equal(warning?.type, "runtime.warning");
       if (warning?.type === "runtime.warning") {
         assert.deepEqual(warning.payload.detail, {
-          sdkVersion: "0.3.293",
+          sdkVersion: "0.3.301",
           message: "system/task_updated",
         });
         assert.equal(JSON.stringify(warning).includes("must-not-project"), false);

@@ -119,6 +119,7 @@ export const ProviderRuntimeEventType = Schema.Literals([
   "turn.proposed.delta",
   "turn.proposed.completed",
   "turn.diff.updated",
+  "turn.prompt-suggestion",
   "item.started",
   "item.updated",
   "item.completed",

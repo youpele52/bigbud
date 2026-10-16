@@ -1,5 +1,6 @@
 import { PROVIDER_DISPLAY_NAMES } from "@bigbud/contracts/constants/provider.constant.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Exact preview client/CLI pair; this pin is not full release conformance approval. */
 export const OPENCODE_V2_CLIENT_VERSION = "2.0.26";
 export const OPENCODE_V2_PROVIDER = "opencodeV2";
@@ -35,6 +36,7 @@ export function validateOwnedEndpoint(value: string): string {
 
 export const OPENCODE_V2_DORMANT_CAPABILITIES = {
   sessionModelSwitch: "unsupported",
+  subagents: PROVIDER_SUBAGENT_CAPABILITIES.opencodeV2,
   sessionRecovery: "unsupported",
   conversationRewind: "unsupported",
   conversationFork: "unsupported",

@@ -309,6 +309,17 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
           normalizedInput,
         );
       }),
+    generatePromptSuggestion: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generatePromptSuggestion",
+        });
+        return yield* route(modelSelection.provider).generatePromptSuggestion({
+          ...input,
+          modelSelection,
+        });
+      }),
   } satisfies TextGenerationShape;
 });
 

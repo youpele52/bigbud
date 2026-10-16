@@ -80,6 +80,7 @@ import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/Projec
 import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
 import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
+import { ClaudeProviderRefreshReactorLive } from "./provider/Layers/ClaudeProviderRefreshReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
@@ -244,14 +245,18 @@ const makeProviderLayerLive = (
 const ProviderInfrastructureLayerLive = Layer.unwrap(
   Effect.gen(function* () {
     const optionalRegistrations = yield* OptionalProviderRegistrations;
-    return Layer.mergeAll(
-      makeProviderLayerLive(optionalRegistrations),
-      makeProviderRegistryLive({
-        optionalRegistrations: optionalRegistrations.map((registration) => ({
-          provider: registration.provider,
-          service: registration.providerService,
-        })),
-      }),
+    return ClaudeProviderRefreshReactorLive.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          makeProviderLayerLive(optionalRegistrations),
+          makeProviderRegistryLive({
+            optionalRegistrations: optionalRegistrations.map((registration) => ({
+              provider: registration.provider,
+              service: registration.providerService,
+            })),
+          }),
+        ),
+      ),
     );
   }),
 ).pipe(Layer.provide(OptionalProviderCompositionLive));

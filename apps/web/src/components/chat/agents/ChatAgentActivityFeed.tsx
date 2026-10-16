@@ -2,13 +2,18 @@ import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestr
 
 import { isFreshActiveProviderAgent } from "./agentActivity.presentation";
 import { SubagentsCard } from "./SubagentsCard";
+import type { SubagentStopHandler } from "./SubagentRow.stop";
 
-export function ChatAgentActivityFeed(props: { agents: ReadonlyArray<OrchestrationTask> }) {
+export function ChatAgentActivityFeed(props: {
+  agents: ReadonlyArray<OrchestrationTask>;
+  nowIso?: string | undefined;
+  onStopSubagent?: SubagentStopHandler | undefined;
+}) {
   const active = props.agents.filter(isFreshActiveProviderAgent);
   if (active.length === 0) return null;
   return (
     <div className="mt-2 mb-8" data-agent-feed-placement="timeline-end">
-      <SubagentsCard agents={active} />
+      <SubagentsCard agents={active} nowIso={props.nowIso} onStopSubagent={props.onStopSubagent} />
     </div>
   );
 }

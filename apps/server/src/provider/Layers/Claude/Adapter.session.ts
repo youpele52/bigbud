@@ -132,7 +132,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     });
 
     const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.claudeAgent),
+      Effect.map((settings) => ({
+        ...settings.providers.claudeAgent,
+        promptSuggestions: settings.promptSuggestions === true,
+      })),
       Effect.mapError(
         (error) =>
           new ProviderAdapterProcessError({
@@ -203,6 +206,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
+    const forwardSubagentText =
+      harness?.forwardSubagentText ??
+      (harness ? false : claudeSettings.rollout.forwardedSubagentText);
     const {
       apiModelId,
       effectiveEffort,
@@ -226,11 +232,18 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       boundedHookProgress:
         harness?.boundedHookProgress ??
         (harness ? false : claudeSettings.rollout.boundedHookProgress),
-      forwardSubagentText:
-        harness?.forwardSubagentText ??
-        (harness ? false : claudeSettings.rollout.forwardedSubagentText),
+      forwardSubagentText,
       ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
       ...(harness?.environment ? { environment: harness.environment } : {}),
+      ...(harness
+        ? {}
+        : {
+            promptSuggestions: claudeSettings.promptSuggestions,
+            subagentCaps: {
+              maxSpawnDepth: claudeSettings.maxSubagentSpawnDepth ?? null,
+              maxConcurrent: claudeSettings.maxConcurrentSubagents ?? null,
+            },
+          }),
     });
     const queryRuntime = yield* Effect.try({
       try: () =>
@@ -328,6 +341,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ]),
       modernTaskExposure: claudeSettings.rollout.modernTaskExposure,
       providerSubagentsSupported: deps.resolveHarness === undefined,
+      forwardSubagentText,
+      agentModels: undefined,
+      agentToolInputs: new Map(),
       mcpControlsEnabled: claudeSettings.rollout.mcpControls,
       refreshMcpStatuses: undefined,
       stopped: false,

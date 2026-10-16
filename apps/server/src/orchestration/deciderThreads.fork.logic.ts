@@ -29,6 +29,7 @@ import {
   findOwnTurnStartFailure,
   TURN_START_FAILED_ACTIVITY_KIND,
 } from "@bigbud/shared/threadFork";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 /** Recovery bookkeeping belongs to the source's failed session, never to the fork. */
 const NON_COPIED_ACTIVITY_KINDS = new Set<string>([
@@ -36,6 +37,8 @@ const NON_COPIED_ACTIVITY_KINDS = new Set<string>([
   "provider.session.recovery",
   THREAD_FORKED_ACTIVITY_KIND,
   THREAD_FORK_ORIGIN_ACTIVITY_KIND,
+  // A fork starts without the source's prompt suggestion (Phase 7).
+  PROMPT_SUGGESTION_ACTIVITY_KIND,
 ]);
 
 /** Deterministic per (fork, source entity) so a redelivered command maps to the same rows. */

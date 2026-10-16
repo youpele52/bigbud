@@ -93,6 +93,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         binaryPath: "/usr/local/bin/claude",
         customModels: ["claude-custom"],
         rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
+        maxSubagentSpawnDepth: null,
+        maxConcurrentSubagents: null,
       });
       assert.deepEqual(next.textGenerationModelSelection, {
         provider: "codex",
@@ -169,6 +171,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         binaryPath: "/opt/homebrew/bin/claude",
         customModels: [],
         rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
+        maxSubagentSpawnDepth: null,
+        maxConcurrentSubagents: null,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );

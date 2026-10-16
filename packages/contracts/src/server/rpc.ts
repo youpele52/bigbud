@@ -38,6 +38,7 @@ import {
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
+import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
   WsPluginsGitAvailabilityRpc,
   WsPluginsGetRpc,
@@ -146,6 +147,7 @@ export * from "./rpc.core";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
+export * from "./rpc.subagents";
 export * from "./plugins";
 export * from "./rpc.plugins";
 export * from "./rpc.workspace";
@@ -200,6 +202,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerTriggerAutomationRpc,
   WsServerListAutomationRunsRpc,
   WsServerGetUsageSummaryRpc,
+  WsProviderStopSubagentRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,

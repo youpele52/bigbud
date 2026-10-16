@@ -72,7 +72,7 @@ export function runtimeEventToActivitiesFromHelpers(
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "info",
+          tone: event.payload.severity === "error" ? "error" : "info",
           kind: "runtime.warning",
           summary: "Runtime warning",
           payload: {
@@ -139,6 +139,23 @@ export function runtimeEventToActivitiesFromHelpers(
     case "task.updated":
       return taskRuntimeEventToActivities(event, helpers, sequence);
     case "thread.state.changed":
+      if (event.payload.state === "reset") {
+        return [
+          {
+            id: event.eventId,
+            createdAt: event.createdAt,
+            tone: "info",
+            kind: "provider-conversation.reset",
+            summary: "Provider conversation cleared",
+            payload: {
+              state: event.payload.state,
+              ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
+            },
+            turnId: helpers.toTurnId(event.turnId) ?? null,
+            ...sequence,
+          },
+        ];
+      }
       if (event.payload.state !== "compacted") return [];
       return [
         {

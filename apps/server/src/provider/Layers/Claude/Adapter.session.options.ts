@@ -30,6 +30,32 @@ interface BuildClaudeQueryOptionsInput {
   readonly forwardSubagentText: boolean;
   readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  /** User-configured subagent caps (6.6); null or absent keeps the CLI default. */
+  readonly subagentCaps?: ClaudeSubagentCaps;
+  /** Native prompt suggestions after each turn (Phase 7). */
+  readonly promptSuggestions?: boolean;
+}
+
+export interface ClaudeSubagentCaps {
+  readonly maxSpawnDepth: number | null;
+  readonly maxConcurrent: number | null;
+}
+
+/** Adds `CLAUDE_CODE_MAX_*` only for configured caps; otherwise returns the input unchanged. */
+export function withClaudeSubagentCaps(
+  environment: Readonly<Record<string, string | undefined>>,
+  caps: ClaudeSubagentCaps | undefined,
+): Readonly<Record<string, string | undefined>> {
+  if (!caps || (caps.maxSpawnDepth === null && caps.maxConcurrent === null)) return environment;
+  return {
+    ...environment,
+    ...(caps.maxSpawnDepth !== null
+      ? { CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(caps.maxSpawnDepth) }
+      : {}),
+    ...(caps.maxConcurrent !== null
+      ? { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(caps.maxConcurrent) }
+      : {}),
+  };
 }
 
 type ClaudeNativeEffort = NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[number];
@@ -120,9 +146,10 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
         ? { includeHookEvents: true, agentProgressSummaries: true }
         : {}),
       ...(input.forwardSubagentText ? { forwardSubagentText: true } : {}),
+      ...(input.promptSuggestions ? { promptSuggestions: true } : {}),
       canUseTool: input.canUseTool,
       ...(input.onElicitation ? { onElicitation: input.onElicitation } : {}),
-      env: input.environment ?? process.env,
+      env: withClaudeSubagentCaps(input.environment ?? process.env, input.subagentCaps),
       ...(input.runtimeCwd && !input.hasRemoteWorkspaceBridge
         ? { additionalDirectories: [input.runtimeCwd] }
         : {}),

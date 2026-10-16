@@ -29,6 +29,7 @@ import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.t
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import { makeSystemHandlers } from "./Adapter.stream.system.ts";
+import { isClaudeAgentTool, makeSubagentHandlers } from "./Adapter.stream.subagents.ts";
 
 export interface MessageHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{
@@ -44,13 +45,21 @@ export interface MessageHandlerDeps {
 export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
   const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn } = deps;
 
-  const systemHandlers = makeSystemHandlers({ makeEventStamp, offerRuntimeEvent, nowIso, turn });
+  const subagents = makeSubagentHandlers({ makeEventStamp, offerRuntimeEvent, nowIso });
+  const systemHandlers = makeSystemHandlers({
+    makeEventStamp,
+    offerRuntimeEvent,
+    nowIso,
+    turn,
+    subagents,
+  });
   const messageSpecificHandlers = makeMessageSpecificHandlers({
     makeEventStamp,
     offerRuntimeEvent,
     nowIso,
     blocks,
     turn,
+    subagents,
   });
 
   const handleStreamEvent = Effect.fn("handleStreamEvent")(function* (
@@ -58,6 +67,12 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
     message: SDKMessage,
   ) {
     if (message.type !== "stream_event") {
+      return;
+    }
+
+    // Subagent partials use their own block indexes; they must never reach the parent's
+    // text blocks or in-flight tools. Subagent progress arrives through its own frames.
+    if (message.parent_tool_use_id) {
       return;
     }
 
@@ -267,6 +282,9 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         return;
       }
 
+      if (isClaudeAgentTool(tool.toolName)) {
+        yield* subagents.recordAgentToolInput(context, tool.itemId, tool.input);
+      }
       if (tool.toolName !== "TaskList" && tool.toolName !== "TaskGet") {
         yield* updateClaudeTaskPlan({
           context,
@@ -304,6 +322,10 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         return;
       case "system":
         yield* systemHandlers.handleSystemMessage(context, message);
+        return;
+      case "conversation_reset":
+      case "prompt_suggestion":
+        yield* systemHandlers.handleTopLevelMessage(context, message);
         return;
       case "tool_progress":
       case "tool_use_summary":

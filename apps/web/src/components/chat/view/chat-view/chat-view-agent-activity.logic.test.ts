@@ -1,7 +1,10 @@
 import { RuntimeTaskId, type OrchestrationTask } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.logic";
+import {
+  resolveAgentActivityPresentation,
+  shouldTickElapsedClock,
+} from "./chat-view-agent-activity.logic";
 
 function child(activityFresh: boolean): OrchestrationTask {
   return {
@@ -43,5 +46,17 @@ describe("resolveAgentActivityPresentation", () => {
         agents: [child(false)],
       }),
     ).toMatchObject({ visible: false });
+  });
+});
+
+describe("shouldTickElapsedClock", () => {
+  it("keeps the elapsed clock ticking for a fresh active subagent while the main turn is idle", () => {
+    expect(shouldTickElapsedClock({ mainWorking: false, agents: [child(true)] })).toBe(true);
+    expect(shouldTickElapsedClock({ mainWorking: true, agents: undefined })).toBe(true);
+  });
+
+  it("stops the clock when nothing is active or only stale agents remain", () => {
+    expect(shouldTickElapsedClock({ mainWorking: false, agents: [child(false)] })).toBe(false);
+    expect(shouldTickElapsedClock({ mainWorking: false, agents: [] })).toBe(false);
   });
 });

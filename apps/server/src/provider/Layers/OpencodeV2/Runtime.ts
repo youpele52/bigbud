@@ -38,6 +38,7 @@ import { inspectV2Turn } from "./Runtime.inspect.ts";
 import { consumeV2RuntimeEvent } from "./Runtime.stream.ts";
 import type { V2ProcessConfig } from "./ServerManager.child.ts";
 import { watchV2OutputPublication } from "./Runtime.publication.failure.ts";
+import { noteV2ChildHint } from "./Runtime.subagents.ts";
 
 /** Owned preview execution engine shared by application routing and disposable conformance harnesses. */
 export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
@@ -226,6 +227,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
           this.scheduleRepair(owner);
         },
         onDrained: () => this.scheduleRepair(owner, false),
+        onChildHint: () => noteV2ChildHint(this, owner),
       });
       const unsubscribeDeath = observeV2ProcessLifecycle(owner.lease.process, () => {
         owner.stopped = true;

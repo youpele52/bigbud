@@ -31,6 +31,7 @@ import type {
   ProviderTurnInspectionState,
   ProviderTurnLiveness,
 } from "@bigbud/contracts/orchestration/providerTurnLiveness";
+import type { ProviderStopSubagentInput } from "@bigbud/contracts/server/subagents";
 import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
@@ -119,6 +120,11 @@ export interface ProviderServiceShape {
     readonly turnId?: import("@bigbud/contracts").TurnId;
     readonly sessionEpoch?: number;
   }) => Effect.Effect<void, ProviderServiceError>;
+
+  /** Stop one running provider subagent (D3); Stop-all is `interruptTurn`. */
+  readonly stopSubagent?: (
+    input: ProviderStopSubagentInput,
+  ) => Effect.Effect<void, ProviderServiceError>;
 
   readonly inspectActiveTurn: (input: {
     readonly threadId: ThreadId;

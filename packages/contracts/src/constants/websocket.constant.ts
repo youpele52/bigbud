@@ -116,6 +116,7 @@ export const WS_METHODS = {
   serverTriggerAutomation: "server.triggerAutomation",
   serverListAutomationRuns: "server.listAutomationRuns",
   serverGetUsageSummary: "server.getUsageSummary",
+  providerStopSubagent: "provider.stopSubagent",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

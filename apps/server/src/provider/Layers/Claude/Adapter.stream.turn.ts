@@ -108,6 +108,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
     context: ClaudeSessionContext,
     message: string,
     detail?: unknown,
+    severity?: "error",
   ) {
     const turnState = context.turnState;
     const stamp = yield* makeEventStamp();
@@ -118,7 +119,11 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
       createdAt: stamp.createdAt,
       threadId: context.session.threadId,
       ...(turnState ? { turnId: asCanonicalTurnId(turnState.turnId) } : {}),
-      payload: { message, ...(detail !== undefined ? { detail } : {}) },
+      payload: {
+        message,
+        ...(detail !== undefined ? { detail } : {}),
+        ...(severity ? { severity } : {}),
+      },
       providerRefs: nativeProviderRefs(context),
     });
   });
