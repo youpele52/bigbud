@@ -6,7 +6,6 @@ import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.process
 import {
   STRICT_PROVIDER_LIFECYCLE_GUARD,
   normalizeRuntimeTurnState,
-  orchestrationSessionStatusFromRuntimeState,
   proposedPlanIdForTurn,
   proposedPlanIdFromEvent,
   runtimeEventToActivities,
@@ -15,14 +14,13 @@ import {
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import {
   isProviderLifecycleEvent,
+  lifecycleSessionStatus,
   resolveProviderLifecycleGuard,
 } from "./ProviderRuntimeIngestion.lifecycle.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
-import {
-  makeRuntimeProcessorEventHelpers,
-  type TaskRuntimeEvent,
-} from "./ProviderRuntimeIngestion.processor.events.ts";
+import { makeRuntimeProcessorEventHelpers } from "./ProviderRuntimeIngestion.processor.events.ts";
+import { makeRuntimeTaskProcessor } from "./ProviderRuntimeIngestion.processor.tasks.ts";
 import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
@@ -36,7 +34,6 @@ export function makeRuntimeEventProcessor(
   cacheHelpers: RuntimeProcessorCacheHelpers,
 ) {
   const { orchestrationEngine, serverSettingsService } = services;
-  let nextTaskOrdinal = 0;
   const activityGovernor = new RuntimeActivityGovernor();
   const {
     rememberAssistantMessageId,
@@ -60,15 +57,19 @@ export function makeRuntimeEventProcessor(
     finalizeThinkingForTurn,
     finalizeThinkingForThread,
   } = makeThinkingProcessorHelpers(services, cacheHelpers, providerCommandId);
-  const { appendActivities, handleThreadMetadataUpdated, handleTurnDiffUpdated, upsertTask } =
+  const { appendActivities, handleThreadMetadataUpdated, handleTurnDiffUpdated } =
     makeRuntimeProcessorEventHelpers({
       orchestrationEngine,
       serverSettingsService,
       isGitRepoForThread,
       providerCommandId,
     });
-  return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
+  const taskProcessor = makeRuntimeTaskProcessor({ orchestrationEngine, providerCommandId });
+  const processRuntimeEvent = Effect.fn("processRuntimeEvent")(function* (
+    event: ProviderRuntimeEvent,
+  ) {
     yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
+    yield* taskProcessor.flushDue(event, event.threadId);
     const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
       (entry) => entry.id === event.threadId,
     );
@@ -120,23 +121,7 @@ export function makeRuntimeEventProcessor(
               event.type === "session.exited"
             ? null
             : activeTurnId;
-      const status = (() => {
-        switch (event.type) {
-          case "session.state.changed":
-            return orchestrationSessionStatusFromRuntimeState(event.payload.state);
-          case "turn.started":
-            return "running";
-          case "session.exited":
-            return "stopped";
-          case "turn.completed":
-            return normalizeRuntimeTurnState(event.payload.state) === "failed" ? "error" : "ready";
-          case "turn.aborted":
-            return "ready";
-          case "session.started":
-          case "thread.started":
-            return activeTurnId !== null ? "running" : "ready";
-        }
-      })();
+      const status = lifecycleSessionStatus(event, activeTurnId);
       const lastError =
         event.type === "session.state.changed" && event.payload.state === "error"
           ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
@@ -375,29 +360,7 @@ export function makeRuntimeEventProcessor(
       yield* handleTurnDiffUpdated({ event, thread, now });
     }
 
-    if (event.type === "task.removed") {
-      yield* orchestrationEngine.dispatch({
-        type: "thread.task.remove",
-        commandId: providerCommandId(event, "thread-task-remove"),
-        threadId: thread.id,
-        taskId: event.payload.taskId,
-        source: event.payload.source,
-        freshness: event.payload.freshness,
-        ...(event.payload.replacement ? { replacement: event.payload.replacement } : {}),
-        createdAt: event.createdAt,
-      });
-    } else if (
-      event.type === "task.started" ||
-      event.type === "task.progress" ||
-      event.type === "task.completed" ||
-      event.type === "task.updated"
-    ) {
-      yield* upsertTask({
-        event: event as unknown as TaskRuntimeEvent,
-        threadId: thread.id,
-        ordinal: nextTaskOrdinal++,
-      });
-    }
+    yield* taskProcessor.processTaskEvent(event, thread.id);
 
     const activities = runtimeEventToActivities(event, {
       model: thread.modelSelection.model,
@@ -415,5 +378,8 @@ export function makeRuntimeEventProcessor(
     if (event.type === "turn.completed" || event.type === "session.exited") {
       activityGovernor.clear({ threadId: thread.id, turnId: eventTurnId ?? null });
     }
+  });
+  return Object.assign(processRuntimeEvent, {
+    flushPendingSubagentUpserts: taskProcessor.flushAll,
   });
 }

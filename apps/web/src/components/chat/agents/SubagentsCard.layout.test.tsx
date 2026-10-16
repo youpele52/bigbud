@@ -82,7 +82,8 @@ describe("compact Subagents presentation", () => {
     expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(subagents).toContain("text-[9px]");
     expect(subagents).toContain("sm:text-[9px]");
-    expect(subagents).toContain('class="shrink-0 text-xs capitalize text-muted-foreground"');
+    expect(subagents).toContain("text-blue-600 dark:text-blue-400");
+    expect(subagents).toContain(">Working<");
   });
 
   it("anchors completion to its turn before later user and assistant messages", () => {

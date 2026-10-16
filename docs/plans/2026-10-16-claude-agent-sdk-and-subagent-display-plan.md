@@ -497,6 +497,11 @@ No open questions remain.
 Recorded during implementation; the validation ledger is [claude-sdk-subagent-display-2026-10-16.md](../validation/claude-sdk-subagent-display-2026-10-16.md).
 
 - **2026-10-16, pre-flight:** every split-first line count and the SDK pin matched at HEAD `4a1661223b`. No deviation.
+- **2026-10-16, Phase 2.1:** `OrchestrationSubagentStep` gained an optional `id`, the native tool-use ID. The plan requires the step ring to be deduplicated by tool-use ID, and the listed step shape had no field to carry it. The field is additive and has no user-facing effect.
+- **2026-10-16, Phase 2.3:** `upsertTask` moved into `ProviderRuntimeIngestion.processor.tasks.ts` together with the task branch, because the throttle and the flushes need it in one place. To bring `ProviderRuntimeIngestion.processor.runtime.ts` from 401 to 385 lines, the session-status switch also moved into `ProviderRuntimeIngestion.lifecycle.ts` as `lifecycleSessionStatus`. Behavior is unchanged.
+- **2026-10-16, Phase 2.3:** projections merge with `mergeTaskPatch`, which can never clear a field. That made the 3.9 rule ("a newer run reopens the task and clears `endedAt` and `resultSummary`") impossible to implement. A shared `mergeTaskSnapshot` (`@bigbud/shared/providerSubagents`) now drops stale end data when a terminal task reopens. It is used by the in-memory projector, the SQL projector and ingestion. For every other transition it behaves exactly like `mergeTaskPatch`.
+- **2026-10-16, Phase 2.3:** the throttle measures time with Effect `Clock` (wall time), not provider timestamps. "Adapter stop or session teardown" is flushed through the `session.exited` and `session.state.changed` events that adapters emit on stop. Ingestion shutdown is flushed by a scope finalizer.
+- **2026-10-16, Phase 2.4:** the 100-agent cap also applies to snapshot hydration (`mappers.store.ts`), not only to `mappers.lazy.store.ts`. This keeps the bound true on every path into the store.
 
 ## Plan Validity, Review and Handoff
 

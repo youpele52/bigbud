@@ -26,6 +26,7 @@ import {
   type Thread,
 } from "../../models/types";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
+import { capProviderAgents } from "./events.store.providerAgents";
 
 export { attachmentPreviewRoutePath, toAttachmentPreviewUrl };
 
@@ -203,7 +204,9 @@ export function mapThread(thread: OrchestrationThread): Thread {
     session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
-    providerAgents: (thread.tasks ?? []).filter((task) => task.kind === "providerSubagent"),
+    providerAgents: capProviderAgents(
+      (thread.tasks ?? []).filter((task) => task.kind === "providerSubagent"),
+    ),
     delegatedChildren: [],
     queuedPrompts: [...(thread.queuedPrompts ?? [])],
     pendingTurnControlOperation: thread.pendingTurnControlOperation ?? null,

@@ -20,6 +20,37 @@ const forkOf = async (model: Parameters<typeof decide>[0], command = forkCommand
 };
 
 describe("thread.fork decider", () => {
+  it("copies provider subagent display fields with stale activity", async () => {
+    const source = sourceThread({ pairs: 2, tasks: 1 });
+    const agent = {
+      ...source.tasks![0]!,
+      id: "agent-1",
+      kind: "providerSubagent",
+      activityFresh: true,
+      status: "inProgress",
+      model: "claude-sonnet-4-5",
+      effort: "high",
+      prompt: "Review the diff",
+      depth: 1,
+      resultSummary: "Partial review",
+      metrics: { totalTokens: 900, toolUses: 2 },
+      recentSteps: [{ id: "tool-1", toolName: "Read", status: "completed", at: source.createdAt }],
+    };
+    const { fork } = await forkOf(readModel({ ...source, tasks: [agent] as never }));
+
+    expect(fork?.tasks?.[0]).toMatchObject({
+      kind: "providerSubagent",
+      activityFresh: false,
+      model: "claude-sonnet-4-5",
+      effort: "high",
+      prompt: "Review the diff",
+      depth: 1,
+      resultSummary: "Partial review",
+      metrics: { totalTokens: 900, toolUses: 2 },
+      recentSteps: [{ id: "tool-1", toolName: "Read", status: "completed" }],
+    });
+  });
+
   it("copies bounded history, plans, tasks and activities with lineage", async () => {
     const source = sourceThread({
       pairs: 130,

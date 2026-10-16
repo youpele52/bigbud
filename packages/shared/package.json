@@ -192,6 +192,10 @@
       "types": "./src/providerRuntime.ts",
       "import": "./src/providerRuntime.ts"
     },
+    "./providerSubagents": {
+      "types": "./src/providerSubagents.ts",
+      "import": "./src/providerSubagents.ts"
+    },
     "./workLog": {
       "types": "./src/workLog.ts",
       "import": "./src/workLog.ts"

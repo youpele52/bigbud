@@ -232,7 +232,10 @@ export function ChatViewChatBody({
                   }}
                   onReaderPositionChange={runtime.scrollBehavior.updateReaderPosition}
                 />
-                <ChatAgentActivityFeed agents={base.activeThread!.providerAgents ?? []} />
+                <ChatAgentActivityFeed
+                  agents={base.activeThread!.providerAgents ?? []}
+                  nowIso={thread.nowIso}
+                />
               </div>
 
               <div className="pointer-events-none absolute top-1/2 right-2 z-20 flex h-[75%] w-10 -translate-y-1/2 items-center justify-end sm:right-2 sm:w-10">

@@ -3,12 +3,15 @@ import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestr
 import { isFreshActiveProviderAgent } from "./agentActivity.presentation";
 import { SubagentsCard } from "./SubagentsCard";
 
-export function ChatAgentActivityFeed(props: { agents: ReadonlyArray<OrchestrationTask> }) {
+export function ChatAgentActivityFeed(props: {
+  agents: ReadonlyArray<OrchestrationTask>;
+  nowIso?: string | undefined;
+}) {
   const active = props.agents.filter(isFreshActiveProviderAgent);
   if (active.length === 0) return null;
   return (
     <div className="mt-2 mb-8" data-agent-feed-placement="timeline-end">
-      <SubagentsCard agents={active} />
+      <SubagentsCard agents={active} nowIso={props.nowIso} />
     </div>
   );
 }
