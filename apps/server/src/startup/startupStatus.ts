@@ -5,6 +5,8 @@ export type StartupStatus = "upgrading" | "starting" | "ready" | "error";
 type ServerStartupFailureReason = Extract<
   DesktopBackendStartupFailureReason,
   | "bootstrap_failed"
+  | "state_directory_in_use"
+  | "state_directory_owner_unverified"
   | "projection_database_initialization_failed"
   | "server_runtime_startup_failed"
   | "unknown"

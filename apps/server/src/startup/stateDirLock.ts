@@ -41,6 +41,7 @@ export interface StateDirLockRecord {
 export class StateDirLockError extends Data.TaggedError("StateDirLockError")<{
   readonly message: string;
   readonly stateDir: string;
+  readonly reason?: "state_directory_in_use" | "state_directory_owner_unverified";
   readonly cause?: unknown;
 }> {}
 
@@ -248,17 +249,20 @@ export async function acquireStateDirLock(input: {
       throw new StateDirLockError({
         stateDir: input.stateDir,
         message: `The bigbud backend lock ${lockPath} is unreadable. If no bigbud backend is running, delete it; otherwise use a different BIGBUD_HOME.`,
+        reason: "state_directory_owner_unverified",
       });
     const state = classifyStateDirLockOwner(owner, probe);
     if (state === "foreign-host")
       throw new StateDirLockError({
         stateDir: input.stateDir,
         message: `The bigbud backend lock ${lockPath} was written on host "${owner.hostname}" (pid ${owner.pid}, port ${owner.port}), not this host "${probe.hostname()}", so its owner cannot be checked. If this is the same machine, confirm no bigbud backend is running and remove ${lockPath} (hostnames can change with the network); otherwise use a different BIGBUD_HOME.`,
+        reason: "state_directory_owner_unverified",
       });
     if (state === "live")
       throw new StateDirLockError({
         stateDir: input.stateDir,
         message: `Another bigbud backend (pid ${owner.pid}, port ${owner.port}) owns ${input.stateDir}; stop it or use a different BIGBUD_HOME.`,
+        reason: "state_directory_in_use",
       });
     await displaceStale(lockPath, raw, content, `${nonce}.${attempt}`, probe);
     await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));

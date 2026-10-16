@@ -43,6 +43,7 @@ import {
   rotateSystemMonitorAgentToken,
 } from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
+import { attachBackendChildLifecycle } from "./backendManager.child";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
@@ -294,76 +295,21 @@ export async function startBackend(): Promise<void> {
     `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)} exec=${backendLauncherPath}`,
   );
   captureBackendOutput(child, backendLogSink);
-  child.on("error", (error) => {
-    if (backendProcess === child) revokeSystemMonitorAgentToken();
-    logBackendLifecycle(
-      "child_error",
-      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} error=${error.stack ?? error.message} stderr=${stderrTail}`,
-    );
-    recordBackendStartupFailure(
-      startupGeneration,
-      "child_spawn_failed",
-      createBackendStartupDiagnostics({
-        category: "process",
-        errorMessage: error.message,
-        stderrTail,
-      }),
-      _deps?.isDevelopmentDiagnostics
-        ? createDevelopmentBackendDiagnostics({ error, stderrTail })
-        : undefined,
-    );
-    if (_deps?.isDevelopmentDiagnostics) {
-      recordBackendStartupDevelopmentDiagnostics(
-        startupGeneration,
-        createDevelopmentBackendDiagnostics({ error, stderrTail }),
-      );
-    }
-    const wasExpected = expectedBackendExitChildren.has(child);
-    if (backendProcess === child) {
-      backendProcess = null;
-    }
-    closeBackendSession(`pid=${child.pid ?? "unknown"} error=${error.message}`);
-    if (wasExpected) {
-      return;
-    }
-    scheduleBackendRestart(error.message);
-  });
-  child.on("exit", (code, signal) => {
-    if (backendProcess === child) revokeSystemMonitorAgentToken();
-    logBackendLifecycle(
-      "child_exit",
-      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"} stderr=${stderrTail}`,
-    );
-    recordBackendStartupFailure(
-      startupGeneration,
-      "child_exit_before_ready",
-      createBackendStartupDiagnostics({
-        category: "process",
-        exitCode: code,
-        exitSignal: signal,
-        stderrTail,
-      }),
-      _deps?.isDevelopmentDiagnostics
-        ? createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail })
-        : undefined,
-    );
-    if (_deps?.isDevelopmentDiagnostics) {
-      recordBackendStartupDevelopmentDiagnostics(
-        startupGeneration,
-        createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail }),
-      );
-    }
-    const wasExpected = expectedBackendExitChildren.has(child);
-    if (backendProcess === child) {
-      backendProcess = null;
-    }
-    closeBackendSession(
-      `pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`,
-    );
-    if (_deps?.getIsQuitting() || wasExpected) return;
-    const crashDetail = stderrTail.trim().slice(-512).replace(/\n/g, " ↵ ");
-    const reason = `code=${code ?? "null"} signal=${signal ?? "null"}${crashDetail ? ` stderr=${crashDetail}` : ""}`;
-    scheduleBackendRestart(reason);
+  attachBackendChildLifecycle(child, {
+    generation: startupGeneration,
+    isDevelopmentDiagnostics: _deps.isDevelopmentDiagnostics,
+    getIsQuitting: _deps.getIsQuitting,
+    getStderrTail: () => stderrTail,
+    isExpectedExit: () => expectedBackendExitChildren.has(child),
+    onDisconnected: () => {
+      if (backendProcess === child) {
+        revokeSystemMonitorAgentToken();
+        backendProcess = null;
+      }
+    },
+    closeSession: closeBackendSession,
+    logLifecycle: logBackendLifecycle,
+    scheduleRestart: scheduleBackendRestart,
   });
 }
 export function stopBackend(): void {

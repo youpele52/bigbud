@@ -89,6 +89,7 @@ describe("acquireStateDirLock", () => {
     await writeRecord({ pid: 41, port: 3773 });
     const attempt = acquireStateDirLock({ stateDir, port: 3774, probe: makeProbe(100, table) });
     await expect(attempt).rejects.toBeInstanceOf(StateDirLockError);
+    await expect(attempt).rejects.toMatchObject({ reason: "state_directory_in_use" });
     await expect(attempt).rejects.toThrow(
       `Another bigbud backend (pid 41, port 3773) owns ${stateDir}; stop it or use a different BIGBUD_HOME.`,
     );

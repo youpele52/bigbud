@@ -1,3 +1,5 @@
+import { ConnectIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertTriangle, CloudOff, LoaderCircle, RotateCw } from "lucide-react";
 
 import { APP_DISPLAY_NAME, APP_SERVER_NAME } from "../config/branding";
@@ -132,6 +134,10 @@ const startupFailureCopy = {
   projection_database_initialization_failed: "Local data could not be initialized.",
   server_entry_missing: "The local backend installation is incomplete.",
   server_runtime_startup_failed: "The local backend could not finish starting.",
+  state_directory_in_use:
+    "Another bigbud backend owns your local data. Stop that backend, then quit and reopen bigbud.",
+  state_directory_owner_unverified:
+    "The owner of your local data lock could not be verified. Confirm all backends using that data are stopped before recovering the lock, then quit and reopen bigbud.",
   startup_timed_out: "The local backend is taking longer than expected to start.",
   unknown: "The local backend could not finish starting.",
 } as const;
@@ -202,12 +208,18 @@ export function WebSocketBlockingState({
   readonly configReadiness?: ServerConfigReadiness;
 }) {
   const technicalDetails = desktopStartup ? buildStartupTechnicalDetails(desktopStartup) : null;
+  const ownershipFailure =
+    desktopStartup?.status === "failed" &&
+    (desktopStartup.failureReason === "state_directory_in_use" ||
+      desktopStartup.failureReason === "state_directory_owner_unverified");
   const copy =
     desktopStartup?.status === "failed"
       ? {
-          description: `${getDesktopStartupFailureDescription(desktopStartup)} Reload the app to try again.`,
+          description: `${getDesktopStartupFailureDescription(desktopStartup)}${ownershipFailure ? "" : " Reload the app to try again."}`,
           eyebrow: "Startup Failed",
-          title: "Local backend stopped during startup",
+          title: ownershipFailure
+            ? "Local backend startup blocked"
+            : "Local backend stopped during startup",
         }
       : desktopStartup?.status === "timedOut"
         ? {
@@ -296,25 +308,27 @@ export function WebSocketBlockingState({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {status.phase === "connected" &&
-          (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed") ? (
-            <Button size="sm" onClick={() => retryServerConfigSync()}>
+        {!ownershipFailure ? (
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {status.phase === "connected" &&
+            (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed") ? (
+              <Button size="sm" onClick={() => retryServerConfigSync()}>
+                <RotateCw />
+                Retry configuration
+              </Button>
+            ) : null}
+            {status.phase !== "connected" ? (
+              <Button variant="outline" size="sm" onClick={reconnectConfigurationFromUi}>
+                <HugeiconsIcon aria-hidden="true" icon={ConnectIcon} strokeWidth={2} />
+                Reconnect
+              </Button>
+            ) : null}
+            <Button size="sm" onClick={() => window.location.reload()}>
               <RotateCw />
-              Retry configuration
+              Reload app
             </Button>
-          ) : null}
-          {status.phase !== "connected" ? (
-            <Button size="sm" onClick={reconnectConfigurationFromUi}>
-              <RotateCw />
-              Reconnect
-            </Button>
-          ) : null}
-          <Button size="sm" onClick={() => window.location.reload()}>
-            <RotateCw />
-            Reload app
-          </Button>
-        </div>
+          </div>
+        ) : null}
 
         <details className="group mt-5 overflow-hidden rounded-lg border border-border/70 bg-background/55">
           <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">

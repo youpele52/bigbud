@@ -12,6 +12,7 @@ import * as fs from "node:fs/promises";
 import { Effect, Layer, ServiceMap } from "effect";
 
 import { ServerConfig } from "./config.ts";
+import { writeStartupStatus } from "./startupStatus.ts";
 import {
   acquireStateDirLock,
   classifyStateDirLockOwner,
@@ -104,7 +105,13 @@ export const StateDirLockLive = Layer.effect(
                 message: `Could not acquire the bigbud backend lock in ${config.stateDir}.`,
                 cause,
               }),
-      }),
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.sync(() => {
+            if (error.reason) writeStartupStatus("error", error.reason);
+          }),
+        ),
+      ),
       (handle) => Effect.promise(() => handle.release().catch(() => {})),
     );
     return makeBackendInstance(handle, config.stateDir);

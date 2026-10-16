@@ -25,7 +25,7 @@ layer("128_ProjectionThreadsForkOrigin", (it) => {
           '{"provider":"codex","model":"test"}', 'full-access', 'default',
           NULL, NULL, '2026-01-01', '2026-01-01')
       `;
-      const executed = yield* runMigrations();
+      const executed = yield* runMigrations({ toMigrationInclusive: 128 });
       assert.deepEqual(
         executed.map(([id, name]) => `${id}_${name}`),
         ["128_ProjectionThreadsForkOrigin"],

@@ -129,6 +129,7 @@ import Migration0125 from "./Migrations/125_ProviderTurnAdmissionPayloads.ts";
 import Migration0126 from "./Migrations/126_LearningMemoryApplications.ts";
 import Migration0127 from "./Migrations/127_OpencodeV2SharedBindings.ts";
 import Migration0128 from "./Migrations/128_ProjectionThreadsForkOrigin.ts";
+import Migration0129 from "./Migrations/129_RepairDirectResourceCleanupRequests.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -258,6 +259,7 @@ export const migrationEntries = [
   [126, "LearningMemoryApplications", Migration0126],
   [127, "OpencodeV2SharedBindings", Migration0127],
   [128, "ProjectionThreadsForkOrigin", Migration0128],
+  [129, "RepairDirectResourceCleanupRequests", Migration0129],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

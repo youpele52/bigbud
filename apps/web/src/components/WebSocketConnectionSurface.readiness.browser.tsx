@@ -1,4 +1,5 @@
 import "../index.css";
+import { ConnectIcon } from "@hugeicons/core-free-icons";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -131,6 +132,18 @@ describe("real config readiness surface", () => {
           </WebSocketConnectionSurface>
         </AppAtomRegistryProvider>,
       );
+      await expect
+        .element(screen.getByRole("button", { name: "Reconnect", exact: true }))
+        .toHaveClass("text-muted-foreground");
+      await expect
+        .element(screen.getByRole("button", { name: "Reload app", exact: true }))
+        .toHaveClass("bg-primary");
+      const reconnect = screen.getByRole("button", { name: "Reconnect", exact: true }).element();
+      expect(getComputedStyle(reconnect.parentElement!).justifyContent).toBe("center");
+      expect(reconnect.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+      expect(
+        Array.from(reconnect.querySelectorAll("svg path"), (path) => path.getAttribute("d")),
+      ).toEqual(ConnectIcon.map(([, attributes]) => attributes.d));
       await screen.getByRole("button", { name: "Reconnect", exact: true }).click();
       await vi.waitFor(() => expect(retry).toHaveBeenCalledOnce());
       expect(mocks.reconnect).toHaveBeenCalledOnce();

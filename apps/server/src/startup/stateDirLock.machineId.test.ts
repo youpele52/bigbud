@@ -86,6 +86,7 @@ describe("state-dir lock machine identity", () => {
       (error: unknown) => error as Error,
     );
     expect(failure?.message).toContain('"macbook.local"');
+    expect(failure).toMatchObject({ reason: "state_directory_owner_unverified" });
     expect(failure?.message).toContain('"macbook.fritz.box"');
     expect(failure?.message).toContain(
       `If this is the same machine, confirm no bigbud backend is running and remove ${lockPath()}`,

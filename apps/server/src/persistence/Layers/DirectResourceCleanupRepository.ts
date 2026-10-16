@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Data, Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
   DirectResourceCleanupRepository,
@@ -8,6 +8,13 @@ import { makeDirectResourceCleanupReconciliation } from "./DirectResourceCleanup
 import { makeDirectResourceCleanupPreparation } from "./DirectResourceCleanupRepository.prepare.ts";
 import { makeDirectResourceCleanupProof } from "./DirectResourceCleanupRepository.proof.ts";
 import { makeDirectResourceCleanupWorktrees } from "./DirectResourceCleanupRepository.worktrees.ts";
+
+/** Keeps corrupt persisted attempt data in the typed failure channel. */
+class CleanupAttemptReadError extends Data.TaggedError("CleanupAttemptReadError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
 const terminalOutcomes = new Set([
   "removed",
   "already_absent",
@@ -315,9 +322,9 @@ export const makeDirectResourceCleanupRepository = Effect.gen(function* () {
         readonly attemptId: string;
         readonly pageDigest: string;
         readonly resourceIdsJson: string;
-        readonly requestJson: string;
-        readonly requestFrameHex: string;
-        readonly deadlineUnixMs: number;
+        readonly requestJson: string | null;
+        readonly requestFrameHex: string | null;
+        readonly deadlineUnixMs: number | null;
       }>`
         SELECT attempt_id AS "attemptId", page_digest AS "pageDigest",
           resource_ids_json AS "resourceIdsJson", request_json AS "requestJson",
@@ -327,18 +334,33 @@ export const makeDirectResourceCleanupRepository = Effect.gen(function* () {
           AND state IN ('prepared', 'sent', 'ambiguous')
         ORDER BY created_at DESC, attempt_id DESC LIMIT 1
       `.pipe(
-        Effect.map((rows) =>
-          rows[0]
-            ? {
-                attemptId: rows[0].attemptId,
-                pageDigest: rows[0].pageDigest,
-                resourceIds: JSON.parse(rows[0].resourceIdsJson) as ReadonlyArray<string>,
-                requestJson: rows[0].requestJson,
-                requestFrameHex: rows[0].requestFrameHex,
-                deadlineUnixMs: rows[0].deadlineUnixMs,
-              }
-            : undefined,
-        ),
+        Effect.flatMap((rows) => {
+          const row = rows[0];
+          if (!row) return Effect.succeed(undefined);
+          const { requestJson, requestFrameHex, deadlineUnixMs } = row;
+          if (requestJson === null || requestFrameHex === null || deadlineUnixMs === null) {
+            return Effect.fail(
+              new Error(
+                "Legacy cleanup attempt request is unavailable; manual recovery is required.",
+              ),
+            );
+          }
+          return Effect.try({
+            try: () => ({
+              attemptId: row.attemptId,
+              pageDigest: row.pageDigest,
+              resourceIds: JSON.parse(row.resourceIdsJson) as ReadonlyArray<string>,
+              requestJson,
+              requestFrameHex,
+              deadlineUnixMs,
+            }),
+            catch: (cause) =>
+              new CleanupAttemptReadError({
+                message: "Cleanup attempt resource IDs could not be read.",
+                cause,
+              }),
+          });
+        }),
         Effect.mapError((error) => new Error(String(error))),
       ),
     markAttempt: (attemptId, state, at, leaseId) =>
