@@ -44,6 +44,7 @@ import {
   makeRollbackThread,
 } from "./Adapter.session.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export { resolveCopilotRuntimeInvocation } from "./Adapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./Adapter.types.ts";
 
@@ -291,6 +292,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "restart-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.copilot,
     },
     startSession: makeStartSession(sessionDeps),
     sendTurn: makeSendTurn(sessionDeps),

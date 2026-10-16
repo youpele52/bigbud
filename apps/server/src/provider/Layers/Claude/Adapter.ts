@@ -38,6 +38,7 @@ import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 import { makeClaudeControlOperations } from "./Adapter.controls.ts";
 import { makeClaudeEventRuntime } from "./Adapter.events.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export type { ClaudeAdapterLiveOptions };
 
 export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
@@ -360,6 +361,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
       sessionRecovery: "resume-restart",
       conversationRewind: "unsupported",
       conversationFork: "unsupported",

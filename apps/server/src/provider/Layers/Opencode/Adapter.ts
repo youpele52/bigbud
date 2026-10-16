@@ -22,6 +22,7 @@ import { makeActiveTurnInspection } from "./Adapter.activeTurnInspection.ts";
 import { makeNextEventId, makeEventStampFactory } from "./Adapter.stream.ts";
 import { makeSessionMethods, type SessionMethodDeps } from "./Adapter.session.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export type { OpencodeAdapterLiveOptions } from "./Adapter.types.ts";
 
 const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
@@ -87,6 +88,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.opencode,
     },
     ...sessionMethods,
     inspectActiveTurn,

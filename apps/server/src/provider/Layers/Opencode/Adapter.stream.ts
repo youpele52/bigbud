@@ -20,7 +20,7 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { toMessage } from "./Adapter.stream.utils.ts";
 import { logNativeEvent, type SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import { makeMapEvent } from "./Adapter.stream.mapEvent.ts";
-import { makeChildSessionTracker } from "./Adapter.stream.children.ts";
+import { makeChildSessionTracker, tracksChildSessions } from "./Adapter.stream.children.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 
 export * from "./Adapter.stream.utils.ts";
@@ -99,7 +99,10 @@ export function startEventStream(
   session.sseAbortController = abortController;
   let invalidated = false;
   let healthNotificationEmitted = false;
-  const childTracker = provider === "opencode" ? makeChildSessionTracker(session) : undefined;
+  const childTracker =
+    (provider === "opencode" || provider === "kilocode") && tracksChildSessions(provider)
+      ? makeChildSessionTracker(session, provider)
+      : undefined;
   const isOwner = () => session.sseAbortController === abortController;
   const reconcile = async () => {
     if (session.activeTurnId && isOwner())

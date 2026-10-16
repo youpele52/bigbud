@@ -26,6 +26,7 @@ import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarg
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
+import { makeCodexSubagentTracker } from "./Adapter.stream.subagents.ts";
 import { toCodexManagerModelSelection } from "./Adapter.session.modelSelection.ts";
 import { toRequestError, toStartSessionError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
@@ -34,6 +35,7 @@ import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorks
 import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   options?: CodexAdapterLiveOptions,
@@ -295,9 +297,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
   const registerListener = Effect.fn("registerListener")(function* () {
     const services = yield* Effect.services<never>();
+    const subagents = makeCodexSubagentTracker();
     const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
       yield* writeNativeEvent(event);
-      const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
+      const runtimeEvents = [...mapToRuntimeEvents(event, event.threadId), ...subagents.map(event)];
       if (runtimeEvents.length === 0) {
         yield* Effect.logDebug("ignoring unhandled Codex provider event", {
           method: event.method,
@@ -330,6 +333,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.codex,
       supportsSteer: true,
       turnControl: {
         nativeSteer: true,

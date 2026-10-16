@@ -97,3 +97,24 @@ G4 outcome: not passed; V2 native subagents stay denied (D1). Evidence: [opencod
 | `bun fmt` / `bun lint` / `bun typecheck`                                                                                                 | 0 / 0 / 0 | lint at the 31-warning baseline (none in touched files)                                    |
 
 Load average was 64–112 during the run; no timeouts.
+
+## Phase 5 (widened): every registered provider, capability contract
+
+Red → green (tests written from SDK/protocol declarations; no live runs):
+
+- Copilot (`Adapter.mapEvent.subagents.test.ts`, shapes from `@github/copilot-sdk` 1.0.7 `session-events.d.ts`): against the HEAD mapping, the model/steps/metrics and failure/end-time tests failed (2/3; the third, an unknown-step and no-agent guard, passes at HEAD by design). Green: 3/3.
+- Pi (`Adapter.stream.subagents.fields.test.ts`, shapes from the 0.80.3 extension and pi-ai `ToolCall`/`toolResult`): 3/4 failed at HEAD (model, prompt, steps, metrics, result summary, end time, async tool-count metrics and step ring). Green: 4/4.
+- OpenCode V1 / KiloCode (`Adapter.stream.children.fields.test.ts`, `@opencode-ai/sdk` 1.17.13 v2 types): 2/3 failed at HEAD (`tracksChildSessions is not a function`; KiloCode identity, model, summed metrics, tool steps). Green: 3/3.
+- Codex (`Adapter.stream.subagents.test.ts`, shapes from `codex app-server generate-ts` 0.162.1 `ThreadItem`): failed at HEAD with "Cannot find module './Adapter.stream.subagents.ts'" (Codex mapped nothing). Green: 5/5, plus the adapter wiring test (`Adapter.stream.subagents.adapter.test.ts`, 1/1).
+- Conformance (`providerSubagents.conformance.test.ts`): failed while Codex had no mapping test ("codex: missing provider/Layers/Codex/Adapter.stream.subagents.test.ts"), and again when a KiloCode test file lacked `providerSubagent` assertions. With Devin's `capabilities.subagents` removed temporarily it failed ("provider/Layers/Devin/Adapter.ts: expected +0 to be 1"). Green: 3/3.
+- Web: `SubagentsCard.agnostic.test.ts` (no provider branches in the Subagents display) is a guard and passes.
+- Tests changed deliberately: the Claude and CLIProxy capability assertions now include `subagents`; the Pi tool-name bound follows the shared 80-character limit.
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `bun run --cwd apps/server vitest run src/provider/Layers/Pi src/provider/Layers/Copilot src/provider/Layers/Opencode src/provider/Layers/Codex src/codex src/provider/Layers/Kilocode src/provider/Layers/Cursor src/provider/Layers/Devin src/provider/Layers/Claude src/provider/Layers/CliProxy src/provider/providerSubagents.conformance.test.ts src/provider/Layers/ProviderAdapterRegistry.test.ts` | 0 | 367 files passed, 30 skipped; 1588 tests passed, 40 skipped; 3 capability-assertion failures (above), fixed and re-run: 30/30 |
+| `bun run --cwd apps/web vitest run src/components/chat/agents/SubagentsCard.agnostic.test.ts` | 0 | 1/1 |
+| `bun run --cwd apps/server thread-tools:manifest:check` | 0 | unchanged |
+| `bun fmt` / `bun lint` / `bun typecheck` | 0 / 0 / 0 | lint at the 31-warning baseline |
+
+Load average reached 180–200 during the run (other workloads on the machine); no timeouts.

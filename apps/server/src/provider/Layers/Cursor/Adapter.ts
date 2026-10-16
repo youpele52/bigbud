@@ -47,6 +47,7 @@ import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -297,7 +298,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.cursor,
+      },
       startSession,
       sendTurn,
       interruptTurn,

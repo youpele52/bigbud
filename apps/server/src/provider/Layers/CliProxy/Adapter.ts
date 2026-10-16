@@ -23,6 +23,7 @@ import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspect
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
 import { resolveCliProxyRuntimeConfig } from "./RuntimeConfig.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 const PROVIDER = "cliProxy" as const;
 
 export function toClaudeSessionStartInput(
@@ -182,6 +183,7 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "unsupported",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.cliProxy,
       // CLIProxy's Claude-compatible endpoint does not expose a verified native
       // resume contract. Recovery is therefore a fresh Claude session whose
       // transcript is rebuilt by orchestration before the next turn.

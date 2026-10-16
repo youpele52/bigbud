@@ -7,8 +7,9 @@
  */
 import type { SessionActive, SessionInfo, SessionMessageInfo } from "@opencode/client";
 import type { TaskUpdatedPayload, ThreadId } from "@bigbud/contracts";
-import { RuntimeTaskId } from "@bigbud/contracts/core/baseSchemas";
 import { boundSubagentText, normalizeSubagentMetrics } from "@bigbud/shared/providerSubagents";
+
+import { providerSubagentTaskId } from "../../providerSubagents.ts";
 
 /** Children observed per owner; matches the EventHub child index bound. */
 export const V2_SUBAGENT_MAX_CHILDREN = 32;
@@ -21,7 +22,7 @@ export type V2SubagentStatus = TaskUpdatedPayload["status"];
 export type V2SubagentContent = Omit<TaskUpdatedPayload, "freshness" | "source">;
 
 export function v2SubagentTaskId(threadId: ThreadId, epoch: number, childId: string) {
-  return RuntimeTaskId.makeUnsafe(`opencodeV2:${threadId}:${epoch}:${childId}`);
+  return providerSubagentTaskId("opencodeV2", threadId, epoch, childId);
 }
 
 /** Whether the parent's projected output contains a native subagent tool call. */

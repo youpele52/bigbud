@@ -25,6 +25,7 @@ import type {
 import type { Effect } from "effect";
 import type { Stream } from "effect";
 import type { ProviderServiceShape } from "./ProviderService.ts";
+import type { ProviderSubagentCapability } from "../providerSubagents.capabilities.ts";
 
 export interface ProviderMcpOperations<TError> {
   readonly refresh: (
@@ -75,6 +76,11 @@ export interface ProviderAdapterCapabilities {
   readonly supportsSteer?: boolean;
   /** Structured execution strengths used by the provider-neutral turn controller. */
   readonly turnControl?: ProviderTurnControlCapabilities;
+  /**
+   * Native subagent support. Every production adapter must set its
+   * `PROVIDER_SUBAGENT_CAPABILITIES` entry (enforced by the conformance test).
+   */
+  readonly subagents?: ProviderSubagentCapability;
 }
 
 export interface ProviderThreadTurnSnapshot {

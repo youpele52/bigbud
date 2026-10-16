@@ -47,6 +47,7 @@ import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -295,7 +296,10 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.devin,
+      },
       startSession,
       sendTurn,
       interruptTurn,

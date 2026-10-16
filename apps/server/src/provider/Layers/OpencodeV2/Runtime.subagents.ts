@@ -15,6 +15,7 @@ import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
+import { providerSubagentEvent } from "../../providerSubagents.ts";
 import { v2Request } from "./Client.ts";
 import { EventId } from "@bigbud/contracts/core/baseSchemas";
 import {
@@ -66,17 +67,19 @@ function taskEvent(
 ): ProviderRuntimeEvent {
   const ordinal = ++state.ordinal;
   // No top-level turnId: observer output is never turn liveness evidence.
-  return {
-    provider: "opencodeV2",
-    threadId: session.threadId,
-    sessionEpoch: session.epoch,
-    eventId: EventId.makeUnsafe(
-      `v2:${session.native.id}:subagent:${session.epoch}:${content.nativeId}:${ordinal}`,
-    ),
-    createdAt: new Date().toISOString(),
-    type: "task.updated",
-    payload: {
+  return providerSubagentEvent(
+    {
+      provider: "opencodeV2",
+      threadId: session.threadId,
+      sessionEpoch: session.epoch,
+      eventId: EventId.makeUnsafe(
+        `v2:${session.native.id}:subagent:${session.epoch}:${content.nativeId}:${ordinal}`,
+      ),
+      createdAt: new Date().toISOString(),
+    },
+    {
       ...content,
+      nativeId: content.nativeId!,
       source: "observed",
       freshness: {
         sessionEpoch: String(session.epoch),
@@ -87,7 +90,7 @@ function taskEvent(
         observedOrdinal: ordinal,
       },
     },
-  };
+  );
 }
 
 async function readChildren(session: V2RuntimeSession) {
