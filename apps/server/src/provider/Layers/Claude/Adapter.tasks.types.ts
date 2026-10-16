@@ -1,5 +1,9 @@
 import type { OrchestrationTaskStatus } from "@bigbud/contracts";
 import type { TaskFreshness } from "@bigbud/shared/providerRuntime";
+import type {
+  ProviderSubagentMetrics,
+  ProviderSubagentStep,
+} from "@bigbud/shared/providerSubagents";
 
 export interface ClaudeTask {
   readonly id: string;
@@ -17,6 +21,26 @@ export interface ClaudeTask {
   readonly parentToolUseId?: string | undefined;
   readonly parentTaskId?: string | undefined;
   readonly subagentType?: string | undefined;
+  /** Native task type (`local_agent`, `local_bash`, ...); kept apart from `subagentType`. */
+  readonly taskType?: string | undefined;
+  /** Housekeeping task that hosts must exclude from activity indicators. */
+  readonly ambient?: boolean | undefined;
+  /** Native run ID; run IDs of one task sort lexically in run order. */
+  readonly runId?: string | undefined;
+  readonly prompt?: string | undefined;
+  /** Agent tool input `model` (highest-priority model source). */
+  readonly requestedModel?: string | undefined;
+  /** First `message.model` seen from the subagent's own messages. */
+  readonly observedModel?: string | undefined;
+  /** `AgentOutput.resolvedModel` (lowest-priority model source). */
+  readonly resolvedModel?: string | undefined;
+  readonly effort?: string | undefined;
+  readonly depth?: number | undefined;
+  readonly background?: boolean | undefined;
+  readonly endedAt?: string | undefined;
+  readonly resultSummary?: string | undefined;
+  readonly metrics?: ProviderSubagentMetrics | undefined;
+  readonly recentSteps?: ReadonlyArray<ProviderSubagentStep> | undefined;
   readonly blocks?: ReadonlyArray<string> | undefined;
   readonly blockedBy?: ReadonlyArray<string> | undefined;
   readonly progressSummary?: string | undefined;

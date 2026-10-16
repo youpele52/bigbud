@@ -502,6 +502,11 @@ Recorded during implementation; the validation ledger is [claude-sdk-subagent-di
 - **2026-10-16, Phase 2.3:** projections merge with `mergeTaskPatch`, which can never clear a field. That made the 3.9 rule ("a newer run reopens the task and clears `endedAt` and `resultSummary`") impossible to implement. A shared `mergeTaskSnapshot` (`@bigbud/shared/providerSubagents`) now drops stale end data when a terminal task reopens. It is used by the in-memory projector, the SQL projector and ingestion. For every other transition it behaves exactly like `mergeTaskPatch`.
 - **2026-10-16, Phase 2.3:** the throttle measures time with Effect `Clock` (wall time), not provider timestamps. "Adapter stop or session teardown" is flushed through the `session.exited` and `session.state.changed` events that adapters emit on stop. Ingestion shutdown is flushed by a scope finalizer.
 - **2026-10-16, Phase 2.4:** the 100-agent cap also applies to snapshot hydration (`mappers.store.ts`), not only to `mappers.lazy.store.ts`. This keeps the bound true on every path into the store.
+- **2026-10-16, Phase 3.5:** a notification `summary` now maps to `resultSummary` for every Claude task, no longer to `progressSummary`. `task_type` no longer feeds `subagentType`; the two are stored separately (3.3).
+- **2026-10-16, Phase 3.6:** a subagent `stream_event` is dropped entirely, and no separate in-memory heartbeat exists. Subagent liveness comes from `tool_progress` (3.7), `task_progress` and the subagent's own messages.
+- **2026-10-16, Phase 3.7:** a `tool_progress` heartbeat updates the task only when the tool name changes, to bound event volume. Every emitted update still carries `activityFresh: true`.
+- **2026-10-16, Phase 3.10:** the Claude adapter now emits each task snapshot (`task.updated`) before its lifecycle copy. Without that, a brand-new task had no owner yet, so the skip could not apply to its first lifecycle event, and a duplicate `task` row resulted. Lifecycle events still drive work-log activities.
+- **2026-10-16, Phase 3 tests:** `FakeClaudeQuery` moved to `Adapter.test.helpers.query.ts`; `makeHarness` gained `serverSettings` and `resolveHarness` options.
 
 ## Plan Validity, Review and Handoff
 

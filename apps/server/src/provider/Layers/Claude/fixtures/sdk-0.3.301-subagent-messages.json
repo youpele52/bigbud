@@ -1,0 +1,271 @@
+{
+  "source": "Hand-written from @anthropic-ai/claude-agent-sdk 0.3.301 sdk.d.ts and sdk-tools.d.ts declarations (no live capture, decision D2). A foreground and a background local_agent subagent, plus ambient and shell background tasks.",
+  "agents": [
+    { "name": "code-reviewer", "description": "Reviews diffs", "model": "inherit" },
+    { "name": "Explore", "description": "Fast read-only search", "model": "haiku" }
+  ],
+  "messages": [
+    {
+      "type": "stream_event",
+      "uuid": "fx-se-1",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": null,
+      "event": {
+        "type": "content_block_start",
+        "index": 1,
+        "content_block": {
+          "type": "tool_use",
+          "id": "toolu_fg",
+          "name": "Agent",
+          "input": {
+            "description": "Review diff",
+            "prompt": "Review the reducer diff for bugs",
+            "subagent_type": "code-reviewer",
+            "model": "sonnet",
+            "effort": "high",
+            "run_in_background": false
+          }
+        }
+      }
+    },
+    {
+      "type": "stream_event",
+      "uuid": "fx-se-2",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": null,
+      "event": { "type": "content_block_stop", "index": 1 }
+    },
+    {
+      "type": "system",
+      "subtype": "task_started",
+      "uuid": "fx-start-fg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_fg",
+      "run_id": "run-0001",
+      "tool_use_id": "toolu_fg",
+      "description": "Review diff",
+      "subagent_type": "code-reviewer",
+      "task_type": "local_agent",
+      "is_backgrounded": false,
+      "spawn_depth": 1,
+      "prompt": "Review the reducer diff for bugs"
+    },
+    {
+      "type": "stream_event",
+      "uuid": "fx-se-child",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": "toolu_fg",
+      "event": {
+        "type": "content_block_start",
+        "index": 1,
+        "content_block": { "type": "text", "text": "child partial must not reach the parent" }
+      }
+    },
+    {
+      "type": "assistant",
+      "uuid": "fx-child-a1",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": "toolu_fg",
+      "agent_id": "task_fg",
+      "subagent_type": "code-reviewer",
+      "message": {
+        "id": "msg_child_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-4-5-20250929",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_fg_read",
+            "name": "Read",
+            "input": { "file_path": "/repo/src/reducer.ts" }
+          }
+        ],
+        "stop_reason": null,
+        "usage": { "input_tokens": 10, "output_tokens": 5 }
+      }
+    },
+    {
+      "type": "user",
+      "uuid": "fx-child-u1",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": "toolu_fg",
+      "agent_id": "task_fg",
+      "message": {
+        "role": "user",
+        "content": [{ "type": "tool_result", "tool_use_id": "toolu_fg_read", "content": "ok" }]
+      }
+    },
+    {
+      "type": "tool_progress",
+      "uuid": "fx-tp-1",
+      "session_id": "sdk-session-fx",
+      "tool_use_id": "toolu_fg_bash",
+      "tool_name": "Bash",
+      "parent_tool_use_id": "toolu_fg",
+      "elapsed_time_seconds": 2
+    },
+    {
+      "type": "system",
+      "subtype": "task_progress",
+      "uuid": "fx-progress-fg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_fg",
+      "run_id": "run-0001",
+      "tool_use_id": "toolu_fg",
+      "description": "Review diff",
+      "subagent_type": "code-reviewer",
+      "usage": { "total_tokens": 12000, "tool_uses": 2, "duration_ms": 8000 },
+      "last_tool_name": "Bash",
+      "summary": "Checking reducer edge cases"
+    },
+    {
+      "type": "system",
+      "subtype": "task_notification",
+      "uuid": "fx-note-fg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_fg",
+      "run_id": "run-0001",
+      "tool_use_id": "toolu_fg",
+      "status": "completed",
+      "output_file": "/tmp/task_fg.output",
+      "summary": "Found one bug in the reducer",
+      "usage": { "total_tokens": 15000, "tool_uses": 3, "duration_ms": 12000 }
+    },
+    {
+      "type": "stream_event",
+      "uuid": "fx-se-3",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": null,
+      "event": {
+        "type": "content_block_start",
+        "index": 2,
+        "content_block": {
+          "type": "tool_use",
+          "id": "toolu_bg",
+          "name": "Agent",
+          "input": {
+            "description": "Index docs",
+            "prompt": "Index the docs folder",
+            "subagent_type": "Explore"
+          }
+        }
+      }
+    },
+    {
+      "type": "stream_event",
+      "uuid": "fx-se-4",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": null,
+      "event": { "type": "content_block_stop", "index": 2 }
+    },
+    {
+      "type": "system",
+      "subtype": "task_started",
+      "uuid": "fx-start-bg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_bg",
+      "run_id": "run-0002",
+      "tool_use_id": "toolu_bg",
+      "description": "Index docs",
+      "subagent_type": "Explore",
+      "task_type": "local_agent",
+      "is_backgrounded": true,
+      "spawn_depth": 1,
+      "prompt": "Index the docs folder"
+    },
+    {
+      "type": "user",
+      "uuid": "fx-main-u-bg",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": null,
+      "message": {
+        "role": "user",
+        "content": [
+          { "type": "tool_result", "tool_use_id": "toolu_bg", "content": "Async agent launched" }
+        ]
+      },
+      "tool_use_result": {
+        "status": "async_launched",
+        "agentId": "task_bg",
+        "description": "Index docs",
+        "prompt": "Index the docs folder",
+        "outputFile": "/tmp/task_bg.output",
+        "resolvedModel": "claude-haiku-4-5-20251001"
+      }
+    },
+    {
+      "type": "system",
+      "subtype": "background_tasks_changed",
+      "uuid": "fx-bg-1",
+      "session_id": "sdk-session-fx",
+      "tasks": [
+        {
+          "task_id": "task_bg",
+          "run_id": "run-0002",
+          "task_type": "local_agent",
+          "subagent_type": "Explore",
+          "description": "Index docs",
+          "ambient": false
+        },
+        {
+          "task_id": "task_watch",
+          "task_type": "local_agent",
+          "subagent_type": "watcher",
+          "description": "Watch build",
+          "ambient": true
+        },
+        { "task_id": "task_shell", "task_type": "local_bash", "description": "Run tests" }
+      ]
+    },
+    {
+      "type": "assistant",
+      "uuid": "fx-bg-a1",
+      "session_id": "sdk-session-fx",
+      "parent_tool_use_id": "toolu_bg",
+      "agent_id": "task_bg",
+      "subagent_type": "Explore",
+      "message": {
+        "id": "msg_bg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-4-5-20251001",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_bg_grep",
+            "name": "Grep",
+            "input": { "pattern": "TODO" }
+          }
+        ],
+        "stop_reason": null,
+        "usage": { "input_tokens": 10, "output_tokens": 5 }
+      }
+    },
+    {
+      "type": "system",
+      "subtype": "task_progress",
+      "uuid": "fx-progress-bg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_bg",
+      "run_id": "run-0002",
+      "description": "Index docs",
+      "subagent_type": "Explore",
+      "usage": { "total_tokens": 4000, "tool_uses": 1, "duration_ms": 3000 },
+      "last_tool_name": "Grep"
+    },
+    {
+      "type": "system",
+      "subtype": "task_notification",
+      "uuid": "fx-note-bg",
+      "session_id": "sdk-session-fx",
+      "task_id": "task_bg",
+      "run_id": "run-0002",
+      "status": "completed",
+      "output_file": "/tmp/task_bg.output",
+      "summary": "Indexed 42 documents",
+      "usage": { "total_tokens": 6000, "tool_uses": 2, "duration_ms": 5000 },
+      "ambient": false
+    }
+  ]
+}

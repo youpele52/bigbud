@@ -1,26 +1,16 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type EventId, RuntimeTaskId } from "@bigbud/contracts";
+import type { EventId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
-import {
-  asCanonicalTurnId,
-  nativeProviderRefs,
-  normalizeClaudeTokenUsage,
-  sdkNativeMethod,
-} from "./Adapter.utils.ts";
+import { asCanonicalTurnId, nativeProviderRefs, sdkNativeMethod } from "./Adapter.utils.ts";
 import {
   asRecord,
   decodeClaudeApiRetryMessage,
-  decodeClaudeBackgroundTasksChangedMessage,
   decodeClaudeCommandsChangedMessage,
   decodeClaudeElicitationCompleteMessage,
   decodeClaudeHookMessage,
   decodeClaudeMcpInitialization,
   decodeClaudeRefusalMessage,
-  decodeClaudeTaskNotificationMessage,
-  decodeClaudeTaskProgressMessage,
-  decodeClaudeTaskStartedMessage,
-  decodeClaudeTaskUpdatedMessage,
 } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.ts";
@@ -28,23 +18,26 @@ import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
-import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
+import { isClaudeTaskSystemMessage, makeTaskSystemHandler } from "./Adapter.stream.system.tasks.ts";
 import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../providerMcp.ts";
 import { makeSdkTelemetryHandler } from "./Adapter.stream.system.telemetry.ts";
+import type { SubagentHandlers } from "./Adapter.stream.subagents.ts";
 
 export interface SystemHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
   readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly nowIso: Effect.Effect<string>;
   readonly turn: TurnHandlers;
+  readonly subagents: SubagentHandlers;
 }
 
 export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
-  const { makeEventStamp, offerRuntimeEvent, nowIso, turn } = deps;
+  const { makeEventStamp, offerRuntimeEvent, nowIso, turn, subagents } = deps;
   const handleSdkTelemetryMessage = makeSdkTelemetryHandler({
     makeEventStamp,
     offerRuntimeEvent,
     turn,
+    subagents,
   });
   const invalid = Effect.fn("invalidClaudeSystemMessage")(function* (
     context: ClaudeSessionContext,
@@ -55,6 +48,13 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       `Invalid Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} ${claudeSdkMessageLabel(message)} message.`,
       claudeSdkDiagnostic(message),
     );
+  });
+
+  const handleTaskSystemMessage = makeTaskSystemHandler({
+    makeEventStamp,
+    offerRuntimeEvent,
+    nowIso,
+    invalid,
   });
 
   const handleSystemMessage = Effect.fn("handleSystemMessage")(function* (
@@ -73,6 +73,9 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       raw: claudeSdkRuntimeRaw(message, sdkNativeMethod(message)),
     };
 
+    if (isClaudeTaskSystemMessage(message)) {
+      return yield* handleTaskSystemMessage(context, message, base);
+    }
     switch (message.subtype) {
       case "init": {
         const init = decodeClaudeMcpInitialization(message);
@@ -151,163 +154,6 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             },
           });
         }
-        return;
-      }
-      case "task_started": {
-        const task = decodeClaudeTaskStartedMessage(message);
-        if (!task) return yield* invalid(context, message);
-        yield* offerRuntimeEvent(context, {
-          ...base,
-          type: "task.started",
-          payload: { taskId: RuntimeTaskId.makeUnsafe(task.taskId), description: task.description },
-        });
-        yield* updateClaudeTaskPlan({
-          context,
-          toolUseId: task.toolUseId ?? task.taskId,
-          toolName: "task_updated",
-          input: { task_id: task.taskId, description: task.description, status: "running" },
-          now: yield* nowIso,
-          makeEventStamp,
-          offerRuntimeEvent,
-        });
-        return;
-      }
-      case "task_progress": {
-        const task = decodeClaudeTaskProgressMessage(message);
-        if (!task) return yield* invalid(context, message);
-        const normalizedUsage = task.usage
-          ? normalizeClaudeTokenUsage(
-              {
-                total_tokens: task.usage.totalTokens,
-                tool_uses: task.usage.toolUses,
-                duration_ms: task.usage.durationMs,
-              },
-              context.lastKnownContextWindow,
-            )
-          : undefined;
-        if (normalizedUsage) {
-          context.lastKnownTokenUsage = normalizedUsage;
-          const usageStamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent(context, {
-            ...base,
-            eventId: usageStamp.eventId,
-            createdAt: usageStamp.createdAt,
-            type: "thread.token-usage.updated",
-            payload: { usage: normalizedUsage },
-          });
-        }
-        yield* offerRuntimeEvent(context, {
-          ...base,
-          type: "task.progress",
-          payload: {
-            taskId: RuntimeTaskId.makeUnsafe(task.taskId),
-            description: task.description,
-            ...(task.summary ? { summary: task.summary } : {}),
-            ...(task.usage ? { usage: task.usage } : {}),
-            ...(task.lastToolName ? { lastToolName: task.lastToolName } : {}),
-          },
-        });
-        yield* updateClaudeTaskPlan({
-          context,
-          toolUseId: task.toolUseId ?? task.taskId,
-          toolName: "task_updated",
-          input: {
-            task_id: task.taskId,
-            description: task.description,
-            ...(task.summary ? { progress_summary: task.summary } : {}),
-            ...(task.lastToolName ? { last_tool_name: task.lastToolName } : {}),
-          },
-          now: yield* nowIso,
-          makeEventStamp,
-          offerRuntimeEvent,
-        });
-        return;
-      }
-      case "task_notification": {
-        const task = decodeClaudeTaskNotificationMessage(message);
-        if (!task) return yield* invalid(context, message);
-        const normalizedUsage = task.usage
-          ? normalizeClaudeTokenUsage(
-              {
-                total_tokens: task.usage.totalTokens,
-                tool_uses: task.usage.toolUses,
-                duration_ms: task.usage.durationMs,
-              },
-              context.lastKnownContextWindow,
-            )
-          : undefined;
-        if (normalizedUsage) {
-          context.lastKnownTokenUsage = normalizedUsage;
-          const usageStamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent(context, {
-            ...base,
-            eventId: usageStamp.eventId,
-            createdAt: usageStamp.createdAt,
-            type: "thread.token-usage.updated",
-            payload: { usage: normalizedUsage },
-          });
-        }
-        yield* offerRuntimeEvent(context, {
-          ...base,
-          type: "task.completed",
-          payload: {
-            taskId: RuntimeTaskId.makeUnsafe(task.taskId),
-            status: task.status,
-            summary: task.summary,
-            ...(task.usage ? { usage: task.usage } : {}),
-          },
-        });
-        yield* updateClaudeTaskPlan({
-          context,
-          toolUseId: task.toolUseId ?? task.taskId,
-          toolName: "task_notification",
-          input: {
-            uuid: task.uuid,
-            task_id: task.taskId,
-            status: task.status,
-            summary: task.summary,
-            ...(task.usage ? { usage: task.usage } : {}),
-          },
-          now: yield* nowIso,
-          makeEventStamp,
-          offerRuntimeEvent,
-        });
-        return;
-      }
-      case "task_updated": {
-        const task = decodeClaudeTaskUpdatedMessage(message);
-        if (!task) return yield* invalid(context, message);
-        yield* updateClaudeTaskPlan({
-          context,
-          toolUseId: task.taskId,
-          toolName: "task_updated",
-          input: { task_id: task.taskId, patch: task.patch },
-          now: yield* nowIso,
-          makeEventStamp,
-          offerRuntimeEvent,
-        });
-        return;
-      }
-      case "background_tasks_changed": {
-        const snapshot = decodeClaudeBackgroundTasksChangedMessage(message);
-        if (!snapshot) return yield* invalid(context, message);
-        yield* updateClaudeTaskPlan({
-          context,
-          toolUseId: snapshot.uuid,
-          toolName: "background_tasks_changed",
-          input: {
-            uuid: snapshot.uuid,
-            tasks: snapshot.tasks.map((task) => ({
-              task_id: task.taskId,
-              task_type: task.taskType,
-              description: task.description,
-            })),
-          },
-          authoritativeSnapshot: true,
-          now: yield* nowIso,
-          makeEventStamp,
-          offerRuntimeEvent,
-        });
         return;
       }
       case "api_retry": {

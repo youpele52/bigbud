@@ -8,7 +8,7 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { CliProxyAdapter } from "../../Services/CliProxy/Adapter.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { FakeClaudeQuery } from "../Claude/Adapter.test.helpers.ts";
+import { FakeClaudeQuery } from "../Claude/Adapter.test.helpers.query.ts";
 import type { ClaudeAdapterLiveOptions } from "../Claude/Adapter.ts";
 import {
   makeCliProxyAdapterLive,

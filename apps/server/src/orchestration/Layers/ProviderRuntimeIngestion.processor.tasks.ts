@@ -16,6 +16,7 @@ import type { RuntimeProcessorServices } from "./ProviderRuntimeIngestion.proces
 import { SubagentUpsertThrottle } from "./ProviderRuntimeIngestion.subagentThrottle.ts";
 import {
   buildRuntimeTaskSnapshot,
+  isDuplicateClaudeLifecycleUpsert,
   isTerminalTaskStatus,
   type TaskUpsertRuntimeEvent,
 } from "./ProviderRuntimeIngestion.tasks.map.ts";
@@ -92,6 +93,7 @@ export function makeRuntimeTaskProcessor(input: {
       currentTasks: yield* readTasks(deps.threadId),
     });
     const base = throttle.pending(deps.threadId, identity.id) ?? identity.previous;
+    if (isDuplicateClaudeLifecycleUpsert(deps.event, base)) return;
     const task = buildRuntimeTaskSnapshot({
       event: deps.event,
       taskId: identity.id,

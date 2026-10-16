@@ -57,3 +57,26 @@ Red → green:
 | `bun fmt` / `bun lint` / `bun typecheck`                                                                                                                                                                                                                                                                                                                                      | 0 / 0 / 0 | lint: 0 errors; its warnings are all in untouched files |
 
 Every touched code file is 400 lines or fewer. The largest is `ProviderRuntimeIngestion.processor.runtime.ts` at 385, down from 419.
+
+## Phase 3: Claude subagent fidelity
+
+Red → green:
+
+- Decoders: `Adapter.sdk.messages.tasks.test.ts` failed 2/7 before the 0.3.301 fields were decoded. Green: 7/7.
+- Fixture replay (`fixtures/sdk-0.3.301-subagent-messages.json`, hand-written from the 0.3.301 `sdk.d.ts` and `sdk-tools.d.ts`; D2): `Adapter.stream.subagents.replay.test.ts` run against the Phase 2 Claude adapter files (temporarily restored from HEAD) failed 3/5: models, steps and metrics missing; context meter moved; child partial leaked. The ambient and CLIProxy cases passed vacuously, because HEAD never classified `local_agent`. Green: 5/5.
+- Frame behavior: `Adapter.stream.subagents.test.ts` against the same HEAD files failed 8/8: `agent_id` correlation and the 5-step ring; forwarded-text gating; late runs; reopen; `worker_restart`; heartbeat; legacy `agent`; usage → metrics. Green: 8/8.
+- Duplicate lifecycle upserts (3.10): `ProviderRuntimeIngestion.processor.events.test.ts` failed 3/8 (`isDuplicateClaudeLifecycleUpsert is not a function`). Green: 8/8. A harness-level version was dropped, because the projector already rejects the cross-epoch lifecycle snapshot, so projected state could not show the skip.
+- Classification unit tests (`Adapter.tasks.classify.test.ts`, 18 cases) were written after the classifier, so they have no captured red. The behavior is also covered red → green by the replay and frame tests above.
+- Tests that pinned the old defects were changed deliberately:
+  - the `task_progress` → `thread.token-usage.updated` test was inverted into the context-meter regression and moved out of `Adapter.lifecycle.test.ts` (402 → 344 lines);
+  - the routing sequence no longer contains `thread.token-usage.updated`;
+  - the modern plan test now uses `local_bash` (D8);
+  - the forwarded-text test enables `forwardedSubagentText`.
+
+| Command                                                                                                                                                                                                                                       | Exit      | Result                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------- |
+| `bun run --cwd apps/server vitest run src/provider/Layers/Claude src/provider/Layers/CliProxy src/orchestration/Layers/ProviderRuntimeIngestion.processor.events.test.ts src/orchestration/Layers/ProviderRuntimeIngestion.subagents.test.ts` | 0         | 62 files passed, 3 skipped; 303 tests passed, 3 skipped (opt-in live smoke) |
+| `bun run --cwd apps/server thread-tools:manifest:check`                                                                                                                                                                                       | 0         | unchanged                                                                   |
+| `bun fmt` / `bun lint` / `bun typecheck`                                                                                                                                                                                                      | 0 / 0 / 0 | lint back to the 31-warning baseline (none in touched files)                |
+
+Note: one earlier run of `ProviderRuntimeIngestion.subagents.test.ts` hung for more than 15 minutes, under load average 8–15, while a since-removed Pi `turn.completed` test case was in the file. I stopped my own process (no user process was signalled). The file without that case passes (18/18 together with the throttle and events tests).

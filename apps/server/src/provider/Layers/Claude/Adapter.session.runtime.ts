@@ -7,6 +7,7 @@ import { toError } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
+import { loadClaudeAgentModels } from "./Adapter.stream.subagents.ts";
 
 export interface SessionRuntimeDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -145,5 +146,7 @@ export const startSessionRuntimeStream =
       };
 
       startStream();
+      // Best-effort: AgentInfo.model feeds subagent model resolution; never blocks the stream.
+      input.runFork(loadClaudeAgentModels(input.context));
     });
   };

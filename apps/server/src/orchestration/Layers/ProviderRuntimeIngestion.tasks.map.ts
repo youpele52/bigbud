@@ -26,6 +26,24 @@ export type TaskUpsertRuntimeEvent =
   | ProviderRuntimeTaskCompletedEvent
   | ProviderRuntimeTaskUpdatedEvent;
 
+/**
+ * Claude reports each native task twice: as `task.updated` snapshots and as lifecycle
+ * `task.started`/`task.progress`/`task.completed` events. Once another source owns the task,
+ * the lifecycle copy would only add a second persisted upsert, so it is skipped. Activities
+ * still derive from the lifecycle event, and every other provider keeps its behavior.
+ */
+export function isDuplicateClaudeLifecycleUpsert(
+  event: Pick<TaskUpsertRuntimeEvent, "type" | "provider">,
+  current: OrchestrationTask | undefined,
+): boolean {
+  return (
+    event.provider === "claudeAgent" &&
+    event.type !== "task.updated" &&
+    current !== undefined &&
+    current.source !== "lifecycle"
+  );
+}
+
 export const isTerminalTaskStatus = (status: OrchestrationTask["status"]) =>
   status === "completed" || status === "failed" || status === "stopped";
 
