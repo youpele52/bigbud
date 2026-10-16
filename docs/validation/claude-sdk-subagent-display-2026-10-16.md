@@ -80,3 +80,20 @@ Red → green:
 | `bun fmt` / `bun lint` / `bun typecheck`                                                                                                                                                                                                      | 0 / 0 / 0 | lint back to the 31-warning baseline (none in touched files)                |
 
 Note: one earlier run of `ProviderRuntimeIngestion.subagents.test.ts` hung for more than 15 minutes, under load average 8–15, while a since-removed Pi `turn.completed` test case was in the file. I stopped my own process (no user process was signalled). The file without that case passes (18/18 together with the throttle and events tests).
+
+## Phase 4: OpenCode V2 read-only observer (G4 not passed)
+
+Red → green:
+
+- New tests `Runtime.subagents.test.ts` and `EventHub.children.test.ts`, run against the HEAD `EventHub.ts`, `Runtime.ts` and `Runtime.recovery.ts` (temporarily restored, then put back): 7/11 failed. The observer never ran (no `task.updated`, `session.list` never called), the hint never reached the owner (`onChildHint` called 0 times), and `hub.noteChildren is not a function`. The 4 that passed are the pure index test, the throwing-hint test, the inert case and the G4 denial guard, which do not depend on the wiring. Green: 11/11.
+
+G4 outcome: not passed; V2 native subagents stay denied (D1). Evidence: [opencode-v2-subagent-evidence-2026-10-16.md](opencode-v2-subagent-evidence-2026-10-16.md).
+
+| Command                                                                                                                                  | Exit      | Result                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `bun run --cwd apps/server vitest run src/provider/Layers/OpencodeV2 src/orchestration/Layers/ProviderCommandReactorSessionOps.recovery` | 0         | 218 files passed, 27 skipped; 944 tests passed, 37 skipped (native and live opt-in suites) |
+| `bun run --cwd apps/server thread-tools:manifest:check`                                                                                  | 0         | unchanged                                                                                  |
+| `bun run --cwd apps/server thread-tools:native-qualification:check`                                                                      | 0         | `generatorSourceDigest` 3321f844…a31, `qualifiedRecords` 0 (unchanged)                     |
+| `bun fmt` / `bun lint` / `bun typecheck`                                                                                                 | 0 / 0 / 0 | lint at the 31-warning baseline (none in touched files)                                    |
+
+Load average was 64–112 during the run; no timeouts.

@@ -14,6 +14,7 @@ import { flushV2FinalEvents, queueV2FinalEvents } from "./Runtime.finalization.t
 import { v2RuntimeStatus } from "./Runtime.status.ts";
 import { isV2AssistantSettled } from "./Projection.ts";
 import { v2NativeFailureMessage } from "./Runtime.failure.ts";
+import { observeV2Subagents } from "./Runtime.subagents.ts";
 
 /** Invalidate pending interaction and output ownership immediately on owned process exit. */
 export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
@@ -278,6 +279,8 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
     // Merely scheduling that retry must not invalidate the projection just queued.
     session.lease.hub.reconciled(session.native.id, generation);
     session.lease.hub.start();
+    // Read-only and never throws; it is not liveness or ownership evidence.
+    await observeV2Subagents(runtime, session, projection.assistants, validate);
   } catch {
     try {
       validate();
