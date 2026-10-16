@@ -91,6 +91,9 @@ function assertV2RequestContextOnce(transport: string, url: URL, method: string)
     const root = `/api/session/${encodeURIComponent(context.nativeSessionId ?? "")}`;
     const route = url.pathname;
     const read = method === "GET" && (route === root || route === `${root}/inbox`);
+    // Dead-backend retirement must prove the old owner's native turn is idle; the official
+    // running-session map is read-only and carries no session content.
+    const running = method === "GET" && route === "/api/session/active";
     const cancel =
       method === "DELETE" &&
       (route.startsWith(`${root}/inbox/`) || route.startsWith(`${root}/form/`));
@@ -98,7 +101,7 @@ function assertV2RequestContextOnce(transport: string, url: URL, method: string)
       method === "POST" &&
       route === `${root}/interrupt` &&
       url.searchParams.get("resume") === "false";
-    if (!context.nativeSessionId || (!read && !cancel && !interrupt))
+    if (!context.nativeSessionId || (!read && !running && !cancel && !interrupt))
       throw new Error("V2 original-owner cleanup route rejected.");
   }
   return context;
