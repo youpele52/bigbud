@@ -29,6 +29,7 @@ import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
+import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
 export function makeRuntimeEventProcessor(
   services: RuntimeProcessorServices,
   cacheHelpers: RuntimeProcessorCacheHelpers,
@@ -65,6 +66,10 @@ export function makeRuntimeEventProcessor(
       providerCommandId,
     });
   const taskProcessor = makeRuntimeTaskProcessor({ orchestrationEngine, providerCommandId });
+  const ingestPromptSuggestion = makePromptSuggestionIngestion({
+    orchestrationEngine,
+    serverSettingsService,
+  });
   const processRuntimeEvent = Effect.fn("processRuntimeEvent")(function* (
     event: ProviderRuntimeEvent,
   ) {
@@ -74,6 +79,8 @@ export function makeRuntimeEventProcessor(
       (entry) => entry.id === event.threadId,
     );
     if (!thread) return;
+    if (event.type === "turn.prompt-suggestion")
+      return yield* ingestPromptSuggestion(event, thread);
     const now = event.createdAt;
     const sessionEpoch = event.sessionEpoch;
     const projectedSessionEpoch = thread.session?.sessionEpoch ?? 0;

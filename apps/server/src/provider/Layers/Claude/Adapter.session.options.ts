@@ -32,6 +32,8 @@ interface BuildClaudeQueryOptionsInput {
   readonly environment?: Readonly<Record<string, string | undefined>>;
   /** User-configured subagent caps (6.6); null or absent keeps the CLI default. */
   readonly subagentCaps?: ClaudeSubagentCaps;
+  /** Native prompt suggestions after each turn (Phase 7). */
+  readonly promptSuggestions?: boolean;
 }
 
 export interface ClaudeSubagentCaps {
@@ -144,6 +146,7 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
         ? { includeHookEvents: true, agentProgressSummaries: true }
         : {}),
       ...(input.forwardSubagentText ? { forwardSubagentText: true } : {}),
+      ...(input.promptSuggestions ? { promptSuggestions: true } : {}),
       canUseTool: input.canUseTool,
       ...(input.onElicitation ? { onElicitation: input.onElicitation } : {}),
       env: withClaudeSubagentCaps(input.environment ?? process.env, input.subagentCaps),

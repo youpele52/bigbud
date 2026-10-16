@@ -87,6 +87,19 @@ export interface ThreadElevatorSummaryGenerationResult {
   summary: string;
 }
 
+export interface PromptSuggestionGenerationInput {
+  cwd: string;
+  /** Bounded, redacted user and assistant message text (no tool output). */
+  transcript: string;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface PromptSuggestionGenerationResult {
+  /** Raw suggestion; the attaching pipeline normalizes and bounds it. */
+  suggestion: string;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
@@ -137,6 +150,13 @@ export interface TextGenerationShape {
   readonly generateThreadElevatorSummary: (
     input: ThreadElevatorSummaryGenerationInput,
   ) => Effect.Effect<ThreadElevatorSummaryGenerationResult, TextGenerationError>;
+
+  /**
+   * Generate the logical next user message after a settled turn (Phase 7).
+   */
+  readonly generatePromptSuggestion: (
+    input: PromptSuggestionGenerationInput,
+  ) => Effect.Effect<PromptSuggestionGenerationResult, TextGenerationError>;
 }
 
 /**

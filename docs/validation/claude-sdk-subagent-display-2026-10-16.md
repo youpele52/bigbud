@@ -138,3 +138,30 @@ Red → green (fixtures from the SDK 0.3.301 type declarations; no live runs):
 | `bun run --cwd apps/web test:browser src/components/chat/agents/SubagentRow.stop.browser.tsx src/components/chat/agents/SubagentsCard.browser.tsx`                                                                                                                                                                                                                                                  | 0         | 6/6                                                                                                                       |
 | `bun run --cwd apps/server thread-tools:manifest:check`                                                                                                                                                                                                                                                                                                                                             | 0         | unchanged                                                                                                                 |
 | `bun fmt:check` / `bun lint` / `bun typecheck`                                                                                                                                                                                                                                                                                                                                                      | 0 / 0 / 0 | lint at the 31-warning baseline                                                                                           |
+
+## Phase 7: prompt suggestions (added by the user)
+
+Red → green (fixtures from the SDK 0.3.301 types; no live runs):
+
+- `@bigbud/shared/promptSuggestion` normalizer (`promptSuggestion.test.ts`): failed with the module missing; green 8/8 (bounds 14/15/150/151, multi-line, control/zero-width/bidi, equal to the last user message).
+- Attachment rules (`promptSuggestion.logic.test.ts`): failed with the module missing; green 6/6.
+- Ingestion (`ProviderRuntimeIngestion.promptSuggestion.test.ts`): 1/3 failed at HEAD (nothing projected; the two drop cases pass by design); green 3/3.
+- Claude native mapping after `result` (`Adapter.stream.promptSuggestion.test.ts`): 1/2 failed ("expected undefined to not equal undefined"); green 2/2. The option test (`Adapter.session.options.promptSuggestions.test.ts`, 1/1) had no captured red.
+- Clearing on revert (in-memory and SQL projectors) and fork (`promptSuggestion.clearing.test.ts`): 3/3 failed against the HEAD versions of the three files; green 3/3. Web: `promptSuggestion.logic.test.ts` (new turn, send, queue, running, failed, archived, disabled, reverted) failed with the module missing, green 4/4; `helpers.store.promptSuggestion.test.ts` 1/1; work log `workLog.promptSuggestion.test.ts` 1/1.
+- Generated fallback: `PromptSuggestionReactor.logic.test.ts` 8/8 (eligibility, model order, transcript, cancel events) and `TextGeneration.promptSuggestion.test.ts` 2/2 had no captured red. `PromptSuggestionReactor.test.ts`: with cancellation disabled the cancel test timed out (60 s); green 4/4 (thread model, text-generation fallback, native providers skipped, cancellation on a user message).
+- Settings (`settings.promptSuggestions.test.ts`) 2/2.
+- Composer (`ComposerPromptEditor.suggestion.browser.tsx`): with the editor wiring removed, 3/5 failed; green 5/5 (ghost text and aria hint, Tab accepts, → accepts, Enter never sends it, Tab untouched without a suggestion).
+- Tests changed deliberately: the Claude capability assertion includes `nativePromptSuggestions: true`; the git text generation fake implements `generatePromptSuggestion`.
+
+## Final full gate (after Phase 7)
+
+`uptime` before the run: load average 27 / 35 / 56. No file timed out, so none was re-run alone.
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `bun run test -- --continue` | 0 | 9/9 turbo tasks. server 1190 files passed, 45 skipped; 5199 tests passed, 2 expected fail, 104 skipped. web 484 files, 2985 tests. shared 53 / 389. contracts 38 / 217. desktop 72 files (3 skipped) / 429 tests (6 skipped). mobile-web 41 / 212. scripts 25 / 133. |
+| `bun run --cwd apps/web test:browser` SubagentsCard, SubagentRow.stop, ComposerPromptEditor.suggestion, SettingsSearch, ComposerCommandMenu.incremental | 0 | 25/25 |
+| `bun run --cwd apps/web test:browser src/components/settings/SettingsPanels.browser.tsx` | 1 | 6/8; the two `ProvidersSettingsPanel route expansion` tests fail identically with this branch's only settings-panel change (`ProviderCard.tsx`) reverted to its pre-Phase-6 version, and no other file they render was changed here. Recorded as pre-existing, not fixed (out of scope). |
+| Focused re-runs after the last edits (Claude adapter, prompt suggestion reactor and ingestion, web settings and stores) | 0 | server 63 files / 281 tests; web 37 files / 173 tests |
+| `bun fmt:check` / `bun lint` / `bun typecheck` | 0 / 0 / 0 | lint at the 31-warning baseline |
+| `bun run --cwd apps/server thread-tools:manifest:check` | 0 | unchanged |

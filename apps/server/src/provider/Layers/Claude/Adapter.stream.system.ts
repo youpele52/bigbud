@@ -23,6 +23,7 @@ import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../pro
 import { makeSdkTelemetryHandler } from "./Adapter.stream.system.telemetry.ts";
 import type { SubagentHandlers } from "./Adapter.stream.subagents.ts";
 import { countClaudeSdkMessage, makeMiscSystemHandlers } from "./Adapter.stream.system.misc.ts";
+import { makeClaudePromptSuggestionHandler } from "./Adapter.stream.promptSuggestion.ts";
 
 export interface SystemHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -249,6 +250,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
     }
   });
 
+  const handlePromptSuggestion = makeClaudePromptSuggestionHandler({ offerRuntimeEvent });
   /** Top-level `conversation_reset` and `prompt_suggestion` frames. */
   const handleTopLevelMessage = Effect.fn("handleClaudeTopLevelMessage")(function* (
     context: ClaudeSessionContext,
@@ -267,8 +269,9 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
     if (message.type === "conversation_reset") {
       return yield* misc.handleConversationReset(context, message, base);
     }
-    // promptSuggestions is not enabled; a suggestion is dropped and never auto-sent.
     yield* countClaudeSdkMessage("prompt_suggestion");
+    // Mapped for the settled turn; never sent automatically.
+    yield* handlePromptSuggestion(context, message, base);
   });
   return { handleSystemMessage, handleSdkTelemetryMessage, handleTopLevelMessage };
 };

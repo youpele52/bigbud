@@ -361,6 +361,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     capabilities: {
       sessionModelSwitch: "in-session",
       subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
+      nativePromptSuggestions: true,
       sessionRecovery: "resume-restart",
       conversationRewind: "unsupported",
       conversationFork: "unsupported",

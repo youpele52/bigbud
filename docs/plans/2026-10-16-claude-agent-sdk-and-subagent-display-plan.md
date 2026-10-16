@@ -461,6 +461,27 @@ The steps below are listed in priority order. Each one ships independently.
    - UI: `text-sm` inputs with `text-xs` helper text.
 7. **Transcript rewind and native fork (D5):** a separate plan; not implemented under this one.
 
+### Phase 7 — Prompt suggestions (added 2026-10-16 by the user)
+
+User requirements: a provider-agnostic pipeline so any provider with native prompt suggestions plugs in, starting with the Claude Agent SDK; when a provider has none, bigbud generates one. The suggestion is the logical next message (a question or an instruction), always related to what was discussed, 15–150 characters. Text generation always uses the thread's current model; the fallback is the text-generation model.
+
+1. **Contracts.**
+   - Runtime event `turn.prompt-suggestion` with payload `{ suggestion, source: "native" | "generated" }`; `threadId`, `turnId` and `provider` come from the event envelope.
+   - `orchestration.promptSuggestion.ts`: activity kind `prompt.suggestion`, payload `{ suggestion, source, provider }`, and the length bounds.
+   - Server settings `promptSuggestions` (default on) and `generatedPromptSuggestions` (default on), with patch keys. Older saved settings decode to the defaults.
+2. **Normalizer** (`@bigbud/shared/promptSuggestion`): trim; collapse to one line; strip control, zero-width and bidi characters; keep 15–150 characters after normalization and drop anything outside the range (never truncate); drop a suggestion equal to the last user message.
+3. **Ingestion** projects the latest suggestion onto the thread as a `prompt.suggestion` activity bound to its turn. It attaches only when the setting is on, the turn is the thread's latest and completed, no turn is running, nothing is queued, and the thread is not archived or deleting. The activity is hidden from the work log.
+4. **Clearing.** The web shows only the newest suggestion, and only while it belongs to the latest settled turn with no later user message (new turn, send and queue clear it). Revert and rollback drop suggestion activities in every projector (in-memory, SQL and web). Forks never copy them. A suggestion is never sent automatically and never touches recovery or the queued-prompt path.
+5. **Claude native.** `promptSuggestions: true` in the query options when the setting is on (not for the CLIProxy harness). The stream keeps iterating after `result`; `prompt_suggestion` maps to `turn.prompt-suggestion` with `source: "native"` for the turn that just completed. This replaces the 6.1 no-op.
+6. **Generated fallback** for adapters without `capabilities.nativePromptSuggestions`, when both settings are on.
+   - Runs after a successful turn. Skipped on the first turn, after failed or interrupted turns, in plan mode, while approvals or user input are pending, and when the thread is archived, deleting or has a pending delegated model choice.
+   - Model: the thread's `modelSelection` when bigbud's text generation can run it, otherwise `textGenerationModelSelection`. A failure yields no suggestion and is logged at debug level.
+   - Input: a bounded transcript of user and assistant message text only (no tool output, attachments or terminal context) with common secret patterns redacted.
+   - One in-flight generation per thread (a new turn, user message, queue, revert, archive or deletion cancels it), a ~15 s timeout and a global concurrency cap. It never blocks a turn and attaches only if the turn is still the latest.
+7. **Settings UI.** Two toggles in Settings → AI (text generation), with a one-line note that the generated fallback makes an extra model call.
+8. **Web composer.** Ghost text only when the composer is empty and the suggestion belongs to the latest settled turn. Tab or → accepts it; typing hides it; Enter never sends an unaccepted suggestion. An aria hint announces it. The slash and mention menus are unaffected (they need typed text). On touch devices a tap chip accepts it.
+9. **Tests:** normalizer bounds (14/15/150/151, multi-line, bidi); Claude mapping after `result`; clearing on new turn, send, fork and revert; fallback model order; cancellation; no auto-send; a composer browser test.
+
 ## Risks And Decision Gates
 
 - **Event volume:** handled by the throttle rules (Phase 2.3). `forwardSubagentText` stays off.
@@ -558,6 +579,14 @@ Recorded during implementation; the validation ledger is [claude-sdk-subagent-di
 - **2026-10-16, Phase 6.4:** the Stop capability is declared as `stop: true` on the provider's `PROVIDER_SUBAGENT_CAPABILITIES` entry (Claude only) and is advertised to the web as `ServerProvider.subagentStop`. The server checks it, and the Claude adapter also checks that the task is a running provider subagent of the live session, so CLIProxy (`providerSubagentsSupported: false`) can never stop a task. The RPC is `provider.stopSubagent` (`NativeApi.server.stopSubagent`); it never recovers or starts a session.
 - **2026-10-16, Phase 6.4:** the Stop button appears only in the live activity feed (fresh active rows), and only when the composer's active provider advertises `subagentStop`. After a successful request the button re-enables; the row changes only when the provider reports `stopped`.
 - **2026-10-16, Phase 6.6:** an unset cap is `null` (the default, also for older saved settings). A set cap is an integer from 1 to 64; the CLI requires at least 1, and 64 is a bigbud bound. A cap the user already exported is kept when the setting is unset; a set cap wins. Caps apply to new Claude sessions only and never to the CLIProxy harness. The inputs are in the Claude provider card (Settings, Providers), which is where Claude settings live.
+- **2026-10-16, Phase 7:** the `turn.prompt-suggestion` payload is `{ suggestion, source }`; `threadId`, `turnId` and `provider` come from the runtime event envelope instead of being repeated.
+- **2026-10-16, Phase 7:** the latest suggestion is projected as a `prompt.suggestion` activity (no new thread column and no migration). Clearing is derived: the composer shows only the newest suggestion while it belongs to the latest settled turn with no newer user message and nothing queued. Revert drops suggestion activities in the in-memory, SQL and web projectors; forks never copy them; the work log hides them.
+- **2026-10-16, Phase 7:** a turn counts as settled once the session is idle, even before its checkpoint is captured (`latestTurn.state` is still `running` until the checkpoint reactor finishes), because Claude sends `prompt_suggestion` right after `result`.
+- **2026-10-16, Phase 7:** the generated fallback starts from the provider's `turn.completed` (state `completed`), waits up to 2 s for ingestion to apply it, and runs from the provider command reactor's start. The cap is 2 concurrent generations; the timeout is 15 s.
+- **2026-10-16, Phase 7:** "the thread's model" means the thread's `modelSelection` when bigbud's text generation can run it (Codex, Claude, Cursor). Other providers (including CLIProxy) use `textGenerationModelSelection`. Routing can still substitute an enabled provider when the requested one is disabled, as for every text generation call.
+- **2026-10-16, Phase 7:** transcript redaction reuses `toBoundedRedactedText`, which also replaces URLs.
+- **2026-10-16, Phase 7:** `CursorTextGeneration.ts` (414 lines) was split while adding the method: its operation type, defaults, error mapping and JSON extraction moved to `CursorTextGeneration.helpers.ts`. The generation method itself is written once (`TextGeneration.promptSuggestion.ts`) and reuses each provider's JSON runner.
+- **2026-10-16, Phase 7:** the toggles live in Settings → AI, in the "Text generation" section. On touch devices the ghost text shows a "Use" chip instead of the Tab hint.
 
 ## Plan Validity, Review and Handoff
 

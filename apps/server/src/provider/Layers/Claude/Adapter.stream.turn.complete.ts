@@ -186,6 +186,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     });
 
     const updatedAt = yield* nowIso;
+    context.lastSettledTurn = { turnId: turnState.turnId, completed: status === "completed" };
     context.turnState = undefined;
     context.session = {
       ...context.session,

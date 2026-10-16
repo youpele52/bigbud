@@ -3,6 +3,7 @@ import type {
   OrchestrationProposedPlan,
   OrchestrationThreadActivity,
 } from "@bigbud/contracts";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 export function retainThreadMessagesAfterRevert(
   messages: ReadonlyArray<OrchestrationMessage>,
@@ -72,7 +73,10 @@ export function retainThreadActivitiesAfterRevert(
   retainedTurnIds: ReadonlySet<string>,
 ): Array<OrchestrationThreadActivity> {
   return activities.filter(
-    (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
+    (activity) =>
+      // A revert or rollback clears the prompt suggestion (Phase 7).
+      activity.kind !== PROMPT_SUGGESTION_ACTIVITY_KIND &&
+      (activity.turnId === null || retainedTurnIds.has(activity.turnId)),
   );
 }
 

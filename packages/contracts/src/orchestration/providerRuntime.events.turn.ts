@@ -25,6 +25,7 @@ import {
   UserInputRequestedPayload,
   UserInputResolvedPayload,
 } from "./providerRuntime.payloads";
+import { TurnPromptSuggestionPayload } from "./orchestration.promptSuggestion";
 
 export const ProviderRuntimeTurnStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
@@ -76,6 +77,15 @@ export const ProviderRuntimeTurnDiffUpdatedEvent = Schema.Struct({
   payload: TurnDiffUpdatedPayload,
 });
 export type ProviderRuntimeTurnDiffUpdatedEvent = typeof ProviderRuntimeTurnDiffUpdatedEvent.Type;
+
+/** The logical next user message after a settled turn (Phase 7). */
+export const ProviderRuntimeTurnPromptSuggestionEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: Schema.Literal("turn.prompt-suggestion"),
+  payload: TurnPromptSuggestionPayload,
+});
+export type ProviderRuntimeTurnPromptSuggestionEvent =
+  typeof ProviderRuntimeTurnPromptSuggestionEvent.Type;
 
 export const ProviderRuntimeItemStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,

@@ -25,6 +25,7 @@ describe("ClaudeAdapterLive", () => {
         conversationRewind: "unsupported",
         conversationFork: "unsupported",
         subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
+        nativePromptSuggestions: true,
       });
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

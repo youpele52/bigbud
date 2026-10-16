@@ -64,6 +64,8 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Text generation", section: "AI", to: "/settings/ai" },
   { label: "Stream replies", section: "AI", to: "/settings/ai" },
   { label: "Stream thinking", section: "AI", to: "/settings/ai" },
+  { label: "Prompt suggestions", section: "AI", to: "/settings/ai" },
+  { label: "Generate suggestions", section: "AI", to: "/settings/ai" },
   { label: "Text generation model", section: "AI", to: "/settings/ai" },
   { label: "Browser", section: "AI", to: "/settings/ai" },
   { label: "Default agent browser", section: "AI", to: "/settings/ai" },

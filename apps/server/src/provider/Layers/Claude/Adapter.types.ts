@@ -150,6 +150,8 @@ export interface ClaudeSessionContext {
   readonly taskState: ClaudeTaskState;
   lastPlanFingerprint: string | undefined;
   turnState: ClaudeTurnState | undefined;
+  /** The turn that ended last; a native prompt suggestion binds to it (Phase 7). */
+  lastSettledTurn?: { readonly turnId: TurnId; readonly completed: boolean } | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
   lastAssistantUuid: string | undefined;

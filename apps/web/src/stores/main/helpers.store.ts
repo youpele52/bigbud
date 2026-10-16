@@ -8,6 +8,7 @@ import {
   type SidebarThreadSummary,
   type Thread,
 } from "../../models/types";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -264,7 +265,10 @@ export function retainThreadActivitiesAfterRevert(
   retainedTurnIds: ReadonlySet<string>,
 ): Thread["activities"] {
   return activities.filter(
-    (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
+    (activity) =>
+      // A revert or rollback clears the prompt suggestion (Phase 7).
+      activity.kind !== PROMPT_SUGGESTION_ACTIVITY_KIND &&
+      (activity.turnId === null || retainedTurnIds.has(activity.turnId)),
   );
 }
 

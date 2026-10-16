@@ -127,6 +127,8 @@ export const ServerSettingsPatch = Schema.Struct({
   greetingName: Schema.optionalKey(GreetingName),
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
+  promptSuggestions: Schema.optionalKey(Schema.Boolean),
+  generatedPromptSuggestions: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),

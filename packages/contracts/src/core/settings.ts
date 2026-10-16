@@ -245,6 +245,10 @@ export const ServerSettings = Schema.Struct({
   greetingName: GreetingName.pipe(Schema.withDecodingDefault(() => "")),
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableThinkingStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  /** Show the provider's suggested next prompt after a settled turn (Phase 7). */
+  promptSuggestions: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  /** Generate one with the thread's model when the provider has none (an extra model call). */
+  generatedPromptSuggestions: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),

@@ -132,7 +132,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     });
 
     const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.claudeAgent),
+      Effect.map((settings) => ({
+        ...settings.providers.claudeAgent,
+        promptSuggestions: settings.promptSuggestions === true,
+      })),
       Effect.mapError(
         (error) =>
           new ProviderAdapterProcessError({
@@ -235,6 +238,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ...(harness
         ? {}
         : {
+            promptSuggestions: claudeSettings.promptSuggestions,
             subagentCaps: {
               maxSpawnDepth: claudeSettings.maxSubagentSpawnDepth ?? null,
               maxConcurrent: claudeSettings.maxConcurrentSubagents ?? null,

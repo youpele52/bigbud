@@ -81,6 +81,11 @@ export interface ProviderAdapterCapabilities {
    * `PROVIDER_SUBAGENT_CAPABILITIES` entry (enforced by the conformance test).
    */
   readonly subagents?: ProviderSubagentCapability;
+  /**
+   * The provider emits its own `turn.prompt-suggestion` after a settled turn. Without it,
+   * bigbud generates one with the thread's model when the user allows it (Phase 7).
+   */
+  readonly nativePromptSuggestions?: boolean;
 }
 
 export interface ProviderThreadTurnSnapshot {

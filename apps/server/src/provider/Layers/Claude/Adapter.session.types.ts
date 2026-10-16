@@ -25,6 +25,7 @@ export interface SessionStartDeps {
   readonly serverSettingsService: {
     readonly getSettings: Effect.Effect<
       {
+        readonly promptSuggestions?: boolean;
         readonly providers: {
           readonly claudeAgent: {
             readonly binaryPath: string;
