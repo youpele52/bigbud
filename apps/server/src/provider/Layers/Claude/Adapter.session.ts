@@ -31,6 +31,7 @@ import {
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
 import { readClaudeResumeState, toMessage, validateClaudeResumeBoundary } from "./Adapter.utils.ts";
 import { buildClaudeQueryOptions } from "./Adapter.session.options.ts";
+import { buildClaudeSessionRolloutOptions } from "./Adapter.session.rollout.ts";
 import { makeClaudeTaskState } from "./Adapter.tasks.ts";
 import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
 import { makeLogNativeSdkMessage } from "./Adapter.session.log.ts";
@@ -206,9 +207,8 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
-    const forwardSubagentText =
-      harness?.forwardSubagentText ??
-      (harness ? false : claudeSettings.rollout.forwardedSubagentText);
+    const rolloutOptions = buildClaudeSessionRolloutOptions(harness, claudeSettings);
+    const { forwardSubagentText } = rolloutOptions;
     const {
       apiModelId,
       effectiveEffort,
@@ -229,21 +229,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       newSessionId,
       canUseTool,
       onElicitation,
-      boundedHookProgress:
-        harness?.boundedHookProgress ??
-        (harness ? false : claudeSettings.rollout.boundedHookProgress),
-      forwardSubagentText,
-      ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
-      ...(harness?.environment ? { environment: harness.environment } : {}),
-      ...(harness
-        ? {}
-        : {
-            promptSuggestions: claudeSettings.promptSuggestions,
-            subagentCaps: {
-              maxSpawnDepth: claudeSettings.maxSubagentSpawnDepth ?? null,
-              maxConcurrent: claudeSettings.maxConcurrentSubagents ?? null,
-            },
-          }),
+      ...rolloutOptions,
     });
     const queryRuntime = yield* Effect.try({
       try: () =>
