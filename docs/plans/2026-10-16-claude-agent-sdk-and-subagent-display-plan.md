@@ -492,6 +492,12 @@ Never run `bun test`.
 
 No open questions remain.
 
+## Implementation Deviations
+
+Recorded during implementation; the validation ledger is [claude-sdk-subagent-display-2026-10-16.md](../validation/claude-sdk-subagent-display-2026-10-16.md).
+
+- **2026-10-16, pre-flight:** every split-first line count and the SDK pin matched at HEAD `4a1661223b`. No deviation.
+
 ## Plan Validity, Review and Handoff
 
 - **Valid for:** `feat/claude-sdk-subagent-display` at `f690b7fd65`; SDK 0.3.301 with Claude CLI 2.1.301; `@opencode/client` 2.0.26; Copilot 1.0.7; Pi 0.80.3; Codex CLI 0.162.1. Revalidate if the Claude adapter, task contracts, subagent UI, V2 policy or `EventHub`, or the frozen V2 file set change, or a newer SDK ships.
