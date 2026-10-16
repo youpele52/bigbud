@@ -269,3 +269,7 @@ To be filled by the orchestrator with the results at HEAD after the review follo
 | `bun run test` (root)                                            | pending |
 | `bun fmt:check` / `bun lint` / `bun typecheck`                   | pending |
 | `bun run --cwd apps/server build`, `thread-tools:manifest:check` | pending |
+
+## node-pty back to stable (2026-10-16)
+
+At the user's request ("stick to stable unless the beta offers a needed feature"), `apps/server` went back from `node-pty` `1.2.0-beta.15` to the latest stable `^1.1.0` (resolved 1.1.0). The macOS `/dev/ptmx` descriptor leak documented above returns. `NodePTY.leak.test.ts` now marks its two leak cases as expected failures (`it.fails`) on macOS while 1.1.0 is installed, so a stable release that fixes the leak is detected. `bun run --cwd apps/server vitest run src/terminal src/shell`: 23 files, 134 passed, 2 expected failures, 1 skipped.

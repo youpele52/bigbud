@@ -43,7 +43,7 @@
     "@pierre/diffs": "^1.2.12",
     "effect": "catalog:",
     "effect-acp": "workspace:*",
-    "node-pty": "1.2.0-beta.15",
+    "node-pty": "^1.1.0",
     "open": "^10.1.0",
     "playwright": "^1.58.2",
     "yaml": "^2.8.3"

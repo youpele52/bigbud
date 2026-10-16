@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -19,6 +20,12 @@ const SKIP_REASON =
     : LSOF_PATH === undefined
       ? "lsof is unavailable, so open pseudo-terminal descriptors cannot be counted"
       : null;
+// The latest stable node-pty (1.1.0) still leaks on macOS; 1.2.0-beta.15 fixes it. bigbud stays on
+// stable, so these cases are expected failures there. When a stable release fixes the leak they
+// start passing, `it.fails` reports that, and this guard should be removed.
+const NODE_PTY_VERSION: string = createRequire(import.meta.url)("node-pty/package.json").version;
+const KNOWN_STABLE_LEAK = process.platform === "darwin" && NODE_PTY_VERSION === "1.1.0";
+const leakCase = KNOWN_STABLE_LEAK ? it.fails : it;
 const SPAWN_COUNT = 10;
 const SETTLE_TIMEOUT_MS = 5_000;
 const SHELL_ENV = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
@@ -54,7 +61,7 @@ function waitForExit(processHandle: PtyProcess): Promise<PtyExitEvent> {
 }
 
 describe.skipIf(SKIP_REASON !== null)("NodePTY pseudo-terminal descriptor lifetime", () => {
-  it(`returns to the baseline after ${SPAWN_COUNT} exited or killed PTYs`, async () => {
+  leakCase(`returns to the baseline after ${SPAWN_COUNT} exited or killed PTYs`, async () => {
     const pty = await adapter;
     const baseline = countOpenPtyDescriptors();
 
@@ -78,7 +85,7 @@ describe.skipIf(SKIP_REASON !== null)("NodePTY pseudo-terminal descriptor lifeti
     expect(await waitForPtyCount(baseline)).toBe(baseline);
   });
 
-  it("returns to the baseline after failed spawns", async () => {
+  leakCase("returns to the baseline after failed spawns", async () => {
     const pty = await adapter;
     const baseline = countOpenPtyDescriptors();
 

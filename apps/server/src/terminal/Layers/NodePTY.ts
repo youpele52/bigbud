@@ -27,8 +27,8 @@ const resolveNodePtySpawnHelperPath = Effect.gen(function* () {
   return null;
 }).pipe(Effect.orElseSucceed(() => null));
 
-// node-pty 1.2.0-beta.15 ships prebuilt `spawn-helper` as 0755, but 1.1.0 shipped it 0644 and
-// copied or from-source installs (`build/Release`) can still lose the bit, so keep the repair.
+// node-pty 1.1.0 (the stable release bigbud uses) ships prebuilt `spawn-helper` as 0644, and
+// copied or from-source installs (`build/Release`) can also lose the bit, so repair it.
 export const ensureNodePtySpawnHelperExecutable = Effect.fn(function* (explicitPath?: string) {
   const fs = yield* FileSystem.FileSystem;
   if (process.platform === "win32") return;
