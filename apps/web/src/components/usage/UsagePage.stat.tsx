@@ -8,11 +8,13 @@ export function UsageStatCard({
   label,
   value,
   compact = false,
+  sourceLabel,
 }: {
   readonly icon: ComponentType<{ className?: string }>;
   readonly label: string;
   readonly value: string;
   readonly compact?: boolean;
+  readonly sourceLabel?: string;
 }) {
   return (
     <Card className="min-w-0">
@@ -32,6 +34,9 @@ export function UsageStatCard({
           <div className="truncate text-sm font-medium text-foreground" title={value}>
             {value}
           </div>
+          {sourceLabel ? (
+            <span className="text-xs text-muted-foreground">{sourceLabel}</span>
+          ) : null}
         </div>
       </CardContent>
     </Card>

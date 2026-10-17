@@ -51,7 +51,10 @@ it.effect(
         assert.isTrue(
           Exit.isFailure(yield* Effect.exit(sql`SELECT parent_path FROM worktree_operations`)),
         );
-        assert.deepEqual(yield* runMigrations(), [[132, "RepairWorktreeOperationSchema"]]);
+        assert.deepEqual(
+          (yield* runMigrations()).filter(([id]) => id === 132),
+          [[132, "RepairWorktreeOperationSchema"]],
+        );
 
         const execute = vi.fn(() =>
           Effect.fail(worktreeFailure("/fixture", "Disposable fixture has no live repository.")),

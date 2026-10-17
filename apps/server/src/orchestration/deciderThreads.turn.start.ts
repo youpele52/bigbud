@@ -138,6 +138,11 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     causationEventId: userMessageEvent.eventId,
     type: "thread.turn-start-requested",
     payload: {
+      usageAttribution: {
+        provider: (command.modelSelection ?? targetThread.modelSelection).provider,
+        model: (command.modelSelection ?? targetThread.modelSelection).model,
+        interactionMode: command.interactionMode,
+      },
       threadId: command.threadId,
       messageId: command.message.messageId,
       ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),

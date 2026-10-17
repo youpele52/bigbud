@@ -13,6 +13,8 @@ import { UsageStatCard } from "./UsagePage.stat";
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 import { useUsagePanelSummary } from "./useUsagePanelSummary";
 import { CenteredStatus } from "../common/CenteredStatus";
+import { UsageAccountingFooter } from "./UsageAccountingFooter";
+import { usageSourceLabel } from "./UsageAccounting.logic";
 
 export function UsagePanel({ visible }: { visible: boolean }) {
   const providers = useServerProviders();
@@ -47,6 +49,7 @@ export function UsagePanel({ visible }: { visible: boolean }) {
                   compact
                   icon={SigmaIcon}
                   label="Total tokens"
+                  sourceLabel={usageSourceLabel(displaySummary.totals.accounting)}
                   value={displaySummary.totals.usedTokens.toLocaleString()}
                 />
                 <UsageStatCard
@@ -83,6 +86,7 @@ export function UsagePanel({ visible }: { visible: boolean }) {
         >
           View full usage <ArrowRightIcon className="size-3.5" />
         </Link>
+        {displaySummary ? <UsageAccountingFooter summary={displaySummary} /> : null}
       </div>
     </div>
   );

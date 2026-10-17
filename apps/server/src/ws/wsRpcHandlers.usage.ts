@@ -11,8 +11,11 @@ import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
+import { summarizeUsageSources } from "./wsRpcHandlers.usage.accounting.ts";
+import type { UsageSourceMetadata } from "@bigbud/contracts/server/usage.ts";
 
 type UsageAccumulator = {
+  accounting?: UsageSourceMetadata;
   usedTokens: number;
   inputTokens: number;
   cachedInputTokens: number;
@@ -22,6 +25,8 @@ type UsageAccumulator = {
 };
 
 type UsageEntry = UsageAccumulator & {
+  accountingJson?: string | null;
+  source?: "provider-reported" | "estimated";
   contributionId: string;
   threadId: string;
   turnId: string | null;
@@ -34,6 +39,7 @@ type UsageEntry = UsageAccumulator & {
 };
 
 type UsageGroup = Omit<UsageAccumulator, "turnCount"> & {
+  entries: UsageEntry[];
   turnKeys: Set<string>;
 };
 
@@ -79,6 +85,7 @@ function getBucketStart(isoDate: string, range: ServerUsageRange) {
 function emptyUsageGroup(): UsageGroup {
   return {
     usedTokens: 0,
+    entries: [],
     inputTokens: 0,
     cachedInputTokens: 0,
     outputTokens: 0,
@@ -88,6 +95,7 @@ function emptyUsageGroup(): UsageGroup {
 }
 
 function addUsage(target: UsageGroup, entry: UsageEntry) {
+  target.entries.push(entry);
   target.usedTokens += entry.usedTokens;
   target.inputTokens += entry.inputTokens;
   target.cachedInputTokens += entry.cachedInputTokens;
@@ -98,6 +106,7 @@ function addUsage(target: UsageGroup, entry: UsageEntry) {
 
 function completeUsageGroup(group: UsageGroup): UsageAccumulator {
   return {
+    accounting: summarizeUsageSources(group.entries),
     usedTokens: group.usedTokens,
     inputTokens: group.inputTokens,
     cachedInputTokens: group.cachedInputTokens,

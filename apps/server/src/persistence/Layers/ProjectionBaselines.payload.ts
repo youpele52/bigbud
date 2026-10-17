@@ -22,6 +22,13 @@ export function parseBaselinePayload(payloadJson: string): BaselinePayload {
     throw new Error("baseline payload tables are invalid");
   }
   for (const table of PROJECTION_BASELINE_TABLES) {
+    if (
+      (table === "projection_usage_codex_state" ||
+        table === "projection_usage_codex_retired_turns") &&
+      !Object.hasOwn(tables, table)
+    ) {
+      (tables as Record<string, unknown>)[table] = [];
+    }
     if (!Array.isArray((tables as Record<string, unknown>)[table])) {
       throw new Error(`baseline payload is missing ${table}`);
     }

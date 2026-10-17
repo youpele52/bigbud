@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { UsageAttribution } from "./providerRuntime.usage";
 import {
   ApprovalRequestId,
   CommandId,
@@ -173,6 +174,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 });
 
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
+  usageAttribution: Schema.optional(UsageAttribution),
   threadId: ThreadId,
   messageId: MessageId,
   replyTo: Schema.optional(OrchestrationMessageReply),

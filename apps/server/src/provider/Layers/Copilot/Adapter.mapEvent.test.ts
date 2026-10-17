@@ -49,7 +49,7 @@ function makeSession(): ActiveCopilotSession {
     cwd: undefined,
     model: "gpt-5",
     client: {} as ActiveCopilotSession["client"],
-    session: {} as ActiveCopilotSession["session"],
+    session: { sessionId: "native-session" } as ActiveCopilotSession["session"],
   };
 }
 
@@ -220,7 +220,7 @@ describe("CopilotAdapter.mapEvent", () => {
     });
   });
 
-  it("maps assistant usage to canonical turn accounting", async () => {
+  it("maps each native API call to stable item accounting without guessing cache inclusion", async () => {
     const events = await Effect.runPromise(
       mapEvent(makeDeps(), makeSession(), {
         type: "assistant.usage",
@@ -228,6 +228,7 @@ describe("CopilotAdapter.mapEvent", () => {
         parentId: null,
         timestamp: "2026-05-14T00:00:02.000Z",
         data: {
+          model: "gpt-5",
           inputTokens: 100,
           outputTokens: 20,
           cacheReadTokens: 30,
@@ -239,12 +240,13 @@ describe("CopilotAdapter.mapEvent", () => {
       type: "thread.token-usage.updated",
       payload: {
         accounting: {
-          scope: "turn",
-          scopeId: "turn-1",
-          processedTokens: 150,
+          scope: "item",
+          scopeId: "native-session:sdk-usage-1",
+          processedTokens: 120,
           inputTokens: 100,
           cachedInputTokens: 30,
           outputTokens: 20,
+          canonical: { completeness: "partial", cacheReadTokens: null, model: "gpt-5" },
         },
       },
     });

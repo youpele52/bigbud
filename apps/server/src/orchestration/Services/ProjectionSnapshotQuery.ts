@@ -27,6 +27,8 @@ export interface ProjectionSnapshotCounts {
 }
 
 export interface ProjectionUsageEntry {
+  readonly accountingJson?: string | null;
+  readonly source?: "provider-reported" | "estimated";
   readonly contributionId: string;
   readonly threadId: string;
   readonly turnId: string | null;

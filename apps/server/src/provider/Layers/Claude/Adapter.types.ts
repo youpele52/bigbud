@@ -154,6 +154,8 @@ export interface ClaudeSessionContext {
   lastSettledTurn?: { readonly turnId: TurnId; readonly completed: boolean } | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
+  lastKnownTokenUsageTurnId?: string;
+  lastKnownTokenUsageModel?: string;
   lastAssistantUuid: string | undefined;
   lastInterruptReceipt: ClaudeInterruptReceipt | undefined;
   readonly queuedUserMessageIds: Set<string>;

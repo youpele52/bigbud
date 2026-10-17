@@ -116,6 +116,8 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
       outputTokens: 8,
       lastOutputTokens: 8,
       lastUsedTokens: 25,
+      cacheWriteTokens: 0,
+      reasoningOutputTokens: 0,
     });
     expect(emitted.map((event) => event.type)).toEqual([
       "turn.started",

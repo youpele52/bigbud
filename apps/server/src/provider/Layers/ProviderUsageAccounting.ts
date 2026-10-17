@@ -2,7 +2,8 @@ import type {
   ThreadTokenUsageAccounting,
   ThreadTokenUsageAccountingScope,
   ThreadTokenUsageSnapshot,
-} from "@bigbud/contracts";
+  UsageAccountingV2,
+} from "@bigbud/contracts/orchestration/providerRuntime.usage";
 
 export function makeTokenUsageAccounting(input: {
   readonly scope: ThreadTokenUsageAccountingScope;
@@ -10,6 +11,7 @@ export function makeTokenUsageAccounting(input: {
   readonly usage: ThreadTokenUsageSnapshot;
   readonly processedTokens?: number;
   readonly finalized?: boolean;
+  readonly canonical?: UsageAccountingV2 | undefined;
 }): ThreadTokenUsageAccounting | undefined {
   const scopeId = input.scopeId?.trim();
   if (!scopeId) {
@@ -21,7 +23,7 @@ export function makeTokenUsageAccounting(input: {
     input.usage.totalProcessedTokens ??
     input.usage.lastUsedTokens ??
     input.usage.usedTokens;
-  if (processedTokens <= 0) {
+  if (!Number.isSafeInteger(processedTokens) || processedTokens < 0) {
     return undefined;
   }
 
@@ -35,5 +37,6 @@ export function makeTokenUsageAccounting(input: {
     reasoningOutputTokens:
       input.usage.reasoningOutputTokens ?? input.usage.lastReasoningOutputTokens ?? 0,
     finalized: input.finalized ?? true,
+    ...(input.canonical ? { canonical: input.canonical } : {}),
   };
 }

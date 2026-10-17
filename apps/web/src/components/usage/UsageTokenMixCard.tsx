@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader } from "../ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { formatCompactNumber } from "./UsagePage.format";
+import { disjointUsageMix } from "./UsageAccounting.logic";
 
 const tokenMixChartConfig = {
+  cacheWriteTokens: { color: "var(--chart-5)", label: "Cache write" },
   cachedInputTokens: { color: "var(--chart-1)", label: "Cached" },
   inputTokens: { color: "var(--chart-2)", label: "Input" },
   outputTokens: { color: "var(--chart-3)", label: "Output" },
@@ -27,7 +29,7 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
         <CardContent className="p-0">
           <Empty className="min-h-64">
             <EmptyHeader>
-              <EmptyTitle>No mix yet.</EmptyTitle>
+              <EmptyTitle>Breakdown incomplete.</EmptyTitle>
               <EmptyDescription>
                 Token type details are not available for this range.
               </EmptyDescription>
@@ -94,29 +96,37 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
 }
 
 function buildTokenMixData(totals: ServerUsageSummaryResult["totals"]) {
+  const mix = disjointUsageMix(totals.accounting);
+  if (!mix) return [];
   return [
+    {
+      id: "cacheWriteTokens",
+      label: tokenMixChartConfig.cacheWriteTokens.label,
+      value: mix.cacheWriteTokens,
+      fill: tokenMixChartConfig.cacheWriteTokens.color,
+    },
     {
       id: "cachedInputTokens",
       label: tokenMixChartConfig.cachedInputTokens.label,
-      value: totals.cachedInputTokens,
+      value: mix.cachedInputTokens,
       fill: tokenMixChartConfig.cachedInputTokens.color,
     },
     {
       id: "inputTokens",
       label: tokenMixChartConfig.inputTokens.label,
-      value: totals.inputTokens,
+      value: mix.inputTokens,
       fill: tokenMixChartConfig.inputTokens.color,
     },
     {
       id: "outputTokens",
       label: tokenMixChartConfig.outputTokens.label,
-      value: totals.outputTokens,
+      value: mix.outputTokens,
       fill: tokenMixChartConfig.outputTokens.color,
     },
     {
       id: "reasoningOutputTokens",
       label: tokenMixChartConfig.reasoningOutputTokens.label,
-      value: totals.reasoningOutputTokens,
+      value: mix.reasoningOutputTokens,
       fill: tokenMixChartConfig.reasoningOutputTokens.color,
     },
   ].filter((entry) => entry.value > 0);

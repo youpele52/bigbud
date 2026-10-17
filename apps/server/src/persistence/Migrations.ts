@@ -133,6 +133,8 @@ import Migration0129 from "./Migrations/129_RepairDirectResourceCleanupRequests.
 import Migration0130 from "./Migrations/130_WorktreeOperations.ts";
 import Migration0131 from "./Migrations/131_WorktreeProviderRelocations.ts";
 import Migration0132 from "./Migrations/132_RepairWorktreeOperationSchema.ts";
+import Migration0133 from "./Migrations/133_UsageAccountingV2.ts";
+import Migration0134 from "./Migrations/134_UsageCodexRetirementGuards.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -266,6 +268,8 @@ export const migrationEntries = [
   [130, "WorktreeOperations", Migration0130],
   [131, "WorktreeProviderRelocations", Migration0131],
   [132, "RepairWorktreeOperationSchema", Migration0132],
+  [133, "UsageAccountingV2", Migration0133],
+  [134, "UsageCodexRetirementGuards", Migration0134],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

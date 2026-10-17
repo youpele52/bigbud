@@ -4,18 +4,12 @@
  *
  * @module ClaudeAdapter.utils
  */
-import type {
-  ModelUsage,
-  NonNullableUsage,
-  SDKResultMessage,
-  SettingSource,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { ModelUsage, SDKResultMessage, SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import {
   type CanonicalItemType,
   type CanonicalRequestType,
   ApprovalRequestId,
   RuntimeRequestId,
-  type ThreadTokenUsageSnapshot,
   ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
@@ -140,65 +134,6 @@ export function maxClaudeContextWindowFromModelUsage(
   }
 
   return maxContextWindow;
-}
-
-export function normalizeClaudeTokenUsage(
-  value: NonNullableUsage | Record<string, unknown> | undefined,
-  contextWindow?: number,
-): ThreadTokenUsageSnapshot | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const usage = value as Record<string, unknown>;
-  const inputTokens =
-    (typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens)
-      ? usage.input_tokens
-      : 0) +
-    (typeof usage.cache_creation_input_tokens === "number" &&
-    Number.isFinite(usage.cache_creation_input_tokens)
-      ? usage.cache_creation_input_tokens
-      : 0);
-  const cachedInputTokens =
-    typeof usage.cache_read_input_tokens === "number" &&
-    Number.isFinite(usage.cache_read_input_tokens)
-      ? usage.cache_read_input_tokens
-      : 0;
-  const outputTokens =
-    typeof usage.output_tokens === "number" && Number.isFinite(usage.output_tokens)
-      ? usage.output_tokens
-      : 0;
-  const derivedTotalProcessedTokens = inputTokens + cachedInputTokens + outputTokens;
-  const totalProcessedTokens =
-    (typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens)
-      ? usage.total_tokens
-      : undefined) ?? (derivedTotalProcessedTokens > 0 ? derivedTotalProcessedTokens : undefined);
-  if (totalProcessedTokens === undefined || totalProcessedTokens <= 0) {
-    return undefined;
-  }
-
-  const maxTokens =
-    typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
-      ? contextWindow
-      : undefined;
-  const usedTokens =
-    maxTokens !== undefined ? Math.min(totalProcessedTokens, maxTokens) : totalProcessedTokens;
-
-  return {
-    usedTokens,
-    lastUsedTokens: usedTokens,
-    ...(totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
-    ...(inputTokens > 0 ? { inputTokens } : {}),
-    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
-    ...(outputTokens > 0 ? { outputTokens } : {}),
-    ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...(typeof usage.tool_uses === "number" && Number.isFinite(usage.tool_uses)
-      ? { toolUses: usage.tool_uses }
-      : {}),
-    ...(typeof usage.duration_ms === "number" && Number.isFinite(usage.duration_ms)
-      ? { durationMs: usage.duration_ms }
-      : {}),
-  };
 }
 
 export function asCanonicalTurnId(value: TurnId): TurnId {

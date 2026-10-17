@@ -7,6 +7,7 @@ import { asString, asObject } from "./Adapter.types.ts";
 import { runtimeEventBase } from "./Adapter.stream.base.ts";
 import { normalizeCodexTokenUsage, toThreadState } from "./Adapter.stream.utils.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { codexUsage } from "./Adapter.usage.ts";
 
 // ---------------------------------------------------------------------------
 // Thread events
@@ -79,22 +80,33 @@ export function handleThreadTokenUsageUpdated(
   const payload = asObject(event.payload);
   const tokenUsage = asObject(payload?.tokenUsage);
   const normalizedUsage = normalizeCodexTokenUsage(tokenUsage ?? event.payload);
-  if (!normalizedUsage) {
+  const nativeUsage = tokenUsage ?? payload;
+  const total = codexUsage(nativeUsage?.total_token_usage ?? nativeUsage?.total);
+  const last = codexUsage(nativeUsage?.last_token_usage ?? nativeUsage?.last);
+  const nativeThreadId = asString(payload?.threadId) ?? asString(payload?.thread_id);
+  if (!normalizedUsage && !total) {
     return [];
   }
   const accounting = makeTokenUsageAccounting({
     scope: "turn",
     scopeId: event.turnId,
-    usage: normalizedUsage,
-    processedTokens: normalizedUsage.lastUsedTokens ?? normalizedUsage.usedTokens,
+    usage: normalizedUsage ?? { usedTokens: 0 },
+    processedTokens: last?.subtotal ?? 0,
   });
   return [
     {
       type: "thread.token-usage.updated",
       ...runtimeEventBase(event, canonicalThreadId),
       payload: {
-        usage: normalizedUsage,
-        ...(accounting ? { accounting } : {}),
+        ...(normalizedUsage ? { usage: normalizedUsage } : {}),
+        ...(accounting && total && nativeThreadId
+          ? {
+              accounting: {
+                ...accounting,
+                codexObservation: { nativeThreadId, total, ...(last ? { last } : {}) },
+              },
+            }
+          : {}),
       },
     },
   ];

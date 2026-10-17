@@ -26,10 +26,13 @@ import { applyUsageDisplayLabels } from "./UsagePage.labels";
 import { UsageTokenMixCard } from "./UsageTokenMixCard";
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 import { UsageStatCard } from "./UsagePage.stat";
+import { UsageAccountingFooter } from "./UsageAccountingFooter";
+import { usageSourceLabel } from "./UsageAccounting.logic";
 
 const RANGE_OPTIONS: ReadonlyArray<ServerUsageRange> = ["24h", "7d", "30d", "all"];
 
 const chartConfig = {
+  usedTokens: { color: "var(--chart-2)", label: "Tokens" },
   cachedInputTokens: { color: "var(--chart-1)", label: "Cached" },
   inputTokens: { color: "var(--chart-2)", label: "Input" },
   outputTokens: { color: "var(--chart-3)", label: "Output" },
@@ -135,6 +138,7 @@ export function UsagePage() {
                 <UsageStatCard
                   icon={SigmaIcon}
                   label="Total tokens"
+                  sourceLabel={usageSourceLabel(displaySummary.totals.accounting)}
                   value={displaySummary.totals.usedTokens.toLocaleString()}
                 />
                 <UsageStatCard
@@ -192,36 +196,15 @@ export function UsagePage() {
                               content={
                                 <ChartTooltipContent
                                   labelFormatter={(value) =>
-                                    formatBucketTooltipLabel(value, displaySummary.range)
+                                    `${formatBucketTooltipLabel(value, displaySummary.range)} ${usageSourceLabel(displaySummary.buckets.find((bucket) => bucket.bucketStart === value)?.accounting)}`
                                   }
                                 />
                               }
                             />
                             <Bar
-                              dataKey="cachedInputTokens"
-                              fill="var(--color-cachedInputTokens)"
-                              name={chartConfig.cachedInputTokens.label}
-                              radius={[2, 2, 0, 0]}
-                              stackId="usage"
-                            />
-                            <Bar
-                              dataKey="inputTokens"
-                              fill="var(--color-inputTokens)"
-                              name={chartConfig.inputTokens.label}
-                              radius={[2, 2, 0, 0]}
-                              stackId="usage"
-                            />
-                            <Bar
-                              dataKey="outputTokens"
-                              fill="var(--color-outputTokens)"
-                              name={chartConfig.outputTokens.label}
-                              radius={[2, 2, 0, 0]}
-                              stackId="usage"
-                            />
-                            <Bar
-                              dataKey="reasoningOutputTokens"
-                              fill="var(--color-reasoningOutputTokens)"
-                              name={chartConfig.reasoningOutputTokens.label}
+                              dataKey="usedTokens"
+                              fill="var(--color-usedTokens)"
+                              name={chartConfig.usedTokens.label}
                               radius={[2, 2, 0, 0]}
                               stackId="usage"
                             />
@@ -297,6 +280,7 @@ export function UsagePage() {
         <UsageSubscriptionLimits limits={subscriptionLimits} />
         {!loading && displaySummary ? (
           <section className="space-y-4 text-xs text-muted-foreground">
+            <UsageAccountingFooter summary={displaySummary} />
             <p>
               *Token counts are reported differently by each provider. bigbud normalizes available
               usage fields for comparison, but totals should be treated as directional rather than
