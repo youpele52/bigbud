@@ -91,7 +91,10 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     pid: session.pid,
     runtimeGeneration: session.runtimeGeneration,
     ...(isLocalExecutionTarget(session.executionTargetId)
-      ? { activeAgentProvider: session.activeAgentProvider }
+      ? {
+          activeAgentProvider: session.activeAgentProvider,
+          activeAgent: session.activeAgent ?? null,
+        }
       : {}),
     history: session.history + session.pendingHistoryControlSequence,
     ...(session.historyTruncated ? { historyTruncated: true } : {}),

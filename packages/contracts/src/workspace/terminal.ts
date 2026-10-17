@@ -7,6 +7,7 @@ import {
 import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 import { ProviderKind } from "../orchestration/orchestration.provider";
 import { TerminalWslIdentity } from "./terminal.wsl";
+import { TerminalAgentIdentity } from "./terminal.agentIdentity";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -106,6 +107,7 @@ export const TerminalSessionSnapshot = Schema.Struct({
   status: TerminalSessionStatus,
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   activeAgentProvider: Schema.optional(Schema.NullOr(ProviderKind)),
+  activeAgent: Schema.optional(Schema.NullOr(TerminalAgentIdentity)),
   runtimeGeneration: Schema.optional(Schema.String),
   // Explicit launch overrides only, not the inherited process environment or live shell state.
   runtimeEnv: Schema.optional(TerminalEnvSchema),
@@ -178,6 +180,7 @@ const TerminalAgentIdentityEvent = Schema.Struct({
   type: Schema.Literal("agentIdentity"),
   runtimeGeneration: Schema.optional(Schema.String),
   provider: Schema.NullOr(ProviderKind),
+  agent: Schema.optional(Schema.NullOr(TerminalAgentIdentity)),
 });
 
 export const TerminalEvent = Schema.Union([

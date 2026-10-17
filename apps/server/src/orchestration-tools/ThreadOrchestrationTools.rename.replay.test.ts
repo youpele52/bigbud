@@ -66,6 +66,17 @@ it("reconciles exact rename receipts and relocks the target on replay after rest
           type: "thread.meta-updated",
           payload: expect.objectContaining({ threadId: target, title: "ohno" }),
         }),
+        expect.objectContaining({
+          commandId,
+          type: "thread.activity-appended",
+          payload: expect.objectContaining({
+            threadId: target,
+            activity: expect.objectContaining({
+              kind: "thread.title-ownership",
+              payload: { source: "manual" },
+            }),
+          }),
+        }),
       ]);
       await restarted.runPromise(
         renameThreadViaOrchestration({ ...args, orchestrationEngine: engine }),

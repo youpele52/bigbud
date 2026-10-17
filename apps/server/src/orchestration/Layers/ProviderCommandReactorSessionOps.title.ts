@@ -13,6 +13,7 @@ import {
   shouldAllowAutoTitleReplace,
 } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.rename.ts";
+import { threadTitleOwner } from "../../orchestration-tools/TerminalThreadTitle.ts";
 import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGeneration.success.ts";
 import { sameTextGenerationWorkspace } from "../../git/Layers/InternalTextGeneration.requests.ts";
 import {
@@ -60,6 +61,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       shouldAllowAutoTitleReplace({
         threadId: input.threadId,
         currentTitle: thread.title,
+        titleOwner: threadTitleOwner(thread),
         ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
       });
     if (!allowed(initial)) {

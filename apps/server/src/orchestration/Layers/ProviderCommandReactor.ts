@@ -12,6 +12,7 @@ import { DirectResourceCleanupRepository } from "../../persistence/Services/Dire
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { makeTextGenerationRequestRecovery } from "./ProviderCommandReactor.textGenerationRecovery.ts";
 import { makeTitleStageRecovery } from "./ProviderCommandReactor.titleRecovery.ts";
+import { makeTerminalThreadTitleStart } from "./TerminalThreadTitleReactor.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -40,6 +41,7 @@ const make = Effect.gen(function* () {
   const startPromptSuggestions = yield* makePromptSuggestionReactorStart;
   const recoverTextGenerationRequests = yield* makeTextGenerationRequestRecovery;
   const recoverTitleStages = yield* makeTitleStageRecovery;
+  const startTerminalTitles = yield* makeTerminalThreadTitleStart;
   const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
@@ -78,6 +80,7 @@ const make = Effect.gen(function* () {
   };
 
   const start: ProviderCommandReactorShape["start"] = Effect.fn("start")(function* () {
+    yield* startTerminalTitles();
     const processEvent = Effect.fn("processEvent")(function* (event: OrchestrationEvent) {
       if (
         event.type === "project.deletion-requested" ||

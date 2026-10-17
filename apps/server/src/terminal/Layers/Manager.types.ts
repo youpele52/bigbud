@@ -12,6 +12,7 @@ import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY"
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
+import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,6 +67,7 @@ export interface TerminalSessionState {
   unsubscribeExit: (() => void) | null;
   hasRunningSubprocess: boolean;
   activeAgentProvider: ProviderKind | null;
+  activeAgent?: TerminalAgentIdentity | null;
   agentIdentityMisses: number;
   runtimeEnv: Record<string, string> | null;
 }

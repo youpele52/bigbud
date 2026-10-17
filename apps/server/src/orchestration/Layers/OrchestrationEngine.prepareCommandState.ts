@@ -48,6 +48,7 @@ export function makePrepareCommandState<HydrationError>(input: {
         ? command.sourceProposedPlan?.threadId
         : undefined;
     const historyRequired =
+      (command.type === "thread.meta.update" && command.title !== undefined) ||
       command.type === "thread.turn.start" ||
       (command.type === "thread.message.submit" &&
         command.message.replyToMessageId !== undefined) ||

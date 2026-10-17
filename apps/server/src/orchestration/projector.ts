@@ -44,6 +44,7 @@ import { projectThreadTaskEvent } from "./projectorTasks.ts";
 import { projectThreadMessageSent } from "./projectorThreadMessages.ts";
 import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.ts";
 import { projectThreadTurnControlEvent } from "./projectorThreadTurnControl.ts";
+import { retainThreadTitleOwnership } from "../orchestration-tools/TerminalThreadTitle.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -357,12 +358,12 @@ export function projectEvent(
             return nextBase;
           }
 
-          const activities = [
-            ...thread.activities.filter((entry) => entry.id !== payload.activity.id),
-            payload.activity,
-          ]
-            .toSorted(compareThreadActivities)
-            .slice(-500);
+          const activities = retainThreadTitleOwnership(
+            [
+              ...thread.activities.filter((entry) => entry.id !== payload.activity.id),
+              payload.activity,
+            ].toSorted(compareThreadActivities),
+          );
 
           return {
             ...nextBase,

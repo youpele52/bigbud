@@ -130,6 +130,7 @@ export function stopProcessWith(
       session.pid = null;
       session.hasRunningSubprocess = false;
       session.activeAgentProvider = null;
+      session.activeAgent = null;
       session.agentIdentityMisses = 0;
       session.status = "exited";
       session.pendingHistoryControlSequence = "";
@@ -184,6 +185,7 @@ export function startSessionWith(
       session.dropPathMode = defaultTerminalDropPathMode(session.executionTargetId);
       session.hasRunningSubprocess = false;
       session.activeAgentProvider = null;
+      session.activeAgent = null;
       session.agentIdentityMisses = 0;
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;

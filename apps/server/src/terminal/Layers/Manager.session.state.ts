@@ -55,6 +55,7 @@ export function createTerminalSessionState(input: {
     unsubscribeExit: null,
     hasRunningSubprocess: false,
     activeAgentProvider: null,
+    activeAgent: null,
     agentIdentityMisses: 0,
     runtimeEnv: input.runtimeEnv,
   };

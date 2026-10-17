@@ -70,6 +70,7 @@ export function drainProcessEventsWith(
         session.pid = null;
         session.hasRunningSubprocess = false;
         session.activeAgentProvider = null;
+        session.activeAgent = null;
         session.agentIdentityMisses = 0;
         session.status = "exited";
         session.pendingHistoryControlSequence = "";

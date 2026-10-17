@@ -123,6 +123,16 @@ it.layer(serverTestLayer)("authenticated canonical rename HTTP", (it) => {
             type: "thread.meta-updated",
             payload: expect.objectContaining({ threadId: target, title: "ohno" }),
           }),
+          expect.objectContaining({
+            type: "thread.activity-appended",
+            payload: expect.objectContaining({
+              threadId: target,
+              activity: expect.objectContaining({
+                kind: "thread.title-ownership",
+                payload: { source: "manual" },
+              }),
+            }),
+          }),
         ]);
         expect((yield* post({ title: "own-title" })).status).toBe(200);
         expect(

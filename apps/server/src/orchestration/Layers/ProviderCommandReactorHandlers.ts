@@ -21,6 +21,7 @@ import {
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
 import { shouldAllowAutoTitleReplace } from "../../orchestration-tools/ThreadTitleLock.ts";
+import { threadTitleOwner } from "../../orchestration-tools/TerminalThreadTitle.ts";
 import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
@@ -229,6 +230,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         shouldAllowAutoTitleReplace({
           threadId: event.payload.threadId,
           currentTitle: thread.title,
+          titleOwner: threadTitleOwner(thread),
           ...(resolvedTitleSeed !== undefined ? { titleSeed: resolvedTitleSeed } : {}),
         })
       ) {
