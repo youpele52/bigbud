@@ -81,7 +81,7 @@ it.each([
     );
     try {
       await expect.poll(() => mocks.open.mock.calls.length).toBe(1);
-      await expect.element(provider.getByText("Chats: restoring terminal history")).toBeVisible();
+      await expect.element(provider.getByText("Chats: resolving terminal folder")).toBeVisible();
       const terminal = opened.mock.instances[0] as Terminal;
       const initialCols = terminal.cols;
       await page.viewport(width, height);
@@ -90,7 +90,7 @@ it.each([
       finishOpen();
       await expect.poll(() => terminal.options.disableStdin).toBe(false);
       await expect
-        .element(provider.getByText("Chats: restoring terminal history"))
+        .element(provider.getByText("Chats: resolving terminal folder"))
         .not.toBeInTheDocument();
       await expect.poll(() => ptySize).toMatchObject({ cols: terminal.cols, rows: terminal.rows });
       expect(mocks.open).toHaveBeenCalledOnce();

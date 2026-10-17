@@ -44,6 +44,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => mocks.queryClient,
 }));
 vi.mock("../../rpc/serverState", () => ({
+  getServerConfig: () => null,
   useServerConfig: () => null,
   useServerSettings: () => mocks.settings,
   getServerConfigUpdatedNotification: () => null,
@@ -54,7 +55,10 @@ vi.mock("../../hooks/useHandleNewThread", () => ({
   useHandleNewThread: () => ({ handleNewThread: mocks.newThread }),
   resolveNewChatOptions: () => ({}),
 }));
-vi.mock("../../hooks/useSettings", () => ({ migrateLocalSettingsToServer: () => undefined }));
+vi.mock("../../hooks/useSettings", () => ({
+  migrateLocalSettingsToServer: () => undefined,
+  persistServerSettings: () => undefined,
+}));
 vi.mock("../../routes/-__root.recovery", () => ({
   createEventRouterRecovery: () => ({ cancel: () => undefined }),
 }));
