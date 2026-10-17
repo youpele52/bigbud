@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { normalizeCompactToolLabel } from "./MessagesTimeline.logic";
+import { formatBigbudToolName } from "~/lib/toolPresentation";
 
 export type TimelineWorkEntry = Extract<
   MessagesTimelineRow,
@@ -118,9 +119,8 @@ function capitalizePhrase(value: string): string {
 
 function browserToolHeading(toolTitle: string, action: string | undefined): string | null {
   if (
-    toolTitle !== "browser" &&
-    !/^bigbud_orchestration(?:_[\w-]+)?_browser$/.test(toolTitle) &&
-    toolTitle !== "mcp__bigbud_orchestration__browser"
+    toolTitle.toLowerCase() !== "browser" &&
+    formatBigbudToolName(toolTitle) !== "bigbud browser"
   ) {
     return null;
   }
@@ -162,17 +162,22 @@ function browserToolHeading(toolTitle: string, action: string | undefined): stri
 }
 
 export function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  const browserHeading = workEntry.toolTitle
-    ? browserToolHeading(workEntry.toolTitle, workEntry.toolAction)
+  const label = normalizeCompactToolLabel(
+    workEntry.toolPresentation?.qualifiedName ?? (workEntry.toolTitle || workEntry.label),
+  );
+  const friendlyName = formatBigbudToolName(label);
+  const browserTitle = workEntry.toolPresentation?.qualifiedName ?? workEntry.toolTitle;
+  const browserHeading = browserTitle
+    ? browserToolHeading(browserTitle, workEntry.toolAction)
     : null;
   if (browserHeading) {
-    return browserHeading;
+    return friendlyName
+      ? browserHeading === "Browser"
+        ? friendlyName
+        : `bigbud · ${browserHeading.toLowerCase()}`
+      : browserHeading;
   }
-  const heading = capitalizePhrase(
-    normalizeCompactToolLabel(workEntry.toolTitle || workEntry.label),
-  );
-  // Only normalize the namespace prefix of a structured tool label, not its suffix or prose.
-  return heading.replace(/^(mcp__)?bigbud_orchestration(?=$|:|_)/i, "$1bigbud_orchestration");
+  return friendlyName ?? capitalizePhrase(label);
 }
 
 export function workEntryCopyText(workEntry: TimelineWorkEntry): string {
@@ -188,7 +193,13 @@ export function workEntryCopyText(workEntry: TimelineWorkEntry): string {
     lines.push(trimmed);
   };
 
-  appendLine(toolWorkEntryHeading(workEntry));
+  const rawTitle = workEntry.toolPresentation?.rawName ?? (workEntry.toolTitle || workEntry.label);
+  // Clipboard inspection keeps the provider identifier, not the friendly presentation name.
+  appendLine(
+    workEntry.toolPresentation || formatBigbudToolName(normalizeCompactToolLabel(rawTitle))
+      ? rawTitle
+      : toolWorkEntryHeading(workEntry),
+  );
   appendLine(workEntryRawCommand(workEntry) ?? workEntry.command ?? workEntry.detail);
   if ((workEntry.changedFiles?.length ?? 0) > 0) {
     appendLine(`Changed files:\n${workEntry.changedFiles!.join("\n")}`);

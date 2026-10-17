@@ -4,6 +4,7 @@ import type {
 } from "@bigbud/contracts/orchestration/orchestration.thread.tasks.ts";
 
 import { formatContextWindowTokens } from "~/lib/contextWindow";
+import { formatToolDisplayName } from "~/lib/toolPresentation";
 
 /** Status tones follow the app semantics: blue working, green done, amber warning, red failure. */
 export type SubagentStatusTone = "working" | "done" | "warning" | "failed";
@@ -64,8 +65,12 @@ export function subagentModelLabel(agent: OrchestrationTask): string | undefined
 
 export function subagentActivityLine(agent: OrchestrationTask): string | undefined {
   if (agent.progressSummary) return agent.progressSummary;
-  if (agent.lastToolName && isActive(agent)) return `Running ${agent.lastToolName}`;
-  return agent.resultSummary ?? (agent.lastToolName ? `Ran ${agent.lastToolName}` : undefined);
+  if (agent.lastToolName && isActive(agent))
+    return `Running ${formatToolDisplayName(agent.lastToolName)}`;
+  return (
+    agent.resultSummary ??
+    (agent.lastToolName ? `Ran ${formatToolDisplayName(agent.lastToolName)}` : undefined)
+  );
 }
 
 function durationLabel(milliseconds: number): string {

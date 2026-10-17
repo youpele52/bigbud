@@ -70,6 +70,16 @@ describe("subagent presentation", () => {
     ).toBe("All good");
     expect(subagentActivityLine(agent("a"))).toBeUndefined();
   });
+  it("formats only owned tool identifiers without changing progress summaries or stored names", () => {
+    const raw = "bigbud_thread_v1_rename_thread";
+    const running = agent("rename", { lastToolName: raw });
+    expect(subagentActivityLine(running)).toBe("Running bigbud renamer");
+    expect(running.lastToolName).toBe(raw);
+    expect(subagentActivityLine({ ...running, status: "completed" })).toBe("Ran bigbud renamer");
+    expect(subagentActivityLine({ ...running, progressSummary: `Inspect ${raw}` })).toBe(
+      `Inspect ${raw}`,
+    );
+  });
 
   it("measures terminal rows to endedAt, live rows to now and stale rows from the last update", () => {
     const now = Date.parse("2026-09-28T13:00:00.000Z");

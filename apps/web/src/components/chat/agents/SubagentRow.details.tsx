@@ -1,6 +1,7 @@
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.tasks.ts";
 
 import { cn } from "~/lib/utils";
+import { formatToolDisplayName } from "~/lib/toolPresentation";
 import { SUBAGENT_STATUS_TONE_CLASSES, subagentMetricsLabel } from "./subagentPresentation.logic";
 
 const STEP_TONE = {
@@ -46,7 +47,9 @@ export function SubagentRowDetails(props: {
                 aria-hidden="true"
                 className={cn("size-1.5 shrink-0 rounded-full", STEP_TONE[step.status].dot)}
               />
-              <span className="shrink-0 text-foreground/80">{step.toolName}</span>
+              <span className="shrink-0 text-foreground/80" title={step.toolName}>
+                {formatToolDisplayName(step.toolName)}
+              </span>
               {step.label ? <span className="min-w-0 truncate">{step.label}</span> : null}
               <span className={cn("ml-auto shrink-0", STEP_TONE[step.status].text)}>
                 {STEP_LABEL[step.status]}
@@ -55,7 +58,10 @@ export function SubagentRowDetails(props: {
           ))}
         </ul>
       ) : agent.lastToolName ? (
-        <p>Latest tool: {agent.lastToolName}</p>
+        <p>
+          Latest tool:{" "}
+          <span title={agent.lastToolName}>{formatToolDisplayName(agent.lastToolName)}</span>
+        </p>
       ) : null}
       {metrics ? <p>{metrics}</p> : null}
       {agent.resultSummary ? (

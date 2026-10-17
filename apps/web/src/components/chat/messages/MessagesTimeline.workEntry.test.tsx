@@ -10,21 +10,17 @@ import {
 
 describe("SimpleWorkEntryRow", () => {
   it.each([
-    ["bigbud_orchestration: screenshot", "bigbud_orchestration: screenshot"],
-    ["Bigbud_orchestration: search_capabilities", "bigbud_orchestration: search_capabilities"],
-    ["BiGbUd_OrChEsTrAtIoN: CaptureScreenshot", "bigbud_orchestration: CaptureScreenshot"],
-    ["BIGBUD_ORCHESTRATION", "bigbud_orchestration"],
-    ["mcp__bigbud_orchestration__screenshot", "Mcp__bigbud_orchestration__screenshot"],
-    [
-      "mcp__BiGbUd_OrChEsTrAtIoN__CaptureScreenshot",
-      "Mcp__bigbud_orchestration__CaptureScreenshot",
-    ],
-    [
-      "Bigbud_orchestration_Thread-1_CaptureScreenshot",
-      "bigbud_orchestration_Thread-1_CaptureScreenshot",
-    ],
-    ["bigbud_orchestration: screenshot completed", "bigbud_orchestration: screenshot"],
-  ])("normalizes only the namespace in %s", (toolTitle, expected) => {
+    ["bigbud_orchestration: screenshot", "bigbud tool"],
+    ["Bigbud_orchestration: search_capabilities", "bigbud capability finder"],
+    ["BiGbUd_OrChEsTrAtIoN: CaptureScreenshot", "bigbud tool"],
+    ["BIGBUD_ORCHESTRATION", "bigbud orchestrator"],
+    ["mcp__bigbud_orchestration__screenshot", "bigbud tool"],
+    ["mcp__BiGbUd_OrChEsTrAtIoN__CaptureScreenshot", "bigbud tool"],
+    ["Bigbud_orchestration_Thread-1_CaptureScreenshot", "bigbud tool"],
+    ["bigbud_orchestration: screenshot completed", "bigbud tool"],
+    ["Bigbud_thread_v1_rename_thread", "bigbud renamer"],
+    ["mcp__bigbud_orchestration__rename_thread", "bigbud renamer"],
+  ])("formats a friendly UI heading for %s", (toolTitle, expected) => {
     expect(
       toolWorkEntryHeading({
         id: "work-entry-tool",
@@ -47,7 +43,7 @@ describe("SimpleWorkEntryRow", () => {
           tone: "tool",
           ...(toolTitle !== undefined ? { toolTitle } : {}),
         }),
-      ).toBe("bigbud_orchestration: CaptureScreenshot");
+      ).toBe("bigbud tool");
     },
   );
 
@@ -104,36 +100,37 @@ describe("SimpleWorkEntryRow", () => {
         toolTitle: "bigbud_orchestration_browser",
         ...(toolAction !== undefined ? { toolAction } : {}),
       }),
-    ).toBe(expected);
+    ).toBe(expected === "Browser" ? "bigbud browser" : `bigbud · ${expected.toLowerCase()}`);
   });
 
-  it("uses the same namespace heading for display, title and copy without changing tool content", () => {
+  it("uses a friendly heading while retaining the exact raw identifier for inspection and copy", () => {
     const workEntry: TimelineWorkEntry = {
       id: "work-entry-screenshot",
       createdAt: "2026-05-15T18:00:00.000Z",
       label: "Tool",
       tone: "tool",
-      toolTitle: "Bigbud_orchestration: CaptureScreenshot",
+      toolTitle: "bigbud_thread_v1_rename_thread",
       detail: "Bigbud_orchestration: Keep This Description",
       changedFiles: ["/Screenshots/Bigbud_orchestration/Capture.PNG"],
     };
     const heading = toolWorkEntryHeading(workEntry);
     const markup = renderToStaticMarkup(<SimpleWorkEntryRow workEntry={workEntry} />);
 
-    expect(heading).toBe("bigbud_orchestration: CaptureScreenshot");
+    expect(heading).toBe("bigbud renamer");
     expect(markup).toContain(`>${heading}</span>`);
     expect(markup).toContain(`title="${heading} - ${workEntry.detail}"`);
+    expect(markup).toContain(`title="${workEntry.toolTitle}"`);
     expect(workEntryCopyText(workEntry)).toBe(
-      `${heading}\n${workEntry.detail}\nChanged files:\n${workEntry.changedFiles!.join("\n")}`,
+      `${workEntry.toolTitle}\n${workEntry.detail}\nChanged files:\n${workEntry.changedFiles!.join("\n")}`,
     );
 
     const command = "Bigbud_orchestration --Path /Screenshots/Capture.PNG";
     const rawCommand = 'Bigbud_orchestration --Arguments {"Name":"CaptureScreenshot"}';
     expect(workEntryCopyText({ ...workEntry, command, changedFiles: [] })).toBe(
-      `${heading}\n${command}`,
+      `${workEntry.toolTitle}\n${command}`,
     );
     expect(workEntryCopyText({ ...workEntry, command, rawCommand, changedFiles: [] })).toBe(
-      `${heading}\n${rawCommand}`,
+      `${workEntry.toolTitle}\n${rawCommand}`,
     );
   });
 
@@ -147,7 +144,7 @@ describe("SimpleWorkEntryRow", () => {
         toolTitle: "bigbud_orchestration_thread-1_browser",
         toolAction: "navigate",
       }),
-    ).toBe("Navigating browser");
+    ).toBe("bigbud · navigating browser");
   });
 
   it("uses action-specific copy for MCP-qualified browser tools", () => {
@@ -160,7 +157,7 @@ describe("SimpleWorkEntryRow", () => {
         toolTitle: "mcp__bigbud_orchestration__browser",
         toolAction: "capture",
       }),
-    ).toBe("Captured browser");
+    ).toBe("bigbud · captured browser");
   });
 
   it("labels page-text browser inspection", () => {

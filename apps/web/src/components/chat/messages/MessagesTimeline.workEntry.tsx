@@ -13,6 +13,7 @@ import { WorkEntryActionButtons } from "./MessagesTimeline.workEntry.actions";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { cn } from "~/lib/utils";
+import { formatBigbudToolName } from "~/lib/toolPresentation";
 
 export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
@@ -23,6 +24,8 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
+  const rawToolName =
+    workEntry.toolPresentation?.rawName ?? (workEntry.toolTitle || workEntry.label);
   const preview = workEntryPreview(workEntry);
   const rawCommand = workEntryRawCommand(workEntry);
   const displayText = preview ? `${heading} - ${preview}` : heading;
@@ -51,6 +54,11 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               title={rawCommand ? undefined : displayText}
             >
               <span
+                title={
+                  rawToolName && (workEntry.toolPresentation || formatBigbudToolName(rawToolName))
+                    ? rawToolName
+                    : undefined
+                }
                 className={cn(
                   workEntry.tone === "thinking" || workEntry.tone === "info"
                     ? workToneClass(workEntry.tone)
