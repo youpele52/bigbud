@@ -1,6 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLink } from "../lib/openLink";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -29,15 +29,6 @@ function resolveDeliveryConsumerId(): string {
     return consumerId;
   } catch {
     return crypto.randomUUID();
-  }
-}
-
-function shouldOpenViaDesktopShell(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol !== "http:" && protocol !== "https:";
-  } catch {
-    return false;
   }
 }
 
@@ -220,19 +211,7 @@ export function createWsNativeApi(): NativeApi {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openInTerminal: (cwd, terminal) => rpcClient.shell.openInTerminal({ cwd, terminal }),
       openPath: (path) => rpcClient.shell.openPath({ path }),
-      openExternal: async (url) => {
-        const nextUrl = url.trim();
-        if (!nextUrl) {
-          throw new Error("Unable to open link.");
-        }
-
-        if (window.desktopBridge && shouldOpenViaDesktopShell(nextUrl)) {
-          await window.desktopBridge.openExternal(nextUrl);
-          return;
-        }
-
-        openBrowserPanel({ url: nextUrl });
-      },
+      openExternal: openLink,
     },
     worktrees: rpcClient.worktrees,
     git: {

@@ -192,6 +192,26 @@ export function GeneralSettingsSection() {
         />
 
         <SettingsRow
+          title="Open web links in bigbud"
+          description="Open web links from terminal, chat, and help in the in-app browser. Turn off to use your system default browser (a new tab in the web app)."
+          resetAction={
+            !settings.openWebLinksInApp ? (
+              <SettingResetButton
+                label="web link browser"
+                onClick={() => updateSettings({ openWebLinksInApp: true })}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              tone="success"
+              checked={settings.openWebLinksInApp}
+              onCheckedChange={(checked) => updateSettings({ openWebLinksInApp: Boolean(checked) })}
+              aria-label="Open web links in bigbud"
+            />
+          }
+        />
+        <SettingsRow
           title="Diff line wrapping"
           description="Set the default wrap state when the diff panel opens."
           resetAction={

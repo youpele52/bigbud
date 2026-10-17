@@ -3,6 +3,7 @@ import { ArrowUpRightIcon, SmartphoneIcon, TabletSmartphoneIcon } from "lucide-r
 import { useEffect, useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
+import { openLinkFromClick } from "../../lib/openLink";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
@@ -169,6 +170,15 @@ export function MobileRemoteControlSettingsSection() {
           <p className="pt-1 text-xs text-muted-foreground">
             <a
               href="https://bigbud.app/docs/#advanced-features"
+              onClick={(event) => {
+                event.preventDefault();
+                openLinkFromClick("https://bigbud.app/docs/#advanced-features");
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                openLinkFromClick("https://bigbud.app/docs/#advanced-features");
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-4 hover:text-foreground hover:decoration-solid"

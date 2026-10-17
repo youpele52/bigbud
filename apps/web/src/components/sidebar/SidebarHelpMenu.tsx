@@ -10,7 +10,7 @@ import { Fragment } from "react";
 import { useSidebar } from "../ui/sidebar";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "~/lib/openLink";
 
 const helpMenuItems = [
   {
@@ -69,7 +69,7 @@ export function SidebarHelpMenu() {
             <MenuItem
               className="min-h-7 py-1 text-xs"
               onClick={() => {
-                openBrowserPanel({ url });
+                openLinkFromClick(url);
                 if (isMobile) {
                   setOpenMobile(false);
                 }

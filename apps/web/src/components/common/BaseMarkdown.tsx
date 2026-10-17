@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type MouseEvent,
 } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -20,7 +21,7 @@ import { cn } from "~/lib/utils";
 
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useTheme } from "../../hooks/useTheme";
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../utils/markdown";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
@@ -189,21 +190,17 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         }
         const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
         if (!targetPath) {
-          return (
-            <a
-              {...props}
-              href={href}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (onAnchorClick) {
-                  onAnchorClick({ href, workspaceRoot: cwd });
-                  return;
-                }
-                openBrowserPanel({ url: href });
-              }}
-            />
-          );
+          const activateLink = (event: MouseEvent<HTMLAnchorElement>) => {
+            if (event.type === "auxclick" && event.button !== 1) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (onAnchorClick) {
+              onAnchorClick({ href, workspaceRoot: cwd });
+              return;
+            }
+            openLinkFromClick(href);
+          };
+          return <a {...props} href={href} onClick={activateLink} onAuxClick={activateLink} />;
         }
 
         const linkText = typeof props.children === "string" ? props.children : "";

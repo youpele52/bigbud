@@ -21,7 +21,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
@@ -204,7 +204,7 @@ export function SidebarActionsSection({
         "Plugins need Git on this computer. Install Git, then try showing Plugins again.",
       actionProps: {
         children: "Install Git",
-        onClick: () => openBrowserPanel({ url: "https://git-scm.com/install/" }),
+        onClick: () => openLinkFromClick("https://git-scm.com/install/"),
       },
     });
   };
