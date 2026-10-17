@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { ProviderStatusBanner } from "./ProviderStatusBanner";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
 
 function provider(overrides: Partial<ServerProvider>): ServerProvider {
   return {
@@ -26,7 +27,24 @@ function provider(overrides: Partial<ServerProvider>): ServerProvider {
 
 describe("ProviderStatusBanner", () => {
   afterEach(() => {
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
     document.body.innerHTML = "";
+  });
+  it("keeps a dismissed condition hidden across navigation and routine probes, but not in a different thread", async () => {
+    const status = provider({ message: "Provider warning" });
+    const first = await render(<ProviderStatusBanner threadId="thread-one" status={status} />);
+    await page.getByLabelText("Dismiss provider status").click();
+    await first.unmount();
+    const reopened = await render(
+      <ProviderStatusBanner threadId="thread-one" status={{ ...status, checkedAt: "new-probe" }} />,
+    );
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await reopened.rerender(<ProviderStatusBanner threadId="thread-two" status={status} />);
+    await expect.element(page.getByRole("alert")).toBeVisible();
+    await reopened.rerender(
+      <ProviderStatusBanner threadId="thread-one" status={{ ...status, version: "new-version" }} />,
+    );
+    await expect.element(page.getByRole("alert")).toBeVisible();
   });
 
   it("re-shows after dismissal when the provider status key changes", async () => {
@@ -35,7 +53,7 @@ describe("ProviderStatusBanner", () => {
     );
 
     await expect.element(page.getByRole("alert")).toHaveTextContent("The first status message");
-    await page.getByLabelText("Dismiss").click();
+    await page.getByLabelText("Dismiss provider status").click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
 
     await screen.rerender(

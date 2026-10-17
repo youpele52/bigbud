@@ -1,11 +1,22 @@
-/** Retained canonical transcripts remain visible; this notice is not the dismissible provider-wide advisory. */
-export function OpencodeV2RetainedHistoryNotice({ message }: { readonly message: string }) {
+import { ThreadNoticeBanner } from "./ThreadNoticeBanner";
+
+/** Hiding this explanation never unlocks a retained canonical transcript. */
+export function OpencodeV2RetainedHistoryNotice({
+  message,
+  threadId,
+}: {
+  readonly message: string;
+  readonly threadId: string;
+}) {
   return (
-    <div
+    <ThreadNoticeBanner
+      threadId={threadId}
+      kind="retained-history"
+      condition={message}
+      variant="warning"
       role="status"
-      className="border-b border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning"
-    >
-      {message}
-    </div>
+      description={message}
+      dismissLabel="Dismiss retained history notice"
+    />
   );
 }

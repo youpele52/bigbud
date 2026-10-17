@@ -62,6 +62,18 @@ export function useOpenCodeRuntimeSetup(input: {
   const current = enabled && state?.scope === scope ? state : null;
   const result = current?.result;
   return {
+    noticeIdentity: result
+      ? [
+          result.reasonCode,
+          result.activationState,
+          result.artifactDigest,
+          result.issuerKeyId,
+          result.installedBootstrapDigest,
+          result.desiredBootstrapDigest,
+          result.activeImplementationDigest,
+          result.qualificationRecordId,
+        ]
+      : null,
     verified:
       result?.status === "ready" &&
       result.activationState === "ready" &&

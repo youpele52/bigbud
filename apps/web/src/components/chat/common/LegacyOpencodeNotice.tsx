@@ -1,17 +1,23 @@
 import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
 import { TriangleAlertIcon } from "lucide-react";
-import { StatusBanner } from "../../common/StatusBanner";
+import { ThreadNoticeBanner } from "./ThreadNoticeBanner";
 
 /** Show read-only guidance in the chat's top warning banner area. */
-export function LegacyOpencodeNotice() {
+export function LegacyOpencodeNotice({
+  threadId = "legacy-opencode",
+}: {
+  readonly threadId?: string;
+}) {
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <StatusBanner
-        variant="warning"
-        role="status"
-        icon={<TriangleAlertIcon />}
-        description={LEGACY_OPENCODE_READ_ONLY_MESSAGE}
-      />
-    </div>
+    <ThreadNoticeBanner
+      threadId={threadId}
+      kind="legacy-opencode"
+      condition={LEGACY_OPENCODE_READ_ONLY_MESSAGE}
+      variant="warning"
+      role="status"
+      icon={<TriangleAlertIcon />}
+      description={LEGACY_OPENCODE_READ_ONLY_MESSAGE}
+      dismissLabel="Dismiss legacy OpenCode notice"
+    />
   );
 }

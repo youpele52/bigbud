@@ -6,7 +6,7 @@ import type { OpencodeV2DevelopmentSettings } from "@bigbud/contracts/core/setti
 import { InfoIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 
-import { StatusBanner } from "../../common/StatusBanner";
+import { ChatBanner } from "./ChatBanner";
 
 const ACCESS_LABELS: Record<RuntimeMode, string> = {
   "approval-required": "Supervised",
@@ -80,23 +80,19 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
   const description = getAccessModeInfoDescription(runtimeMode, connectionMode);
 
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <StatusBanner
-        variant="default"
-        role="status"
-        icon={<InfoIcon />}
-        title={`Access: ${ACCESS_LABELS[runtimeMode]}`}
-        description={
-          <span className="text-foreground">
-            {description} External-directory requests still ask.
-            {!shared
-              ? " Synthetic remote workspaces never gain native file or shell access."
-              : null}
-          </span>
-        }
-        dismissLabel="Dismiss access information"
-        onDismiss={() => setNotice(null)}
-      />
-    </div>
+    <ChatBanner
+      variant="default"
+      role="status"
+      icon={<InfoIcon />}
+      title={`Access: ${ACCESS_LABELS[runtimeMode]}`}
+      description={
+        <span className="text-foreground">
+          {description} External-directory requests still ask.
+          {!shared ? " Synthetic remote workspaces never gain native file or shell access." : null}
+        </span>
+      }
+      dismissLabel="Dismiss access information"
+      onDismiss={() => setNotice(null)}
+    />
   );
 });

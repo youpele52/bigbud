@@ -1,10 +1,10 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { GitForkIcon, XIcon } from "lucide-react";
+import { GitForkIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { ChatBanner } from "../common/ChatBanner";
 import { Button } from "../../ui/button";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import {
@@ -52,57 +52,57 @@ export function ThreadForkNotice({
   if ((!origin && !sourceFork) || dismissed) return null;
   const carry = sourceFork?.carry ?? null;
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
+    <>
       {origin ? (
-        <Alert
+        <ChatBanner
           variant={origin.tone}
           role="status"
           data-fork-notice="origin"
           data-tone={origin.tone}
-        >
-          <GitForkIcon aria-hidden />
-          <AlertTitle>
-            Continued from{" "}
-            <Link
-              to="/$threadId"
-              params={{ threadId: origin.sourceThreadId }}
-              className={LINK_CLASS}
-            >
-              {origin.sourceTitle}
-            </Link>
-          </AlertTitle>
-          <AlertDescription className="text-xs">{origin.description}</AlertDescription>
-          <AlertAction>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              aria-label="Dismiss continuation notice"
-              onClick={dismiss}
-            >
-              <XIcon className="size-3.5" aria-hidden />
-            </Button>
-          </AlertAction>
-        </Alert>
+          icon={<GitForkIcon aria-hidden />}
+          title={
+            <>
+              Continued from{" "}
+              <Link
+                to="/$threadId"
+                params={{ threadId: origin.sourceThreadId }}
+                className={LINK_CLASS}
+              >
+                {origin.sourceTitle}
+              </Link>
+            </>
+          }
+          description={origin.description}
+          dismissLabel="Dismiss continuation notice"
+          onDismiss={dismiss}
+        />
       ) : sourceFork ? (
-        <Alert variant="info" role="status" data-fork-notice="source">
-          <GitForkIcon aria-hidden />
-          <AlertTitle>
-            {sourceFork.automatic
+        <ChatBanner
+          variant="info"
+          role="status"
+          data-fork-notice="source"
+          icon={<GitForkIcon aria-hidden />}
+          title={
+            sourceFork.automatic
               ? "This thread could not be resumed and continued in a new thread"
-              : "This thread continued in a new thread"}
-          </AlertTitle>
-          <AlertDescription className="text-xs">
-            <Link
-              to="/$threadId"
-              params={{ threadId: sourceFork.forkThreadId }}
-              className={LINK_CLASS}
-            >
-              Open the continued thread
-            </Link>
-            {carry ? " Your latest message did not reach the provider." : null}
-          </AlertDescription>
-          <AlertAction>
-            {carry && onCarryToContinuedThread ? (
+              : "This thread continued in a new thread"
+          }
+          description={
+            <>
+              <Link
+                to="/$threadId"
+                params={{ threadId: sourceFork.forkThreadId }}
+                className={LINK_CLASS}
+              >
+                Open the continued thread
+              </Link>
+              {carry ? " Your latest message did not reach the provider." : null}
+            </>
+          }
+          dismissLabel="Dismiss continuation notice"
+          onDismiss={dismiss}
+          action={
+            carry && onCarryToContinuedThread ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -111,18 +111,10 @@ export function ThreadForkNotice({
               >
                 Send this message to the continued thread
               </Button>
-            ) : null}
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              aria-label="Dismiss continuation notice"
-              onClick={dismiss}
-            >
-              <XIcon className="size-3.5" aria-hidden />
-            </Button>
-          </AlertAction>
-        </Alert>
+            ) : null
+          }
+        />
       ) : null}
-    </div>
+    </>
   );
 }

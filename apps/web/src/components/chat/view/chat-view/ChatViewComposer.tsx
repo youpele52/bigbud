@@ -137,7 +137,13 @@ export function ChatViewComposer({
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
-          {!compact && <ChatViewComposerHeader thread={thread} interactions={interactions} />}
+          {!compact && (
+            <ChatViewComposerHeader
+              threadId={base.threadId}
+              thread={thread}
+              interactions={interactions}
+            />
+          )}
 
           <div
             className={cn(

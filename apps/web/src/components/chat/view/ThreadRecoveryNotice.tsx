@@ -1,14 +1,8 @@
-import {
-  CircleCheckIcon,
-  LoaderCircleIcon,
-  TriangleAlertIcon,
-  XCircleIcon,
-  XIcon,
-} from "lucide-react";
+import { CircleCheckIcon, LoaderCircleIcon, TriangleAlertIcon, XCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { ChatBanner } from "../common/ChatBanner";
 import { Button } from "../../ui/button";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { observeThreadTurnStartRequest } from "./ThreadRecoveryNotice.clock";
@@ -73,37 +67,28 @@ export function ThreadRecoveryNotice({
   if (!notice || dismissed) return null;
   const Icon = NOTICE_ICONS[notice.tone];
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
-      <Alert
-        variant={notice.tone}
-        role="status"
-        aria-live="polite"
-        data-recovery-notice={notice.kind}
-      >
-        <Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />
-        <AlertTitle>{notice.title}</AlertTitle>
-        <AlertDescription className="text-xs">{notice.description}</AlertDescription>
-        <AlertAction>
-          {notice.canContinueInNewThread && onContinueInNewThread ? (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={continuePending}
-              onClick={onContinueInNewThread}
-            >
-              Continue in a new thread
-            </Button>
-          ) : null}
+    <ChatBanner
+      variant={notice.tone}
+      role="status"
+      aria-live="polite"
+      data-recovery-notice={notice.kind}
+      icon={<Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />}
+      title={notice.title}
+      description={notice.description}
+      dismissLabel="Dismiss recovery notice"
+      onDismiss={dismiss}
+      action={
+        notice.canContinueInNewThread && onContinueInNewThread ? (
           <Button
-            size="icon-xs"
-            variant="ghost"
-            aria-label="Dismiss recovery notice"
-            onClick={dismiss}
+            size="sm"
+            variant="outline"
+            disabled={continuePending}
+            onClick={onContinueInNewThread}
           >
-            <XIcon className="size-3.5" aria-hidden />
+            Continue in a new thread
           </Button>
-        </AlertAction>
-      </Alert>
-    </div>
+        ) : null
+      }
+    />
   );
 }

@@ -32,7 +32,7 @@ import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.log
 import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
 import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
 import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
-import { StatusBanner } from "~/components/common/StatusBanner";
+import { ThreadNoticeBanner } from "../../common/ThreadNoticeBanner";
 import { ThreadRecoveryNotices } from "../ThreadRecoveryNotices";
 
 interface ChatViewChatBodyProps {
@@ -107,22 +107,34 @@ export function ChatViewChatBody({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-chat-body>
       {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
-        <LegacyOpencodeNotice />
+        <LegacyOpencodeNotice threadId={base.threadId} />
       ) : null}
       <ProviderStatusBanner
         status={composer.activeProviderStatus}
         runtimeVerified={openCodeSetup.verified}
+        threadId={base.threadId}
       />
       {openCodeSetup.error ? (
-        <div className="pt-3 mx-auto max-w-3xl">
-          <StatusBanner
-            variant={openCodeSetup.severity}
-            title="OpenCode setup"
-            description={openCodeSetup.error}
-          />
-        </div>
+        <ThreadNoticeBanner
+          threadId={base.threadId}
+          kind="opencode-setup"
+          condition={[
+            openCodeSetup.error,
+            openCodeSetup.severity,
+            openCodeSetup.noticeIdentity,
+            base.settings.providers.opencodeV2,
+            composer.gitCwd ?? workspaceRoot,
+            composer.activeProviderStatus?.version,
+          ]}
+          variant={openCodeSetup.severity}
+          title="OpenCode setup"
+          description={openCodeSetup.error}
+          dismissLabel="Dismiss OpenCode setup notice"
+        />
       ) : null}
-      {retainedHistory ? <OpencodeV2RetainedHistoryNotice message={retainedHistory} /> : null}
+      {retainedHistory ? (
+        <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
+      ) : null}
       <ContextWindowWarningBanner
         threadId={base.activeThread!.id}
         usage={thread.activeContextWindow}

@@ -3,7 +3,7 @@ import { CircleCheckIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-rea
 import { useMemo } from "react";
 
 import { deriveThreadModelChoice } from "../../../logic/session/session.activity.modelChoice.logic";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
+import { ThreadNoticeBanner } from "../common/ThreadNoticeBanner";
 import { ThreadModelChoicePicker } from "./ThreadModelChoicePicker";
 import {
   useModelChoiceCountdown,
@@ -39,31 +39,28 @@ export function ThreadModelChoiceNotice({
   const notice = deriveModelChoiceNotice(record, remainingMs ?? 0);
   const Icon = NOTICE_ICONS[notice.tone];
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
-      <Alert
-        variant={notice.tone}
-        role="status"
-        aria-live="polite"
-        data-model-choice-notice={notice.kind}
-      >
-        <Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />
-        <AlertTitle>{notice.title}</AlertTitle>
-        {notice.description !== null ? (
-          // The countdown changes every second; only the title is announced.
-          <AlertDescription className="text-xs" aria-live="off">
-            {notice.description}
-          </AlertDescription>
-        ) : null}
-        {record.status === "pending" ? (
-          <AlertDescription className="pt-1">
-            <ThreadModelChoicePicker
-              choice={record}
-              disabled={pickingChoiceId === record.choiceId}
-              onPick={(selection) => void pick(record.choiceId, selection)}
-            />
-          </AlertDescription>
-        ) : null}
-      </Alert>
-    </div>
+    <ThreadNoticeBanner
+      threadId={thread.id}
+      kind="model-choice"
+      condition={record}
+      variant={notice.tone}
+      role="status"
+      aria-live="polite"
+      data-model-choice-notice={notice.kind}
+      icon={<Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />}
+      title={notice.title}
+      dismissLabel="Dismiss model choice notice"
+      descriptionProps={{ "aria-live": "off" }}
+      description={notice.description}
+      action={
+        record.status === "pending" ? (
+          <ThreadModelChoicePicker
+            choice={record}
+            disabled={pickingChoiceId === record.choiceId}
+            onPick={(selection) => void pick(record.choiceId, selection)}
+          />
+        ) : null
+      }
+    />
   );
 }

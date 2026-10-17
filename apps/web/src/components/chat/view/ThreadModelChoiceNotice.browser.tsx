@@ -12,6 +12,7 @@ vi.mock("../../../rpc/nativeApi", () => ({
 vi.mock("../../ui/toast", () => ({ toastManager: { add: mocks.toast } }));
 
 import { ThreadModelChoiceNotice } from "./ThreadModelChoiceNotice";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
 import {
   makeRequestedPayload,
   makeResolvedPayload,
@@ -32,6 +33,7 @@ const renderNotice = (id: string, activities: OrchestrationThreadActivity[]) =>
 
 describe("ThreadModelChoiceNotice", () => {
   beforeEach(() => {
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
     vi.clearAllMocks();
     mocks.dispatch.mockResolvedValue({ sequence: 1 });
   });
@@ -133,7 +135,9 @@ describe("ThreadModelChoiceNotice", () => {
     await expect
       .element(page.getByText("Requested composer-1 unavailable (provider is hidden); used gpt-5"))
       .toBeVisible();
-    expect(page.getByRole("button").elements()).toHaveLength(0);
+    await expect
+      .element(page.getByRole("button", { name: "Dismiss model choice notice" }))
+      .toBeVisible();
   });
 
   it("wraps the options on a phone-sized viewport without horizontal overflow", async () => {
@@ -153,5 +157,24 @@ describe("ThreadModelChoiceNotice", () => {
   it("renders nothing for a thread without a model choice", async () => {
     await renderNotice("thread-none", []);
     expect(page.getByRole("status").elements()).toHaveLength(0);
+  });
+  it("hides the picker without picking a model and shows the later resolved condition", async () => {
+    const requested = modelChoiceActivity("requested", makeRequestedPayload());
+    const first = await renderNotice("thread-dismiss", [requested]);
+    await page.getByRole("button", { name: "Dismiss model choice notice" }).click();
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    await first.unmount();
+    const reopened = await renderNotice("thread-dismiss", [requested]);
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    await reopened.rerender(
+      <ThreadModelChoiceNotice
+        thread={{
+          id: "thread-dismiss" as ThreadId,
+          activities: [requested, modelChoiceActivity("resolved", makeResolvedPayload())],
+        }}
+      />,
+    );
+    await expect.element(page.getByRole("status")).toBeVisible();
   });
 });

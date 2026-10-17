@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { fnv1a32 } from "../../lib/diffRendering";
+import { pruneNoticeDismissals } from "./noticeDismissal.retention";
 
 interface ThreadNoticeDismissalState {
   readonly dismissed: ReadonlySet<string>;
@@ -10,7 +11,14 @@ interface ThreadNoticeDismissalState {
 /** Renderer-session UI state only: never persisted or applied to thread/provider state. */
 export const useThreadNoticeDismissalStore = create<ThreadNoticeDismissalState>((set) => ({
   dismissed: new Set(),
-  dismiss: (key) => set((state) => ({ dismissed: new Set([...state.dismissed, key]) })),
+  dismiss: (key) =>
+    set((state) => {
+      const dismissed = new Set(state.dismissed);
+      dismissed.delete(key);
+      dismissed.add(key);
+      pruneNoticeDismissals(dismissed);
+      return { dismissed };
+    }),
 }));
 
 /** Compact condition identities avoid retaining full provider error messages in store keys. */

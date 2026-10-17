@@ -31,6 +31,7 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../ui/toast", () => ({ toastManager: { add: mocks.add } }));
 
 import { ProviderStatusBanner } from "./ProviderStatusBanner";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
 import { ProviderRecoveryToastCoordinator } from "../../ProviderRecoveryToastCoordinator";
 
 const nativeMessage = `Connected to your native OpenCode service. ${OPENCODE_RETAINED_HISTORY_ADVISORY}`;
@@ -55,6 +56,7 @@ function nativeStatus(overrides: Partial<ServerProvider> = {}): ServerProvider {
 
 describe("OpenCode retained-history advisory dismissal", () => {
   beforeEach(() => {
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
     localStorage.removeItem(RETAINED_HISTORY_DISMISSAL_KEY);
     mocks.state = createRetainedHistoryAdvisoryState();
     mocks.providers = [nativeStatus()];
@@ -65,24 +67,28 @@ describe("OpenCode retained-history advisory dismissal", () => {
     localStorage.removeItem(RETAINED_HISTORY_DISMISSAL_KEY);
   });
 
-  it("never reappears in another chat or remount and does not toast immediately on dismiss", async () => {
+  it("dismisses for this thread in memory without persisting or generating a startup toast", async () => {
     await render(<ProviderRecoveryToastCoordinator />);
     const firstChat = await render(
-      <ProviderStatusBanner key="first-thread" status={nativeStatus()} />,
+      <ProviderStatusBanner threadId="first-thread" status={nativeStatus()} />,
     );
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent(OPENCODE_RETAINED_HISTORY_ADVISORY);
-    await page.getByLabelText("Dismiss").click();
+    await page.getByLabelText("Dismiss provider status").click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
-    expect(localStorage.getItem(RETAINED_HISTORY_DISMISSAL_KEY)).toBe("true");
+    expect(localStorage.getItem(RETAINED_HISTORY_DISMISSAL_KEY)).toBeNull();
     expect(mocks.add).not.toHaveBeenCalled();
     await firstChat.unmount();
 
-    await render(
-      <ProviderStatusBanner key="another-thread" status={nativeStatus({ version: "1.18.0" })} />,
+    const remount = await render(
+      <ProviderStatusBanner threadId="first-thread" status={nativeStatus()} />,
     );
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await remount.rerender(
+      <ProviderStatusBanner threadId="another-thread" status={nativeStatus()} />,
+    );
+    await expect.element(page.getByRole("alert")).toBeVisible();
     expect(mocks.add).not.toHaveBeenCalled();
   });
 
@@ -140,7 +146,7 @@ describe("OpenCode retained-history advisory dismissal", () => {
     await expect.element(page.getByRole("alert")).toHaveTextContent("provider is unavailable");
     await screen.rerender(<ProviderStatusBanner status={nativeStatus({ provider: "opencode" })} />);
     await expect.element(page.getByRole("alert")).toHaveTextContent(nativeMessage);
-    await page.getByLabelText("Dismiss").click();
+    await page.getByLabelText("Dismiss provider status").click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     await screen.rerender(
       <ProviderStatusBanner
@@ -184,7 +190,7 @@ describe("OpenCode retained-history advisory dismissal", () => {
     });
     const first = await render(<ProviderStatusBanner status={nativeStatus()} />);
     const second = await render(<ProviderStatusBanner status={nativeStatus()} />);
-    await page.getByLabelText("Dismiss").first().click();
+    await page.getByLabelText("Dismiss provider status").first().click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     await first.unmount();
     await second.unmount();
