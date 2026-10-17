@@ -55,6 +55,7 @@ export function recordThreadTextGenerationStatus(
   status: "failed" | "completed" | "unchanged" | "started" | "deferred",
   context?: {
     readonly titleSeed?: string;
+    readonly finalFailure?: boolean;
     readonly branch?: string;
     readonly worktreePath?: string;
     readonly workspaceExecutionTargetId?: string;

@@ -1,9 +1,4 @@
-import {
-  type ChatAttachment,
-  type ModelSelection,
-  TextGenerationError,
-  ThreadId,
-} from "@bigbud/contracts";
+import { type ChatAttachment, ThreadId } from "@bigbud/contracts";
 import { Cause, Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -11,15 +6,9 @@ import {
   buildGeneratedWorktreeBranchName,
   isTemporaryWorktreeBranch,
   serverCommandId,
-  shouldRetryGeneratedThreadTitle,
 } from "./ProviderCommandReactorHelpers.ts";
-import {
-  getThreadTitleVersion,
-  shouldAllowAutoTitleReplace,
-} from "../../orchestration-tools/ThreadTitleLock.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
-import { sameTextGenerationWorkspace } from "../../git/Layers/InternalTextGeneration.requests.ts";
 import { assertSavedWorktreeIdentity } from "../../git/Layers/WorktreeSavedIdentity.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGeneration.success.ts";
@@ -179,169 +168,4 @@ export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: Sessi
     );
 };
 
-export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices) => {
-  const generate = Effect.fn("maybeGenerateThreadTitleForFirstTurn")(function* (input: {
-    readonly threadId: ThreadId;
-    readonly cwd: string;
-    readonly messageText: string;
-    readonly attachments?: ReadonlyArray<ChatAttachment>;
-    readonly modelSelection: ModelSelection;
-    readonly titleSeed?: string;
-    readonly retry?: boolean;
-  }) {
-    const { textGeneration, orchestrationEngine, resolveThread } = services;
-    const attachments = input.attachments ?? [];
-    const titleVersionAtStart = getThreadTitleVersion(input.threadId);
-    yield* Effect.gen(function* () {
-      const initialThread = yield* resolveThread(input.threadId);
-      if (
-        input.retry &&
-        initialThread &&
-        !initialThread.archivedAt &&
-        !initialThread.deletingAt &&
-        !initialThread.deletedAt
-      )
-        yield* recordThreadTextGenerationStatus(
-          orchestrationEngine,
-          input.threadId,
-          "title",
-          "started",
-        );
-      if (
-        !initialThread ||
-        initialThread.archivedAt ||
-        initialThread.deletingAt ||
-        initialThread.deletedAt
-      )
-        return;
-      if (
-        !shouldAllowAutoTitleReplace({
-          threadId: input.threadId,
-          currentTitle: initialThread.title,
-          ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
-        })
-      ) {
-        if (input.retry)
-          yield* recordThreadTextGenerationStatus(
-            orchestrationEngine,
-            input.threadId,
-            "title",
-            "unchanged",
-          );
-        return;
-      }
-      const successfulModelSelection = initialThread
-        ? lastSuccessfulThreadModel(initialThread)
-        : null;
-      const settings = yield* services.serverSettingsService.getSettings;
-      // A brand-new thread has no proven fallback yet. Its first successful turn triggers this job.
-      if (!settings.textGenerationModelSelection && !successfulModelSelection) {
-        if (!input.retry)
-          yield* recordThreadTextGenerationStatus(
-            orchestrationEngine,
-            input.threadId,
-            "title",
-            "deferred",
-            { titleSeed: input.titleSeed ?? initialThread.title },
-          );
-        if (input.retry)
-          yield* recordThreadTextGenerationStatus(
-            orchestrationEngine,
-            input.threadId,
-            "title",
-            "failed",
-          );
-        return;
-      }
-      const generated = yield* Effect.suspend(() =>
-        textGeneration.generateThreadTitle({
-          cwd: input.cwd,
-          message: input.messageText,
-          ...(attachments.length > 0 ? { attachments } : {}),
-          modelSelection: input.modelSelection,
-          titleSeed: input.titleSeed,
-          successfulModelSelection,
-        }),
-      ).pipe(
-        Effect.flatMap((result) =>
-          shouldRetryGeneratedThreadTitle({
-            generatedTitle: result.title,
-            ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
-          })
-            ? Effect.fail(
-                new TextGenerationError({
-                  operation: "generateThreadTitle",
-                  detail: "Generated thread title was too weak to replace the fallback.",
-                }),
-              )
-            : Effect.succeed(result),
-        ),
-      );
-      const thread = yield* resolveThread(input.threadId);
-      if (!thread) return;
-      if (
-        thread.archivedAt ||
-        thread.deletingAt ||
-        thread.deletedAt ||
-        !sameTextGenerationWorkspace(initialThread, thread) ||
-        getThreadTitleVersion(input.threadId) !== titleVersionAtStart ||
-        !shouldAllowAutoTitleReplace({
-          threadId: input.threadId,
-          currentTitle: thread.title,
-          ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
-        })
-      ) {
-        if (input.retry)
-          yield* recordThreadTextGenerationStatus(
-            orchestrationEngine,
-            input.threadId,
-            "title",
-            "unchanged",
-          );
-        return;
-      }
-      yield* orchestrationEngine.dispatch({
-        type: "thread.meta.update",
-        commandId: serverCommandId("thread-title-rename"),
-        threadId: input.threadId,
-        title: generated.title,
-      });
-      yield* recordThreadTextGenerationStatus(
-        orchestrationEngine,
-        input.threadId,
-        "title",
-        "completed",
-      );
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.interrupt
-          : Effect.logWarning(
-              "provider command reactor failed to generate or rename thread title",
-              {
-                threadId: input.threadId,
-                cwd: input.cwd,
-                cause: Cause.pretty(cause),
-              },
-            ).pipe(
-              Effect.andThen(
-                recordThreadTextGenerationStatus(
-                  orchestrationEngine,
-                  input.threadId,
-                  "title",
-                  "failed",
-                ),
-              ),
-            ),
-      ),
-    );
-  });
-  return (input: Parameters<typeof generate>[0]) =>
-    withThreadTextGenerationJob(
-      services.orchestrationEngine,
-      input.threadId,
-      "title",
-      generate(input),
-      input.retry === true,
-    );
-};
+export { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";

@@ -8,7 +8,6 @@ import {
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTitleLock.ts";
-import { requestTextGenerationRetry } from "../../ws/wsRetryTextGeneration.ts";
 import {
   asMessageId,
   createHarness,
@@ -64,7 +63,7 @@ describe("ProviderCommandReactor title generation", () => {
     await waitFor(() => hasStatus(harness, "text-generation.completed"));
   });
 
-  it("does not repeat a failing pair; preserves the fallback title and chat", async () => {
+  it("retries the normal policy once, then waits without warning or replaying chat", async () => {
     const harness = await configuredHarness();
     harness.generateThreadTitle.mockReturnValue(
       Effect.fail(
@@ -72,8 +71,16 @@ describe("ProviderCommandReactor title generation", () => {
       ),
     );
     await start(harness);
-    await waitFor(() => hasStatus(harness, "text-generation.failed"));
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    await waitFor(async () =>
+      (await readThread(harness)).activities.some(
+        (item) =>
+          item.kind === "text-generation.title-stage" &&
+          (item.payload as { stage?: number; state?: string }).stage === 2 &&
+          (item.payload as { state?: string }).state === "failed",
+      ),
+    );
+    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(2);
+    expect(await hasStatus(harness, "text-generation.failed")).toBe(false);
     expect((await readThread(harness)).title).toBe("Please investigate reconn...");
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
   });
@@ -82,9 +89,9 @@ describe("ProviderCommandReactor title generation", () => {
     const harness = await configuredHarness();
     harness.generateThreadTitle.mockReturnValue(Effect.succeed({ title: "New thread" }));
     await start(harness);
-    await waitFor(() => hasStatus(harness, "text-generation.failed"));
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 2);
     expect((await readThread(harness)).title).toBe("Please investigate reconn...");
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(2);
   });
 
   it("waits for first success without an override, then generates with success evidence", async () => {
@@ -119,7 +126,7 @@ describe("ProviderCommandReactor title generation", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
   });
 
-  it("retries only the title job without replaying the chat message", async () => {
+  it("stops automatically after the immediate second attempt succeeds", async () => {
     const harness = await configuredHarness();
     harness.generateThreadTitle
       .mockReturnValueOnce(
@@ -129,16 +136,6 @@ describe("ProviderCommandReactor title generation", () => {
       )
       .mockReturnValue(Effect.succeed({ title: "Recovered title" }));
     await start(harness);
-    await waitFor(() => hasStatus(harness, "text-generation.failed"));
-    await Effect.runPromise(
-      requestTextGenerationRetry(harness.engine, {
-        threadId,
-        operation: "title",
-        sourceActivityId: (await readThread(harness)).activities.findLast(
-          (item) => item.kind === "text-generation.failed",
-        )!.id,
-      }),
-    );
     await waitFor(async () => (await readThread(harness)).title === "Recovered title");
     expect(harness.generateThreadTitle).toHaveBeenCalledTimes(2);
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);

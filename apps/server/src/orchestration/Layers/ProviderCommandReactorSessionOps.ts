@@ -258,7 +258,5 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     });
   });
 
-export {
-  maybeGenerateAndRenameWorktreeBranchForFirstTurn,
-  maybeGenerateThreadTitleForFirstTurn,
-} from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+export { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+export { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";

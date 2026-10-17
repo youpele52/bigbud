@@ -3,6 +3,8 @@ import type { EventId, OrchestrationThreadActivity, ThreadId } from "@bigbud/con
 import { readNativeApi } from "~/rpc/nativeApi";
 import { Button } from "../../../ui/button";
 import { toastManager } from "../../../ui/toast";
+import { successfulUserTurns } from "@bigbud/shared/internalTextGeneration";
+import { ThreadTextGenerationWarning } from "./ThreadTextGenerationWarning";
 
 /** Metadata failures are nonblocking and never require resending a conversation message. */
 export function ThreadTextGenerationNotice(props: {
@@ -10,6 +12,7 @@ export function ThreadTextGenerationNotice(props: {
   activities: ReadonlyArray<OrchestrationThreadActivity>;
 }) {
   const [pending, setPending] = useState<string | null>(null);
+  const eligible = successfulUserTurns(props.activities).length >= 3;
   const notices = (["title", "summary"] as const).flatMap((operation) => {
     const activity = props.activities.findLast(
       (item) =>
@@ -21,7 +24,10 @@ export function ThreadTextGenerationNotice(props: {
         "operation" in item.payload &&
         item.payload.operation === operation,
     );
-    return activity && activity.kind !== "text-generation.completed"
+    return eligible &&
+      activity?.kind === "text-generation.failed" &&
+      (operation === "summary" ||
+        (activity.payload as { finalFailure?: boolean }).finalFailure === true)
       ? [{ operation, activity }]
       : [];
   });
@@ -47,23 +53,27 @@ export function ThreadTextGenerationNotice(props: {
     }
   };
   return (
-    <div className="shrink-0 space-y-1 px-3 py-1" aria-live="polite">
+    <div className="shrink-0" aria-live="polite">
       {notices.map(({ operation, activity }) => (
-        <div
+        <ThreadTextGenerationWarning
           key={operation}
+          threadId={props.threadId}
+          operation={operation}
           role="status"
-          className={`flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs ${activity.kind === "text-generation.failed" ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"}`}
-        >
-          <span>{activity.summary}</span>
-          <Button
-            size="xs"
-            variant="ghost"
-            disabled={pending !== null}
-            onClick={() => void retry(operation, activity.id)}
-          >
-            {pending === operation ? "Requesting…" : "Retry"}
-          </Button>
-        </div>
+          variant={activity.kind === "text-generation.failed" ? "warning" : "info"}
+          description={activity.summary}
+          dismissLabel={`Dismiss thread ${operation} generation notice`}
+          action={
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={pending !== null}
+              onClick={() => void retry(operation, activity.id)}
+            >
+              {pending === operation ? "Requesting…" : "Retry"}
+            </Button>
+          }
+        />
       ))}
     </div>
   );

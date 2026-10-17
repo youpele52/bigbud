@@ -2,6 +2,16 @@
 
 ## Authoritative scope
 
+### Staged title recovery (latest user direction)
+
+The original no-repeat title job is superseded by four durable automatic stages: normal generation, one immediate normal retry, a third generation after three distinct successful user submissions, then a context-based rename-tool fallback. The first two stages each retain the existing preference → verified-thread policy (at most two provider calls per stage). Stages three and four use only the verified model/subprovider from the third successful user turn, never the global override or an unproven current selection. This bounds automatic work to four logical jobs / six provider invocations; a metadata-only explicit Retry is one logical job, not a reset of the automatic stages.
+
+Successful-user-turn evidence joins server-validated submission bindings with actual successful runtime-model activities, deduplicating message and turn identities. Failed/cancelled turns, metadata generation, and tool-only events do not advance the threshold. Both orderings of submission acknowledgement and completion are supported. Stage claims/results use existing activity rows and command receipts; startup resumes bounded pending metadata jobs while consuming ambiguous already-started stages rather than replaying external work.
+
+The final fallback generates a proposed title from the existing bounded user/assistant transcript, using the same exact verified pair, and executes the real `renameThreadViaOrchestration` handler as the owning thread with a stable invocation receipt. It does not send a provider chat turn, append hidden prompts, open a replacement conversation to force a callback, or fabricate a tool event. Raw tool names/contracts are unchanged. Existing lifecycle, workspace, title-version, custom-title, and tool ownership checks remain in force.
+
+Title warnings require final fallback failure; summary generation policy is unchanged, with no rename-summary fallback. Both warnings wait for three verified successful user turns and are presented at most once per thread/operation in the renderer session, across activity revisions, dismissal, and navigation. A mounted warning retains its Retry/X controls. State is not persisted across app restart. The bounded 512-identity store never evicts seen identities: at saturation it suppresses new presentations until renderer restart rather than allowing an old warning to reappear.
+
 All generation outside conversation turns uses only:
 
 1. The explicitly configured text-generation provider/model, if present.

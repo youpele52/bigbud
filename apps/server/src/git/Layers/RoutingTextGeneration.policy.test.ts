@@ -55,7 +55,11 @@ function fixture(selection: ModelSelection | null = preference) {
     }): Effect.Effect<typeof result, TextGenerationError> =>
       Effect.fail(new TextGenerationError({ operation: "fixture", detail: "Rejected model" })),
   );
-  const passed = vi.fn((_input: { modelSelection: ModelSelection }) => Effect.succeed(result));
+  const passed = vi.fn(
+    (_input: {
+      modelSelection: ModelSelection;
+    }): Effect.Effect<typeof result, TextGenerationError> => Effect.succeed(result),
+  );
   const router = makeInternalTextGenerationRouter({
     codex: service(failed),
     claude: service(passed),
@@ -87,6 +91,40 @@ function fixture(selection: ModelSelection | null = preference) {
 }
 
 describe("central internal-generation routing policy", () => {
+  it("staged title recovery ignores the override and attempts only its verified thread pair", async () => {
+    const test = fixture();
+    test.passed.mockReturnValueOnce(
+      Effect.fail(
+        new TextGenerationError({
+          operation: "generateThreadTitle",
+          detail: "Verified pair unavailable",
+        }),
+      ),
+    );
+    await Effect.runPromiseExit(
+      test.router.generateThreadTitle({
+        ...test.input,
+        modelSelection: preference,
+        verifiedThreadModelOnly: true,
+      }),
+    );
+    expect(test.failed).not.toHaveBeenCalled();
+    expect(test.passed).toHaveBeenCalledTimes(1);
+    expect(test.passed.mock.calls[0]?.[0].modelSelection).toEqual(successful);
+  });
+  it("never substitutes the override when exact-thread recovery lacks verified evidence", async () => {
+    const test = fixture();
+    await Effect.runPromiseExit(
+      test.router.generateThreadTitle({
+        ...test.input,
+        modelSelection: preference,
+        successfulModelSelection: null,
+        verifiedThreadModelOnly: true,
+      }),
+    );
+    expect(test.failed).not.toHaveBeenCalled();
+    expect(test.passed).not.toHaveBeenCalled();
+  });
   it("tries the successful pair when the preferred model returns an unusable placeholder title", async () => {
     const test = fixture();
     test.failed.mockReturnValueOnce(Effect.succeed({ ...result, title: "New thread" }));

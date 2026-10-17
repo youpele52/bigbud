@@ -8,6 +8,7 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { makeThreadDelegationRepository } from "../../persistence/Layers/ThreadDelegations.ts";
 import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -98,6 +99,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const { resolveProject, resolveThreadsByProject } =
     makeProviderCommandProjectResolvers(orchestrationEngine);
   const sessionOpServices: SessionOpServices = {
+    threadDelegationRepository: yield* makeThreadDelegationRepository,
     orchestrationEngine,
     providerService,
     git,

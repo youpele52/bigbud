@@ -26,6 +26,7 @@ import type {
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
 import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 import type { TurnStartDispatchPhase } from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
+import { recordSubmittedUserTurn } from "./ProviderCommandReactorSessionOps.userTurn.ts";
 
 export const sendTurnAttempt = (
   services: SessionOpServices,
@@ -195,6 +196,12 @@ export const sendTurnAttempt = (
       sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
     });
 
+    yield* recordSubmittedUserTurn(services, {
+      threadId: input.threadId,
+      ...(input.requestMessageId ? { requestMessageId: input.requestMessageId } : {}),
+      turnId: turn.turnId,
+      createdAt: input.createdAt,
+    });
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const liveSession = yield* providerService
       .listSessions()

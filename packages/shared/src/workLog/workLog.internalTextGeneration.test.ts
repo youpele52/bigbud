@@ -9,6 +9,8 @@ describe("internal text-generation activity", () => {
       "failed",
       "completed",
       "retry-requested",
+      "user-turn-bound",
+      "title-stage",
     ].map((kind) => ({
       id: EventId.makeUnsafe(`fixture:${kind}`),
       kind: `text-generation.${kind}`,

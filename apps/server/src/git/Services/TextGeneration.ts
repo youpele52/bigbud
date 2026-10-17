@@ -72,6 +72,8 @@ export interface BranchNameGenerationResult {
 }
 
 export interface ThreadTitleGenerationInput extends InternalTextGenerationContext {
+  /** Staged recovery may use only this turn's verified pair, ignoring the global override. */
+  verifiedThreadModelOnly?: boolean;
   cwd: string;
   titleSeed?: string | undefined;
   message: string;

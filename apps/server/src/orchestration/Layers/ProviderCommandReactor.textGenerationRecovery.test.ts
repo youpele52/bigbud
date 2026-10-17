@@ -16,6 +16,8 @@ import { recordThreadTextGenerationStatus } from "../../git/Layers/InternalTextG
 import { recordTextGenerationRequestStage } from "../../git/Layers/InternalTextGeneration.requests.ts";
 import { requestTextGenerationRetry } from "../../ws/wsRetryTextGeneration.ts";
 import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTitleLock.ts";
+import { recordTitleStage } from "./ProviderCommandReactorSessionOps.title.state.ts";
+import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 const threadId = ThreadId.makeUnsafe("thread-1");
 type Harness = Awaited<ReturnType<typeof createHarness>>;
@@ -66,6 +68,32 @@ async function acceptedRequest() {
 describe("durable metadata request recovery", () => {
   registerProviderCommandReactorTestCleanup();
   afterEach(resetThreadTitleLockForTests);
+  it("retains final-fallback failure eligibility when a manual retry's delivery is ambiguous after restart", async () => {
+    const { harness, request } = await acceptedRequest();
+    await Effect.runPromise(
+      recordTitleStage(
+        { orchestrationEngine: harness.engine } as SessionOpServices,
+        await readThread(harness),
+        4,
+        "failed",
+      ),
+    );
+    await Effect.runPromise(
+      recordTextGenerationRequestStage(harness.engine, threadId, request, "started"),
+    );
+    await harness.startReactor();
+    await waitFor(async () =>
+      (await readThread(harness)).activities.some(
+        (item) => item.kind === "text-generation.request-settled",
+      ),
+    );
+    const failure = (await readThread(harness)).activities.findLast(
+      (item) => item.kind === "text-generation.failed",
+    );
+    expect(failure?.payload).toMatchObject({ operation: "title", finalFailure: true });
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
+    expect(harness.sendTurn).not.toHaveBeenCalled();
+  });
   it("uses durable command receipts to reject a second execution owner for the same request", async () => {
     const { harness, request } = await acceptedRequest();
     await Effect.runPromise(

@@ -3,7 +3,8 @@ import { Cause, Effect, Semaphore } from "effect";
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
-import { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+import { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";
+import { readTitleStage } from "./ProviderCommandReactorSessionOps.title.state.ts";
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
@@ -25,7 +26,14 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
     ) {
       const { activity, threadId } = event.payload;
       const retry = activity.kind === "text-generation.retry-requested";
-      if (!retry && activity.kind !== "text-generation.model-succeeded") return;
+      const recovery = activity.kind === "text-generation.title-recovery";
+      if (
+        !retry &&
+        !recovery &&
+        activity.kind !== "text-generation.model-succeeded" &&
+        activity.kind !== "text-generation.user-turn-bound"
+      )
+        return;
       const requested =
         typeof activity.payload === "object" &&
         activity.payload !== null &&
@@ -63,7 +71,7 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
       const cwd =
         resolveThreadWorkspaceCwd({ thread, projects: model.projects }) ??
         resolveDefaultChatCwd(settings);
-      if (!retry) {
+      if (!retry && !recovery) {
         const deferredBranch = thread.activities.findLast(
           (item) =>
             [
@@ -98,6 +106,7 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
         }
       }
       for (const operation of ["title", "summary"] as const) {
+        if (recovery && operation !== "title") continue;
         if (retry && requested !== operation) continue;
         if (request && executingRequests.has(request.requestId)) continue;
         if (request) {
@@ -135,6 +144,10 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
               threadId,
               operation,
               "failed",
+              {
+                finalFailure:
+                  operation === "title" && readTitleStage(thread, 4)?.state === "failed",
+              },
             );
             yield* recordTextGenerationRequestStage(
               services.orchestrationEngine,
@@ -145,15 +158,6 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
             continue;
           }
         }
-        const previous = thread.activities.findLast(
-          (item) =>
-            (item.kind === "text-generation.completed" || item.kind === "text-generation.failed") &&
-            typeof item.payload === "object" &&
-            item.payload !== null &&
-            "operation" in item.payload &&
-            item.payload.operation === operation,
-        );
-        if (!retry && operation === "title" && previous) continue;
         const first = thread.messages.find((message) => message.role === "user");
         const deferred = thread.activities.findLast(
           (item) =>
@@ -231,13 +235,15 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
             }),
           ),
         );
-        if (request) yield* guarded;
+        if (request || recovery) yield* guarded;
         else yield* guarded.pipe(Effect.forkScoped);
       }
     });
     // Retry recovery is detached from chat intent workers, and hydrates/runs at most two jobs at once.
     return (event: Parameters<typeof handle>[0]) =>
-      event.payload.activity.kind === "text-generation.retry-requested"
+      ["text-generation.retry-requested", "text-generation.title-recovery"].includes(
+        event.payload.activity.kind,
+      )
         ? permits.withPermits(1)(handle(event)).pipe(Effect.forkScoped, Effect.asVoid)
         : handle(event);
   });

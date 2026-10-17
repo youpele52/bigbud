@@ -67,6 +67,7 @@ export function makeInternalTextGenerationRouter(deps: {
       readonly transcript?: string;
       readonly attachments?: ReadonlyArray<unknown> | undefined;
       readonly titleSeed?: string | undefined;
+      readonly verifiedThreadModelOnly?: boolean;
     },
     generate: (selection: ModelSelection) => Effect.Effect<A, TextGenerationError>,
   ) =>
@@ -102,7 +103,7 @@ export function makeInternalTextGenerationRouter(deps: {
       );
       return yield* runInternalTextGeneration({
         operation,
-        preference: settings.textGenerationModelSelection,
+        preference: input.verifiedThreadModelOnly ? null : settings.textGenerationModelSelection,
         successful: input.successfulModelSelection ?? null,
         generate: (selection) =>
           !settings.providers[selection.provider]?.enabled

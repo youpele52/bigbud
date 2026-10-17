@@ -58,29 +58,47 @@ export function shouldRefreshThreadElevatorSummary(input: {
   );
 }
 
-function buildElevatorSummaryTranscript(messages: ReadonlyArray<OrchestrationMessage>): string {
-  const visibleMessages = messages.filter(isVisibleSummaryMessage);
-  const sections: string[] = [];
+/** Slice before formatting so enormous responses never create an unbounded temporary section. */
+function boundedTranscriptSection(message: OrchestrationMessage, budget: number): string {
+  if (!isVisibleSummaryMessage(message)) return "";
+  const heading = message.role === "assistant" ? "ASSISTANT:\n" : "USER:\n";
+  if (budget <= heading.length) return "";
+  const start = message.text.search(/\S/u);
+  if (start < 0) return "";
+  let text = message.text.slice(start, start + budget - heading.length).trimEnd();
+  const last = text.charCodeAt(text.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) text = text.slice(0, -1);
+  return text ? `${heading}${text}` : "";
+}
 
-  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
-    const message = visibleMessages[index];
-    if (!message) {
-      continue;
-    }
-    const roleLabel = message.role === "assistant" ? "ASSISTANT" : "USER";
-    const text = message.text.trim();
-    if (text.length === 0) {
-      continue;
-    }
-    const nextSection = `${roleLabel}:\n${text}`;
-    sections.unshift(nextSection);
-    const transcript = sections.join("\n\n");
-    if (transcript.length > THREAD_ELEVATOR_SUMMARY_TRANSCRIPT_MAX_CHARS) {
-      sections.shift();
-      break;
-    }
+/** Keep chronological, bounded context, reserving room for the most recent readable user intent. */
+export function buildElevatorSummaryTranscript(
+  messages: ReadonlyArray<OrchestrationMessage>,
+): string {
+  const budget = THREAD_ELEVATOR_SUMMARY_TRANSCRIPT_MAX_CHARS;
+  let userIndex = -1;
+  let reserved = 0;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role !== "user") continue;
+    const section = boundedTranscriptSection(message, budget / 2);
+    if (!section) continue;
+    userIndex = index;
+    reserved = section.length;
+    break;
   }
-
+  const sections: string[] = [];
+  let used = 0;
+  for (let index = messages.length - 1; index >= 0 && used < budget; index -= 1) {
+    const isReservedUser = index === userIndex;
+    const remaining = budget - used - (sections.length > 0 ? 2 : 0);
+    const available = isReservedUser ? remaining : remaining - reserved - (reserved > 0 ? 2 : 0);
+    const section = boundedTranscriptSection(messages[index]!, available);
+    if (!section) continue;
+    used += section.length + (sections.length > 0 ? 2 : 0);
+    sections.unshift(section);
+    if (isReservedUser) reserved = 0;
+  }
   return sections.join("\n\n");
 }
 

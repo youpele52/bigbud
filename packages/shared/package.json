@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./internalTextGeneration": {
+      "types": "./src/internalTextGeneration.ts",
+      "import": "./src/internalTextGeneration.ts"
+    },
     "./opencodeNativeTrust": {
       "types": "./src/opencodeNativeTrust.ts",
       "import": "./src/opencodeNativeTrust.ts"

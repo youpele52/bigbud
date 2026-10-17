@@ -11,6 +11,7 @@ import { makePromptSuggestionReactorStart } from "./PromptSuggestionReactor.live
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { makeTextGenerationRequestRecovery } from "./ProviderCommandReactor.textGenerationRecovery.ts";
+import { makeTitleStageRecovery } from "./ProviderCommandReactor.titleRecovery.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -38,6 +39,7 @@ const make = Effect.gen(function* () {
   const handlers = yield* makeProviderCommandHandlers;
   const startPromptSuggestions = yield* makePromptSuggestionReactorStart;
   const recoverTextGenerationRequests = yield* makeTextGenerationRequestRecovery;
+  const recoverTitleStages = yield* makeTitleStageRecovery;
   const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
@@ -85,6 +87,7 @@ const make = Effect.gen(function* () {
         event.type === "thread.message-sent" ||
         (event.type === "thread.activity-appended" &&
           (event.payload.activity.kind === "text-generation.model-succeeded" ||
+            event.payload.activity.kind === "text-generation.user-turn-bound" ||
             event.payload.activity.kind === "text-generation.retry-requested")) ||
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.turn-steer-requested" ||
@@ -112,6 +115,9 @@ const make = Effect.gen(function* () {
     yield* startPromptSuggestions();
     yield* Effect.yieldNow;
     yield* recoverTextGenerationRequests(handlers.processTextGenerationActivity);
+    yield* recoverTitleStages(handlers.processTextGenerationActivity).pipe(
+      Effect.catch((cause) => Effect.logWarning("could not recover staged title jobs", { cause })),
+    );
 
     let cursorAt = "";
     let cursorId = "";
