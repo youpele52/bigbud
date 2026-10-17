@@ -58,7 +58,10 @@ it.effect(
       assert.isTrue(
         Exit.isFailure(yield* Effect.exit(sql`SELECT parent_path FROM worktree_operations`)),
       );
-      assert.deepEqual(yield* runMigrations(), [[132, "RepairWorktreeOperationSchema"]]);
+      assert.deepEqual(
+        (yield* runMigrations()).filter(([id]) => id === 132),
+        [[132, "RepairWorktreeOperationSchema"]],
+      );
       const rows =
         yield* sql`SELECT operation_id, parent_path, parent_device, parent_inode, phase FROM worktree_operations`;
       assert.deepEqual(rows, [

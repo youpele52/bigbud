@@ -5,6 +5,10 @@ import { ChatAttachment, OrchestrationMessageReply } from "@bigbud/contracts";
 import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import {
+  estimateObservableTokens,
+  OBSERVABLE_ESTIMATOR_VERSION,
+} from "../../orchestration/usageObservable.ts";
 import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   GetProjectionThreadMessageInput,
@@ -56,6 +60,8 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       return sql`
         INSERT INTO projection_thread_messages (
           message_id,
+          observable_token_count,
+          observable_estimator_version,
           thread_id,
           turn_id,
           role,
@@ -69,6 +75,8 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
         )
         VALUES (
           ${row.messageId},
+          ${estimateObservableTokens(row.text)},
+          ${OBSERVABLE_ESTIMATOR_VERSION},
           ${row.threadId},
           ${row.turnId},
           ${row.role},
@@ -107,6 +115,8 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           turn_id = excluded.turn_id,
           role = excluded.role,
           text = excluded.text,
+          observable_token_count = excluded.observable_token_count,
+          observable_estimator_version = excluded.observable_estimator_version,
           attachments_json = COALESCE(
             excluded.attachments_json,
             projection_thread_messages.attachments_json

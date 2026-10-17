@@ -237,8 +237,8 @@ describe("ProviderRuntimeEvent", () => {
     if (parsed.type !== "thread.token-usage.updated") {
       throw new Error("expected thread.token-usage.updated");
     }
-    expect(parsed.payload.usage.maxTokens).toBe(200000);
-    expect(parsed.payload.usage.usedTokens).toBe(31251);
+    expect(parsed.payload.usage?.maxTokens).toBe(200000);
+    expect(parsed.payload.usage?.usedTokens).toBe(31251);
     expect(parsed.payload.accounting?.scopeId).toBe("turn-1");
   });
 });

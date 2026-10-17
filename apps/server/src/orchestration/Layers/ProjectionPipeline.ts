@@ -49,6 +49,7 @@ import {
 } from "./ProjectionPipeline.helpers.ts";
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
+import { runUsageEstimateBackfill } from "./ProjectionPipeline.usageEstimateBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
 import { increment, threadRetentionCompactionRows } from "../../observability/Metrics.ts";
 import {
@@ -285,7 +286,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const backfillUsageContributions: OrchestrationProjectionPipelineShape["backfillUsageContributions"] =
       runUsageContributionBackfill({
         repository: projectionThreadActivityRepository,
-      });
+      }).pipe(
+        Effect.andThen(runUsageEstimateBackfill(sql)),
+        Effect.catchTag("SqlError", (error) =>
+          Effect.fail(toPersistenceSqlError("ProjectionPipeline.usageEstimateBackfill")(error)),
+        ),
+      );
 
     const compactVerifiedPrefix = (batchSize?: number) =>
       eventStore.compactVerifiedPrefix

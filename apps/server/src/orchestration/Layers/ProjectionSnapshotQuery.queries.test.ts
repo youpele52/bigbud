@@ -226,6 +226,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
 
       assert.deepEqual(entries, [
         {
+          accountingJson: null,
+          source: "provider-reported",
           contributionId: "codex:usage-thread:turn:current",
           threadId: "usage-thread",
           turnId: "current",
@@ -241,6 +243,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         },
         {
           contributionId: "opencode:usage-thread:item:message-1",
+          accountingJson: null,
+          source: "provider-reported",
           threadId: "usage-thread",
           turnId: "current",
           createdAt: "2026-03-02T00:00:03.000Z",

@@ -262,7 +262,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("emits Claude context window on result completion usage snapshots", () => {
+  it.effect("emits result consumption without inventing a last-message context snapshot", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -315,14 +315,9 @@ describe("ClaudeAdapterLive", () => {
       const completedEvent = runtimeEvents.find((event) => event.type === "turn.completed");
       assert.equal(usageEvent?.type, "thread.token-usage.updated");
       if (usageEvent?.type === "thread.token-usage.updated") {
-        assert.deepEqual(usageEvent.payload.usage, {
-          usedTokens: 24542,
-          lastUsedTokens: 24542,
-          inputTokens: 2719,
-          cachedInputTokens: 21144,
-          outputTokens: 679,
-          maxTokens: 200000,
-        });
+        assert.isUndefined(usageEvent.payload.usage);
+        assert.equal(usageEvent.payload.accounting?.canonical?.inputTokens, 23863);
+        assert.equal(usageEvent.payload.accounting?.canonical?.cacheWriteTokens, 2715);
         assert.equal(usageEvent.payload.accounting?.scope, "turn");
         assert.equal(typeof usageEvent.payload.accounting?.scopeId, "string");
         assert.equal(usageEvent.payload.accounting?.processedTokens, 24542);

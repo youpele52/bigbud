@@ -258,6 +258,10 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
                 )
             `;
               yield* sql`DELETE FROM projection_state`;
+              yield* sql`UPDATE projection_usage_backfill_state
+                SET last_activity_id = '', completed = 0`;
+              yield* sql`UPDATE projection_usage_estimate_backfill_state
+                SET last_message_id = '', completed = 0`;
               const updatedAt = new Date().toISOString();
               for (const projector of requiredProjectors) {
                 yield* sql`

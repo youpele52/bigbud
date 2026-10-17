@@ -18,6 +18,7 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { Option, Schema, ServiceMap } from "effect";
+import { UsageAttribution } from "@bigbud/contracts/orchestration/providerRuntime.usage";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -32,6 +33,7 @@ export const ProjectionTurnState = Schema.Literals([
 export type ProjectionTurnState = typeof ProjectionTurnState.Type;
 
 export const ProjectionTurn = Schema.Struct({
+  usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
   threadId: ThreadId,
   turnId: Schema.NullOr(TurnId),
   pendingMessageId: Schema.NullOr(MessageId),
@@ -50,6 +52,7 @@ export const ProjectionTurn = Schema.Struct({
 export type ProjectionTurn = typeof ProjectionTurn.Type;
 
 export const ProjectionTurnById = Schema.Struct({
+  usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
   threadId: ThreadId,
   turnId: TurnId,
   pendingMessageId: Schema.NullOr(MessageId),
@@ -68,6 +71,7 @@ export const ProjectionTurnById = Schema.Struct({
 export type ProjectionTurnById = typeof ProjectionTurnById.Type;
 
 export const ProjectionPendingTurnStart = Schema.Struct({
+  usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
   threadId: ThreadId,
   messageId: MessageId,
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),

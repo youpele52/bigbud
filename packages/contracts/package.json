@@ -34,6 +34,7 @@
       "import": "./src/system-monitor/types.ts"
     },
     "./orchestration/*": "./src/orchestration/*",
+    "./orchestration/providerRuntime.usage": "./src/orchestration/providerRuntime.usage.ts",
     "./orchestration/orchestration.catalog": "./src/orchestration/orchestration.catalog.ts",
     "./orchestration/orchestration.fork": "./src/orchestration/orchestration.fork.ts",
     "./orchestration/orchestration.delegationModelChoice": "./src/orchestration/orchestration.delegationModelChoice.ts",

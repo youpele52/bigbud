@@ -57,6 +57,7 @@ describe("GeneralSettingsPanel terminal group", () => {
       "What should bigbud call you?",
       "Theme",
       "Time format",
+      "Open web links in bigbud",
       "Diff line wrapping",
     ]);
     expect(sections[2]?.rows).toEqual([

@@ -1,7 +1,7 @@
 import { Option, Schema } from "effect";
 import { ApprovalExecutionIntent } from "./approvalIntent";
 
-import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+import { NonNegativeInt } from "../core/baseSchemas";
 import { UserInputField } from "./providerRuntime.forms";
 import { ModelSelection } from "./orchestration.provider";
 export { McpOauthCompletedPayload, McpStatusUpdatedPayload } from "./providerRuntime.payloads.mcp";
@@ -69,45 +69,12 @@ export const ThreadMetadataUpdatedPayload = Schema.Struct({
 });
 export type ThreadMetadataUpdatedPayload = typeof ThreadMetadataUpdatedPayload.Type;
 
-export const ThreadTokenUsageSnapshot = Schema.Struct({
-  usedTokens: NonNegativeInt,
-  totalProcessedTokens: Schema.optional(NonNegativeInt),
-  maxTokens: Schema.optional(PositiveInt),
-  inputTokens: Schema.optional(NonNegativeInt),
-  cachedInputTokens: Schema.optional(NonNegativeInt),
-  outputTokens: Schema.optional(NonNegativeInt),
-  reasoningOutputTokens: Schema.optional(NonNegativeInt),
-  lastUsedTokens: Schema.optional(NonNegativeInt),
-  lastInputTokens: Schema.optional(NonNegativeInt),
-  lastCachedInputTokens: Schema.optional(NonNegativeInt),
-  lastOutputTokens: Schema.optional(NonNegativeInt),
-  lastReasoningOutputTokens: Schema.optional(NonNegativeInt),
-  toolUses: Schema.optional(NonNegativeInt),
-  durationMs: Schema.optional(NonNegativeInt),
-  compactsAutomatically: Schema.optional(Schema.Boolean),
-});
-export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
-
-export const ThreadTokenUsageAccountingScope = Schema.Literals(["turn", "item", "task"]);
-export type ThreadTokenUsageAccountingScope = typeof ThreadTokenUsageAccountingScope.Type;
-
-export const ThreadTokenUsageAccounting = Schema.Struct({
-  scope: ThreadTokenUsageAccountingScope,
-  scopeId: TrimmedNonEmptyStringSchema,
-  processedTokens: NonNegativeInt,
-  inputTokens: NonNegativeInt,
-  cachedInputTokens: NonNegativeInt,
-  outputTokens: NonNegativeInt,
-  reasoningOutputTokens: NonNegativeInt,
-  finalized: Schema.Boolean,
-});
-export type ThreadTokenUsageAccounting = typeof ThreadTokenUsageAccounting.Type;
-
-export const ThreadTokenUsageUpdatedPayload = Schema.Struct({
-  usage: ThreadTokenUsageSnapshot,
-  accounting: Schema.optional(ThreadTokenUsageAccounting),
-});
-export type ThreadTokenUsageUpdatedPayload = typeof ThreadTokenUsageUpdatedPayload.Type;
+export {
+  ThreadTokenUsageSnapshot,
+  ThreadTokenUsageAccountingScope,
+  ThreadTokenUsageAccounting,
+  ThreadTokenUsageUpdatedPayload,
+} from "./providerRuntime.usage";
 
 export const ThreadRealtimeStartedPayload = Schema.Struct({
   realtimeSessionId: Schema.optional(TrimmedNonEmptyStringSchema),

@@ -16,6 +16,10 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { Schema, ServiceMap } from "effect";
+import {
+  CodexUsageObservation,
+  UsageAccountingV2,
+} from "@bigbud/contracts/orchestration/providerRuntime.usage";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -34,6 +38,8 @@ export const ProjectionThreadActivity = Schema.Struct({
 export type ProjectionThreadActivity = typeof ProjectionThreadActivity.Type;
 
 export const ProjectionUsageContribution = Schema.Struct({
+  accounting: Schema.optional(UsageAccountingV2),
+  codexObservation: Schema.optional(CodexUsageObservation),
   contributionId: Schema.String,
   activityId: EventId,
   threadId: ThreadId,
@@ -104,6 +110,10 @@ export type ListPendingDelegatedModelChoiceRequestsInput =
  * ProjectionThreadActivityRepositoryShape - Service API for projected thread activity.
  */
 export interface ProjectionThreadActivityRepositoryShape {
+  readonly retireUsageTurns?: (
+    threadId: ThreadId,
+    turnIds: readonly string[],
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
   /**
    * Insert or replace a projected thread activity row.
    *
