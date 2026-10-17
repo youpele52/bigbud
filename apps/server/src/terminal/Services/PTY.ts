@@ -23,6 +23,10 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
+  /** Attached to an existing process whose earlier output is not replayed by this adapter. */
+  readonly recovered?: boolean;
+  /** Explicit replacement must wait for definitive exit and durable ownership release. */
+  readonly prepareRestart?: () => Promise<void>;
   readonly detach?: () => void;
   readonly pid: number;
   write(data: string): void;

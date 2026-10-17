@@ -1,0 +1,140 @@
+syntax = "proto3";
+package bigbud.system_monitor.v1;
+import "system-monitor/app.proto";
+import "system-monitor/metrics.proto";
+import "system-monitor/process.proto";
+
+message Frame {
+  oneof payload {
+    Hello hello = 1;
+    HelloAck hello_ack = 2;
+    Subscribe subscribe = 3;
+    UpdateSubscription update_subscription = 4;
+    Unsubscribe unsubscribe = 5;
+    Snapshot snapshot = 6;
+    SnapshotAck snapshot_ack = 7;
+    ProcessQuery process_query = 8;
+    bigbud.system_monitor.process.v1.ProcessPage process_page = 9;
+    RetryCollection retry_collection = 10;
+    Error error = 11;
+    Shutdown shutdown = 12;
+    SubscribeAck subscribe_ack = 13;
+    RetryAck retry_ack = 14;
+    CollectionStatus collection_status = 15;
+  }
+}
+message Hello { uint32 major = 1; uint32 minor = 2; }
+message HelloAck { uint32 major = 1; uint32 minor = 2; uint32 maximum_frame_bytes = 3; uint32 maximum_subscriptions = 4; uint64 epoch = 5; repeated string capabilities = 6; optional string hostname = 7; optional string os_name = 8; optional string os_version = 9; optional string architecture = 10; }
+message RetryAck { uint64 request_id = 1; uint64 epoch = 2; }
+enum CollectionPhase {
+  COLLECTION_PHASE_UNSPECIFIED = 0;
+  COLLECTION_PHASE_HEALTHY = 1;
+  COLLECTION_PHASE_RETRYING = 2;
+  COLLECTION_PHASE_FAILED = 3;
+}
+message CollectionStatus {
+  CollectionPhase phase = 1;
+  uint32 attempts = 2;
+  uint64 retry_after_ms = 3;
+  string reason = 4;
+  uint64 epoch = 5;
+}
+message SubscribeAck { uint64 request_id = 1; uint64 subscription_id = 2; }
+message Demand {
+  bool processes = 1;
+  bool disks = 2;
+  bool sensors = 3;
+  bool app_resources = 4;
+  repeated bigbud.system_monitor.app.v1.AppProcessRoot app_roots = 5;
+}
+message Subscribe { uint64 request_id = 1; Demand demand = 2; }
+message UpdateSubscription { uint64 subscription_id = 1; Demand demand = 2; }
+message Unsubscribe { uint64 subscription_id = 1; }
+message Flag { bool value = 1; string status = 2; uint64 sampled_at_ms = 3; }
+message TextField { string value = 1; string status = 2; uint64 sampled_at_ms = 3; }
+message NamedMetric { string name = 1; bigbud.system_monitor.metrics.v1.Metric metric = 2; }
+message DiskRow {
+  string name = 1;
+  string mount = 2;
+  string filesystem = 3;
+  bigbud.system_monitor.metrics.v1.Metric total_bytes = 4;
+  bigbud.system_monitor.metrics.v1.Metric free_bytes = 5;
+  bigbud.system_monitor.metrics.v1.Metric used_bytes = 6;
+  bigbud.system_monitor.metrics.v1.Metric read_bytes_per_second = 7;
+  bigbud.system_monitor.metrics.v1.Metric written_bytes_per_second = 8;
+  Flag removable = 9;
+  Flag read_only = 10;
+}
+message NetworkRow {
+  string name = 1;
+  bigbud.system_monitor.metrics.v1.Metric received_total_bytes = 2;
+  bigbud.system_monitor.metrics.v1.Metric transmitted_total_bytes = 3;
+  bigbud.system_monitor.metrics.v1.Metric received_bytes_per_second = 4;
+  bigbud.system_monitor.metrics.v1.Metric transmitted_bytes_per_second = 5;
+  bigbud.system_monitor.metrics.v1.Metric receive_errors = 6;
+  bigbud.system_monitor.metrics.v1.Metric transmit_errors = 7;
+  bigbud.system_monitor.metrics.v1.Metric received_packets = 8;
+  bigbud.system_monitor.metrics.v1.Metric transmitted_packets = 9;
+  TextField link_state = 10;
+  bigbud.system_monitor.metrics.v1.Metric mtu_bytes = 11;
+}
+message Snapshot {
+  uint64 subscription_id = 1;
+  uint64 epoch = 2;
+  uint64 sequence = 3;
+  bool baseline = 4;
+  uint64 sampled_at_ms = 5;
+  string hostname = 6;
+  bigbud.system_monitor.metrics.v1.Metric cpu_percent = 7;
+  repeated NamedMetric per_core_percent = 8;
+  bigbud.system_monitor.metrics.v1.Metric memory_total_bytes = 9;
+  bigbud.system_monitor.metrics.v1.Metric memory_used_bytes = 10;
+  bigbud.system_monitor.metrics.v1.Metric swap_total_bytes = 11;
+  bigbud.system_monitor.metrics.v1.Metric swap_used_bytes = 12;
+  bigbud.system_monitor.metrics.v1.Metric network_received_bytes_per_second = 13;
+  bigbud.system_monitor.metrics.v1.Metric network_transmitted_bytes_per_second = 14;
+  bigbud.system_monitor.metrics.v1.Metric disk_capacity_bytes = 15;
+  repeated NamedMetric temperatures_celsius = 16;
+  string process_status = 17;
+  string summary_status = 18;
+  repeated DiskRow disks = 19;
+  repeated NetworkRow interfaces = 20;
+  string os_name = 21;
+  string os_version = 22;
+  string architecture = 23;
+  bigbud.system_monitor.metrics.v1.Metric uptime_seconds = 24;
+  bigbud.system_monitor.metrics.v1.Metric logical_cores = 25;
+  bool per_core_truncated = 26;
+  bool disks_truncated = 27;
+  bool interfaces_truncated = 28;
+  bool sensors_truncated = 29;
+  bigbud.system_monitor.metrics.v1.Metric memory_available_bytes = 30;
+  bigbud.system_monitor.metrics.v1.Metric swap_free_bytes = 31;
+  string kernel_version = 32;
+  bigbud.system_monitor.metrics.v1.Metric boot_time_seconds = 33;
+  bigbud.system_monitor.metrics.v1.Metric physical_cores = 34;
+  string cpu_brand = 35;
+  bigbud.system_monitor.metrics.v1.Metric cpu_frequency_mhz = 36;
+  bigbud.system_monitor.metrics.v1.Metric load_average_one = 37;
+  bigbud.system_monitor.metrics.v1.Metric load_average_five = 38;
+  bigbud.system_monitor.metrics.v1.Metric load_average_fifteen = 39;
+  repeated NamedMetric critical_temperatures_celsius = 40;
+  bigbud.system_monitor.app.v1.AppResources app_resources = 41;
+}
+message SnapshotAck { uint64 subscription_id = 1; uint64 epoch = 2; uint64 sequence = 3; }
+message ProcessQuery {
+  uint64 request_id = 1;
+  string name = 2;
+  optional uint32 pid = 3;
+  string status = 4;
+  string sort = 5;
+  bool descending = 6;
+  uint32 limit = 7;
+  uint64 cursor_generation = 8;
+  uint64 cursor_digest = 9;
+  uint32 cursor_offset = 10;
+  string search = 11;
+}
+message RetryCollection { uint64 request_id = 1; }
+message Error { uint64 request_id = 1; uint64 subscription_id = 2; string code = 3; string message = 4; }
+message Shutdown {}

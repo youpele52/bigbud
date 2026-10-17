@@ -17,7 +17,8 @@ export type LearningMemoryOutcome =
 type LearningMemoryJob = Pick<
   LearningJob,
   "jobId" | "threadId" | "turnId" | "attemptCount" | "memoryUserMessageCount"
->;
+> &
+  Partial<Pick<LearningJob, "provider" | "modelSelection">>;
 
 export function makeLearningActivityPublisher(orchestrationEngine: OrchestrationEngineShape) {
   const publish = (input: {
@@ -47,6 +48,10 @@ export function makeLearningActivityPublisher(orchestrationEngine: Orchestration
             jobId: input.job.jobId,
             attempt: input.job.attemptCount,
             scopes: input.scopes ?? [],
+            ...(input.job.provider ? { requestedProvider: input.job.provider } : {}),
+            ...((input.phase === "updated" || input.phase === "unchanged") && input.job.provider
+              ? { actualProvider: input.job.provider }
+              : {}),
             ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
           },
           turnId: input.job.turnId,

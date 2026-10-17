@@ -278,6 +278,15 @@ export function createOrchestraOperations(input: {
           role: "user",
           text: assignment.prompt.trim(),
           attachments: [],
+          originSegments: [
+            {
+              kind: "orchestraAssignment",
+              actor: "userAssignment",
+              text: assignment.prompt.trim(),
+              sourceThreads: [{ threadId: parentThread.threadId, title: parentThread.title }],
+              verified: false,
+            },
+          ],
         },
         modelSelection: assignment.modelSelection,
         titleSeed: title,
@@ -303,7 +312,7 @@ export function createOrchestraOperations(input: {
         title: selectThreadById(threadId)(useStore.getState())?.title ?? "handoff",
         content: handoffDocument,
       });
-      return buildHandoffSeedMessage(result.path);
+      return buildHandoffSeedMessage(result.path, threadId);
     },
     waitForThreadCompletion,
   };

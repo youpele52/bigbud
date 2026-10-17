@@ -100,6 +100,8 @@ export function CompactThreadConversation({
         >
           <div ref={setTimelineContent} className="h-full">
             <MessagesTimeline
+              emptyChatGreeting={context.timeline.emptyChatGreeting}
+              shimmerEmptyChat={context.timeline.shimmerEmptyChat}
               isWorking={context.thread.isWorking}
               activeTurnInProgress={context.interactions.activeTurnInProgress}
               activeTurnStartedAt={context.thread.activeWorkStartedAt}

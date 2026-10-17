@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { toastManager } from "../components/ui/toast";
+import { publishTerminalOutput } from "../components/terminal/TerminalOutputStream";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
 import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
@@ -18,6 +19,7 @@ import {
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
 import {
+  getServerConfig,
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
   useServerConfig,
@@ -31,7 +33,8 @@ import { useThreadSelectionStore } from "../stores/thread";
 import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
 import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
-import { migrateLocalSettingsToServer } from "../hooks/useSettings";
+import { migrateLocalSettingsToServer, persistServerSettings } from "../hooks/useSettings";
+import { migrateHiddenComposerProvidersToServer } from "../hooks/useSettings.storage";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
@@ -195,6 +198,17 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     }
   }, [clearAllThinkingDeltas, serverSettings.enableThinkingStreaming]);
 
+  const serverConfigLoaded = serverConfig !== null;
+  useEffect(() => {
+    const loaded = getServerConfig();
+    if (!serverConfigLoaded || !loaded || !readNativeApi()) return;
+    // Awaited: the local list is dropped only after the server accepted it (retried next start).
+    void migrateHiddenComposerProvidersToServer({
+      serverHiddenComposerProviders: loaded.settings.hiddenComposerProviders,
+      patchServer: (hiddenComposerProviders) => persistServerSettings({ hiddenComposerProviders }),
+    });
+  }, [serverConfigLoaded]);
+
   useEffect(() => {
     const api = readNativeApi();
     if (!api || !serverSettings.enableThinkingStreaming) {
@@ -226,7 +240,10 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       removeFromSelection,
       removeTerminalState,
       removeOrphanedTerminalStates,
-      applyTerminalEvent: (event) => applyTerminalEvents([event]),
+      applyTerminalEvent: (event) => {
+        publishTerminalOutput(event);
+        applyTerminalEvents([event]);
+      },
     });
     const deliveryApplicationQueue = createAsyncOperationQueue();
 
@@ -316,7 +333,9 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       if (thread && thread.archivedAt !== null) {
         return;
       }
+      publishTerminalOutput(event);
       pendingTerminalEvents.push(event);
+      if (pendingTerminalEvents.length >= 128) flushPendingTerminalEvents();
       schedulePendingTerminalEventsFlush();
     });
     return () => {

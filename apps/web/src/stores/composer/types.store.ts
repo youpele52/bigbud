@@ -13,6 +13,7 @@ import {
 } from "@bigbud/contracts";
 import { CodexReasoningEffort } from "@bigbud/contracts/core/model";
 import * as Schema from "effect/Schema";
+import { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 import { type TerminalContextDraft } from "../../lib/terminalContext";
 import {
   type ChatFileAttachment,
@@ -94,6 +95,7 @@ export type PersistedTerminalContextDraft = typeof PersistedTerminalContextDraft
 export type PersistedComposerFileAttachment = typeof PersistedComposerFileAttachment.Type;
 
 export const PersistedComposerThreadDraftState = Schema.Struct({
+  pendingEnvMode: Schema.optionalKey(DraftThreadEnvModeSchema),
   prompt: Schema.String,
   shellMode: Schema.optionalKey(Schema.Boolean),
   attachments: Schema.Array(PersistedComposerImageAttachment),
@@ -167,6 +169,7 @@ export const PersistedDraftThreadState = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
+  worktreeBinding: Schema.optional(WorktreeBinding),
   envMode: DraftThreadEnvModeSchema,
 });
 export type PersistedDraftThreadState = typeof PersistedDraftThreadState.Type;
@@ -188,6 +191,7 @@ export const PersistedComposerDraftStoreStorage = Schema.Struct({
 });
 
 export interface ComposerThreadDraftState {
+  pendingEnvMode?: DraftThreadEnvMode;
   prompt: string;
   shellMode: boolean;
   images: ComposerImageAttachment[];
@@ -206,6 +210,7 @@ export interface ComposerThreadDraftState {
 }
 
 export interface DraftThreadState {
+  worktreeBinding?: WorktreeBinding | undefined;
   projectId: ProjectId;
   createdAt: string;
   runtimeMode: RuntimeMode;
@@ -244,6 +249,7 @@ export interface ComposerDraftStoreState {
     options: {
       branch?: string | null;
       worktreePath?: string | null;
+      worktreeBinding?: WorktreeBinding;
       projectId?: ProjectId;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
@@ -263,6 +269,7 @@ export interface ComposerDraftStoreState {
   clearDraftThread: (threadId: ThreadId) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadId: ThreadId, prompt: string) => void;
+  appendPrompt: (threadId: ThreadId, prompt: string) => void;
   setShellMode: (threadId: ThreadId, shellMode: boolean) => void;
   setTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
   setModelSelection: (

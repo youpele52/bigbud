@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Semaphore from "effect/Semaphore";
 
 import { ServerConfig } from "../../startup/config.ts";
 import {
@@ -50,6 +51,8 @@ const makeMemoryStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
+  // Serialize compare-and-rename across learning jobs and manual memory updates.
+  const writes = yield* Semaphore.make(1);
 
   const resolvePath = (scope: "user" | "global" | "project", projectId: string | null) =>
     resolveMemoryDocumentPath({ path, stateDir: config.stateDir, scope, projectId });
@@ -103,7 +106,7 @@ const makeMemoryStore = Effect.gen(function* () {
     return yield* read({ scope: input.scope, projectId: input.projectId });
   });
 
-  return { read, write } satisfies MemoryStoreShape;
+  return { read, write: (input) => writes.withPermits(1)(write(input)) } satisfies MemoryStoreShape;
 });
 
 export const MemoryStoreLive = Layer.effect(MemoryStore, makeMemoryStore);

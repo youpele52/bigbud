@@ -12,10 +12,8 @@ import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgen
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.ts";
 import { makeRemoteAgentPtyAdapter } from "./remoteAgentPtyAdapter.ts";
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
-import {
-  RemoteAgentConnectionPool,
-  type RemoteAgentRuntimeBinding,
-} from "./remoteAgentConnectionPool.ts";
+import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
+import { restartFixtureBinding as binding } from "./remoteAgentOwners.restart.binding.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import type { RemoteAgentFrame } from "./remoteAgentProtocol.ts";
 import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
@@ -33,31 +31,13 @@ import { RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import * as RemoteDefault from "./remoteAgentDefault.ts";
 import { runRestartFixtureTool } from "./remoteAgentOwners.httpFixture.ts";
+import * as SshProcess from "../ssh/sshProcess.ts";
 
 vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReady: () => undefined }));
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
 }));
 afterEach(() => vi.restoreAllMocks());
-
-function binding(generation: string): RemoteAgentRuntimeBinding {
-  const sha256 = (generation === "g1" ? "a" : "b").repeat(64);
-  return {
-    expectedEpoch: `epoch-${generation}`,
-    runtime: {
-      generation,
-      version: "0.2.207",
-      sha256,
-      buildDigest: "fixture",
-      targetTriple: "aarch64-unknown-linux-gnu",
-      origin: "managed",
-      binaryPath: `/tmp/agent/bin/0.2.207/${sha256}/bigbud-remote-agent`,
-      statePath: `/tmp/agent/runtimes/${generation}`,
-      socketPath: `/tmp/agent/runtimes/${generation}/supervisor.sock`,
-      logPath: `/tmp/agent/runtimes/${generation}/supervisor.log`,
-    },
-  };
-}
 
 describe("application terminal owner recovery after server services restart", () => {
   it("restores a retryable tool invocation on its original runtime without persisting command secrets or redispatching", async () => {
@@ -224,6 +204,13 @@ describe("application terminal owner recovery after server services restart", ()
   });
 
   it("reopens through the durable old PTY identity after newer activation; never spawns a replacement", async () => {
+    const folderProbe = vi.spyOn(SshProcess, "runSshCommand").mockImplementation(async (input) => ({
+      stdout: `\x1e${input.args?.[3]}\x1f`,
+      stderr: "",
+      code: 0,
+      signal: null,
+      timedOut: false,
+    }));
     const directory = mkdtempSync(join(tmpdir(), "bigbud-owner-restart-"));
     const old = binding("g1");
     const newer = binding("g2");
@@ -337,6 +324,29 @@ describe("application terminal owner recovery after server services restart", ()
           }),
         );
         expect(result.pid).toBe(9000);
+        expect(result.cwd).toBe("/workspace");
+        expect(result.historyUnavailable).toBe(restart ? true : undefined);
+        expect(result.history).toBe("");
+        if (!restart) {
+          await store.update('terminal:["thread","terminal"]', (owner) => ({
+            ...owner,
+            outputSequence: 17,
+          }));
+        } else {
+          const attached = requests
+            .filter((entry) => entry.frame.type === "ptyAttachRequest")
+            .at(-1)!;
+          expect(
+            attached.frame.type === "ptyAttachRequest" && attached.frame.value.afterSequence,
+          ).toBe(17);
+          expect(
+            (
+              await runtime.runPromise(
+                manager.snapshot({ threadId: "thread", terminalId: "terminal" }),
+              )
+            ).historyUnavailable,
+          ).toBe(true);
+        }
         await runtime.runPromise(Scope.close(scope, Exit.void));
         pool.closeAll();
         await runtime.dispose();
@@ -347,6 +357,10 @@ describe("application terminal owner recovery after server services restart", ()
       expect(requests.every((entry) => entry.generation === "g1")).toBe(true);
       expect(selection).toHaveBeenCalledOnce();
       expect(requests.some((entry) => entry.frame.type === "ptySignalRequest")).toBe(false);
+      expect(folderProbe).toHaveBeenCalledTimes(2);
+      expect(folderProbe).toHaveBeenCalledWith(
+        expect.objectContaining({ executionTargetId: "ssh:fixture", command: "sh" }),
+      );
     } finally {
       for (const controller of controllers) await controller.dispose();
       rmSync(directory, { recursive: true, force: true });

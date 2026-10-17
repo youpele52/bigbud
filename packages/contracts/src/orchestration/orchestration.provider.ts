@@ -7,6 +7,7 @@ import {
   DevinModelOptions,
   KilocodeModelOptions,
   OpencodeModelOptions,
+  OpencodeV2ModelOptions,
   PiModelOptions,
 } from "../core/model";
 import { CommandId, TrimmedNonEmptyString } from "../core/baseSchemas";
@@ -77,6 +78,14 @@ export const OpencodeModelSelection = Schema.Struct({
 });
 export type OpencodeModelSelection = typeof OpencodeModelSelection.Type;
 
+export const OpencodeV2ModelSelection = Schema.Struct({
+  provider: Schema.Literal("opencodeV2"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(OpencodeV2ModelOptions),
+  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type OpencodeV2ModelSelection = typeof OpencodeV2ModelSelection.Type;
+
 export const KilocodeModelSelection = Schema.Struct({
   provider: Schema.Literal("kilocode"),
   model: TrimmedNonEmptyString,
@@ -116,6 +125,7 @@ export const ModelSelection = Schema.Union([
   CopilotModelSelection,
   KilocodeModelSelection,
   OpencodeModelSelection,
+  OpencodeV2ModelSelection,
   PiModelSelection,
   CursorModelSelection,
   DevinModelSelection,

@@ -29,6 +29,10 @@ import {
 } from "./build.runtime.ts";
 import { stageBundledSkills } from "./bundledSkills.ts";
 import {
+  SERVER_RUNTIME_NPM_OVERRIDES,
+  installStagedServerDependencies,
+} from "./serverRuntimeDependencies.ts";
+import {
   assertPlatformBuildResources,
   createBuildConfig,
   resolveDesktopRuntimeDependencies,
@@ -47,6 +51,7 @@ import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { sanitizeUnsignedSigningEnvironment } from "../windows-signing-mode.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
+import { copyDesktopArtifacts } from "./build.copy.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -222,6 +227,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     bin: serverPackageJson.bin,
     files: serverPackageJson.files,
     dependencies: serverExternalDependencies,
+    overrides: SERVER_RUNTIME_NPM_OVERRIDES,
   };
   const stageServerPackageJsonString = yield* encodeJsonString(stageServerPackageJson);
   yield* fs.writeFileString(
@@ -238,20 +244,11 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     })`bun install --production`,
   );
   yield* pruneSourceMaps(path.join(stageAppDir, "node_modules"), "desktop runtime dependencies");
-  // Use npm (not bun) for the server directory so node_modules follows the
-  // standard flat layout that Node.js expects. Bun's symlink-based hoisting
-  // does not survive electron-builder's file copy to extraResources.
-  // Do NOT use --no-optional: @github/copilot declares platform-specific
-  // CLI binaries (@github/copilot-darwin-arm64, etc.) as optionalDependencies.
-  // Without them the Copilot SDK has no CLI to spawn and listModels() returns
-  // incomplete model shapes that crash at runtime.
-  yield* runCommand(
-    ChildProcess.make({
-      cwd: stageServerDir,
-      ...commandOutputOptions(options.verbose),
-      shell: shellOptionForPlatform(options.platform),
-    })`npm install --production`,
-  );
+  yield* installStagedServerDependencies({
+    stageServerDir,
+    platform: options.platform,
+    verbose: options.verbose,
+  });
 
   if (options.platform === "mac") {
     yield* Effect.log("[desktop-artifact] Pruning non-mac native runtime artifacts...");
@@ -353,30 +350,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     });
   }
 
-  const stageEntries = yield* fs.readDirectory(stageDistDir);
-  yield* fs.makeDirectory(options.outputDir, { recursive: true });
-
-  const copiedArtifacts: string[] = [];
-  for (const entry of stageEntries) {
-    const from = path.join(stageDistDir, entry);
-    const stat = yield* fs.stat(from).pipe(Effect.catch(() => Effect.succeed(null)));
-    if (!stat) continue;
-
-    const to = path.join(options.outputDir, entry);
-    if (stat.type === "File") {
-      yield* fs.copyFile(from, to);
-      copiedArtifacts.push(to);
-    } else if (stat.type === "Directory") {
-      yield* fs.copy(from, to);
-      copiedArtifacts.push(to);
-    }
-  }
-
-  if (copiedArtifacts.length === 0) {
-    return yield* new BuildScriptError({
-      message: `Build completed but no files were produced in ${stageDistDir}`,
-    });
-  }
+  const copiedArtifacts = yield* copyDesktopArtifacts(stageDistDir, options.outputDir);
 
   if (options.platform === "linux") {
     if (options.target === "dir") {

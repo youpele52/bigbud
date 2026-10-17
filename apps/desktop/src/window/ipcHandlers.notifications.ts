@@ -10,12 +10,13 @@ export function showDesktopNotification(
   input: DesktopNotificationInput,
   resolveIconPath: (ext: "ico" | "icns" | "png") => string | null,
   getMainWindow: () => BrowserWindow | null,
+  openMainWindow?: (threadId?: string) => BrowserWindow,
 ): boolean {
   if (!Notification.isSupported()) {
     return false;
   }
 
-  const { title, body, silent } = input;
+  const { title, body, silent, threadId } = input;
   if (typeof title !== "string" || title.trim().length === 0) {
     return false;
   }
@@ -29,7 +30,8 @@ export function showDesktopNotification(
   });
 
   notification.on("click", () => {
-    const window = getMainWindow() ?? BrowserWindow.getAllWindows()[0];
+    const targetThreadId = threadId?.trim() || undefined;
+    const window = openMainWindow ? openMainWindow(targetThreadId) : getMainWindow();
     if (!window) return;
     if (window.isMinimized()) window.restore();
     window.show();

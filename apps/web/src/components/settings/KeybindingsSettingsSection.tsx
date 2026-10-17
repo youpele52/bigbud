@@ -39,10 +39,10 @@ export function KeybindingsSettingsSection() {
     <SettingsSection title="Keybindings">
       <SettingsRow
         title="Keybindings"
-        description="Open the persisted `keybindings.json` file to edit advanced bindings directly."
+        description='Open the persisted "keybindings.json" file to edit advanced bindings directly.'
         status={
           <>
-            <span className="block break-all font-mono text-[11px] text-foreground">
+            <span className="block break-all text-sm font-light text-foreground">
               {keybindingsConfigPath ?? "Resolving keybindings path..."}
             </span>
             {openKeybindingsError ? (

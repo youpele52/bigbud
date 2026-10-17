@@ -75,7 +75,7 @@ export function useChatViewComposerActions(input: UseChatViewComposerActionsInpu
 
   const onSubmitReadFiles = useCallback(
     async (files: File[]) => {
-      input.interactions.addComposerFiles(files);
+      if (!input.interactions.addComposerFiles(files)) return;
       const nextPrompt =
         input.base.promptRef.current.trim().length > 0
           ? input.base.promptRef.current

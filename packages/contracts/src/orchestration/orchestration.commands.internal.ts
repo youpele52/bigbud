@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import {
   CheckpointRef,
   CommandId,
@@ -22,6 +23,10 @@ import {
   OrchestrationThreadActivity,
   OrchestrationTurnControlOperation,
 } from "./orchestration.thread";
+import {
+  ThreadDelegationModelChoiceExpireCommand,
+  ThreadDelegationModelChoiceHoldCommand,
+} from "./orchestration.delegationModelChoice";
 
 const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
 
@@ -109,6 +114,7 @@ const ThreadTurnStartFailedCommand = Schema.Struct({
   threadId: ThreadId,
   context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
   detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  failureClass: Schema.optional(TurnStartFailureClass),
   createdAt: IsoDateTime,
 });
 
@@ -219,5 +225,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadTaskUpsertCommand,
   ThreadTaskRemoveCommand,
   ThreadRevertCompleteCommand,
+  ThreadDelegationModelChoiceHoldCommand,
+  ThreadDelegationModelChoiceExpireCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

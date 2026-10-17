@@ -1,0 +1,32 @@
+{
+  "type": "OwnerFinish",
+  "input": {
+    "fields": {
+      "handshakeId": {
+        "$bytes": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+      },
+      "transcript": {
+        "$bytes": "839efae1eb6e90d6339d7aef2f102430754614031de2c2ae9319b514ae815c6b"
+      },
+      "sessionId": {
+        "$bytes": "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c"
+      },
+      "laneId": {
+        "$bytes": "2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d"
+      },
+      "scopeDigest": {
+        "$bytes": "17348c7f59426bc491b3b1c3e90d6acad7ea4ca6ea5c82728b957e521ed4259c"
+      },
+      "limitsDigest": {
+        "$bytes": "a32be65a37c84538d5547ecca18f804fc6d796d3c48a970156bf08593cf2ffb3"
+      },
+      "rootIntentDigest": {
+        "$bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "finishProof": {
+      "$bytes": "c9a0ce41abe6541832000239f9f279f0bfa68b5d4466ff0bed90ff7a549b2e6a"
+    }
+  },
+  "canonical": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b839efae1eb6e90d6339d7aef2f102430754614031de2c2ae9319b514ae815c6b2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d17348c7f59426bc491b3b1c3e90d6acad7ea4ca6ea5c82728b957e521ed4259ca32be65a37c84538d5547ecca18f804fc6d796d3c48a970156bf08593cf2ffb30000000000000000000000000000000000000000000000000000000000000000c9a0ce41abe6541832000239f9f279f0bfa68b5d4466ff0bed90ff7a549b2e6a"
+}

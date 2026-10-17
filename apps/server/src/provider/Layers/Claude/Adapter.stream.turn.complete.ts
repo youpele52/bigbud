@@ -186,10 +186,11 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     });
 
     const updatedAt = yield* nowIso;
+    context.lastSettledTurn = { turnId: turnState.turnId, completed: status === "completed" };
     context.turnState = undefined;
     context.session = {
       ...context.session,
-      status: "ready",
+      status: context.stopped || context.session.status === "closed" ? "closed" : "ready",
       activeTurnId: undefined,
       updatedAt,
       ...(status === "failed" && errorMessage ? { lastError: errorMessage } : {}),

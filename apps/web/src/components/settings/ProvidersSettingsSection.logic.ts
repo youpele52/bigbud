@@ -7,10 +7,14 @@ import {
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@bigbud/contracts/settings";
 import { normalizeModelSlug } from "@bigbud/shared/model";
 import { Equal } from "effect";
-import { MAX_CUSTOM_MODEL_LENGTH, resolveAppModelSelectionState } from "../../models/provider";
+import { MAX_CUSTOM_MODEL_LENGTH } from "../../models/provider";
 import { formatRelativeTime } from "../../utils/timestamp";
 import type { ProviderCardData } from "./ProviderCard";
-import { PROVIDER_DESCRIPTORS } from "../chat/provider/providerDescriptors";
+import { getOpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
+import {
+  PROVIDER_DESCRIPTORS,
+  PUBLIC_PROVIDER_DESCRIPTORS,
+} from "../chat/provider/providerDescriptors";
 
 export type InstallProviderSettings = {
   provider: ProviderKind;
@@ -18,7 +22,7 @@ export type InstallProviderSettings = {
   binaryPlaceholder: string;
   binaryDescription: ReactNode;
   configPath?: boolean;
-  homePathKey?: "codexHomePath";
+  homePathKey?: "codexHomePath" | "opencodeV2ProfileRoot";
   homePlaceholder?: string;
   homeDescription?: ReactNode;
   setupUrl?: string;
@@ -26,25 +30,28 @@ export type InstallProviderSettings = {
   customModelPlaceholder?: string;
 };
 
-export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = PROVIDER_DESCRIPTORS.map(
-  (descriptor) => ({
-    provider: descriptor.provider,
-    title: descriptor.label,
-    binaryPlaceholder: descriptor.settings.path.placeholder,
-    binaryDescription: descriptor.settings.path.description,
-    ...(descriptor.settings.path.kind === "config" ? { configPath: true } : {}),
-    ...(descriptor.settings.home
-      ? {
-          homePathKey: descriptor.settings.home.key,
-          homePlaceholder: descriptor.settings.home.placeholder,
-          homeDescription: descriptor.settings.home.description,
-        }
-      : {}),
-    ...(descriptor.settings.setupUrl ? { setupUrl: descriptor.settings.setupUrl } : {}),
-    supportsCustomModels: descriptor.customModels !== null,
-    ...(descriptor.customModels ? { customModelPlaceholder: descriptor.customModels.example } : {}),
-  }),
-);
+const descriptorSettings = (
+  descriptor: (typeof PROVIDER_DESCRIPTORS)[number],
+): InstallProviderSettings => ({
+  provider: descriptor.provider,
+  title: descriptor.label,
+  binaryPlaceholder: descriptor.settings.path.placeholder,
+  binaryDescription: descriptor.settings.path.description,
+  ...(descriptor.settings.path.kind === "config" ? { configPath: true } : {}),
+  ...(descriptor.settings.home
+    ? {
+        homePathKey: descriptor.settings.home.key,
+        homePlaceholder: descriptor.settings.home.placeholder,
+        homeDescription: descriptor.settings.home.description,
+      }
+    : {}),
+  ...(descriptor.settings.setupUrl ? { setupUrl: descriptor.settings.setupUrl } : {}),
+  supportsCustomModels: descriptor.customModels !== null,
+  ...(descriptor.customModels ? { customModelPlaceholder: descriptor.customModels.example } : {}),
+});
+
+export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] =
+  PUBLIC_PROVIDER_DESCRIPTORS.map(descriptorSettings);
 
 export const PROVIDER_STATUS_STYLES = {
   disabled: { dot: "bg-amber-400" },
@@ -155,6 +162,7 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
     cliProxy: "",
     copilot: "",
     opencode: "",
+    opencodeV2: "",
     kilocode: "",
     pi: "",
     cursor: "",
@@ -201,8 +209,15 @@ export function buildProviderCards(input: {
     );
     const providerConfig = input.settings.providers[providerSettings.provider];
     const defaultProviderConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
-    const statusKey = liveProvider?.status ?? (providerConfig.enabled ? "warning" : "disabled");
-    const summary = getProviderSummary(liveProvider);
+    const native =
+      providerSettings.provider === "opencodeV2"
+        ? getOpenCodeSettingsStatus(liveProvider, providerConfig.enabled)
+        : undefined;
+    const statusKey =
+      native?.statusKey ??
+      liveProvider?.status ??
+      (providerConfig.enabled ? "warning" : "disabled");
+    const summary = native?.summary ?? getProviderSummary(liveProvider);
     const customModels =
       "customModels" in providerConfig
         ? providerConfig.customModels
@@ -235,6 +250,7 @@ export function buildProviderCards(input: {
       providerConfig,
       statusStyle: PROVIDER_STATUS_STYLES[statusKey],
       summary,
+      nativeStatus: native?.status,
       versionLabel: getProviderVersionLabel(liveProvider?.version),
     };
   });
@@ -249,17 +265,4 @@ export function getLatestProviderCheckedAt(
         serverProviders[0]!.checkedAt,
       )
     : null;
-}
-
-export function shouldClearTextGenerationSelection(input: {
-  settings: UnifiedSettings;
-  serverProviders: ReadonlyArray<ServerProvider>;
-  provider: ProviderKind;
-  checked: boolean;
-}) {
-  const textGenProvider = resolveAppModelSelectionState(
-    input.settings,
-    input.serverProviders,
-  ).provider;
-  return !input.checked && textGenProvider === input.provider;
 }

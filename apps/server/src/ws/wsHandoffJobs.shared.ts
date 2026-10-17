@@ -12,8 +12,6 @@ import {
   resolveThreadWorkflowStatus,
   serializeThreadWorkflowStatusMarkdown,
 } from "../orchestration/ThreadWorkflowStatus.logic.ts";
-import { normalizeTextGenerationModelSelection } from "../git/Layers/RoutingTextGeneration.ts";
-import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 
 export const HANDOFF_TIMEOUT_MS = 180_000;
 const HANDOFF_CHUNK_MAX_CHARS = 16_000;
@@ -30,21 +28,13 @@ export function normalizeHandoffModelSelection(
   modelSelection: ModelSelection,
   availableProviderKinds?: ReadonlyArray<ModelSelection["provider"]>,
 ): CodexModelSelection | ClaudeModelSelection {
-  const resolution = resolveProviderWorkload({
-    requested: modelSelection,
-    workload: "unattendedTextGeneration",
-    ...(availableProviderKinds ? { availableProviderKinds } : {}),
-    fallbackOrder: ["codex", "claudeAgent"],
-  });
-  if (!resolution.actual) {
+  if (availableProviderKinds && !availableProviderKinds.includes(modelSelection.provider)) {
     throw new TextGenerationError({
       operation: "normalizeHandoffModelSelection",
-      detail:
-        resolution.reason ??
-        `Provider '${modelSelection.provider}' has no supported handoff fallback.`,
+      detail: `Provider '${modelSelection.provider}' is disabled.`,
     });
   }
-  const normalized = normalizeTextGenerationModelSelection(resolution.actual);
+  const normalized = modelSelection;
   if (normalized.provider === "claudeAgent" || normalized.provider === "codex") {
     return normalized;
   }

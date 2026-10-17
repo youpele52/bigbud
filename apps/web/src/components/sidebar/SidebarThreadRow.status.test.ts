@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isProviderIconWorking,
   mergeRunningTerminalIds,
   providerIconPresentationClass,
   shouldAnimateProviderIcon,
@@ -105,6 +106,26 @@ describe("SidebarThreadRow.status", () => {
     expect(providerIconPresentationClass(null, false)).toBe("text-muted-foreground");
     expect(shouldAnimateProviderIcon({ isConnecting: true, isRunning: false })).toBe(true);
     expect(shouldAnimateProviderIcon({ isConnecting: false, isRunning: false })).toBe(false);
+  });
+
+  it("breathes for main or child work while preserving the resolved icon color", () => {
+    expect(isProviderIconWorking({ label: "Working" } as never)).toBe(true);
+    expect(isProviderIconWorking({ label: "Subagents Working" } as never)).toBe(true);
+    expect(isProviderIconWorking({ label: "Idle" } as never)).toBe(false);
+    const childStatus = {
+      label: "Subagents Working",
+      colorClass: "text-info-foreground",
+      dotClass: "bg-info-foreground",
+      pulse: true,
+    } as never;
+    expect(providerIconPresentationClass(childStatus, false)).toBe("text-violet-500");
+    expect(shouldShowThreadStatusLabel(childStatus)).toBe(false);
+    expect(
+      shouldAnimateProviderIcon({
+        isConnecting: false,
+        isRunning: isProviderIconWorking(childStatus),
+      }),
+    ).toBe(true);
   });
 
   it("uses the warning color for the provider icon during connecting", () => {

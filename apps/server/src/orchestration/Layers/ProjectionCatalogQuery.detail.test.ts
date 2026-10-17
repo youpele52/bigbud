@@ -1,4 +1,4 @@
-import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { MessageId, ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -43,6 +43,32 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
         ) VALUES ('detail-thread', 'running', 'codex', 'turn-current', '2026-01-04')
       `;
       yield* sql`
+        INSERT INTO projection_threads (
+          thread_id, project_id, title, purpose, model_selection_json, runtime_mode,
+          interaction_mode, latest_turn_id, created_at, updated_at, archived_at, deleted_at
+        ) VALUES (
+          'delegated-child', 'other-project', 'Delegated child', 'standard',
+          '{"provider":"pi","model":"test"}', 'full-access', 'default',
+          'child-turn', '2026-01-02', '2026-01-05', NULL, NULL
+        )
+      `;
+      yield* sql`
+        INSERT INTO projection_thread_sessions (
+          thread_id, status, provider_name, active_turn_id, updated_at
+        ) VALUES ('delegated-child', 'running', 'pi', 'child-turn', '2026-01-05')
+      `;
+      yield* sql`
+        INSERT INTO thread_delegations (
+          delegation_id, caller_thread_id, source_message_id, invocation_id,
+          root_delegation_id, depth, target_kind, child_thread_id, child_turn_id,
+          state, created_at, updated_at
+        ) VALUES (
+          'delegation-1', 'detail-thread', 'message-b', 'invocation-1',
+          'delegation-1', 0, 'project', 'delegated-child', 'child-turn',
+          'completed', '2026-01-02', '2026-01-05'
+        )
+      `;
+      yield* sql`
         INSERT INTO projection_thread_messages (
           message_id, thread_id, role, text, attachments_json, is_streaming, created_at, updated_at
         ) VALUES
@@ -50,6 +76,19 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
           ('message-b', 'detail-thread', 'user', 'Middle B', NULL, 0, '2026-01-03', '2026-01-03'),
           ('message-c', 'detail-thread', 'user', 'Middle C', NULL, 0, '2026-01-03', '2026-01-03'),
           ('message-d', 'detail-thread', 'user', 'Oldest', NULL, 0, '2026-01-02', '2026-01-02')
+      `;
+      yield* sql`
+        UPDATE projection_thread_messages
+        SET origin_segments_json = ${JSON.stringify([
+          {
+            kind: "crossThreadAgent",
+            actor: "agent",
+            text: "Middle B",
+            sourceThreads: [{ threadId: "source-thread", title: "Source" }],
+            verified: true,
+          },
+        ])}
+        WHERE message_id = 'message-b'
       `;
       yield* sql`
         INSERT INTO projection_thread_activities (
@@ -109,8 +148,32 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
             freshness: { sessionEpoch: "test", sourcePriority: 1, observedOrdinal: 2 },
             createdAt: "2026-01-02",
             updatedAt: "2026-01-03",
-          })}, '2026-01-02', '2026-01-03')
+          })}, '2026-01-02', '2026-01-03'),
+          ('agent-live', 'detail-thread', ${JSON.stringify({
+            id: "agent-live",
+            kind: "providerSubagent",
+            nativeId: "native-agent-1",
+            activityFresh: true,
+            status: "inProgress",
+            subject: "Inspect provider",
+            source: "observed",
+            freshness: { sessionEpoch: "test", sourcePriority: 1, observedOrdinal: 3 },
+            createdAt: "2026-01-03",
+            updatedAt: "2026-01-05",
+          })}, '2026-01-03', '2026-01-05')
       `;
+      const taskPlan = yield* sql<{ readonly detail: string }>`
+        EXPLAIN QUERY PLAN
+        SELECT task_json FROM projection_thread_tasks
+        WHERE thread_id = 'detail-thread'
+          AND json_extract(task_json, '$.kind') = 'providerSubagent'
+        ORDER BY updated_at DESC, task_id ASC
+        LIMIT 51
+      `;
+      assert.equal(
+        taskPlan.some((row) => row.detail.includes("idx_projection_thread_tasks_thread_order")),
+        true,
+      );
       yield* sql`
         INSERT INTO projection_turns (
           thread_id, turn_id, state, requested_at, checkpoint_turn_count,
@@ -140,6 +203,10 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
       );
       assert.equal(first.messages[0]?.attachments.length, 20);
       assert.equal(first.messages[0]?.attachmentsTruncated, true);
+      assert.equal(
+        first.messages[1]?.originSegments?.[0]?.sourceThreads[0]?.threadId,
+        "source-thread",
+      );
       assert.deepEqual(first.messageWindow.nextCursor, {
         createdAt: "2026-01-03",
         messageId: "message-b",
@@ -160,6 +227,20 @@ layer("ProjectionCatalogQuery selected thread detail", (it) => {
         first.activeTasks.map((task) => task.id),
         ["task-active"],
       );
+      assert.deepEqual(
+        first.recentAgents?.map((task) => task.id),
+        ["agent-live"],
+      );
+      assert.equal(first.recentAgents?.[0]?.activityFresh, false);
+      assert.deepEqual(first.delegatedChildren, [
+        {
+          threadId: ThreadId.makeUnsafe("delegated-child"),
+          title: "Delegated child",
+          projectId: ProjectId.makeUnsafe("other-project"),
+          workflowState: "working",
+          updatedAt: "2026-01-05",
+        },
+      ]);
       assert.deepEqual(
         first.checkpoints.map((checkpoint) => checkpoint.checkpointTurnCount),
         [2],

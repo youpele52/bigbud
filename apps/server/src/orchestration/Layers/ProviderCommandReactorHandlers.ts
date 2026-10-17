@@ -8,6 +8,7 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { makeThreadDelegationRepository } from "../../persistence/Layers/ThreadDelegations.ts";
 import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -20,6 +21,7 @@ import {
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
 import { shouldAllowAutoTitleReplace } from "../../orchestration-tools/ThreadTitleLock.ts";
+import { threadTitleOwner } from "../../orchestration-tools/TerminalThreadTitle.ts";
 import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
@@ -30,7 +32,6 @@ import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.fa
 import { makeProviderCommandProjectResolvers } from "./ProviderCommandReactorHandlers.projects.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
-  ensureSessionForThread,
   maybeGenerateAndRenameWorktreeBranchForFirstTurn,
   maybeGenerateThreadTitleForFirstTurn,
   sendTurnForThread,
@@ -57,6 +58,9 @@ import {
 } from "./ProviderCommandReactorHandlers.events.ts";
 import { makeProviderCommandSessionStateHelpers } from "./ProviderCommandReactorHandlers.sessionState.ts";
 import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.turnStart.ts";
+import { makeRequestAutomaticFork } from "./ProviderCommandReactorHandlers.fork.ts";
+import { makeTextGenerationActivityHandler } from "./ProviderCommandReactorHandlers.textGeneration.ts";
+import { processRuntimeModeSet } from "./ProviderCommandReactorHandlers.runtimeMode.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -82,12 +86,12 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     string,
     import("./ProviderCommandReactorSessionOps.capabilityContext.ts").ProviderCapabilityContextState
   >();
-
   const { appendProviderFailureActivity, recordTurnStartFailure } =
     makeProviderFailureHandlers(orchestrationEngine);
   const handleTurnStartFailure = makeHandleTurnStartFailure({
     orchestrationEngine,
     recordTurnStartFailure,
+    requestAutomaticFork: makeRequestAutomaticFork({ orchestrationEngine, providerService }),
   });
 
   const { assertRuntimeStartAllowed, resolveThread, setThreadSession } =
@@ -96,6 +100,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const { resolveProject, resolveThreadsByProject } =
     makeProviderCommandProjectResolvers(orchestrationEngine);
   const sessionOpServices: SessionOpServices = {
+    threadDelegationRepository: yield* makeThreadDelegationRepository,
     orchestrationEngine,
     providerService,
     git,
@@ -155,7 +160,9 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         threadId: event.payload.threadId,
         context: "message-validation",
         detail,
+        failureClass: "invalid-request",
         createdAt: event.payload.createdAt,
+        messageId: event.payload.messageId,
       });
       return;
     }
@@ -223,6 +230,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         shouldAllowAutoTitleReplace({
           threadId: event.payload.threadId,
           currentTitle: thread.title,
+          titleOwner: threadTitleOwner(thread),
           ...(resolvedTitleSeed !== undefined ? { titleSeed: resolvedTitleSeed } : {}),
         })
       ) {
@@ -274,6 +282,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
+      requestMessageId: event.payload.messageId,
       messageText: message.text,
       providerInputText,
       capabilityCatalog: effectiveCapabilityCatalog,
@@ -307,37 +316,16 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
   const processExecutionTargetReconfigure =
     makeExecutionTargetReconfigureHandler(sessionOpServices);
+  const processTextGenerationActivity = yield* makeTextGenerationActivityHandler(sessionOpServices);
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError, Scope.Scope> {
     yield* annotateProviderIntentEvent(event);
     switch (event.type) {
-      case "thread.runtime-mode-set": {
-        const thread = yield* resolveThread(event.payload.threadId);
-        if (!thread?.session || thread.session.status === "stopped") {
-          return;
-        }
-        const previousSession = thread.session;
-        const cachedModelSelection = threadModelSelections.get(event.payload.threadId);
-        yield* ensureSessionForThread(sessionOpServices)(
-          event.payload.threadId,
-          event.occurredAt,
-          cachedModelSelection !== undefined ? { modelSelection: cachedModelSelection } : {},
-        ).pipe(
-          Effect.catchCause((cause) =>
-            Effect.gen(function* () {
-              yield* setThreadSession({
-                threadId: event.payload.threadId,
-                session: previousSession,
-                createdAt: event.occurredAt,
-                expectedSessionEpoch: (previousSession.sessionEpoch ?? 0) + 1,
-              });
-              return yield* Effect.failCause(cause);
-            }),
-          ),
-        );
-        return;
-      }
+      case "thread.activity-appended":
+        return yield* processTextGenerationActivity(event);
+      case "thread.runtime-mode-set":
+        return yield* processRuntimeModeSet(sessionOpServices, event);
       case "thread.meta-updated":
         yield* processExecutionTargetReconfigure(event);
         return;
@@ -389,6 +377,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   });
 
   return {
+    processTextGenerationActivity,
     processDomainEvent,
   };
 });

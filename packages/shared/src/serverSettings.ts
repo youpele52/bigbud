@@ -4,6 +4,18 @@ import { fromLenientJson } from "./schemaJson";
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
+/** Sparse new settings share the TUI; legacy private paths remain isolated until explicitly changed. */
+export function resolveOpencodeV2ConnectionMode(value: {
+  readonly connectionMode?: "shared" | "isolated";
+  readonly binaryPath: string;
+  readonly profileRoot: string;
+}): "shared" | "isolated" {
+  return (
+    value.connectionMode ??
+    (value.binaryPath.trim() || value.profileRoot.trim() ? "isolated" : "shared")
+  );
+}
+
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;

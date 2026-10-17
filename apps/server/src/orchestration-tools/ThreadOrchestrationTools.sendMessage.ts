@@ -3,8 +3,8 @@ import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
-import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
-import { stableThreadToolId } from "./ThreadOrchestrationTools.ts";
+import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
+import { stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
 type SendThreadMessageOutcome =
   | { readonly delivery: "started" }
@@ -42,19 +42,9 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
     if (message.length === 0 || message.length > 32_000) {
       return yield* Effect.fail(new Error("Message must be between 1 and 32000 characters."));
     }
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const caller = readModel.threads.find((thread) => thread.id === input.callerThreadId);
-    const target = readModel.threads.find((thread) => thread.id === input.threadId);
-    if (!caller || caller.deletedAt !== null) {
-      return yield* Effect.fail(new Error("Caller thread could not be resolved."));
-    }
-    if (!target || target.deletedAt !== null) {
-      return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
-    }
-    yield* requireThreadCoordinationAccess({
-      threadDelegationRepository: input.threadDelegationRepository,
-      callerThread: caller,
-      targetThread: target,
+    const { callerThread: caller, targetThread: target } = yield* resolveThreadToolParticipants({
+      ...input,
+      operation: "send",
     });
     if (target.archivedAt !== null || target.deletingAt) {
       return yield* Effect.fail(new Error(`Thread '${input.threadId}' is not available.`));
@@ -76,6 +66,15 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
       commandId,
       threadId: target.id,
       message: { messageId, text: message },
+      originSegments: [
+        {
+          kind: "crossThreadAgent",
+          actor: "agent",
+          text: message,
+          sourceThreads: [{ threadId: caller.id, title: caller.title }],
+          verified: true,
+        },
+      ],
       delivery: input.delivery,
       createdAt: new Date().toISOString(),
     });

@@ -165,7 +165,7 @@ export async function extractPromptTextFromFile(input: {
   const fileName = input.fileName.toLowerCase();
 
   if (isTextReadable(mimeType) || isTextReadableFileName(fileName)) {
-    return normalizeExtractedText(await readFile(input.filePath, "utf8"));
+    return truncateExtractedText(normalizeExtractedText(await readFile(input.filePath, "utf8")));
   }
 
   if (mimeType === PDF_MIME_TYPE || fileName.endsWith(".pdf")) {

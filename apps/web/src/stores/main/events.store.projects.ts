@@ -5,7 +5,6 @@ import {
   buildSidebarThreadSummary,
   mapProject,
   mapProjectScripts,
-  mapThread,
   normalizeModelSlug,
   sidebarThreadSummariesEqual,
 } from "./mappers.store";
@@ -16,6 +15,8 @@ import {
   updateProject,
 } from "./helpers.store";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { removeDeletedDelegatedChildren } from "./events.store.delegations";
+import { mapCreatedProjectThread } from "./events.store.projects.threadCreated";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
 import type { Project } from "../../models/types";
@@ -261,7 +262,7 @@ export function applyProjectEvent(
 
     case "thread.created": {
       const existing = state.threads.find((thread) => thread.id === event.payload.threadId);
-      const nextThread = mapProjectThread(event);
+      const nextThread = mapCreatedProjectThread(event);
       const projects = applyActiveThreadCountTransition(state.projects, existing, nextThread);
       const threads = existing
         ? state.threads.map((thread) => (thread.id === nextThread.id ? nextThread : thread))
@@ -306,6 +307,9 @@ export function applyProjectEvent(
           deletedThreadIds.has(thread.parentThread.threadId) &&
           !deletedThreadIds.has(thread.id),
       );
+      const hasDeletedDelegatedChild = state.threads.some((thread) =>
+        thread.delegatedChildren?.some((child) => deletedThreadIds.has(child.threadId)),
+      );
       const hasDetachedSidebarThread = Object.values(state.sidebarThreadsById).some(
         (thread) =>
           thread?.parentThread !== undefined &&
@@ -315,10 +319,14 @@ export function applyProjectEvent(
       const threads = state.threads
         .filter((thread) => !deletedThreadIds.has(thread.id))
         .map((thread) => {
+          const withoutDeletedDelegations = removeDeletedDelegatedChildren(
+            thread,
+            deletedThreadIds,
+          );
           if (!thread.parentThread || !deletedThreadIds.has(thread.parentThread.threadId)) {
-            return thread;
+            return withoutDeletedDelegations;
           }
-          const { parentThread: _parentThread, ...detachedThread } = thread;
+          const { parentThread: _parentThread, ...detachedThread } = withoutDeletedDelegations;
           return detachedThread;
         });
       const hasCachedThread = [...deletedThreadIds].some(
@@ -334,6 +342,7 @@ export function applyProjectEvent(
       if (
         threads.length === state.threads.length &&
         !hasCachedThread &&
+        !hasDeletedDelegatedChild &&
         !hasDetachedThread &&
         !hasDetachedSidebarThread
       ) {
@@ -386,36 +395,4 @@ export function applyProjectEvent(
     default:
       return undefined;
   }
-}
-
-function mapProjectThread(event: Extract<OrchestrationEvent, { type: "thread.created" }>) {
-  return mapThread({
-    id: event.payload.threadId,
-    projectId: event.payload.projectId,
-    title: event.payload.title,
-    purpose: event.payload.purpose ?? "standard",
-    elevatorSummary: event.payload.title,
-    elevatorSummaryMessageCount: 0,
-    providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId,
-    workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId,
-    executionTargetId: event.payload.executionTargetId,
-    modelSelection: event.payload.modelSelection,
-    runtimeMode: event.payload.runtimeMode,
-    interactionMode: event.payload.interactionMode,
-    branch: event.payload.branch,
-    worktreePath: event.payload.worktreePath,
-    latestTurn: null,
-    createdAt: event.payload.createdAt,
-    updatedAt: event.payload.updatedAt,
-    archivedAt: null,
-    pinnedAt: null,
-    deletingAt: null,
-    deletedAt: null,
-    messages: [],
-    proposedPlans: [],
-    activities: [],
-    checkpoints: [],
-    session: null,
-    watchingThreads: [],
-  });
 }

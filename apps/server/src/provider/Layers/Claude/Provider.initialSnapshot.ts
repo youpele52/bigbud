@@ -1,4 +1,5 @@
 import type { ClaudeSettings } from "@bigbud/contracts";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 
 import { buildServerProvider, providerModelsFromSettings } from "../../providerSnapshot";
 import {
@@ -26,7 +27,7 @@ export function makeClaudeInitialSnapshot(claudeSettings: ClaudeSettings) {
   const modelDiscovery = {
     status: "unavailable" as const,
     source: "fallback" as const,
-    version: "0.3.219",
+    version: CLAUDE_AGENT_SDK_VERSION,
     durationMs: 0,
   };
 

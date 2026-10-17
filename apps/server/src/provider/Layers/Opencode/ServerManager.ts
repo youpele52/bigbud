@@ -9,6 +9,7 @@ import {
 } from "../../Services/Opencode/ServerManager.ts";
 import { buildClientOptions, resolveBinaryPath } from "./ServerManager.helpers.ts";
 import { startManagedServer } from "./ServerManager.child.ts";
+import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
 export { formatMissingOpencodeBinaryDetail } from "./ServerManager.errors.ts";
 export { readManagedServerListeningUrl } from "./ServerManager.helpers.ts";
 
@@ -144,6 +145,9 @@ export function makeOpencodeServerManager(options: OpencodeServerManagerFactoryO
   const acquire = async (input?: OpencodeServerAcquireInput): Promise<OpencodeServerHandle> => {
     if (closing) throw new Error("OpenCode server manager is shutting down.");
     const config = SERVER_CONFIGS[input?.provider ?? "opencode"];
+    if (config.provider === "opencode" && !options.startServer) {
+      throw new Error(LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    }
     const executionTargetId = resolveExecutionTargetId(input?.executionTargetId);
     const binaryPath = resolveBinaryPath(config, input?.binaryPath);
     const targetKey = JSON.stringify([config.provider, executionTargetId, binaryPath]);

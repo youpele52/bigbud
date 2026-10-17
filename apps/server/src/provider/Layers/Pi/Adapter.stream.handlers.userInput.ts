@@ -13,6 +13,7 @@ import { PROVIDER, USER_INPUT_FALLBACK_QUESTION_ID } from "./Adapter.types.ts";
 import type { PiRpcExtensionUIRequest } from "./RpcProcess.ts";
 import { normalizeString, toMessage } from "./Adapter.utils.ts";
 import { emitWithTurnAppend } from "./Adapter.stream.handlers.ts";
+import { mapPiAsyncSubagentWidget } from "./Adapter.stream.asyncSubagents.ts";
 
 function buildQuestion(message: PiRpcExtensionUIRequest): UserInputQuestion | undefined {
   switch (message.method) {
@@ -135,10 +136,14 @@ export const handleExtensionUiRequest = Effect.fn("handleExtensionUiRequest")(fu
   readonly sessions: Map<ThreadId, ActivePiSession>;
   readonly message: PiRpcExtensionUIRequest;
 }) {
+  if (deps.message.method === "setWidget") {
+    const events = mapPiAsyncSubagentWidget(deps.session, deps.message);
+    if (events.length > 0) yield* deps.emit(events);
+    return;
+  }
   if (
     deps.message.method === "notify" ||
     deps.message.method === "setStatus" ||
-    deps.message.method === "setWidget" ||
     deps.message.method === "setTitle" ||
     deps.message.method === "set_editor_text"
   ) {

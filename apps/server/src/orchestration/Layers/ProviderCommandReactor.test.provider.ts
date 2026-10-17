@@ -18,6 +18,7 @@ export function makeReactorProvider(
         readonly interruptTurnFailure?: string;
         readonly interruptTurnLeavesSessionActive?: boolean;
         readonly stopSessionFailure?: string;
+        readonly sessionRecovery?: "resume-restart" | "fresh-restart" | "unsupported";
       }
     | undefined,
   now: string,
@@ -161,6 +162,7 @@ export function makeReactorProvider(
     getCapabilities: (_provider) =>
       Effect.succeed({
         sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
+        ...(input?.sessionRecovery ? { sessionRecovery: input.sessionRecovery } : {}),
       }),
     rollbackConversation: () => unsupported(),
     get streamEvents() {

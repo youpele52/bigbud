@@ -21,7 +21,7 @@ function mapError(operation: string) {
       : toPersistenceSqlError(`${operation}:query`)(cause);
 }
 
-const makeThreadDelegationRepository = Effect.gen(function* () {
+export const makeThreadDelegationRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const getByInvocation = SqlSchema.findOneOption({
     Request: ThreadDelegationInvocation,

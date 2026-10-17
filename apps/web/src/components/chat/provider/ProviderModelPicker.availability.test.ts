@@ -19,6 +19,55 @@ function provider(overrides: Partial<ServerProvider> = {}): ServerProvider {
 }
 
 describe("getProviderModelAvailability", () => {
+  it("shows loading during the initial V2 native/catalog probe", () => {
+    const snapshot = provider({ provider: "opencodeV2", initialProbeComplete: false });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 0 })
+        .loading,
+    ).toBe(true);
+  });
+
+  it("keeps a cached V2 catalog browseable for setup after native readiness failure", () => {
+    const snapshot = provider({
+      provider: "opencodeV2",
+      installed: false,
+      message: "Refresh failed; no fallback was attempted.",
+    });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 1 }),
+    ).toMatchObject({ unavailable: false, unavailableMessage: snapshot.message });
+    const disabled = { ...snapshot, enabled: false };
+    expect(
+      getProviderModelAvailability({ providers: [disabled], provider: disabled, modelCount: 1 })
+        .unavailable,
+    ).toBe(true);
+  });
+
+  it("does not make unavailable V1/native providers browseable because V2 has full-catalog browsing", () => {
+    const snapshot = provider({ provider: "opencode", installed: false });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 1 })
+        .unavailable,
+    ).toBe(true);
+  });
+  it("shows V2 configuration failures instead of claiming the executable is missing", () => {
+    const snapshot = provider({
+      provider: "opencodeV2",
+      installed: false,
+      message: "V2 requires absolute binary and dedicated profile paths in Providers settings.",
+    });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 0 }),
+    ).toMatchObject({ unavailable: true, unavailableMessage: snapshot.message });
+  });
+
+  it("preserves the missing-installation message for other providers", () => {
+    const snapshot = provider({ provider: "opencode", installed: false });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 0 }),
+    ).toMatchObject({ unavailable: true, unavailableMessage: "Provider is not installed" });
+  });
+
   it("reports an empty warning snapshot as unavailable instead of loading", () => {
     expect(
       getProviderModelAvailability({

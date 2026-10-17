@@ -1,6 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLink } from "../lib/openLink";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -29,15 +29,6 @@ function resolveDeliveryConsumerId(): string {
     return consumerId;
   } catch {
     return crypto.randomUUID();
-  }
-}
-
-function shouldOpenViaDesktopShell(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol !== "http:" && protocol !== "https:";
-  } catch {
-    return false;
   }
 }
 
@@ -178,6 +169,8 @@ export function createWsNativeApi(): NativeApi {
       },
     },
     terminal: {
+      wslDistributions: () => rpcClient.terminal.wslDistributions(),
+      snapshot: (input) => rpcClient.terminal.snapshot(input as never),
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),
       resize: (input) => rpcClient.terminal.resize(input as never),
@@ -218,20 +211,9 @@ export function createWsNativeApi(): NativeApi {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openInTerminal: (cwd, terminal) => rpcClient.shell.openInTerminal({ cwd, terminal }),
       openPath: (path) => rpcClient.shell.openPath({ path }),
-      openExternal: async (url) => {
-        const nextUrl = url.trim();
-        if (!nextUrl) {
-          throw new Error("Unable to open link.");
-        }
-
-        if (window.desktopBridge && shouldOpenViaDesktopShell(nextUrl)) {
-          await window.desktopBridge.openExternal(nextUrl);
-          return;
-        }
-
-        openBrowserPanel({ url: nextUrl });
-      },
+      openExternal: openLink,
     },
+    worktrees: rpcClient.worktrees,
     git: {
       pull: rpcClient.git.pull,
       fetch: rpcClient.git.fetch,
@@ -286,8 +268,10 @@ export function createWsNativeApi(): NativeApi {
       setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
+      retryTextGeneration: rpcClient.server.retryTextGeneration,
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
+      getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,
       createMobileRemotePairing: rpcClient.server.createMobileRemotePairing,
       listMobileRemoteSessions: rpcClient.server.listMobileRemoteSessions,
       revokeMobileRemoteSession: rpcClient.server.revokeMobileRemoteSession,
@@ -304,6 +288,7 @@ export function createWsNativeApi(): NativeApi {
       triggerAutomation: rpcClient.server.triggerAutomation,
       listAutomationRuns: rpcClient.server.listAutomationRuns,
       getUsageSummary: rpcClient.server.getUsageSummary,
+      stopSubagent: rpcClient.server.stopSubagent,
     },
     orchestration: {
       getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),

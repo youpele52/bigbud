@@ -13,6 +13,12 @@ import {
 } from "effect";
 
 import { ServerConfig } from "./config";
+import { serverRunId } from "./serverRunIdentity.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { GitCore } from "../git/Services/GitCore.ts";
+import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
+import { makeWorktreeLifecycle } from "../git/Layers/WorktreeLifecycle.ts";
+import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { Keybindings } from "../keybindings/keybindings";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
 import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor";
@@ -202,6 +208,10 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const threadRetention = yield* Effect.serviceOption(ThreadRetention);
   const remoteAgentUpdateCoordinator = yield* Effect.serviceOption(RemoteAgentUpdateCoordinator);
   const commandGate = yield* makeCommandGate();
+  const workspaceSql = yield* Effect.serviceOption(SqlClient.SqlClient);
+  const workspaceGit = yield* Effect.serviceOption(GitCore);
+  const workspaceEngine = yield* Effect.serviceOption(OrchestrationEngineService);
+  const workspaceProvider = yield* Effect.serviceOption(ProviderService);
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
 
@@ -254,6 +264,22 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
     yield* runStartupPhase("pins.migrate", runLegacyPinnedThreadSettingsMigration());
 
     yield* Effect.logDebug("startup phase: starting orchestration reactors");
+    if (
+      Option.isSome(workspaceSql) &&
+      Option.isSome(workspaceGit) &&
+      Option.isSome(workspaceEngine)
+    ) {
+      yield* runStartupPhase(
+        "worktrees.recover",
+        makeWorktreeLifecycle({
+          sql: workspaceSql.value,
+          git: workspaceGit.value,
+          engine: workspaceEngine.value,
+          worktreesDir: serverConfig.worktreesDir,
+          ...(Option.isSome(workspaceProvider) ? { providerService: workspaceProvider.value } : {}),
+        }).recover,
+      );
+    }
     yield* runStartupPhase(
       "reactors.start",
       orchestrationReactor.start().pipe(Scope.provide(reactorScope)),
@@ -272,7 +298,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       lifecycleEvents.publish({
         version: 1,
         type: "welcome",
-        payload: welcome,
+        payload: { ...welcome, serverRunId },
       }),
     );
   }).pipe(

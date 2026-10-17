@@ -1,3 +1,4 @@
+import { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Schema } from "effect";
 
 import type { CheckpointServiceError } from "../checkpointing/Errors.ts";
@@ -11,6 +12,8 @@ export class ProviderAdapterValidationError extends Schema.TaggedErrorClass<Prov
     provider: Schema.String,
     operation: Schema.String,
     issue: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -27,6 +30,8 @@ export class ProviderAdapterSessionNotFoundError extends Schema.TaggedErrorClass
   {
     provider: Schema.String,
     threadId: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -43,6 +48,8 @@ export class ProviderAdapterSessionClosedError extends Schema.TaggedErrorClass<P
   {
     provider: Schema.String,
     threadId: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -60,6 +67,8 @@ export class ProviderAdapterRequestError extends Schema.TaggedErrorClass<Provide
     provider: Schema.String,
     method: Schema.String,
     detail: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -77,6 +86,8 @@ export class ProviderAdapterProcessError extends Schema.TaggedErrorClass<Provide
     provider: Schema.String,
     threadId: Schema.String,
     detail: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

@@ -17,6 +17,7 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { ProviderAdapterRequestError, ProviderAdapterSessionNotFoundError } from "../../Errors.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CopilotAdapter, type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { buildSessionConfig } from "./Adapter.session.config.ts";
@@ -43,6 +44,7 @@ import {
   makeRollbackThread,
 } from "./Adapter.session.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export { resolveCopilotRuntimeInvocation } from "./Adapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./Adapter.types.ts";
 
@@ -71,10 +73,11 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
   const requireSession = (
     threadId: ThreadId,
   ): Effect.Effect<ActiveCopilotSession, ProviderAdapterSessionNotFoundError> => {
-    const session = sessions.get(threadId);
-    return session
-      ? Effect.succeed(session)
-      : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }));
+    return requireLiveAdapterSession({
+      provider: PROVIDER,
+      threadId,
+      session: sessions.get(threadId),
+    });
   };
 
   const emit = (events: ReadonlyArray<ProviderRuntimeEvent>) =>
@@ -289,6 +292,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "restart-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.copilot,
     },
     startSession: makeStartSession(sessionDeps),
     sendTurn: makeSendTurn(sessionDeps),

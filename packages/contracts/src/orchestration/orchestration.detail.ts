@@ -12,6 +12,7 @@ import {
   TurnId,
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
+import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import { UserInputQuestion } from "./providerRuntime.payloads";
 import {
   OrchestrationCheckpointStatus,
@@ -44,6 +45,7 @@ export const ThreadDetailMessage = Schema.Struct({
   attachments: Schema.Array(ChatAttachment),
   attachmentsTruncated: Schema.Boolean,
   replyTo: Schema.optional(OrchestrationMessageReply),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -100,11 +102,21 @@ export const GetSelectedThreadDetailInput = Schema.Struct({
   approvalLimit: Schema.optional(PositiveInt),
   userInputLimit: Schema.optional(PositiveInt),
   taskLimit: Schema.optional(PositiveInt),
+  agentLimit: Schema.optional(PositiveInt),
   checkpointLimit: Schema.optional(PositiveInt),
   messageCursor: Schema.optional(ThreadMessageCursor),
   messageAnchorId: Schema.optional(MessageId),
 });
 export type GetSelectedThreadDetailInput = typeof GetSelectedThreadDetailInput.Type;
+
+export const ThreadDetailDelegatedChild = Schema.Struct({
+  threadId: ThreadId,
+  title: Schema.String,
+  projectId: Schema.NullOr(ProjectId),
+  workflowState: Schema.Literals(["working", "idle", "failed", "unavailable"]),
+  updatedAt: IsoDateTime,
+});
+export type ThreadDetailDelegatedChild = typeof ThreadDetailDelegatedChild.Type;
 
 export const GetSelectedThreadDetailResult = Schema.Struct({
   projectionSequence: NonNegativeInt,
@@ -122,6 +134,15 @@ export const GetSelectedThreadDetailResult = Schema.Struct({
   activePlan: Schema.NullOr(OrchestrationProposedPlan),
   activeTasks: Schema.Array(OrchestrationTask),
   activeTasksTruncated: Schema.Boolean,
+  recentAgents: Schema.optional(Schema.Array(OrchestrationTask)).pipe(
+    Schema.withDecodingDefault(() => []),
+  ),
+  recentAgentsTruncated: Schema.optional(Schema.Boolean).pipe(
+    Schema.withDecodingDefault(() => false),
+  ),
+  delegatedChildren: Schema.optional(Schema.Array(ThreadDetailDelegatedChild)).pipe(
+    Schema.withDecodingDefault(() => []),
+  ),
   checkpoints: Schema.Array(ThreadDetailCheckpoint),
   checkpointsTruncated: Schema.Boolean,
 });

@@ -19,6 +19,7 @@ import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import { ChatViewOrchestraDialog } from "./ChatViewOrchestraDialog";
 import { ChatViewChatBody } from "./ChatViewChatBody";
 import type { useTerminalLayout } from "./terminalLayout.hooks";
+import { ThreadTextGenerationNotice } from "./ThreadTextGenerationNotice";
 
 interface ChatViewContentProps {
   base: ChatViewBaseState;
@@ -99,8 +100,7 @@ export function ChatViewContent({
           rightPanelOpen={rightPanelOpen}
           planCardLabel={thread.planCardLabel}
           planCardOpen={base.planCardOpen}
-          terminalOpen={base.terminalState.terminalOpen}
-          terminalLayoutNextActionLabel={terminalLayout.nextActionLabel}
+          terminalLayoutMode={terminalLayout.mode}
           onOpenOrchestra={() => setOrchestraOpen(true)}
           onOpenSideChat={() => {
             void openSideChat(base.activeThread!);
@@ -114,10 +114,14 @@ export function ChatViewContent({
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
           onTogglePlanCard={runtime.togglePlanCard}
           onOpenTerminal={terminalLayout.openTerminal}
-          onCycleTerminalLayout={terminalLayout.cycleLayout}
+          onSelectTerminalLayout={terminalLayout.selectLayout}
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </ContentPanelHeader>
+      <ThreadTextGenerationNotice
+        threadId={base.activeThread!.id}
+        activities={base.activeThread!.activities}
+      />
 
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -157,6 +161,7 @@ export function ChatViewContent({
           closeShortcutLabel={composer.closeTerminalShortcutLabel ?? undefined}
           keybindings={composer.keybindings}
           onAddTerminalContext={runtime.addTerminalContextToDraft}
+          onToggleExpanded={terminalLayout.toggleExpanded}
         />
       ))}
 

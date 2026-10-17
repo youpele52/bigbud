@@ -8,11 +8,14 @@ import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { asCanonicalTurnId, nativeProviderRefs, sdkNativeMethod } from "./Adapter.utils.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
+import type { SubagentHandlers } from "./Adapter.stream.subagents.ts";
+import { claudeRateLimitWarning, decodeClaudeRateLimits } from "./Adapter.stream.rateLimits.ts";
 
 export function makeSdkTelemetryHandler(deps: {
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
   readonly offerRuntimeEvent: OfferClaudeRuntimeEvent;
   readonly turn: TurnHandlers;
+  readonly subagents: SubagentHandlers;
 }) {
   return Effect.fn("handleSdkTelemetryMessage")(function* (
     context: ClaudeSessionContext,
@@ -39,6 +42,7 @@ export function makeSdkTelemetryHandler(deps: {
           ...(message.task_id ? { summary: `task:${message.task_id}` } : {}),
         },
       });
+      yield* deps.subagents.noteSubagentToolProgress(context, message);
     } else if (message.type === "tool_use_summary") {
       yield* deps.offerRuntimeEvent(context, {
         ...base,
@@ -61,11 +65,29 @@ export function makeSdkTelemetryHandler(deps: {
         },
       });
     } else if (message.type === "rate_limit_event") {
-      yield* deps.turn.emitRuntimeWarning(
-        context,
-        "Claude rate-limit status changed.",
-        claudeSdkDiagnostic(message),
-      );
+      const rateLimits = decodeClaudeRateLimits(message);
+      if (!rateLimits) {
+        yield* deps.turn.emitRuntimeWarning(
+          context,
+          "Invalid Claude rate-limit message.",
+          claudeSdkDiagnostic(message),
+        );
+        return;
+      }
+      yield* deps.offerRuntimeEvent(context, {
+        ...base,
+        type: "account.rate-limits.updated",
+        payload: { rateLimits },
+      });
+      const warning = claudeRateLimitWarning(rateLimits);
+      if (warning) {
+        yield* deps.turn.emitRuntimeWarning(
+          context,
+          warning,
+          { rateLimits },
+          rateLimits.status === "rejected" ? "error" : undefined,
+        );
+      }
     }
   });
 }

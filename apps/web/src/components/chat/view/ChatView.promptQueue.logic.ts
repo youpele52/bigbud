@@ -41,6 +41,11 @@ interface UsePromptQueueInput {
   }) => Promise<void>;
   onError: (message: string) => void;
   newId: () => string;
+  /**
+   * Persists the composer's model and modes on the thread, as a composer send does. "Send now"
+   * runs on the thread's settings, so the user's picker choice must reach the server first.
+   */
+  persistSettingsBeforeRelease?: (() => Promise<void>) | undefined;
 }
 
 export function promptQueueErrorMessage(error: unknown) {
@@ -83,6 +88,55 @@ export function buildSteerCommand(input: {
     ...(input.sessionEpoch !== undefined ? { sessionEpoch: input.sessionEpoch } : {}),
     createdAt: input.createdAt,
   };
+}
+
+/**
+ * "Send now" on an idle thread. It is the user's own send, so it also releases a held queue (a
+ * fork's held message, or a queue held after Stop); automatic flushes never carry `userRelease`.
+ */
+export function buildSendNowFlushCommand(input: {
+  readonly threadId: ThreadId;
+  readonly commandId: CommandId;
+  readonly messageIds: ReadonlyArray<MessageId>;
+  readonly messageId: MessageId;
+  readonly createdAt: string;
+}) {
+  return {
+    type: "thread.queued-prompt.flush" as const,
+    commandId: input.commandId,
+    threadId: input.threadId,
+    messageIds: [...input.messageIds],
+    messageId: input.messageId,
+    userRelease: true,
+    createdAt: input.createdAt,
+  };
+}
+
+/**
+ * "Send now": interrupt the running turn (the server flushes the queue on settlement), or persist
+ * the composer's settings and then release the idle queue. Settings are never persisted mid-turn:
+ * a runtime-mode change restarts the provider session and would race the interrupt. If the
+ * settings cannot be saved, nothing is sent and the error is reported.
+ */
+export async function sendNowQueuedPrompts(input: {
+  readonly queuedPromptIds: ReadonlyArray<MessageId>;
+  readonly activeTurnInProgress: boolean;
+  readonly persistSettingsBeforeRelease?: (() => Promise<void>) | undefined;
+  readonly interrupt: (queuedPromptIds: ReadonlyArray<MessageId>) => Promise<void>;
+  readonly flush: (queuedPromptIds: ReadonlyArray<MessageId>) => Promise<unknown>;
+  readonly onError: (message: string) => void;
+}): Promise<void> {
+  if (input.queuedPromptIds.length === 0) return;
+  try {
+    if (input.activeTurnInProgress) {
+      await input.interrupt(input.queuedPromptIds);
+      return;
+    }
+    await input.persistSettingsBeforeRelease?.();
+    await input.flush(input.queuedPromptIds);
+  } catch (error) {
+    input.onError(promptQueueErrorMessage(error));
+  }
 }
 
 export function buildComposerFollowUpCommand(input: {
@@ -155,29 +209,28 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     [input],
   );
 
-  const interruptAndFlushQueuedPrompts = useCallback(async () => {
-    if (queuedPrompts.length === 0) {
-      return;
-    }
-    try {
-      if (input.activeTurnInProgress) {
-        await input.onInterrupt({
-          queuedPromptIdsAfterSettlement: queuedPrompts.map((prompt) => prompt.id as MessageId),
-        });
-        return;
-      }
-      await readNativeApi()?.orchestration.dispatchCommand({
-        type: "thread.queued-prompt.flush",
-        commandId: newCommandId(),
-        threadId: input.threadId,
-        messageIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
-        messageId: newMessageId(),
-        createdAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      input.onError(promptQueueErrorMessage(error));
-    }
-  }, [input, queuedPrompts]);
+  const interruptAndFlushQueuedPrompts = useCallback(
+    () =>
+      sendNowQueuedPrompts({
+        queuedPromptIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
+        activeTurnInProgress: input.activeTurnInProgress,
+        persistSettingsBeforeRelease: input.persistSettingsBeforeRelease,
+        interrupt: (queuedPromptIds) =>
+          input.onInterrupt({ queuedPromptIdsAfterSettlement: queuedPromptIds }),
+        flush: async (messageIds) =>
+          readNativeApi()?.orchestration.dispatchCommand(
+            buildSendNowFlushCommand({
+              commandId: newCommandId(),
+              threadId: input.threadId,
+              messageIds,
+              messageId: newMessageId(),
+              createdAt: new Date().toISOString(),
+            }),
+          ),
+        onError: input.onError,
+      }),
+    [input, queuedPrompts],
+  );
 
   const steerQueuedPrompts = useCallback(async () => {
     if (

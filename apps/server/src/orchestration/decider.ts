@@ -14,6 +14,8 @@ import { Effect } from "effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { decideProjectCommand } from "./deciderProjects.ts";
 import { decideThreadCommand } from "./deciderThreads.ts";
+import { requireActiveOpencodeIntegration } from "./decider.opencodePolicy.ts";
+import { withThreadTitleOwnership } from "./deciderThreads.titleOwnership.ts";
 
 export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand")(function* ({
   command,
@@ -25,6 +27,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   Omit<OrchestrationEvent, "sequence"> | ReadonlyArray<Omit<OrchestrationEvent, "sequence">>,
   OrchestrationCommandInvariantError
 > {
+  yield* requireActiveOpencodeIntegration(command, readModel);
   if (
     command.type === "project.create" ||
     command.type === "project.meta.update" ||
@@ -36,5 +39,6 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     return yield* decideProjectCommand({ command, readModel });
   }
 
-  return yield* decideThreadCommand({ command, readModel });
+  const result = yield* decideThreadCommand({ command, readModel });
+  return withThreadTitleOwnership(command, readModel, result);
 });

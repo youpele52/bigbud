@@ -1,4 +1,9 @@
-import { Effect, FileSystem, Option, SynchronizedRef } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as SynchronizedRef from "effect/SynchronizedRef";
+import { access } from "node:fs/promises";
+import { constants } from "node:fs";
 
 import { TerminalCwdError, TerminalSessionLookupError } from "../Services/Manager";
 import {
@@ -112,4 +117,13 @@ export const makeAssertValidCwd =
           reason: "notDirectory",
         });
       }
+      yield* fileSystem
+        .access(cwd, { readable: true })
+        .pipe(
+          Effect.mapError((cause) => new TerminalCwdError({ cwd, reason: "statFailed", cause })),
+        );
+      yield* Effect.tryPromise({
+        try: () => access(cwd, constants.X_OK),
+        catch: (cause) => new TerminalCwdError({ cwd, reason: "statFailed", cause }),
+      });
     }).pipe(Effect.withSpan("terminal.assertValidCwd"));

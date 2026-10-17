@@ -17,11 +17,13 @@ import {
   ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../../Errors.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CliProxyAdapter, type CliProxyAdapterShape } from "../../Services/CliProxy/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
 import { resolveCliProxyRuntimeConfig } from "./RuntimeConfig.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 const PROVIDER = "cliProxy" as const;
 
 export function toClaudeSessionStartInput(
@@ -83,21 +85,17 @@ function requireCliProxyModelSelection(
   return Effect.succeed({ provider: PROVIDER, model: candidate.model.trim() });
 }
 
-function requireCliProxySession(
+export function requireCliProxySession(
   sessions: ReadonlyArray<ProviderSession>,
   threadId: ThreadId,
 ): Effect.Effect<ProviderSession, ProviderAdapterSessionNotFoundError> {
-  const session = sessions.find(
-    (candidate) => candidate.threadId === threadId && candidate.status !== "closed",
-  );
-  return session
-    ? Effect.succeed(session)
-    : Effect.fail(
-        new ProviderAdapterSessionNotFoundError({
-          provider: PROVIDER,
-          threadId,
-        }),
-      );
+  return requireLiveAdapterSession({
+    provider: PROVIDER,
+    threadId,
+    session: sessions.find(
+      (candidate) => candidate.threadId === threadId && candidate.status !== "closed",
+    ),
+  });
 }
 
 export function toClaudeSendTurnInput(input: ProviderSendTurnInput): ProviderSendTurnInput {
@@ -118,7 +116,7 @@ function remapEvent(event: ProviderRuntimeEvent): ProviderRuntimeEvent {
   return { ...event, provider: PROVIDER };
 }
 
-function remapError(error: ProviderAdapterError): ProviderAdapterError {
+export function remapError(error: ProviderAdapterError): ProviderAdapterError {
   switch (error._tag) {
     case "ProviderAdapterValidationError":
       return new ProviderAdapterValidationError({ ...error, provider: PROVIDER });
@@ -185,6 +183,7 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "unsupported",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.cliProxy,
       // CLIProxy's Claude-compatible endpoint does not expose a verified native
       // resume contract. Recovery is therefore a fresh Claude session whose
       // transcript is rebuilt by orchestration before the next turn.

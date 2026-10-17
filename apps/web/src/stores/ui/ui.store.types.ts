@@ -55,6 +55,7 @@ export const initialState: UiState = {
     "scheduled",
     "games",
     "usage",
+    "resource-monitor",
     "pinned",
     "chats",
     "projects",

@@ -1,6 +1,6 @@
 import { type ProviderKind } from "@bigbud/contracts";
 
-import { PROVIDER_DESCRIPTORS } from "../chat/provider/providerDescriptors";
+import { PUBLIC_PROVIDER_DESCRIPTORS } from "../chat/provider/providerDescriptors";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { isComposerProviderVisible } from "../../models/provider/composerVisibility.models";
 import { Switch } from "../ui/switch";
@@ -24,7 +24,7 @@ export function ComposerProvidersSettingsSection() {
         Choose which providers appear in the composer/provider and /model menus. This does not
         change provider setup or connection status.
       </p>
-      {PROVIDER_DESCRIPTORS.map((descriptor) => {
+      {PUBLIC_PROVIDER_DESCRIPTORS.map((descriptor) => {
         const visible = isComposerProviderVisible(descriptor.provider, hiddenComposerProviders);
         return (
           <SettingsRow

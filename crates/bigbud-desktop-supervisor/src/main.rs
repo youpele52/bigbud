@@ -139,5 +139,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args()
+        .skip(1)
+        .any(|arg| arg == "--system-monitor")
+    {
+        return bigbud_desktop_supervisor::system_monitor::run().map_err(Into::into);
+    }
     run()
 }

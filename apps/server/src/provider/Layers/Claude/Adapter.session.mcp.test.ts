@@ -33,6 +33,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       const abortController = new AbortController();
       const firstResultPromise = onElicitation!(ELICITATION_REQUEST, {
         signal: abortController.signal,
+        requestId: "elicitation-1",
       });
       const requested = yield* Stream.runHead(adapter.streamEvents);
       assert.equal(requested._tag, "Some");
@@ -40,6 +41,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       assert.equal(requested.value.type, "user-input.requested");
       const secondResultPromise = onElicitation!(ELICITATION_REQUEST, {
         signal: abortController.signal,
+        requestId: "elicitation-1",
       });
       yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
       yield* adapter.respondToUserInput(THREAD_ID, ApprovalRequestId.makeUnsafe("elicitation-1"), {
@@ -75,6 +77,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       assert.isDefined(onElicitation);
       const resultPromise = onElicitation!(ELICITATION_REQUEST, {
         signal: new AbortController().signal,
+        requestId: "elicitation-1",
       });
       yield* Stream.runHead(adapter.streamEvents);
       yield* TestClock.adjust("2 minutes");
@@ -99,6 +102,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       assert.isDefined(onElicitation);
       const interrupted = onElicitation!(ELICITATION_REQUEST, {
         signal: new AbortController().signal,
+        requestId: "elicitation-1",
       });
       yield* Stream.runHead(adapter.streamEvents);
       yield* adapter.interruptTurn(THREAD_ID);
@@ -106,7 +110,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
 
       const stopped = onElicitation!(
         { ...ELICITATION_REQUEST, elicitationId: "elicitation-stop" },
-        { signal: new AbortController().signal },
+        { signal: new AbortController().signal, requestId: "elicitation-stop" },
       );
       yield* Stream.runHead(adapter.streamEvents);
       yield* adapter.stopSession(THREAD_ID);
@@ -131,6 +135,7 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       assert.isDefined(onElicitation);
       const resultPromise = onElicitation!(ELICITATION_REQUEST, {
         signal: new AbortController().signal,
+        requestId: "elicitation-1",
       });
       yield* Stream.runHead(adapter.streamEvents);
       const failure = yield* adapter
@@ -151,10 +156,8 @@ describe("ClaudeAdapter MCP lifecycle", () => {
     );
   });
 
-  it.effect("cancels elicitation when stream recovery loses the callback", () => {
+  it.effect("cancels elicitation when the exhausted query is retired", () => {
     const harness = makeHarness();
-    harness.query.setInitializationResponse({} as never);
-    harness.query.reopenOnReinitialize = true;
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
@@ -167,19 +170,16 @@ describe("ClaudeAdapter MCP lifecycle", () => {
       assert.isDefined(onElicitation);
       const resultPromise = onElicitation!(ELICITATION_REQUEST, {
         signal: new AbortController().signal,
+        requestId: "elicitation-1",
       });
       yield* Stream.runHead(adapter.streamEvents);
       harness.query.fail(new Error("transport lost"));
-      for (
-        let attempt = 0;
-        attempt < 20 && harness.query.reinitializeCalls.length === 0;
-        attempt += 1
-      ) {
+      for (let attempt = 0; attempt < 20 && harness.query.closeCalls === 0; attempt += 1) {
         yield* Effect.yieldNow;
       }
-      assert.equal(harness.query.reinitializeCalls.length, 1);
+      assert.equal(harness.query.reinitializeCalls.length, 0);
       assert.deepEqual(yield* Effect.promise(() => resultPromise), { action: "cancel" });
-      yield* adapter.stopSession(THREAD_ID);
+      assert.isFalse(yield* adapter.hasSession(THREAD_ID));
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

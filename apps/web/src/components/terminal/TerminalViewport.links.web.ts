@@ -1,4 +1,4 @@
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { isTerminalLinkActivation } from "../../utils/terminal/links.utils";
 
 /** Return whether a terminal hyperlink is a valid HTTP(S) URL. */
@@ -11,14 +11,14 @@ export function isTerminalWebUrl(value: string): boolean {
   }
 }
 
-/** Open a terminal HTTP(S) hyperlink in bigbud's validated browser panel path. */
+/** Open a terminal HTTP(S) hyperlink using the shared user preference. */
 export function openTerminalWebLink(value: string): boolean {
   const url = value.trim();
   if (!isTerminalWebUrl(url)) {
     return false;
   }
 
-  openBrowserPanel({ url });
+  openLinkFromClick(url);
   return true;
 }
 

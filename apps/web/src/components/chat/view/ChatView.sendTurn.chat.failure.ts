@@ -10,6 +10,7 @@ import {
   repairRejectedMaterializationDraft,
 } from "./ChatView.sendTurn.materialization";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
+import { toastManager } from "../../ui/toast";
 
 export async function handleChatSendFailure(input: {
   readonly api: Pick<NativeApi, "orchestration">;
@@ -78,14 +79,19 @@ export async function handleChatSendFailure(input: {
       contentKind: "prompt",
     });
   }
-  sendInput.setThreadError(
-    input.threadId,
+  const failureMessage =
     materializationFailure === "ambiguous"
       ? "Your prompt is safe. Send again to recover the previous outcome without duplicating it."
       : input.error instanceof Error
         ? input.error.message
-        : "Failed to send message.",
-  );
+        : "Failed to send message.";
+  if ((input.images.length || input.files.length) && materializationFailure !== "ambiguous") {
+    toastManager.add({
+      type: "error",
+      title: "Could not send attachments",
+      description: failureMessage,
+    });
+  } else sendInput.setThreadError(input.threadId, failureMessage);
   if (sendInput.bootstrapSourceThreadId) {
     sendInput.clearBootstrapSourceThreadId(input.threadId);
   }

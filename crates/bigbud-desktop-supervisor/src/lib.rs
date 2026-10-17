@@ -3,9 +3,11 @@ mod frame;
 mod generated;
 mod owner_session;
 mod supervisor;
+pub mod system_monitor;
 
 pub use connection::{ConnectionAction, ConnectionState, TransportHealth};
 pub use frame::{FrameError, read_frame, write_frame};
+pub use generated::monitor_v1;
 pub use generated::v1;
 pub use owner_session::{OwnerSession, SessionResult, error_frame, recovery_frame};
 pub use supervisor::{

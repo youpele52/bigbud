@@ -123,6 +123,7 @@ export function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     draft.activeProvider === null &&
     draft.runtimeMode === null &&
     draft.interactionMode === null &&
+    !draft.pendingEnvMode &&
     (draft.bootstrapSourceThreadId ?? null) === null &&
     draft.replyTarget === null
   );

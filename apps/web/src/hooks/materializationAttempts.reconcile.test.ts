@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   beginMaterializationAttempt,
   readMaterializationLedger,
+  subscribeToMaterializationLedger,
 } from "../stores/materialization/materializationLedger";
 import { reconcilePersistedMaterializationAttempts } from "./materializationAttempts.reconcile";
 
@@ -193,4 +194,52 @@ describe("reconcilePersistedMaterializationAttempts", () => {
     expect(reconcileCanonical).not.toHaveBeenCalled();
     expect(readAttempt()).toMatchObject({ status: "ambiguous", requiresOutcome: true });
   });
+
+  it.each(["unknown", "accepted", "unavailable"])(
+    "does not rebroadcast unchanged %s recovery state across reconciliation passes",
+    async (status) => {
+      await seedExistingThreadAttempt();
+      const input: Parameters<typeof reconcilePersistedMaterializationAttempts>[0] = {
+        api: {
+          orchestration: {
+            getCommandOutcome: async () => {
+              if (status === "unavailable") throw new Error("transport unavailable");
+              return status === "accepted"
+                ? {
+                    status: "accepted",
+                    aggregateKind: "thread",
+                    aggregateId: threadId,
+                    resultSequence: 8,
+                  }
+                : { status: "unknown" };
+            },
+            resolveThreadOwnership: async () => ({
+              status: "absent",
+              threadId,
+              serverEpoch: "server-1",
+              canonicalRevision: 7,
+            }),
+          } as never,
+        },
+        callbacks: { reconcileCanonical: vi.fn(), replaceCollision: vi.fn() },
+      };
+      await reconcilePersistedMaterializationAttempts(input);
+      const settled = readMaterializationLedger();
+      const notify = vi.fn();
+      const unsubscribe = subscribeToMaterializationLedger(notify);
+      try {
+        // Each pass represents another window receiving the first state transition.
+        for (let index = 0; index < 4; index++) {
+          expect(await reconcilePersistedMaterializationAttempts(input)).toMatchObject({
+            pending: 1,
+          });
+        }
+        expect(notify).not.toHaveBeenCalled();
+        expect(readMaterializationLedger()).toEqual(settled);
+        expect(readAttempt()).toMatchObject({ commandId: "command-1", messageId: "message-1" });
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
 });

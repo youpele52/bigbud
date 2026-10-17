@@ -31,6 +31,7 @@ export interface WsProtocolLifecycleHandlers {
   readonly onOpen?: () => void;
   readonly onError?: (message: string) => void;
   readonly onClose?: (details: { readonly code: number; readonly reason: string }) => void;
+  readonly onProtocolFailure?: () => void;
 }
 
 function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
@@ -50,6 +51,7 @@ function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
       clearAllTrackedRpcRequests();
       recordWsConnectionClosed(details);
     },
+    onProtocolFailure: () => undefined,
   };
 }
 
@@ -80,6 +82,9 @@ function composeLifecycleHandlers(
       if (!isActive()) return;
       defaults.onClose(details);
       handlers?.onClose?.(details);
+    },
+    onProtocolFailure: () => {
+      if (isActive()) handlers?.onProtocolFailure?.();
     },
   };
 }
@@ -146,8 +151,17 @@ export function createWsRpcProtocolLayer(url?: string, handlers?: WsProtocolLife
               acknowledgeRpcRequest(response.requestId);
             } else if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
               clearAllTrackedRpcRequests();
+              if (response._tag === "Defect" || response.error.reason._tag === "RpcClientDefect") {
+                return Effect.suspend(() => writeResponse(response)).pipe(
+                  Effect.ensuring(Effect.sync(() => lifecycle.onProtocolFailure())),
+                );
+              }
+              // Socket close/open failures retain the socket protocol's existing retry owner.
+              return Effect.suspend(() => writeResponse(response));
             }
-            return writeResponse(response);
+            return Effect.suspend(() => writeResponse(response)).pipe(
+              Effect.tapCause(() => Effect.sync(() => lifecycle.onProtocolFailure())),
+            );
           }),
         send: (request, transferables) => {
           if (request._tag === "Request") {

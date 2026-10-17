@@ -121,7 +121,18 @@ import Migration0118 from "./Migrations/118_LearningReviewRecovery.ts";
 import Migration0119 from "./Migrations/119_RepairLearningActivityLeases.ts";
 import Migration0117 from "./Migrations/117_RepairThreadRetentionItemIndependence.ts";
 import Migration0120 from "./Migrations/120_ProjectionMessageSearch.ts";
+import Migration0122 from "./Migrations/122_ProjectionThreadMessageOrigins.ts";
 import Migration0121 from "./Migrations/121_ThreadRetentionSelectionMode.ts";
+import Migration0123 from "./Migrations/123_ProviderTurnAdmissions.ts";
+import Migration0124 from "./Migrations/124_ProviderTurnAdmissionOutcomes.ts";
+import Migration0125 from "./Migrations/125_ProviderTurnAdmissionPayloads.ts";
+import Migration0126 from "./Migrations/126_LearningMemoryApplications.ts";
+import Migration0127 from "./Migrations/127_OpencodeV2SharedBindings.ts";
+import Migration0128 from "./Migrations/128_ProjectionThreadsForkOrigin.ts";
+import Migration0129 from "./Migrations/129_RepairDirectResourceCleanupRequests.ts";
+import Migration0130 from "./Migrations/130_WorktreeOperations.ts";
+import Migration0131 from "./Migrations/131_WorktreeProviderRelocations.ts";
+import Migration0132 from "./Migrations/132_RepairWorktreeOperationSchema.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -244,6 +255,17 @@ export const migrationEntries = [
   [119, "RepairLearningActivityLeases", Migration0119],
   [120, "ProjectionMessageSearch", Migration0120],
   [121, "ThreadRetentionSelectionMode", Migration0121],
+  [122, "ProjectionThreadMessageOrigins", Migration0122],
+  [123, "ProviderTurnAdmissions", Migration0123],
+  [124, "ProviderTurnAdmissionOutcomes", Migration0124],
+  [125, "ProviderTurnAdmissionPayloads", Migration0125],
+  [126, "LearningMemoryApplications", Migration0126],
+  [127, "OpencodeV2SharedBindings", Migration0127],
+  [128, "ProjectionThreadsForkOrigin", Migration0128],
+  [129, "RepairDirectResourceCleanupRequests", Migration0129],
+  [130, "WorktreeOperations", Migration0130],
+  [131, "WorktreeProviderRelocations", Migration0131],
+  [132, "RepairWorktreeOperationSchema", Migration0132],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

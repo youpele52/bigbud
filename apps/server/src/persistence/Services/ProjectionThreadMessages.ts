@@ -15,6 +15,7 @@ import {
   TurnId,
   IsoDateTime,
 } from "@bigbud/contracts";
+import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import { Schema, ServiceMap } from "effect";
 import type { Option } from "effect";
 import type { Effect } from "effect";
@@ -29,6 +30,7 @@ export const ProjectionThreadMessage = Schema.Struct({
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   replyTo: Schema.optional(OrchestrationMessageReply),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
   isStreaming: Schema.Boolean,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

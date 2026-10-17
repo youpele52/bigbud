@@ -65,6 +65,8 @@ export const WS_METHODS = {
 
   // Terminal methods
   terminalOpen: "terminal.open",
+  terminalWslDistributions: "terminal.wslDistributions",
+  terminalSnapshot: "terminal.snapshot",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
   terminalClear: "terminal.clear",
@@ -97,7 +99,9 @@ export const WS_METHODS = {
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",
   serverStartHandoffJob: "server.startHandoffJob",
+  serverRetryTextGeneration: "server.retryTextGeneration",
   serverGetHandoffJob: "server.getHandoffJob",
+  serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",
@@ -113,6 +117,7 @@ export const WS_METHODS = {
   serverTriggerAutomation: "server.triggerAutomation",
   serverListAutomationRuns: "server.listAutomationRuns",
   serverGetUsageSummary: "server.getUsageSummary",
+  providerStopSubagent: "provider.stopSubagent",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

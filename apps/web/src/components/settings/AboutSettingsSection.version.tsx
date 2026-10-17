@@ -24,7 +24,7 @@ function AboutVersionTitle() {
   return (
     <span className="inline-flex items-center gap-2">
       <span>Version</span>
-      <code className="text-[11px] font-medium text-muted-foreground">{APP_VERSION}</code>
+      <span className="text-sm font-light text-muted-foreground">{APP_VERSION}</span>
     </span>
   );
 }
@@ -178,9 +178,7 @@ function ManualInstallRow() {
     <SettingsRow
       title="Manual Install"
       description="This unsigned build cannot auto-install updates. Run the command below in your terminal to install the latest version."
-      status={
-        <span className="block break-all font-mono text-[11px] text-foreground">{command}</span>
-      }
+      status={<span className="block break-all text-sm font-light text-foreground">{command}</span>}
       control={
         <Button
           size="xs"

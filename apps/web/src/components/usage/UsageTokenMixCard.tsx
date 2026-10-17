@@ -2,7 +2,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import { type ServerUsageSummaryResult } from "@bigbud/contracts";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent, CardHeader } from "../ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { formatCompactNumber } from "./UsagePage.format";
@@ -22,7 +22,7 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Token mix</CardTitle>
+          <h3>Token mix</h3>
         </CardHeader>
         <CardContent className="p-0">
           <Empty className="min-h-64">
@@ -41,7 +41,7 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Token mix</CardTitle>
+        <h3>Token mix</h3>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="relative">

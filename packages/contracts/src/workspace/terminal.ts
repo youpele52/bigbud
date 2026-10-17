@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import {
   ExecutionTargetId,
   LOCAL_EXECUTION_TARGET_ID,
@@ -6,6 +6,8 @@ import {
 } from "../core/baseSchemas";
 import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 import { ProviderKind } from "../orchestration/orchestration.provider";
+import { TerminalWslIdentity } from "./terminal.wsl";
+import { TerminalAgentIdentity } from "./terminal.agentIdentity";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -67,6 +69,9 @@ export type TerminalResizeInput = Schema.Codec.Encoded<typeof TerminalResizeInpu
 export const TerminalClearInput = TerminalSessionInput;
 export type TerminalClearInput = Schema.Codec.Encoded<typeof TerminalClearInput>;
 
+export const TerminalSnapshotInput = TerminalSessionInput;
+export type TerminalSnapshotInput = Schema.Codec.Encoded<typeof TerminalSnapshotInput>;
+
 export const TerminalRestartInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   executionTargetId: Schema.optional(ExecutionTargetId),
@@ -92,6 +97,7 @@ export const TerminalDropPathMode = Schema.Literals(["posix", "powershell", "cmd
 export type TerminalDropPathMode = typeof TerminalDropPathMode.Type;
 
 export const TerminalSessionSnapshot = Schema.Struct({
+  wslIdentity: Schema.optional(TerminalWslIdentity),
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   executionTargetId: Schema.optional(ExecutionTargetId),
@@ -101,8 +107,18 @@ export const TerminalSessionSnapshot = Schema.Struct({
   status: TerminalSessionStatus,
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   activeAgentProvider: Schema.optional(Schema.NullOr(ProviderKind)),
+  activeAgent: Schema.optional(Schema.NullOr(TerminalAgentIdentity)),
   runtimeGeneration: Schema.optional(Schema.String),
+  // Explicit launch overrides only, not the inherited process environment or live shell state.
+  runtimeEnv: Schema.optional(TerminalEnvSchema),
+  directoryFallback: Schema.optional(
+    Schema.Struct({ requestedCwd: Schema.String, reason: Schema.String }),
+  ),
   history: Schema.String,
+  // No safe replay baseline remains; never interpret a truncated suffix as screen state.
+  historyTruncated: Schema.optional(Schema.Boolean),
+  // An attached surviving process has no baseline at its persisted output cut.
+  historyUnavailable: Schema.optional(Schema.Boolean),
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
   updatedAt: Schema.String,
@@ -164,6 +180,7 @@ const TerminalAgentIdentityEvent = Schema.Struct({
   type: Schema.Literal("agentIdentity"),
   runtimeGeneration: Schema.optional(Schema.String),
   provider: Schema.NullOr(ProviderKind),
+  agent: Schema.optional(Schema.NullOr(TerminalAgentIdentity)),
 });
 
 export const TerminalEvent = Schema.Union([
@@ -182,11 +199,13 @@ export class TerminalCwdError extends Schema.TaggedErrorClass<TerminalCwdError>(
   "TerminalCwdError",
   {
     cwd: Schema.String,
-    reason: Schema.Literals(["notFound", "notDirectory", "statFailed"]),
+    reason: Schema.Literals(["notFound", "notDirectory", "statFailed", "timedOut"]),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message() {
+    if (this.reason === "timedOut")
+      return `Terminal folder resolution exceeded 10 seconds: ${this.cwd}`;
     if (this.reason === "notDirectory") {
       return `Terminal cwd is not a directory: ${this.cwd}`;
     }

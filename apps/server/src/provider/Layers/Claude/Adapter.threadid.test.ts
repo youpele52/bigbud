@@ -138,9 +138,10 @@ describe("ClaudeAdapterLive", () => {
           signal: new AbortController().signal,
           suggestions: [
             {
-              type: "setMode",
-              mode: "default",
-              destination: "session",
+              type: "addRules",
+              rules: [{ toolName: "Bash", ruleContent: "pwd" }],
+              behavior: "allow",
+              destination: "localSettings",
             },
           ],
           toolUseID: "tool-use-1",

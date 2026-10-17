@@ -16,12 +16,13 @@ import {
 import { SkillChangeProposalRepository } from "../../persistence/Services/SkillChangeProposals.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
-import { supportsProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
+import { canScheduleProviderLearning } from "../../provider/Layers/ProviderService.learningSupport.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
 import { makeLearningActivityPublisher } from "./LearningReactor.activities.ts";
 import { makeResolveSkillContext } from "./LearningReactor.skill.ts";
+import { makeDurableMemoryReview } from "../../learning/LearningReview.durable.ts";
 
 export const makeLearningJobProcessor = Effect.gen(function* () {
   const providerService = yield* ProviderService;
@@ -63,6 +64,9 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
       modelSelection: job.modelSelection,
       sourceUserMessage,
       memoryReviewEnabled: job.memoryUserMessageCount !== null,
+      ...(job.provider === "opencodeV2"
+        ? { durableMemory: makeDurableMemoryReview(job, learningJobs, memoryStore) }
+        : {}),
       ...(skill ? { skillContext: skill.context } : {}),
     });
     if (
@@ -139,7 +143,7 @@ export const makeLearningJobProcessor = Effect.gen(function* () {
   return Effect.fn("LearningReactor.processJob")(function* (queued: LearningJob) {
     const job = yield* learningJobs.claim({ jobId: queued.jobId, now: new Date().toISOString() });
     if (!job) return;
-    if (!supportsProviderWorkload(job.provider, "learning")) {
+    if (!(yield* canScheduleProviderLearning(providerService, job.provider))) {
       yield* learningJobs.setState({
         jobId: job.jobId,
         state: "requires-reselection",

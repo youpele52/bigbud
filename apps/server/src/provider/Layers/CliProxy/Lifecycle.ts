@@ -100,18 +100,25 @@ export function makeCliProxyLifecycle(
           platform === "linux"
             ? await commandRunner("systemctl", ["--user", "cat", "cli-proxy-api.service"])
             : ({ _tag: "missing" } as const);
-        const direct = await commandRunner("cli-proxy-api", ["--version"]);
+        let directBinary: string | undefined;
+        // Go's help flag exits before server startup; --version is not supported.
+        for (const binary of ["cliproxyapi", "cli-proxy-api"]) {
+          if (resultIsAvailable(await commandRunner(binary, ["--help"]))) {
+            directBinary = binary;
+            break;
+          }
+        }
         const strategy = selectCliProxyLaunchStrategy({
           platform,
           hasHomebrewService: resultIsAvailable(homebrew),
           hasSystemdUserUnit: resultIsAvailable(systemd),
-          hasDirectBinary: resultIsAvailable(direct),
+          hasDirectBinary: directBinary !== undefined,
         });
 
         if (strategy === "homebrew" || strategy === "systemd-user") {
           return { _tag: "service-configuration-unverified" };
         }
-        if (strategy !== "direct") return { _tag: "unavailable" };
+        if (strategy !== "direct" || !directBinary) return { _tag: "unavailable" };
         if (closed) return { _tag: "closed" };
         if (ownedChild && ownedChild.exitCode !== null) {
           ownedChild = undefined;
@@ -119,7 +126,7 @@ export function makeCliProxyLifecycle(
         }
         if (!ownedChild) {
           try {
-            const child = spawnDirect("cli-proxy-api", ["--config", input.configPath], {
+            const child = spawnDirect(directBinary, ["--config", input.configPath], {
               detached: platform !== "win32",
               stdio: ["ignore", "pipe", "pipe"],
               windowsHide: true,

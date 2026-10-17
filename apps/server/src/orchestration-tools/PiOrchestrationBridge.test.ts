@@ -25,7 +25,7 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("delivery: delivery === 'queue' ? 'queue' : 'auto'");
     expect(source).toContain("invocationId: toolCallId");
     expect(source).toContain(
-      "async execute(toolCallId, { title, task, projectId, watchForCompletion })",
+      "async execute(toolCallId, { title, task, projectId, watchForCompletion, modelSelection })",
     );
     expect(source).toContain("action: 'create_thread'");
     expect(source).toContain("invocationId: toolCallId");
@@ -55,6 +55,21 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("/api/internal/thread-tools");
     expect(source).toContain("token-1");
     expect(source).toContain("thread-1");
+  });
+
+  it("mirrors the delegated model choice surface in TypeBox", () => {
+    const source = renderPiOrchestrationBridgeSource({
+      host: "127.0.0.1",
+      port: 3773,
+      threadId: "thread-1",
+      token: "token-1",
+    });
+
+    expect(source).toContain("modelSelection: Type.Optional(Type.Object({");
+    expect(source).toContain("...(modelSelection !== undefined ? { modelSelection } : {}),");
+    expect(source).toContain('name: "list_available_models"');
+    expect(source).toContain("action: 'list_available_models'");
+    expect(source).toContain("pi.registerTool(listAvailableModelsTool);");
   });
 
   it("renders JavaScript-safe Pi bridge source", () => {

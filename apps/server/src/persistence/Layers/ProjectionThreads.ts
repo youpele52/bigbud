@@ -15,8 +15,9 @@ import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
 import { toPersistenceSqlError } from "../Errors.ts";
-import { captureWorktreePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
+import { resolveProjectionWorktreeIdentity } from "./ProjectionThreads.identity.ts";
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
+import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
@@ -119,6 +120,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_id,
            parent_thread_title,
            parent_thread_project_id,
+           fork_point_message_id,
+           fork_reason,
+           fork_failure_event_id,
           latest_turn_id,
            queued_prompts_json,
            pending_interrupt_flush_intent_json,
@@ -153,6 +157,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            ${row.parentThread?.threadId ?? null},
            ${row.parentThread?.title ?? null},
            ${row.parentThread?.projectId ?? row.projectId},
+           ${row.forkOrigin?.forkPointMessageId ?? null},
+           ${row.forkOrigin?.reason ?? null},
+           ${row.forkOrigin?.failureEventId ?? null},
           ${row.latestTurnId},
            ${JSON.stringify(row.queuedPrompts)},
            ${row.pendingInterruptFlushIntent == null ? null : JSON.stringify(row.pendingInterruptFlushIntent)},
@@ -187,6 +194,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_id = excluded.parent_thread_id,
            parent_thread_title = excluded.parent_thread_title,
            parent_thread_project_id = excluded.parent_thread_project_id,
+           fork_point_message_id = COALESCE(excluded.fork_point_message_id, fork_point_message_id),
+           fork_reason = COALESCE(excluded.fork_reason, fork_reason),
+           fork_failure_event_id = COALESCE(excluded.fork_failure_event_id, fork_failure_event_id),
           latest_turn_id = excluded.latest_turn_id,
            queued_prompts_json = excluded.queued_prompts_json,
            pending_interrupt_flush_intent_json = excluded.pending_interrupt_flush_intent_json,
@@ -334,13 +344,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
     Effect.gen(function* () {
-      const worktreeIdentity = yield* Effect.tryPromise({
-        try: () =>
-          row.worktreePath === null
-            ? Promise.resolve(null)
-            : captureWorktreePathIdentity(row.worktreePath),
-        catch: () => null,
-      });
+      const worktreeIdentity = yield* resolveProjectionWorktreeIdentity(
+        sql,
+        row.threadId,
+        row.worktreePath,
+      );
       yield* upsertProjectionThreadRow({ ...row, worktreeIdentity });
     }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")));
 
@@ -372,6 +380,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     listByProjectId,
     deleteById,
     touchActivity,
+    listRecentModelSelections: makeListRecentModelSelections(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

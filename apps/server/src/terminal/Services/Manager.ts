@@ -26,6 +26,7 @@ import {
 } from "@bigbud/contracts";
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
+import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
 
 export {
   TerminalCwdError,
@@ -83,6 +84,11 @@ export interface TerminalManagerShape {
    */
   readonly open: (
     input: TerminalOpenInput,
+  ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
+
+  /** Read retained history without creating, restarting, or resizing a PTY. */
+  readonly snapshot: (
+    input: TerminalSnapshotInput,
   ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
 
   /**

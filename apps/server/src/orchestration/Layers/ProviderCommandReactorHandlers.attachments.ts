@@ -20,7 +20,7 @@ export function appendFileAttachmentsToProviderInput(
       return `- ${attachment.name} (${kindLabel}, path reference) -> ${attachment.path}`;
     }
     const head = `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`;
-    return attachment.sourcePath ? `${head} -> ${attachment.sourcePath}` : head;
+    return head;
   });
   const block = `<attached_files>\n${lines.join("\n")}\n</attached_files>`;
   return text.length > 0 ? `${text}\n\n${block}` : block;

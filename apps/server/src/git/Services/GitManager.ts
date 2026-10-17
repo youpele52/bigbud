@@ -28,6 +28,7 @@ export interface GitActionProgressReporter {
 }
 
 export interface GitRunStackedActionOptions {
+  readonly successfulModelSelection?: import("@bigbud/contracts").ModelSelection | null;
   readonly actionId?: string;
   readonly progressReporter?: GitActionProgressReporter;
 }

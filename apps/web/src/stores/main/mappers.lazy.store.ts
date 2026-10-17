@@ -13,6 +13,8 @@ import {
   toLegacyProvider,
   toLegacySessionStatus,
 } from "./mappers.store";
+import { hydrateDelegatedChildModelChoices } from "./events.store.delegations";
+import { capProviderAgents } from "./events.store.providerAgents";
 import { buildLatestTurn } from "./helpers.store";
 
 export function mapProjectSummary(project: ProjectSummary): Project {
@@ -221,6 +223,22 @@ export function mergeThreadDetail(
     latestTurn,
     activities: loadingOlder ? thread.activities : activities,
     proposedPlans: loadingOlder ? thread.proposedPlans : proposedPlans,
+    providerAgents: loadingOlder
+      ? (thread.providerAgents ?? [])
+      : capProviderAgents(
+          [...(thread.providerAgents ?? []), ...(detail.recentAgents ?? [])]
+            .filter(
+              (agent, index, all) => all.findLastIndex((entry) => entry.id === agent.id) === index,
+            )
+            .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
+        ),
+    delegatedChildren: loadingOlder
+      ? (thread.delegatedChildren ?? [])
+      : hydrateDelegatedChildModelChoices(
+          detail.delegatedChildren ?? [],
+          thread.delegatedChildren,
+          activities,
+        ),
     turnDiffSummaries: loadingOlder ? thread.turnDiffSummaries : turnDiffSummaries,
   };
 }

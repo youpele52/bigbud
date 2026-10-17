@@ -1,4 +1,9 @@
-import { type ExecutionTargetId, type MessageId, type TurnId } from "@bigbud/contracts";
+import {
+  type ExecutionTargetId,
+  type MessageId,
+  type OrchestrationTask,
+  type TurnId,
+} from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 
 import { type deriveTimelineEntries } from "../../../logic/session";
@@ -12,11 +17,14 @@ export const MIN_ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
 export const RECENT_COMPLETED_TURNS_TO_KEEP_MOUNTED = 2;
 
 export interface MessagesTimelineProps {
+  emptyChatGreeting?: string | null;
+  shimmerEmptyChat?: boolean;
   isWorking: boolean;
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;
   scrollContainer: HTMLDivElement | null;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
+  historicalAgents?: ReadonlyArray<OrchestrationTask>;
   completionDividerBeforeEntryId: string | null;
   completionSummary: string | null;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;

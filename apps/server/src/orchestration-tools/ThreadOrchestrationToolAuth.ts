@@ -2,6 +2,16 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const THREAD_TOOL_AUTH_DIR = "thread-tool-auth";
+const authOperations = new Map<string, Promise<unknown>>();
+async function withAuthOwner<T>(filename: string, run: () => Promise<T>): Promise<T> {
+  const pending = (authOperations.get(filename) ?? Promise.resolve()).then(run, run);
+  authOperations.set(filename, pending);
+  try {
+    return await pending;
+  } finally {
+    if (authOperations.get(filename) === pending) authOperations.delete(filename);
+  }
+}
 export const THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS = 24 * 60 * 60_000;
 
 export interface ThreadOrchestrationToolAuthRecord {
@@ -34,20 +44,34 @@ export async function writeThreadOrchestrationToolAuth(input: {
     stateDir: input.stateDir,
     threadId: input.threadId,
   });
-  await mkdir(resolveThreadOrchestrationToolAuthDir(input.stateDir), { recursive: true });
+  await mkdir(resolveThreadOrchestrationToolAuthDir(input.stateDir), {
+    recursive: true,
+    mode: 0o700,
+  });
   const record: ThreadOrchestrationToolAuthRecord = {
     threadId: input.threadId,
     token: input.token,
     createdAt: new Date().toISOString(),
   };
-  await writeFile(filePath, JSON.stringify(record), { encoding: "utf8", mode: 0o600 });
+  await withAuthOwner(filePath, () =>
+    writeFile(filePath, JSON.stringify(record), { encoding: "utf8", mode: 0o600 }),
+  );
 }
 
 export async function deleteThreadOrchestrationToolAuth(input: {
   readonly stateDir: string;
   readonly threadId: string;
+  readonly token?: string;
 }): Promise<void> {
-  await rm(resolveThreadOrchestrationToolAuthPath(input), { force: true });
+  const filename = resolveThreadOrchestrationToolAuthPath(input);
+  await withAuthOwner(filename, async () => {
+    if (
+      input.token !== undefined &&
+      (await readThreadOrchestrationToolAuth(input))?.token !== input.token
+    )
+      return;
+    await rm(filename, { force: true });
+  });
 }
 
 function isExpired(record: ThreadOrchestrationToolAuthRecord, nowMs = Date.now()): boolean {
@@ -55,6 +79,26 @@ function isExpired(record: ThreadOrchestrationToolAuthRecord, nowMs = Date.now()
   return (
     !Number.isFinite(createdAtMs) || nowMs - createdAtMs > THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS
   );
+}
+
+/** Only a still-owned internal capability may extend its TTL; missing/changed records are never repaired. */
+export async function renewThreadOrchestrationToolAuth(input: {
+  readonly stateDir: string;
+  readonly threadId: string;
+  readonly token: string;
+}): Promise<void> {
+  const filename = resolveThreadOrchestrationToolAuthPath(input);
+  await withAuthOwner(filename, async () => {
+    const record = await readThreadOrchestrationToolAuth(input);
+    if (!record || record.token !== input.token || !Number.isFinite(Date.parse(record.createdAt)))
+      throw new Error("V2 canonical auth owner changed or unavailable.");
+    if (Date.now() - Date.parse(record.createdAt) < THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS - 600000)
+      return;
+    await writeFile(filename, JSON.stringify({ ...record, createdAt: new Date().toISOString() }), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+  });
 }
 
 export async function readThreadOrchestrationToolAuth(input: {
@@ -102,7 +146,11 @@ export async function readThreadOrchestrationToolAuthByToken(input: {
         threadId,
       });
       if (record && isExpired(record)) {
-        await deleteThreadOrchestrationToolAuth({ stateDir: input.stateDir, threadId });
+        await deleteThreadOrchestrationToolAuth({
+          stateDir: input.stateDir,
+          threadId,
+          token: record.token,
+        });
         continue;
       }
       if (record?.token === input.token) {

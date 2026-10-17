@@ -114,6 +114,7 @@ export async function waitFor(
 }
 
 export async function createHarness(input?: {
+  readonly startReactor?: boolean;
   readonly cleanupExecutor?: DirectResourceCleanupExecutorShape;
   readonly baseDir?: string;
   readonly workspaceRoot?: string;
@@ -122,6 +123,7 @@ export async function createHarness(input?: {
   readonly interruptTurnFailure?: string;
   readonly interruptTurnLeavesSessionActive?: boolean;
   readonly stopSessionFailure?: string;
+  readonly sessionRecovery?: "resume-restart" | "fresh-restart" | "unsupported";
   readonly browserCloseFailure?: string;
   readonly terminalCloseFailure?: string;
   readonly discoveryCatalog?: ServerDiscoveryCatalog;
@@ -240,6 +242,7 @@ export async function createHarness(input?: {
     closeAll: () => Effect.void,
   };
   const terminalService: TerminalManagerShape = {
+    snapshot: () => unsupported(),
     open: () => unsupported(),
     write: () => unsupported(),
     resize: () => unsupported(),
@@ -313,12 +316,19 @@ export async function createHarness(input?: {
   const runtime = ManagedRuntime.make(layer);
 
   let scope: Scope.Closeable | null = null;
-  cleanupTasks.add(async () => {
+  let drainWork = Effect.void;
+  const drain = () => Effect.runPromise(drainWork);
+  const cleanup = async () => {
     if (scope) {
       await Effect.runPromise(Scope.close(scope, Exit.void));
     }
+    // Stop intake, then finish native writes before interrupting runtime workers.
+    // Fiber interruption alone cannot cancel an already-started filesystem call.
+    await drain();
     await runtime.dispose();
-  });
+    cleanupTasks.delete(cleanup);
+  };
+  cleanupTasks.add(cleanup);
 
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
   registerLiveSessionSettler(engine, settleLiveSession);
@@ -328,8 +338,9 @@ export async function createHarness(input?: {
   const reactor = await runtime.runPromise(Effect.service(ProviderCommandReactor));
   const sql = await runtime.runPromise(Effect.service(SqlClient.SqlClient));
   scope = await Effect.runPromise(Scope.make("sequential"));
-  await Effect.runPromise(reactor.start().pipe(Scope.provide(scope)));
-  const drain = () => Effect.runPromise(reactor.drain);
+  const startReactor = () => Effect.runPromise(reactor.start().pipe(Scope.provide(scope!)));
+  if (input?.startReactor !== false) await startReactor();
+  drainWork = reactor.drain;
 
   await Effect.runPromise(
     engine.dispatch({
@@ -359,6 +370,7 @@ export async function createHarness(input?: {
   );
 
   return {
+    startReactor,
     engine,
     projectionPipeline,
     sql,
@@ -377,5 +389,6 @@ export async function createHarness(input?: {
     terminalClose,
     stateDir,
     drain,
+    cleanup,
   };
 }

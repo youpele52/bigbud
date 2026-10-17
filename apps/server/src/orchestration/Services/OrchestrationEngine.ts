@@ -34,6 +34,8 @@ import type { BootstrapSubmissionDispatch } from "../Layers/OrchestrationEngine.
  * OrchestrationEngineShape - Service API for orchestration command and event flow.
  */
 export interface OrchestrationEngineShape {
+  /** Internal short preparation barrier; never await providers or dispatch inside it. */
+  readonly withWorkspaceBarrier?: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
   /** Stable identity for this server process, used to fence recovery frames. */
   readonly serverEpoch?: string;
 
@@ -95,7 +97,12 @@ export interface OrchestrationEngineShape {
    */
   readonly dispatch: (
     command: OrchestrationCommand,
-    options?: { readonly bootstrapSubmission?: BootstrapSubmissionDispatch },
+    options?: {
+      readonly bootstrapSubmission?: BootstrapSubmissionDispatch;
+      readonly worktreeOperationId?: string;
+      readonly expectedWorktreePath?: { readonly value: string | null };
+      readonly expectedWorktreeIdentity?: { readonly path: string; readonly identity: string };
+    },
   ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError, never>;
 
   /**

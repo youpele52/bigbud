@@ -7,6 +7,9 @@ import type {
 import { readCodexAccountSnapshot, type CodexAccountSnapshot } from "./codexAccount";
 import { parseCodexModelsResult } from "./codexAppServer.models";
 import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
+import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
+import { normalizeCodexUsageLimits } from "./Layers/Codex/Provider.usageLimits.ts";
+import { usageLimitsStatus } from "./providerUsageLimits.ts";
 
 interface JsonRpcProbeResponse {
   readonly id?: unknown;
@@ -20,6 +23,7 @@ export interface CodexDiscoverySnapshot {
   readonly account: CodexAccountSnapshot;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
   readonly models: ReadonlyArray<ServerProviderModel>;
+  readonly usageLimits?: ServerProviderUsageLimits;
 }
 
 function readErrorMessage(response: JsonRpcProbeResponse): string | undefined {
@@ -99,6 +103,7 @@ export async function probeCodexDiscovery(input: {
   readonly homePath?: string;
   readonly cwd: string;
   readonly signal?: AbortSignal;
+  readonly includeUsageLimits?: boolean;
 }): Promise<CodexDiscoverySnapshot> {
   return await new Promise((resolve, reject) => {
     const child = spawn(input.binaryPath, ["app-server"], {
@@ -115,8 +120,15 @@ export async function probeCodexDiscovery(input: {
     let account: CodexAccountSnapshot | undefined;
     let skills: ReadonlyArray<ServerProviderSkill> | undefined;
     let models: ReadonlyArray<ServerProviderModel> | undefined;
+    let enrichmentTimer: ReturnType<typeof setTimeout> | undefined;
+    let usageTimer: ReturnType<typeof setTimeout> | undefined;
+    let usageComplete = !input.includeUsageLimits;
+    let usageLimits: ServerProviderUsageLimits | undefined;
 
     const cleanup = () => {
+      clearTimeout(enrichmentTimer);
+      clearTimeout(usageTimer);
+      input.signal?.removeEventListener("abort", onAbort);
       output.removeAllListeners();
       output.close();
       child.removeAllListeners();
@@ -142,24 +154,45 @@ export async function probeCodexDiscovery(input: {
       );
 
     const maybeResolve = () => {
-      if (!account || skills === undefined || models === undefined) {
+      if (!account || skills === undefined || models === undefined || !usageComplete) {
         return;
       }
       const resolvedAccount = account;
       const resolvedSkills = skills;
       const resolvedModels = models;
       finish(() =>
-        resolve({ account: resolvedAccount, skills: resolvedSkills, models: resolvedModels }),
+        resolve({
+          account: resolvedAccount,
+          skills: resolvedSkills,
+          models: resolvedModels,
+          ...(usageLimits ? { usageLimits } : {}),
+        }),
       );
     };
+
+    const resolveAvailableModels = () => {
+      if (models === undefined) return;
+      account ??= readCodexAccountSnapshot(undefined);
+      skills ??= [];
+      if (!usageComplete && account.type !== "chatgpt") {
+        usageComplete = true;
+        usageLimits = usageLimitsStatus(
+          "codex-app-server",
+          new Date().toISOString(),
+          "unavailable",
+        );
+      }
+      maybeResolve();
+    };
+    const onAbort = () => fail(new Error("Codex discovery probe aborted."));
 
     if (input.signal?.aborted) {
       fail(new Error("Codex discovery probe aborted."));
       return;
     }
-    input.signal?.addEventListener("abort", () =>
-      fail(new Error("Codex discovery probe aborted.")),
-    );
+    input.signal?.addEventListener("abort", onAbort, { once: true });
+    // Drain diagnostics so a noisy subprocess cannot block its JSON-RPC output.
+    child.stderr.resume();
 
     const writeMessage = (message: unknown) => {
       if (!child.stdin.writable) {
@@ -211,6 +244,7 @@ export async function probeCodexDiscovery(input: {
           return;
         }
         maybeResolve();
+        if (!completed) enrichmentTimer = setTimeout(resolveAvailableModels, 500);
         return;
       }
 
@@ -224,11 +258,56 @@ export async function probeCodexDiscovery(input: {
       if (response.id === 4) {
         const errorMessage = readErrorMessage(response);
         if (errorMessage) {
-          fail(new Error(`account/read failed: ${errorMessage}`));
+          account = readCodexAccountSnapshot(undefined);
+          usageComplete = true;
+          if (input.includeUsageLimits)
+            usageLimits = usageLimitsStatus(
+              "codex-app-server",
+              new Date().toISOString(),
+              "unavailable",
+            );
+          maybeResolve();
           return;
         }
 
         account = readCodexAccountSnapshot(response.result);
+        if (input.includeUsageLimits && account.type === "chatgpt") {
+          writeMessage({ id: 5, method: "account/rateLimits/read" });
+          usageTimer = setTimeout(() => {
+            usageComplete = true;
+            usageLimits = usageLimitsStatus("codex-app-server", new Date().toISOString(), "error");
+            maybeResolve();
+          }, 2_000);
+        } else {
+          usageComplete = true;
+          if (input.includeUsageLimits)
+            usageLimits = usageLimitsStatus(
+              "codex-app-server",
+              new Date().toISOString(),
+              "unavailable",
+            );
+        }
+        maybeResolve();
+        return;
+      }
+
+      if (response.id === 5 && input.includeUsageLimits) {
+        clearTimeout(usageTimer);
+        usageComplete = true;
+        const checkedAt = new Date().toISOString();
+        try {
+          usageLimits = response.error
+            ? usageLimitsStatus(
+                "codex-app-server",
+                checkedAt,
+                /authentication required|method not found/i.test(readErrorMessage(response) ?? "")
+                  ? "unavailable"
+                  : "error",
+              )
+            : normalizeCodexUsageLimits(response.result, checkedAt);
+        } catch {
+          usageLimits = usageLimitsStatus("codex-app-server", checkedAt, "error");
+        }
         maybeResolve();
       }
     });
@@ -236,6 +315,14 @@ export async function probeCodexDiscovery(input: {
     child.once("error", fail);
     child.once("exit", (code, signal) => {
       if (completed) return;
+      if (models !== undefined) {
+        if (!usageComplete) {
+          usageComplete = true;
+          usageLimits = usageLimitsStatus("codex-app-server", new Date().toISOString(), "error");
+        }
+        resolveAvailableModels();
+        return;
+      }
       fail(
         new Error(
           `codex app-server exited before probe completed (code=${code ?? "null"}, signal=${signal ?? "null"}).`,

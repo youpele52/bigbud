@@ -92,6 +92,11 @@ export interface ProjectionSnapshotQueryShape {
     ProjectionRepositoryError
   >;
 
+  /** Read distinct UTC activity days without loading historical token rows. */
+  readonly getUsageActiveDays: (
+    before: string,
+  ) => Effect.Effect<ReadonlyArray<string>, ProjectionRepositoryError>;
+
   /**
    * Read the active project for an exact workspace root match.
    */

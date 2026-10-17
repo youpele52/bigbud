@@ -1,0 +1,83 @@
+import { Schema } from "effect";
+import type { OpencodeV2Client } from "./Client.ts";
+import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
+import {
+  V2_THREAD_ACTIONS,
+  V2_THREAD_RPC,
+  V2_ENROLLMENT_PROTOCOL,
+} from "./Orchestration.protocol.ts";
+import { assertV2ImplementationCompatible } from "./Orchestration.compatibility.ts";
+import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
+import { assertV2NativeThreadSource } from "./Orchestration.readiness.source.ts";
+import type { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
+import {
+  verifyV2NativeEligibility,
+  type V2NativeEligibilityVerifier,
+} from "./NativeCompatibility.runtime.ts";
+import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
+import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
+import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
+
+const Info = Schema.Struct({
+  protocol: Schema.Literal(V2_THREAD_RPC),
+  issuer: Schema.String,
+  artifactDigest: Schema.String,
+  bootstrapDigest: Schema.String,
+  bootstrapAbi: Schema.String,
+  enrollmentProtocol: Schema.Literal(V2_ENROLLMENT_PROTOCOL),
+  compatibilityDigest: Schema.String,
+  schemaDigest: Schema.String,
+  setupInstanceId: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/)),
+  nativeVersion: Schema.String,
+  tools: Schema.Array(Schema.String),
+});
+
+/** Verify private app bytes and the selected Location's loaded ABI before creating/updating native history. */
+export async function verifyV2ThreadTools(
+  artifact: Awaited<ReturnType<typeof exportV2ThreadArtifact>>,
+  client: OpencodeV2Client,
+  directory: string,
+  signal?: AbortSignal,
+  implementation: V2ThreadImplementation = v2ThreadImplementation(),
+  eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
+  root: string = resolveV2PluginConfigRoot(),
+) {
+  signal?.throwIfAborted();
+  assertV2ImplementationCompatible(implementation, artifact.compatibility);
+  await artifact.verify();
+  const proof = await eligibility(artifact, client, directory, root, signal);
+  await assertV2NativeRuntimePolicy(client, proof, signal);
+  try {
+    const value = await callV2ThreadRpc(client, directory, "info", {});
+    signal?.throwIfAborted();
+    proof.assertCurrent();
+    const info = Schema.decodeUnknownSync(Info)(value, { onExcessProperty: "error" });
+    if (
+      info.issuer !== artifact.issuer ||
+      info.artifactDigest !== artifact.artifactDigest ||
+      info.bootstrapDigest !== artifact.artifactDigest ||
+      info.bootstrapAbi !== artifact.compatibility.bootstrapAbi ||
+      info.compatibilityDigest !== artifact.compatibilityDigest ||
+      info.schemaDigest !== implementation.schemaDigest ||
+      info.nativeVersion !== proof.nativeVersion ||
+      JSON.stringify(info.tools.toSorted()) !==
+        JSON.stringify(V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`).toSorted())
+    )
+      throw new V2NativeCompatibilityError(
+        "bootstrap-contract-incompatible",
+        "selected Location bootstrap contract/native version does not match verified eligibility.",
+        proof.nativeVersion,
+      );
+    await assertV2NativeThreadSource(artifact, client, directory);
+    signal?.throwIfAborted();
+    proof.assertCurrent();
+    return { ...info, nativeProof: proof };
+  } catch (error) {
+    if (error instanceof V2NativeCompatibilityError) throw error;
+    // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
+    throw new Error(
+      `V2 required bigbud thread-tools setup is incomplete for ${directory}. Review the selected-Location setup in Providers settings; no native history was created or replayed.`,
+    );
+  }
+}

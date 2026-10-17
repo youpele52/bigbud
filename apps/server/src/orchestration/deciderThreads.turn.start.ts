@@ -17,6 +17,8 @@ import {
   resolvePromptReferences,
 } from "./ThreadPromptAdmission.logic.ts";
 import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
+import { verifiedOrchestraAssignmentSegments } from "./ThreadMessageOrigin.logic.ts";
+import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.ts";
 
 export function requireThreadReadyForMutation(input: {
   readonly thread: OrchestrationThread;
@@ -63,6 +65,7 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     threadId: command.threadId,
   });
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
+  yield* requireThreadAttachmentsSupported(targetThread, command);
   if (isThreadTurnDispatchBlocked(targetThread)) {
     const existing = targetThread.queuedPrompts?.find(
       (prompt) => prompt.id === command.message.messageId,
@@ -97,6 +100,12 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     targetThread,
   });
   const sourceProposedPlan = references.sourceProposedPlan;
+  const claimedOrchestraAssignment = command.message.originSegments?.some(
+    (segment) => segment.kind === "orchestraAssignment",
+  );
+  const originSegments = claimedOrchestraAssignment
+    ? verifiedOrchestraAssignmentSegments({ message: command.message, targetThread, readModel })
+    : command.message.originSegments;
   const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
       aggregateKind: "thread",
@@ -112,6 +121,7 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
       text: command.message.text,
       attachments: command.message.attachments,
       ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),
+      ...(originSegments !== undefined ? { originSegments } : {}),
       turnId: null,
       streaming: false,
       createdAt: command.createdAt,

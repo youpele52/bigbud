@@ -34,6 +34,7 @@ export function subscribeToTerminalEvents(
           createdAt: session.updatedAt,
           runtimeGeneration: session.runtimeGeneration,
           provider: session.activeAgentProvider,
+          agent: session.activeAgent ?? null,
         });
         updatedAtByKey.set(toSessionKey(session.threadId, session.terminalId), session.updatedAt);
       }

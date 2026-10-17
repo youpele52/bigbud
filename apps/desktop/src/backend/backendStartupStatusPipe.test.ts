@@ -70,3 +70,15 @@ it("does not report a ready rejected after an accepted error", () => {
   expect(recordStatus).toHaveBeenNthCalledWith(2, 9, "ready");
   expect(onReady).not.toHaveBeenCalled();
 });
+
+it.each(["state_directory_in_use", "state_directory_owner_unverified"])(
+  "reports ownership failure %s without trusting arbitrary pipe text",
+  (reason) => {
+    const stream = new PassThrough();
+    listenForBackendStartupStatus(stream, 10);
+    stream.write(`${JSON.stringify({ status: "error", reason, message: "untrusted" })}\n`);
+    stream.write(`${JSON.stringify({ status: "error", reason })}\n`);
+    expect(recordStatus).toHaveBeenNthCalledWith(1, 10, "error", reason);
+    expect(recordStatus).toHaveBeenNthCalledWith(2, 10, "error", reason);
+  },
+);

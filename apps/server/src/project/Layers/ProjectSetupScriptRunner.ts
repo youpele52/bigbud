@@ -1,5 +1,8 @@
 import { projectScriptRuntimeEnv, setupProjectScript } from "@bigbud/shared/projectScripts";
-import { Effect, Layer } from "effect";
+import { assertTerminalCommandContext } from "@bigbud/shared/terminalCommand";
+import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
@@ -48,13 +51,28 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
         worktreePath: input.worktreePath,
       });
 
-      yield* terminalManager.open({
+      const openInput = {
         threadId: input.threadId,
         terminalId,
         executionTargetId: resolveWorkspaceExecutionTargetId(project),
         cwd,
         worktreePath: input.worktreePath,
         env,
+      };
+      const opened = yield* terminalManager.open(openInput);
+      yield* Effect.try({
+        try: () => assertTerminalCommandContext(opened, openInput),
+        catch: (error) =>
+          new TerminalExecutionTargetError({
+            threadId: input.threadId,
+            terminalId,
+            executionTargetId: openInput.executionTargetId,
+            detail:
+              error instanceof Error
+                ? error.message
+                : "Could not verify the setup terminal launch context.",
+            cause: error,
+          }),
       });
       yield* terminalManager.write({
         threadId: input.threadId,

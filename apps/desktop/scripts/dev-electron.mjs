@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { watch } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
+import { prepareDevSystemMonitorEnv } from "./dev-system-monitor.mjs";
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
@@ -26,7 +27,7 @@ await waitForResources({
   tcpPort: port,
 });
 
-const childEnv = { ...process.env };
+const childEnv = prepareDevSystemMonitorEnv(process.env, resolve(desktopDir, "../.."));
 delete childEnv.ELECTRON_RUN_AS_NODE;
 
 let shuttingDown = false;

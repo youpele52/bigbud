@@ -24,6 +24,8 @@ interface AttachTerminalKeybindingsInput {
   readonly terminalId: string;
   readonly keybindingsRef: MutableRefObject<ResolvedKeybindingsConfig>;
   readonly api: NativeApi;
+  readonly acceptsInput?: () => boolean;
+  readonly writeNotice?: (terminal: Terminal, message: string) => void;
 }
 
 interface TerminalKeyEventHandlerInput extends Omit<AttachTerminalKeybindingsInput, "terminal"> {
@@ -65,19 +67,23 @@ export function createTerminalKeyEventHandler({
   terminalId,
   keybindingsRef,
   api,
+  acceptsInput = () => true,
+  writeNotice = writeSystemMessage,
 }: TerminalKeyEventHandlerInput): (event: KeyboardEvent) => boolean {
   const sendTerminalInput = async (data: string, fallbackError: string) => {
     const activeTerminal = terminalRef.current;
-    if (!activeTerminal) return;
+    if (!activeTerminal || !acceptsInput()) return;
     try {
       await api.terminal.write({ threadId, terminalId, data });
     } catch (error) {
-      writeSystemMessage(activeTerminal, error instanceof Error ? error.message : fallbackError);
+      if (terminalRef.current === activeTerminal && acceptsInput()) {
+        writeNotice(activeTerminal, error instanceof Error ? error.message : fallbackError);
+      }
     }
   };
 
   return (event) => {
-    if (suppressShiftEnter(event, terminal)) {
+    if (acceptsInput() && suppressShiftEnter(event, terminal)) {
       return false;
     }
 
@@ -93,6 +99,8 @@ export function createTerminalKeyEventHandler({
     ) {
       return false;
     }
+
+    if (!acceptsInput()) return false;
 
     const navigationData = terminalNavigationShortcutData(event);
     if (navigationData !== null) {

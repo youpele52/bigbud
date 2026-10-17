@@ -28,6 +28,14 @@ export const WORKSPACE_AGENT_TARGETS = [
   {
     buildPlatform: "win",
     platform: "win32",
+    arch: "arm64",
+    rustOs: "windows",
+    rustArch: "aarch64",
+    rustTarget: "aarch64-pc-windows-msvc",
+  },
+  {
+    buildPlatform: "win",
+    platform: "win32",
     arch: "x64",
     rustOs: "windows",
     rustArch: "x86_64",
@@ -81,7 +89,7 @@ export function assertWorkspaceAgentArtifactTarget(
     matches =
       peOffset + 6 <= bytes.length &&
       bytes.subarray(peOffset, peOffset + 4).toString("binary") === "PE\0\0" &&
-      bytes.readUInt16LE(peOffset + 4) === 0x8664;
+      bytes.readUInt16LE(peOffset + 4) === (target.arch === "arm64" ? 0xaa64 : 0x8664);
   }
   if (!matches) {
     throw new Error(

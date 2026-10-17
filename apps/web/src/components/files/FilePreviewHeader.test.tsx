@@ -27,7 +27,9 @@ describe("FilePreviewHeader", () => {
     expect(markup).not.toContain(">docs<");
     expect(markup).toContain("/workspace/bigbud/docs/plans/file.md");
     expect(markup).toContain('data-slot="tooltip-trigger"');
-    expect(markup).toContain('aria-label="Close"');
+    expect(markup).toContain('aria-label="Close file"');
+    expect(markup.match(/aria-label="Close file"/g)).toHaveLength(1);
+    expect(markup).toMatch(/data-file-preview-identity[^]*aria-label="Close file"[^]*<\/div>/);
     expect(markup).toContain('aria-label="Back"');
     expect(markup).toContain("disabled");
     expect(markup.match(/draggable="true"/g)).toHaveLength(1);

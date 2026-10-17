@@ -1,10 +1,17 @@
-import { CommandId, type OrchestrationMessage, type ThreadId } from "@bigbud/contracts";
-import { Cause, Effect, Schema } from "effect";
+import {
+  CommandId,
+  EventId,
+  type MessageId,
+  type OrchestrationMessage,
+  type ThreadId,
+} from "@bigbud/contracts";
+import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
+import { Cause, Effect } from "effect";
 
-import { ProviderAdapterValidationError, ProviderValidationError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
+import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
 
 type TurnStartRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -15,22 +22,18 @@ type RecordTurnStartFailure = (input: {
   readonly threadId: ThreadId;
   readonly context: "provider-turn-start";
   readonly detail: string;
+  readonly failureClass: TurnStartFailureClass;
   readonly createdAt: string;
+  readonly messageId?: MessageId;
+  readonly activityId?: EventId;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
 
-const PROVIDER_BUSY_TURN_DETAIL =
-  /already active|ongoing provider work|cannot start another turn|unresolved turn/i;
-
-export function isProviderTurnBusyCause(cause: Cause.Cause<unknown>): boolean {
-  const error = Cause.squash(cause);
-  if (
-    Schema.is(ProviderAdapterValidationError)(error) ||
-    Schema.is(ProviderValidationError)(error)
-  ) {
-    return PROVIDER_BUSY_TURN_DETAIL.test(error.issue);
-  }
-  return PROVIDER_BUSY_TURN_DETAIL.test(formatProviderServiceCauseDetail(cause));
-}
+type RequestAutomaticFork = (input: {
+  readonly sourceThreadId: ThreadId;
+  readonly failureEventId: EventId;
+  readonly pendingMessageId: MessageId;
+  readonly createdAt: string;
+}) => Effect.Effect<void>;
 
 function canQueueTurnStart(input: {
   readonly event: TurnStartRequestedEvent;
@@ -79,6 +82,7 @@ function queueTurnStart(input: {
 export function makeHandleTurnStartFailure(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly recordTurnStartFailure: RecordTurnStartFailure;
+  readonly requestAutomaticFork?: RequestAutomaticFork;
 }) {
   return (failure: {
     readonly event: TurnStartRequestedEvent;
@@ -86,16 +90,35 @@ export function makeHandleTurnStartFailure(input: {
     readonly cause: Cause.Cause<unknown>;
   }) => {
     const detail = formatProviderServiceCauseDetail(failure.cause);
+    const failureClass = classifyTurnStartFailure(failure.cause);
     if (
-      !isProviderTurnBusyCause(failure.cause) ||
+      failureClass !== "busy" ||
       !canQueueTurnStart({ event: failure.event, message: failure.message })
     ) {
-      return input.recordTurnStartFailure({
-        threadId: failure.event.payload.threadId,
+      const threadId = failure.event.payload.threadId;
+      const activityId = EventId.makeUnsafe(`turn-start-failed:${failure.event.eventId}`);
+      const recorded = input.recordTurnStartFailure({
+        threadId,
         context: "provider-turn-start",
         detail,
+        failureClass,
         createdAt: failure.event.payload.createdAt,
+        messageId: failure.message.id,
+        activityId,
       });
+      // Bounded in-place recovery already ran; still session-dead means it cannot resume (D16).
+      const requestAutomaticFork = input.requestAutomaticFork;
+      if (failureClass !== "session-dead" || requestAutomaticFork === undefined) return recorded;
+      return recorded.pipe(
+        Effect.andThen(
+          requestAutomaticFork({
+            sourceThreadId: threadId,
+            failureEventId: activityId,
+            pendingMessageId: failure.message.id,
+            createdAt: new Date().toISOString(),
+          }),
+        ),
+      );
     }
 
     return queueTurnStart({
@@ -116,7 +139,9 @@ export function makeHandleTurnStartFailure(input: {
           threadId: failure.event.payload.threadId,
           context: "provider-turn-start",
           detail: `${detail} Failed to queue the follow-up prompt: ${formatProviderServiceCauseDetail(queueCause)}`,
+          failureClass,
           createdAt: failure.event.payload.createdAt,
+          messageId: failure.message.id,
         }),
       ),
       Effect.asVoid,

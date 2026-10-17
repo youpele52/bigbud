@@ -8,7 +8,7 @@ import {
   type ProviderRuntimeEvent,
   type ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Layer, PubSub, Stream } from "effect";
+import { Effect, Layer, PubSub } from "effect";
 
 import {
   providerMetricAttributes,
@@ -45,7 +45,11 @@ import {
   makeStopStaleSessionsForThread,
   makeUpsertSessionBinding,
 } from "./ProviderService.sessionLifecycle.ts";
-import { makeProcessProviderRuntimeEvent } from "./ProviderService.runtimeEvents.ts";
+import {
+  makeProcessProviderRuntimeEvent,
+  makeCanonicalRuntimePublisher,
+  canonicalRuntimeStream,
+} from "./ProviderService.runtimeEvents.ts";
 import { ProviderTurnLivenessRepository } from "../../persistence/Services/ProviderTurnLiveness.ts";
 import { recordAcceptedSendTurn } from "./ProviderService.sendTurn.record.ts";
 import {
@@ -58,6 +62,8 @@ import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
+import { preserveStoppedProviderBinding } from "./ProviderService.stopSession.binding.ts";
+import { makeStopSubagent } from "./ProviderService.subagentStop.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -99,11 +105,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
   const processRuntimeEvent = makeProcessProviderRuntimeEvent({
     observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
-    publish: (event) =>
-      (canonicalEventLogger ? canonicalEventLogger.write(event, null) : Effect.void).pipe(
-        Effect.andThen(PubSub.publish(runtimeEventPubSub, event)),
-        Effect.asVoid,
-      ),
+    publish: makeCanonicalRuntimePublisher(runtimeEventPubSub, canonicalEventLogger),
   });
 
   yield* monitorProviderRuntimeEvents({
@@ -222,6 +224,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     analytics,
   });
   const steerTurn = makeSteerTurn({ resolveRoutableSession });
+  const stopSubagent = makeStopSubagent({ resolveRoutableSession });
 
   const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
 
@@ -324,7 +327,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           terminalAt: new Date().toISOString(),
         });
         yield* options?.settleThreadLogs?.(input.threadId) ?? Effect.void;
-        yield* directory.remove(input.threadId);
+        yield* preserveStoppedProviderBinding(directory, input.threadId);
         yield* analytics.record("provider.session.stopped", { provider: routed.adapter.provider });
       }).pipe(
         Effect.mapError((e) => e as ProviderServiceError),
@@ -364,6 +367,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopSubagent,
     inspectActiveTurn,
     listActiveTurnLiveness,
     recordTurnInspection,
@@ -377,7 +381,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     rollbackConversation,
     // Each consumer independently receives all canonical runtime events.
     get streamEvents(): ProviderServiceShape["streamEvents"] {
-      return Stream.fromPubSub(runtimeEventPubSub);
+      return canonicalRuntimeStream(runtimeEventPubSub);
     },
   } satisfies ProviderServiceShape;
 });

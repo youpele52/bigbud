@@ -30,8 +30,10 @@ import type {
 import type { EditorId } from "../workspace/editor";
 import type { TerminalApplicationId } from "../workspace/terminalApplication";
 import type * as Git from "../workspace/git";
+import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
+import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
 import type { ContextMenuItem } from "./ipc";
 import type * as Kanban from "./kanban";
@@ -43,9 +45,22 @@ import type * as RemoteRestart from "./server.remoteRestart";
 import type * as Handoff from "./server.handoff";
 import type * as Retention from "./threadRetention";
 import type * as Teach from "./teach";
+import type * as Subagents from "./subagents";
 import type * as Usage from "./usage";
 
 export interface NativeApi {
+  worktrees?: {
+    operations: (
+      input: Worktrees.WorktreeContext,
+    ) => Promise<readonly Worktrees.WorktreeOperationSummary[]>;
+    recover: (
+      input: Worktrees.WorktreeOperationRecovery,
+    ) => Promise<Worktrees.WorktreeOperationSummary>;
+    list: (input: Worktrees.WorktreeContext) => Promise<Worktrees.WorktreeInventory>;
+    create: (input: Worktrees.WorktreeCreate) => Promise<{ path: string; branch: string }>;
+    delete: (input: Worktrees.WorktreeMutation) => Promise<Worktrees.WorktreeOperationResult>;
+    select: (input: Worktrees.WorktreeSelection) => Promise<void>;
+  };
   dialogs: {
     pickFolder: () => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
@@ -56,6 +71,10 @@ export interface NativeApi {
     ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
+    wslDistributions?: () => Promise<TerminalWslDistributions>;
+    snapshot?: (
+      input: typeof Terminal.TerminalSnapshotInput.Encoded,
+    ) => Promise<Terminal.TerminalSessionSnapshot>;
     open: (
       input: typeof Terminal.TerminalOpenInput.Encoded,
     ) => Promise<Terminal.TerminalSessionSnapshot>;
@@ -211,10 +230,16 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: Server.ServerWriteHandoffDocumentInput,
     ) => Promise<Server.ServerWriteHandoffDocumentResult>;
+    retryTextGeneration: (
+      input: import("./rpc.textGeneration").RetryThreadTextGenerationInput,
+    ) => Promise<void>;
     startHandoffJob: (
       input: Handoff.ServerStartHandoffJobInput,
     ) => Promise<Handoff.ServerHandoffJob>;
     getHandoffJob: (input: Handoff.ServerGetHandoffJobInput) => Promise<Handoff.ServerHandoffJob>;
+    getOpencodeV2ThreadToolsSetup: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
     createMobileRemotePairing: (
       input: Mobile.ServerCreateMobileRemotePairingInput,
     ) => Promise<Mobile.ServerMobileRemotePairing>;
@@ -255,6 +280,8 @@ export interface NativeApi {
     getUsageSummary: (
       input: Usage.ServerGetUsageSummaryInput,
     ) => Promise<Usage.ServerUsageSummaryResult>;
+    /** Stop one running provider subagent; Stop-all is unchanged. */
+    stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
   };
   orchestration: {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;
@@ -295,3 +322,7 @@ export interface NativeApi {
     ) => () => void;
   };
 }
+import type {
+  ServerOpencodeV2ThreadToolsSetupInput,
+  ServerOpencodeV2ThreadToolsSetupResult,
+} from "./server.opencodeV2ThreadToolsSetup";

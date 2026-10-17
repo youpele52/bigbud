@@ -1,4 +1,6 @@
 import type { LedgerStorage } from "../ledger/revisionedLedger";
+import * as Schema from "effect/Schema";
+import { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 import {
   OWNERSHIP_SCOPES,
   type OwnershipDraftRecord,
@@ -45,6 +47,7 @@ function isDraft(value: unknown): value is OwnershipDraftRecord {
     typeof value.interactionMode === "string" &&
     (value.branch === null || typeof value.branch === "string") &&
     (value.worktreePath === null || typeof value.worktreePath === "string") &&
+    (value.worktreeBinding === undefined || Schema.is(WorktreeBinding)(value.worktreeBinding)) &&
     (value.envMode === "local" || value.envMode === "worktree")
   );
 }

@@ -80,6 +80,8 @@ export interface AcpSessionRuntimeShape {
   readonly handleUnknownExtNotification: EffectAcpClient.AcpClientShape["handleUnknownExtNotification"];
   readonly handleExtRequest: EffectAcpClient.AcpClientShape["handleExtRequest"];
   readonly handleExtNotification: EffectAcpClient.AcpClientShape["handleExtNotification"];
+  /** False only once the agent process exit is already observed (the next prompt cannot start). */
+  readonly isAlive: Effect.Effect<boolean>;
   readonly start: () => Effect.Effect<AcpSessionRuntimeStartResult, EffectAcpErrors.AcpError>;
   readonly getEvents: () => Stream.Stream<AcpParsedSessionEvent, never>;
   readonly getModeState: Effect.Effect<AcpSessionModeState | undefined>;
@@ -219,6 +221,8 @@ const makeAcpSessionRuntime = (
       handleUnknownExtNotification: acp.handleUnknownExtNotification,
       handleExtRequest: acp.handleExtRequest,
       handleExtNotification: acp.handleExtNotification,
+      // An unknown status is treated as alive, so an uncertain exit is never called pre-dispatch.
+      isAlive: child.isRunning.pipe(Effect.orElseSucceed(() => true)),
       ...methods,
     } satisfies AcpSessionRuntimeShape;
   });

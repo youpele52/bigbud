@@ -73,6 +73,9 @@ export const ThreadDetailMessageDbRow = ProjectionThreadMessage.mapFields(
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(ProjectionThreadMessage.fields.attachments)),
     replyTo: Schema.NullOr(Schema.fromJsonString(ProjectionThreadMessage.fields.replyTo)),
+    originSegments: Schema.NullOr(
+      Schema.fromJsonString(ProjectionThreadMessage.fields.originSegments),
+    ),
   }),
 );
 export type ThreadDetailMessageDbRow = typeof ThreadDetailMessageDbRow.Type;

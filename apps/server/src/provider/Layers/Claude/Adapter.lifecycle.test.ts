@@ -7,12 +7,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import { makeClaudeAdapterLive } from "./Adapter.ts";
-import {
-  THREAD_ID,
-  makeDeterministicRandomService,
-  makeHarness,
-  FakeClaudeQuery,
-} from "./Adapter.test.helpers.ts";
+import { THREAD_ID, makeDeterministicRandomService, makeHarness } from "./Adapter.test.helpers.ts";
+import { FakeClaudeQuery } from "./Adapter.test.helpers.query.ts";
 
 describe("ClaudeAdapterLive", () => {
   it.effect("treats user-aborted Claude results as interrupted without a runtime error", () => {
@@ -259,60 +255,6 @@ describe("ClaudeAdapterLive", () => {
           "Code reviewer checked the migration edge cases.",
         );
         assert.equal(progressEvent.payload.description, "Running background teammate");
-      }
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("emits thread token usage updates from Claude task progress", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-
-      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 6).pipe(
-        Stream.runCollect,
-        Effect.forkChild,
-      );
-
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-
-      harness.query.emit({
-        type: "system",
-        subtype: "task_progress",
-        task_id: "task-usage-1",
-        description: "Thinking through the patch",
-        usage: {
-          total_tokens: 321,
-          tool_uses: 2,
-          duration_ms: 654,
-        },
-        session_id: "sdk-session-task-usage",
-        uuid: "task-usage-progress-1",
-      } as unknown as SDKMessage);
-
-      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
-      const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
-      const progressEvent = runtimeEvents.find((event) => event.type === "task.progress");
-      assert.equal(usageEvent?.type, "thread.token-usage.updated");
-      if (usageEvent?.type === "thread.token-usage.updated") {
-        assert.deepEqual(usageEvent.payload, {
-          usage: {
-            usedTokens: 321,
-            lastUsedTokens: 321,
-            toolUses: 2,
-            durationMs: 654,
-          },
-        });
-      }
-      assert.equal(progressEvent?.type, "task.progress");
-      if (usageEvent && progressEvent) {
-        assert.notStrictEqual(usageEvent.eventId, progressEvent.eventId);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

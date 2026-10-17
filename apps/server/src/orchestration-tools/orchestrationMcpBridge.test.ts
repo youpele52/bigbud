@@ -69,7 +69,8 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("create_thread");
     expect(source).toContain("send_thread_message");
     expect(source).toContain('enum: ["auto", "queue"]');
-    expect(source).toContain("maxLength: 200");
+    // create_thread embeds the shared JSON schema (CREATE_THREAD_TOOL_PARAMETERS).
+    expect(source).toContain('"maxLength":200');
     expect(source).toContain("maxLength: 32000");
     expect(source).toContain("MCP_INVOCATION_IDENTITY_REQUIRED");
     expect(source).toContain("invocationId,");

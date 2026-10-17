@@ -2,11 +2,7 @@ import type { ProviderSendTurnInput } from "@bigbud/contracts";
 import type { ClaudeSdkUserContent } from "./Adapter.utils.message.ts";
 import { Effect, type FileSystem } from "effect";
 
-import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
-import {
-  appendAttachedImageOcrContents,
-  extractPromptTextFromFile,
-} from "../../../attachments/documentText.ts";
+import { prepareManagedAttachmentContext } from "../../../attachments/providerAttachments.managed.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import {
   buildClaudeImageContentBlock,
@@ -22,13 +18,30 @@ export interface BuildUserMessageDeps {
 }
 
 export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
-  const { fileSystem, serverConfig } = deps;
-  return Effect.fn("buildUserMessageEffect")(function* (input: ProviderSendTurnInput) {
-    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+  const { serverConfig } = deps;
+  return Effect.fn("buildUserMessageEffect")(function* (
+    input: ProviderSendTurnInput,
+    pathReachable = true,
+  ) {
+    const prepared = yield* Effect.tryPromise({
+      try: () =>
+        prepareManagedAttachmentContext(
+          buildPromptText(input),
+          input.attachments ?? [],
+          serverConfig.attachmentsDir,
+          pathReachable,
+        ),
+      catch: (cause) =>
+        new ProviderAdapterRequestError({
+          provider: "claudeAgent",
+          method: "turn/start",
+          detail: toMessage(cause, "Failed to prepare attachments."),
+          cause,
+        }),
+    });
     const sdkContent: Array<ClaudeSdkUserContent[number]> = [];
 
-    for (const attachment of input.attachments ?? []) {
-      if (attachment.type === "path") continue;
+    for (const { attachment, bytes } of prepared.attachments) {
       if (attachment.type === "image") {
         if (!isClaudeImageMimeType(attachment.mimeType)) {
           return yield* new ProviderAdapterValidationError({
@@ -36,49 +49,6 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
             operation: "turn/start",
             issue: `Unsupported Claude image attachment type '${attachment.mimeType}'.`,
           });
-        }
-
-        const attachmentPath = resolveAttachmentPath({
-          attachmentsDir: serverConfig.attachmentsDir,
-          attachment,
-        });
-        if (!attachmentPath) {
-          return yield* new ProviderAdapterRequestError({
-            provider: "claudeAgent",
-            method: "turn/start",
-            detail: `Invalid attachment id '${attachment.id}'.`,
-          });
-        }
-
-        const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterRequestError({
-                provider: "claudeAgent",
-                method: "turn/start",
-                detail: toMessage(cause, "Failed to read attachment file."),
-                cause,
-              }),
-          ),
-        );
-
-        const extractedText = yield* Effect.tryPromise({
-          try: () =>
-            extractPromptTextFromFile({
-              filePath: attachmentPath,
-              mimeType: attachment.mimeType,
-              fileName: attachment.name,
-            }),
-          catch: (cause) =>
-            new ProviderAdapterRequestError({
-              provider: "claudeAgent",
-              method: "turn/start",
-              detail: toMessage(cause, "Failed to extract OCR text from image attachment."),
-              cause,
-            }),
-        });
-        if (extractedText !== null) {
-          imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
         }
 
         sdkContent.push(
@@ -90,50 +60,20 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
         continue;
       }
 
-      if (attachment.mimeType !== "application/pdf") {
-        return yield* new ProviderAdapterValidationError({
-          provider: "claudeAgent",
-          operation: "turn/start",
-          issue: `Unsupported Claude document attachment type '${attachment.mimeType}'.`,
-        });
-      }
-
-      const attachmentPath = resolveAttachmentPath({
-        attachmentsDir: serverConfig.attachmentsDir,
-        attachment,
-      });
-      if (!attachmentPath) {
-        return yield* new ProviderAdapterRequestError({
-          provider: "claudeAgent",
-          method: "turn/start",
-          detail: `Invalid file attachment id '${attachment.id}'.`,
-        });
-      }
-
-      const fileBytes = yield* fileSystem.readFile(attachmentPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProviderAdapterRequestError({
-              provider: "claudeAgent",
-              method: "turn/start",
-              detail: toMessage(cause, "Failed to read file attachment."),
-              cause,
-            }),
-        ),
-      );
+      if (attachment.mimeType !== "application/pdf") continue;
 
       sdkContent.push({
         type: "document",
         source: {
           type: "base64",
           media_type: attachment.mimeType,
-          data: Buffer.from(fileBytes).toString("base64"),
+          data: bytes.toString("base64"),
         },
         title: attachment.name,
       });
     }
 
-    const text = appendAttachedImageOcrContents(buildPromptText(input), imageOcrBlocks);
+    const text = prepared.text;
     if (text.length > 0) {
       sdkContent.unshift({ type: "text", text });
     }

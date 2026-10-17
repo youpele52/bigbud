@@ -2,6 +2,8 @@ import { page } from "vitest/browser";
 import { expect, vi } from "vitest";
 
 import { isMacPlatform } from "../../../../lib/utils";
+import { getServerConfig } from "../../../../rpc/serverState";
+import { shortcutLabelForCommand } from "../../../../models/keybindings/keybindings.models";
 import type { MessageId } from "@bigbud/contracts";
 
 import { type ChatRouter, type UserRowMeasurement, type ViewportSpec } from "./types";
@@ -160,12 +162,16 @@ export async function waitForInteractionModeButton(
 
 export function dispatchChatNewShortcut(): void {
   const useMetaForMod = isMacPlatform(navigator.platform);
+  const binding = getServerConfig()?.keybindings.find((entry) => entry.command === "chat.new");
+  if (!binding) throw new Error("The browser fixture has no chat.new shortcut.");
+  const shortcut = binding.shortcut;
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
-      key: "o",
-      shiftKey: true,
-      metaKey: useMetaForMod,
-      ctrlKey: !useMetaForMod,
+      key: shortcut.key,
+      shiftKey: shortcut.shiftKey,
+      altKey: shortcut.altKey,
+      metaKey: shortcut.metaKey || (shortcut.modKey && useMetaForMod),
+      ctrlKey: shortcut.ctrlKey || (shortcut.modKey && !useMetaForMod),
       bubbles: true,
       cancelable: true,
     }),
@@ -189,7 +195,7 @@ export function dispatchCommandPaletteShortcut(): void {
   const useMetaForMod = isMacPlatform(navigator.platform);
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
-      key: "k",
+      key: "p",
       metaKey: useMetaForMod,
       ctrlKey: !useMetaForMod,
       bubbles: true,
@@ -220,10 +226,12 @@ export async function waitForNewThreadShortcutLabel(): Promise<void> {
   const newThreadButton = page.getByTestId("new-thread-button");
   await expect.element(newThreadButton).toBeInTheDocument();
   await newThreadButton.hover();
-  const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⌘N)"
-    : "New thread (Ctrl+N)";
-  await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
+  const bindings = getServerConfig()?.keybindings ?? [];
+  const shortcutLabel =
+    shortcutLabelForCommand(bindings, "chat.newLocal", navigator.platform) ??
+    shortcutLabelForCommand(bindings, "chat.new", navigator.platform);
+  expect(shortcutLabel).toBeTruthy();
+  await expect.element(page.getByText(`New thread (${shortcutLabel})`)).toBeInTheDocument();
 }
 
 async function waitForImagesToLoad(scope: ParentNode): Promise<void> {

@@ -1,6 +1,7 @@
 import type { OrchestrationCommand, OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { forkLineageThreadIds } from "../deciderThreads.fork.logic.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandProcessing.ts";
 
 type ThreadStateHydrator<HydrationError> = {
@@ -26,6 +27,19 @@ export function makePrepareCommandState<HydrationError>(input: {
         }
       });
     }
+    if (command.type === "thread.fork") {
+      // The fork copies settled history from its source, so the source needs full history.
+      return Effect.gen(function* () {
+        yield* input.threadStateHydrator!.load(command.threadId, "operational");
+        const source = yield* input.threadStateHydrator!.load(command.sourceThreadId, "history");
+        // Earlier forks decide idempotency only while they still exist (deleted ones do not).
+        for (const forkThreadId of new Set(source ? forkLineageThreadIds(source) : [])) {
+          if (forkThreadId !== command.threadId) {
+            yield* input.threadStateHydrator!.load(forkThreadId, "operational");
+          }
+        }
+      });
+    }
     const aggregate = commandToAggregateRef(command);
     if (aggregate.aggregateKind !== "thread") return Effect.void;
     const targetThreadId = aggregate.aggregateId as ThreadId;
@@ -34,12 +48,17 @@ export function makePrepareCommandState<HydrationError>(input: {
         ? command.sourceProposedPlan?.threadId
         : undefined;
     const historyRequired =
+      (command.type === "thread.meta.update" && command.title !== undefined) ||
       command.type === "thread.turn.start" ||
       (command.type === "thread.message.submit" &&
         command.message.replyToMessageId !== undefined) ||
       sourceThreadId === targetThreadId ||
       command.type === "thread.checkpoint.revert" ||
-      command.type === "thread.revert.complete";
+      command.type === "thread.revert.complete" ||
+      // The startup window omits idle threads' activities; a held choice must be visible.
+      command.type === "thread.delegation.model-choice.hold" ||
+      command.type === "thread.delegation.model-choice.expire" ||
+      command.type === "thread.delegation.model-choice.pick";
     return Effect.gen(function* () {
       yield* input.threadStateHydrator!.load(
         targetThreadId,

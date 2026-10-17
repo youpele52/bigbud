@@ -1,6 +1,9 @@
 import { Option, Schema } from "effect";
+import { ApprovalExecutionIntent } from "./approvalIntent";
 
 import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+import { UserInputField } from "./providerRuntime.forms";
+import { ModelSelection } from "./orchestration.provider";
 export { McpOauthCompletedPayload, McpStatusUpdatedPayload } from "./providerRuntime.payloads.mcp";
 export {
   TaskCompletedPayload,
@@ -133,12 +136,14 @@ export type ThreadRealtimeClosedPayload = typeof ThreadRealtimeClosedPayload.Typ
 
 export const TurnStartedPayload = Schema.Struct({
   model: Schema.optional(TrimmedNonEmptyStringSchema),
+  modelSelection: Schema.optional(ModelSelection),
   effort: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 export type TurnStartedPayload = typeof TurnStartedPayload.Type;
 
 export const TurnCompletedPayload = Schema.Struct({
   state: RuntimeTurnState,
+  actualModelSelection: Schema.optional(ModelSelection),
   stopReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   usageAvailable: Schema.optional(Schema.Boolean),
   usage: Schema.optional(Schema.Unknown),
@@ -201,6 +206,7 @@ export const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
+  executionIntent: Schema.optional(ApprovalExecutionIntent),
   autoApproveAfterMs: Schema.optional(NonNegativeInt),
   sessionApprovalAvailable: Schema.optional(Schema.Boolean),
   sessionApprovalLabel: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -222,6 +228,7 @@ const UserInputQuestionOption = Schema.Struct({
 export type UserInputQuestionOption = typeof UserInputQuestionOption.Type;
 
 export const UserInputQuestion = Schema.Struct({
+  field: Schema.optional(UserInputField),
   id: TrimmedNonEmptyStringSchema,
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,
@@ -340,6 +347,8 @@ export type FilesPersistedPayload = typeof FilesPersistedPayload.Type;
 export const RuntimeWarningPayload = Schema.Struct({
   message: TrimmedNonEmptyStringSchema,
   detail: Schema.optional(Schema.Unknown),
+  /** Additive: `error` shows the warning on the red error surface without failing the session. */
+  severity: Schema.optional(Schema.Literals(["warning", "error"])),
 });
 export type RuntimeWarningPayload = typeof RuntimeWarningPayload.Type;
 

@@ -15,6 +15,7 @@ import {
 import { readBootstrapEnvelope } from "../startup/bootstrap";
 import { expandHomePath, resolveBaseDir } from "../utils/os-jank";
 import { TraceModeSchema } from "../observability/TracePolicy.ts";
+import { setSystemMonitorAgentAccess } from "../orchestration-tools/ThreadSystemResourcesTool.ts";
 
 export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -30,6 +31,12 @@ const BootstrapEnvelopeSchema = Schema.Struct({
   logWebSocketEvents: Schema.optional(Schema.Boolean),
   otlpTracesUrl: Schema.optional(Schema.String),
   otlpMetricsUrl: Schema.optional(Schema.String),
+  systemMonitorAgentAccess: Schema.optional(
+    Schema.Struct({
+      endpoint: Schema.String,
+      token: Schema.String,
+    }),
+  ),
 });
 
 const aliasedConfig = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
@@ -188,6 +195,7 @@ export const resolveServerConfig = (
       bootstrapFd !== undefined
         ? yield* readBootstrapEnvelope(BootstrapEnvelopeSchema, bootstrapFd)
         : Option.none();
+    setSystemMonitorAgentAccess(Option.getOrUndefined(bootstrapEnvelope)?.systemMonitorAgentAccess);
 
     const mode: RuntimeMode = Option.getOrElse(
       resolveOptionPrecedence(

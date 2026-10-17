@@ -4,6 +4,12 @@ import { type TerminalSessionState } from "./Manager.types";
 
 export function resetSessionRuntimeState(session: TerminalSessionState): void {
   session.history = "";
+  session.historyTruncated = false;
+  session.historyUnavailable = false;
+  session.historyBytes = 0;
+  session.historyNewlines = 0;
+  session.historyTail = "";
+  session.pendingHistoryBytes = 0;
   session.pendingHistoryControlSequence = "";
   session.pendingProcessEvents = [];
   session.pendingProcessEventIndex = 0;
@@ -49,6 +55,7 @@ export function createTerminalSessionState(input: {
     unsubscribeExit: null,
     hasRunningSubprocess: false,
     activeAgentProvider: null,
+    activeAgent: null,
     agentIdentityMisses: 0,
     runtimeEnv: input.runtimeEnv,
   };

@@ -29,6 +29,7 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CursorAdapter, type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
@@ -46,6 +47,7 @@ import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -98,13 +100,12 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
     const requireSession = (
       threadId: ThreadId,
     ): Effect.Effect<CursorSessionContext, ProviderAdapterSessionNotFoundError> => {
-      const ctx = sessions.get(threadId);
-      if (!ctx || ctx.stopped) {
-        return Effect.fail(
-          new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }),
-        );
-      }
-      return Effect.succeed(ctx);
+      return requireLiveAdapterSession({
+        provider: PROVIDER,
+        threadId,
+        session: sessions.get(threadId),
+        isLive: (ctx) => !ctx.stopped,
+      });
     };
 
     const stopSessionInternal = (ctx: CursorSessionContext) =>
@@ -297,7 +298,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.cursor,
+      },
       startSession,
       sendTurn,
       interruptTurn,

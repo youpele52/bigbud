@@ -26,12 +26,82 @@ export interface ThreadOrchestrationSessionBridgeInput {
 
 export const THREAD_ORCHESTRATION_API_PATH = "/api/internal/thread-tools";
 
-export const RENAME_THREAD_TOOL_DESCRIPTION = "Rename the current BigBud thread.";
+export const RENAME_THREAD_TOOL_DESCRIPTION =
+  "Rename canonical bigbud thread metadata, not a native provider session. Omit targetThreadId for the current thread. Rename another thread only when the current user explicitly requests it; only current-project threads and directly delegated children are eligible, with existing approvals. Attached history alone does not authorize renaming.";
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 
+/** The v1 description, frozen in OpenCode V2's bootstrap ABI; extended below, never edited. */
 export const CREATE_THREAD_TOOL_DESCRIPTION =
   "Create a standalone bigbud thread in a project and optionally watch it for completion.";
+
+export const CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION = `${CREATE_THREAD_TOOL_DESCRIPTION} Optionally request a provider and model for the new thread with modelSelection, chosen from list_available_models. bigbud uses it only when the user can use that model; otherwise the thread uses this thread's model, and the user may pick another within about 10 seconds. modelSelection never makes this call fail or wait; the result reports the model requested and the model used.`;
+
+export const LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION =
+  "List the providers and models the user can use right now for a delegated thread's modelSelection, most recently used first, with this thread's model flagged. Read-only. An empty list means agent model choice is off; then omit modelSelection.";
+
+export const LIST_AVAILABLE_MODELS_DEFAULT_LIMIT = 50;
+export const LIST_AVAILABLE_MODELS_MAX_LIMIT = 200;
+
+/**
+ * Deliberately lenient (no required keys, extra keys allowed): the server validates the request
+ * and falls back to the parent's model, so a malformed selection never fails `create_thread`.
+ */
+export const MODEL_SELECTION_DESCRIPTION =
+  "Optional provider and model for the new thread, from list_available_models. Omit to use this thread's model.";
+
+const MODEL_SELECTION_PARAMETER = {
+  type: "object",
+  description: MODEL_SELECTION_DESCRIPTION,
+  properties: {
+    provider: { type: "string", description: "Provider ID, for example codex or claudeAgent" },
+    model: { type: "string", description: "Model ID; omit to use the provider's recent model" },
+    subProviderID: { type: "string", description: "Sub-provider ID, when listed" },
+  },
+} as const;
+
+export const CREATE_THREAD_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    title: {
+      type: "string",
+      description: "Title for the new standalone bigbud thread",
+      maxLength: 200,
+    },
+    task: {
+      type: "string",
+      description: "Task for the new standalone bigbud thread",
+      maxLength: 32000,
+    },
+    projectId: { type: "string", description: "Optional target project ID" },
+    watchForCompletion: {
+      type: "boolean",
+      description: "Whether to watch the child thread for completion",
+    },
+    modelSelection: MODEL_SELECTION_PARAMETER,
+  },
+  required: ["title", "task"],
+  additionalProperties: false,
+} as const;
+
+export const LIST_AVAILABLE_MODELS_PARAMETERS = {
+  type: "object",
+  properties: {
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: LIST_AVAILABLE_MODELS_MAX_LIMIT,
+      description: `Maximum models to return; defaults to ${LIST_AVAILABLE_MODELS_DEFAULT_LIMIT}`,
+    },
+  },
+  required: [],
+  additionalProperties: false,
+} as const;
+
+/** OpenCode V2's frozen bootstrap ABI has no model choice yet (plan Phase 5). */
+export function providerSupportsDelegatedModelChoice(provider: string): boolean {
+  return provider !== "opencodeV2";
+}
 
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a bigbud thread in the current project or a directly delegated child. Use this to check whether another thread's agent is still working before starting dependent work.";
@@ -56,6 +126,9 @@ export const BROWSER_TOOL_DESCRIPTION =
 
 export const COMPUTER_USE_TOOL_DESCRIPTION =
   'Automate native desktop apps via the `computer_use` tool. Use `surface: "desktop"` for native macOS automation such as launching or focusing apps, reading Calendar or Reminders, capturing screens, and interacting through the accessibility tree. Desktop `navigate` opens the URL in the OS default browser; use it when the user explicitly requests an external/system browser or capability context says that browser is preferred. Opening does not by itself confirm that the browser is controllable. Use the separate `browser` tool for bigbud\'s built-in browser. Do not assume CLI tools or direct app APIs are unavailable before trying this tool. Read-only actions (capture, list_windows, list_apps, check_permissions, doctor, get_accessibility_tree) work in any runtime mode. Mutating actions require full-access runtime mode.';
+
+export const GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION =
+  "Read a current, bounded snapshot of the desktop app's machine resources from bigbud's Rust monitor. Returns host identity, sample time, freshness, metric availability, CPU, memory, network, and disk summary. Returns unavailable when the desktop monitor is absent. Read-only; call when system state is relevant.";
 
 export function resolveOrchestrationBridgeHost(host: string | undefined): string {
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {

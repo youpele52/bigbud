@@ -18,7 +18,10 @@ export default mergeConfig(
       include: ["src/components/**/*.browser.tsx", "src/routes/**/*.browser.tsx"],
       browser: {
         enabled: true,
-        provider: playwright(),
+        provider: playwright({
+          // Keep native scrollbars hittable for preview-edge track and thumb tests.
+          launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },
+        }),
         instances: [{ browser: "chromium" }],
         headless: true,
       },

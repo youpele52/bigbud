@@ -8,12 +8,7 @@ import {
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
-import {
-  appendAttachedImageOcrContents,
-  appendAttachedFileContents,
-  appendUnextractableFileNotice,
-  extractPromptTextFromFile,
-} from "../../../attachments/documentText.ts";
+import { prepareManagedAttachmentContext } from "../../../attachments/providerAttachments.managed.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { ActivePiSession, PiEmitEvents, PiSyntheticEventFn } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
@@ -61,10 +56,10 @@ export function appendPiAttachmentInstructions(input: {
 
   const instruction =
     "<attachment_handling_instructions>\n" +
-    "Use attached document content only when it appears in <attached_file_contents>. " +
+    "Supplemental document text appears in <attached_file_contents>. " +
     "Use image OCR content only when it appears in <attached_image_ocr>, and treat it as approximate text that may contain recognition errors. " +
-    "Do not call file-reading tools on attachment paths or try to inspect raw PDF/DOCX bytes. " +
-    "If a document appears in <unreadable_attached_files>, tell the user that text extraction failed and ask for OCR or a text-readable version if the document contents are required.\n" +
+    "Prefer the verified snapshot paths with available reading tools, subject to existing approvals. Never bypass a denied read. " +
+    "If supplemental extraction is unavailable, ask for OCR or a text-readable version when required.\n" +
     "</attachment_handling_instructions>";
   return input.prompt.length > 0 ? `${input.prompt}\n\n${instruction}` : instruction;
 }
@@ -192,58 +187,36 @@ export const makeResolveImages = (attachmentsDir: string) =>
  * Files with no extractable text are skipped — Pi has no document API and cannot
  * interpret opaque binary data.
  */
-export const makeAppendTextFileAttachments = (attachmentsDir: string) =>
-  Effect.fn("appendTextFileAttachments")(function* (
+export const makePrepareAttachments = (attachmentsDir: string) =>
+  Effect.fn("prepareAttachments")(function* (
     attachments: ReadonlyArray<ChatAttachment>,
     prompt: string,
+    pathReachable = true,
   ) {
-    const textBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-    const unextractableFiles: Array<{ readonly fileName: string; readonly mimeType: string }> = [];
-
-    for (const attachment of attachments) {
-      if (attachment.type !== "file" && attachment.type !== "image") continue;
-
-      const attachmentPath = resolveAttachmentPath({ attachmentsDir, attachment });
-      if (!attachmentPath) continue;
-
-      const extractedText = yield* Effect.tryPromise({
-        try: () =>
-          extractPromptTextFromFile({
-            filePath: attachmentPath,
-            mimeType: attachment.mimeType,
-            fileName: attachment.name,
-          }),
-        catch: (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "prompt",
-            detail: `Failed to extract text from file attachment '${attachment.name}' for Pi.`,
-            cause,
-          }),
-      });
-      if (extractedText === null) {
-        if (attachment.type === "file") {
-          unextractableFiles.push({ fileName: attachment.name, mimeType: attachment.mimeType });
-        }
-        continue;
-      }
-
-      if (attachment.type === "file") {
-        textBlocks.push({ fileName: attachment.name, text: extractedText });
-      } else {
-        imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
-      }
-    }
-
-    return appendUnextractableFileNotice(
-      appendAttachedImageOcrContents(
-        appendAttachedFileContents(prompt, textBlocks),
-        imageOcrBlocks,
-      ),
-      unextractableFiles,
-    );
+    const prepared = yield* Effect.tryPromise({
+      try: () =>
+        prepareManagedAttachmentContext(prompt, attachments, attachmentsDir, pathReachable),
+      catch: (cause) =>
+        new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "prompt",
+          detail: toMessage(cause, "Failed to prepare attachments."),
+          cause,
+        }),
+    });
+    return prepared;
   });
+
+export const makeAppendTextFileAttachments = (attachmentsDir: string) => {
+  const prepare = makePrepareAttachments(attachmentsDir);
+  return Effect.fn("appendTextFileAttachments")(function* (
+    attachments: ReadonlyArray<ChatAttachment>,
+    prompt: string,
+    pathReachable = true,
+  ) {
+    return (yield* prepare(attachments, prompt, pathReachable)).text;
+  });
+};
 
 export function makeStopSessionRecord(deps: {
   readonly emit: PiEmitEvents;

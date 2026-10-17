@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { type DesktopUpdateState } from "@bigbud/contracts";
 import { isElectron } from "../config/env";
+import { openLinkFromClick } from "../lib/openLink";
 import { toastManager } from "../components/ui/toast";
 import {
   getDesktopUpdateActionError,
@@ -69,7 +70,7 @@ export function useDesktopUpdateState(): UseDesktopUpdateStateResult {
     if (desktopUpdateButtonDisabled || desktopUpdateButtonAction === "none") return;
 
     if (desktopUpdateButtonAction === "open-download") {
-      void bridge.openExternal(RELEASES_URL).catch(() => undefined);
+      openLinkFromClick(RELEASES_URL);
       return;
     }
 

@@ -46,6 +46,7 @@ export type TerminalSubprocessChecker = (
 // ---------------------------------------------------------------------------
 
 export interface ShellCandidate {
+  label?: string;
   shell: string;
   args?: string[];
   dropPathMode: TerminalDropPathMode;
@@ -126,6 +127,7 @@ function shellCandidateFromCommand(command: string | null): ShellCandidate | nul
 }
 
 export function formatShellCandidate(candidate: ShellCandidate): string {
+  if (candidate.label) return candidate.label;
   if (!candidate.args || candidate.args.length === 0) return candidate.shell;
   return `${candidate.shell} ${candidate.args.join(" ")}`;
 }

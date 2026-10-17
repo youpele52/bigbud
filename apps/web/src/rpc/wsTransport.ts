@@ -1,18 +1,25 @@
-import { Cause, Duration, Effect, Exit, ManagedRuntime, Option, Scope, Stream } from "effect";
-import { RpcClient } from "effect/unstable/rpc";
+import { Duration, Effect, Option, Stream } from "effect";
 
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
-import { markWsInboundActivity } from "./wsActivity";
-import { waitForDesktopBackendReady } from "./desktopBackendReady";
-import { resolveSubscriptionRetryDelayMs, type SubscriptionRetryDelay } from "./wsTransport.retry";
 import {
-  createWsRpcProtocolLayer,
-  makeWsRpcProtocolClient,
-  type WsProtocolLifecycleHandlers,
-  type WsRpcProtocolClient,
-} from "./protocol";
+  cappedExponentialRetryDelay,
+  resolveSubscriptionRetryDelayMs,
+  type SubscriptionRetryDelay,
+} from "./wsTransport.retry";
+import { runWsStreamOnSession } from "./wsTransport.stream";
+import { recordWsProtocolRecovery } from "./wsConnectionState";
+import {
+  closeWsTransportSession,
+  createWsTransportSession,
+  type TransportSession,
+} from "./wsTransport.session";
+import { waitForExplicitWsRecovery, waitForWsRetry } from "./wsTransport.wait";
+import { scopedWsFiniteRequest, withWsRequestDeadline } from "./wsTransport.request";
+import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
+import { type WsProtocolLifecycleHandlers, type WsRpcProtocolClient } from "./protocol";
 
 interface SubscribeOptions {
+  readonly initialApplication?: WsInitialApplicationDeadline;
   readonly retryDelay?: SubscriptionRetryDelay;
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
@@ -26,6 +33,20 @@ interface RequestOptions {
 const DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS = Duration.millis(250);
 const NOOP: () => void = () => undefined;
 const SUBSCRIPTION_LISTENER_FAILURE_NAME = "WsSubscriptionListenerError";
+
+export class WsSubscriptionCompletedError extends Error {
+  constructor() {
+    super("Persistent WebSocket subscription completed unexpectedly.");
+    this.name = "WsSubscriptionCompletedError";
+  }
+}
+
+export class WsProtocolRecoveryExhaustedError extends Error {
+  constructor() {
+    super("WebSocket RPC recovery exhausted. Retry explicitly to reconnect.");
+    this.name = "WsProtocolRecoveryExhaustedError";
+  }
+}
 
 class WsSubscriptionListenerError extends Error {
   readonly listenerCause: unknown;
@@ -49,16 +70,12 @@ function subscriptionErrorCause(error: unknown): unknown {
   return error instanceof WsSubscriptionListenerError ? error.listenerCause : error;
 }
 
-interface TransportSession {
-  readonly clientPromise: Promise<WsRpcProtocolClient>;
-  readonly clientScope: Scope.Closeable;
-  readonly closeScope: () => Promise<void>;
-  readonly readinessController: AbortController;
-  readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
-}
-
 function formatErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
+  if (
+    error instanceof Error &&
+    typeof error.message === "string" &&
+    error.message.trim().length > 0
+  ) {
     return error.message;
   }
   return String(error);
@@ -73,7 +90,13 @@ export class WsTransport {
   private readonly url: string | undefined;
   private disposed = false;
   private hasReportedTransportDisconnect = false;
-  private reconnectChain: Promise<void> = Promise.resolve();
+  private reconnectOperation: Promise<void> | null = null;
+  private protocolFailures = 0;
+  private protocolExhausted = false;
+  private sessionCreatedAt = Date.now();
+  private readonly disposalController = new AbortController();
+  private readonly subscriptionControllers = new Set<AbortController>();
+  private readonly recoveryWaiters = new Set<() => void>();
   private nextSessionId = 0;
   private activeSessionId = 0;
   private session: TransportSession;
@@ -86,15 +109,24 @@ export class WsTransport {
 
   async request<TSuccess>(
     execute: (client: WsRpcProtocolClient) => Effect.Effect<TSuccess, Error, never>,
-    _options?: RequestOptions,
+    options?: RequestOptions,
   ): Promise<TSuccess> {
     if (this.disposed) {
       throw new Error("Transport disposed");
     }
 
+    await this.reconnectOperation;
+    if (this.protocolExhausted) throw new WsProtocolRecoveryExhaustedError();
+
     const session = this.session;
-    const client = await session.clientPromise;
-    return await session.runtime.runPromise(Effect.suspend(() => execute(client)));
+    return await session.runtime.runPromise(
+      withWsRequestDeadline(
+        Effect.promise(() => session.clientPromise).pipe(
+          Effect.flatMap((client) => Effect.suspend(() => execute(client))),
+        ),
+        options?.timeout,
+      ),
+    );
   }
 
   async requestStream<TValue>(
@@ -105,14 +137,16 @@ export class WsTransport {
       throw new Error("Transport disposed");
     }
 
+    await this.reconnectOperation;
+    if (this.protocolExhausted) throw new WsProtocolRecoveryExhaustedError();
+
     const session = this.session;
-    const client = await session.clientPromise;
     await session.runtime.runPromise(
-      Stream.runForEach(connect(client), (value) =>
-        Effect.promise(() => {
-          markWsInboundActivity();
-          return Promise.resolve(listener(value));
-        }),
+      scopedWsFiniteRequest(
+        session.clientPromise,
+        connect,
+        listener,
+        () => !this.disposed && this.activeSessionId !== 0 && session === this.session,
       ),
     );
   }
@@ -129,12 +163,22 @@ export class WsTransport {
     let active = true;
     let hasReceivedValue = false;
     let retryAttempt = 0;
+    let completionAttempt = 0;
     let cancelCurrentStream: () => void = NOOP;
+    const controller = new AbortController();
+    this.subscriptionControllers.add(controller);
 
     void (async () => {
       for (;;) {
         if (!active || this.disposed) {
           return;
+        }
+        await this.reconnectOperation;
+        if (!active || this.disposed) return;
+        if (this.protocolExhausted) {
+          options?.onError?.(new WsProtocolRecoveryExhaustedError());
+          await waitForExplicitWsRecovery(this.recoveryWaiters, controller.signal);
+          continue;
         }
 
         const session = this.session;
@@ -143,72 +187,98 @@ export class WsTransport {
             options?.onResubscribe?.();
           }
 
-          const runningStream = this.runStreamOnSession(
+          const runningStream = runWsStreamOnSession(
             session,
             connect,
             listener,
-            () => active,
+            () =>
+              active && !this.disposed && this.activeSessionId !== 0 && session === this.session,
             () => {
-              this.hasReportedTransportDisconnect = false;
               hasReceivedValue = true;
             },
             () => {
               retryAttempt = 0;
+              this.hasReportedTransportDisconnect = false;
+              if (Date.now() - this.sessionCreatedAt >= 30_000) this.protocolFailures = 0;
             },
+            markWsSubscriptionListenerFailure,
+            options?.initialApplication,
           );
           cancelCurrentStream = runningStream.cancel;
           try {
             await runningStream.completed;
           } finally {
-            // Every attempt owns a scoped RPC client. Interrupting it is idempotent after
-            // completion and guarantees its server request is disposed before a retry starts.
+            // Release this attempt's request scope before scheduling its replacement.
             runningStream.cancel();
             cancelCurrentStream = NOOP;
           }
+          if (!active || this.disposed) return;
+          if (session !== this.session) continue;
+          completionAttempt += 1;
+          throw new WsSubscriptionCompletedError();
         } catch (error) {
           if (!active || this.disposed) {
             return;
+          }
+          if (session !== this.session || this.activeSessionId === 0) {
+            await this.reconnectOperation;
+            continue;
           }
           const listenerFailure = isWsSubscriptionListenerFailure(error);
           const reportedError = subscriptionErrorCause(error);
           if (!listenerFailure && isUnknownRequestTagError(error)) {
             options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
-              error: formatErrorMessage(error),
+              category: "unsupported_method",
             });
             return;
           }
           if (options?.shouldRetry?.(error) === false) {
             options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
-              error: formatErrorMessage(error),
+              category: listenerFailure ? "listener_failure" : "subscription_failure",
             });
             return;
           }
 
           if (!this.hasReportedTransportDisconnect) {
             console.warn("WebSocket RPC subscription disconnected", {
-              error: formatErrorMessage(error),
+              category: listenerFailure ? "listener_failure" : "subscription_failure",
             });
           }
           this.hasReportedTransportDisconnect = true;
           retryAttempt += 1;
+          if (!(error instanceof WsSubscriptionCompletedError)) completionAttempt = 0;
+          const attempt = Math.max(retryAttempt, completionAttempt);
           const retryDelayMs = resolveSubscriptionRetryDelayMs(
             options?.retryDelay,
-            { error, attempt: retryAttempt },
-            DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS,
+            { error, attempt },
+            Duration.millis(
+              cappedExponentialRetryDelay({
+                attempt,
+                baseMs: Duration.toMillis(DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS),
+                maxMs: 8_000,
+              }),
+            ),
           );
-          await sleep(retryDelayMs);
+          await waitForWsRetry(retryDelayMs, controller.signal);
         }
 
         if (session !== this.session) {
           continue;
         }
       }
-    })();
+    })()
+      .catch((error: unknown) => {
+        if (active && !this.disposed) options?.onError?.(error);
+      })
+      .finally(() => {
+        this.subscriptionControllers.delete(controller);
+      });
 
     return () => {
       active = false;
+      controller.abort();
       cancelCurrentStream();
     };
   }
@@ -218,19 +288,30 @@ export class WsTransport {
       throw new Error("Transport disposed");
     }
 
-    const reconnectOperation = this.reconnectChain.then(async () => {
+    if (this.reconnectOperation) return this.reconnectOperation;
+    this.protocolFailures = 0;
+    this.protocolExhausted = false;
+    const reconnectOperation = (async () => {
       if (this.disposed) {
         throw new Error("Transport disposed");
       }
 
       clearAllTrackedRpcRequests();
       const previousSession = this.session;
-      this.session = this.createSession();
+      this.activeSessionId = 0;
       await this.closeSession(previousSession);
-    });
+      if (!this.disposed) {
+        this.session = this.createSession();
+        for (const resume of this.recoveryWaiters) resume();
+      }
+    })();
 
-    this.reconnectChain = reconnectOperation.catch(() => undefined);
-    await reconnectOperation;
+    this.reconnectOperation = reconnectOperation;
+    try {
+      await reconnectOperation;
+    } finally {
+      if (this.reconnectOperation === reconnectOperation) this.reconnectOperation = null;
+    }
   }
 
   async dispose() {
@@ -238,110 +319,58 @@ export class WsTransport {
       return;
     }
     this.disposed = true;
+    this.disposalController.abort();
+    for (const controller of this.subscriptionControllers) controller.abort();
     await this.closeSession(this.session);
   }
 
   private closeSession(session: TransportSession) {
-    session.readinessController?.abort();
-    return session.closeScope().finally(() => {
-      session.runtime.dispose();
-    });
+    return closeWsTransportSession(session);
   }
 
   private createSession(): TransportSession {
     const sessionId = this.nextSessionId + 1;
     this.nextSessionId = sessionId;
     this.activeSessionId = sessionId;
-    const runtime = ManagedRuntime.make(
-      createWsRpcProtocolLayer(this.url, {
-        ...this.lifecycleHandlers,
-        isActive: () => !this.disposed && this.activeSessionId === sessionId,
-      }),
-    );
-    const clientScope = Effect.runSync(Scope.make());
-    const readinessController = new AbortController();
-    const clientPromise = waitForDesktopBackendReady(
-      typeof window === "undefined" ? undefined : window.desktopBridge,
-      readinessController.signal,
-    ).then(() => {
-      if (readinessController.signal.aborted) {
-        throw new Error("WebSocket transport session closed before backend readiness.");
-      }
-      return runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient));
-    });
-    void clientPromise.catch(() => undefined);
-    return {
-      runtime,
-      clientScope,
-      closeScope: () => Effect.runPromise(Scope.close(clientScope, Exit.void)),
-      readinessController,
-      clientPromise,
-    };
-  }
-
-  private runStreamOnSession<TValue>(
-    session: TransportSession,
-    connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
-    listener: (value: TValue) => void | Promise<void>,
-    isActive: () => boolean,
-    markValueReceived: () => void,
-    markValueApplied: () => void,
-  ): {
-    readonly cancel: () => void;
-    readonly completed: Promise<void>;
-  } {
-    let resolveCompleted!: () => void;
-    let rejectCompleted!: (error: unknown) => void;
-    let listenerFailure: unknown;
-    const completed = new Promise<void>((resolve, reject) => {
-      resolveCompleted = resolve;
-      rejectCompleted = reject;
-    });
-    const cancel = session.runtime.runCallback(
-      Effect.scoped(
-        Effect.promise(() => session.clientPromise).pipe(
-          Effect.flatMap((client) =>
-            Stream.runForEach(connect(client), (value) =>
-              Effect.promise(() => {
-                if (!isActive()) {
-                  return Promise.resolve();
-                }
-
-                markWsInboundActivity();
-                markValueReceived();
-                return Promise.resolve()
-                  .then(() => listener(value))
-                  .then(markValueApplied)
-                  .catch((error: unknown) => {
-                    listenerFailure = markWsSubscriptionListenerFailure(error);
-                    return Promise.reject(listenerFailure);
-                  });
-              }),
-            ),
-          ),
-        ),
-      ),
-      {
-        onExit: (exit) => {
-          if (Exit.isSuccess(exit)) {
-            resolveCompleted();
-            return;
-          }
-
-          rejectCompleted(listenerFailure ?? Cause.squash(exit.cause));
-        },
+    this.sessionCreatedAt = Date.now();
+    return createWsTransportSession(this.url, {
+      ...this.lifecycleHandlers,
+      isActive: () => !this.disposed && this.activeSessionId === sessionId,
+      onProtocolFailure: () => {
+        this.retireProtocolSession(sessionId);
+        this.lifecycleHandlers?.onProtocolFailure?.();
       },
-    );
-
-    return {
-      cancel,
-      completed,
-    };
+    });
   }
-}
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+  private retireProtocolSession(sessionId: number): void {
+    if (this.disposed || this.activeSessionId !== sessionId || this.reconnectOperation) return;
+    this.activeSessionId = 0;
+    this.protocolFailures += 1;
+    this.protocolExhausted = this.protocolFailures >= 3;
+    recordWsProtocolRecovery(this.protocolExhausted);
+    const previousSession = this.session;
+    const operation = (async () => {
+      await this.closeSession(previousSession);
+      if (this.protocolExhausted || this.disposed) return;
+      await waitForWsRetry(
+        cappedExponentialRetryDelay({
+          attempt: this.protocolFailures,
+          baseMs: 250,
+          maxMs: 8_000,
+        }),
+        this.disposalController.signal,
+      );
+      if (!this.disposed) this.session = this.createSession();
+    })();
+    this.reconnectOperation = operation;
+    void operation
+      .finally(() => {
+        if (this.reconnectOperation === operation) this.reconnectOperation = null;
+      })
+      .catch(() => {
+        this.protocolExhausted = true;
+        recordWsProtocolRecovery(true);
+      });
+  }
 }

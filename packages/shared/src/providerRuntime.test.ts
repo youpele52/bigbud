@@ -22,6 +22,20 @@ describe("compareTaskFreshness", () => {
     expect(isTaskFreshnessNewer({ ...baseline, snapshotGeneration: 3 }, baseline)).toBe(true);
     expect(isTaskFreshnessNewer({ ...baseline, sourcePriority: 0 }, baseline)).toBe(false);
   });
+
+  it("does not lexically order unrelated session epoch identities", () => {
+    const existing = { sessionEpoch: "z-random", sourcePriority: 1, observedOrdinal: 10 };
+    const candidate = { sessionEpoch: "a-random", sourcePriority: 4, observedOrdinal: 1 };
+
+    expect(compareTaskFreshness(candidate, existing)).toBe(0);
+    expect(isTaskFreshnessNewer(candidate, existing)).toBe(false);
+    expect(
+      isTaskFreshnessNewer(
+        { ...candidate, providerTimestamp: "2026-09-28T12:01:00.000Z" },
+        { ...existing, providerTimestamp: "2026-09-28T12:00:00.000Z" },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("mergeTaskPatch", () => {

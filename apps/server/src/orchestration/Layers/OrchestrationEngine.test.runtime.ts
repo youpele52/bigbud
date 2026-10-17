@@ -30,7 +30,7 @@ export function createRuntime(dbPath: string) {
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-    Layer.provide(makeSqlitePersistenceLive(dbPath)),
+    Layer.provideMerge(makeSqlitePersistenceLive(dbPath)),
     Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),

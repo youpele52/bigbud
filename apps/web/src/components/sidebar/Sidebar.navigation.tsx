@@ -135,6 +135,10 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
             closeMobileSidebar();
             void navigate({ to: "/usage" });
           }}
+          onOpenSystemMonitor={() => {
+            closeMobileSidebar();
+            void navigate({ to: "/system-monitor" });
+          }}
           sections={sections}
         />
         {!s.bootstrapComplete ? (

@@ -322,6 +322,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
             threadId: command.threadId,
             context: command.context,
             detail: command.detail,
+            ...(command.failureClass !== undefined ? { failureClass: command.failureClass } : {}),
             createdAt: command.createdAt,
           },
         };

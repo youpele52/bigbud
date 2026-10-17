@@ -118,8 +118,11 @@ export function consumableQueuedPrefix(input: {
   readonly messageIds: ReadonlyArray<MessageId>;
   readonly controlOperationId?: CommandId | undefined;
   readonly consumeOnly?: boolean | undefined;
+  /** The user's explicit "Send now"; only it may release a held queue (`queueHold`). */
+  readonly userRelease?: boolean | undefined;
 }) {
   const { thread, messageIds, controlOperationId, consumeOnly } = input;
+  const userReleasesHold = input.userRelease === true && controlOperationId === undefined;
   if (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null) return [];
   const operation = thread.pendingTurnControlOperation;
   if (controlOperationId !== undefined) {
@@ -141,7 +144,12 @@ export function consumableQueuedPrefix(input: {
       )
         return [];
     } else if (operation.strategy !== "interrupt-continue") return [];
-  } else if (hasActiveQueueReservation(thread) || thread.queueHold || consumeOnly) return [];
+  } else if (
+    hasActiveQueueReservation(thread) ||
+    (thread.queueHold && !userReleasesHold) ||
+    consumeOnly
+  )
+    return [];
   if (!consumeOnly && !isThreadConfirmedIdleForDispatch(thread)) return [];
   const intent = thread.pendingInterruptFlushIntent;
   if (

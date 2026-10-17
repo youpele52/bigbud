@@ -1,7 +1,7 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { WsRpcGroup } from "@bigbud/contracts";
-import { Effect, Layer, Schedule } from "effect";
+import { Clock, Effect, Layer, Schedule } from "effect";
 import { HttpServer } from "effect/unstable/http";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
@@ -48,4 +48,9 @@ export const getWsServerUrl = (pathname = "") =>
     return `ws://127.0.0.1:${address.port}${pathname}`;
   });
 
-export const serverTestLayer = NodeServices.layer;
+// Real socket handshakes and their retry/open-timeout timers must share live time.
+// A frozen TestClock otherwise turns one transient handshake failure into a hang.
+export const serverTestLayer = Layer.merge(
+  NodeServices.layer,
+  Layer.succeed(Clock.Clock, Clock.Clock.defaultValue()),
+);

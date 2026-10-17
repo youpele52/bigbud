@@ -33,6 +33,7 @@ export function projectThreadMessageSent(
         text: payload.text,
         ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
         ...(payload.replyTo !== undefined ? { replyTo: payload.replyTo } : {}),
+        ...(payload.originSegments !== undefined ? { originSegments: payload.originSegments } : {}),
         turnId: payload.turnId,
         streaming: payload.streaming,
         createdAt: payload.createdAt,
@@ -60,6 +61,9 @@ export function projectThreadMessageSent(
                 turnId: message.turnId,
                 ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
                 ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
+                ...(message.originSegments !== undefined
+                  ? { originSegments: message.originSegments }
+                  : {}),
               }
             : entry,
         )

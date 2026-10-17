@@ -2,7 +2,8 @@ import type { ServerProvider } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 
-import { enrichManagedServerCatalog, resolveManagedServerCatalog } from "./managedServerCatalog";
+import { discoverManagedServerCatalog, resolveManagedServerCatalog } from "./managedServerCatalog";
+import { runCoordinatedProviderProbe } from "./providerProbeCoordinator";
 
 const snapshot = (provider: "kilocode" | "opencode" = "opencode"): ServerProvider => ({
   provider,
@@ -220,7 +221,7 @@ describe("managed server catalog", () => {
   it.effect("keeps healthy readiness while representing a transient catalog failure", () =>
     Effect.gen(function* () {
       const published = yield* Ref.make<ServerProvider | null>(null);
-      yield* enrichManagedServerCatalog({
+      yield* discoverManagedServerCatalog({
         provider: "opencode",
         baseSnapshot: snapshot(),
         catalogSnapshot: Effect.succeed({
@@ -244,17 +245,19 @@ describe("managed server catalog", () => {
       const peak = yield* Ref.make(0);
       const release = yield* Deferred.make<void>();
       const run = (provider: "kilocode" | "opencode") =>
-        enrichManagedServerCatalog({
-          provider,
-          baseSnapshot: snapshot(provider),
-          catalogSnapshot: Ref.updateAndGet(active, (count) => count + 1).pipe(
-            Effect.tap((count) => Ref.update(peak, (current) => Math.max(current, count))),
-            Effect.andThen(Deferred.await(release)),
-            Effect.ensuring(Ref.update(active, (count) => count - 1)),
-            Effect.as(snapshot(provider)),
-          ),
-          publishSnapshot: () => Effect.void,
-        });
+        runCoordinatedProviderProbe(
+          discoverManagedServerCatalog({
+            provider,
+            baseSnapshot: snapshot(provider),
+            catalogSnapshot: Ref.updateAndGet(active, (count) => count + 1).pipe(
+              Effect.tap((count) => Ref.update(peak, (current) => Math.max(current, count))),
+              Effect.andThen(Deferred.await(release)),
+              Effect.ensuring(Ref.update(active, (count) => count - 1)),
+              Effect.as(snapshot(provider)),
+            ),
+            publishSnapshot: () => Effect.void,
+          }),
+        );
 
       const fiber = yield* Effect.all(
         [run("opencode"), run("kilocode"), run("opencode"), run("kilocode")],

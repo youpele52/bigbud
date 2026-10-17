@@ -1,4 +1,5 @@
-import type { Effect, Fiber } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Fiber from "effect/Fiber";
 
 import type {
   TerminalCwdError,
@@ -10,6 +11,8 @@ import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
+import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
+import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,18 +31,28 @@ export const DEFAULT_OPEN_ROWS = 30;
 // ---------------------------------------------------------------------------
 
 export interface TerminalSessionState {
+  wslIdentity?: TerminalWslIdentity | undefined;
   remoteOwnerRecoveryRequired?: boolean;
+  restartPending?: boolean;
+  restartPreparation?: (() => Promise<void>) | undefined;
   threadId: string;
   terminalId: string;
   executionTargetId: string;
   dropPathMode: TerminalDropPathMode;
   cwd: string;
   worktreePath: string | null;
+  directoryFallback?: { requestedCwd: string; reason: string } | undefined;
   runtimeEpoch: number;
   runtimeGeneration: string;
   status: TerminalSessionStatus;
   pid: number | null;
   history: string;
+  historyTruncated?: boolean;
+  historyUnavailable?: boolean;
+  historyBytes?: number;
+  historyNewlines?: number;
+  historyTail?: string;
+  pendingHistoryBytes?: number;
   pendingHistoryControlSequence: string;
   pendingProcessEvents: Array<PendingProcessEvent>;
   pendingProcessEventIndex: number;
@@ -54,6 +67,7 @@ export interface TerminalSessionState {
   unsubscribeExit: (() => void) | null;
   hasRunningSubprocess: boolean;
   activeAgentProvider: ProviderKind | null;
+  activeAgent?: TerminalAgentIdentity | null;
   agentIdentityMisses: number;
   runtimeEnv: Record<string, string> | null;
 }
@@ -102,6 +116,9 @@ export interface TerminalStartInput {
 }
 
 export interface TerminalManagerOptions {
+  resolveRuntimePathIdentity?: (
+    cwd: string,
+  ) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>;
   logsDir: string;
   historyLineLimit?: number;
   ptyAdapter: PtyAdapterShape;
@@ -112,6 +129,7 @@ export interface TerminalManagerOptions {
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
   acquireWorktreeLease?: (input: {
+    runtimePathIdentity?: RuntimePathIdentity | undefined;
     threadId: string;
     terminalId: string;
     executionTargetId: string;
@@ -124,4 +142,10 @@ export interface TerminalManagerOptions {
     processId: number;
   }) => Effect.Effect<void>;
   releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
+}
+
+export interface RuntimePathIdentity {
+  readonly canonicalPath: string;
+  readonly device: number;
+  readonly inode: number;
 }

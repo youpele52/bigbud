@@ -23,6 +23,7 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
+import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import type * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -46,6 +47,8 @@ export const ProjectionThread = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   parentThread: Schema.optional(ParentThreadReference),
+  /** Fork lineage; written once at creation and kept by later upserts. */
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   latestTurnId: Schema.NullOr(TurnId),
   queuedPrompts: Schema.Array(OrchestrationQueuedPrompt),
   pendingInterruptFlushIntent: Schema.optional(
@@ -89,6 +92,17 @@ export type ListProjectionThreadsByProjectInput = typeof ListProjectionThreadsBy
 /**
  * ProjectionThreadRepositoryShape - Service API for projected thread records.
  */
+export const ListRecentModelSelectionsInput = Schema.Struct({ limit: NonNegativeInt });
+export type ListRecentModelSelectionsInput = typeof ListRecentModelSelectionsInput.Type;
+
+/** One provider+model+subProviderID, with the latest activity of a started thread using it. */
+export interface RecentProjectionModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly subProviderID?: string;
+  readonly lastUsedAt: string;
+}
+
 export interface ProjectionThreadRepositoryShape {
   /**
    * Insert or replace a projected thread row.
@@ -122,6 +136,11 @@ export interface ProjectionThreadRepositoryShape {
   readonly touchActivity: (
     input: TouchProjectionThreadActivityInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Models of started, live threads, most recently used first (delegated model choice, D7). */
+  readonly listRecentModelSelections: (
+    input: ListRecentModelSelectionsInput,
+  ) => Effect.Effect<ReadonlyArray<RecentProjectionModelSelection>, ProjectionRepositoryError>;
 }
 
 /**

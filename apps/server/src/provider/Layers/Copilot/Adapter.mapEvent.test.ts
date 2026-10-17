@@ -54,6 +54,88 @@ function makeSession(): ActiveCopilotSession {
 }
 
 describe("CopilotAdapter.mapEvent", () => {
+  it("maps subagent lifecycle and isolates child text", async () => {
+    const session = makeSession();
+    const base = {
+      id: "child-event",
+      parentId: null,
+      agentId: "agent-1",
+      timestamp: "2026-05-14T00:00:01.000Z",
+    };
+    const started = await Effect.runPromise(
+      mapEvent(makeDeps(), session, {
+        ...base,
+        type: "subagent.started",
+        data: {
+          agentName: "reviewer",
+          agentDisplayName: "Reviewer",
+          agentDescription: "Review",
+          toolCallId: "tool-1",
+        },
+      } as SessionEvent),
+    );
+    expect(started).toMatchObject([
+      {
+        type: "task.updated",
+        payload: { kind: "providerSubagent", status: "inProgress", agentId: "agent-1" },
+      },
+    ]);
+    const progress = await Effect.runPromise(
+      mapEvent(makeDeps(), session, {
+        ...base,
+        type: "tool.execution_start",
+        data: { toolCallId: "child-tool", toolName: "grep" },
+      } as SessionEvent),
+    );
+    expect(progress).toMatchObject([
+      { type: "task.updated", payload: { status: "inProgress", lastToolName: "grep" } },
+    ]);
+    expect((progress[0] as { payload: { taskId: string } }).payload.taskId).toBe(
+      (started[0] as { payload: { taskId: string } }).payload.taskId,
+    );
+    const completed = await Effect.runPromise(
+      mapEvent(makeDeps(), session, {
+        ...base,
+        type: "subagent.completed",
+        data: {
+          agentName: "reviewer",
+          agentDisplayName: "Reviewer",
+          toolCallId: "tool-1",
+          totalTokens: 23,
+        },
+      } as SessionEvent),
+    );
+    expect(completed).toMatchObject([
+      { type: "task.updated", payload: { status: "completed", usage: { totalTokens: 23 } } },
+    ]);
+    expect((completed[0] as { payload: { taskId: string } }).payload.taskId).toBe(
+      (started[0] as { payload: { taskId: string } }).payload.taskId,
+    );
+    expect(
+      await Effect.runPromise(
+        mapEvent(makeDeps(), session, {
+          ...base,
+          type: "subagent.started",
+          data: {
+            agentName: "reviewer",
+            agentDisplayName: "Reviewer",
+            agentDescription: "Review",
+            toolCallId: "tool-1",
+          },
+        } as SessionEvent),
+      ),
+    ).toEqual([]);
+    expect(
+      await Effect.runPromise(
+        mapEvent(makeDeps(), session, {
+          ...base,
+          type: "assistant.message_delta",
+          data: { messageId: "msg-1", deltaContent: "child output" },
+        } as SessionEvent),
+      ),
+    ).toEqual([]);
+  });
+
   it("maps assistant.reasoning_delta to a reasoning_text content delta", async () => {
     const events = await Effect.runPromise(
       mapEvent(makeDeps(), makeSession(), {

@@ -1,5 +1,6 @@
 import type { GitStatusResult } from "@bigbud/contracts";
 
+import { CHILD_PROVIDER_ICON_CLASS } from "../chat/agents/agentActivity.presentation";
 import type { ThreadStatusPill } from "./Sidebar.logic";
 
 export type ThreadPr = GitStatusResult["pr"];
@@ -23,7 +24,12 @@ export function providerIconPresentationClass(
 ): string {
   if (isConnecting) return "text-warning";
   if (status?.label === "Done") return "text-success";
+  if (status?.label === "Subagents Working") return CHILD_PROVIDER_ICON_CLASS;
   return status?.colorClass ?? "text-muted-foreground";
+}
+
+export function isProviderIconWorking(status: ThreadStatusPill | null): boolean {
+  return status?.label === "Working" || status?.label === "Subagents Working";
 }
 
 export function shouldAnimateProviderIcon({
@@ -41,6 +47,7 @@ export function shouldShowThreadStatusLabel(status: ThreadStatusPill | null): bo
     status !== null &&
     status.label !== "Failed" &&
     status.label !== "Working" &&
+    status.label !== "Subagents Working" &&
     status.label !== "Compacting" &&
     status.label !== "Done" &&
     status.label !== "Idle"

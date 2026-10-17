@@ -4,6 +4,9 @@ import { projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
 import { DEFAULT_THREAD_TERMINAL_ID, MAX_TERMINALS_PER_GROUP } from "../../../models/types";
 import { randomUUID } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
+import { ensureThreadMaterialized } from "../../../lib/threadMaterialization";
+import { forgetTerminalLaunch } from "../../../lib/terminalLaunchBinding";
+import { runBoundTerminalCommand } from "../../../lib/terminalLaunchBinding.command";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import { resolveWorkspaceExecutionTargetId } from "../../../lib/providerExecutionTargets";
 import type { Thread, Project } from "../../../models/types";
@@ -172,6 +175,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         void fallbackExitWrite();
       }
       storeCloseTerminal(activeThreadId, terminalId);
+      forgetTerminalLaunch(activeThreadId, terminalId);
       setTerminalFocusRequestId((value) => value + 1);
     },
     [
@@ -218,22 +222,10 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         terminalState.terminalIds[0] ||
         DEFAULT_THREAD_TERMINAL_ID;
       const isBaseTerminalBusy = terminalState.runningTerminalIds.includes(baseTerminalId);
-      const wantsNewTerminal = Boolean(options?.preferNewTerminal) || isBaseTerminalBusy;
-      const targetTerminalId = wantsNewTerminal ? `terminal-${randomUUID()}` : baseTerminalId;
-      const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
-
-      setTerminalLaunchContext({
-        threadId: activeThreadId,
-        cwd: targetCwd,
-        worktreePath: targetWorktreePath,
-      });
-      setTerminalOpen(true);
-      if (wantsNewTerminal) {
-        storeNewTerminal(activeThreadId, targetTerminalId);
-      } else {
-        storeSetActiveTerminal(activeThreadId, targetTerminalId);
-      }
-      setTerminalFocusRequestId((value) => value + 1);
+      const targetWorktreePath =
+        options?.worktreePath !== undefined
+          ? options.worktreePath
+          : (activeThread.worktreePath ?? null);
 
       const runtimeEnv = projectScriptRuntimeEnv({
         project: {
@@ -242,36 +234,38 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         worktreePath: targetWorktreePath,
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
-      const openTerminalInput: TerminalOpenInput = wantsNewTerminal
-        ? {
-            threadId: activeThreadId,
-            ...(activeProject.executionTargetId
-              ? { executionTargetId: activeProject.executionTargetId }
-              : {}),
-            terminalId: targetTerminalId,
-            cwd: targetCwd,
-            ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
-            env: runtimeEnv,
-            cols: SCRIPT_TERMINAL_COLS,
-            rows: SCRIPT_TERMINAL_ROWS,
-          }
-        : {
-            threadId: activeThreadId,
-            ...(activeProject.executionTargetId
-              ? { executionTargetId: activeProject.executionTargetId }
-              : {}),
-            terminalId: targetTerminalId,
-            cwd: targetCwd,
-            ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
-            env: runtimeEnv,
-          };
+      const openTerminalInput: TerminalOpenInput = {
+        threadId: activeThreadId,
+        executionTargetId: resolveWorkspaceExecutionTargetId(activeProject),
+        terminalId: baseTerminalId,
+        cwd: targetCwd,
+        worktreePath: targetWorktreePath,
+        env: runtimeEnv,
+      };
 
       try {
-        await api.terminal.open(openTerminalInput);
-        await api.terminal.write({
-          threadId: activeThreadId,
-          terminalId: targetTerminalId,
-          data: `${trimmedCommand}\r`,
+        await ensureThreadMaterialized(activeThreadId);
+        await runBoundTerminalCommand(api.terminal, {
+          openInput: openTerminalInput,
+          command: trimmedCommand,
+          preferNewTerminal: Boolean(options?.preferNewTerminal),
+          baseTerminalBusy: isBaseTerminalBusy,
+          newTerminalDimensions: { cols: SCRIPT_TERMINAL_COLS, rows: SCRIPT_TERMINAL_ROWS },
+          createTerminalId: () => `terminal-${randomUUID()}`,
+          onTerminalSelected: (selected, isNew) => {
+            setTerminalLaunchContext({
+              threadId: activeThreadId,
+              cwd: targetCwd,
+              worktreePath: targetWorktreePath,
+            });
+            setTerminalOpen(true);
+            if (isNew) {
+              storeNewTerminal(activeThreadId, selected.terminalId);
+            } else {
+              storeSetActiveTerminal(activeThreadId, selected.terminalId);
+            }
+            setTerminalFocusRequestId((value) => value + 1);
+          },
         });
         setThreadError(activeThreadId, null);
       } catch (error) {

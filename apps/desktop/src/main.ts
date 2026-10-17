@@ -1,4 +1,7 @@
 import * as Crypto from "node:crypto";
+import { SystemMonitorBridge } from "./system-monitor/bridge";
+import { getDesktopMonitorRoots } from "./system-monitor/ownership";
+import { stopSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 
 import { app, BrowserWindow, dialog } from "electron";
 
@@ -48,6 +51,7 @@ import { DesktopPreferencesStore } from "./window/desktopPreferences";
 import { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
 import { bootstrapDesktop } from "./main.bootstrap";
 import { registerFloatingAssistantIpc } from "./main.floatingAssistant";
+import { registerDesktopShutdownSignals } from "./main.shutdownSignals";
 
 const channels = desktopIpcChannels;
 
@@ -82,6 +86,7 @@ let desktopLogSink: QueuedLogSink | null = null;
 let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 const windowRegistry = new DesktopWindowRegistry();
+const systemMonitor = new SystemMonitorBridge(app.isPackaged, getDesktopMonitorRoots);
 let desktopPreferences: DesktopPreferencesStore;
 let floatingAssistantWindows: FloatingAssistantWindows;
 
@@ -275,6 +280,8 @@ function prepareForAppQuit(reason: string): void {
   if (quitTeardownComplete) return;
   quitTeardownComplete = true;
   isQuitting = true;
+  systemMonitor.stop();
+  stopSystemMonitorAgentBridge();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();
@@ -342,11 +349,13 @@ app
       floatingAssistantWindows,
       getIsQuitting: () => isQuitting,
       getMainWindow: () => mainWindow,
+      openMainWindow,
       isDevelopment,
       isPackaged: app.isPackaged,
       logHeader,
       makeWindow,
       prepareForAppQuit,
+      systemMonitor,
       registerFloatingAssistantIpc: () =>
         registerFloatingAssistantIpc({
           appInstance: app,
@@ -387,14 +396,4 @@ app.on("window-all-closed", () => {
   }
 });
 
-if (process.platform !== "win32") {
-  process.on("SIGINT", () => {
-    prepareForAppQuit("SIGINT");
-    app.quit();
-  });
-
-  process.on("SIGTERM", () => {
-    prepareForAppQuit("SIGTERM");
-    app.quit();
-  });
-}
+registerDesktopShutdownSignals(prepareForAppQuit, () => app.quit());

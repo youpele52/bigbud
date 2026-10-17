@@ -16,7 +16,7 @@ import {
 import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
-import { GitPanelPushAction } from "./GitPanelPushAction";
+import { GitPanelSyncControl } from "./GitPanelSyncControl";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
 
 interface GitPanelProps {
@@ -118,7 +118,16 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
 
   if (gitStatusError && !gitStatusQuery.data) {
     return (
-      <div className="p-4 text-sm text-destructive">Failed to load Git state: {gitStatusError}</div>
+      <div className="space-y-3 p-4 text-sm text-destructive">
+        <p>Failed to load Git state: {gitStatusError}</p>
+        <GitPanelSyncControl
+          activeThreadId={activeThreadId}
+          cwd={cwd}
+          executionTargetId={executionTargetId}
+          gitStatus={null}
+          gitStatusError={gitStatusError}
+        />
+      </div>
     );
   }
 
@@ -126,7 +135,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
     return (
       <div className="space-y-2 p-4 text-sm text-muted-foreground">
         <p>
-          No Git repository at <code className="break-all text-foreground">{cwd}</code>.
+          No Git repository at <span className="break-all font-light">&quot;{cwd}&quot;</span>.
         </p>
         <p>
           Git uses the project workspace root, not the terminal&apos;s current directory. Edit the
@@ -148,18 +157,13 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
               <span className="truncate">{branchLabel}</span>
             </div>
             <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground/80">
-              <span>
-                {gitStatus.aheadCount > 0 ? `${gitStatus.aheadCount} ahead` : "Up to date"}
-                {gitStatus.behindCount > 0 ? `, ${gitStatus.behindCount} behind` : ""}
-              </span>
-              {gitStatus.aheadCount > 0 ? (
-                <GitPanelPushAction
-                  activeThreadId={activeThreadId}
-                  cwd={cwd}
-                  executionTargetId={executionTargetId}
-                  gitStatus={gitStatus}
-                />
-              ) : null}
+              <GitPanelSyncControl
+                activeThreadId={activeThreadId}
+                cwd={cwd}
+                executionTargetId={executionTargetId}
+                gitStatus={gitStatus}
+                gitStatusError={gitStatusError}
+              />
             </div>
           </div>
           <ToggleGroup

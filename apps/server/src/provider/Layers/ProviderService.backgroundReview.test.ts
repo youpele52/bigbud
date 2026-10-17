@@ -3,6 +3,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { assert } from "@effect/vitest";
 import { Effect, Fiber, Option, Ref, Stream } from "effect";
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
+import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
 import { ProviderAdapterProcessError } from "../Errors.ts";
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
@@ -44,7 +45,6 @@ harness.layer("background provider reviews", (it) => {
     ["copilot", harness.copilot],
     ["cursor", harness.cursor],
     ["devin", harness.devin],
-    ["opencode", harness.opencode],
     ["kilocode", harness.kilocode],
     ["pi", harness.pi],
   ] as const) {
@@ -158,6 +158,22 @@ harness.layer("background provider reviews", (it) => {
         }),
     );
   }
+
+  it.effect("rejects legacy reviews before startup without rewriting the owner binding", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const directory = yield* ProviderSessionDirectory;
+      const before = yield* directory.getBinding(ownerThreadId);
+      const starts = harness.opencode.startSession.mock.calls.length;
+      const error = yield* Effect.flip(provider.runBackgroundReview(request("opencode")));
+      assert.equal(error._tag, "ProviderValidationError");
+      if (error._tag === "ProviderValidationError") {
+        assert.equal(error.issue, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+      }
+      assert.equal(harness.opencode.startSession.mock.calls.length, starts);
+      assert.deepEqual(yield* directory.getBinding(ownerThreadId), before);
+    }),
+  );
 
   for (const event of [
     { type: "turn.completed", payload: { state: "failed" } },

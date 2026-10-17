@@ -11,7 +11,9 @@ import type {
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
+import type { TerminalRenderingPolicy } from "./ipc.terminal";
 
 export type {
   DesktopRuntimeArch,
@@ -55,6 +57,7 @@ export interface DesktopNotificationInput {
   title: string;
   body?: string;
   silent?: boolean;
+  threadId?: string;
 }
 
 export interface DesktopTailscaleRemoteAccessStatus {
@@ -67,8 +70,13 @@ export interface DesktopTailscaleRemoteAccessStatus {
 }
 
 export interface DesktopBridge
-  extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge, DesktopScreenshotBridge {
+  extends
+    DesktopComputerUseBridge,
+    DesktopCertificateChallengeBridge,
+    DesktopScreenshotBridge,
+    DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
+  getTerminalRenderingPolicy?: () => Promise<TerminalRenderingPolicy>;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;
   beginMascotDrag?: (point: { x: number; y: number }) => Promise<boolean>;

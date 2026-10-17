@@ -19,9 +19,18 @@ import type { WsRpcContext } from "./wsRpcContext";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { makeServerConfigUpdateStream } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
+import type { ServerOpencodeV2ThreadToolsSetupInput } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
 
 export function makeServerWsRpcHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.serverGetOpencodeV2ThreadToolsSetup]: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetOpencodeV2ThreadToolsSetup,
+        context.v2ThreadToolsSetup.get(input),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverPing]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverPing,
@@ -191,6 +200,9 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         }),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverRetryTextGeneration]: (
+      input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
+    ) => requestTextGenerationRetry(context.orchestrationEngine, input, context.serverSettings),
     [WS_METHODS.serverStartHandoffJob]: (input: {
       readonly threadId: ThreadId;
       readonly focus?: string | undefined;
@@ -289,3 +301,4 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       ),
   };
 }
+import { requestTextGenerationRetry } from "./wsRetryTextGeneration.ts";

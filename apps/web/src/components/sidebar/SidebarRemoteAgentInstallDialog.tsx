@@ -109,8 +109,9 @@ export function SidebarRemoteAgentInstallDialog({
                   sessions keep their original runtime.
                 </p>
                 <p>
-                  The agent is installed under <code>~/.bigbud/agent</code>, runs with your SSH user
-                  permissions, and opens no inbound network port.
+                  The agent is installed under{" "}
+                  <span className="font-light">&quot;~/.bigbud/agent&quot;</span>, runs with your
+                  SSH user permissions, and opens no inbound network port.
                 </p>
                 <p>
                   Cancel setup to leave the project unchanged. Downloaded agent builds stay

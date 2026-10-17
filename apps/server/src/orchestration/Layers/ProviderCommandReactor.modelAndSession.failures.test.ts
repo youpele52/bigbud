@@ -161,14 +161,16 @@ describe("ProviderCommandReactor", () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
-    harness.sendTurn.mockImplementationOnce((() =>
+    // A process error raised by the send itself may follow dispatch and the adapter did not mark
+    // it pre-dispatch: unsafe to replay, so it is recorded once and never resent.
+    harness.sendTurn.mockImplementation((() =>
       Effect.fail(
         new ProviderAdapterProcessError({
           provider: "pi",
           threadId: "thread-1",
           detail: "Failed to start Pi RPC process.",
         }),
-      )) as unknown as Parameters<typeof harness.sendTurn.mockImplementationOnce>[0]);
+      )) as unknown as Parameters<typeof harness.sendTurn.mockImplementation>[0]);
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -206,8 +208,11 @@ describe("ProviderCommandReactor", () => {
       summary: "Provider turn start failed",
       payload: {
         detail: "Failed to start Pi RPC process.",
+        failureClass: "unsafe-to-replay",
       },
     });
+    await new Promise((resolve) => setTimeout(resolve, 300)); // Prove no resend follows.
+    expect(harness.sendTurn.mock.calls).toHaveLength(1);
   });
 
   it("retries a context-limit failure once in a fresh session", async () => {

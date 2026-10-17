@@ -28,6 +28,8 @@ export function resolveLearningModelSelection(input: {
     return { ...input.selected, model: input.model };
   }
   switch (input.provider) {
+    case "opencodeV2":
+      return { provider: "opencodeV2", model: input.model };
     case "codex":
       return { provider: "codex", model: input.model };
     case "claudeAgent":

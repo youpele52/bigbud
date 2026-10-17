@@ -271,6 +271,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       enabled: piSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      modelDiscovery: { status: "unavailable", source: "pi-rpc", durationMs: 0 },
       probe: {
         installed: true,
         version: parsedVersion,
@@ -295,6 +296,11 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
     enabled: piSettings.enabled,
     checkedAt,
     models: probedModels,
+    modelDiscovery: {
+      status: rpcProbe.success.models.length ? "live" : "empty",
+      source: "pi-rpc",
+      durationMs: 0,
+    },
     slashCommands,
     skills,
     probe: {
@@ -315,9 +321,6 @@ export const PiProviderLive = Layer.effect(
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const initialSettings = yield* serverSettings.getSettings.pipe(
-      Effect.map((settings) => settings.providers.pi),
-    );
 
     const checkProvider = checkPiProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
@@ -343,8 +346,9 @@ export const PiProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      recoverModelDiscovery: true,
       decorateSnapshot,
-      initialSnapshot: makeInitialPiSnapshot(initialSettings),
+      initialSnapshot: makeInitialPiSnapshot,
     });
   }),
 );

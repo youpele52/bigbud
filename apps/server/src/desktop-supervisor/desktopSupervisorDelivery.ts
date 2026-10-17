@@ -21,8 +21,10 @@ import {
 import { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
 import { installSessionSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.session.ts";
 import { hasLiveDesktopSupervisorSession } from "./desktopSupervisorDelivery.identity.ts";
+import { hasOpenDeliveryConsumer } from "./desktopSupervisorDelivery.presence.ts";
 import type {
   DesktopSupervisorDeliveryShape,
+  DesktopSupervisorOwner,
   DesktopSupervisorSubscription,
 } from "./desktopSupervisorDelivery.types.ts";
 import { DesktopSupervisorOwnerClient } from "./desktopSupervisorOwnerClient.ts";
@@ -33,18 +35,6 @@ import type {
 } from "./desktopSupervisorProtocol.ts";
 import { isDesktopSupervisorIncompatibleProtocolError } from "./desktopSupervisorProtocol.ts";
 import { computeDesktopSupervisorBatchId } from "./desktopSupervisorProtocol.codec.ts";
-
-export interface DesktopSupervisorOwner {
-  readonly attach: DesktopSupervisorOwnerClient["attach"];
-  readonly detach: DesktopSupervisorOwnerClient["detach"];
-  readonly enqueue: DesktopSupervisorOwnerClient["enqueue"];
-  readonly acknowledge: DesktopSupervisorOwnerClient["acknowledge"];
-  readonly installBaseline: DesktopSupervisorOwnerClient["installBaseline"];
-  readonly heartbeat: DesktopSupervisorOwnerClient["heartbeat"];
-  readonly onFailure: DesktopSupervisorOwnerClient["onFailure"];
-  readonly onFrame: DesktopSupervisorOwnerClient["onFrame"];
-  readonly close: DesktopSupervisorOwnerClient["close"];
-}
 
 function delay(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -128,6 +118,10 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     const session = this.sessions.get(this.sessionKey(input.consumerId, input.consumerGeneration));
     if (session) return session.acknowledgeBaseline(input);
     return Promise.resolve({ accepted: false, fenced: true, acknowledgedSequence: 0 });
+  }
+
+  hasOpenConsumer(): boolean {
+    return !this.closed && hasOpenDeliveryConsumer(this.authoritativeSessions.values());
   }
 
   get retainedConsumerGenerationCount(): number {

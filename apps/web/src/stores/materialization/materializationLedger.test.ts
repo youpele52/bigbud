@@ -10,6 +10,7 @@ import {
   MaterializationLedgerOverloadedError,
   readMaterializationLedger,
   setMaterializationAttemptStatus,
+  subscribeToMaterializationLedger,
 } from "./materializationLedger";
 
 function memoryStorage(): LedgerStorage & { readonly values: Map<string, string> } {
@@ -45,6 +46,91 @@ function ready(storage: LedgerStorage) {
 }
 
 describe("materializationLedger", () => {
+  it.each([
+    ["ambiguous", null],
+    ["accepted-awaiting-event", 8],
+  ] as const)("does not publish unchanged %s recovery status", async (status, sequence) => {
+    const storage = memoryStorage();
+    const attempt = await beginMaterializationAttempt(attemptInput(1), { storage });
+    const revisions: number[] = [];
+    const unsubscribe = subscribeToMaterializationLedger((revision) => revisions.push(revision));
+    try {
+      await setMaterializationAttemptStatus(
+        attempt.threadId,
+        attempt.generation,
+        status,
+        sequence,
+        {
+          storage,
+        },
+      );
+      const settled = storage.getItem(MATERIALIZATION_LEDGER_KEY);
+      const revision = ready(storage).revision;
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          setMaterializationAttemptStatus(attempt.threadId, attempt.generation, status, sequence, {
+            storage,
+          }),
+        ),
+      );
+      expect(results).toEqual(Array(8).fill(true));
+      expect(storage.getItem(MATERIALIZATION_LEDGER_KEY)).toBe(settled);
+      expect(revisions).toEqual([revision]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("publishes a new accepted sequence but not stale or missing attempt mutations", async () => {
+    const storage = memoryStorage();
+    const attempt = await beginMaterializationAttempt(attemptInput(1), { storage });
+    await setMaterializationAttemptStatus(
+      attempt.threadId,
+      attempt.generation,
+      "accepted-awaiting-event",
+      8,
+      { storage },
+    );
+    const revision = ready(storage).revision;
+    await setMaterializationAttemptStatus(
+      attempt.threadId,
+      attempt.generation,
+      "accepted-awaiting-event",
+      9,
+      { storage },
+    );
+    expect(ready(storage).revision).toBe(revision + 1);
+    const settled = storage.getItem(MATERIALIZATION_LEDGER_KEY);
+    expect(
+      await setMaterializationAttemptStatus(
+        attempt.threadId,
+        attempt.generation + 1,
+        "ambiguous",
+        null,
+        { storage },
+      ),
+    ).toBe(false);
+    expect(
+      await clearMaterializationAttempt(attempt.threadId, attempt.generation + 1, { storage }),
+    ).toBe(false);
+    expect(storage.getItem(MATERIALIZATION_LEDGER_KEY)).toBe(settled);
+    await clearMaterializationAttempt(attempt.threadId, attempt.generation, { storage });
+    const cleared = storage.getItem(MATERIALIZATION_LEDGER_KEY);
+    expect(
+      await clearMaterializationAttempt(attempt.threadId, attempt.generation, { storage }),
+    ).toBe(false);
+    expect(
+      await setMaterializationAttemptStatus(
+        attempt.threadId,
+        attempt.generation,
+        "ambiguous",
+        null,
+        { storage },
+      ),
+    ).toBe(false);
+    expect(storage.getItem(MATERIALIZATION_LEDGER_KEY)).toBe(cleared);
+  });
+
   it("persists stable identities across a dispatching restart", async () => {
     const storage = memoryStorage();
     const attempt = await beginMaterializationAttempt(attemptInput(1), { storage });

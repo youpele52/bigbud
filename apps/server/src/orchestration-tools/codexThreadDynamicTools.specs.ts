@@ -13,7 +13,12 @@ import {
   BROWSER_TOOL_DESCRIPTION,
   COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
+  CREATE_THREAD_TOOL_PARAMETERS,
+  CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+  LIST_AVAILABLE_MODELS_PARAMETERS,
+  LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -22,10 +27,59 @@ import {
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 
 export const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 
-export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<CodexDynamicToolSpec> {
+/**
+ * The v1 `create_thread` surface. OpenCode V2's bootstrap ABI froze it from these specs, so it stays
+ * the default until V2 gains model choice (plan Phase 5); Codex sessions opt in to the extension.
+ */
+const CREATE_THREAD_TOOL_V1_PARAMETERS = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Title for the new standalone bigbud thread" },
+    task: { type: "string", description: "Task for the new standalone bigbud thread" },
+    projectId: { type: "string", description: "Optional target project ID" },
+    watchForCompletion: {
+      type: "boolean",
+      description: "Whether to watch the child thread for completion",
+    },
+  },
+  required: ["title", "task"],
+  additionalProperties: false,
+} as const;
+
+function createThreadToolSpecs(delegatedModelChoice: boolean): ReadonlyArray<CodexDynamicToolSpec> {
+  if (!delegatedModelChoice) {
+    return [
+      {
+        namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+        name: "create_thread",
+        description: CREATE_THREAD_TOOL_DESCRIPTION,
+        inputSchema: CREATE_THREAD_TOOL_V1_PARAMETERS,
+      },
+    ];
+  }
+  return [
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "create_thread",
+      description: CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
+      inputSchema: CREATE_THREAD_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "list_available_models",
+      description: LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION,
+      inputSchema: LIST_AVAILABLE_MODELS_PARAMETERS,
+    },
+  ];
+}
+
+export function createCodexThreadOrchestrationDynamicTools(
+  options: { readonly delegatedModelChoice?: boolean } = {},
+): ReadonlyArray<CodexDynamicToolSpec> {
   return [
     ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) => ({
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
@@ -47,6 +101,12 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "get_system_resources",
+      description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
+      inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "browser",
       description: BROWSER_TOOL_DESCRIPTION,
       inputSchema: BROWSER_TOOL_PARAMETERS,
@@ -55,12 +115,7 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
-      inputSchema: {
-        type: "object",
-        properties: { title: { type: "string", description: "New thread title" } },
-        required: ["title"],
-        additionalProperties: false,
-      },
+      inputSchema: RENAME_THREAD_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
@@ -68,25 +123,7 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
       description: ARCHIVE_THREAD_TOOL_DESCRIPTION,
       inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
     },
-    {
-      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
-      name: "create_thread",
-      description: CREATE_THREAD_TOOL_DESCRIPTION,
-      inputSchema: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Title for the new standalone bigbud thread" },
-          task: { type: "string", description: "Task for the new standalone bigbud thread" },
-          projectId: { type: "string", description: "Optional target project ID" },
-          watchForCompletion: {
-            type: "boolean",
-            description: "Whether to watch the child thread for completion",
-          },
-        },
-        required: ["title", "task"],
-        additionalProperties: false,
-      },
-    },
+    ...createThreadToolSpecs(options.delegatedModelChoice === true),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "get_thread_status",

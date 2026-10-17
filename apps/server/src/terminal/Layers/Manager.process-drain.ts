@@ -14,6 +14,8 @@ import {
 } from "./Manager.shell";
 import { buildRemoteTerminalShellCandidate } from "./Manager.remote.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import { buildWslTerminalShellCandidate } from "./Manager.wsl.invocation";
 import {
   cleanupProcessHandles,
   enqueueProcessEvent,
@@ -33,6 +35,7 @@ export function trySpawnWith(
   session: TerminalSessionState,
   shellCandidates: ReadonlyArray<{
     shell: string;
+    label?: string;
     args?: string[];
     dropPathMode: TerminalSessionState["dropPathMode"];
   }>,
@@ -79,7 +82,10 @@ export function trySpawnWith(
         rows: session.rows,
         env: spawnEnv,
         executionTargetId: session.executionTargetId,
-        ...(isLocalExecutionTarget(session.executionTargetId) ? {} : { remoteCwd: session.cwd }),
+        ...(isLocalExecutionTarget(session.executionTargetId) ||
+        isWslTerminalTargetId(session.executionTargetId)
+          ? {}
+          : { remoteCwd: session.cwd }),
       }),
     );
 
@@ -124,6 +130,7 @@ export function stopProcessWith(
       session.pid = null;
       session.hasRunningSubprocess = false;
       session.activeAgentProvider = null;
+      session.activeAgent = null;
       session.agentIdentityMisses = 0;
       session.status = "exited";
       session.pendingHistoryControlSequence = "";
@@ -178,6 +185,7 @@ export function startSessionWith(
       session.dropPathMode = defaultTerminalDropPathMode(session.executionTargetId);
       session.hasRunningSubprocess = false;
       session.activeAgentProvider = null;
+      session.activeAgent = null;
       session.agentIdentityMisses = 0;
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
@@ -198,13 +206,18 @@ export function startSessionWith(
           Effect.gen(function* () {
             const shellCandidates = isLocalExecutionTarget(session.executionTargetId)
               ? resolveShellCandidates(ctx.shellResolver)
-              : [buildRemoteTerminalShellCandidate(session)];
+              : isWslTerminalTargetId(session.executionTargetId)
+                ? [buildWslTerminalShellCandidate(session)]
+                : [buildRemoteTerminalShellCandidate(session)];
             const terminalEnv = createTerminalSpawnEnv(
               process.env,
               isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
             );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
             ptyProcess = spawnResult.process;
+            // A durable remote owner resumes after its acknowledged output cut,
+            // not from process birth. Empty local history is not a valid baseline.
+            session.historyUnavailable = ptyProcess.recovered === true;
             startedShell = spawnResult.shellLabel;
             startedDropPathMode = spawnResult.dropPathMode;
 
@@ -217,9 +230,12 @@ export function startSessionWith(
               ctx.runFork(ctx.queuePtyOutput(session, processPid, data));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
+              // Explicit restart owns the exit while awaiting durable remote release.
+              if (session.restartPending) return;
               ctx.runFork(
                 Effect.gen(function* () {
                   yield* ctx.flushPtyOutput(session.threadId, session.terminalId);
+                  if (session.restartPending) return;
                   if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
                     return;
                   }

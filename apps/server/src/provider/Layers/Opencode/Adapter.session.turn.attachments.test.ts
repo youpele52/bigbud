@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  realpathSync,
+  copyFileSync,
+  statSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -145,24 +153,25 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     const promptInput = promptInputs[0];
     assert.isDefined(promptInput);
     assert.notProperty(promptInput, "messageID");
-    assert.deepEqual(promptInput, {
+    expect(promptInput).toEqual({
       sessionID: "opencode-session-1",
       parts: [
         {
           type: "text",
-          text: "Can you see this image?",
+          text: expect.stringContaining("Can you see this image?"),
         },
         {
           type: "file",
           mime: "image/png",
           filename: "diagram.png",
-          url: pathToFileURL(attachmentPath).href,
+          url: pathToFileURL(realpathSync(attachmentPath)).href,
         },
       ],
       system:
         "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient. The actual workspace root is /srv/project.",
     });
     assert.isAtLeast(events.length, 1);
+    expect(JSON.stringify(promptInput)).toContain("<attachment_delivery>");
   });
 });
 
@@ -191,6 +200,26 @@ endobj
       "latin1",
     ),
   );
+  const attachmentsDir = path.join(baseDir, "attachments");
+  mkdirSync(attachmentsDir);
+  const csv = {
+    type: "file",
+    id: "thread-opencode-file-1-12345678-1234-1234-1234-123456789abc",
+    name: "market_headers.csv",
+    mimeType: "text/csv",
+    sizeBytes: csvContent.length,
+    sourcePath: csvPath,
+  } as const;
+  const pdf = {
+    type: "file",
+    id: "thread-opencode-file-2-12345678-1234-1234-1234-123456789abc",
+    name: "Science Communication Overview.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: statSync(pdfPath).size,
+    sourcePath: pdfPath,
+  } as const;
+  copyFileSync(csvPath, path.join(attachmentsDir, attachmentRelativePath(csv)!));
+  copyFileSync(pdfPath, path.join(attachmentsDir, attachmentRelativePath(pdf)!));
 
   const promptInputs: Array<{
     sessionID: string;
@@ -277,30 +306,13 @@ endobj
         } as never),
       emitFn: () => Effect.void,
       teardownSessionRecord: () => Effect.void,
-      serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
+      serverConfig: { attachmentsDir },
     });
 
     yield* sendTurn({
       threadId: THREAD_ID,
       input: "summarise these",
-      attachments: [
-        {
-          type: "file",
-          id: "thread-opencode-file-1-12345678-1234-1234-1234-123456789abc",
-          name: "market_headers.csv",
-          mimeType: "text/csv",
-          sizeBytes: csvContent.length,
-          sourcePath: csvPath,
-        },
-        {
-          type: "file",
-          id: "thread-opencode-file-2-12345678-1234-1234-1234-123456789abc",
-          name: "Science Communication Overview.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 120,
-          sourcePath: pdfPath,
-        },
-      ],
+      attachments: [csv, pdf],
     });
     yield* Effect.yieldNow;
     yield* Effect.yieldNow;
@@ -312,7 +324,9 @@ endobj
       parts: [
         {
           type: "text",
-          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent.trim()}\n</file>\n</attached_file_contents>`,
+          text: expect.stringContaining(
+            `<file name="market_headers.csv">\n${csvContent.trim()}\n</file>`,
+          ),
         },
         {
           filename: "Science Communication Overview.pdf",

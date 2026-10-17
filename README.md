@@ -102,6 +102,8 @@ bigbud supports multiple AI coding agents. Configure at least one in **Settings 
 
 Provider status is checked in real-time and displayed in Settings. Each provider can be toggled on or off independently.
 
+For Claude's SDK integration, authentication boundaries and recovery behavior, see [Claude in bigbud](docs/providers-claude.md).
+
 ## Remote Projects
 
 bigbud can connect to remote projects over SSH while keeping the app experience local.

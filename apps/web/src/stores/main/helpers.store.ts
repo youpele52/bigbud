@@ -1,5 +1,6 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
+import { syncDelegatedChildSummaries } from "./helpers.delegatedChildren.store";
 import { type AppState } from "./main.store";
 import {
   type ChatMessage,
@@ -7,6 +8,7 @@ import {
   type SidebarThreadSummary,
   type Thread,
 } from "../../models/types";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -263,7 +265,10 @@ export function retainThreadActivitiesAfterRevert(
   retainedTurnIds: ReadonlySet<string>,
 ): Thread["activities"] {
   return activities.filter(
-    (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
+    (activity) =>
+      // A revert or rollback clears the prompt suggestion (Phase 7).
+      activity.kind !== PROMPT_SUGGESTION_ACTIVITY_KIND &&
+      (activity.turnId === null || retainedTurnIds.has(activity.turnId)),
   );
 }
 
@@ -284,14 +289,13 @@ export function updateThreadState(
   updater: (thread: Thread) => Thread,
   options: { readonly preserveLatestUserMessageAt?: boolean } = {},
 ): AppState {
-  const threads = updateThread(state.threads, threadId, (thread) => {
+  let threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
     return nextThread;
   });
   const updatedThread = threads.find((thread) => thread.id === threadId);
-  if (threads === state.threads || !updatedThread) {
-    return state;
-  }
+  if (threads === state.threads || !updatedThread) return state;
+  threads = syncDelegatedChildSummaries(threads, updatedThread);
   if (updatedThread.purpose === "side-chat") {
     return { ...state, threads };
   }

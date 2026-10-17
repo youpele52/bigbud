@@ -7,6 +7,6 @@ export function resolveBasePermissionMode(runtimeMode: RuntimeMode | undefined) 
     case "full-access":
       return "bypassPermissions" as const;
     default:
-      return undefined;
+      return "default" as const;
   }
 }

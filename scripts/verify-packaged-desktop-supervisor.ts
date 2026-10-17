@@ -5,6 +5,7 @@ import {
   smokeTestDesktopSupervisorBinary,
   smokeTestDesktopSupervisorRecovery,
 } from "./lib/desktop-supervisor-smoke.ts";
+import { smokeTestSystemMonitorBinary } from "./lib/system-monitor-smoke.ts";
 import {
   findPackagedDesktopSupervisor,
   verifyPackagedDesktopSupervisorEvidence,
@@ -42,4 +43,5 @@ if (requireCodeSignature) {
 verifyPackagedDesktopSupervisorEvidence(binaryPath, { verifyDigest: !requireCodeSignature });
 await smokeTestDesktopSupervisorBinary(binaryPath);
 await smokeTestDesktopSupervisorRecovery(binaryPath);
+await smokeTestSystemMonitorBinary(binaryPath);
 console.log(`Verified packaged desktop supervisor: ${basename(binaryPath)} (${platform})`);

@@ -6,6 +6,8 @@ import type { DesktopBackendStartupFailureReason } from "@bigbud/contracts/serve
 const MAX_STARTUP_STATUS_BUFFER_LENGTH = 16 * 1024;
 const failureReasons = new Set<DesktopBackendStartupFailureReason>([
   "bootstrap_failed",
+  "state_directory_in_use",
+  "state_directory_owner_unverified",
   "projection_database_initialization_failed",
   "server_runtime_startup_failed",
   "unknown",

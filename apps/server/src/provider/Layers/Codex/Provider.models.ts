@@ -14,6 +14,21 @@ import {
 export { UNVERIFIED_CODEX_MODEL_CAPABILITIES } from "../../codexAppServer.models";
 
 export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
+  // Verified against Codex 0.159.0 model/list on 2026-09-30; live discovery is authoritative.
+  ...[
+    ["gpt-6.1-sol", "GPT-6.1 Sol"],
+    ["gpt-6-astra", "GPT-6 Astra"],
+    ["gpt-6-sol", "GPT-6 Sol"],
+    ["gpt-6-luna", "GPT-6 Luna"],
+    ["gpt-5.6-sol", "GPT-5.6 Sol"],
+    ["gpt-5.6-terra", "GPT-5.6 Terra"],
+    ["gpt-5.6-luna", "GPT-5.6 Luna"],
+  ].map(([slug, name]) => ({
+    slug: slug!,
+    name: name!,
+    isCustom: false,
+    capabilities: UNVERIFIED_CODEX_MODEL_CAPABILITIES,
+  })),
   {
     slug: "gpt-5.5",
     name: "GPT-5.5",
@@ -139,7 +154,9 @@ export function getCodexFallbackModels(
   customModels: ReadonlyArray<string>,
 ): ReadonlyArray<ServerProviderModel> {
   const unverifiedBuiltInModels = BUILT_IN_MODELS.map((model) => ({
-    ...model,
+    slug: model.slug,
+    name: model.name,
+    isCustom: model.isCustom,
     capabilities: UNVERIFIED_CODEX_MODEL_CAPABILITIES,
   }));
 

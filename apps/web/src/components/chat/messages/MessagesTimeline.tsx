@@ -1,7 +1,7 @@
 import { type MessageId } from "@bigbud/contracts";
-import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
+import { ChatGreeting } from "../common/ChatGreeting";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { measureElement as measureVirtualElement, useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
 import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
 import { deriveChatScrollRowsFromTimeline } from "../scroller/chatScroll.timelineRows";
@@ -18,14 +18,18 @@ import {
   getMessagesTimelineRowMeasurementKey,
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
+import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
+  emptyChatGreeting,
+  shimmerEmptyChat = false,
   isWorking,
   activeTurnInProgress,
   activeTurnStartedAt,
   scrollContainer,
   timelineEntries,
+  historicalAgents = [],
   completionDividerBeforeEntryId,
   completionSummary,
   turnDiffSummaryByAssistantMessageId,
@@ -52,35 +56,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onVirtualizerSnapshot,
   onReaderPositionChange,
 }: MessagesTimelineProps) {
-  const timelineRootRef = useRef<HTMLDivElement | null>(null);
-  const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
+  const { timelineRootRef, timelineWidthPx } = useTimelineWidth();
   const [focusedMessageId, setFocusedMessageId] = useState<MessageId | null>(null);
   const lastProcessedFocusMessageIdRef = useRef<MessageId | null>(null);
-
-  useLayoutEffect(() => {
-    const timelineRoot = timelineRootRef.current;
-    if (!timelineRoot) return;
-
-    const updateWidth = (nextWidth: number) => {
-      setTimelineWidthPx((previousWidth) => {
-        if (previousWidth !== null && Math.abs(previousWidth - nextWidth) < 0.5) {
-          return previousWidth;
-        }
-        return nextWidth;
-      });
-    };
-
-    updateWidth(timelineRoot.getBoundingClientRect().width);
-
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      updateWidth(timelineRoot.getBoundingClientRect().width);
-    });
-    observer.observe(timelineRoot);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   const rows = useMemo(
     () =>
@@ -89,8 +67,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         completionDividerBeforeEntryId,
         isWorking,
         activeTurnStartedAt,
+        historicalAgents,
       }),
-    [timelineEntries, completionDividerBeforeEntryId, isWorking, activeTurnStartedAt],
+    [
+      timelineEntries,
+      completionDividerBeforeEntryId,
+      isWorking,
+      activeTurnStartedAt,
+      historicalAgents,
+    ],
   );
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
@@ -154,7 +139,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         turnDiffSummaryByAssistantMessageId,
       });
     },
-    measureElement: measureVirtualElement,
+    measureElement: measureVisibleTimelineElement,
     useAnimationFrameWithResizeObserver: true,
     overscan: 8,
   });
@@ -318,11 +303,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);
 
   if (rows.length === 0 && !isWorking) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <BigbudLogo className="h-8 opacity-70" />
-      </div>
-    );
+    return <ChatGreeting greeting={emptyChatGreeting ?? null} shimmer={shimmerEmptyChat} />;
   }
 
   return (

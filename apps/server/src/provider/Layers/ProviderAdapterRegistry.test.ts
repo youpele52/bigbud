@@ -201,14 +201,14 @@ layer("ProviderAdapterRegistryLive", (it) => {
       const claude = yield* registry.getByProvider("claudeAgent");
       const cliProxy = yield* registry.getByProvider("cliProxy");
       const copilot = yield* registry.getByProvider("copilot");
-      const opencode = yield* registry.getByProvider("opencode");
+      const opencode = yield* registry.getByProvider("opencode").pipe(Effect.result);
       const kilocode = yield* registry.getByProvider("kilocode");
       const pi = yield* registry.getByProvider("pi");
       assert.equal(codex, fakeCodexAdapter);
       assert.equal(claude, fakeClaudeAdapter);
       assert.equal(cliProxy, fakeCliProxyAdapter);
       assert.equal(copilot, fakeCopilotAdapter);
-      assert.equal(opencode, fakeOpencodeAdapter);
+      assertFailure(opencode, new ProviderUnsupportedError({ provider: "opencode" }));
       assert.equal(kilocode, fakeKilocodeAdapter);
       assert.equal(pi, fakePiAdapter);
 
@@ -221,7 +221,6 @@ layer("ProviderAdapterRegistryLive", (it) => {
         "cursor",
         "devin",
         "kilocode",
-        "opencode",
         "pi",
       ]);
     }),
@@ -269,7 +268,6 @@ withoutCliProxyLayer("ProviderAdapterRegistryLive without CLIProxy", (it) => {
         "cursor",
         "devin",
         "kilocode",
-        "opencode",
         "pi",
       ]);
       assertFailure(adapter, new ProviderUnsupportedError({ provider: "cliProxy" }));

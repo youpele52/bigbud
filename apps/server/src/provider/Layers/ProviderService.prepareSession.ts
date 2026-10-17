@@ -15,6 +15,10 @@ import {
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
+import {
+  isRetiredProvider,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 export interface SessionPreparationDependencies {
   readonly serverSettings: {
@@ -49,6 +53,12 @@ export const prepareProviderSession = Effect.fn("prepareProviderSession")(functi
     );
   }
   const provider = parsed.provider ?? parsed.modelSelection?.provider ?? "codex";
+  if (isRetiredProvider(provider) || isRetiredProvider(persistedBinding?.provider)) {
+    return yield* toValidationError(
+      "ProviderService.startSession",
+      LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+    );
+  }
   if (!input.isProviderComposed(provider)) {
     return yield* toValidationError(
       "ProviderService.startSession",

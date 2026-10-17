@@ -1,4 +1,7 @@
 import * as Crypto from "node:crypto";
+import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
+import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
 import type { BrowserWindow, WebContents } from "electron";
 
@@ -56,9 +59,11 @@ import { stopCuaDriverCommandsAndWait } from "./backend/cuaDriver.process";
 import { sweepWindowsCuaDriverProcesses } from "./backend/cuaDriver.windowsSweep";
 import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceability";
 import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
+import { registerTerminalRenderingIpc } from "./main.terminalRendering";
 
 interface BootstrapDesktopOptions {
   readonly baseDir: string;
+  readonly systemMonitor: SystemMonitorBridge;
   readonly channels: typeof desktopIpcChannels;
   readonly cuaDriverHostBundleId: string;
   readonly desktopPreferences: DesktopPreferencesStore;
@@ -66,6 +71,7 @@ interface BootstrapDesktopOptions {
   readonly floatingAssistantWindows: FloatingAssistantWindows;
   readonly getIsQuitting: () => boolean;
   readonly getMainWindow: () => BrowserWindow | null;
+  readonly openMainWindow: (threadId?: string) => BrowserWindow;
   readonly isDevelopment: boolean;
   readonly isPackaged: boolean;
   readonly logHeader: (message: string) => void;
@@ -83,6 +89,7 @@ interface BootstrapDesktopOptions {
 export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promise<void> {
   const {
     baseDir,
+    systemMonitor,
     channels,
     cuaDriverHostBundleId,
     desktopPreferences,
@@ -90,6 +97,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     floatingAssistantWindows,
     getIsQuitting,
     getMainWindow,
+    openMainWindow,
     isDevelopment,
     isPackaged,
     logHeader,
@@ -174,6 +182,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     BACKEND_STARTUP_STATE_CHANNEL: channels.backendStartupState,
     BACKEND_STARTUP_GET_STATE_CHANNEL: channels.backendStartupGetState,
     getMainWindow,
+    openMainWindow,
     isTrustedRenderer: (webContents: WebContents) => windowRegistry.isTrusted(webContents),
     getBackendWsUrl: () => backendWsUrl,
     getIsQuitting,
@@ -220,6 +229,17 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       mobileBackendBaseUrl = localMobileBackendBaseUrl;
       return status;
     },
+  });
+  registerSystemMonitorIpc(
+    systemMonitor,
+    (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
+  );
+  registerTerminalRenderingIpc((sender) => {
+    const role = windowRegistry.getRole(sender);
+    return role === "main" || role === "compact-chat";
+  });
+  await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
+    logHeader("system monitor agent bridge unavailable");
   });
   registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");

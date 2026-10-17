@@ -43,4 +43,20 @@ it.layer(layer)("MemoryStore", (it) => {
       assert.equal(error._tag, "MemoryConflictError");
     }),
   );
+  it.effect("allows only one concurrent replacement of the same memory baseline", () =>
+    Effect.gen(function* () {
+      const store = yield* MemoryStore;
+      yield* store.write({ scope: "global", projectId: null, content: "baseline\n" });
+      const results = yield* Effect.forEach(
+        ["first\n", "second\n"],
+        (content) =>
+          store
+            .write({ scope: "global", projectId: null, content, expectedContent: "baseline\n" })
+            .pipe(Effect.result),
+        { concurrency: 2 },
+      );
+      assert.strictEqual(results.filter((result) => result._tag === "Success").length, 1);
+      assert.strictEqual(results.filter((result) => result._tag === "Failure").length, 1);
+    }),
+  );
 });

@@ -178,6 +178,26 @@ describe("TerminalCloseInput", () => {
 });
 
 describe("TerminalSessionSnapshot", () => {
+  it.each(["historyTruncated", "historyUnavailable"])(
+    "retains explicit %s across decoding",
+    (reason) => {
+      const decoded = decodeSync(TerminalSessionSnapshot, {
+        threadId: "thread-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+        dropPathMode: "posix",
+        cwd: "/project",
+        worktreePath: null,
+        status: "running",
+        pid: 1234,
+        history: "",
+        [reason]: true,
+        exitCode: null,
+        exitSignal: null,
+        updatedAt: "2026-10-17T00:00:00.000Z",
+      });
+      expect(decoded).toHaveProperty(reason, true);
+    },
+  );
   it("accepts running snapshots", () => {
     expect(
       decodes(TerminalSessionSnapshot, {

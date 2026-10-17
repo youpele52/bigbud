@@ -143,7 +143,8 @@ export function ProjectScriptsDialog({
                 onKeyDown={captureKeybinding}
               />
               <p className="text-xs text-muted-foreground">
-                Press a shortcut. Use <code>Backspace</code> to clear.
+                Press a shortcut. Use <span className="font-light">&quot;Backspace&quot;</span> to
+                clear.
               </p>
             </div>
             <div className="space-y-1.5">

@@ -63,6 +63,14 @@ BIGBUD_DEV_INSTANCE=branch-a bun run dev:mobile-web
 
 If you want full control instead of hashing, set `BIGBUD_PORT_OFFSET` to a numeric offset. Legacy `T3CODE_PORT_OFFSET` is still accepted.
 
+Port offsets do not separate data. Each backend holds an exclusive lock (`backend.lock`) on its state directory (`<BIGBUD_HOME>/dev` in development, `<BIGBUD_HOME>/userdata` otherwise), so a second backend on the same directory refuses to start with `Another bigbud backend (pid N, port P) owns <stateDir>; stop it or use a different BIGBUD_HOME.` To run instances concurrently, give each its own home:
+
+```bash
+BIGBUD_DEV_INSTANCE=branch-b BIGBUD_HOME=~/.bigbud-branch-b bun run dev
+```
+
+The lock is released on shutdown. A lock left by a crashed backend is replaced automatically when its process is provably gone; an owner that cannot be proven gone (for example a different host, or an unreadable lock file) is never replaced.
+
 The dev runner prints the selected server/web ports and the mobile starting port on startup:
 
 ```text

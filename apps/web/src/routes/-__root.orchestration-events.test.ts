@@ -73,4 +73,32 @@ describe("__root orchestration event helpers", () => {
     expect(events[0].payload.text).toBe("hello world");
     expect(events[0].payload.streaming).toBe(true);
   });
+
+  it("keeps an empty completion separate from a streaming delta", () => {
+    const delta = makeThreadMessageSentEvent({ text: " suffix", streaming: true });
+    const completion = {
+      ...makeThreadMessageSentEvent({ text: "", streaming: false }),
+      eventId: EventId.makeUnsafe("event-2"),
+      sequence: 2,
+      occurredAt: "2026-05-12T12:00:01.000Z",
+    };
+
+    expect(coalesceOrchestrationUiEvents([delta, completion])).toEqual([delta, completion]);
+  });
+
+  it("still coalesces a nonempty authoritative completion", () => {
+    const completion = {
+      ...makeThreadMessageSentEvent({ text: "complete response", streaming: false }),
+      eventId: EventId.makeUnsafe("event-2"),
+      sequence: 2,
+      occurredAt: "2026-05-12T12:00:01.000Z",
+    };
+
+    expect(
+      coalesceOrchestrationUiEvents([
+        makeThreadMessageSentEvent({ text: "partial", streaming: true }),
+        completion,
+      ]),
+    ).toEqual([completion]);
+  });
 });

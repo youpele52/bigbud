@@ -307,7 +307,7 @@ export default function GitActionsControl({
         return;
       }
 
-      if (item.dialogAction === "push") {
+      if (item.action === "push") {
         void runGitActionWithToast({ action: "push" });
         return;
       }

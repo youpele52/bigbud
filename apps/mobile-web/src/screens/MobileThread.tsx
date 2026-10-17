@@ -34,8 +34,12 @@ import { describeRecoveryReason } from "../logic/mobileRecovery.types";
 import { isMobileConnectionActionsBlocked } from "../components/shell/MobileConnectionNotice.logic";
 import { redactMobileText } from "../lib/mobileRedaction";
 import { useMobileThreadState } from "./MobileThread.state";
-import { resolveDraftWorkspaceRoot } from "./MobileThread.workspace";
+import {
+  resolveDraftWorkspaceRoot,
+  resolveMobileThreadWorkspaceRoot,
+} from "./MobileThread.workspace";
 import { useMobileThreadDelivery } from "./MobileThread.delivery";
+import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
 
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
@@ -251,15 +255,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const projectId = thread?.projectId ?? draftThread!.projectId;
   const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
   const projectTitle = project?.title ?? "Unknown project";
-  const workspaceRoot = thread
-    ? snapshot
-      ? resolveThreadWorkspaceRoot(snapshot, thread)
-      : (thread.worktreePath ?? undefined)
-    : draftThread
-      ? snapshot
-        ? resolveDraftWorkspaceRoot(snapshot, draftThread)
-        : (draftThread.worktreePath ?? undefined)
-      : undefined;
+  const workspaceRoot = resolveMobileThreadWorkspaceRoot(snapshot, thread, draftThread);
   const messages = thread?.messages ?? [];
   const activeWorkStartedAt = thread
     ? deriveActiveWorkStartedAt(
@@ -340,6 +336,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     <div className="relative h-full">
       <MobileQueueNotice queuedPromptCount={thread?.queuedPrompts?.length ?? 0} />
       <MobileThreadView
+        legacyReadOnly={isLegacyOpencodeThread(thread)}
         activeWorkStartedAt={activeWorkStartedAt}
         isFollowing={isFollowing}
         messages={messages}

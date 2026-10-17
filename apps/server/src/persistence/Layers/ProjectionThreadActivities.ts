@@ -5,6 +5,7 @@ import { Effect, Layer, Schema, Struct } from "effect";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
+import { makeListPendingDelegatedModelChoiceRequests } from "./ProjectionThreads.modelChoice.ts";
 
 import {
   DeleteProjectionThreadActivitiesInput,
@@ -375,6 +376,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
     getUsageBackfillState,
     listUsageBackfillBatch,
     advanceUsageBackfillState,
+    listPendingDelegatedModelChoiceRequests: makeListPendingDelegatedModelChoiceRequests(sql),
   } satisfies ProjectionThreadActivityRepositoryShape;
 });
 

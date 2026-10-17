@@ -1,5 +1,4 @@
 import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   PROVIDER_KINDS,
   type ModelSelection,
   type ProviderKind,
@@ -9,7 +8,7 @@ import { normalizeModelSlug, resolveSelectableModel } from "@bigbud/shared/model
 import { getComposerProviderState } from "../../components/chat/provider/composerProviderRegistry";
 import { getProviderDescriptor } from "../../components/chat/provider/providerDescriptors";
 import { UnifiedSettings } from "@bigbud/contracts/settings";
-import { cloneModelSelection, createModelSelection } from "./selection-helpers.models";
+import { createModelSelection } from "./selection-helpers.models";
 import {
   getDefaultServerModel,
   getProviderModels,
@@ -27,6 +26,7 @@ export interface AppModelOption {
   group?: string | undefined;
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Passed through from the server snapshot. */
   subProviderID?: string | undefined;
+  availability?: "available" | "requires-setup" | undefined;
 }
 
 export function normalizeCustomModelSlugs(
@@ -65,10 +65,11 @@ export function getAppModelOptions(
   selectedModel?: string | null,
 ): AppModelOption[] {
   const options: AppModelOption[] = getProviderModels(providers, provider).map(
-    ({ slug, name, isCustom, group, subProviderID }) => {
+    ({ slug, name, isCustom, group, subProviderID, availability }) => {
       const option: AppModelOption = { slug, name, isCustom };
       if (group !== undefined) option.group = group;
       if (subProviderID !== undefined) option.subProviderID = subProviderID;
+      if (availability !== undefined) option.availability = availability;
       return option;
     },
   );
@@ -105,7 +106,9 @@ export function getAppModelOptions(
   // persisted model into a synthetic custom option. The user must reselect
   // from the current server catalog instead.
   if (!descriptor.catalogAuthoritative) {
-    const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
+    // Catalog refresh must not reinterpret a persisted model ID as a legacy alias.
+    // Alias normalization belongs to explicit selection, not discovery updates.
+    const normalizedSelectedModel = selectedModel?.trim() || null;
     const selectedModelMatchesExistingName =
       typeof trimmedSelectedModel === "string" &&
       options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
@@ -159,6 +162,7 @@ export function getCustomModelOptionsByProvider(
     name: string;
     group?: string | undefined;
     subProviderID?: string | undefined;
+    availability?: "available" | "requires-setup" | undefined;
   }>
 > {
   return Object.fromEntries(
@@ -178,37 +182,16 @@ export function resolveAppModelSelectionState(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
 ): ModelSelection {
-  const selection = settings.textGenerationModelSelection ?? {
-    provider: "codex" as const,
-    model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
-  };
-  const provider = resolveSelectableProvider(providers, selection.provider);
-
-  // When the provider changed due to fallback (e.g. selected provider was disabled),
-  // don't carry over the old provider's model — use the fallback provider's default.
-  const selectedModel = provider === selection.provider ? selection.model : null;
-  const model = resolveAppModelSelection(provider, settings, providers, selectedModel);
+  if (settings.textGenerationModelSelection) return settings.textGenerationModelSelection;
+  // This is only the initial picker display. Nothing is configured until the user picks a model.
+  const provider = resolveSelectableProvider(providers, "codex");
+  const model = resolveAppModelSelection(provider, settings, providers, null);
   const { modelOptionsForDispatch } = getComposerProviderState({
     provider,
     model,
     models: getProviderModels(providers, provider),
     prompt: "",
-    modelOptions: {
-      [provider]: provider === selection.provider ? selection.options : undefined,
-    },
-    subProviderID: "subProviderID" in selection ? selection.subProviderID : undefined,
+    modelOptions: {},
   });
-
-  if (provider === selection.provider) {
-    const baseSelection = createModelSelection(provider, model, modelOptionsForDispatch);
-    return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
-      "subProviderID" in selection &&
-      selection.subProviderID
-      ? cloneModelSelection(baseSelection, {
-          subProviderID: selection.subProviderID,
-        } as Partial<ModelSelection>)
-      : baseSelection;
-  }
-
   return createModelSelection(provider, model, modelOptionsForDispatch);
 }

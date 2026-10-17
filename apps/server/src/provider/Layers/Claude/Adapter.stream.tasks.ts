@@ -83,7 +83,15 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
       providerRefs: nativeProviderRefs(deps.context, { providerItemId: deps.toolUseId }),
     });
   }
-  for (const task of claudeTaskRuntimeUpdates(deps.context.taskState, reduction.changedTaskIds)) {
+  const classification = {
+    providerSubagentsSupported: deps.context.providerSubagentsSupported,
+    agentModels: deps.context.agentModels,
+  };
+  for (const task of claudeTaskRuntimeUpdates(
+    deps.context.taskState,
+    reduction.changedTaskIds,
+    classification,
+  )) {
     const stamp = yield* deps.makeEventStamp();
     yield* deps.offerRuntimeEvent(deps.context, {
       type: "task.updated",
@@ -92,13 +100,14 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
       createdAt: stamp.createdAt,
       threadId: deps.context.session.threadId,
       ...(turnId ? { turnId } : {}),
-      payload: task,
+      payload: deps.context.providerSubagentsSupported ? task : { ...task, kind: "task" },
       providerRefs: nativeProviderRefs(deps.context, { providerItemId: deps.toolUseId }),
     });
   }
   const payload = claudeTaskPlanPayload(
     deps.context.taskState,
     deps.authoritativeSnapshot === true || reduction.removedTaskIds.length > 0,
+    deps.context.providerSubagentsSupported,
   );
   if (!turnId || !payload) {
     return;

@@ -1,6 +1,16 @@
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import {
+  WsWorktreeOperationsRpc,
+  WsWorktreeRecoverRpc,
+  WsWorktreeListRpc,
+  WsWorktreeCreateRpc,
+  WsWorktreeDeleteRpc,
+  WsWorktreeSelectRpc,
+} from "./rpc.worktrees";
 
 import { WS_METHODS } from "../constants/websocket.constant";
+import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
+import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
   WsKanbanCreateRpc,
   WsKanbanDeleteRpc,
@@ -36,6 +46,7 @@ import {
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
+import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
   WsPluginsGitAvailabilityRpc,
   WsPluginsGetRpc,
@@ -137,17 +148,30 @@ import {
 } from "./rpc.browser";
 
 export { WS_METHODS };
+import { WsServerOpencodeV2ThreadToolsSetupRpc } from "./rpc.opencodeV2ThreadToolsSetup";
 export * from "./rpc.automation";
 export * from "./rpc.browser";
 export * from "./rpc.core";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
+export * from "./rpc.subagents";
 export * from "./plugins";
 export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
+export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+
 export const WsRpcGroup = RpcGroup.make(
+  WsServerRetryTextGenerationRpc,
+  WsWorktreeOperationsRpc,
+  WsWorktreeRecoverRpc,
+  WsWorktreeListRpc,
+  WsWorktreeCreateRpc,
+  WsWorktreeDeleteRpc,
+  WsWorktreeSelectRpc,
+  WsServerOpencodeV2ThreadToolsSetupRpc,
   WsPluginsGitAvailabilityRpc,
   WsPluginsListCatalogRpc,
   WsPluginsGetRpc,
@@ -196,6 +220,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerTriggerAutomationRpc,
   WsServerListAutomationRunsRpc,
   WsServerGetUsageSummaryRpc,
+  WsProviderStopSubagentRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,
@@ -239,6 +264,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitDiscardChangesRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
+  WsTerminalSnapshotRpc,
+  WsTerminalWslDistributionsRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,
   WsTerminalRestartRpc,

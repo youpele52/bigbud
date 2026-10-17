@@ -26,6 +26,7 @@ import {
   type Thread,
 } from "../../models/types";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
+import { capProviderAgents } from "./events.store.providerAgents";
 
 export { attachmentPreviewRoutePath, toAttachmentPreviewUrl };
 
@@ -136,6 +137,7 @@ export function mapMessage(message: OrchestrationMessage): ChatMessage {
     role: message.role,
     text: message.text,
     ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
+    ...(message.originSegments !== undefined ? { originSegments: message.originSegments } : {}),
     turnId: message.turnId,
     createdAt: message.createdAt,
     streaming: message.streaming,
@@ -191,6 +193,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
       thread.workspaceExecutionTargetId ?? thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
+    ...(thread.forkOrigin ? { forkOrigin: thread.forkOrigin } : {}),
     title: thread.title,
     purpose: thread.purpose ?? "standard",
     elevatorSummary: thread.elevatorSummary,
@@ -201,6 +204,10 @@ export function mapThread(thread: OrchestrationThread): Thread {
     session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
+    providerAgents: capProviderAgents(
+      (thread.tasks ?? []).filter((task) => task.kind === "providerSubagent"),
+    ),
+    delegatedChildren: [],
     queuedPrompts: [...(thread.queuedPrompts ?? [])],
     pendingTurnControlOperation: thread.pendingTurnControlOperation ?? null,
     queueHold: thread.queueHold ?? false,
@@ -294,6 +301,7 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
     hasActionableProposedPlan: hasActionableProposedPlan(
       findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
     ),
+    ...(thread.providerAgents ? { providerAgents: thread.providerAgents } : {}),
   };
 }
 

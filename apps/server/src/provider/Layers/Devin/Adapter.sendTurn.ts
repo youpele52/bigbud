@@ -1,12 +1,20 @@
 import { TurnId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
 import { Effect, type FileSystem } from "effect";
 import type { ContentBlock } from "effect-acp/schema";
+import {
+  canReadManagedProviderPaths,
+  prepareManagedAttachmentContext,
+} from "../../../attachments/providerAttachments.managed.ts";
 
 import {
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import {
+  assertAcpAgentAliveBeforePrompt,
+  mapAcpPromptToAdapterError,
+} from "../../acp/AcpAdapterSupport.ts";
 import { type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
 import {
   type DevinEventStamp,
@@ -14,7 +22,6 @@ import {
   mapAcpToAdapterError,
   PROVIDER,
   applyRequestedSessionConfiguration,
-  resolveAttachmentPath,
   resolveDevinAcpBaseModelId,
 } from "./Adapter.helpers.ts";
 
@@ -41,52 +48,41 @@ export function makeSendTurnEffect(
     const model = turnModelSelection?.model ?? ctx.session.model;
     const resolvedModel = resolveDevinAcpBaseModelId(model);
 
+    const prepared = yield* Effect.tryPromise({
+      try: () =>
+        prepareManagedAttachmentContext(
+          input.input ?? "",
+          input.attachments ?? [],
+          deps.attachmentsDir,
+          canReadManagedProviderPaths(ctx.session),
+        ),
+      catch: (cause) =>
+        new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "session/prompt",
+          detail: cause instanceof Error ? cause.message : "Failed to prepare attachments.",
+          cause,
+        }),
+    });
     yield* applyRequestedSessionConfiguration({
       runtime: ctx.acp,
       runtimeMode: ctx.session.runtimeMode,
       interactionMode: input.interactionMode,
       modelSelection:
-        model === undefined
-          ? undefined
-          : {
-              model,
-              options: turnModelSelection?.options,
-            },
+        model === undefined ? undefined : { model, options: turnModelSelection?.options },
       mapError: ({ cause, method }) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
     });
-
     const promptParts: Array<ContentBlock> = [];
-    if (input.input?.trim()) {
-      promptParts.push({ type: "text", text: input.input.trim() });
+    if (prepared.text.trim()) {
+      promptParts.push({ type: "text", text: prepared.text.trim() });
     }
-    if (input.attachments && input.attachments.length > 0) {
-      for (const attachment of input.attachments) {
-        const attachmentPath = resolveAttachmentPath({
-          attachmentsDir: deps.attachmentsDir,
-          attachment,
-        });
-        if (!attachmentPath) {
-          return yield* new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session/prompt",
-            detail: `Invalid attachment id '${attachment.id}'.`,
-          });
-        }
-        const bytes = yield* deps.fileSystem.readFile(attachmentPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterRequestError({
-                provider: PROVIDER,
-                method: "session/prompt",
-                detail: cause.message,
-                cause,
-              }),
-          ),
-        );
+    if (prepared.attachments.length > 0) {
+      for (const { attachment, bytes } of prepared.attachments) {
+        if (attachment.type !== "image") continue;
         promptParts.push({
           type: "image",
-          data: Buffer.from(bytes).toString("base64"),
+          data: bytes.toString("base64"),
           mimeType: attachment.mimeType,
         });
       }
@@ -100,6 +96,8 @@ export function makeSendTurnEffect(
       });
     }
 
+    // An exit observed before dispatch means the turn never started (session-dead, recoverable).
+    yield* assertAcpAgentAliveBeforePrompt(PROVIDER, input.threadId, ctx.acp);
     ctx.activeTurnId = turnId;
     ctx.lastPlanFingerprint = undefined;
     ctx.session = {
@@ -121,7 +119,7 @@ export function makeSendTurnEffect(
 
     const result = yield* ctx.acp.prompt({ prompt: promptParts }).pipe(
       Effect.mapError((error) =>
-        mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+        mapAcpPromptToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
       ),
       Effect.tapError(() => Effect.sync(() => settleIdleDevinTurn(ctx))),
     );

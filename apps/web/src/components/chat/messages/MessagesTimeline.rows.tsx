@@ -5,7 +5,9 @@ import type {
   ChatImageAttachment,
   ChatPathAttachment,
 } from "../../../models/types/app.types";
+import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
+import { UserInputFieldHint } from "./UserInputFieldHint";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
@@ -13,6 +15,7 @@ import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { MessagesTimelineWorkGroup } from "./MessagesTimeline.workGroup";
 import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
 import { MessagesTimelineDelegatedProvenance } from "./MessagesTimeline.delegatedProvenance";
+import { MessagesTimelineOrigins } from "./MessagesTimeline.origins";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
@@ -68,6 +71,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
+      {row.kind === "subagents-history" ? <SubagentsCard agents={row.agents} /> : null}
       {row.kind === "work" && (
         <MessagesTimelineWorkGroup
           row={row}
@@ -179,6 +183,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     ))}
                   </div>
                 )}
+                <MessagesTimelineOrigins segments={row.message.originSegments} />
                 <UserFileReferenceChips
                   files={userFileReferences}
                   markdownCwd={markdownCwd}
@@ -309,6 +314,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             <div className="space-y-4">
               {row.pendingUserInput.questions.map((question, index) => (
                 <div key={question.id}>
+                  <UserInputFieldHint question={question} />
                   <p className="mb-1 text-sm font-medium text-foreground/90">
                     {row.pendingUserInput.questions.length > 1
                       ? `${index + 1}. ${question.header || question.question}`

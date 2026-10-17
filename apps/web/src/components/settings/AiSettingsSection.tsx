@@ -11,6 +11,7 @@ import { ProviderModelPicker } from "../chat/provider/ProviderModelPicker";
 import { TraitsPicker } from "../chat/provider/TraitsPicker";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { PromptSuggestionSettingsRows } from "./AiSettingsSection.promptSuggestions";
 
 export function AiSettingsSection() {
   const settings = useSettings();
@@ -89,9 +90,15 @@ export function AiSettingsSection() {
         }
       />
 
+      <PromptSuggestionSettingsRows />
+
       <SettingsRow
         title="Text generation model"
-        description="Configure the model used for generated commit messages, PR titles, and similar Git text."
+        description={
+          settings.textGenerationModelSelection
+            ? "Try this model first for internal text generation, then the thread’s last successful model."
+            : "No override. Thread generation waits for a successful chat model; Git text without a thread needs an explicit model."
+        }
         resetAction={
           isGitWritingModelDirty ? (
             <SettingResetButton
@@ -114,6 +121,7 @@ export function AiSettingsSection() {
               providers={serverProviders}
               modelOptionsByProvider={gitModelOptionsByProvider}
               triggerVariant="outline"
+              triggerLabel={settings.textGenerationModelSelection ? undefined : "No override"}
               triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
               onProviderModelChange={(provider, model) => {
                 updateSettings({

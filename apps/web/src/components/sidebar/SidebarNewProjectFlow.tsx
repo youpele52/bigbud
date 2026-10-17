@@ -48,7 +48,7 @@ export function SidebarNewProjectFlow({
       <div className="flex gap-1.5">
         <input
           ref={addProjectInputRef}
-          className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
+          className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 text-sm font-light text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
             addProjectError
               ? "border-red-500/70 focus:border-red-500"
               : "border-border focus:border-ring"

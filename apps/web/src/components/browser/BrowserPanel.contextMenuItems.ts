@@ -53,9 +53,7 @@ function openExternal(url: string | null) {
 
 function sendSelectionToChat(threadId: ThreadId | null | undefined, selection: string) {
   if (!threadId) return;
-  const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
-  const nextPrompt = draft?.prompt ? `${draft.prompt}\n\n${selection}` : selection;
-  useComposerDraftStore.getState().setPrompt(threadId, nextPrompt);
+  useComposerDraftStore.getState().appendPrompt(threadId, selection);
   addToast("success", "Selection added to chat");
 }
 

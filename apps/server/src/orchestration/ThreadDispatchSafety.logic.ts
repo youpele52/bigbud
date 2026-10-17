@@ -1,4 +1,5 @@
 import type { OrchestrationThread } from "@bigbud/contracts";
+import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
 
 import { resolveThreadWorkflowStatus } from "./ThreadWorkflowStatus.logic.ts";
 
@@ -11,9 +12,15 @@ export function hasActiveThreadTurnOrSession(thread: OrchestrationThread): boole
 }
 
 export function isThreadTurnDispatchBlocked(thread: OrchestrationThread): boolean {
+  if (isLegacyOpencodeThread(thread)) return true;
   if (hasActiveThreadTurnOrSession(thread)) return true;
   const workflow = resolveThreadWorkflowStatus(thread);
-  return workflow.hasPendingApprovals || workflow.hasPendingUserInput;
+  // A pending delegated model choice holds the first turn exactly like a pending approval.
+  return (
+    workflow.hasPendingApprovals ||
+    workflow.hasPendingUserInput ||
+    workflow.modelChoice?.status === "pending"
+  );
 }
 
 // Direct thread.turn.start still needs its own durable pending-start gate; that

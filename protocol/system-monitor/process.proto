@@ -1,0 +1,25 @@
+syntax = "proto3";
+package bigbud.system_monitor.process.v1;
+import "system-monitor/metrics.proto";
+
+message ProcessRow {
+  uint32 pid = 1;
+  optional uint32 parent_pid = 2;
+  string name = 3;
+  string status = 4;
+  uint64 start_time_seconds = 5;
+  uint64 run_time_seconds = 6;
+  bigbud.system_monitor.metrics.v1.Metric cpu_percent = 7;
+  uint64 resident_bytes = 8;
+  uint64 virtual_bytes = 9;
+  uint64 disk_read_bytes = 10;
+  uint64 disk_written_bytes = 11;
+}
+message ProcessPage {
+  uint64 request_id = 1;
+  repeated ProcessRow rows = 2;
+  bool truncated_inventory = 3;
+  uint64 generation = 4;
+  uint64 next_digest = 5;
+  uint32 next_offset = 6;
+}

@@ -1,4 +1,3 @@
-// TODO: Split by concern when this file is next touched.
 import { Effect, Layer, Option, Ref, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -33,89 +32,15 @@ import {
   sanitizePrTitle,
   sanitizeThreadTitle,
 } from "../Utils.ts";
-
-const CURSOR_TIMEOUT_MS = 180_000;
-const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
-  enabled: false,
-  binaryPath: "",
-  apiEndpoint: "",
-  customModels: [],
-};
-
-function mapCursorTextGenerationError(
-  operation:
-    | "generateCommitMessage"
-    | "generatePrContent"
-    | "generateBranchName"
-    | "generateThreadTitle"
-    | "generateThreadElevatorSummary",
-  detail: string,
-  cause: unknown,
-): TextGenerationError {
-  return new TextGenerationError({
-    operation,
-    detail,
-    ...(cause !== undefined ? { cause } : {}),
-  });
-}
-
-function isTextGenerationError(error: unknown): error is TextGenerationError {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "TextGenerationError"
-  );
-}
-
-function extractJsonObjectString(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return trimmed;
-  }
-
-  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const candidate = fencedMatch?.[1]?.trim() ?? trimmed;
-
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escaping = false;
-
-  for (let index = 0; index < candidate.length; index += 1) {
-    const char = candidate[index];
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaping = inString;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) {
-      continue;
-    }
-    if (char === "{") {
-      if (depth === 0) {
-        start = index;
-      }
-      depth += 1;
-      continue;
-    }
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0 && start >= 0) {
-        return candidate.slice(start, index + 1);
-      }
-    }
-  }
-
-  return candidate;
-}
+import {
+  CURSOR_TIMEOUT_MS,
+  type CursorTextGenerationOperation,
+  DEFAULT_CURSOR_SETTINGS,
+  extractJsonObjectString,
+  isTextGenerationError,
+  mapCursorTextGenerationError,
+} from "./CursorTextGeneration.helpers.ts";
+import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
 
 const makeCursorTextGeneration = Effect.gen(function* () {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -134,12 +59,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     modelSelection,
     cursorSettings,
   }: {
-    operation:
-      | "generateCommitMessage"
-      | "generatePrContent"
-      | "generateBranchName"
-      | "generateThreadTitle"
-      | "generateThreadElevatorSummary";
+    operation: CursorTextGenerationOperation;
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -408,6 +328,18 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     generateBranchName,
     generateThreadTitle,
     generateThreadElevatorSummary,
+    generatePromptSuggestion: makeGeneratePromptSuggestion({
+      provider: "cursor",
+      run: ({ outputSchema, ...args }) =>
+        Effect.gen(function* () {
+          return yield* runCursorJson({
+            ...args,
+            operation: "generatePromptSuggestion",
+            outputSchemaJson: outputSchema,
+            cursorSettings: yield* loadCursorSettings,
+          });
+        }),
+    }),
   } satisfies TextGenerationShape;
 });
 

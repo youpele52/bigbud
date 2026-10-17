@@ -1,0 +1,85 @@
+{
+  "type": "CleanupGrantResult",
+  "input": {
+    "outcome": {
+      "child": {
+        "parentRootSequence": "249",
+        "shutdownId": {
+          "$bytes": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "class": 3,
+        "slot": 10,
+        "resourceIdentity": {
+          "$bytes": "8834208bf6cb1e15ce74a33f2b0d68e5e246d02ee42456d9bfd69fc03e324722"
+        }
+      },
+      "childId": {
+        "$bytes": "84eaff258460203f3805cbe602a36485fbe6f147c5edec76f97c00d53a249412"
+      },
+      "mutationDigest": {
+        "$bytes": "a4925556d829f3d4a87cc2310aed40756d75117ecde491daa9fd2bd867fa465a"
+      },
+      "state": 2,
+      "dispositionDigest": {
+        "$bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "authorityRevision": "248"
+    },
+    "grantId": {
+      "$bytes": "2828282828282828282828282828282828282828282828282828282828282828"
+    },
+    "secret": {
+      "$bytes": "2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e"
+    },
+    "scope": {
+      "role": 4,
+      "use": 3,
+      "revision": "1",
+      "generations": {
+        "main": "1",
+        "controller": "1",
+        "host": "0"
+      },
+      "process": {
+        "os": 1,
+        "pid": "42",
+        "birth": {
+          "$bytes": "020000000000000064000000c8"
+        },
+        "ownerEpoch": {
+          "$bytes": "0101010101010101010101010101010101010101010101010101010101010101"
+        }
+      },
+      "artifactSetDigest": {
+        "$bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+      },
+      "createBudget": 0,
+      "capabilities": [9, 10],
+      "ptys": [],
+      "shutdownId": {
+        "$bytes": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+      },
+      "cleanupInventory": {
+        "version": 1,
+        "inventoryId": {
+          "$bytes": "3232323232323232323232323232323232323232323232323232323232323232"
+        },
+        "ownerEpoch": {
+          "$bytes": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "shutdownId": {
+          "$bytes": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "parentRootSequence": "249",
+        "inventoryCut": {
+          "$bytes": "8834208bf6cb1e15ce74a33f2b0d68e5e246d02ee42456d9bfd69fc03e324722"
+        }
+      }
+    },
+    "scopeDigest": {
+      "$bytes": "17348c7f59426bc491b3b1c3e90d6acad7ea4ca6ea5c82728b957e521ed4259c"
+    },
+    "ttlMs": "30000"
+  },
+  "canonical": "00000000000000f90c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c030000000a8834208bf6cb1e15ce74a33f2b0d68e5e246d02ee42456d9bfd69fc03e32472284eaff258460203f3805cbe602a36485fbe6f147c5edec76f97c00d53a249412a4925556d829f3d4a87cc2310aed40756d75117ecde491daa9fd2bd867fa465a0200000000000000000000000000000000000000000000000000000000000000000000000000000000f828282828282828282828282828282828282828282828282828282828282828282e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e0403000000000000000100000000000000010000000000000001000000000000000001000000000000002a0000000d020000000000000064000000c8010101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202020000000000000002090a000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c010001323232323232323232323232323232323232323232323232323232323232323201010101010101010101010101010101010101010101010101010101010101010c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00000000000000f98834208bf6cb1e15ce74a33f2b0d68e5e246d02ee42456d9bfd69fc03e32472217348c7f59426bc491b3b1c3e90d6acad7ea4ca6ea5c82728b957e521ed4259c0000000000007530"
+}

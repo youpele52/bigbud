@@ -7,6 +7,7 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 export function toPromptTurnEvents(input: {
+  readonly provider?: "opencode" | "kilocode";
   readonly record: ActiveOpencodeSession;
   readonly threadId: import("@bigbud/contracts").ThreadId;
   readonly turnId: TurnId;
@@ -189,6 +190,15 @@ export function toPromptTurnEvents(input: {
           "turn.completed",
           {
             state: "completed",
+            ...(promptInfo.modelID
+              ? {
+                  actualModelSelection: {
+                    provider: input.provider ?? "opencode",
+                    model: promptInfo.modelID,
+                    ...(promptInfo.providerID ? { subProviderID: promptInfo.providerID } : {}),
+                  },
+                }
+              : {}),
             ...(record.lastUsage ? { usage: record.lastUsage } : {}),
           },
           { turnId },

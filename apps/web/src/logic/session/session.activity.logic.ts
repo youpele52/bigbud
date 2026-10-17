@@ -12,6 +12,9 @@ import {
 } from "@bigbud/contracts";
 
 import type { PendingApproval, PendingUserInput, ActivePlanState } from "./session.logic";
+import { Option, Schema } from "effect";
+import { UserInputField } from "@bigbud/contracts/orchestration/providerRuntime.forms.ts";
+import { ApprovalExecutionIntent } from "@bigbud/contracts/orchestration/approvalIntent.ts";
 
 // ── Private helpers ───────────────────────────────────────────────────
 
@@ -75,9 +78,12 @@ function parseUserInputQuestions(
         })
         .filter((option): option is UserInputQuestion["options"][number] => option !== null);
       // Allow questions with zero options (e.g. OpenCode free-text TUI prompts).
+      const field = Schema.decodeUnknownOption(UserInputField)(question.field);
+      if (question.field !== undefined && Option.isNone(field)) return null;
       // The composer handles this by letting the user type a custom answer.
       return {
         id: question.id,
+        ...(Option.isSome(field) ? { field: field.value } : {}),
         header: question.header,
         question: question.question,
         options,
@@ -176,6 +182,13 @@ export function derivePendingApprovals(
         requestKind: requestKind ?? "tool",
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
+        ...(payload?.executionIntent
+          ? {
+              executionIntent: Schema.decodeUnknownSync(ApprovalExecutionIntent)(
+                payload.executionIntent,
+              ),
+            }
+          : {}),
         ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
         ...(sessionApprovalAvailable !== undefined ? { sessionApprovalAvailable } : {}),
         ...(sessionApprovalLabel ? { sessionApprovalLabel } : {}),

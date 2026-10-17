@@ -30,6 +30,11 @@ describe("ProviderCommandReactor queued prompt settlement", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.sendTurn).toHaveBeenCalledOnce();
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const sentMessage = readModel.threads[0]?.messages.find((message) => message.role === "user");
+    const sentInput = harness.sendTurn.mock.calls[0]?.[0] as
+      | { requestMessageId?: string }
+      | undefined;
+    expect(sentInput?.requestMessageId).toBe(sentMessage?.id);
     expect(readModel.threads[0]?.queuedPrompts).toEqual([]);
   });
 

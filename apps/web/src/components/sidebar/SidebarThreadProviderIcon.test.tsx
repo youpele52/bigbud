@@ -18,4 +18,17 @@ describe("SidebarThreadProviderIcon", () => {
     expect(markup).toMatch(/<span[^>]*><svg/);
     expect(markup).not.toMatch(/<svg[^>]*text-warning/);
   });
+
+  it("applies violet and the established breathing class together for child activity", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarThreadProviderIcon
+        icon={(props) => <svg {...props} />}
+        colorClass="text-violet-500"
+        animationClass="animate-breathe motion-reduce:animate-none"
+      />,
+    );
+    expect(markup).toContain("text-violet-500");
+    expect(markup).toContain("animate-breathe");
+    expect(markup).toContain("motion-reduce:animate-none");
+  });
 });

@@ -1,37 +1,23 @@
 import { assert, it } from "@effect/vitest";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Deferred, Effect, Fiber, Layer, Metric, Option, Ref, Stream } from "effect";
+import { Deferred, Effect, Fiber, Metric, Option, Ref, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vitest";
 
 const writeStartupStatus = vi.hoisted(() => vi.fn());
 vi.mock("./startupStatus.ts", () => ({ writeStartupStatus }));
 
-import { Keybindings } from "../keybindings/keybindings.ts";
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService.ts";
-import { Open } from "../utils/open.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { ServerLifecycleEvents, ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
-import {
-  OrchestrationProjectionPipeline,
-  type OrchestrationProjectionPipelineShape,
-} from "../orchestration/Services/ProjectionPipeline.ts";
-import { ServerConfig } from "./config.ts";
-import { ServerSettingsService } from "../ws/serverSettings.ts";
+import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import {
   launchStartupHeartbeat,
   makeCommandGate,
   ServerRuntimeStartupError,
   ServerRuntimeStartup,
-  ServerRuntimeStartupLive,
   watchRemoteAgentSourceChanges,
 } from "./serverRuntimeStartup.ts";
 import { runStartupPhase } from "./serverRuntimeStartup.browser.ts";
-import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
-import { EntityPurgeTest } from "../deletion/Services/EntityPurge.ts";
+import { startupLayer } from "./serverRuntimeStartup.test.fixtures.ts";
 
 const hasMetricSnapshot = (
   snapshots: ReadonlyArray<Metric.Metric.Snapshot>,
@@ -43,91 +29,6 @@ const hasMetricSnapshot = (
       snapshot.id === id &&
       Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
   );
-
-const startupLayer = (
-  events: Array<string>,
-  projectionPipeline: OrchestrationProjectionPipelineShape = {
-    bootstrap: Effect.void,
-    backfillUsageContributions: Effect.void,
-    ensureVerifiedBaselineThrough: () => Effect.void,
-    compactVerifiedPrefix: () => Effect.void,
-    projectEvent: () => Effect.void,
-  },
-  reactorStart: Effect.Effect<void> = Effect.sync(() => events.push("reactors.start")),
-  retentionStart?: Effect.Effect<void>,
-  analyticsRecord: (name: string) => Effect.Effect<void> = () => Effect.void,
-) => {
-  const nodeServices = NodeServices.layer;
-  const serverConfig = ServerConfig.layerTest(process.cwd(), {
-    prefix: "bigbud-startup-order-",
-  }).pipe(Layer.provide(nodeServices));
-
-  return ServerRuntimeStartupLive.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        nodeServices,
-        serverConfig,
-        EntityPurgeTest,
-        ServerLifecycleEventsLive,
-        ServerSettingsService.layerTest(),
-        Layer.succeed(AnalyticsService, {
-          record: analyticsRecord,
-          flush: Effect.void,
-        }),
-        Layer.succeed(OrchestrationProjectionPipeline, projectionPipeline),
-        Layer.succeed(Keybindings, {
-          start: Effect.void,
-          ready: Effect.void,
-          syncDefaultKeybindingsOnStartup: Effect.void,
-          loadConfigState: Effect.die("keybindings loadConfigState"),
-          getSnapshot: Effect.die("keybindings getSnapshot"),
-          streamChanges: Stream.empty,
-          upsertKeybindingRule: () => Effect.die("keybindings upsertKeybindingRule"),
-        }),
-        Layer.succeed(OrchestrationReactor, {
-          start: () => reactorStart,
-        }),
-        Layer.succeed(OrchestrationEngineService, {
-          getReadModel: () => Effect.succeed({ projects: [] } as never),
-          readEvents: () => Stream.empty,
-          readReplay: () => Effect.die("engine readReplay"),
-          dispatch: () => Effect.succeed({ sequence: 1 }),
-          streamDomainEvents: Stream.empty,
-        }),
-        Layer.succeed(ProjectionSnapshotQuery, {
-          getSnapshot: () => Effect.die("projection getSnapshot"),
-          getCounts: () => Effect.die("projection getCounts"),
-          getUsageEntries: () => Effect.die("projection getUsageEntries"),
-          getUsageHistoryStatus: () => Effect.die("projection getUsageHistoryStatus"),
-          getActiveProjectByWorkspaceRoot: () =>
-            Effect.die("projection getActiveProjectByWorkspaceRoot"),
-          getFirstActiveThreadIdByProjectId: () =>
-            Effect.die("projection getFirstActiveThreadIdByProjectId"),
-          getThreadCheckpointContext: () => Effect.die("projection getThreadCheckpointContext"),
-        }),
-        Layer.succeed(ProviderRegistry, {
-          getProviders: Effect.succeed([]),
-          refresh: () => Effect.succeed([]),
-          streamChanges: Stream.empty,
-          awaitFirstReadyProvider: Effect.succeed(Option.none()),
-        }),
-        Layer.succeed(Open, {
-          openBrowser: () => Effect.void,
-          openInEditor: () => Effect.void,
-          openInTerminal: () => Effect.void,
-          openPath: () => Effect.void,
-        }),
-        ...(retentionStart
-          ? [
-              Layer.mock(ThreadRetention)({
-                start: retentionStart,
-              }),
-            ]
-          : []),
-      ),
-    ),
-  );
-};
 
 it.effect("enqueueCommand waits for readiness and then drains queued work", () =>
   Effect.scoped(
@@ -198,6 +99,7 @@ it.effect("launchStartupHeartbeat does not block the caller while counts are loa
             ),
           getUsageEntries: () => Effect.succeed([]),
           getUsageHistoryStatus: () => Effect.succeed("ready"),
+          getUsageActiveDays: () => Effect.succeed([]),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
