@@ -1,4 +1,4 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, type Scope } from "effect";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
@@ -7,6 +7,7 @@ import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcAutomationHandlers } from "./wsRpcHandlers.automation";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
+import { makeWsRpcWorktreeHandlers } from "./wsRpcHandlers.worktrees.ts";
 import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
@@ -23,7 +24,10 @@ import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
-const makeWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+const makeWsRpcLayer = (
+  withBootstrapCommandLock: BootstrapCommandLock,
+  worktreeScope: Scope.Scope,
+) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock);
@@ -37,7 +41,8 @@ const makeWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
         ...makeWsRpcTeachHandlers(context),
         ...makeWsRpcUsageHandlers(context),
         ...makeWsRpcSubagentHandlers(context),
-        ...makeWsRpcGitTerminalHandlers(context),
+        ...makeWsRpcGitTerminalHandlers(context, worktreeScope),
+        ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcPluginHandlers(context),
       });
     }),
@@ -46,8 +51,10 @@ const makeWsRpcLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
 export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
   Layer.unwrap(
     Effect.gen(function* () {
+      // Own accepted mutations for the HTTP server's lifetime, not the temporary RPC layer build.
+      const worktreeScope = yield* Effect.scope;
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(withBootstrapCommandLock),
+        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
       );

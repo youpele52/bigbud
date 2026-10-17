@@ -189,6 +189,9 @@ export type DelegatedChildSummary = ThreadDetailDelegatedChild & {
 };
 
 export interface Thread {
+  worktreeBinding?:
+    | import("@bigbud/contracts/workspace/worktreeBinding.ts").WorktreeBinding
+    | undefined;
   id: ThreadId;
   codexThreadId: string | null;
   projectId: ProjectId;

@@ -1,9 +1,16 @@
-import { CircleCheckIcon, LoaderCircleIcon, TriangleAlertIcon, XCircleIcon } from "lucide-react";
+import {
+  CircleCheckIcon,
+  LoaderCircleIcon,
+  TriangleAlertIcon,
+  XCircleIcon,
+  XIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { observeThreadTurnStartRequest } from "./ThreadRecoveryNotice.clock";
 import { deriveServerTurnFailure } from "./ThreadRecoveryNotice.failure";
 import {
@@ -48,6 +55,11 @@ export function ThreadRecoveryNotice({
     () => deriveThreadRecoveryNotice({ request: turnStartRequest, clock, failure, nowMs }),
     [clock, failure, nowMs, turnStartRequest],
   );
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "recovery", [
+    turnStartRequest,
+    failure,
+    notice,
+  ]);
 
   useEffect(() => {
     if (nextChangeInMs === null) return;
@@ -58,7 +70,7 @@ export function ThreadRecoveryNotice({
   // A new request restarts the clock from the current time.
   useEffect(() => setNowMs(Date.now()), [turnStartRequest]);
 
-  if (!notice) return null;
+  if (!notice || dismissed) return null;
   const Icon = NOTICE_ICONS[notice.tone];
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
@@ -71,8 +83,8 @@ export function ThreadRecoveryNotice({
         <Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />
         <AlertTitle>{notice.title}</AlertTitle>
         <AlertDescription className="text-xs">{notice.description}</AlertDescription>
-        {notice.canContinueInNewThread && onContinueInNewThread ? (
-          <AlertAction>
+        <AlertAction>
+          {notice.canContinueInNewThread && onContinueInNewThread ? (
             <Button
               size="sm"
               variant="outline"
@@ -81,8 +93,16 @@ export function ThreadRecoveryNotice({
             >
               Continue in a new thread
             </Button>
-          </AlertAction>
-        ) : null}
+          ) : null}
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Dismiss recovery notice"
+            onClick={dismiss}
+          >
+            <XIcon className="size-3.5" aria-hidden />
+          </Button>
+        </AlertAction>
       </Alert>
     </div>
   );

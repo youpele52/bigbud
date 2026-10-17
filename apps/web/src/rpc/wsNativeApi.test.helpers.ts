@@ -47,6 +47,14 @@ export const projectDirectoryEventListeners = new Set<
 >();
 
 export const rpcClientMock: DeepMock<WsRpcClient> = {
+  worktrees: {
+    list: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+    select: vi.fn(),
+    operations: vi.fn(),
+    recover: vi.fn(),
+  },
   dispose: vi.fn(),
   reconnect: vi.fn(),
   terminal: {
@@ -147,6 +155,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     setThreadPinned: vi.fn(),
     readDocumentUrl: vi.fn(),
     writeHandoffDocument: vi.fn(),
+    retryTextGeneration: vi.fn(),
     startHandoffJob: vi.fn(),
     getHandoffJob: vi.fn(),
     getOpencodeV2ThreadToolsSetup: vi.fn(),

@@ -30,6 +30,7 @@ import type {
 import type { EditorId } from "../workspace/editor";
 import type { TerminalApplicationId } from "../workspace/terminalApplication";
 import type * as Git from "../workspace/git";
+import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
@@ -48,6 +49,18 @@ import type * as Subagents from "./subagents";
 import type * as Usage from "./usage";
 
 export interface NativeApi {
+  worktrees?: {
+    operations: (
+      input: Worktrees.WorktreeContext,
+    ) => Promise<readonly Worktrees.WorktreeOperationSummary[]>;
+    recover: (
+      input: Worktrees.WorktreeOperationRecovery,
+    ) => Promise<Worktrees.WorktreeOperationSummary>;
+    list: (input: Worktrees.WorktreeContext) => Promise<Worktrees.WorktreeInventory>;
+    create: (input: Worktrees.WorktreeCreate) => Promise<{ path: string; branch: string }>;
+    delete: (input: Worktrees.WorktreeMutation) => Promise<Worktrees.WorktreeOperationResult>;
+    select: (input: Worktrees.WorktreeSelection) => Promise<void>;
+  };
   dialogs: {
     pickFolder: () => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
@@ -217,6 +230,9 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: Server.ServerWriteHandoffDocumentInput,
     ) => Promise<Server.ServerWriteHandoffDocumentResult>;
+    retryTextGeneration: (
+      input: import("./rpc.textGeneration").RetryThreadTextGenerationInput,
+    ) => Promise<void>;
     startHandoffJob: (
       input: Handoff.ServerStartHandoffJobInput,
     ) => Promise<Handoff.ServerHandoffJob>;

@@ -4,7 +4,6 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
 import { ModelSelection } from "../orchestration/orchestration";
 import { ProviderKind } from "../orchestration/orchestration.provider";
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -14,7 +13,6 @@ import {
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
-import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -253,11 +251,8 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
-  textGenerationModelSelection: ModelSelection.pipe(
-    Schema.withDecodingDefault(() => ({
-      provider: DEFAULT_PROVIDER_KIND,
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[DEFAULT_PROVIDER_KIND],
-    })),
+  textGenerationModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(() => null),
   ),
 
   // Provider specific settings

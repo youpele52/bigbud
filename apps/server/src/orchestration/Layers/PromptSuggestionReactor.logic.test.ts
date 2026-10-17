@@ -5,7 +5,6 @@ import {
   buildPromptSuggestionTranscript,
   generatedSuggestionSkipReason,
   promptSuggestionCancelThreadId,
-  resolvePromptSuggestionModel,
 } from "./PromptSuggestionReactor.logic.ts";
 
 const TURN = TurnId.makeUnsafe("turn-2");
@@ -97,22 +96,6 @@ describe("generated prompt suggestion eligibility", () => {
       ] as never,
     });
     expect(generatedSuggestionSkipReason(suggested, TURN)).toBe("already-suggested");
-  });
-});
-
-describe("generated prompt suggestion model", () => {
-  const textGeneration = { provider: "codex", model: "gpt-5-mini" } as const;
-
-  it("uses the thread's model when bigbud text generation can run it", () => {
-    const threadModel = { provider: "claudeAgent", model: "claude-opus-4-1" } as const;
-    expect(resolvePromptSuggestionModel(threadModel, textGeneration)).toEqual(threadModel);
-  });
-
-  it("falls back to the text generation model otherwise", () => {
-    const threadModel = { provider: "opencodeV2", model: "anthropic/claude" } as const;
-    expect(resolvePromptSuggestionModel(threadModel as never, textGeneration)).toEqual(
-      textGeneration,
-    );
   });
 });
 

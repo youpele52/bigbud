@@ -131,7 +131,11 @@ export function ChatViewChatBody({
       />
       <ThreadErrorBanner
         error={base.activeThread!.error}
-        onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
+        threadId={base.activeThread!.id}
+        conditionIdentity={[
+          base.activeThread!.turnStartRequest,
+          base.activeThread!.activities.findLast((activity) => activity.tone === "error")?.id,
+        ]}
       />
       {base.isServerThread && base.activeThread ? (
         <ThreadRecoveryNotices thread={base.activeThread} />

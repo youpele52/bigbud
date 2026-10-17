@@ -66,7 +66,10 @@ export const rebuildTableSql = Effect.fn("rebuildTableSql")(function* (
   sql: SqlClient.SqlClient,
   table: string,
   transformSql: (tableSql: string) => string,
-  options?: { readonly children?: ReadonlyArray<string> },
+  options?: {
+    readonly children?: ReadonlyArray<string>;
+    readonly restoreChildObjectsAfterCopy?: boolean;
+  },
 ) {
   const tableSql = yield* readTableSql(sql, table);
   if (tableSql === null) return;
@@ -119,9 +122,14 @@ export const rebuildTableSql = Effect.fn("rebuildTableSql")(function* (
       return yield* Effect.die(new Error(`missing DDL for ${snapshot.child}`));
     }
     yield* sql.unsafe(snapshot.childSql);
-    yield* recreateObjects(sql, snapshot.objects);
+    if (!options?.restoreChildObjectsAfterCopy) yield* recreateObjects(sql, snapshot.objects);
     yield* copyTableRows(sql, snapshot.backup, snapshot.child);
     yield* sql.unsafe(`DROP TABLE ${quoteIdent(snapshot.backup)}`);
+  }
+  // Historical rows may predate admission triggers, or have terminal parents that
+  // intentionally cannot admit new children. Restore those guards after the exact copy.
+  if (options?.restoreChildObjectsAfterCopy) {
+    for (const snapshot of childSnapshots) yield* recreateObjects(sql, snapshot.objects);
   }
   yield* recreateObjects(sql, referencingTriggers);
 });

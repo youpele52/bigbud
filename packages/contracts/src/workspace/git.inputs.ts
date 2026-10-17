@@ -43,6 +43,7 @@ export type GitPullInput = typeof GitPullInput.Type;
 
 export const GitRunStackedActionInput = Schema.Struct({
   ...ExecutionTargetInputShape,
+  threadId: Schema.optional(ThreadId),
   actionId: TrimmedNonEmptyStringSchema,
   cwd: TrimmedNonEmptyStringSchema,
   action: GitStackedAction,

@@ -57,6 +57,7 @@
       "require": "./src/server/rpc.mobile.ts"
     },
     "./server/rpc.retention": "./src/server/rpc.retention.ts",
+    "./server/rpc.worktrees": "./src/server/rpc.worktrees.ts",
     "./server/subagents": "./src/server/subagents.ts",
     "./server/server": "./src/server/server.ts",
     "./server/server.opencodeV2ThreadToolsSetup": "./src/server/server.opencodeV2ThreadToolsSetup.ts",

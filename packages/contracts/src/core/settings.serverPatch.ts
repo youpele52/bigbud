@@ -131,7 +131,7 @@ export const ServerSettingsPatch = Schema.Struct({
   generatedPromptSuggestions: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
-  textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  textGenerationModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelectionPatch)),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(Schema.String),

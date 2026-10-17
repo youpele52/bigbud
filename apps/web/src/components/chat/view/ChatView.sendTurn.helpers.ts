@@ -103,6 +103,9 @@ export function buildThreadBootstrap(input: {
             interactionMode: input.interactionMode,
             branch: input.thread.branch,
             worktreePath: input.thread.worktreePath,
+            ...(input.thread.worktreeBinding
+              ? { worktreeBinding: input.thread.worktreeBinding }
+              : {}),
             createdAt: input.thread.createdAt,
           },
         }

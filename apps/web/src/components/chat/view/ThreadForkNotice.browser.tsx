@@ -15,6 +15,8 @@ import { render } from "vitest-browser-react";
 
 import type { Thread } from "../../../models/types/app.types";
 import { ThreadForkNotice } from "./ThreadForkNotice";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
+import { deriveSourceForkNotice } from "./ThreadForkNotice.logic";
 
 type NoticeThread = Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
 
@@ -22,11 +24,12 @@ async function renderAt(
   thread: NoticeThread,
   onCarry?: ComponentProps<typeof ThreadForkNotice>["onCarryToContinuedThread"],
   isForkPresent: (forkThreadId: string) => boolean = () => true,
+  threadId = "fork-notice-test",
 ) {
   const root = createRootRoute({
     component: () => (
       <ThreadForkNotice
-        thread={thread}
+        thread={{ ...thread, id: threadId as ThreadId }}
         isForkPresent={isForkPresent}
         onCarryToContinuedThread={onCarry}
       />
@@ -49,6 +52,7 @@ const activity = (id: string, kind: string, createdAt: string, payload: unknown)
 describe("ThreadForkNotice", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
   });
 
   it("names the source in a fork and links back to it", async () => {
@@ -165,5 +169,44 @@ describe("ThreadForkNotice", () => {
       pendingMessageId: "m-2",
       failureEventId: "failure-2",
     });
+  });
+
+  it("remembers closing continuation without changing lineage and re-arms for a different target", async () => {
+    const thread: NoticeThread = {
+      messages: [],
+      activities: [
+        activity("closed-fork", "thread.forked", "2026-10-15T10:00:00.000Z", {
+          forkThreadId: "continued-one",
+          reason: "manual",
+        }),
+      ],
+    };
+    const before = structuredClone(thread);
+    await renderAt(thread);
+    await page.getByRole("button", { name: "Dismiss continuation notice" }).click();
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    expect(thread).toEqual(before);
+    expect(deriveSourceForkNotice(thread, () => true)?.forkThreadId).toBe("continued-one");
+    document.body.innerHTML = "";
+    await renderAt(thread);
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    document.body.innerHTML = "";
+    await renderAt(thread, undefined, () => true, "another-source");
+    await expect
+      .element(page.getByRole("link", { name: "Open the continued thread" }))
+      .toBeVisible();
+    document.body.innerHTML = "";
+    await renderAt({
+      ...thread,
+      activities: [
+        activity("new-fork", "thread.forked", "2026-10-15T10:00:00.000Z", {
+          forkThreadId: "continued-two",
+          reason: "manual",
+        }),
+      ],
+    });
+    await expect
+      .element(page.getByRole("link", { name: "Open the continued thread" }))
+      .toHaveAttribute("href", "/continued-two");
   });
 });

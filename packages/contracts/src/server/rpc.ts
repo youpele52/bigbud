@@ -1,4 +1,12 @@
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import {
+  WsWorktreeOperationsRpc,
+  WsWorktreeRecoverRpc,
+  WsWorktreeListRpc,
+  WsWorktreeCreateRpc,
+  WsWorktreeDeleteRpc,
+  WsWorktreeSelectRpc,
+} from "./rpc.worktrees";
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
@@ -152,7 +160,17 @@ export * from "./plugins";
 export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
+export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+
 export const WsRpcGroup = RpcGroup.make(
+  WsServerRetryTextGenerationRpc,
+  WsWorktreeOperationsRpc,
+  WsWorktreeRecoverRpc,
+  WsWorktreeListRpc,
+  WsWorktreeCreateRpc,
+  WsWorktreeDeleteRpc,
+  WsWorktreeSelectRpc,
   WsServerOpencodeV2ThreadToolsSetupRpc,
   WsPluginsGitAvailabilityRpc,
   WsPluginsListCatalogRpc,

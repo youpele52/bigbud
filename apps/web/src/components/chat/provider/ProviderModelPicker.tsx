@@ -146,6 +146,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
     setIsMenuOpen(false);
   };
 
+  const triggerLabel = props.triggerLabel ?? selectedModelLabel;
   return (
     <Menu
       open={isMenuOpen}
@@ -188,10 +189,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
               "size-4 shrink-0",
               providerIconClassName(activeProvider, "text-muted-foreground/70"),
               props.activeProviderIconClassName,
+              props.triggerLabel && "hidden",
             )}
           />
           <span className="min-w-0 flex-1 truncate">
-            {noComposerProviders ? "No composer providers" : selectedModelLabel}
+            {noComposerProviders ? "No composer providers" : triggerLabel}
           </span>
           <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
         </span>

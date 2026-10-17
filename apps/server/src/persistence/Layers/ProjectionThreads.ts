@@ -15,7 +15,7 @@ import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
 import { toPersistenceSqlError } from "../Errors.ts";
-import { captureWorktreePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
+import { resolveProjectionWorktreeIdentity } from "./ProjectionThreads.identity.ts";
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
 import {
@@ -344,13 +344,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
     Effect.gen(function* () {
-      const worktreeIdentity = yield* Effect.tryPromise({
-        try: () =>
-          row.worktreePath === null
-            ? Promise.resolve(null)
-            : captureWorktreePathIdentity(row.worktreePath),
-        catch: () => null,
-      });
+      const worktreeIdentity = yield* resolveProjectionWorktreeIdentity(
+        sql,
+        row.threadId,
+        row.worktreePath,
+      );
       yield* upsertProjectionThreadRow({ ...row, worktreeIdentity });
     }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")));
 

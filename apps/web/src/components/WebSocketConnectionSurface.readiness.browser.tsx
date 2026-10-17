@@ -116,6 +116,52 @@ describe("real config readiness surface", () => {
     }
   });
 
+  it("keeps recovery styling and ConnectIcon when reconnect changes to configuration retry", async () => {
+    recordWsConnectionAttempt("ws://localhost:3020/ws");
+    recordWsProtocolRecovery(true);
+    const generation = beginServerConfigReadiness(false);
+    updateServerConfigReadiness(generation, { stream: "exhausted", failure: "protocol_failed" });
+    const retry = vi.fn();
+    const stop = registerServerConfigRetry(generation, retry);
+    try {
+      const screen = await render(
+        <AppAtomRegistryProvider>
+          <WebSocketConnectionSurface>
+            <main>Shell</main>
+          </WebSocketConnectionSurface>
+        </AppAtomRegistryProvider>,
+      );
+      const reconnect = screen.getByRole("button", { name: "Reconnect", exact: true });
+      await expect.element(reconnect).toBeVisible();
+      const reconnectClasses = reconnect.element().className;
+
+      recordWsConnectionOpened();
+
+      const configurationRetry = screen.getByRole("button", {
+        name: "Retry configuration",
+        exact: true,
+      });
+      await expect.element(configurationRetry).toHaveClass("text-muted-foreground");
+      expect(configurationRetry.element().className).toBe(reconnectClasses);
+      expect(
+        Array.from(configurationRetry.element().querySelectorAll("svg path"), (path) =>
+          path.getAttribute("d"),
+        ),
+      ).toEqual(ConnectIcon.map(([, attributes]) => attributes.d));
+      expect(getComputedStyle(configurationRetry.element().parentElement!).justifyContent).toBe(
+        "center",
+      );
+      await expect
+        .element(screen.getByRole("button", { name: "Reload app", exact: true }))
+        .toHaveClass("bg-primary");
+      await configurationRetry.click();
+      expect(retry).toHaveBeenCalledOnce();
+      expect(mocks.reconnect).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+  });
+
   it("offers physical reconnect without reload and re-establishes a stopped config owner", async () => {
     recordWsConnectionAttempt("ws://localhost:3020/ws");
     recordWsConnectionOpened();

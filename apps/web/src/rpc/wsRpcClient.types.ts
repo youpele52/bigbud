@@ -125,6 +125,7 @@ export interface GitRunStackedActionOptions {
 }
 
 export interface WsRpcClient {
+  readonly worktrees: NonNullable<NativeApi["worktrees"]>;
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;
   readonly terminal: {
@@ -269,6 +270,9 @@ export interface WsRpcClient {
     readonly setThreadPinned: RpcUnaryMethod<typeof WS_METHODS.serverSetThreadPinned>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly retryTextGeneration: (
+      input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
+    ) => Promise<void>;
     readonly startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
     readonly getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
     readonly getOpencodeV2ThreadToolsSetup: (

@@ -234,6 +234,7 @@ export function createWsNativeApi(): NativeApi {
         openBrowserPanel({ url: nextUrl });
       },
     },
+    worktrees: rpcClient.worktrees,
     git: {
       pull: rpcClient.git.pull,
       fetch: rpcClient.git.fetch,
@@ -288,6 +289,7 @@ export function createWsNativeApi(): NativeApi {
       setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
+      retryTextGeneration: rpcClient.server.retryTextGeneration,
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
       getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,

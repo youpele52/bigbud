@@ -10,6 +10,7 @@ import { makeProviderCommandHandlers } from "./ProviderCommandReactorHandlers.ts
 import { makePromptSuggestionReactorStart } from "./PromptSuggestionReactor.live.ts";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
+import { makeTextGenerationRequestRecovery } from "./ProviderCommandReactor.textGenerationRecovery.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -20,6 +21,7 @@ type ProviderIntentEvent = Extract<
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
       | "thread.message-sent"
+      | "thread.activity-appended"
       | "thread.turn-interrupt-requested"
       | "thread.turn-steer-requested"
       | "thread.approval-response-requested"
@@ -35,6 +37,7 @@ const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const handlers = yield* makeProviderCommandHandlers;
   const startPromptSuggestions = yield* makePromptSuggestionReactorStart;
+  const recoverTextGenerationRequests = yield* makeTextGenerationRequestRecovery;
   const cleanupRepositoryService = yield* Effect.serviceOption(DirectResourceCleanupRepository);
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
@@ -80,6 +83,9 @@ const make = Effect.gen(function* () {
         event.type === "thread.runtime-mode-set" ||
         event.type === "thread.turn-start-requested" ||
         event.type === "thread.message-sent" ||
+        (event.type === "thread.activity-appended" &&
+          (event.payload.activity.kind === "text-generation.model-succeeded" ||
+            event.payload.activity.kind === "text-generation.retry-requested")) ||
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.turn-steer-requested" ||
         event.type === "thread.approval-response-requested" ||
@@ -105,6 +111,7 @@ const make = Effect.gen(function* () {
     // Generated prompt suggestions (Phase 7) run beside, never inside, the intent workers.
     yield* startPromptSuggestions();
     yield* Effect.yieldNow;
+    yield* recoverTextGenerationRequests(handlers.processTextGenerationActivity);
 
     let cursorAt = "";
     let cursorId = "";

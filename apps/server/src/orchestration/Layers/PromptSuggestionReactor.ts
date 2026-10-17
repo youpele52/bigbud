@@ -13,7 +13,6 @@
 import {
   CommandId,
   EventId,
-  type ModelSelection,
   type OrchestrationThread,
   type ProviderKind,
   type ProviderRuntimeEvent,
@@ -43,8 +42,8 @@ import {
   buildPromptSuggestionTranscript,
   generatedSuggestionSkipReason,
   promptSuggestionCancelThreadId,
-  resolvePromptSuggestionModel,
 } from "./PromptSuggestionReactor.logic.ts";
+import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGeneration.success.ts";
 
 export const PROMPT_SUGGESTION_TIMEOUT = Duration.seconds(15);
 export const PROMPT_SUGGESTION_MAX_CONCURRENT = 2;
@@ -105,14 +104,13 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
         yield* Effect.logDebug("generated prompt suggestion skipped", { threadId, turnId, skip });
         return;
       }
-      const modelSelection: ModelSelection = resolvePromptSuggestionModel(
-        thread.modelSelection,
-        settings.textGenerationModelSelection,
-      );
+      const successfulModelSelection = lastSuccessfulThreadModel(thread);
+      const modelSelection = settings.textGenerationModelSelection ?? successfulModelSelection;
+      if (!modelSelection) return;
       const cwd = yield* deps.resolveCwd(thread);
       const generated = yield* permits.withPermits(1)(
         deps.textGeneration
-          .generatePromptSuggestion({ cwd, transcript, modelSelection })
+          .generatePromptSuggestion({ cwd, transcript, modelSelection, successfulModelSelection })
           .pipe(Effect.timeout(deps.timeout ?? PROMPT_SUGGESTION_TIMEOUT)),
       );
       const latest = yield* readThread(threadId);
@@ -123,7 +121,7 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
         turnId,
         raw: generated.suggestion,
         source: "generated",
-        provider: modelSelection.provider,
+        provider: generated.actualModelSelection?.provider ?? modelSelection.provider,
         eventId: EventId.makeUnsafe(`prompt-suggestion:${threadId}:${turnId}`),
         createdAt,
       });

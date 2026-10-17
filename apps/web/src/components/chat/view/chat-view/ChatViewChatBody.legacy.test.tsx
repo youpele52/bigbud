@@ -28,7 +28,7 @@ vi.mock("../ThreadRecoveryNotices", () => ({ ThreadRecoveryNotices: () => null }
 function makeProps(provider: "opencode" | "opencodeV2") {
   return {
     base: {
-      activeThread: { id: "thread-1", modelSelection: { provider }, error: null },
+      activeThread: { id: "thread-1", modelSelection: { provider }, error: null, activities: [] },
       isServerThread: true,
       settings: { providers: { opencodeV2: {} } },
     },

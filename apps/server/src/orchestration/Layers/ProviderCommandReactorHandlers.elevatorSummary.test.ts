@@ -133,11 +133,14 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
             model: "test-model",
           },
           worktreePath: "/tmp/project",
+          activities: [],
         };
         const services = {
           resolveThread: () => Effect.succeed(thread),
           serverSettingsService: {
-            getSettings: Effect.succeed({}),
+            getSettings: Effect.succeed({
+              textGenerationModelSelection: { provider: "codex", model: "explicit-model" },
+            }),
           },
           orchestrationEngine: {
             getReadModel: () =>
@@ -159,7 +162,18 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
 
         yield* maybeGenerateThreadElevatorSummary(services)({ threadId });
 
-        expect(dispatch).not.toHaveBeenCalled();
+        expect(dispatch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "thread.activity.append",
+            activity: expect.objectContaining({
+              kind: "text-generation.failed",
+              payload: { operation: "summary" },
+            }),
+          }),
+        );
+        expect(dispatch).not.toHaveBeenCalledWith(
+          expect.objectContaining({ type: "thread.meta.update" }),
+        );
       }),
     );
   });

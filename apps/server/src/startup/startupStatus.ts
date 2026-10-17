@@ -18,6 +18,10 @@ export function writeStartupStatus(
   status: StartupStatus,
   reason?: ServerStartupFailureReason,
 ): void {
+  // Keep readiness visible in development logs as well as the desktop-only pipe.
+  console.info(
+    `[startup] status=${status}${status === "error" ? ` reason=${reason ?? "unknown"}` : ""}`,
+  );
   const startupStatusFd = Number(process.env.BIGBUD_STARTUP_STATUS_FD);
   if (!Number.isInteger(startupStatusFd) || startupStatusFd < 0) return;
   try {

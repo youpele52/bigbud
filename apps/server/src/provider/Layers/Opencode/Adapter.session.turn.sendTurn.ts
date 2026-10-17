@@ -86,7 +86,16 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
           input.threadId,
           record.sessionEpoch,
           "turn.started",
-          record.model ? { model: record.model } : {},
+          record.model
+            ? {
+                model: record.model,
+                modelSelection: {
+                  provider,
+                  model: record.model,
+                  ...(record.providerID ? { subProviderID: record.providerID } : {}),
+                },
+              }
+            : {},
           { turnId },
         ),
       ]);
@@ -141,6 +150,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
           // inactivity recovery probe cannot both emit terminal events.
           record.promptSettlementTurnId = turnId;
           const events = yield* toPromptTurnEvents({
+            provider,
             record,
             threadId: input.threadId,
             turnId,

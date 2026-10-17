@@ -99,6 +99,7 @@ export const WS_METHODS = {
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",
   serverStartHandoffJob: "server.startHandoffJob",
+  serverRetryTextGeneration: "server.retryTextGeneration",
   serverGetHandoffJob: "server.getHandoffJob",
   serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",

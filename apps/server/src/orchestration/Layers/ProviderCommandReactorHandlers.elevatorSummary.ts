@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  TextGenerationError,
   type OrchestrationMessage,
   type OrchestrationThread,
   type ThreadId,
@@ -11,6 +12,12 @@ import { sanitizeElevatorSummary } from "../../git/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
+import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGeneration.success.ts";
+import { sameTextGenerationWorkspace } from "../../git/Layers/InternalTextGeneration.requests.ts";
+import {
+  recordThreadTextGenerationStatus,
+  withThreadTextGenerationJob,
+} from "../../git/Layers/InternalTextGeneration.status.ts";
 
 const THREAD_ELEVATOR_SUMMARY_INITIAL_MESSAGE_COUNT = 5;
 const THREAD_ELEVATOR_SUMMARY_REFRESH_MESSAGE_INTERVAL = 10;
@@ -77,17 +84,43 @@ function buildElevatorSummaryTranscript(messages: ReadonlyArray<OrchestrationMes
   return sections.join("\n\n");
 }
 
-export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) =>
-  Effect.fn("maybeGenerateThreadElevatorSummary")(function* (input: {
+export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) => {
+  const generate = Effect.fn("maybeGenerateThreadElevatorSummary")(function* (input: {
     readonly threadId: ThreadId;
+    readonly force?: boolean;
   }) {
     const thread = yield* services.resolveThread(input.threadId);
-    if (!thread || !shouldRefreshThreadElevatorSummary({ thread })) {
+    if (thread?.archivedAt || thread?.deletingAt || thread?.deletedAt) return;
+    if (!thread || (!input.force && !shouldRefreshThreadElevatorSummary({ thread }))) {
       return;
     }
+    const previousStatus = thread.activities.findLast(
+      (activity) =>
+        (activity.kind === "text-generation.failed" ||
+          activity.kind === "text-generation.completed") &&
+        typeof activity.payload === "object" &&
+        activity.payload !== null &&
+        "operation" in activity.payload &&
+        activity.payload.operation === "summary",
+    );
+    if (!input.force && previousStatus?.kind === "text-generation.failed") return;
+    if (input.force)
+      yield* recordThreadTextGenerationStatus(
+        services.orchestrationEngine,
+        input.threadId,
+        "summary",
+        "started",
+      );
 
     const transcript = buildElevatorSummaryTranscript(thread.messages);
     if (transcript.length === 0) {
+      if (input.force)
+        yield* recordThreadTextGenerationStatus(
+          services.orchestrationEngine,
+          input.threadId,
+          "summary",
+          "failed",
+        );
       return;
     }
 
@@ -95,6 +128,16 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
     const serverSettings = yield* services.serverSettingsService.getSettings.pipe(
       Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
     );
+    if (!serverSettings.textGenerationModelSelection && !lastSuccessfulThreadModel(thread)) {
+      if (input.force)
+        yield* recordThreadTextGenerationStatus(
+          services.orchestrationEngine,
+          input.threadId,
+          "summary",
+          "failed",
+        );
+      return;
+    }
     const readModel = yield* services.orchestrationEngine.getReadModel();
     const generationCwd =
       resolveThreadWorkspaceCwd({
@@ -107,18 +150,62 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
         cwd: generationCwd,
         transcript,
         modelSelection: thread.modelSelection,
+        successfulModelSelection: lastSuccessfulThreadModel(thread),
       })
       .pipe(
         Effect.map((generated) => sanitizeElevatorSummary(generated.summary)),
+        Effect.flatMap((summary) =>
+          summary.length > 0
+            ? Effect.succeed(summary)
+            : Effect.fail(
+                new TextGenerationError({
+                  operation: "generateThreadElevatorSummary",
+                  detail: "Provider returned an empty summary.",
+                  kind: "provider",
+                }),
+              ),
+        ),
         Effect.catchCause((cause) =>
-          Effect.logWarning("provider command reactor failed to generate thread elevator summary", {
-            threadId: input.threadId,
-            cause: Cause.pretty(cause),
-          }).pipe(Effect.as("")),
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.interrupt
+            : Effect.logWarning(
+                "provider command reactor failed to generate thread elevator summary",
+                {
+                  threadId: input.threadId,
+                  cause: Cause.pretty(cause),
+                },
+              ).pipe(
+                Effect.andThen(
+                  recordThreadTextGenerationStatus(
+                    services.orchestrationEngine,
+                    input.threadId,
+                    "summary",
+                    "failed",
+                  ),
+                ),
+                Effect.as(""),
+              ),
         ),
       );
 
     if (summary.length === 0) {
+      return;
+    }
+    const latest = yield* services.resolveThread(input.threadId);
+    if (!latest) return;
+    if (
+      latest.archivedAt ||
+      latest.deletingAt ||
+      latest.deletedAt ||
+      !sameTextGenerationWorkspace(thread, latest)
+    ) {
+      if (input.force)
+        yield* recordThreadTextGenerationStatus(
+          services.orchestrationEngine,
+          input.threadId,
+          "summary",
+          "unchanged",
+        );
       return;
     }
 
@@ -131,6 +218,14 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
         elevatorSummaryMessageCount: visibleMessageCount,
       })
       .pipe(
+        Effect.tap(() =>
+          recordThreadTextGenerationStatus(
+            services.orchestrationEngine,
+            input.threadId,
+            "summary",
+            "completed",
+          ),
+        ),
         Effect.catchCause((cause) =>
           Effect.logWarning("provider command reactor failed to generate thread elevator summary", {
             threadId: input.threadId,
@@ -139,3 +234,12 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
         ),
       );
   });
+  return (input: Parameters<typeof generate>[0]) =>
+    withThreadTextGenerationJob(
+      services.orchestrationEngine,
+      input.threadId,
+      "summary",
+      generate(input),
+      input.force === true,
+    );
+};

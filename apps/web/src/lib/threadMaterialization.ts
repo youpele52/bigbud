@@ -84,6 +84,7 @@ async function materializeOwner(
       interactionMode: settings?.interactionMode ?? draft.interactionMode,
       branch: draft.branch,
       worktreePath: draft.worktreePath,
+      ...(draft.worktreeBinding ? { worktreeBinding: draft.worktreeBinding } : {}),
       createdAt: draft.createdAt,
     });
   }

@@ -7,6 +7,7 @@ import {
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
 import { ModelSelection, ProviderInteractionMode, RuntimeMode } from "./orchestration.provider";
+import { WorktreeBinding } from "../workspace/worktreeBinding";
 
 const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   projectId: ProjectId,
@@ -19,6 +20,7 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  worktreeBinding: Schema.optional(WorktreeBinding),
   createdAt: IsoDateTime,
 });
 

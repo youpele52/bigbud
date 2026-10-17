@@ -22,7 +22,6 @@ import {
   expandProviderDetails,
   getAddCustomModelError,
   getLatestProviderCheckedAt,
-  shouldClearTextGenerationSelection,
 } from "./ProvidersSettingsSection.logic";
 
 export function ProvidersSettingsSection({
@@ -309,12 +308,6 @@ export function ProvidersSettingsSection({
                   );
                 return;
               }
-              const shouldClearModelSelection = shouldClearTextGenerationSelection({
-                settings,
-                serverProviders,
-                provider: card.provider,
-                checked: Boolean(checked),
-              });
               updateSettings({
                 providers: {
                   ...settings.providers,
@@ -323,12 +316,6 @@ export function ProvidersSettingsSection({
                     enabled: Boolean(checked),
                   },
                 },
-                ...(shouldClearModelSelection
-                  ? {
-                      textGenerationModelSelection:
-                        DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
-                    }
-                  : {}),
               });
             }}
             onBinaryPathChange={(value) =>

@@ -157,6 +157,14 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.shellOpenInTerminal](input)),
       openPath: (input) => transport.request((client) => client[WS_METHODS.shellOpenPath](input)),
     },
+    worktrees: {
+      operations: (input) => transport.request((client) => client["worktrees.operations"](input)),
+      recover: (input) => transport.request((client) => client["worktrees.recover"](input)),
+      list: (input) => transport.request((client) => client["worktrees.list"](input)),
+      create: (input) => transport.request((client) => client["worktrees.create"](input)),
+      delete: (input) => transport.request((client) => client["worktrees.delete"](input)),
+      select: (input) => transport.request((client) => client["worktrees.select"](input)),
+    },
     git: {
       pull: (input) => {
         const operationInput = withGitMutationOperationId(input);
@@ -264,6 +272,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      retryTextGeneration: (input) =>
+        transport.request((client) => client[WS_METHODS.serverRetryTextGeneration](input)),
       startHandoffJob: (input) =>
         transport.request((client) => client[WS_METHODS.serverStartHandoffJob](input)),
       getHandoffJob: (input) =>

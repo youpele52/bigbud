@@ -1,12 +1,19 @@
 import "../../../index.css";
 
-import type { MessageId, OrchestrationThreadActivity, ThreadId } from "@bigbud/contracts";
+import {
+  EventId,
+  type MessageId,
+  type OrchestrationThreadActivity,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import type { ChatMessage, ThreadTurnStartRequest } from "../../../models/types/app.types";
 import { ThreadRecoveryNotice } from "./ThreadRecoveryNotice";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
+import { deriveServerTurnFailure } from "./ThreadRecoveryNotice.failure";
 
 const pending = (requestedAt: string): ThreadTurnStartRequest => ({
   messageId: "user-1" as MessageId,
@@ -20,6 +27,7 @@ describe("ThreadRecoveryNotice", () => {
   afterEach(() => {
     vi.useRealTimers();
     document.body.innerHTML = "";
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
   });
 
   it("appears as a polite blue status only after 5 s without a started turn", async () => {
@@ -106,5 +114,51 @@ describe("ThreadRecoveryNotice", () => {
     const status = page.getByRole("status");
     await expect.element(status).toHaveAttribute("data-recovery-notice", "degraded");
     await expect.element(page.getByText("Continued in a fresh session")).toBeVisible();
+  });
+
+  it("remembers closing a failure across navigation, scopes it to the thread, and re-arms on a new failure", async () => {
+    const thread = {
+      id: "dismiss-recovery" as ThreadId,
+      messages: [
+        { id: "pending", role: "user", createdAt: "2026-10-15T10:00:00.000Z", turnId: null },
+      ] as ChatMessage[],
+      activities: [
+        {
+          id: "failure-close",
+          kind: "provider.turn.start.failed",
+          tone: "error",
+          summary: "Failed",
+          payload: { failureClass: "session-dead" },
+          turnId: null,
+          createdAt: "2026-10-15T10:00:00.000Z",
+        },
+      ] as OrchestrationThreadActivity[],
+    };
+    const before = structuredClone(thread);
+    const onContinue = vi.fn();
+    const screen = await render(
+      <ThreadRecoveryNotice thread={thread} onContinueInNewThread={onContinue} />,
+    );
+    await page.getByRole("button", { name: "Dismiss recovery notice" }).click();
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    expect(thread).toEqual(before);
+    expect(deriveServerTurnFailure(thread)?.failureClass).toBe("session-dead");
+    expect(onContinue).not.toHaveBeenCalled();
+    await screen.unmount();
+    const reopened = await render(<ThreadRecoveryNotice thread={thread} />);
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    await reopened.rerender(
+      <ThreadRecoveryNotice thread={{ ...thread, id: "other-thread" as ThreadId }} />,
+    );
+    await expect.element(page.getByText("Could not reconnect")).toBeVisible();
+    await reopened.rerender(
+      <ThreadRecoveryNotice
+        thread={{
+          ...thread,
+          activities: [{ ...thread.activities[0]!, id: EventId.makeUnsafe("new-failure") }],
+        }}
+      />,
+    );
+    await expect.element(page.getByText("Could not reconnect")).toBeVisible();
   });
 });

@@ -1,4 +1,6 @@
 import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { makeWorktreeReservations } from "../../git/Layers/WorktreeReservations.ts";
 import {
   Cause,
   Deferred,
@@ -79,6 +81,9 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const notes = yield* Effect.serviceOption(ProjectionNoteRepository);
   const kanban = yield* Effect.serviceOption(ProjectionKanbanRepository);
   const threadDeletion = yield* ThreadDeletion;
+  // Reservations are persisted SQL state, available before hydration or startup flush recovery.
+  const workspaceSql = yield* SqlClient.SqlClient;
+  const worktreeReservations = makeWorktreeReservations(workspaceSql);
 
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
@@ -133,7 +138,10 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       readModel,
       createdAt: new Date().toISOString(),
     });
-    if (recoveryCommand) {
+    const workspaceAllowed = recoveryCommand
+      ? yield* worktreeReservations.assertAllows(recoveryCommand).pipe(Effect.result)
+      : null;
+    if (recoveryCommand && workspaceAllowed?._tag === "Success") {
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer(
         {
@@ -152,6 +160,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         commandSemaphore.withPermits(1)(
           prepareCommandState(envelope.command).pipe(
             Effect.andThen(deletionFence.assertAllows(envelope.command)),
+            Effect.andThen(
+              worktreeReservations.assertAllows(
+                envelope.command,
+                envelope.worktreeOperationId,
+                envelope.expectedWorktreePath,
+                envelope.expectedWorktreeIdentity,
+              ),
+            ),
             Effect.matchEffect({
               onFailure: (error) => {
                 if (!Schema.is(OrchestrationCommandInvariantError)(error)) {
@@ -246,6 +262,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer({
+        ...(options?.worktreeOperationId
+          ? { worktreeOperationId: options.worktreeOperationId }
+          : {}),
+        ...(options?.expectedWorktreePath
+          ? { expectedWorktreePath: options.expectedWorktreePath }
+          : {}),
+        ...(options?.expectedWorktreeIdentity
+          ? { expectedWorktreeIdentity: options.expectedWorktreeIdentity }
+          : {}),
         command,
         payloadDigest: calculateCommandPayloadDigest(command),
         result,
@@ -257,6 +282,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       });
     });
   const engine: OrchestrationEngineShape = {
+    withWorkspaceBarrier: (effect) => commandSemaphore.withPermits(1)(effect),
     serverEpoch,
     threadDeletion,
     getCommandOutcome,

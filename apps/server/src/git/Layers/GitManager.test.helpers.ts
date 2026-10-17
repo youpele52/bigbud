@@ -196,7 +196,9 @@ export function makeManager(input?: {
     prefix: "t3-git-manager-test-",
   });
 
-  const serverSettingsLayer = ServerSettingsService.layerTest();
+  const serverSettingsLayer = ServerSettingsService.layerTest({
+    textGenerationModelSelection: { provider: "codex", model: "fixture-model" },
+  });
 
   const gitCoreLayer = input?.gitCore
     ? Layer.succeed(GitCore, input.gitCore)

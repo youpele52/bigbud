@@ -253,6 +253,15 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
           type: "turn.completed",
           payload: {
             state: outcome,
+            ...(last?.model
+              ? {
+                  actualModelSelection: {
+                    provider: "opencodeV2" as const,
+                    model: last.model.id,
+                    subProviderID: last.model.providerID,
+                  },
+                }
+              : {}),
             ...(outcome === "failed" ? { errorMessage: v2NativeFailureMessage(last) } : {}),
             totalCostUsd: projection.assistants.reduce(
               (sum, message) => sum + (message.cost ?? 0),

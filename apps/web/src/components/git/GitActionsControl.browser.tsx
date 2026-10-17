@@ -1,13 +1,16 @@
-// TODO: Split by concern when this file is next touched.
-import { ThreadId } from "@bigbud/contracts";
-import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
-
-const THREAD_A = ThreadId.makeUnsafe("thread-a");
-const THREAD_B = ThreadId.makeUnsafe("thread-b");
-const GIT_CWD = "/repo/project";
-const BRANCH_NAME = "feature/toast-scope";
+import {
+  THREAD_A,
+  THREAD_B,
+  GIT_CWD,
+  BRANCH_NAME,
+  branchQueryData,
+  Harness,
+  findButtonByText,
+  findMenuTrigger,
+  findMenuItemByText,
+} from "./GitActionsControl.browser.fixtures";
 
 const {
   activeDraftThreadRef,
@@ -73,6 +76,8 @@ vi.mock("@tanstack/react-query", async () => {
       if (options.queryKey?.[0] === "git-status") {
         return {
           data: {
+            isRepo: true,
+            hasOriginRemote: true,
             branch: BRANCH_NAME,
             hasWorkingTreeChanges: false,
             workingTree: { files: [], insertions: 0, deletions: 0 },
@@ -87,18 +92,7 @@ vi.mock("@tanstack/react-query", async () => {
 
       if (options.queryKey?.[0] === "git-branches") {
         return {
-          data: {
-            isRepo: true,
-            hasOriginRemote: true,
-            branches: [
-              {
-                name: BRANCH_NAME,
-                current: true,
-                isDefault: false,
-                worktreePath: null,
-              },
-            ],
-          },
+          data: branchQueryData,
           error: null,
         };
       }
@@ -131,9 +125,14 @@ vi.mock("../../stores/composer", () => ({
 }));
 
 vi.mock("~/lib/gitReactQuery", () => ({
+  createGitMutationOperationId: vi.fn(() => "operation-1"),
   gitBranchesQueryOptions: vi.fn(() => ({ queryKey: ["git-branches"] })),
   gitInitMutationOptions: vi.fn(() => ({ __kind: "init" })),
+  gitFetchMutationOptions: vi.fn(() => ({ __kind: "fetch" })),
+  gitDiscardChangesMutationOptions: vi.fn(() => ({ __kind: "discard" })),
   gitMutationKeys: {
+    fetch: vi.fn(() => ["fetch"]),
+    discardChanges: vi.fn(() => ["discard"]),
     pull: vi.fn(() => ["pull"]),
     runStackedAction: vi.fn(() => ["run-stacked-action"]),
   },
@@ -177,40 +176,6 @@ vi.mock("../../utils/terminal", () => ({
 
 import GitActionsControl from "./GitActionsControl";
 
-function findButtonByText(text: string): HTMLButtonElement | null {
-  return (Array.from(document.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes(text),
-  ) ?? null) as HTMLButtonElement | null;
-}
-
-function findMenuTrigger(): HTMLButtonElement | null {
-  return (document.querySelector('[aria-label="Quick actions"]') ??
-    null) as HTMLButtonElement | null;
-}
-
-function findMenuItemByText(text: string): HTMLElement | null {
-  return (Array.from(document.querySelectorAll('[role="menuitem"]')).find((element) =>
-    element.textContent?.includes(text),
-  ) ?? null) as HTMLElement | null;
-}
-
-function Harness() {
-  const [activeThreadId, setActiveThreadId] = useState(THREAD_A);
-
-  return (
-    <>
-      <button type="button" onClick={() => setActiveThreadId(THREAD_B)}>
-        Switch thread
-      </button>
-      <GitActionsControl
-        gitCwd={GIT_CWD}
-        activeThreadId={activeThreadId}
-        onOpenOrchestra={vi.fn()}
-      />
-    </>
-  );
-}
-
 describe("GitActionsControl thread-scoped progress toast", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -235,6 +200,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       }
       menuTrigger.click();
 
+      await vi.waitFor(() => expect(findMenuItemByText("Git")).toBeTruthy());
       const gitMenuItem = findMenuItemByText("Git");
       expect(gitMenuItem, 'Unable to find "Git" menu item').toBeTruthy();
       if (!gitMenuItem) {
@@ -242,6 +208,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       }
       gitMenuItem.click();
 
+      await vi.waitFor(() => expect(findMenuItemByText("Push")).toBeTruthy());
       const pushMenuItem = findMenuItemByText("Push");
       expect(pushMenuItem, 'Unable to find "Push" menu item').toBeTruthy();
       if (!pushMenuItem) {
@@ -249,6 +216,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       }
       pushMenuItem.click();
 
+      await vi.waitFor(() => expect(toastAddSpy, pushMenuItem.outerHTML).toHaveBeenCalled());
       expect(toastAddSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { threadId: THREAD_A },
@@ -365,6 +333,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       }
       menuTrigger.click();
 
+      await vi.waitFor(() => expect(findMenuItemByText("Orchestrate")).toBeTruthy());
       const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
       const gitMenuItem = findMenuItemByText("Git");
       const orchestrateMenuItem = findMenuItemByText("Orchestrate");
@@ -407,6 +376,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       }
       menuTrigger.click();
 
+      await vi.waitFor(() => expect(findMenuItemByText("Show tasks")).toBeTruthy());
       const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
       const orchestrateMenuItem = findMenuItemByText("Orchestrate");
       const togglePlanCardMenuItem = findMenuItemByText("Show tasks");

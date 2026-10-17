@@ -43,7 +43,7 @@ function RenderedErrorHarness() {
   const [error, setError] = useState<string | null>(null);
   return (
     <>
-      <ThreadErrorBanner error={error} onDismiss={() => setError(null)} />
+      <ThreadErrorBanner error={error} threadId={threadId} />
       <Harness onError={setError} />
     </>
   );

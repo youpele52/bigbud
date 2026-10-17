@@ -82,6 +82,7 @@ export function buildLocalDraftThread(
     latestTurn: null,
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
+    ...(draftThread.worktreeBinding ? { worktreeBinding: draftThread.worktreeBinding } : {}),
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],

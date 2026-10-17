@@ -7,6 +7,7 @@ import type {
 } from "@bigbud/contracts";
 import { Cause, Deferred, Duration, Effect, Exit, Metric, Option, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { persistWorktreeRuntimeCwd } from "../../git/Layers/WorktreeRuntimeCwd.ts";
 
 import {
   metricAttributes,
@@ -47,6 +48,9 @@ import {
 const eventPayloadEncoder = new TextEncoder();
 
 export interface CommandEnvelope {
+  readonly worktreeOperationId?: string;
+  readonly expectedWorktreePath?: { readonly value: string | null };
+  readonly expectedWorktreeIdentity?: { readonly path: string; readonly identity: string };
   readonly command: OrchestrationCommand;
   readonly payloadDigest: OrchestrationCommandPayloadDigest;
   readonly result: Deferred.Deferred<{ sequence: number }, OrchestrationDispatchError>;
@@ -179,6 +183,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 );
                 nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
                 yield* projectionPipeline.projectEvent(savedEvent);
+                yield* persistWorktreeRuntimeCwd(sql, savedEvent);
                 committedEvents.push(savedEvent);
               }
               const lastSavedEvent = committedEvents.at(-1) ?? null;

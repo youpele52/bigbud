@@ -212,6 +212,9 @@ export function WebSocketBlockingState({
     desktopStartup?.status === "failed" &&
     (desktopStartup.failureReason === "state_directory_in_use" ||
       desktopStartup.failureReason === "state_directory_owner_unverified");
+  const shouldRetryConfiguration =
+    status.phase === "connected" &&
+    (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed");
   const copy =
     desktopStartup?.status === "failed"
       ? {
@@ -310,17 +313,18 @@ export function WebSocketBlockingState({
 
         {!ownershipFailure ? (
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {status.phase === "connected" &&
-            (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed") ? (
-              <Button size="sm" onClick={() => retryServerConfigSync()}>
-                <RotateCw />
-                Retry configuration
-              </Button>
-            ) : null}
-            {status.phase !== "connected" ? (
-              <Button variant="outline" size="sm" onClick={reconnectConfigurationFromUi}>
+            {shouldRetryConfiguration || status.phase !== "connected" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={
+                  shouldRetryConfiguration
+                    ? () => retryServerConfigSync()
+                    : reconnectConfigurationFromUi
+                }
+              >
                 <HugeiconsIcon aria-hidden="true" icon={ConnectIcon} strokeWidth={2} />
-                Reconnect
+                {shouldRetryConfiguration ? "Retry configuration" : "Reconnect"}
               </Button>
             ) : null}
             <Button size="sm" onClick={() => window.location.reload()}>

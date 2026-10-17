@@ -18,7 +18,7 @@ import {
   invalidateGitQueries,
 } from "../../lib/gitReactQuery";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { EnvMode } from "./BranchToolbar.logic";
+import type { BranchToolbarBranchSelectorProps } from "./BranchToolbarBranchSelector.props";
 import {
   deriveBranchSelectorState,
   deriveSelectedBranchName,
@@ -33,19 +33,6 @@ import { Button } from "../ui/button";
 import { Menu, MenuTrigger } from "../ui/menu";
 import { toastManager } from "../ui/toast";
 
-interface BranchToolbarBranchSelectorProps {
-  activeProjectCwd: string | null;
-  executionTargetId?: string | undefined;
-  activeThreadBranch: string | null;
-  activeWorktreePath: string | null;
-  branchCwd: string | null;
-  effectiveEnvMode: EnvMode;
-  envLocked: boolean;
-  onSetThreadBranch: (branch: string | null, worktreePath: string | null) => void;
-  onCheckoutPullRequestRequest?: (reference: string) => void;
-  onComposerFocusRequest?: () => void;
-}
-
 export function BranchToolbarBranchSelector({
   activeProjectCwd,
   executionTargetId,
@@ -54,7 +41,11 @@ export function BranchToolbarBranchSelector({
   branchCwd,
   effectiveEnvMode,
   envLocked,
+  workspaceLocked = false,
   onSetThreadBranch,
+  onSelectExistingWorktree,
+  onCreateWorktreeRequest,
+  onWorktreeOperationsRequest,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
@@ -152,12 +143,12 @@ export function BranchToolbarBranchSelector({
     });
   };
 
-  const selectBranch = (branch: GitBranch) => {
+  const selectBranch = async (branch: GitBranch) => {
     const api = readNativeApi();
     if (!api || !branchCwd || isBranchActionPending) return;
 
     if (isSelectingWorktreeBase) {
-      onSetThreadBranch(branch.name, null);
+      await onSetThreadBranch(branch.name, null);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -170,7 +161,9 @@ export function BranchToolbarBranchSelector({
     });
 
     if (selectionTarget.reuseExistingWorktree) {
-      onSetThreadBranch(branch.name, selectionTarget.nextWorktreePath);
+      if (!executionTargetId || executionTargetId === "local")
+        await onSelectExistingWorktree(selectionTarget.checkoutCwd);
+      else await onSetThreadBranch(branch.name, selectionTarget.nextWorktreePath);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -216,7 +209,7 @@ export function BranchToolbarBranchSelector({
       }
 
       setOptimisticBranch(nextBranchName);
-      onSetThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
+      await onSetThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
     });
   };
 
@@ -261,7 +254,7 @@ export function BranchToolbarBranchSelector({
       }
 
       setOptimisticBranch(name);
-      onSetThreadBranch(name, activeWorktreePath);
+      await onSetThreadBranch(name, activeWorktreePath);
       setBranchQuery("");
     });
   };
@@ -277,7 +270,7 @@ export function BranchToolbarBranchSelector({
     });
     await invalidateGitQueries(queryClient, { cwd: branchCwd, executionTargetId });
     if (branch.current || activeThreadBranch === branch.name) {
-      onSetThreadBranch(result.branch, activeWorktreePath);
+      await onSetThreadBranch(result.branch, activeWorktreePath);
     }
   };
 
@@ -344,14 +337,15 @@ export function BranchToolbarBranchSelector({
       <Menu open={isBranchMenuOpen} onOpenChange={handleOpenChange}>
         <MenuTrigger
           render={<Button variant="ghost" size="xs" />}
-          className="text-muted-foreground/70 hover:text-foreground/80"
+          className="max-w-full min-w-0 text-muted-foreground/70 hover:text-foreground/80"
           disabled={(isBranchesSearchPending && branches.length === 0) || isBranchActionPending}
         >
           <GitBranchIcon className="size-3" />
-          <span className="max-w-[240px] truncate">{triggerLabel}</span>
+          <span className="min-w-0 truncate">{triggerLabel}</span>
           <ChevronDownIcon className="size-3" />
         </MenuTrigger>
         <BranchToolbarBranchSelectorPopup
+          executionTargetId={executionTargetId}
           inputRef={branchSearchInputRef}
           query={branchQuery}
           branchStatusText={branchStatusText}
@@ -363,9 +357,19 @@ export function BranchToolbarBranchSelector({
           branchByName={branchByName}
           activeProjectCwd={activeProjectCwd}
           isSelectingWorktreeBase={isSelectingWorktreeBase}
-          actionPending={isBranchActionPending}
+          actionPending={workspaceLocked || isBranchActionPending}
           onQueryChange={setBranchQuery}
-          onSelect={selectBranch}
+          onSelect={(branch) =>
+            void selectBranch(branch).catch((error) =>
+              toastManager.add({
+                type: "error",
+                title: "Could not switch workspace.",
+                description: toBranchActionErrorMessage(error),
+              }),
+            )
+          }
+          {...(onCreateWorktreeRequest ? { onCreateWorktreeRequest } : {})}
+          {...(onWorktreeOperationsRequest ? { onWorktreeOperationsRequest } : {})}
           onCheckoutPullRequest={checkoutPullRequest}
           onCreateBranch={() => createBranch(trimmedBranchQuery)}
           onRenameRequest={(branch) => setRenameBranchTarget(branch)}

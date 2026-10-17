@@ -13,6 +13,7 @@ import {
 } from "@bigbud/contracts";
 import { CodexReasoningEffort } from "@bigbud/contracts/core/model";
 import * as Schema from "effect/Schema";
+import { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 import { type TerminalContextDraft } from "../../lib/terminalContext";
 import {
   type ChatFileAttachment,
@@ -168,6 +169,7 @@ export const PersistedDraftThreadState = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
+  worktreeBinding: Schema.optional(WorktreeBinding),
   envMode: DraftThreadEnvModeSchema,
 });
 export type PersistedDraftThreadState = typeof PersistedDraftThreadState.Type;
@@ -208,6 +210,7 @@ export interface ComposerThreadDraftState {
 }
 
 export interface DraftThreadState {
+  worktreeBinding?: WorktreeBinding | undefined;
   projectId: ProjectId;
   createdAt: string;
   runtimeMode: RuntimeMode;
@@ -246,6 +249,7 @@ export interface ComposerDraftStoreState {
     options: {
       branch?: string | null;
       worktreePath?: string | null;
+      worktreeBinding?: WorktreeBinding;
       projectId?: ProjectId;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;

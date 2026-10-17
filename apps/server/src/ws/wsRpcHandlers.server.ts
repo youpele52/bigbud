@@ -200,6 +200,9 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         }),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverRetryTextGeneration]: (
+      input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
+    ) => requestTextGenerationRetry(context.orchestrationEngine, input, context.serverSettings),
     [WS_METHODS.serverStartHandoffJob]: (input: {
       readonly threadId: ThreadId;
       readonly focus?: string | undefined;
@@ -298,3 +301,4 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       ),
   };
 }
+import { requestTextGenerationRetry } from "./wsRetryTextGeneration.ts";

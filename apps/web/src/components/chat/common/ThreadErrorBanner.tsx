@@ -1,15 +1,22 @@
 import { memo } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { StatusBanner } from "../../common/StatusBanner";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 
 export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   error,
-  onDismiss,
+  threadId,
+  conditionIdentity,
 }: {
   error: string | null;
-  onDismiss?: () => void;
+  threadId: string;
+  conditionIdentity?: unknown;
 }) {
-  if (!error) return null;
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "error", [
+    error,
+    conditionIdentity,
+  ]);
+  if (!error || dismissed) return null;
   return (
     <div className="pt-3 mx-auto max-w-3xl">
       <StatusBanner
@@ -21,7 +28,7 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
           </span>
         }
         dismissLabel="Dismiss error"
-        {...(onDismiss ? { onDismiss } : {})}
+        onDismiss={dismiss}
       />
     </div>
   );

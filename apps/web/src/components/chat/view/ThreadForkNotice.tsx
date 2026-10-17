@@ -1,11 +1,12 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { GitForkIcon } from "lucide-react";
+import { GitForkIcon, XIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import {
   deriveForkOriginNotice,
   deriveSourceForkNotice,
@@ -25,7 +26,7 @@ export function ThreadForkNotice({
   onCarryToContinuedThread,
   carryPending = false,
 }: {
-  readonly thread: Pick<Thread, "forkOrigin" | "parentThread" | "messages" | "activities">;
+  readonly thread: Pick<Thread, "id" | "forkOrigin" | "parentThread" | "messages" | "activities">;
   /** Deleted or unknown forks are not linked (see `useForkPresence`). */
   readonly isForkPresent: (forkThreadId: string) => boolean;
   readonly onCarryToContinuedThread?:
@@ -47,7 +48,8 @@ export function ThreadForkNotice({
     () => deriveSourceForkNotice({ messages, activities }, isForkPresent),
     [messages, activities, isForkPresent],
   );
-  if (!origin && !sourceFork) return null;
+  const { dismissed, dismiss } = useThreadNoticeDismissal(thread.id, "fork", origin ?? sourceFork);
+  if ((!origin && !sourceFork) || dismissed) return null;
   const carry = sourceFork?.carry ?? null;
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pt-3 sm:px-5">
@@ -70,6 +72,16 @@ export function ThreadForkNotice({
             </Link>
           </AlertTitle>
           <AlertDescription className="text-xs">{origin.description}</AlertDescription>
+          <AlertAction>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Dismiss continuation notice"
+              onClick={dismiss}
+            >
+              <XIcon className="size-3.5" aria-hidden />
+            </Button>
+          </AlertAction>
         </Alert>
       ) : sourceFork ? (
         <Alert variant="info" role="status" data-fork-notice="source">
@@ -89,8 +101,8 @@ export function ThreadForkNotice({
             </Link>
             {carry ? " Your latest message did not reach the provider." : null}
           </AlertDescription>
-          {carry && onCarryToContinuedThread ? (
-            <AlertAction>
+          <AlertAction>
+            {carry && onCarryToContinuedThread ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -99,8 +111,16 @@ export function ThreadForkNotice({
               >
                 Send this message to the continued thread
               </Button>
-            </AlertAction>
-          ) : null}
+            ) : null}
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Dismiss continuation notice"
+              onClick={dismiss}
+            >
+              <XIcon className="size-3.5" aria-hidden />
+            </Button>
+          </AlertAction>
         </Alert>
       ) : null}
     </div>

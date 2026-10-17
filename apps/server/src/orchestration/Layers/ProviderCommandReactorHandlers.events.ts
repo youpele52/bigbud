@@ -5,6 +5,7 @@ export type ProviderIntentEvent = Extract<
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
       | "thread.message-sent"
+      | "thread.activity-appended"
       | "thread.turn-interrupt-requested"
       | "thread.turn-steer-requested"
       | "thread.approval-response-requested"

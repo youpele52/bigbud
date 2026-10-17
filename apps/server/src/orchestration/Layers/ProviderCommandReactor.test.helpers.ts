@@ -114,6 +114,7 @@ export async function waitFor(
 }
 
 export async function createHarness(input?: {
+  readonly startReactor?: boolean;
   readonly cleanupExecutor?: DirectResourceCleanupExecutorShape;
   readonly baseDir?: string;
   readonly workspaceRoot?: string;
@@ -337,7 +338,8 @@ export async function createHarness(input?: {
   const reactor = await runtime.runPromise(Effect.service(ProviderCommandReactor));
   const sql = await runtime.runPromise(Effect.service(SqlClient.SqlClient));
   scope = await Effect.runPromise(Scope.make("sequential"));
-  await Effect.runPromise(reactor.start().pipe(Scope.provide(scope)));
+  const startReactor = () => Effect.runPromise(reactor.start().pipe(Scope.provide(scope!)));
+  if (input?.startReactor !== false) await startReactor();
   drainWork = reactor.drain;
 
   await Effect.runPromise(
@@ -368,6 +370,7 @@ export async function createHarness(input?: {
   );
 
   return {
+    startReactor,
     engine,
     projectionPipeline,
     sql,

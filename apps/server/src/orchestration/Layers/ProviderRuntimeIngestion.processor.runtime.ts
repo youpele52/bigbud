@@ -30,12 +30,17 @@ import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.rec
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
 import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
+import {
+  isSuccessfulModelEvent,
+  makeSuccessfulModelRecorder,
+} from "./ProviderRuntimeIngestion.successfulModel.ts";
 export function makeRuntimeEventProcessor(
   services: RuntimeProcessorServices,
   cacheHelpers: RuntimeProcessorCacheHelpers,
 ) {
   const { orchestrationEngine, serverSettingsService } = services;
   const activityGovernor = new RuntimeActivityGovernor();
+  const recordSuccessfulModel = makeSuccessfulModelRecorder(orchestrationEngine);
   const {
     rememberAssistantMessageId,
     forgetAssistantMessageId,
@@ -219,6 +224,8 @@ export function makeRuntimeEventProcessor(
     ) {
       return;
     }
+
+    if (isSuccessfulModelEvent(event)) yield* recordSuccessfulModel(event, thread, liveSession);
 
     const proposedPlanDelta =
       event.type === "turn.proposed.delta" ? event.payload.delta : undefined;

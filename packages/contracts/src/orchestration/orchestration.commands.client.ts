@@ -22,16 +22,11 @@ import {
   RuntimeMode,
 } from "./orchestration.provider";
 import { ProjectScript } from "./orchestration.project";
-import {
-  ElevatorSummary,
-  OrchestrationMessage,
-  ParentThreadReference,
-  SourceProposedPlanReference,
-  OrchestrationThreadPurpose,
-} from "./orchestration.thread";
+import { ElevatorSummary, SourceProposedPlanReference } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
 import * as MessageOrigin from "./orchestration.messageOrigin";
 import { ThreadForkCommand } from "./orchestration.fork";
+import { ThreadCreateCommand } from "./orchestration.commands.client.threadCreate";
 import { ThreadDelegationModelChoicePickCommand } from "./orchestration.delegationModelChoice";
 import {
   ClientThreadMessageSubmitCommand,
@@ -81,28 +76,6 @@ const ProjectDeleteCommand = Schema.Struct({
   type: Schema.Literal("project.delete"),
   commandId: CommandId,
   projectId: ProjectId,
-});
-
-const ThreadCreateCommand = Schema.Struct({
-  type: Schema.Literal("thread.create"),
-  commandId: CommandId,
-  threadId: ThreadId,
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  purpose: Schema.optional(OrchestrationThreadPurpose),
-  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
-  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
-  executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: ModelSelection,
-  runtimeMode: RuntimeMode,
-  interactionMode: ProviderInteractionMode.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
-  ),
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  parentThread: Schema.optional(ParentThreadReference),
-  seedMessages: Schema.optional(Schema.Array(OrchestrationMessage)),
-  createdAt: IsoDateTime,
 });
 
 const ThreadDeleteCommand = Schema.Struct({

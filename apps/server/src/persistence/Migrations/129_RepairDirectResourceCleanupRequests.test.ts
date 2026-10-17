@@ -28,7 +28,10 @@ it.effect("repairs the installed empty attempt table through a new forward migra
     const repository = yield* DirectResourceCleanupRepository;
     yield* initialize;
     yield* makeLegacySchema(sql);
-    assert.deepEqual(yield* runMigrations(), [[129, "RepairDirectResourceCleanupRequests"]]);
+    assert.deepEqual(
+      (yield* runMigrations()).filter(([id]) => id === 129),
+      [[129, "RepairDirectResourceCleanupRequests"]],
+    );
     const columns = yield* sql<{
       readonly name: string;
     }>`PRAGMA table_info(direct_resource_cleanup_attempts)`;
@@ -262,7 +265,10 @@ it.effect("rolls back schema and plan changes together when repair is interrupte
     assert.deepEqual(yield* sql`SELECT name, sql FROM sqlite_master ORDER BY name`, schema);
     assert.deepEqual(yield* sql`SELECT * FROM direct_resource_cleanup_plans`, plans);
     assert.deepEqual(yield* sql`SELECT * FROM direct_resource_cleanup_attempts`, attempts);
-    assert.deepEqual(yield* runMigrations(), [[129, "RepairDirectResourceCleanupRequests"]]);
+    assert.deepEqual(
+      (yield* runMigrations()).filter(([id]) => id === 129),
+      [[129, "RepairDirectResourceCleanupRequests"]],
+    );
     assert.deepEqual(yield* sql`PRAGMA foreign_key_check`, []);
     assert.deepEqual(yield* sql`PRAGMA integrity_check`, [{ integrity_check: "ok" }]);
   }).pipe(Effect.provide(layer)),

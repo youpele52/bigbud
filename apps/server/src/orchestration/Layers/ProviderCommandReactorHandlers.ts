@@ -30,7 +30,6 @@ import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.fa
 import { makeProviderCommandProjectResolvers } from "./ProviderCommandReactorHandlers.projects.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
-  ensureSessionForThread,
   maybeGenerateAndRenameWorktreeBranchForFirstTurn,
   maybeGenerateThreadTitleForFirstTurn,
   sendTurnForThread,
@@ -58,6 +57,8 @@ import {
 import { makeProviderCommandSessionStateHelpers } from "./ProviderCommandReactorHandlers.sessionState.ts";
 import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.turnStart.ts";
 import { makeRequestAutomaticFork } from "./ProviderCommandReactorHandlers.fork.ts";
+import { makeTextGenerationActivityHandler } from "./ProviderCommandReactorHandlers.textGeneration.ts";
+import { processRuntimeModeSet } from "./ProviderCommandReactorHandlers.runtimeMode.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -83,7 +84,6 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     string,
     import("./ProviderCommandReactorSessionOps.capabilityContext.ts").ProviderCapabilityContextState
   >();
-
   const { appendProviderFailureActivity, recordTurnStartFailure } =
     makeProviderFailureHandlers(orchestrationEngine);
   const handleTurnStartFailure = makeHandleTurnStartFailure({
@@ -312,37 +312,16 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
   const processExecutionTargetReconfigure =
     makeExecutionTargetReconfigureHandler(sessionOpServices);
+  const processTextGenerationActivity = yield* makeTextGenerationActivityHandler(sessionOpServices);
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError, Scope.Scope> {
     yield* annotateProviderIntentEvent(event);
     switch (event.type) {
-      case "thread.runtime-mode-set": {
-        const thread = yield* resolveThread(event.payload.threadId);
-        if (!thread?.session || thread.session.status === "stopped") {
-          return;
-        }
-        const previousSession = thread.session;
-        const cachedModelSelection = threadModelSelections.get(event.payload.threadId);
-        yield* ensureSessionForThread(sessionOpServices)(
-          event.payload.threadId,
-          event.occurredAt,
-          cachedModelSelection !== undefined ? { modelSelection: cachedModelSelection } : {},
-        ).pipe(
-          Effect.catchCause((cause) =>
-            Effect.gen(function* () {
-              yield* setThreadSession({
-                threadId: event.payload.threadId,
-                session: previousSession,
-                createdAt: event.occurredAt,
-                expectedSessionEpoch: (previousSession.sessionEpoch ?? 0) + 1,
-              });
-              return yield* Effect.failCause(cause);
-            }),
-          ),
-        );
-        return;
-      }
+      case "thread.activity-appended":
+        return yield* processTextGenerationActivity(event);
+      case "thread.runtime-mode-set":
+        return yield* processRuntimeModeSet(sessionOpServices, event);
       case "thread.meta-updated":
         yield* processExecutionTargetReconfigure(event);
         return;
@@ -394,6 +373,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   });
 
   return {
+    processTextGenerationActivity,
     processDomainEvent,
   };
 });

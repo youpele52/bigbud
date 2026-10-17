@@ -307,6 +307,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     }).pipe(Effect.flatMap(validateServerConfig));
 
     return {
+      worktreeSql: Option.getOrUndefined(sql),
       activateCliProxy,
       assertLocalGitExecutionTarget,
       automationScheduleRepository,

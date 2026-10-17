@@ -169,7 +169,14 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           await runtime.emit(session, {
             ...runtimeEventBase(session, `started:${session.row.turnId}`),
             type: "turn.started",
-            payload: { model: session.model.id },
+            payload: {
+              model: session.model.id,
+              modelSelection: {
+                provider: "opencodeV2",
+                model: session.model.id,
+                subProviderID: session.model.providerID,
+              },
+            },
           });
           await runtime.reconcile(session);
           return {

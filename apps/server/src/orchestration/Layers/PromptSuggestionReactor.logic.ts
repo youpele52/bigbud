@@ -1,40 +1,19 @@
 /**
- * Pure rules for generated prompt suggestions (Phase 7): when to generate, which model to use,
+ * Pure rules for generated prompt suggestions (Phase 7): when to generate,
  * what context to send and which events cancel an in-flight generation.
  *
  * @module PromptSuggestionReactor.logic
  */
-import type {
-  ModelSelection,
-  OrchestrationEvent,
-  OrchestrationThread,
-  ThreadId,
-  TurnId,
-} from "@bigbud/contracts";
+import type { OrchestrationEvent, OrchestrationThread, ThreadId, TurnId } from "@bigbud/contracts";
 import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 import { derivePendingDelegatedModelChoice } from "@bigbud/shared/delegatedModelChoice";
 import { redactPromptSuggestionContext } from "@bigbud/shared/promptSuggestion";
 
 import { isPromptSuggestionAttachable } from "../promptSuggestion.logic.ts";
 
-/** Providers whose models bigbud's own text generation can run. */
-const TEXT_GENERATION_PROVIDERS: ReadonlySet<ModelSelection["provider"]> = new Set([
-  "codex",
-  "claudeAgent",
-  "cursor",
-]);
-
 export const PROMPT_SUGGESTION_TRANSCRIPT_MAX_CHARS = 6_000;
 const PROMPT_SUGGESTION_MESSAGE_MAX_CHARS = 1_500;
 const PROMPT_SUGGESTION_MAX_MESSAGES = 8;
-
-/** The thread's current model when text generation can run it, else the text-generation model. */
-export function resolvePromptSuggestionModel(
-  threadModel: ModelSelection,
-  textGenerationModel: ModelSelection,
-): ModelSelection {
-  return TEXT_GENERATION_PROVIDERS.has(threadModel.provider) ? threadModel : textGenerationModel;
-}
 
 export type GeneratedSuggestionSkipReason =
   | "not-attachable"

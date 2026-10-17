@@ -62,6 +62,7 @@ import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
+import { preserveStoppedProviderBinding } from "./ProviderService.stopSession.binding.ts";
 import { makeStopSubagent } from "./ProviderService.subagentStop.ts";
 
 export interface ProviderServiceLiveOptions {
@@ -326,7 +327,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           terminalAt: new Date().toISOString(),
         });
         yield* options?.settleThreadLogs?.(input.threadId) ?? Effect.void;
-        yield* directory.remove(input.threadId);
+        yield* preserveStoppedProviderBinding(directory, input.threadId);
         yield* analytics.record("provider.session.stopped", { provider: routed.adapter.provider });
       }).pipe(
         Effect.mapError((e) => e as ProviderServiceError),

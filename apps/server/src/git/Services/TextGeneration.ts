@@ -15,7 +15,15 @@ import type { TextGenerationError } from "@bigbud/contracts";
 /** Providers that support git text generation (commit messages, PR content, branch names). */
 export type TextGenerationProvider = ProviderKind;
 
-export interface CommitMessageGenerationInput {
+/**
+ * Only verified thread success authorizes a fallback. Routing ignores the legacy
+ * `modelSelection` input as evidence; concrete provider adapters still consume it as their target.
+ */
+export interface InternalTextGenerationContext {
+  readonly successfulModelSelection?: ModelSelection | null;
+}
+
+export interface CommitMessageGenerationInput extends InternalTextGenerationContext {
   cwd: string;
   branch: string | null;
   stagedSummary: string;
@@ -35,7 +43,7 @@ export interface CommitMessageGenerationResult {
   branch?: string | undefined;
 }
 
-export interface PrContentGenerationInput {
+export interface PrContentGenerationInput extends InternalTextGenerationContext {
   cwd: string;
   baseBranch: string;
   headBranch: string;
@@ -51,7 +59,7 @@ export interface PrContentGenerationResult {
   body: string;
 }
 
-export interface BranchNameGenerationInput {
+export interface BranchNameGenerationInput extends InternalTextGenerationContext {
   cwd: string;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
@@ -63,8 +71,9 @@ export interface BranchNameGenerationResult {
   branch: string;
 }
 
-export interface ThreadTitleGenerationInput {
+export interface ThreadTitleGenerationInput extends InternalTextGenerationContext {
   cwd: string;
+  titleSeed?: string | undefined;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
   /** What model and provider to use for generation. */
@@ -75,7 +84,7 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
-export interface ThreadElevatorSummaryGenerationInput {
+export interface ThreadElevatorSummaryGenerationInput extends InternalTextGenerationContext {
   cwd: string;
   transcript: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
@@ -87,7 +96,7 @@ export interface ThreadElevatorSummaryGenerationResult {
   summary: string;
 }
 
-export interface PromptSuggestionGenerationInput {
+export interface PromptSuggestionGenerationInput extends InternalTextGenerationContext {
   cwd: string;
   /** Bounded, redacted user and assistant message text (no tool output). */
   transcript: string;
@@ -98,6 +107,7 @@ export interface PromptSuggestionGenerationInput {
 export interface PromptSuggestionGenerationResult {
   /** Raw suggestion; the attaching pipeline normalizes and bounds it. */
   suggestion: string;
+  actualModelSelection?: ModelSelection;
 }
 
 export interface TextGenerationService {

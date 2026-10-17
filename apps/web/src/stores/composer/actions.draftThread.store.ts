@@ -7,6 +7,7 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import type { StoreApi } from "zustand";
+import type { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 import { revokeObjectPreviewUrl } from "./normalization.store";
 import {
   type ComposerDraftStoreState,
@@ -67,6 +68,11 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
             : (options.worktreePath ?? null);
         const nextDraftThread: DraftThreadState = {
           projectId,
+          ...(existingThread?.worktreeBinding &&
+          existingThread.worktreePath === nextWorktreePath &&
+          existingThread.projectId === projectId
+            ? { worktreeBinding: existingThread.worktreeBinding }
+            : {}),
           createdAt: options?.createdAt ?? existingThread?.createdAt ?? new Date().toISOString(),
           runtimeMode: options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
           interactionMode:
@@ -91,6 +97,7 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
           existingThread.interactionMode === nextDraftThread.interactionMode &&
           existingThread.branch === nextDraftThread.branch &&
           existingThread.worktreePath === nextDraftThread.worktreePath &&
+          existingThread.worktreeBinding === nextDraftThread.worktreeBinding &&
           existingThread.envMode === nextDraftThread.envMode;
         if (hasSameProjectMapping && hasSameDraftThread) {
           return state;
@@ -131,6 +138,7 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
         interactionMode?: ProviderInteractionMode;
         branch?: string | null;
         worktreePath?: string | null;
+        worktreeBinding?: WorktreeBinding;
         envMode?: DraftThreadEnvMode;
       },
     ) => {
@@ -147,8 +155,14 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
           options.worktreePath === undefined
             ? (existing?.worktreePath ?? null)
             : (options.worktreePath ?? null);
+        const worktreeBinding =
+          options.worktreeBinding ??
+          (existing?.worktreePath === nextWorktreePath && existing.projectId === nextProjectId
+            ? existing.worktreeBinding
+            : undefined);
         const nextDraftThread: DraftThreadState = {
           projectId: nextProjectId,
+          ...(worktreeBinding ? { worktreeBinding } : {}),
           createdAt:
             options.createdAt === undefined
               ? (existing?.createdAt ?? new Date().toISOString())
@@ -172,6 +186,7 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
           nextDraftThread.interactionMode === existing.interactionMode &&
           nextDraftThread.branch === existing.branch &&
           nextDraftThread.worktreePath === existing.worktreePath &&
+          nextDraftThread.worktreeBinding === existing.worktreeBinding &&
           nextDraftThread.envMode === existing.envMode;
         if (isUnchanged) {
           return state;

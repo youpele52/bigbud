@@ -7,7 +7,7 @@ import {
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@bigbud/contracts/settings";
 import { normalizeModelSlug } from "@bigbud/shared/model";
 import { Equal } from "effect";
-import { MAX_CUSTOM_MODEL_LENGTH, resolveAppModelSelectionState } from "../../models/provider";
+import { MAX_CUSTOM_MODEL_LENGTH } from "../../models/provider";
 import { formatRelativeTime } from "../../utils/timestamp";
 import type { ProviderCardData } from "./ProviderCard";
 import { getOpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
@@ -265,17 +265,4 @@ export function getLatestProviderCheckedAt(
         serverProviders[0]!.checkedAt,
       )
     : null;
-}
-
-export function shouldClearTextGenerationSelection(input: {
-  settings: UnifiedSettings;
-  serverProviders: ReadonlyArray<ServerProvider>;
-  provider: ProviderKind;
-  checked: boolean;
-}) {
-  const textGenProvider = resolveAppModelSelectionState(
-    input.settings,
-    input.serverProviders,
-  ).provider;
-  return !input.checked && textGenProvider === input.provider;
 }

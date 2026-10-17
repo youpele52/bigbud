@@ -13,7 +13,11 @@ describe("ProviderCommandReactor title prompt", () => {
   registerProviderCommandReactorTestCleanup();
   afterEach(() => resetThreadTitleLockForTests());
   it("generates a thread title even when the outgoing prompt is reformatted", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettingsOverrides: {
+        textGenerationModelSelection: { provider: "codex", model: "explicit-model" },
+      },
+    });
     const now = new Date().toISOString();
     harness.generateThreadTitle.mockReturnValue(
       Effect.succeed({ title: "Reconnect spinner resume bug" }),

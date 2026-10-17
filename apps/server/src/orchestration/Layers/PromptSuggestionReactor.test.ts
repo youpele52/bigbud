@@ -110,14 +110,14 @@ const setup = (
 const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
 describe("PromptSuggestionReactor", () => {
-  it.effect("attaches a generated suggestion made with the thread's model", () =>
+  it.effect("attaches a generated suggestion using the explicit preference first", () =>
     Effect.gen(function* () {
       const harness = yield* setup("codex", () =>
         Effect.succeed({ suggestion: "Add tests for the new lexer" }),
       );
       yield* PubSub.publish(harness.providerEvents, turnCompleted);
       yield* settle;
-      assert.equal(harness.requests[0]?.modelSelection.model, "codex-model");
+      assert.equal(harness.requests[0]?.modelSelection.model, "text-gen-model");
       assert.include(harness.requests[0]?.transcript ?? "", "Now add a lexer");
       assert.equal(harness.dispatched.length, 1);
       assert.deepInclude(harness.dispatched[0] as object, { type: "thread.activity.append" });
@@ -132,7 +132,7 @@ describe("PromptSuggestionReactor", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("falls back to the text-generation model for providers it cannot run", () =>
+  it.effect("preserves the explicit preference even for a different thread provider", () =>
     Effect.gen(function* () {
       const harness = yield* setup("opencodeV2", () =>
         Effect.succeed({ suggestion: "Add tests for the new lexer" }),

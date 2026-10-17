@@ -19,6 +19,7 @@ import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import { ChatViewOrchestraDialog } from "./ChatViewOrchestraDialog";
 import { ChatViewChatBody } from "./ChatViewChatBody";
 import type { useTerminalLayout } from "./terminalLayout.hooks";
+import { ThreadTextGenerationNotice } from "./ThreadTextGenerationNotice";
 
 interface ChatViewContentProps {
   base: ChatViewBaseState;
@@ -117,6 +118,10 @@ export function ChatViewContent({
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </ContentPanelHeader>
+      <ThreadTextGenerationNotice
+        threadId={base.activeThread!.id}
+        activities={base.activeThread!.activities}
+      />
 
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col"

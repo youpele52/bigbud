@@ -1,4 +1,4 @@
-import { Effect, Queue, Stream } from "effect";
+import { Effect, Queue, Stream, type Scope } from "effect";
 import { randomUUID } from "node:crypto";
 import {
   type GitActionProgressEvent,
@@ -21,6 +21,8 @@ import {
   getRemoteAgentUpdateStatusEffect,
 } from "./wsRemoteAgentAdmission.ts";
 import { makeRemoteGitStatusStream } from "../git/remoteGitStatusStream.ts";
+import { removePublicWorktree } from "./wsWorktreeRemoval.ts";
+import { runOwnedWorktreeOperation } from "./wsWorktreeOwnedOperation.ts";
 import {
   installRemoteAgentEffect,
   unlockSshKeyEffect,
@@ -52,7 +54,7 @@ function withGitMutationOperationId<
   };
 }
 
-export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
+export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
     [WS_METHODS.terminalWslDistributions]: () =>
       observeRpcEffect(
@@ -230,20 +232,18 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcStream(
         WS_METHODS.gitRunStackedAction,
         Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
-          context.gitManager
-            .runStackedAction(input, {
-              actionId: input.actionId,
-              progressReporter: {
-                publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
-              },
-            })
-            .pipe(
-              Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId)),
-              Effect.matchCauseEffect({
-                onFailure: (cause) => Queue.failCause(queue, cause),
-                onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
-              }),
-            ),
+          runThreadAwareGitAction(context, input, {
+            actionId: input.actionId,
+            progressReporter: {
+              publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
+            },
+          }).pipe(
+            Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId)),
+            Effect.matchCauseEffect({
+              onFailure: (cause) => Queue.failCause(queue, cause),
+              onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
+            }),
+          ),
         ),
         { "rpc.aggregate": "git" },
       ),
@@ -282,9 +282,10 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
     [WS_METHODS.gitRemoveWorktree]: (input: Parameters<WsRpcContext["git"]["removeWorktree"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitRemoveWorktree,
-        context.git
-          .removeWorktree(withGitMutationOperationId(input))
-          .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
+        runOwnedWorktreeOperation(
+          worktreeScope,
+          removePublicWorktree(context, withGitMutationOperationId(input)),
+        ).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {
           "rpc.aggregate": "git",
         },
@@ -380,3 +381,4 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       ),
   };
 }
+import { runThreadAwareGitAction } from "./wsGitTextGenerationContext.ts";
