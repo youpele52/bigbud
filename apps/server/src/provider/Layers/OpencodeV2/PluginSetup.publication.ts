@@ -21,7 +21,8 @@ import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { assertV2PluginUpgradeIdle } from "./PluginSetup.upgrade.ts";
 import { closeV2PublicationBoundary } from "./PluginSetup.publication.boundary.ts";
 import { currentV2RequestContext, runV2RequestContext } from "./Client.guard.ts";
-import { recoverV2RebootPublication } from "./RebootRecovery.publication.ts";
+import { recoverV2InstallationRevalidation } from "./PluginSetup.revalidation.ts";
+import { revalidateV2UnchangedPublication } from "./PluginSetup.revalidation.publication.ts";
 import {
   stageV2NativePlugin,
   commitV2NativePlugin,
@@ -157,17 +158,29 @@ async function publishExclusive(
     ? Schema.decodeUnknownSync(V2PluginPublication)(saved.value, { onExcessProperty: "error" })
     : undefined;
   const wanted = v2ManagedPluginEntry(artifact, root);
-  if (record?.phase !== "committed" || record.next.hash !== wanted.hash)
+  if (
+    await revalidateV2UnchangedPublication(
+      artifact,
+      root,
+      rootIdentity,
+      authority,
+      records,
+      key,
+      saved,
+    )
+  )
+    return;
+  const identityChanged = record && record.rootIdentity.dev !== rootIdentity.dev;
+  if (record?.phase !== "committed" || record.next.hash !== wanted.hash || identityChanged)
     await authority.publication?.prepare();
   const reboot =
     record &&
     saved &&
     authority.publication &&
-    record.next.hash !== wanted.hash &&
     typeof record.rootIdentity.dev === "number" &&
     typeof rootIdentity.dev === "number" &&
     record.rootIdentity.dev !== rootIdentity.dev
-      ? await recoverV2RebootPublication(records, key, saved, artifact, root, rootIdentity)
+      ? await recoverV2InstallationRevalidation(records, key, saved, artifact, root)
       : undefined;
   if (reboot) record = reboot.record;
   if (
@@ -181,12 +194,18 @@ async function publishExclusive(
       "V2 required-plugin publication belongs to a changed native config root/principal; evidence retained.",
     );
   if (record) await v2NativePluginDirectory(path.join(root, "plugins"), record.pluginsIdentity);
-  const needsPublication = record?.phase !== "committed" || record.next.hash !== wanted.hash;
+  const needsPublication =
+    !!reboot || record?.phase !== "committed" || record.next.hash !== wanted.hash;
   const releaseBoundary = needsPublication
     ? await closeV2PublicationBoundary(artifact, root, authority)
     : async () => {};
   try {
-    await reboot?.archive(authority);
+    if (reboot) {
+      const revision = await reboot.archive(authority);
+      saved = await records.read(key);
+      if (saved?.revision !== revision)
+        throw new Error("V2 installation revalidation successor preserved after adoption.");
+    }
     const plugins = await ensureV2NativePluginsDirectory(root, rootIdentity, authority);
     const filename = path.join(plugins.directory, V2_MANAGED_PLUGIN_FILENAME);
     const read = () => readV2NativePluginFile(filename, true, 16384);

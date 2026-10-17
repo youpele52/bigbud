@@ -10,7 +10,6 @@ import { recoveryOwner } from "./RebootRecovery.evidence.ts";
 import {
   V2PluginPublication,
   V2_MANAGED_PLUGIN_FILENAME,
-  v2PluginContentHash,
   type V2PluginSetupArtifact,
 } from "./PluginSetup.record.ts";
 import {
@@ -20,6 +19,7 @@ import {
 } from "./PluginSetup.fs.ts";
 import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { assertV2PluginUpgradeIdle } from "./PluginSetup.upgrade.ts";
+import { revalidateV2InstallationIdentity } from "./PluginSetup.revalidation.identity.ts";
 
 /** A prepared, sealed reboot can revalidate a committed signed entry after st_dev renumbering.
  * This is explicit maintenance adoption, not proof that a device number is a persistent volume ID.
@@ -65,30 +65,7 @@ export async function recoverV2RebootPublication(
   );
   if (recoveryDigest(archived) !== recoveryDigest(signed))
     throw new Error("V2 reboot publication original signed backup changed; no identity adoption.");
-  const pluginsIdentity = await v2NativePluginDirectory(path.join(root, "plugins"));
-  const entry = await readV2NativePluginFile(filename, true, 16384);
-  if (
-    !entry ||
-    entry.content !== old.next.content ||
-    v2PluginContentHash(entry.content) !== old.next.hash ||
-    old.rootIdentity.ino !== rootIdentity.ino ||
-    old.pluginsIdentity.ino !== pluginsIdentity.ino ||
-    old.nextIdentity.ino !== entry.identity.ino ||
-    old.rootIdentity.dev === rootIdentity.dev ||
-    old.pluginsIdentity.dev !== old.rootIdentity.dev ||
-    old.nextIdentity.dev !== old.rootIdentity.dev ||
-    pluginsIdentity.dev !== rootIdentity.dev ||
-    entry.identity.dev !== rootIdentity.dev
-  )
-    throw new Error(
-      "V2 reboot publication requires unchanged canonical inodes and exact bytes with one device-number transition.",
-    );
-  const record: V2PluginPublication = {
-    ...old,
-    rootIdentity,
-    pluginsIdentity,
-    nextIdentity: entry.identity,
-  };
+  const record = await revalidateV2InstallationIdentity(old, root, rootIdentity);
   const auditKey = `publication-reboot:${recoveryDigest(signed)}`;
   const audit = {
     format: "bigbud.thread.reboot-publication.v1",
@@ -111,12 +88,12 @@ export async function recoverV2RebootPublication(
       assertCurrent();
       await assertV2PluginUpgradeIdle(artifact);
       await v2NativePluginDirectory(root, rootIdentity);
-      await v2NativePluginDirectory(path.join(root, "plugins"), pluginsIdentity);
+      await v2NativePluginDirectory(path.join(root, "plugins"), record.pluginsIdentity);
       const current = await readV2NativePluginFile(filename, true, 16384);
       if (
-        current?.content !== entry.content ||
-        current.identity.dev !== entry.identity.dev ||
-        current.identity.ino !== entry.identity.ino ||
+        current?.content !== record.next.content ||
+        current.identity.dev !== record.nextIdentity.dev ||
+        current.identity.ino !== record.nextIdentity.ino ||
         recoveryDigest(await records.read(key)) !== recoveryDigest(signed)
       )
         throw new Error("V2 reboot publication successor preserved before identity adoption.");

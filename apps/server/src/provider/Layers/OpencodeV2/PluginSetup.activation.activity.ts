@@ -52,8 +52,10 @@ export async function readV2ActivationIdle(
         nativeSessionId: value.owner.nativeSessionId,
       });
     } catch {
-      return false;
-    } // Foreign/live/pending/uncertain owners defer even after lease expiry.
+      throw new Error(
+        "V2 retained owner retirement is not durably physically settled; plugin replacement is blocked, not waiting for native foreground/shell idle. Exact unchanged-installation identity maintenance requires its separate backed-up approval; no owner/history is retired or replayed.",
+      );
+    } // Foreign/live/pending/uncertain ownership is a durable barrier, not inferred busy/expired work.
   }
   const native = await readV2NativeActivity(
     job.connection.client,

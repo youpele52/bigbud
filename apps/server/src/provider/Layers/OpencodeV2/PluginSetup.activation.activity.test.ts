@@ -90,7 +90,9 @@ it.each(["active", "pending-initial", "pending-renewal", "revoked-expired"])(
           scope: { gate, participants: new Map() },
         };
       const before = await records.entries();
-      expect(await readV2ActivationIdle(f.job, proposal)).toBe(false);
+      await expect(readV2ActivationIdle(f.job, proposal)).rejects.toThrow(
+        "retained owner retirement",
+      );
       expect(f.active).not.toHaveBeenCalled();
       expect(await records.entries()).toEqual(before);
       const retirement = await V2EnrollmentRetirement.open(records),
@@ -116,7 +118,9 @@ it.each(["active", "pending-initial", "pending-renewal", "revoked-expired"])(
         app.artifact.artifactDigest,
         "synthetic-generation",
       );
-      expect(await readV2ActivationIdle(f.job, proposal)).toBe(false);
+      await expect(readV2ActivationIdle(f.job, proposal)).rejects.toThrow(
+        "retained owner retirement",
+      );
       await retirement.settle(identity, {
         physicalSettled: true,
         controlsSettled: true,

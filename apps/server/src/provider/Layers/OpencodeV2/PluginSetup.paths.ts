@@ -15,6 +15,8 @@ import {
 
 export interface V2PluginSetupAuthority {
   readonly publication?: {
+    /** Separate admission-only authority: exact signed metadata maintenance, never native publication. */
+    readonly identityRevalidation?: NonNullable<V2PluginSetupAuthority["publication"]>;
     readonly prepare: () => Promise<void>;
     readonly locked: () => Promise<() => void>;
     readonly beforeMutation: () => Promise<void>;

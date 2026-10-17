@@ -16,6 +16,7 @@ import type { V2NativeRuntimeProof } from "./NativeCompatibility.types.ts";
 import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
 import { V2ActivationWindow } from "./PluginSetup.activation.window.ts";
 import { V2ActivationBusy } from "./PluginSetup.activation.errors.ts";
+import { makeV2IdentityPublication } from "./PluginSetup.activation.identity.ts";
 
 interface Proposal {
   readonly artifact: V2PluginSetupArtifact;
@@ -84,7 +85,14 @@ async function activationAttempt(
     proof.assertCurrent();
     currentProof = proof;
   };
+  const identity = makeV2IdentityPublication(
+    job,
+    gate,
+    proposal.scope.participants,
+    freshAuthority,
+  );
   const publication = {
+    identityRevalidation: identity.authority,
     joinPhysicalOnCancel: true as const,
     assertGate: () => {
       currentProof?.assertCurrent();
@@ -253,5 +261,6 @@ async function activationAttempt(
     }
     window?.release();
     await window?.drain();
+    await identity.close();
   }
 }
