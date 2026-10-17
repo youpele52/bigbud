@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { ThreadId } from "@bigbud/contracts";
-import { expect, it } from "vitest";
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { expect, it, vi } from "vitest";
 import { inferredV2SetupLocation } from "./ThreadToolsSetup.location.ts";
 import type { OrchestrationEngineShape } from "../../../orchestration/Services/OrchestrationEngine.ts";
 
@@ -48,4 +48,141 @@ it("infers the actual worktree/project/default, never a supplied legacy director
   await expect(
     inferredV2SetupLocation({ refresh: true, threadId }, "/default", engine),
   ).rejects.toThrow("no supported local");
+});
+
+function canonicalLocation() {
+  const thread = {
+    id: ThreadId.makeUnsafe("cold-local-thread"),
+    projectId: "linked-project",
+    worktreePath: null as string | null,
+    deletedAt: null as string | null,
+    workspaceExecutionTargetId: undefined as string | undefined,
+    providerRuntimeExecutionTargetId: undefined as string | undefined,
+    executionTargetId: undefined as string | undefined,
+  };
+  const project = {
+    id: "linked-project",
+    workspaceRoot: "/canonical-project" as string | null,
+    deletedAt: null as string | null,
+    workspaceExecutionTargetId: undefined as string | undefined,
+    providerRuntimeExecutionTargetId: undefined as string | undefined,
+    executionTargetId: undefined as string | undefined,
+  };
+  return { thread, project, threads: [thread], projects: [project] };
+}
+
+it.each(["project", "worktree"])(
+  "hydrates a cold selected thread and its linked project before reading its canonical %s Location",
+  async (kind) => {
+    const canonical = canonicalLocation();
+    if (kind === "worktree") canonical.thread.worktreePath = "/canonical-worktree";
+    let model = {
+      threads: [] as typeof canonical.threads,
+      projects: [] as typeof canonical.projects,
+    };
+    const order: string[] = [];
+    const hydrate = vi.fn(() =>
+      Effect.promise(async () => {
+        order.push("hydrating");
+        await Promise.resolve();
+        model = canonical;
+        order.push("hydrated");
+        return canonical.thread;
+      }),
+    );
+    const dispatch = vi.fn();
+    const engine = {
+      ensureThreadState: hydrate,
+      getReadModel: () =>
+        Effect.sync(() => {
+          order.push("read-model");
+          return model;
+        }),
+      dispatch,
+    } as unknown as OrchestrationEngineShape;
+    await expect(
+      inferredV2SetupLocation(
+        { refresh: true, threadId: canonical.thread.id, directory: "/untrusted-request-directory" },
+        "/private-default",
+        engine,
+      ),
+    ).resolves.toBe(kind === "worktree" ? "/canonical-worktree" : "/canonical-project");
+    expect(hydrate).toHaveBeenCalledExactlyOnceWith(canonical.thread.id, "operational");
+    expect(order).toEqual(["hydrating", "hydrated", "read-model"]);
+    expect(dispatch).not.toHaveBeenCalled(); // Hydration is not execution, enrollment or new authorization.
+  },
+);
+
+it.each([
+  "missing-thread",
+  "missing-project",
+  "deleted-thread",
+  "deleted-project",
+  "remote-workspace",
+  "remote-runtime",
+  "legacy-remote-thread",
+  "inherited-remote-workspace",
+  "inherited-remote-runtime",
+  "legacy-remote-project",
+  "missing-canonical-path",
+  "stale-cache-after-missing-hydration",
+])(
+  "fails closed after hydration for %s without using request/default directories",
+  async (scenario) => {
+    const canonical = canonicalLocation();
+    if (scenario === "missing-thread") canonical.threads = [];
+    if (scenario === "missing-project") canonical.projects = [];
+    if (scenario === "deleted-thread") canonical.thread.deletedAt = "2026-10-17T10:00:00Z";
+    if (scenario === "deleted-project") canonical.project.deletedAt = "2026-10-17T10:00:00Z";
+    if (scenario === "remote-workspace") canonical.thread.workspaceExecutionTargetId = "ssh:remote";
+    if (scenario === "remote-runtime")
+      canonical.thread.providerRuntimeExecutionTargetId = "ssh:remote";
+    if (scenario === "legacy-remote-thread") canonical.thread.executionTargetId = "ssh:remote";
+    if (scenario === "inherited-remote-workspace")
+      canonical.project.workspaceExecutionTargetId = "ssh:remote";
+    if (scenario === "inherited-remote-runtime")
+      canonical.project.providerRuntimeExecutionTargetId = "ssh:remote";
+    if (scenario === "legacy-remote-project") canonical.project.executionTargetId = "ssh:remote";
+    if (scenario === "missing-canonical-path") canonical.project.workspaceRoot = null;
+    const hydrate = vi.fn(() =>
+      Effect.succeed(
+        scenario === "stale-cache-after-missing-hydration" ? undefined : canonical.threads[0],
+      ),
+    );
+    const dispatch = vi.fn();
+    const engine = {
+      ensureThreadState: hydrate,
+      getReadModel: () => Effect.succeed(canonical),
+      dispatch,
+    } as unknown as OrchestrationEngineShape;
+    await expect(
+      inferredV2SetupLocation(
+        { refresh: true, threadId: canonical.thread.id, directory: "/untrusted-request-directory" },
+        "/private-default",
+        engine,
+      ),
+    ).rejects.toThrow("no local/private fallback");
+    expect(hydrate).toHaveBeenCalledExactlyOnceWith(canonical.thread.id, "operational");
+    expect(dispatch).not.toHaveBeenCalled();
+  },
+);
+
+it("does not recover a hydration failure or absent engine through arbitrary directory fallback", async () => {
+  const threadId = ThreadId.makeUnsafe("failed-hydration");
+  const getReadModel = vi.fn();
+  const engine = {
+    ensureThreadState: () => Effect.die(new Error("canonical hydration failed")),
+    getReadModel,
+  } as unknown as OrchestrationEngineShape;
+  await expect(
+    inferredV2SetupLocation(
+      { refresh: true, threadId, directory: "/supplied" },
+      "/default",
+      engine,
+    ),
+  ).rejects.toThrow("canonical hydration failed");
+  expect(getReadModel).not.toHaveBeenCalled();
+  await expect(
+    inferredV2SetupLocation({ refresh: true, threadId, directory: "/supplied" }, "/default"),
+  ).rejects.toThrow("no arbitrary directory fallback");
 });
