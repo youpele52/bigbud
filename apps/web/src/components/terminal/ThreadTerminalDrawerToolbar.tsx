@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, Pencil, Plus, SquareSplitHorizontal, Trash2 } from "lucide-react";
+import { Maximize2, Minimize2, Pencil, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -47,6 +47,7 @@ export function ThreadTerminalDrawerToolbar({
     "text-muted-foreground hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
   );
   const expansionLabel = expanded ? "Restore split view" : "Expand terminal";
+  const dividerClassName = sidebar ? "h-full w-px bg-border/70" : "h-4 w-px bg-border/80";
 
   return (
     <div className={cn("inline-flex items-center", sidebar && "h-full")}>
@@ -64,6 +65,7 @@ export function ThreadTerminalDrawerToolbar({
       >
         <Plus className="size-3.25" />
       </TerminalActionButton>
+      <div className={dividerClassName} />
       <TerminalActionButton
         className={cn(
           buttonClassName,
@@ -74,29 +76,6 @@ export function ThreadTerminalDrawerToolbar({
       >
         <SquareSplitHorizontal className="size-3.25" />
       </TerminalActionButton>
-      {onToggleExpanded && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                className={buttonClassName}
-                onClick={onToggleExpanded}
-                aria-label={expansionLabel}
-              />
-            }
-          >
-            {expanded ? <Minimize2 className="size-3.25" /> : <Maximize2 className="size-3.25" />}
-          </TooltipTrigger>
-          <TooltipPopup
-            side="bottom"
-            className="pointer-events-none"
-            positionerClassName="pointer-events-none"
-          >
-            {expansionLabel}
-          </TooltipPopup>
-        </Tooltip>
-      )}
       <TerminalActionButton
         className={buttonClassName}
         onClick={onRenameTerminalAction}
@@ -104,14 +83,40 @@ export function ThreadTerminalDrawerToolbar({
       >
         <Pencil className="size-3.25" />
       </TerminalActionButton>
-      <div className={sidebar ? "h-full w-px bg-border/70" : "h-4 w-px bg-border/80"} />
+      <div className={dividerClassName} />
       <TerminalActionButton
         className={buttonClassName}
         onClick={() => onCloseTerminal(resolvedActiveTerminalId)}
         label={closeTerminalActionLabel}
       >
-        <Trash2 className="size-3.25" />
+        <XIcon className="size-3.25" />
       </TerminalActionButton>
+      {onToggleExpanded && (
+        <>
+          <div className={dividerClassName} />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className={buttonClassName}
+                  onClick={onToggleExpanded}
+                  aria-label={expansionLabel}
+                />
+              }
+            >
+              {expanded ? <Minimize2 className="size-3.25" /> : <Maximize2 className="size-3.25" />}
+            </TooltipTrigger>
+            <TooltipPopup
+              side="bottom"
+              className="pointer-events-none"
+              positionerClassName="pointer-events-none"
+            >
+              {expansionLabel}
+            </TooltipPopup>
+          </Tooltip>
+        </>
+      )}
     </div>
   );
 }

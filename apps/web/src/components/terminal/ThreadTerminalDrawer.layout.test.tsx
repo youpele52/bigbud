@@ -36,15 +36,22 @@ function expectToolbar(markup: string, labels: string[]) {
     button.includes("transition-colors"),
   );
   expect(buttons.map((button) => button.match(/aria-label="([^"]+)"/)?.[1])).toEqual(labels);
+  expect(markup).toContain("lucide-x");
+  expect(markup).not.toContain("lucide-trash");
   for (const button of buttons) {
     expect(button).toContain("text-muted-foreground");
     expect(button).toContain("hover:text-foreground");
     expect(button).toContain("focus-visible:text-foreground");
   }
   const dividers = markup.match(/<div class="[^"]*w-px bg-border\/[^"]+"><\/div>/g) ?? [];
-  expect(dividers).toHaveLength(1);
-  expect(markup.indexOf(dividers[0]!)).toBeGreaterThan(markup.indexOf(buttons.at(-2)!));
-  expect(markup.indexOf(dividers[0]!)).toBeLessThan(markup.indexOf(buttons.at(-1)!));
+  const dividerAfterButtonIndices = labels.length === 5 ? [0, 2, 3] : [0, 2];
+  expect(dividers).toHaveLength(dividerAfterButtonIndices.length);
+  for (const [index, buttonIndex] of dividerAfterButtonIndices.entries()) {
+    // Identical divider markup needs a forward search to preserve its position.
+    const position = markup.indexOf(dividers[index]!, markup.indexOf(buttons[buttonIndex]!));
+    expect(position).toBeGreaterThan(markup.indexOf(buttons[buttonIndex]!));
+    expect(position).toBeLessThan(markup.indexOf(buttons[buttonIndex + 1]!));
+  }
 }
 
 describe.each([
@@ -66,9 +73,9 @@ describe.each([
       expectToolbar(markup, [
         "New Terminal",
         "Split Terminal",
-        label,
         "Rename Terminal",
         "Close Terminal",
+        label,
       ]);
     },
   );
