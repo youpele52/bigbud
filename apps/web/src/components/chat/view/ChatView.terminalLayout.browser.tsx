@@ -7,6 +7,7 @@ import { page, userEvent } from "vitest/browser";
 import { ChatLayoutMenu } from "../common/ChatHeader.layoutMenu";
 import { ThreadTerminalDrawerToolbar } from "../../terminal/ThreadTerminalDrawerToolbar";
 import { useTerminalLayout } from "./chat-view/terminalLayout.hooks";
+import { resetTerminalStore } from "../../../stores/terminal/terminal.store.test.helpers";
 
 const SPLIT_HEIGHT = 333;
 const openRequests = vi.fn();
@@ -20,17 +21,28 @@ const toolbarCases = [
 function TerminalLayoutHarness({
   variant = "floating",
   panel = false,
+  initiallyOpen = false,
 }: {
   variant?: "floating" | "sidebar";
   panel?: boolean;
+  initiallyOpen?: boolean;
 }) {
   const [activeThreadId, setActiveThreadId] = useState("thread-a");
-  const [terminalOpen, setTerminalOpenState] = useState(false);
-  const setTerminalOpen = useCallback((open: boolean) => {
-    openRequests(open);
-    setTerminalOpenState(open);
-  }, []);
-  const toggleTerminalVisibility = useCallback(() => setTerminalOpenState((open) => !open), []);
+  const [openByThreadId, setOpenByThreadId] = useState<Record<string, boolean>>({});
+  const terminalOpen = openByThreadId[activeThreadId] ?? initiallyOpen;
+  const setTerminalOpen = useCallback(
+    (open: boolean) => {
+      openRequests(open);
+      setOpenByThreadId((previous) => ({ ...previous, [activeThreadId]: open }));
+    },
+    [activeThreadId],
+  );
+  const toggleTerminalVisibility = useCallback(() => {
+    setOpenByThreadId((previous) => ({
+      ...previous,
+      [activeThreadId]: !(previous[activeThreadId] ?? initiallyOpen),
+    }));
+  }, [activeThreadId, initiallyOpen]);
   const layout = useTerminalLayout({
     activeThreadId,
     terminalOpen,
@@ -119,7 +131,10 @@ async function selectLayout(label: string, currentLabel: string) {
 }
 
 describe("terminal layout integration", () => {
-  beforeEach(() => openRequests.mockClear());
+  beforeEach(() => {
+    openRequests.mockClear();
+    resetTerminalStore();
+  });
   afterEach(() => {
     document.body.innerHTML = "";
   });
@@ -208,7 +223,7 @@ describe("terminal layout integration", () => {
     },
   );
 
-  it("resets on idempotent open, close/reopen, and thread changes in both directions", async () => {
+  it("resets on idempotent open and close/reopen, but remembers each thread", async () => {
     const screen = await render(<TerminalLayoutHarness />);
     try {
       await selectLayout("Terminal only", "Chat only");
@@ -223,9 +238,19 @@ describe("terminal layout integration", () => {
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
       await selectLayout("Terminal only", "Chat + terminal");
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
-      await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
+      await vi.waitFor(() => expect(terminalRegion().dataset.terminalOpen).toBe("false"));
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
+      await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("fill"));
+      await page.getByRole("button", { name: "Change thread", exact: true }).click();
+      await page.getByRole("button", { name: "Open terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
+      await selectLayout("Chat only", "Chat + terminal");
+      await page.getByRole("button", { name: "Change thread", exact: true }).click();
+      await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("fill"));
+      await page.getByRole("button", { name: "Change thread", exact: true }).click();
+      await vi.waitFor(() => expect(terminalRegion().hidden).toBe(true));
+      await showMenu("Chat only");
+      await userEvent.keyboard("{Escape}");
       await page.getByRole("button", { name: "Toggle terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalOpen).toBe("false"));
       await selectLayout("Terminal only", "Chat only");
@@ -234,6 +259,26 @@ describe("terminal layout integration", () => {
       await screen.unmount();
     }
   });
+
+  it.each(["Terminal only", "Chat only", "Chat + terminal"])(
+    "remembers %s after the view unmounts and remounts",
+    async (label) => {
+      const screen = await render(<TerminalLayoutHarness initiallyOpen />);
+      await selectLayout(label, "Chat + terminal");
+      await screen.unmount();
+      const remounted = await render(<TerminalLayoutHarness initiallyOpen />);
+      try {
+        await showMenu(label);
+        await userEvent.keyboard("{Escape}");
+        expect(terminalRegion().dataset.terminalRegion).toBe(
+          label === "Terminal only" ? "fill" : label === "Chat only" ? "hidden" : "split",
+        );
+        expect(openRequests).not.toHaveBeenCalled();
+      } finally {
+        await remounted.unmount();
+      }
+    },
+  );
 
   it("supports keyboard selection without opening a session just to show the menu", async () => {
     const screen = await render(<TerminalLayoutHarness />);
@@ -309,15 +354,21 @@ describe("terminal layout integration", () => {
         expect(buttons.map((button) => button.ariaLabel)).toEqual([
           "New Terminal (⌘N)",
           "Split Terminal (⌘⇧G)",
-          ...(!panel ? ["Expand terminal"] : []),
           "Rename Terminal",
           "Close Terminal (⌘W)",
+          ...(!panel ? ["Expand terminal"] : []),
         ]);
         const dividers = document.querySelectorAll("div.w-px");
-        expect(dividers).toHaveLength(1);
-        expect(dividers[0]!.previousElementSibling).toBe(buttons.at(-2));
-        expect(dividers[0]!.nextElementSibling).toBe(buttons.at(-1));
-        const callbacks = [onNew, onSplit, ...(!panel ? [onExpand] : []), onRename, onClose];
+        expect(dividers).toHaveLength(panel ? 2 : 3);
+        expect(dividers[0]!.previousElementSibling).toBe(buttons[0]);
+        expect(dividers[0]!.nextElementSibling).toBe(buttons[1]);
+        expect(dividers[1]!.previousElementSibling).toBe(buttons[2]);
+        expect(dividers[1]!.nextElementSibling).toBe(buttons[3]);
+        if (!panel) {
+          expect(dividers[2]!.previousElementSibling).toBe(buttons[3]);
+          expect(dividers[2]!.nextElementSibling).toBe(buttons[4]);
+        }
+        const callbacks = [onNew, onSplit, onRename, onClose, ...(!panel ? [onExpand] : [])];
         for (const [index, button] of buttons.entries()) {
           expect(button.querySelector("svg")?.classList.contains("size-3.25")).toBe(true);
           await page.getByRole("button", { name: button.ariaLabel!, exact: true }).click();

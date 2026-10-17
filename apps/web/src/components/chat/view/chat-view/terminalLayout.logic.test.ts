@@ -7,31 +7,17 @@ import {
 } from "./terminalLayout.logic";
 
 describe("terminal layout", () => {
-  it("displays chat-only while closed and resets to split after identity changes", () => {
-    const selection = { threadId: "thread-a", epoch: 2, mode: "terminal-only" as const };
-
+  it("displays chat-only while closed and defaults to split without a selection", () => {
     expect(
       resolveEffectiveTerminalLayoutMode({
         terminalOpen: false,
-        activeThreadId: "thread-a",
-        activeEpoch: 2,
-        selection,
+        selection: "terminal-only",
       }),
     ).toBe("chat-only");
     expect(
       resolveEffectiveTerminalLayoutMode({
         terminalOpen: true,
-        activeThreadId: "thread-b",
-        activeEpoch: 3,
-        selection,
-      }),
-    ).toBe("split");
-    expect(
-      resolveEffectiveTerminalLayoutMode({
-        terminalOpen: true,
-        activeThreadId: "thread-a",
-        activeEpoch: 3,
-        selection,
+        selection: undefined,
       }),
     ).toBe("split");
   });
@@ -57,9 +43,7 @@ describe("terminal layout", () => {
       expect(
         resolveEffectiveTerminalLayoutMode({
           terminalOpen: true,
-          activeThreadId: "thread-a",
-          activeEpoch: 2,
-          selection: { threadId: "thread-a", epoch: 2, mode },
+          selection: mode,
         }),
       ).toBe(mode);
     },

@@ -1,10 +1,6 @@
-export type TerminalLayoutMode = "split" | "terminal-only" | "chat-only";
+import type { TerminalLayoutMode } from "~/stores/terminal/terminal.store.layout";
 
-export interface TerminalLayoutSelection {
-  readonly threadId: string;
-  readonly epoch: number;
-  readonly mode: TerminalLayoutMode;
-}
+export type { TerminalLayoutMode };
 
 export const TERMINAL_LAYOUT_LABELS: Record<TerminalLayoutMode, string> = {
   "chat-only": "Chat only",
@@ -14,14 +10,10 @@ export const TERMINAL_LAYOUT_LABELS: Record<TerminalLayoutMode, string> = {
 
 export function resolveEffectiveTerminalLayoutMode(input: {
   readonly terminalOpen: boolean;
-  readonly activeThreadId: string;
-  readonly activeEpoch: number;
-  readonly selection: TerminalLayoutSelection;
+  readonly selection: TerminalLayoutMode | undefined;
 }): TerminalLayoutMode {
   if (!input.terminalOpen) return "chat-only";
-  if (input.selection.threadId !== input.activeThreadId) return "split";
-  if (input.selection.epoch !== input.activeEpoch) return "split";
-  return input.selection.mode;
+  return input.selection ?? "split";
 }
 
 export function resolveTerminalLayoutVisibility(mode: TerminalLayoutMode): {
