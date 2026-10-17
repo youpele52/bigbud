@@ -12,10 +12,8 @@ import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgen
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.ts";
 import { makeRemoteAgentPtyAdapter } from "./remoteAgentPtyAdapter.ts";
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
-import {
-  RemoteAgentConnectionPool,
-  type RemoteAgentRuntimeBinding,
-} from "./remoteAgentConnectionPool.ts";
+import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
+import { restartFixtureBinding as binding } from "./remoteAgentOwners.restart.binding.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import type { RemoteAgentFrame } from "./remoteAgentProtocol.ts";
 import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
@@ -40,25 +38,6 @@ vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
 }));
 afterEach(() => vi.restoreAllMocks());
-
-function binding(generation: string): RemoteAgentRuntimeBinding {
-  const sha256 = (generation === "g1" ? "a" : "b").repeat(64);
-  return {
-    expectedEpoch: `epoch-${generation}`,
-    runtime: {
-      generation,
-      version: "0.2.207",
-      sha256,
-      buildDigest: "fixture",
-      targetTriple: "aarch64-unknown-linux-gnu",
-      origin: "managed",
-      binaryPath: `/tmp/agent/bin/0.2.207/${sha256}/bigbud-remote-agent`,
-      statePath: `/tmp/agent/runtimes/${generation}`,
-      socketPath: `/tmp/agent/runtimes/${generation}/supervisor.sock`,
-      logPath: `/tmp/agent/runtimes/${generation}/supervisor.log`,
-    },
-  };
-}
 
 describe("application terminal owner recovery after server services restart", () => {
   it("restores a retryable tool invocation on its original runtime without persisting command secrets or redispatching", async () => {
@@ -346,6 +325,28 @@ describe("application terminal owner recovery after server services restart", ()
         );
         expect(result.pid).toBe(9000);
         expect(result.cwd).toBe("/workspace");
+        expect(result.historyUnavailable).toBe(restart ? true : undefined);
+        expect(result.history).toBe("");
+        if (!restart) {
+          await store.update('terminal:["thread","terminal"]', (owner) => ({
+            ...owner,
+            outputSequence: 17,
+          }));
+        } else {
+          const attached = requests
+            .filter((entry) => entry.frame.type === "ptyAttachRequest")
+            .at(-1)!;
+          expect(
+            attached.frame.type === "ptyAttachRequest" && attached.frame.value.afterSequence,
+          ).toBe(17);
+          expect(
+            (
+              await runtime.runPromise(
+                manager.snapshot({ threadId: "thread", terminalId: "terminal" }),
+              )
+            ).historyUnavailable,
+          ).toBe(true);
+        }
         await runtime.runPromise(Scope.close(scope, Exit.void));
         pool.closeAll();
         await runtime.dispose();

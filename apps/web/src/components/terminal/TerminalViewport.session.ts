@@ -1,12 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import {
-  type ExecutionTargetId,
-  type ResolvedKeybindingsConfig,
-  type TerminalDropPathMode,
-  type ThreadId,
-} from "@bigbud/contracts";
-import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
+import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/terminal.ts";
+import { useEffect, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { terminalThemeFromApp } from "./ThreadTerminalDrawer.logic";
@@ -14,46 +9,17 @@ import { createTerminalViewportDelivery } from "./TerminalViewport.delivery";
 import { subscribeTerminalOutput } from "./TerminalOutputStream";
 import { useTerminalTypography } from "./TerminalViewport.typography";
 import { attachTerminalRenderer } from "./TerminalViewport.rendering";
-import { TerminalFontController, type TerminalTypographySettings } from "./TerminalFontController";
+import { TerminalFontController } from "./TerminalFontController";
 import { SYSTEM_TERMINAL_FONT_FAMILY } from "./terminalTypography";
 import type { TerminalRendererState } from "./TerminalRendererController";
-import type { TerminalGpuAcceleration } from "@bigbud/contracts/core/settings.ts";
 import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
 import { createTerminalWebLinkHandler } from "./TerminalViewport.links.web";
 import { clearSelectionAction, openTerminalSession } from "./TerminalViewport.session.helpers";
 import { attachTerminalSelection } from "./TerminalViewport.selection";
-
-interface UseTerminalViewportSessionInput extends TerminalTypographySettings {
-  containerRef: RefObject<HTMLDivElement | null>;
-  terminalRef: MutableRefObject<Terminal | null>;
-  fitAddonRef: MutableRefObject<FitAddon | null>;
-  hasHandledExitRef: MutableRefObject<boolean>;
-  selectionPointerRef: MutableRefObject<{ x: number; y: number } | null>;
-  selectionGestureActiveRef: MutableRefObject<boolean>;
-  selectionActionRequestIdRef: MutableRefObject<number>;
-  selectionActionOpenRef: MutableRefObject<boolean>;
-  selectionActionTimerRef: MutableRefObject<number | null>;
-  keybindingsRef: MutableRefObject<ResolvedKeybindingsConfig>;
-  autoFocusRef: MutableRefObject<boolean>;
-  worktreePathRef: MutableRefObject<string | null | undefined>;
-  dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
-  threadId: ThreadId;
-  visible: boolean;
-  terminalId: string;
-  readTerminalLabel: () => string;
-  executionTargetId?: ExecutionTargetId | undefined;
-  cwd: string;
-  runtimeEnv?: Record<string, string> | undefined;
-  terminalGpuAcceleration: TerminalGpuAcceleration;
-  onSessionExited: () => void;
-  onAddTerminalContext: (selection: TerminalContextSelection) => void;
-  onRequestTerminalAnnotation: (input: {
-    selection: TerminalContextSelection;
-    position: { x: number; y: number };
-    selectionRect: { left: number; top: number; right: number; bottom: number } | null;
-  }) => void;
-}
+import { makeTerminalRestartAction } from "./TerminalViewport.restart";
+import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
+import type { UseTerminalViewportSessionInput } from "./TerminalViewport.session.types";
 
 export function useTerminalViewportSession(input: UseTerminalViewportSessionInput) {
   // Keep callbacks in refs so the session effect does not re-run (and
@@ -68,6 +34,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   onSessionExitedRef.current = input.onSessionExited;
   const [inputEnabled, setInputEnabled] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const [startupPending, setStartupPending] = useState(true);
   const [startupFailed, setStartupFailed] = useState(false);
   const [directoryNotice, setDirectoryNotice] = useState<string | null>(null);
@@ -75,6 +42,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   const rendererRef = useRef<ReturnType<typeof attachTerminalRenderer> | null>(null);
   const fontControllerRef = useRef<TerminalFontController | null>(null);
   const retryDeliveryRef = useRef<() => void>(() => undefined);
+  const restartDeliveryRef = useRef<() => void>(() => undefined);
   const typographyRef = useRef(input);
   typographyRef.current = input;
 
@@ -103,6 +71,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     let disposed = false;
     const fitAddon = new FitAddon();
     setDeliveryError(null);
+    setHistoryUnavailable(false);
     setRendering({ mode: "dom", reason: null });
     const themeHost =
       mount.closest<HTMLElement>(".thread-terminal-theme-host") ??
@@ -154,7 +123,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           if (!disposed) setInputEnabled(enabled);
         },
         onFailure: (error) => {
-          if (!disposed) setDeliveryError(error.message);
+          if (!disposed) {
+            setDeliveryError(error.message);
+            if (error instanceof TerminalHistoryUnavailableError) setHistoryUnavailable(true);
+          }
         },
       });
     let delivery = createDelivery();
@@ -240,6 +212,22 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
 
     let openTerminalRetryTimer: number | null = null;
     let hasRunningSnapshot = false;
+    let lastSnapshot: TerminalSessionSnapshot | null = null;
+    const onSnapshot = (snapshot: TerminalSessionSnapshot) => {
+      lastSnapshot = snapshot;
+      input.dropPathModeRef.current = snapshot.dropPathMode;
+      terminalLinksDisposable.dispose();
+      terminalLinksDisposable = registerLinks(snapshot);
+      hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
+      setStartupPending(false);
+      setStartupFailed(!hasRunningSnapshot);
+      setHistoryUnavailable(Boolean(snapshot.historyTruncated || snapshot.historyUnavailable));
+      setDirectoryNotice(
+        snapshot.directoryFallback
+          ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
+          : null,
+      );
+    };
     const runOpenTerminal = async (attachOnly = false) => {
       const owner = delivery;
       try {
@@ -258,18 +246,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           worktreePathRef: input.worktreePathRef,
           dropPathModeRef: input.dropPathModeRef,
           waitForTypography: () => fontController.whenReady(),
-          onSnapshot: (snapshot) => {
-            terminalLinksDisposable.dispose();
-            terminalLinksDisposable = registerLinks(snapshot);
-            hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
-            setStartupPending(false);
-            setStartupFailed(!hasRunningSnapshot);
-            setDirectoryNotice(
-              snapshot.directoryFallback
-                ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
-                : null,
-            );
-          },
+          onSnapshot,
           autoFocusRef: input.autoFocusRef,
           containerRef: input.containerRef,
         });
@@ -286,8 +263,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         owner.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
       }
     };
-    retryDeliveryRef.current = () => {
-      if (disposed || !delivery.writeBatcher.isStopped) return;
+    const replaceDelivery = () => {
       if (openTerminalRetryTimer !== null) window.clearTimeout(openTerminalRetryTimer);
       delivery.dispose();
       unsubscribeTerminalEvents?.();
@@ -296,8 +272,31 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       setStartupPending(!hasRunningSnapshot);
       setStartupFailed(false);
       delivery = createDelivery();
+      input.hasHandledExitRef.current = false;
+      return delivery;
+    };
+    retryDeliveryRef.current = () => {
+      if (disposed || !delivery.writeBatcher.isStopped) return;
+      replaceDelivery();
       void runOpenTerminal(hasRunningSnapshot);
     };
+    restartDeliveryRef.current = makeTerminalRestartAction({
+      api,
+      terminal,
+      readSnapshot: () => lastSnapshot,
+      disposed: () => disposed,
+      prepare: () => {
+        const owner = replaceDelivery();
+        subscribe();
+        return owner;
+      },
+      isCurrent: (owner) => delivery === owner,
+      onSnapshot,
+      onFailure: (error) => {
+        setHistoryUnavailable(true);
+        setDeliveryError(error.message);
+      },
+    });
 
     void runOpenTerminal();
 
@@ -305,6 +304,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       disposed = true;
       clearSelectionActionState();
       retryDeliveryRef.current = () => undefined;
+      restartDeliveryRef.current = () => undefined;
       delivery.dispose();
       selectionActionOpenRef.current = false;
       unsubscribeTerminalEvents?.();
@@ -354,11 +354,13 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   return {
     inputEnabled,
     deliveryError,
+    historyUnavailable,
     startupPending,
     startupFailed,
     directoryNotice,
     rendering,
     retryGpu: () => rendererRef.current?.retry(),
     retryDelivery: () => retryDeliveryRef.current(),
+    restartDelivery: () => restartDeliveryRef.current(),
   };
 }

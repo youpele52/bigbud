@@ -32,6 +32,8 @@ export const DEFAULT_OPEN_ROWS = 30;
 export interface TerminalSessionState {
   wslIdentity?: TerminalWslIdentity | undefined;
   remoteOwnerRecoveryRequired?: boolean;
+  restartPending?: boolean;
+  restartPreparation?: (() => Promise<void>) | undefined;
   threadId: string;
   terminalId: string;
   executionTargetId: string;
@@ -44,6 +46,12 @@ export interface TerminalSessionState {
   status: TerminalSessionStatus;
   pid: number | null;
   history: string;
+  historyTruncated?: boolean;
+  historyUnavailable?: boolean;
+  historyBytes?: number;
+  historyNewlines?: number;
+  historyTail?: string;
+  pendingHistoryBytes?: number;
   pendingHistoryControlSequence: string;
   pendingProcessEvents: Array<PendingProcessEvent>;
   pendingProcessEventIndex: number;

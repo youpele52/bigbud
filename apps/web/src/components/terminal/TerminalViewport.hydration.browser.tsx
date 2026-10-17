@@ -5,6 +5,52 @@ import { expect, it, vi } from "vitest";
 import { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 
+it("restores parser carry at a snapshot cut before applying the live control tail", async () => {
+  const terminal = new Terminal({ cols: 80, rows: 24 });
+  const failure = vi.fn();
+  const lane = new TerminalWriteBatcher(failure);
+  const intake = new TerminalViewportIntake(
+    terminal,
+    lane,
+    (event) => {
+      if (event.type === "output") lane.write(terminal, event.data);
+    },
+    () => undefined,
+  );
+  try {
+    const hydration = intake.hydrate({
+      threadId: "split",
+      terminalId: "default",
+      cwd: "/",
+      worktreePath: null,
+      dropPathMode: "posix",
+      status: "running",
+      pid: 1,
+      history: "\x1b[3",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: "2026-10-17T00:00:00.000Z",
+    });
+    intake.receive({
+      type: "output",
+      threadId: "split",
+      terminalId: "default",
+      data: "2mPi",
+      createdAt: "2026-10-17T00:00:00.001Z",
+    });
+    await hydration;
+    await lane.whenIdle();
+    expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe("Pi");
+    expect(terminal.buffer.active.getLine(0)?.getCell(0)?.getFgColor()).toBe(2);
+    expect(intake.acceptsInput).toBe(true);
+    expect(failure).not.toHaveBeenCalled();
+  } finally {
+    intake.dispose();
+    lane.dispose();
+    terminal.dispose();
+  }
+});
+
 it.each([false, true])(
   "large history and continuous redraws hand off with real xterm (GPU=%s)",
   async (gpu) => {

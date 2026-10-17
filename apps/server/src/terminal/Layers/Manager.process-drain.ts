@@ -213,6 +213,9 @@ export function startSessionWith(
             );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
             ptyProcess = spawnResult.process;
+            // A durable remote owner resumes after its acknowledged output cut,
+            // not from process birth. Empty local history is not a valid baseline.
+            session.historyUnavailable = ptyProcess.recovered === true;
             startedShell = spawnResult.shellLabel;
             startedDropPathMode = spawnResult.dropPathMode;
 
@@ -225,9 +228,12 @@ export function startSessionWith(
               ctx.runFork(ctx.queuePtyOutput(session, processPid, data));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
+              // Explicit restart owns the exit while awaiting durable remote release.
+              if (session.restartPending) return;
               ctx.runFork(
                 Effect.gen(function* () {
                   yield* ctx.flushPtyOutput(session.threadId, session.terminalId);
+                  if (session.restartPending) return;
                   if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
                     return;
                   }

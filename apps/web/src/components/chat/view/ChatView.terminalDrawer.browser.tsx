@@ -7,6 +7,7 @@ import { render } from "vitest-browser-react";
 
 import { TerminalDrawerSwitchFixture } from "./ChatView.terminalDrawer.fixture";
 import { terminalRendererBudget } from "../../terminal/TerminalRendererController.policy";
+import { publishTerminalOutput } from "../../terminal/TerminalOutputStream";
 import { useTerminalStateStore } from "../../../stores/terminal/terminal.store";
 import { resetTerminalStore } from "../../../stores/terminal/terminal.store.test.helpers";
 
@@ -92,6 +93,24 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
       .poll(() => terminals.every((terminal) => !terminal.options.disableStdin), { timeout: 15000 })
       .toBe(true);
     await expect.poll(() => terminalRendererBudget.count).toBe(1);
+    for (const [input] of mocks.open.mock.calls) {
+      publishTerminalOutput({
+        type: "output",
+        ...input,
+        data: "\x1b[H\x1b[2Jold OpenCode",
+        createdAt: "2026-10-10T00:00:01.000Z",
+      });
+      publishTerminalOutput({
+        type: "output",
+        ...input,
+        data: "\x1b[H\x1b[2Jcurrent Pi",
+        createdAt: "2026-10-10T00:00:02.000Z",
+      });
+    }
+    const currentScreen = (terminal: Terminal) =>
+      terminal.buffer.active.getLine(terminal.buffer.active.baseY)?.translateToString(true);
+    await expect.poll(() => terminals.map(currentScreen)).toEqual(["current Pi", "current Pi"]);
+    const writes = terminals.map((terminal) => vi.spyOn(terminal, "write"));
     const buffers = terminals.map((terminal) => terminal.buffer.active);
     const readWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth")!.get!;
     let measurements = 0;
@@ -141,6 +160,8 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
     expect(opened).toHaveBeenCalledTimes(2);
     expect(mocks.open).toHaveBeenCalledTimes(2);
     expect(disposed).not.toHaveBeenCalled();
+    expect(terminals.map(currentScreen)).toEqual(["current Pi", "current Pi"]);
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
     expect(terminals.map((terminal) => terminal.buffer.active)).toEqual(buffers);
     expect(terminals.every((terminal) => terminal.buffer.active.length > terminal.rows)).toBe(true);
 

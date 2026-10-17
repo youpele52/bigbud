@@ -113,6 +113,10 @@ export const TerminalSessionSnapshot = Schema.Struct({
     Schema.Struct({ requestedCwd: Schema.String, reason: Schema.String }),
   ),
   history: Schema.String,
+  // No safe replay baseline remains; never interpret a truncated suffix as screen state.
+  historyTruncated: Schema.optional(Schema.Boolean),
+  // An attached surviving process has no baseline at its persisted output cut.
+  historyUnavailable: Schema.optional(Schema.Boolean),
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
   updatedAt: Schema.String,

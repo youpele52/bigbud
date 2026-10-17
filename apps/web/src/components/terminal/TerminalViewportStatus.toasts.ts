@@ -8,6 +8,8 @@ export interface TerminalViewportToastState {
   rendering: TerminalRendererState;
   retryGpu: () => void;
   retryDelivery?: () => void;
+  historyUnavailable?: boolean;
+  restartDelivery?: () => void;
   gpuRequested: boolean;
   terminalLabel: string;
   visible: boolean;
@@ -54,20 +56,31 @@ export class TerminalViewportToasts {
           ? `${state.terminalLabel}: ${state.startupFailed ? "terminal startup failed" : "terminal input paused"}`
           : `${state.terminalLabel}: ${state.startupPending ? "resolving terminal folder" : "restoring terminal history"}`,
         description:
-          state.deliveryError && state.retryDelivery && !state.startupFailed
+          state.deliveryError &&
+          state.retryDelivery &&
+          !state.startupFailed &&
+          !state.historyUnavailable
             ? `${description}\nReload uses retained legacy history, not an exact restore. The running process will not be restarted.`
             : description,
         timeout: 0,
         actionProps:
-          state.deliveryError && state.retryDelivery
+          state.deliveryError && state.historyUnavailable
             ? {
-                children: state.startupFailed ? "Retry terminal startup" : "Reload legacy view",
+                children: "Restart terminal",
                 onClick: () => {
-                  if (this.latest?.visible && this.latest.deliveryError)
-                    this.latest.retryDelivery?.();
+                  if (this.latest?.visible && this.latest.historyUnavailable)
+                    this.latest.restartDelivery?.();
                 },
               }
-            : undefined,
+            : state.deliveryError && state.retryDelivery
+              ? {
+                  children: state.startupFailed ? "Retry terminal startup" : "Reload legacy view",
+                  onClick: () => {
+                    if (this.latest?.visible && this.latest.deliveryError)
+                      this.latest.retryDelivery?.();
+                  },
+                }
+              : undefined,
       });
     }
     if (state.inputEnabled && state.directoryNotice) {

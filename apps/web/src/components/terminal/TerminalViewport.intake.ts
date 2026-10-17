@@ -4,6 +4,7 @@ import type {
 } from "@bigbud/contracts/workspace/terminal.ts";
 import type { Terminal } from "@xterm/xterm";
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
+import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
 import { reserveTerminalOutput, releaseTerminalOutput } from "./TerminalOutputBudget";
 
 /** Bounded legacy hydration handoff, not a sequenced or exact checkpoint protocol. */
@@ -127,6 +128,10 @@ export class TerminalViewportIntake {
     while (this.baseline && !this.disposed) {
       const snapshot = this.baseline;
       this.baseline = null;
+      if (snapshot.historyTruncated || snapshot.historyUnavailable) {
+        this.pause(new TerminalHistoryUnavailableError());
+        return;
+      }
       this.live = false;
       // Already-queued live output may still contain valid protocol queries.
       this.lane.barrier(() => {

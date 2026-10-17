@@ -160,6 +160,8 @@ export function TerminalViewport({
     rendering,
     retryGpu,
     retryDelivery,
+    historyUnavailable,
+    restartDelivery,
     startupPending,
     startupFailed,
     directoryNotice,
@@ -366,6 +368,8 @@ export function TerminalViewport({
         rendering={rendering}
         retryGpu={retryGpu}
         retryDelivery={retryDelivery}
+        historyUnavailable={historyUnavailable}
+        restartDelivery={restartDelivery}
         gpuRequested={settings.terminalGpuAcceleration !== "off"}
       />
       {pendingAnnotation ? (

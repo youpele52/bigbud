@@ -93,7 +93,9 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     ...(isLocalExecutionTarget(session.executionTargetId)
       ? { activeAgentProvider: session.activeAgentProvider }
       : {}),
-    history: session.history,
+    history: session.history + session.pendingHistoryControlSequence,
+    ...(session.historyTruncated ? { historyTruncated: true } : {}),
+    ...(session.historyUnavailable ? { historyUnavailable: true } : {}),
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     updatedAt: session.updatedAt,

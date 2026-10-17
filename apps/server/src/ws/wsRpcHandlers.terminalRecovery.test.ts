@@ -6,7 +6,7 @@ import { WS_METHODS, type TerminalEvent } from "@bigbud/contracts";
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager";
 import * as NodePTY from "../terminal/Layers/NodePTY";
 import { PtyAdapter } from "../terminal/Services/PTY";
-import { historyLogPath } from "../terminal/Layers/Manager.test.helpers";
+import { historyLogPath, waitFor } from "../terminal/Layers/Manager.test.helpers";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
 import type { WsRpcContext } from "./wsRpcContext";
 
@@ -21,7 +21,7 @@ it.skipIf(process.platform === "win32")(
           const shell = path.join(dir, "synthetic-tui");
           yield* fs.writeFileString(
             shell,
-            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log('INPUT:'+d));\n`,
+            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log(d.toString()==='overflow'?'x'.repeat(1048577):'INPUT:'+d));\n`,
           );
           yield* fs.chmod(shell, 0o755);
           const adapter = yield* PtyAdapter;
@@ -59,10 +59,8 @@ it.skipIf(process.platform === "win32")(
           responseReturned = true;
           expect(startedBeforeResponse).toEqual([true]);
           const started = events.find((event) => event.type === "started");
-          expect(
-            started?.type === "started" && started.snapshot.history.length * 3,
-          ).toBeGreaterThan(1024 * 1024);
-          expect(opened.history).toContain(history);
+          expect(started?.type === "started" && started.snapshot.history).toBe("");
+          expect(opened.history).not.toContain("retained TUI frame");
           const output = () =>
             events
               .filter((event) => event.type === "output")
@@ -87,6 +85,8 @@ it.skipIf(process.platform === "win32")(
           });
           expect(recovered.pid).toBe(opened.pid);
           expect(recovered.runtimeGeneration).toBe(opened.runtimeGeneration);
+          expect(recovered.history).toContain("SIZE:96x24");
+          expect(recovered.history).not.toContain("retained TUI frame");
           expect(spawn).toHaveBeenCalledOnce();
           yield* handlers[WS_METHODS.terminalWrite]({
             threadId: input.threadId,
@@ -94,6 +94,20 @@ it.skipIf(process.platform === "win32")(
             data: "fixture-only",
           });
           yield* Effect.promise(() => expect.poll(output).toContain("INPUT:fixture-only"));
+          yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "overflow" });
+          yield* waitFor(
+            handlers[WS_METHODS.terminalSnapshot](input).pipe(
+              Effect.map((snapshot) => snapshot.historyTruncated === true),
+            ),
+            "5 seconds",
+          );
+          const restarted = yield* handlers[WS_METHODS.terminalRestart](input);
+          expect(restarted.pid).not.toBe(opened.pid);
+          expect(restarted.runtimeGeneration).not.toBe(opened.runtimeGeneration);
+          expect(restarted.historyTruncated).toBeUndefined();
+          expect(restarted.historyUnavailable).toBeUndefined();
+          yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "fresh-generation" });
+          yield* Effect.promise(() => expect.poll(output).toContain("INPUT:fresh-generation"));
           yield* handlers[WS_METHODS.terminalClose]({
             threadId: input.threadId,
             terminalId: input.terminalId,
@@ -105,7 +119,7 @@ it.skipIf(process.platform === "win32")(
             }),
           );
           expect(result._tag).toBe("Failure");
-          expect(spawn).toHaveBeenCalledOnce();
+          expect(spawn).toHaveBeenCalledTimes(2);
         }).pipe(Effect.provide(NodePTY.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
       ),
     );

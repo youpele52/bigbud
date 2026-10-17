@@ -14,6 +14,7 @@ import { type TerminalSessionState } from "./Manager.types";
 import { makeResolveTerminalFolder } from "./Manager.cwd";
 import { TerminalNotRunningError } from "../Services/Manager";
 import { makeTerminalClose } from "./Manager.session.close";
+import { prepareTerminalRestart } from "./Manager.session.restart";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -27,7 +28,6 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     flushPtyOutput,
     persistHistory,
     flushPersist,
-    readHistory,
     evictInactiveSessionsIfNeeded,
     assertValidCwd,
     publishEvent,
@@ -83,7 +83,6 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         if (Option.isNone(existing)) {
           yield* flushPtyOutput(input.threadId, terminalId);
           yield* flushPersist(input.threadId, terminalId);
-          const history = yield* readHistory(input.threadId, terminalId);
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
           const session = createTerminalSessionState({
@@ -93,7 +92,8 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
-            history,
+            // A new process starts fresh; disk logs are not emulator checkpoints.
+            history: "",
             cols,
             rows,
             runtimeEnv: normalizedRuntimeEnv(input.env),
@@ -153,6 +153,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const targetRows = input.rows ?? liveSession.rows;
         if (!liveSession.process) {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
+          if (liveSession.restartPreparation) yield* prepareTerminalRestart(liveSession);
           yield* stopProcess(liveSession);
           liveSession.executionTargetId = executionTargetId;
           liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
@@ -285,6 +286,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         } else {
           session = existingSession.value;
           yield* flushPtyOutput(session.threadId, session.terminalId);
+          yield* prepareTerminalRestart(session);
           yield* stopProcess(session);
           session.executionTargetId = executionTargetId;
           session.dropPathMode = defaultTerminalDropPathMode(executionTargetId);

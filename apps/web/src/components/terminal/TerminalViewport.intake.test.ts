@@ -66,3 +66,15 @@ it("bounded hydration exhaustion stays visibly paused instead of silently splici
   expect(f.intake.acceptsInput).toBe(false);
   f.intake.dispose();
 });
+
+it("refuses an incomplete baseline before resetting or writing to the emulator", async () => {
+  const f = fixture();
+  await f.intake.hydrate({ ...f.snapshot, history: "unsafe suffix", historyTruncated: true });
+  vi.runAllTimers();
+  expect(f.terminal.write).not.toHaveBeenCalled();
+  expect(f.failure).toHaveBeenCalledWith(
+    expect.objectContaining({ message: expect.stringContaining("process is still running") }),
+  );
+  expect(f.intake.acceptsInput).toBe(false);
+  f.intake.dispose();
+});
