@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./providerTurnFailure": {
+      "types": "./src/providerTurnFailure.ts",
+      "import": "./src/providerTurnFailure.ts"
+    },
     "./internalTextGeneration": {
       "types": "./src/internalTextGeneration.ts",
       "import": "./src/internalTextGeneration.ts"

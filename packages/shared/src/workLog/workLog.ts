@@ -18,9 +18,11 @@ import {
 import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 import { extractWorkLogPayloadDetails } from "./workLog.payload";
+import { PROVIDER_TURN_FAILURE_NOTICE_KIND } from "../providerTurnFailure";
 
 /** Rendered by the model choice notice or the composer's prompt suggestion, not the work log. */
 const NOTICE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
+  PROVIDER_TURN_FAILURE_NOTICE_KIND,
   DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
   DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
   PROMPT_SUGGESTION_ACTIVITY_KIND,

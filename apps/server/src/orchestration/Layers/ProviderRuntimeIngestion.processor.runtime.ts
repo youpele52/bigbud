@@ -5,7 +5,6 @@ import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGove
 import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.processor.runtime.assistant.ts";
 import {
   STRICT_PROVIDER_LIFECYCLE_GUARD,
-  normalizeRuntimeTurnState,
   proposedPlanIdForTurn,
   proposedPlanIdFromEvent,
   runtimeEventToActivities,
@@ -29,6 +28,7 @@ import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
+import { runtimeSessionLastError } from "./ProviderRuntimeIngestion.processor.runtime.error.ts";
 import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
 import {
   isSuccessfulModelEvent,
@@ -134,15 +134,7 @@ export function makeRuntimeEventProcessor(
             ? null
             : activeTurnId;
       const status = lifecycleSessionStatus(event, activeTurnId);
-      const lastError =
-        event.type === "session.state.changed" && event.payload.state === "error"
-          ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
-          : event.type === "turn.completed" &&
-              normalizeRuntimeTurnState(event.payload.state) === "failed"
-            ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
-            : status === "ready"
-              ? null
-              : (thread.session?.lastError ?? null);
+      const lastError = runtimeSessionLastError(event, status, thread.session?.lastError);
 
       if (shouldApplyThreadLifecycle) {
         if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {

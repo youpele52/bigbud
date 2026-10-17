@@ -1,5 +1,7 @@
 import type { OrchestrationThreadActivity, ProviderRuntimeEvent } from "@bigbud/contracts";
 import { approvalRuntimeEventToActivities } from "@bigbud/shared/providerApproval";
+import { PROVIDER_TURN_FAILURE_NOTICE_KIND } from "@bigbud/shared/providerTurnFailure";
+import { serverRunId } from "../../startup/serverRunIdentity.ts";
 
 import { taskRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tasks.ts";
 import { toolingRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tooling.ts";
@@ -17,6 +19,24 @@ export function runtimeEventToActivitiesFromHelpers(
   })();
 
   switch (event.type) {
+    case "turn.completed": {
+      if (event.provider !== "opencodeV2" || event.payload.state !== "failed") return [];
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "error",
+          kind: PROVIDER_TURN_FAILURE_NOTICE_KIND,
+          summary: "OpenCode v2 turn failed",
+          payload: {
+            serverRunId,
+            message: event.payload.errorMessage ?? "OpenCode v2 native execution failed.",
+          },
+          turnId: helpers.toTurnId(event.turnId) ?? null,
+          ...sequence,
+        },
+      ];
+    }
     case "request.opened": {
       return approvalRuntimeEventToActivities(event, helpers).map((activity) =>
         Object.assign(activity, {

@@ -13,6 +13,7 @@ import {
 } from "effect";
 
 import { ServerConfig } from "./config";
+import { serverRunId } from "./serverRunIdentity.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { GitCore } from "../git/Services/GitCore.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -297,7 +298,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       lifecycleEvents.publish({
         version: 1,
         type: "welcome",
-        payload: welcome,
+        payload: { ...welcome, serverRunId },
       }),
     );
   }).pipe(

@@ -15,6 +15,15 @@ it.each([
   {
     error: {
       type: "provider.auth",
+      status: 401,
+      message:
+        "This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key.",
+    },
+    reason: "OpenCode Console API key has expired",
+  },
+  {
+    error: {
+      type: "provider.auth",
       status: 403,
       message: "OpenCode's free tier can only be used from within OpenCode",
     },
@@ -82,6 +91,13 @@ it.each([
         errorMessage: expect.stringContaining(`HTTP ${error.status}`),
       });
       expect(JSON.stringify(events)).not.toContain("private-");
+      expect(events.at(-1)).toMatchObject({
+        type: "session.state.changed",
+        payload: { state: "ready" },
+      });
+      expect(runtime.get(threadId).session.status).toBe("ready");
+      expect(runtime.get(threadId).session.lastError).toBeUndefined();
+      expect(events.some((event) => event.type === "content.delta")).toBe(false);
       const prompts = () =>
         http.calls.filter((call) => call.method === "POST" && call.pathname.endsWith("/prompt"));
       expect(prompts()).toHaveLength(1);
