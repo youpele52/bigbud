@@ -105,12 +105,36 @@ it
       const bytes = await readFile(f.backup);
       await writeFile(f.backup, bytes.subarray(0, 150), { mode: 0o600 });
     }
-    if (["integrity", "unrelated", "schema", "empty-ledger", "missing-ledger"].includes(scenario)) {
+    if (scenario === "integrity") {
+      const db = new DatabaseSync(f.backup);
+      let page: number;
+      let pageSize: number;
+      try {
+        page = Number(
+          db.prepare("SELECT rootpage FROM sqlite_schema WHERE name='payload'").get()!.rootpage,
+        );
+        pageSize = Number(db.prepare("PRAGMA page_size").get()!.page_size);
+      } finally {
+        db.close();
+      }
+      // Corrupt only the payload B-tree, leaving schema and journal lineage readable.
+      // Unlike writable_schema, this also works with SQLite defensive mode enabled.
+      const bytes = await readFile(f.backup);
+      bytes[(page - 1) * pageSize] = 0;
+      await writeFile(f.backup, bytes);
+      const damaged = new DatabaseSync(f.backup, { readOnly: true });
+      try {
+        expect(() => damaged.prepare("SELECT value FROM payload").all()).toThrow();
+        expect(
+          damaged.prepare("SELECT event_id FROM orchestration_event_ids").get()!.event_id,
+        ).toBe("selected-state-event");
+      } finally {
+        damaged.close();
+      }
+    }
+    if (["unrelated", "schema", "empty-ledger", "missing-ledger"].includes(scenario)) {
       const db = new DatabaseSync(f.backup);
       try {
-        if (scenario === "integrity")
-          db.exec(`PRAGMA writable_schema=ON;
-          UPDATE sqlite_schema SET rootpage=999999 WHERE name='payload'; PRAGMA writable_schema=OFF;`);
         if (scenario === "unrelated")
           db.exec("UPDATE orchestration_event_ids SET event_id='different-state-event'");
         if (scenario === "schema") db.exec("CREATE TABLE unrelated(value TEXT)");
@@ -126,9 +150,9 @@ it
       await symlink(f.source, f.backup);
     }
     const approve = vi.fn(async () => {});
-    await expect(
-      withV2RecoveryBackup(f.backup, await f.hash(), approve, f.source),
-    ).rejects.toThrow();
+    await expect(withV2RecoveryBackup(f.backup, await f.hash(), approve, f.source)).rejects.toThrow(
+      scenario === "integrity" ? /integrity|malformed/i : undefined,
+    );
     expect(approve).not.toHaveBeenCalled();
   });
 });

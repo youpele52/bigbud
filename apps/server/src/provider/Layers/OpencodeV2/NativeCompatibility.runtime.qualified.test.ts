@@ -10,6 +10,8 @@ import {
 } from "./Orchestration.compatibility.legacy.ts";
 import { assertV2RuntimeBootstrap } from "./NativeCompatibility.qualification.ts";
 import { v2NativeProofMetadata, v2NativeReadyNotice } from "./NativeCompatibility.status.ts";
+import { v2NativeRuntimePlatform } from "./NativeCompatibility.platform.ts";
+import { v2ConfigSourcePaths } from "./NativeCompatibility.sources.platform.ts";
 
 const registry = vi.hoisted(() => ({ passes: [] as unknown[], failures: [] as unknown[] }));
 vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
@@ -22,10 +24,11 @@ afterEach(() => {
 });
 
 it("retains completed-evidence identity and success severity only for the qualified branch", async () => {
-  registry.passes.push(syntheticV2QualificationRecord());
+  registry.passes.push({ ...syntheticV2QualificationRecord(), ...v2NativeRuntimePlatform() });
   await withV2RuntimeWarningFixture("2.0.28", async (f) => {
     const proof = await verifyV2NativeEligibility(f.artifact, f.client, f.directory, f.root);
     expect(proof.evidenceKind).toBe("qualified");
+    expect(proof).toMatchObject(v2NativeRuntimePlatform());
     expect(proof.qualificationRecordId).toMatch(/^[a-f0-9]{64}$/);
     expect(v2NativeProofMetadata(proof)).toMatchObject({
       qualificationState: "qualified",
@@ -38,6 +41,30 @@ it("retains completed-evidence identity and success severity only for the qualif
   });
 });
 
+it.each(["platform", "arch"] as const)(
+  "does not borrow qualification for another %s",
+  async (field) => {
+    const host = v2NativeRuntimePlatform();
+    registry.passes.push({
+      ...syntheticV2QualificationRecord(),
+      ...host,
+      [field]:
+        field === "platform"
+          ? host.platform === "linux"
+            ? "darwin"
+            : "linux"
+          : host.arch === "arm64"
+            ? "x64"
+            : "arm64",
+    });
+    await withV2RuntimeWarningFixture("2.0.28", async (f) => {
+      const proof = await verifyV2NativeEligibility(f.artifact, f.client, f.directory, f.root);
+      expect(proof.evidenceKind).toBe("runtime-checked");
+      expect(proof).not.toHaveProperty("qualificationRecordId");
+    });
+  },
+);
+
 it.each([
   "malformed",
   "duplicate",
@@ -45,7 +72,7 @@ it.each([
   "uncovered-bootstrap",
   "wrong-source-profile",
 ] as const)("does not downgrade %s evidence to runtime-only acceptance", async (scenario) => {
-  const record = syntheticV2QualificationRecord();
+  const record = { ...syntheticV2QualificationRecord(), ...v2NativeRuntimePlatform() };
   if (scenario === "malformed") record.testedBinarySha256 = "invalid";
   if (scenario === "uncovered-bootstrap")
     record.bootstrapContractDigests = [V2_N0_COMPATIBILITY_DIGEST];
@@ -56,8 +83,8 @@ it.each([
     registry.failures.push({
       format: "bigbud.thread.native-incompatible.v1",
       nativeVersion: "2.0.28",
-      platform: "darwin",
-      arch: "arm64",
+      platform: record.platform,
+      arch: record.arch,
       nativeContractDigest: record.nativeContractDigest,
       scope: "native-tool-schema-catalog-permissions",
       reason: "Synthetic incompatibility",
@@ -66,7 +93,7 @@ it.each([
   await withV2RuntimeWarningFixture("2.0.28", async (f) => {
     if (scenario === "wrong-source-profile")
       f.config.mockResolvedValue([
-        { type: "directory", path: "/Library/Application Support/opencode" },
+        { type: "directory", path: v2ConfigSourcePaths().systemRoot },
         { type: "directory", path: f.root },
       ]);
     await expect(

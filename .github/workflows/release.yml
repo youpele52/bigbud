@@ -193,7 +193,7 @@ jobs:
         run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
 
       - name: Align package versions to release version
-        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.tag }}"
 
       - name: Validate macOS signing credentials
         if: matrix.platform == 'mac'
@@ -476,6 +476,7 @@ jobs:
           version='${{ needs.preflight.outputs.version }}'
           node scripts/build-remote-agent-release-manifest.ts \
              --version "$version" \
+            --tag "${{ needs.preflight.outputs.tag }}" \
             --build-digest "$GITHUB_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --output release-assets/remote-agent-manifest.json \

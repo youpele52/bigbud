@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { version as serverVersion } from "../../package.json" with { type: "json" };
-import { loadRemoteAgentInstallSource } from "./remoteAgentInstallSource.ts";
+import {
+  loadRemoteAgentInstallSource,
+  resolveInstallSourceUrl,
+} from "./remoteAgentInstallSource.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -39,6 +42,34 @@ function installSource() {
 }
 
 describe("remote agent install source", () => {
+  it("uses the persisted exact source tag with a canonical packaged version", () => {
+    expect(
+      resolveInstallSourceUrl(
+        { BIGBUD_DESKTOP_PACKAGED: "1" },
+        {
+          version: "0.3.0",
+          bigbudReleaseTag: "v0.3.00",
+        },
+      ),
+    ).toBe(
+      "https://github.com/youpele52/bigbud/releases/download/v0.3.00/remote-agent-install-source.json",
+    );
+  });
+
+  it("retains canonical-tag compatibility for older packages", () => {
+    expect(
+      resolveInstallSourceUrl({ BIGBUD_DESKTOP_PACKAGED: "1" }, { version: "0.3.0" }),
+    ).toContain("/v0.3.0/");
+  });
+
+  it.each(["v0.3.00/other", "v0.3.00\n", 3, ""])("rejects invalid packaged tag %s", (tag) => {
+    expect(() =>
+      resolveInstallSourceUrl(
+        { BIGBUD_DESKTOP_PACKAGED: "1" },
+        { version: "0.3.0", bigbudReleaseTag: tag },
+      ),
+    ).toThrow("release tag is invalid");
+  });
   it("loads an explicit development or packaged source file", async () => {
     const directory = await mkdtemp(join(tmpdir(), "bigbud-agent-source-"));
     temporaryDirectories.push(directory);

@@ -9,6 +9,7 @@ import {
   buildRemoteAgentReleaseManifest,
 } from "./build-remote-agent-release-manifest.ts";
 import { verifyRemoteAgentReleaseAssets } from "./verify-remote-agent-release-assets.ts";
+import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -19,7 +20,21 @@ afterEach(() => {
 });
 
 describe("buildRemoteAgentReleaseManifest", () => {
-  it("creates signed metadata for both supported Linux targets", () => {
+  it.each(["v0.3.01", "v0.4.00"])("rejects mismatched tag %s before signing", (tag) => {
+    expect(() =>
+      buildRemoteAgentReleaseManifest({
+        version: "0.3.0",
+        tag,
+        buildDigest: "0123456789abcdef0123456789abcdef01234567",
+        repository: "youpele52/bigbud",
+        signingKeyId: "release-2026",
+        signingKeyPem: "",
+        assets: [],
+      }),
+    ).toThrow("Release tag must match the canonical release version.");
+  });
+  it.each(["v1.2.3-beta.1", "v0.3.00"])("roundtrips signed metadata for %s", (tag) => {
+    const release = resolveReleaseMetadata(tag);
     const directory = mkdtempSync(join(tmpdir(), "bigbud-agent-manifest-"));
     temporaryDirectories.push(directory);
     const x64Path = join(directory, "x64");
@@ -28,7 +43,8 @@ describe("buildRemoteAgentReleaseManifest", () => {
     writeFileSync(arm64Path, "arm64-agent");
     const keyPair = generateKeyPairSync("ed25519");
     const manifest = buildRemoteAgentReleaseManifest({
-      version: "1.2.3-beta.1",
+      version: release.version,
+      tag: release.tag,
       buildDigest: "0123456789abcdef0123456789abcdef01234567",
       repository: "youpele52/bigbud",
       signingKeyId: "release-2026",
@@ -40,6 +56,12 @@ describe("buildRemoteAgentReleaseManifest", () => {
     });
 
     expect(manifest.schemaVersion).toBe(1);
+    for (const artifact of manifest.artifacts) {
+      expect(artifact.version).toBe(release.version);
+      expect(artifact.url).toBe(
+        `https://github.com/youpele52/bigbud/releases/download/${tag}/bigbud-remote-agent-${release.version}-${artifact.targetTriple}`,
+      );
+    }
     expect(manifest.artifacts.map((artifact) => artifact.targetTriple)).toEqual([
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",
@@ -77,6 +99,7 @@ describe("buildRemoteAgentReleaseManifest", () => {
 
     verifyRemoteAgentReleaseAssets({
       manifestBytes: Buffer.from(JSON.stringify(manifest)),
+      installSourceBytes: Buffer.from(JSON.stringify(installSource)),
       signingKeyPem: keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
       signingKeyId: "release-2026",
       assets: [

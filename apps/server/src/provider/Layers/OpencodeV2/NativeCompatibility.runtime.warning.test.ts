@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { verifyV2NativeEligibility } from "./NativeCompatibility.runtime.ts";
 import { withV2RuntimeWarningFixture } from "./NativeCompatibility.runtime.warning.fixture.ts";
+import { v2ConfigSourcePaths } from "./NativeCompatibility.sources.platform.ts";
 
 it.each(["allow", "deny"] as const)(
   "checks %s permissions in the native document-before-directory layout",
@@ -60,11 +61,12 @@ it.each(["2.0.0", "2.0.25", "2.0.28", "2.999.999"])(
 
 it("derives the system/global profile from observed source shape, never a version range", async () => {
   await withV2RuntimeWarningFixture("2.9.123", async (f) => {
+    const { systemRoot, paths } = v2ConfigSourcePaths();
     f.config.mockResolvedValue([
-      { type: "directory", path: "/Library/Application Support/opencode" },
+      { type: "directory", path: systemRoot },
       {
         type: "document",
-        path: "/Library/Managed Preferences/ai.opencode.managed.plist",
+        path: paths.join(systemRoot, "opencode.json"),
         info: {},
       },
       { type: "directory", path: f.root },

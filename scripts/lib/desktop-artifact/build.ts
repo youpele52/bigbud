@@ -222,6 +222,9 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   const stageServerPackageJson = {
     name: serverPackageJson.name,
     version: appVersion,
+    ...("bigbudReleaseTag" in serverPackageJson && appVersion === serverPackageJson.version
+      ? { bigbudReleaseTag: serverPackageJson.bigbudReleaseTag }
+      : {}),
     private: true,
     type: serverPackageJson.type,
     bin: serverPackageJson.bin,

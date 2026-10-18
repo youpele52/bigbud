@@ -47,7 +47,7 @@ use jobs::{spawn_process_job, spawn_pty_job};
 #[cfg(unix)]
 #[path = "bootstrap.rs"]
 mod bootstrap;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "test_hooks.rs"]
 mod test_hooks;
 #[cfg(unix)]

@@ -7,16 +7,21 @@ import { makeV2SyntheticNativeEligibility } from "./NativeCompatibility.runtime.
 import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
 import { projectV2NativeConfigSources } from "./NativeCompatibility.sources.ts";
 import { deferred } from "./Test.fixtures.ts";
+import { v2ConfigSourcePaths } from "./NativeCompatibility.sources.platform.ts";
 
 it("loaded-bootstrap preflight cannot ignore a system/managed deny and never reads raw machine policy", async () => {
   const app = await makeV2ThreadPluginFixture(),
     root = path.join(app.root, "owned-global");
   await mkdir(root, { mode: 0o700 });
+  const { systemRoot, paths } = v2ConfigSourcePaths();
   const entries = [
-    { type: "directory", path: "/Library/Application Support/opencode" },
+    { type: "directory", path: systemRoot },
     {
       type: "document",
-      path: "/Library/Managed Preferences/ai.opencode.managed.plist",
+      path:
+        process.platform === "darwin"
+          ? "/Library/Managed Preferences/ai.opencode.managed.plist"
+          : paths.join(systemRoot, "opencode.json"),
       info: {
         permissions: [{ action: "bigbud_thread_v1_*", resource: "*", effect: "deny" }],
         credentials: "SYNTHETIC-DO-NOT-CARRY",
