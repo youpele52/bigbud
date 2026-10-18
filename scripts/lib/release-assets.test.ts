@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -96,6 +96,13 @@ describe("desktop release assets", () => {
     writeFileSync(join(directory, "preview-linux.yml"), "url: bigbud-preview-x64.AppImage\n");
     writeFileSync(join(directory, "preview.yml"), "url: bigbud-preview-x64.exe\n");
 
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).not.toThrow();
+    const arm64Helper = join(directory, "server-workspace-agent-win32-arm64.exe");
+    rmSync(arm64Helper);
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
+      "Missing packaged workspace agent: server-workspace-agent-win32-arm64.exe",
+    );
+    writeFileSync(arm64Helper, "native Windows ARM64 helper");
     expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).not.toThrow();
   });
 

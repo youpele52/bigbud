@@ -261,10 +261,41 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  workspace_agent_windows_arm64:
+    name: Build Windows ARM64 server workspace agent
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Build and test read-only native helper
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: 0.0.0-preview.${{ github.run_number }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+        run: |
+          cargo test --locked --package bigbud-remote-agent --test inspect_local
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --release --package bigbud-remote-agent
+      - name: Stage native server artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-publish | Out-Null
+          Copy-Item target/release/bigbud-remote-agent.exe release-publish/server-workspace-agent-win32-arm64.exe
+          $identity = & release-publish/server-workspace-agent-win32-arm64.exe --check
+          if ($LASTEXITCODE -ne 0 -or $identity -notmatch 'windows\s+aarch64$') { throw 'Native ARM64 identity mismatch' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-assets-workspace-agent-win32-arm64
+          path: release-publish/*
+          if-no-files-found: error
+
   release_asset_assembly:
     name: Release Asset Assembly
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [desktop_release_build, release_smoke]
+    needs: [desktop_release_build, workspace_agent_windows_arm64, release_smoke]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
