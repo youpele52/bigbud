@@ -146,6 +146,44 @@ fn warming_missing_and_partial_are_not_presented_as_zero() {
 }
 
 #[test]
+fn owned_process_counts_exclude_threads_with_and_without_host_process_demand() {
+    use crate::collector::{Collector, Demand};
+    use std::sync::{Barrier, mpsc};
+
+    let ready = Barrier::new(2);
+    std::thread::scope(|scope| {
+        let (release, wait) = mpsc::channel::<()>();
+        let ready_ref = &ready;
+        let worker = scope.spawn(move || {
+            ready_ref.wait();
+            let _released = wait.recv();
+        });
+        ready.wait();
+        // Linux sysinfo includes task IDs by default, duplicating the process's
+        // memory and allowing exiting test threads to mark ownership incomplete.
+        for processes in [false, true] {
+            let mut collector = Collector::new();
+            collector.set_app_roots(vec![root(std::process::id(), Role::Desktop)]);
+            let demand = Demand {
+                processes,
+                app_resources: true,
+                ..Default::default()
+            };
+            let app = collector
+                .sample(demand, std::time::Instant::now())
+                .0
+                .app_resources
+                .unwrap();
+            assert!(!app.incomplete);
+            assert_eq!(app.core.process_count, 1);
+            assert_eq!(app.inclusive.process_count, 1);
+        }
+        drop(release);
+        worker.join().unwrap();
+    });
+}
+
+#[test]
 fn live_owned_process_is_sampled_without_host_process_demand() {
     use crate::collector::{Collector, Demand};
     let mut collector = Collector::new();
