@@ -268,6 +268,15 @@ jobs:
 
           bun run dist:desktop:artifact -- "${args[@]}"
 
+      - name: Preserve signed macOS app on notarization failure
+        if: failure() && matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarization-recovery-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: notarization-recovery/
+          retention-days: 3
+          if-no-files-found: ignore
+
       - name: Smoke test packaged workspace watcher
         shell: bash
         env:

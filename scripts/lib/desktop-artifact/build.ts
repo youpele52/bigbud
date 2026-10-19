@@ -279,14 +279,13 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     }
   }
 
-  // The afterSign hook lives in the monorepo and requires @electron/notarize,
-  // which is only present in apps/desktop/node_modules (the staged directory
-  // installs --production). Point NODE_PATH back so the hook can resolve it.
+  // Hooks live in the monorepo rather than the staged production install.
   const monorepoNodeModules = path.join(repoRoot, "node_modules");
   const desktopNodeModules = path.join(repoRoot, "apps/desktop/node_modules");
   buildEnv.NODE_PATH = [buildEnv.NODE_PATH, monorepoNodeModules, desktopNodeModules]
     .filter(Boolean)
     .join(delimiter);
+  buildEnv.BIGBUD_NOTARIZATION_RECOVERY_DIR = path.join(repoRoot, "notarization-recovery");
 
   const preferExistingCodesignIdentity =
     options.platform === "mac" &&
@@ -329,7 +328,10 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
       })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`;
-  const maxAttempts = options.platform === "mac" && options.target === "dmg" ? 3 : 1;
+  // Never rebuild/resubmit a signed app after an accepted or ambiguous submission.
+  // The hook retries transient ticket operations against the same signed artifact.
+  const maxAttempts =
+    options.platform === "mac" && options.target === "dmg" && !options.signed ? 3 : 1;
   const runElectronBuilderAttempt = (attempt: number): ReturnType<typeof runCommand> =>
     runCommand(electronBuilderCommand).pipe(
       Effect.catchTag("BuildScriptError", (error) => {

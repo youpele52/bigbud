@@ -57,6 +57,29 @@ At runtime, the packaged server resolves the install source for its own version 
 `https://github.com/youpele52/bigbud/releases/download/v<version>/remote-agent-install-source.json`.
 Remote installation is only called after the user approves the first-use prompt.
 
+## macOS notarization recovery
+
+The custom `afterSign` hook is the sole notarization owner (`mac.notarize: false`).
+It verifies sidecar/app signatures and team IDs, submits once with `notarytool`,
+then staples, validates the ticket, and requires Gatekeeper acceptance. Only
+transient ticket retrieval/validation errors retry (5, 15, then 30 seconds;
+four attempts per operation). Signed macOS builds never retry electron-builder
+as a whole, including after an ambiguous submission timeout.
+
+On notarization failure, the release workflow retains a `notarization-recovery-`
+artifact for three days. It contains the original signed app ZIP and sanitized
+diagnostics, including the submission ID when Apple returns one, acceptance
+state, runner/OS/Xcode/stapler information, and a bounded CloudKit connectivity
+probe. It contains no certificates, environment dumps, or raw notarytool logs.
+Local builds retain the same data in ignored `notarization-recovery/`; remove it
+after investigation. A successful hook deletes its recovery data.
+
+For an accepted submission, recover that exact signed app from the ZIP and
+retry stapling/validation on a macOS runner; do not rebuild or submit it again.
+An ambiguous timeout requires checking the existing submission with Apple first.
+Never publish the recovery ZIP directly: it predates stapling. Ticket validation,
+Gatekeeper assessment, packaging and release smoke checks must still succeed.
+
 ## Desktop auto-update notes
 
 - Runtime updater: `electron-updater` in `apps/desktop/src/main.ts`.
@@ -178,7 +201,7 @@ Checklist:
 
 Notes:
 
-- Notarization is performed by an explicit `afterSign` hook (`apps/desktop/scripts/notarize.cjs`) using `@electron/notarize`.
+- Notarization is performed by an explicit `afterSign` hook (`apps/desktop/scripts/notarize.cjs`) using Apple's `notarytool` directly.
 - Stable, Beta, Preview, and Nightly use this same Developer ID certificate while retaining distinct bundle IDs.
 - Signed packaging sets `forceCodeSigning`, explicitly signs the embedded Rust workspace watcher, verifies both the sidecar and full app, notarizes, staples, validates the ticket, and requires Gatekeeper acceptance before the DMG/ZIP is created.
 - All five secrets are validated before certificate import. Any missing credential, signature failure, notarization failure, or staple failure aborts the release.
