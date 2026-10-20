@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnnotationIntent } from "../../stores/composer";
 import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
 import { FilePreviewCode } from "./FilePreview.code";
+import { resolveMarkdownPreviewTextSelection } from "./FilePreview.markdown.selection";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { FilePreviewMarkdownToggle, FilePreviewMarkdownView } from "./FilePreview.markdown";
 import { useTheme } from "../../hooks/useTheme";
@@ -175,13 +176,20 @@ export const FilePreview = memo(function FilePreview({
       let annotationRange: { startLine: number; endLine: number } | null = null;
 
       if (onCreateAnnotation && selectedText.length >= 2 && state.contents) {
-        const startIndex = state.contents.indexOf(selectedText);
-        if (startIndex !== -1) {
-          const endIndex = startIndex + selectedText.length;
-          annotationRange = {
-            startLine: state.contents.slice(0, startIndex).split("\n").length,
-            endLine: state.contents.slice(0, endIndex).split("\n").length,
-          };
+        if (isMarkdownFile && markdownViewMode === "preview") {
+          annotationRange = resolveMarkdownPreviewTextSelection(
+            window.getSelection(),
+            markdownContentRef.current,
+          );
+        } else {
+          const startIndex = state.contents.indexOf(selectedText);
+          if (startIndex !== -1) {
+            const endIndex = startIndex + selectedText.length;
+            annotationRange = {
+              startLine: state.contents.slice(0, startIndex).split("\n").length,
+              endLine: state.contents.slice(0, endIndex).split("\n").length,
+            };
+          }
         }
       }
 
@@ -205,7 +213,14 @@ export const FilePreview = memo(function FilePreview({
               },
       });
     },
-    [absolutePath, onCreateAnnotation, relativePath, state.contents],
+    [
+      absolutePath,
+      isMarkdownFile,
+      markdownViewMode,
+      onCreateAnnotation,
+      relativePath,
+      state.contents,
+    ],
   );
 
   const handleHeaderContextMenu = useCallback(

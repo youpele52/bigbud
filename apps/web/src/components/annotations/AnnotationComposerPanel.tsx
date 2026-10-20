@@ -1,9 +1,11 @@
+import { ChevronDownIcon } from "lucide-react";
 import type { AnnotationIntent } from "../../stores/composer";
 import { Button } from "../ui/button";
 import { useState } from "react";
 
 interface AnnotationComposerPanelProps {
   targetLabel: string;
+  selectionPreview?: string;
   fillContainer?: boolean;
   onCancel: () => void;
   onSubmit: (input: { intent: AnnotationIntent; comment: string }) => void;
@@ -22,6 +24,7 @@ export function formatAnnotationTargetLabel(range: { startLine: number; endLine:
 
 export function AnnotationComposerPanel({
   targetLabel,
+  selectionPreview,
   fillContainer = false,
   onCancel,
   onSubmit,
@@ -37,13 +40,35 @@ export function AnnotationComposerPanel({
       <p id="annotation-composer-title" className="mb-2 text-sm font-medium text-foreground">
         {COMMENT_TITLE}
       </p>
-      <p
-        id="annotation-composer-target"
-        className="mb-2.5 break-words text-xs leading-snug text-muted-foreground"
-        title={targetLabel}
-      >
-        {targetLabel}
-      </p>
+      {selectionPreview ? (
+        <details key={targetLabel + selectionPreview} className="group/selection mb-2.5">
+          <summary
+            id="annotation-composer-target"
+            className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-xs leading-snug text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            title={targetLabel}
+          >
+            <span className="break-words">{targetLabel}</span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3 shrink-0 transition-transform duration-150 group-open/selection:rotate-180"
+            />
+          </summary>
+          <pre
+            aria-label="Selected source lines"
+            className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/40 p-2 text-xs text-muted-foreground"
+          >
+            {selectionPreview}
+          </pre>
+        </details>
+      ) : (
+        <p
+          id="annotation-composer-target"
+          className="mb-2.5 break-words text-xs leading-snug text-muted-foreground"
+          title={targetLabel}
+        >
+          {targetLabel}
+        </p>
+      )}
       <textarea
         value={comment}
         onChange={(event) => setComment(event.target.value)}

@@ -70,6 +70,7 @@ export function FilePreviewAnnotationComposer({
   const panel = (
     <AnnotationComposerPanel
       targetLabel={formatAnnotationTargetLabel(selectedRange)}
+      selectionPreview={selectedText}
       onCancel={onCancel}
       onSubmit={({ intent, comment }) => {
         onCreateAnnotation({
