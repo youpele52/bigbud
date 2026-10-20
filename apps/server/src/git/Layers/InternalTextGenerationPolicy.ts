@@ -57,6 +57,7 @@ export function runInternalTextGeneration<A>(input: {
             index + 1 < candidates.length &&
               error.kind !== "invalid-input" &&
               error.kind !== "cancelled" &&
+              error.kind !== "uncertain" &&
               !/invalid input|empty (?:message|transcript)|must provide|cancel(?:led|ed|lation)|abort(?:ed)?/i.test(
                 error.detail,
               )

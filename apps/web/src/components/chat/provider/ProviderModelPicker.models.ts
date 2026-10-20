@@ -9,7 +9,9 @@ import {
   PROVIDER_OPTIONS,
   providerSupportsSubProviderID as descriptorSupportsSubProviderID,
   type ProviderPickerKind,
+  getProviderDescriptor,
 } from "./providerDescriptors";
+import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 
 export function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
   value: ProviderKind;
@@ -28,6 +30,21 @@ export const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => 
 /** Visibility is independent of readiness; unavailable providers explain their status. */
 export function developmentProviderOptions(_providers: ReadonlyArray<ServerProvider> | undefined) {
   return AVAILABLE_PROVIDER_OPTIONS;
+}
+
+/** Capability-limited pickers must not offer interactive-only or partial-operation providers. */
+export function visibleProviderOptionsForPicker(
+  providers: ReadonlyArray<ServerProvider> | undefined,
+  hidden: ReadonlyArray<ProviderKind>,
+  allowed?: ReadonlyArray<ProviderKind>,
+) {
+  const visible = getVisibleComposerProviders(hidden);
+  return developmentProviderOptions(providers).filter(
+    (option) =>
+      visible.includes(option.value) &&
+      (!allowed || allowed.includes(option.value)) &&
+      getProviderDescriptor(option.value).isVisible(providers),
+  );
 }
 export type { ProviderPickerKind } from "./providerDescriptors";
 

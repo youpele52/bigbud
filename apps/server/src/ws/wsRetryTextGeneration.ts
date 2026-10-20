@@ -1,6 +1,7 @@
 import { CommandId, EventId, TextGenerationError } from "@bigbud/contracts";
 import type { RetryThreadTextGenerationInput } from "@bigbud/contracts/server/rpc.textGeneration.ts";
 import { Effect } from "effect";
+import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
 import {
   ensureOrchestrationThreadState,
   type OrchestrationEngineShape,
@@ -29,6 +30,13 @@ export function requestTextGenerationRetry(
         detail: "Thread is unavailable for text generation.",
       });
     }
+    if (hasTextGenerationUncertainty(thread.activities, input.operation))
+      return yield* new TextGenerationError({
+        operation: "retryTextGeneration",
+        kind: "uncertain",
+        detail:
+          "Original native generation is unconfirmed. Verify its settlement before starting another request.",
+      });
     const requests = thread.activities.filter((item) => readTextGenerationRequest(item));
     if (
       requests.some(

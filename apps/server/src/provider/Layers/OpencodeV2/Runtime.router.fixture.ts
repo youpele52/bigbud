@@ -3,7 +3,9 @@ import { makeOwnedClient } from "./Client.ts";
 import type { V2RuntimeHttpFixture } from "./Runtime.fixture.ts";
 
 /** Real loopback HTTP and pinned SDK, with the observed router bound; not retail-native qualification. */
-export async function makeV2BoundedRouterFixture(http: V2RuntimeHttpFixture) {
+export async function makeV2BoundedRouterFixture(
+  http: Pick<V2RuntimeHttpFixture, "fetch" | "client">,
+) {
   const server = createServer(async (request, response) => {
     try {
       const chunks: Buffer[] = [];

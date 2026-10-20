@@ -44,6 +44,29 @@ function proof(count = 3): OrchestrationThreadActivity[] {
 }
 
 describe("thread generation warning", () => {
+  it("shows unconfirmed native work truthfully without offering a paid Retry action", async () => {
+    await render(
+      <ThreadTextGenerationNotice
+        threadId={threadId}
+        activities={[
+          {
+            ...status("failed"),
+            kind: "text-generation.uncertain",
+            tone: "info",
+            summary: "Native generation is unconfirmed. Automatic retries are paused.",
+            payload: { operation: "title", uncertaintyId: "ses_retained" },
+          },
+        ]}
+      />,
+    );
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Automatic retries are paused");
+    await expect
+      .element(page.getByRole("button", { name: "Retry", exact: true }))
+      .not.toBeInTheDocument();
+    expect(mocks.retry).not.toHaveBeenCalled();
+  });
   it("does not resurrect a completed warning for a coalesced late retry request", async () => {
     await render(
       <ThreadTextGenerationNotice

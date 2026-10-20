@@ -139,8 +139,8 @@ describe("staged automatic thread titles", () => {
     const f = titleFixture();
     await Effect.runPromise(recordTitleStage(f.services, f.thread, 1, "started"));
     await Effect.runPromise(f.run());
-    expect(f.generate).toHaveBeenCalledTimes(1);
-    expect(readTitleStage(f.thread, 1)?.state).toBe("failed");
+    expect(f.generate).not.toHaveBeenCalled();
+    expect(readTitleStage(f.thread, 1)?.state).toBe("uncertain");
   });
   it("preserves manual title locks during a late third-stage result", async () => {
     const f = titleFixture();

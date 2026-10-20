@@ -42,7 +42,8 @@ export class TextGenerationError extends Schema.TaggedErrorClass<TextGenerationE
   {
     operation: Schema.String,
     detail: Schema.String,
-    kind: Schema.optional(Schema.Literals(["invalid-input", "cancelled", "provider"])),
+    kind: Schema.optional(Schema.Literals(["invalid-input", "cancelled", "provider", "uncertain"])),
+    uncertaintyId: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

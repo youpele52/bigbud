@@ -10,7 +10,8 @@ import { ModelSelection as ModelSelectionSchema } from "@bigbud/contracts/orches
 
 const Stage = Schema.Struct({
   stage: Schema.Literals([1, 2, 3, 4]),
-  state: Schema.Literals(["started", "failed", "completed", "cancelled", "unchanged"]),
+  state: Schema.Literals(["started", "failed", "completed", "cancelled", "unchanged", "uncertain"]),
+  uncertaintyProtected: Schema.optional(Schema.Boolean),
   model: Schema.optional(ModelSelectionSchema),
 });
 export type TitleStage = 1 | 2 | 3 | 4;
@@ -26,7 +27,12 @@ export function readTitleStage(thread: OrchestrationThread, stage: TitleStage) {
 export function titlePipelineFinished(thread: OrchestrationThread): boolean {
   return ([1, 2, 3, 4] as const).some((stage) => {
     const state = readTitleStage(thread, stage)?.state;
-    return state === "completed" || state === "cancelled" || state === "unchanged";
+    return (
+      state === "completed" ||
+      state === "cancelled" ||
+      state === "unchanged" ||
+      state === "uncertain"
+    );
   });
 }
 
@@ -37,6 +43,7 @@ export function recordTitleStage(
   stage: TitleStage,
   state: (typeof Stage.Type)["state"],
   model?: ModelSelection,
+  uncertaintyProtected?: boolean,
 ) {
   const id = `text-generation-title-stage:${thread.id}:${stage}:${state}`;
   const createdAt = thread.createdAt;
@@ -55,6 +62,7 @@ export function recordTitleStage(
           stage,
           state,
           ...(model ? { model } : {}),
+          ...(uncertaintyProtected ? { uncertaintyProtected: true } : {}),
           ...(state === "started" ? { owner: crypto.randomUUID() } : {}),
         },
         turnId: null,

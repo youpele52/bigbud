@@ -44,6 +44,10 @@ import {
   promptSuggestionCancelThreadId,
 } from "./PromptSuggestionReactor.logic.ts";
 import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGeneration.success.ts";
+import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
+import { recordThreadTextGenerationStatusRequired } from "../../git/Layers/InternalTextGeneration.status.ts";
+import { uncertainTextGenerationError } from "../../git/Layers/InternalTextGeneration.uncertainty.ts";
+import { makeTextGenerationDispatchClaim } from "../../git/Layers/InternalTextGeneration.dispatch.ts";
 
 export const PROMPT_SUGGESTION_TIMEOUT = Duration.seconds(15);
 export const PROMPT_SUGGESTION_MAX_CONCURRENT = 2;
@@ -93,6 +97,7 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
       if (!settings.promptSuggestions || !settings.generatedPromptSuggestions) return;
       const thread = Option.getOrUndefined(yield* settledThread(threadId, turnId));
       if (!thread) return;
+      if (hasTextGenerationUncertainty(thread.activities, "promptSuggestion", turnId)) return;
       const capabilities = yield* deps
         .getCapabilities(thread.modelSelection.provider)
         .pipe(Effect.option);
@@ -108,11 +113,31 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
       const modelSelection = settings.textGenerationModelSelection ?? successfulModelSelection;
       if (!modelSelection) return;
       const cwd = yield* deps.resolveCwd(thread);
+      const claim = makeTextGenerationDispatchClaim(
+        deps.orchestrationEngine,
+        threadId,
+        "promptSuggestion",
+        turnId,
+      );
       const generated = yield* permits.withPermits(1)(
         deps.textGeneration
-          .generatePromptSuggestion({ cwd, transcript, modelSelection, successfulModelSelection })
+          .generatePromptSuggestion({
+            cwd,
+            transcript,
+            modelSelection,
+            successfulModelSelection,
+            beforeV2Dispatch: claim.beforeV2Dispatch,
+          })
           .pipe(Effect.timeout(deps.timeout ?? PROMPT_SUGGESTION_TIMEOUT)),
       );
+      if (claim.isClaimed())
+        yield* recordThreadTextGenerationStatusRequired(
+          deps.orchestrationEngine,
+          threadId,
+          "promptSuggestion",
+          "completed",
+          { turnId },
+        );
       const latest = yield* readThread(threadId);
       if (!latest || generatedSuggestionSkipReason(latest, turnId) === "already-suggested") return;
       const createdAt = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -135,13 +160,32 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
       });
     }).pipe(
       Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.void
-          : Effect.logDebug("generated prompt suggestion unavailable", {
+        Effect.gen(function* () {
+          if (Cause.hasInterruptsOnly(cause)) return;
+          const uncertainty = uncertainTextGenerationError(cause);
+          const failure = Cause.findErrorOption(cause);
+          const timedOut = Option.isSome(failure) && Cause.isTimeoutError(failure.value);
+          const thread = yield* readThread(threadId);
+          if (
+            uncertainty ||
+            (thread && hasTextGenerationUncertainty(thread.activities, "promptSuggestion", turnId))
+          )
+            yield* recordThreadTextGenerationStatusRequired(
+              deps.orchestrationEngine,
               threadId,
-              turnId,
-              cause: Cause.pretty(cause),
-            }),
+              "promptSuggestion",
+              uncertainty || timedOut ? "uncertain" : "failed",
+              {
+                turnId,
+                ...(uncertainty?.uncertaintyId ? { uncertaintyId: uncertainty.uncertaintyId } : {}),
+              },
+            );
+          yield* Effect.logDebug("generated prompt suggestion unavailable", {
+            threadId,
+            turnId,
+            cause: Cause.pretty(cause),
+          });
+        }),
       ),
     );
 

@@ -1,5 +1,6 @@
 import { type ChatAttachment, ThreadId } from "@bigbud/contracts";
 import { Cause, Effect, Option } from "effect";
+import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
@@ -16,6 +17,8 @@ import {
   recordThreadTextGenerationStatus,
   withThreadTextGenerationJob,
 } from "../../git/Layers/InternalTextGeneration.status.ts";
+import { uncertainTextGenerationError } from "../../git/Layers/InternalTextGeneration.uncertainty.ts";
+import { makeTextGenerationDispatchClaim } from "../../git/Layers/InternalTextGeneration.dispatch.ts";
 
 export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: SessionOpServices) => {
   const generate = Effect.fn("maybeGenerateAndRenameWorktreeBranchForFirstTurn")(function* (input: {
@@ -55,6 +58,7 @@ export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: Sessi
       )
         return;
       const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(thread);
+      if (hasTextGenerationUncertainty(thread.activities, "branch")) return;
       const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
       if (Option.isSome(sql)) yield* assertSavedWorktreeIdentity(sql.value, input.threadId);
       let successfulModelSelection = lastSuccessfulThreadModel(thread);
@@ -85,12 +89,14 @@ export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: Sessi
         if (!modelSelection) return;
       }
 
+      const claim = makeTextGenerationDispatchClaim(orchestrationEngine, input.threadId, "branch");
       const generated = yield* textGeneration.generateBranchName({
         cwd,
         message: input.messageText,
         ...(attachments.length > 0 ? { attachments } : {}),
         modelSelection,
         successfulModelSelection,
+        beforeV2Dispatch: claim.beforeV2Dispatch,
       });
       if (!generated) return;
 
@@ -139,23 +145,29 @@ export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: Sessi
         "completed",
       );
     }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("provider command reactor failed to generate or rename worktree branch", {
-          threadId: input.threadId,
-          cwd,
-          oldBranch,
-          cause: Cause.pretty(cause),
-        }).pipe(
+      Effect.catchCause((cause) => {
+        const uncertainty = uncertainTextGenerationError(cause);
+        if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+        return Effect.logWarning(
+          "provider command reactor failed to generate or rename worktree branch",
+          {
+            threadId: input.threadId,
+            cwd,
+            oldBranch,
+            cause: Cause.pretty(cause),
+          },
+        ).pipe(
           Effect.andThen(
             recordThreadTextGenerationStatus(
               orchestrationEngine,
               input.threadId,
               "branch",
-              "failed",
+              uncertainty ? "uncertain" : "failed",
+              uncertainty?.uncertaintyId ? { uncertaintyId: uncertainty.uncertaintyId } : undefined,
             ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   });
   return (input: Parameters<typeof generate>[0]) =>

@@ -34,7 +34,7 @@ export type ProviderWorkloadResolution = {
 const PROVIDER_WORKLOAD_SUPPORT = {
   opencodeV2: {
     interactive: true,
-    unattendedTextGeneration: false,
+    unattendedTextGeneration: true,
     learning: false,
     usageAccounting: true,
   },
