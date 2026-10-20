@@ -32,6 +32,7 @@ import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.log
 import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
 import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
 import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
+import { OpenCodeSetupStatus } from "../../provider/OpenCodeSetupStatus";
 import { ThreadNoticeBanner } from "../../common/ThreadNoticeBanner";
 import { ThreadRecoveryNotices } from "../ThreadRecoveryNotices";
 
@@ -109,12 +110,14 @@ export function ChatViewChatBody({
       {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
         <LegacyOpencodeNotice threadId={base.threadId} />
       ) : null}
-      <ProviderStatusBanner
-        status={composer.activeProviderStatus}
-        runtimeVerified={openCodeSetup.verified}
-        threadId={base.threadId}
-      />
-      {openCodeSetup.error ? (
+      {openCodeSetup.result?.jobId ? (
+        <OpenCodeSetupStatus
+          result={openCodeSetup.result}
+          error={openCodeSetup.error}
+          onRetry={openCodeSetup.retry}
+          onCancel={() => void openCodeSetup.cancel()}
+        />
+      ) : openCodeSetup.error ? (
         <ThreadNoticeBanner
           threadId={base.threadId}
           kind="opencode-setup"
@@ -132,6 +135,11 @@ export function ChatViewChatBody({
           dismissLabel="Dismiss OpenCode setup notice"
         />
       ) : null}
+      <ProviderStatusBanner
+        status={composer.activeProviderStatus}
+        runtimeVerified={openCodeSetup.verified}
+        threadId={base.threadId}
+      />
       {retainedHistory ? (
         <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
       ) : null}

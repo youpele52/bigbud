@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.constant.ts";
 import { expect, it, vi } from "vitest";
 import { inferredV2SetupLocation } from "./ThreadToolsSetup.location.ts";
 import type { OrchestrationEngineShape } from "../../../orchestration/Services/OrchestrationEngine.ts";
@@ -70,6 +71,43 @@ function canonicalLocation() {
   };
   return { thread, project, threads: [thread], projects: [project] };
 }
+
+it("uses Default chat folder only for intentional folderless Chats, preserving project/worktree precedence", async () => {
+  const canonical = canonicalLocation();
+  canonical.thread.projectId = BUILT_IN_CHATS_PROJECT_ID;
+  canonical.project.id = BUILT_IN_CHATS_PROJECT_ID;
+  canonical.project.workspaceRoot = null;
+  const dispatch = vi.fn();
+  const engine = {
+    ensureThreadState: () => Effect.succeed(canonical.thread),
+    getReadModel: () => Effect.succeed(canonical),
+    dispatch,
+  } as unknown as OrchestrationEngineShape;
+  const request = { refresh: true, threadId: canonical.thread.id, directory: "/stale-location" };
+  await expect(inferredV2SetupLocation(request, "/configured-chats", engine)).resolves.toBe(
+    "/configured-chats",
+  );
+  canonical.thread.worktreePath = "/actual-worktree";
+  await expect(inferredV2SetupLocation(request, "/configured-chats", engine)).resolves.toBe(
+    "/actual-worktree",
+  );
+  canonical.thread.worktreePath = null;
+  canonical.project.workspaceRoot = "/actual-project";
+  await expect(inferredV2SetupLocation(request, "/configured-chats", engine)).resolves.toBe(
+    "/actual-project",
+  );
+  canonical.projects = [];
+  await expect(inferredV2SetupLocation(request, "/configured-chats", engine)).rejects.toThrow(
+    "no supported local",
+  );
+  expect(dispatch).not.toHaveBeenCalled();
+});
+
+it("does not resolve a relative configured folder against the process cwd", async () => {
+  await expect(inferredV2SetupLocation({ refresh: true }, "relative-folder")).resolves.toBe(
+    "relative-folder",
+  );
+});
 
 it.each(["project", "worktree"])(
   "hydrates a cold selected thread and its linked project before reading its canonical %s Location",

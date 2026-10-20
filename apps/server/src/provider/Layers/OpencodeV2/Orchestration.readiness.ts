@@ -1,11 +1,8 @@
 import { Schema } from "effect";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
-import {
-  V2_THREAD_ACTIONS,
-  V2_THREAD_RPC,
-  V2_ENROLLMENT_PROTOCOL,
-} from "./Orchestration.protocol.ts";
+import { V2_ENROLLMENT_PROTOCOL } from "./Orchestration.protocol.ts";
 import { assertV2ImplementationCompatible } from "./Orchestration.compatibility.ts";
 import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
 import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
@@ -20,7 +17,7 @@ import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
 import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
 
 const Info = Schema.Struct({
-  protocol: Schema.Literal(V2_THREAD_RPC),
+  protocol: Schema.String,
   issuer: Schema.String,
   artifactDigest: Schema.String,
   bootstrapDigest: Schema.String,
@@ -47,22 +44,32 @@ export async function verifyV2ThreadTools(
   assertV2ImplementationCompatible(implementation, artifact.compatibility);
   await artifact.verify();
   const proof = await eligibility(artifact, client, directory, root, signal);
-  await assertV2NativeRuntimePolicy(client, proof, signal);
+  await assertV2NativeRuntimePolicy(client, proof, signal, v2ThreadRegistration(artifact));
   try {
-    const value = await callV2ThreadRpc(client, directory, "info", {});
+    const registration = v2ThreadRegistration(artifact);
+    const value = await callV2ThreadRpc(
+      client,
+      directory,
+      "info",
+      {},
+      undefined,
+      undefined,
+      signal,
+      registration,
+    );
     signal?.throwIfAborted();
     proof.assertCurrent();
     const info = Schema.decodeUnknownSync(Info)(value, { onExcessProperty: "error" });
     if (
       info.issuer !== artifact.issuer ||
+      info.protocol !== registration.id ||
       info.artifactDigest !== artifact.artifactDigest ||
       info.bootstrapDigest !== artifact.artifactDigest ||
       info.bootstrapAbi !== artifact.compatibility.bootstrapAbi ||
       info.compatibilityDigest !== artifact.compatibilityDigest ||
       info.schemaDigest !== implementation.schemaDigest ||
       info.nativeVersion !== proof.nativeVersion ||
-      JSON.stringify(info.tools.toSorted()) !==
-        JSON.stringify(V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`).toSorted())
+      JSON.stringify(info.tools.toSorted()) !== JSON.stringify(registration.tools.toSorted())
     )
       throw new V2NativeCompatibilityError(
         "bootstrap-contract-incompatible",

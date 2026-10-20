@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { v2OwnerRegistration } from "./Orchestration.registration.ts";
 import { runV2Cleanup } from "./Client.guard.ts";
 import { logV2SettlementDiagnostic } from "./Runtime.settlement.log.ts";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
@@ -88,6 +89,7 @@ export function makeV2DeadBackendContext(input: {
         owner.nativeSessionId,
         undefined,
         signal,
+        v2OwnerRegistration(owner),
       ),
   };
 }

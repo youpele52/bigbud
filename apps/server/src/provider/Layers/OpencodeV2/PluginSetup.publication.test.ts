@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { deferred } from "./Test.fixtures.ts";
@@ -34,7 +34,7 @@ async function fixture() {
     scopeKey: "explicit-expanded-ack",
     assertCurrent: () => controller.signal.throwIfAborted(),
   };
-  const filename = path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+  const filename = path.join(root, "plugins", v2ManagedPluginFilename(app.artifact));
   const records = await V2ThreadRecords.open(
     app.artifact.root,
     "installations",
@@ -50,7 +50,7 @@ async function fixture() {
     authority,
     filename,
     records,
-    key: JSON.stringify([root, V2_MANAGED_PLUGIN_FILENAME]),
+    key: JSON.stringify([root, v2ManagedPluginFilename(app.artifact)]),
   };
 }
 

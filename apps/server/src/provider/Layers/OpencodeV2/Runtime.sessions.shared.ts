@@ -47,7 +47,16 @@ export async function prepareSharedCreation(
       directory: binding.directory,
       runtimeTargetId: binding.runtimeTarget,
       workspaceTargetId: binding.workspaceTarget,
-      identityKind: existing?.identityKind ?? (legacy ? "adopted-legacy-v1" : "shared-api-v1"),
+      identityKind:
+        existing?.identityKind ??
+        (legacy
+          ? "adopted-legacy-v1"
+          : binding.registrationFamily === "scoped"
+            ? "shared-api-v2"
+            : "shared-api-v1"),
+      ...(binding.registrationFamily === "scoped"
+        ? { profileIssuer: binding.profileIssuer!, registrationFamily: "scoped" as const }
+        : {}),
       material,
     }),
   );

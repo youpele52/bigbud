@@ -138,7 +138,7 @@ export async function v2Request<T>(
   } catch (error) {
     if (isV2ResponseSizeError(error)) throw new V2ResponseSizeError();
     const status = v2HttpFailureStatus(error);
-    if (status !== undefined) throw new V2HttpStatusError(status);
+    if (status !== undefined) throw new V2HttpStatusError(status, operation);
     // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
     throw new Error(`OpenCode v2 ${operation} failed or timed out; admission may be unconfirmed.`);
   }

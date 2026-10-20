@@ -18,6 +18,10 @@ import {
   conservedSharedPolicy,
 } from "./Runtime.sessions.shared.ts";
 import { awaitV2RuntimeReady, V2PreAdmissionRetry } from "./Runtime.activation.ts";
+import {
+  matchesV2NativeRegistration,
+  v2NativeRegistrationMetadata,
+} from "./Runtime.registration.ts";
 
 /** Rebinding is unsupported; compare native selection, not just the runtime fingerprint. */
 export function assertV2Model(actual: ModelRef | undefined, requested: ModelRef): void {
@@ -42,6 +46,13 @@ export function v2ResumeCursor(
     model: { ...session.model },
     connectionMode: connectionMode ?? (session.sharedTransport ? "shared" : "isolated"),
     identityVersion: 1,
+    ...(session.native.metadata?.bigbud_registration === "scoped"
+      ? {
+          identityVersion: 2,
+          profileIssuer: session.native.metadata.bigbud_issuer,
+          registrationFamily: "scoped",
+        }
+      : {}),
   } as const;
 }
 
@@ -56,8 +67,9 @@ export async function createRuntimeSession(
   const requests = cancellation ? { signal: cancellation } : {};
   if (input.provider !== undefined && input.provider !== "opencodeV2")
     throw new Error("V2 provider mismatch.");
+  const binding = await resolveV2RuntimeBinding(options, input);
   const { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId } =
-    await resolveV2RuntimeBinding(options, input);
+    binding;
   const retained = await Effect.runPromise(options.journal.latestBound(input.threadId));
   if (
     retained &&
@@ -131,6 +143,7 @@ export async function createRuntimeSession(
         directory,
         cancellation,
         !localTools,
+        { ...binding, threadId: input.threadId },
       );
       cancellation?.throwIfAborted();
       return await mutations.withNamespace(async () => {
@@ -154,13 +167,7 @@ export async function createRuntimeSession(
             transport: options.config.sharedService.registrationFile,
           });
         shared = options.config.sharedService
-          ? await prepareSharedCreation(
-              options,
-              input,
-              { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId },
-              model,
-              permissions,
-            )
+          ? await prepareSharedCreation(options, input, binding, model, permissions)
           : undefined;
         let sharedRow = shared?.row;
         const verify = async () => {
@@ -175,6 +182,7 @@ export async function createRuntimeSession(
           );
           return (
             observed.id === nativeSessionId &&
+            matchesV2NativeRegistration(observed, binding) &&
             observed.location.directory === directory &&
             observed.metadata?.bigbud_thread === input.threadId &&
             observed.metadata.bigbud_storage === storageIdentity &&
@@ -256,6 +264,7 @@ export async function createRuntimeSession(
                   bigbud_provider: "opencodeV2",
                   bigbud_thread: input.threadId,
                   bigbud_storage: storageIdentity,
+                  ...v2NativeRegistrationMetadata(binding),
                 },
                 permissions,
               },
@@ -277,6 +286,7 @@ export async function createRuntimeSession(
         }
         if (
           native.id !== nativeSessionId ||
+          !matchesV2NativeRegistration(native, binding) ||
           native.location.directory !== directory ||
           native.metadata?.bigbud_provider !== "opencodeV2" ||
           native.metadata.bigbud_thread !== input.threadId ||
@@ -289,7 +299,8 @@ export async function createRuntimeSession(
         assertV2Model(native.model, model);
         if (shared?.row.identityKind === "adopted-legacy-v1")
           permissions = conservedSharedPolicy(native.permissions, permissions);
-        if (options.threadBridge && localTools) assertV2ThreadPolicy({ toolPolicy: permissions });
+        if (options.threadBridge && localTools)
+          assertV2ThreadPolicy({ toolPolicy: permissions, native });
         if (shared && sharedRow) await shared.verify(sharedRow);
         if (localTools) await assertV2NoSavedGrants(lease.process.client, native);
         // Reset only this owned session's permissions. Never trust persisted broad approvals.

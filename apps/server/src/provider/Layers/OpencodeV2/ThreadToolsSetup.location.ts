@@ -1,4 +1,3 @@
-import path from "node:path";
 import { Effect } from "effect";
 import type { ServerOpencodeV2ThreadToolsSetupRequest } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
 import {
@@ -47,12 +46,16 @@ export async function inferredV2SetupLocation(
       throw new Error(
         "V2 selected thread has no supported local native Location; no local/private fallback.",
       );
-    const directory = resolveThreadWorkspaceCwd({ thread, projects: model.projects });
+    const directory = resolveThreadWorkspaceCwd({
+      thread,
+      projects: model.projects,
+      defaultChatCwd: fallback,
+    });
     if (!directory)
       throw new Error(
         "V2 selected thread has no canonical native Location; no local/private fallback.",
       );
     return directory;
   }
-  return path.resolve(fallback);
+  return fallback;
 }

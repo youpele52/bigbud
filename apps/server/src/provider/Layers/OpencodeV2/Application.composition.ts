@@ -159,6 +159,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           threadBridge: orchestration.bridge,
           threadToolsPreflight: orchestration.preflight,
           activation: orchestration.activation,
+          profileIssuer: orchestration.issuer,
           allowLocalWorkspace: true,
           enableLocalTools: true,
           ...(Option.isSome(serverConfig)

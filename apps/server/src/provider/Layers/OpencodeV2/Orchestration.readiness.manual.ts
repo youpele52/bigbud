@@ -1,4 +1,5 @@
 import path from "node:path";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { v2Request, type OpencodeV2Client } from "./Client.ts";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
 import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
@@ -26,7 +27,8 @@ export async function readV2CompatibleManualBootstrap(
     (abort) => client.plugin.list({ location: { directory } }, { signal: abort }),
     { ...(signal ? { signal } : {}), timeoutMs: 5000 },
   );
-  const matches = inventory.data.filter((plugin) => plugin.id === "bigbud.thread.v1");
+  const registration = v2ThreadRegistration(preferred);
+  const matches = inventory.data.filter((plugin) => plugin.id === registration.id);
   if (inventory.data.length > 1000 || matches.length > 1)
     throw new Error("V2 required manual bootstrap namespace is colliding.");
   const plugin = matches[0];
@@ -40,7 +42,16 @@ export async function readV2CompatibleManualBootstrap(
     return undefined;
   let info: Record<string, unknown>;
   try {
-    info = (await callV2ThreadRpc(client, directory, "info", {})) as Record<string, unknown>;
+    info = (await callV2ThreadRpc(
+      client,
+      directory,
+      "info",
+      {},
+      undefined,
+      undefined,
+      signal,
+      registration,
+    )) as Record<string, unknown>;
   } catch {
     throw new Error(
       "V2 required bigbud thread-tools setup is incomplete for the existing manual entry; no create/update/prompt was admitted. Native models/history remain available independently; no autoload alias or native reload was attempted.",
@@ -52,6 +63,12 @@ export async function readV2CompatibleManualBootstrap(
       "V2 legacy-manual-bootstrap-update-required: this manual L entry is cleanup-only for the new app. Update that entry explicitly; native config/history was not rewritten and no autoload alias was added.",
     );
   const artifact = await readV2RetainedArtifact(preferred, path.basename(source));
+  if (v2ThreadRegistration(artifact).id !== registration.id)
+    throw new Error("V2 retained registration family mismatch; no cross-family adoption.");
+  if (artifact.bootstrapAbi !== preferred.bootstrapAbi)
+    throw new Error(
+      "V2 manual bootstrap namespace ABI requires an explicit update; no compact-session downgrade, autoload alias or history mutation.",
+    );
   await verifyV2ThreadTools(artifact, client, directory, signal, undefined, eligibility, root);
   return artifact;
 }

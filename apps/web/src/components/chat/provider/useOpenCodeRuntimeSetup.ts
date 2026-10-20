@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
 import type { UnifiedSettings } from "@bigbud/contracts/settings";
@@ -7,7 +7,7 @@ import { hasOpencodeV2ManagedPluginTrust } from "@bigbud/shared/opencodeNativeTr
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { ensureNativeApi } from "~/rpc/nativeApi";
 import { useWsConnectionStatus } from "~/rpc/wsConnectionState";
-import { observeOpenCodeSetup } from "./opencodeSetup.observer";
+import { isPendingOpenCodeSetup, observeOpenCodeSetup } from "./opencodeSetup.observer";
 
 /** Ephemeral, chat-scoped readiness; actual turn admission always performs its own checks. */
 export function useOpenCodeRuntimeSetup(input: {
@@ -18,6 +18,10 @@ export function useOpenCodeRuntimeSetup(input: {
   threadError: string | null | undefined;
 }) {
   const connection = useWsConnectionStatus();
+  const [attempt, setAttempt] = useState(0);
+  const stopObservation = useRef<(() => void) | undefined>(undefined);
+  const operation = useRef(0);
+  const cancelling = useRef(false);
   const { status, settings, directory, threadId, threadError } = input;
   const enabled = Boolean(
     status?.provider === "opencodeV2" &&
@@ -35,6 +39,7 @@ export function useOpenCodeRuntimeSetup(input: {
     directory,
   );
   const scope = JSON.stringify([
+    attempt,
     enabled,
     settings,
     directory,
@@ -44,24 +49,81 @@ export function useOpenCodeRuntimeSetup(input: {
     connection.connectedAt,
     connection.socketUrl,
   ]);
+  const latestScope = useRef(scope);
+  latestScope.current = scope;
   const [state, setState] = useState<{
     scope: string;
     result?: ServerOpencodeV2ThreadToolsSetupResult;
     failed?: boolean;
   } | null>(null);
   useEffect(() => {
+    latestScope.current = scope;
+    const generation = ++operation.current;
+    cancelling.current = false;
+    stopObservation.current?.();
     if (!enabled || !directory) return;
     setState({ scope });
-    return observeOpenCodeSetup(
+    const stop = observeOpenCodeSetup(
       (request) => ensureNativeApi().server.getOpencodeV2ThreadToolsSetup(request),
       { directory, ...(threadId ? { threadId } : {}), refresh: true },
-      (result) => setState({ scope, result }),
-      () => setState({ scope, failed: true }),
+      (result) => {
+        if (latestScope.current === scope && operation.current === generation)
+          setState({ scope, result });
+      },
+      () => {
+        if (latestScope.current === scope && operation.current === generation)
+          setState((previous) => ({ ...previous, scope, failed: true }));
+      },
     );
+    stopObservation.current = stop;
+    return () => {
+      latestScope.current = "";
+      cancelling.current = false;
+      stopObservation.current?.();
+      stopObservation.current = undefined;
+    };
   }, [scope, enabled, directory, threadId]);
   const current = enabled && state?.scope === scope ? state : null;
   const result = current?.result;
+  async function cancel() {
+    if (!result?.jobId || !result.interestId || cancelling.current || latestScope.current !== scope)
+      return;
+    cancelling.current = true;
+    const generation = ++operation.current;
+    const isCurrent = () => latestScope.current === scope && operation.current === generation;
+    stopObservation.current?.();
+    try {
+      const reply = await ensureNativeApi().server.getOpencodeV2ThreadToolsSetup({
+        operation: "cancel-interest",
+        jobId: result.jobId,
+        interestId: result.interestId,
+      });
+      if (isCurrent()) {
+        setState({ scope, result: reply });
+        if (isPendingOpenCodeSetup(reply)) {
+          stopObservation.current?.();
+          stopObservation.current = observeOpenCodeSetup(
+            (request) => ensureNativeApi().server.getOpencodeV2ThreadToolsSetup(request),
+            { operation: "status", jobId: reply.jobId! },
+            (value) => {
+              if (isCurrent()) setState({ scope, result: value });
+            },
+            () => {
+              if (isCurrent()) setState((previous) => ({ ...previous, scope, failed: true }));
+            },
+          );
+        }
+      }
+    } catch {
+      if (isCurrent()) setState((previous) => ({ ...previous, scope, failed: true }));
+    } finally {
+      if (isCurrent()) cancelling.current = false;
+    }
+  }
   return {
+    result,
+    retry: () => setAttempt((value) => value + 1),
+    cancel,
     noticeIdentity: result
       ? [
           result.reasonCode,
@@ -82,7 +144,7 @@ export function useOpenCodeRuntimeSetup(input: {
       result.nativeVersion === status?.version &&
       (result.qualificationState === "qualified" || result.qualificationState === "unqualified"),
     error: current?.failed
-      ? "Automatic OpenCode bridge verification did not finish. Retry setup in Providers settings."
+      ? "Setup status observation stopped or timed out. The job may still be running; no prompt was replayed. Retry setup to check again."
       : result &&
           result.status !== "ready" &&
           ["blocked", "failed", "uncertain", "cancelled", "deferred"].includes(

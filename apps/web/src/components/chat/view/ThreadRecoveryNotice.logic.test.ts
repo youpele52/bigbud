@@ -118,6 +118,16 @@ describe("deriveThreadRecoveryNotice", () => {
     expect(notice?.description).toMatch(/not available/i);
   });
 
+  it("does not describe a setup or uncertain-admission refusal as permanent session loss", () => {
+    const notice = derive(null, 0, { failure: failureOf("unsafe-to-replay") }).notice;
+    expect(notice).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });
+    expect(notice?.description).toContain("resolve the error above before sending again");
+    expect(notice?.description).not.toContain("session cannot be resumed");
+    expect(derive(null, 0, { failure: failureOf("session-dead") }).notice?.description).toContain(
+      "session cannot be resumed",
+    );
+  });
+
   it("offers the manual new-thread action for a rejected request such as a retired model", () => {
     const notice = derive(null, 0, { failure: failureOf("invalid-request") }).notice;
     expect(notice).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });

@@ -71,6 +71,7 @@ export class V2RuntimeHttpFixture {
   modelUnavailable = false;
   readonly modelHttpFailures = new Map<string, number>();
   failInterrupt = false;
+  failSessionVerification = false;
   readonly client = makeOwnedClient({
     endpoint: "http://127.0.0.1:45991",
     password: "synthetic-only",
@@ -86,7 +87,7 @@ export class V2RuntimeHttpFixture {
       this.source.subscribe(options?.signal ?? new AbortController().signal);
   }
 
-  private async fetch(url: string, init?: RequestInit) {
+  async fetch(url: string, init?: RequestInit) {
     const pathname = new URL(url).pathname;
     const method = init?.method ?? "GET";
     const body: Record<string, unknown> =
@@ -95,6 +96,16 @@ export class V2RuntimeHttpFixture {
     if (pathname.includes("experimental/mcp")) return new Response(null, { status: 204 });
     const parts = pathname.split("/");
     const sessionId = parts[parts.indexOf("session") + 1] ?? "";
+    // Match the observed native router limit, independently of body-ID validation.
+    if (parts.includes("session") && sessionId.length > 100)
+      return new Response(null, { status: 404 });
+    if (
+      this.failSessionVerification &&
+      method === "GET" &&
+      /^\/api\/session\/[^/]+$/.test(pathname) &&
+      this.sessions.has(sessionId)
+    )
+      return new Response(null, { status: 404 });
     if (pathname === "/api/permission/saved") return response({ data: [] });
     if (pathname === "/api/model") {
       const location = { directory: new URL(url).searchParams.get("location[directory]")! };

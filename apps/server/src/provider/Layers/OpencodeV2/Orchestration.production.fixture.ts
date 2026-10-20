@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { realpath, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_SERVER_SETTINGS, MessageId, ThreadId } from "@bigbud/contracts";
@@ -85,7 +86,7 @@ export async function withV2ProductionThreadTools(
       location: { directory: await realpath(directory) },
       data: [
         {
-          id: "bigbud.thread.v1",
+          id: v2ThreadRegistration(app.artifact).id,
           source: { type: "local", path: app.artifact.directory },
           features: { server: true, rpc: true },
           state: { status: "active" },
@@ -115,6 +116,7 @@ export async function withV2ProductionThreadTools(
       enableLocalTools: true,
       threadBridge: infrastructure.bridge,
       threadToolsPreflight: infrastructure.preflight,
+      profileIssuer: async () => app.artifact.issuer,
       ...(transport
         ? { config: { runtimeTargetId: "local", sharedService: transport.descriptor } }
         : {}),
@@ -175,13 +177,15 @@ export async function withV2ProductionThreadTools(
                       {
                         type: "tool",
                         id: callID,
-                        name: `bigbud_thread_v1_${action}`,
+                        name: v2ThreadRegistration(app.artifact).tool(action as "create_thread"),
                         time: { created: 3 },
                         state: { status: "running", input: input as never, metadata: {} },
                       },
                     ],
                   });
-                const tool: FixtureTool | undefined = host.tools.get(`bigbud_thread_v1_${action}`);
+                const tool: FixtureTool | undefined = host.tools.get(
+                  v2ThreadRegistration(app.artifact).tool(action as "create_thread"),
+                );
                 if (!tool) throw new Error("fixture required tool absent");
                 const output = await tool.execute(input, {
                   sessionID: session.native.id,

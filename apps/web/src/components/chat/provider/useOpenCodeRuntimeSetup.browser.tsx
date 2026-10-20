@@ -7,6 +7,7 @@ import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdv
 import { useOpenCodeRuntimeSetup } from "./useOpenCodeRuntimeSetup";
 import { ProviderStatusBanner } from "./ProviderStatusBanner";
 import { deferredSetupReply } from "./opencodeSetup.test.fixture";
+import { OpenCodeSetupStatus } from "./OpenCodeSetupStatus";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -48,10 +49,12 @@ function SetupHarness({
   consented = true,
   thread = "first-chat",
   status = provider,
+  showSetup = false,
 }: {
   consented?: boolean;
   thread?: string;
   status?: ServerProvider;
+  showSetup?: boolean;
 }) {
   const setup = useOpenCodeRuntimeSetup({
     status,
@@ -70,6 +73,14 @@ function SetupHarness({
       <p role="status">{setup.verified ? "Runtime verified" : "Not verified"}</p>
       <ProviderStatusBanner status={status} runtimeVerified={setup.verified} />
       {setup.error ? <p role="alert">{setup.error}</p> : null}
+      {showSetup ? (
+        <OpenCodeSetupStatus
+          result={setup.result}
+          error={setup.error}
+          onRetry={setup.retry}
+          onCancel={() => void setup.cancel()}
+        />
+      ) : null}
     </>
   );
 }
@@ -83,6 +94,90 @@ beforeEach(() => {
   };
 });
 afterEach(() => vi.restoreAllMocks());
+
+it.each(["cancel", "status"])(
+  "coalesces double Cancel and fences delayed %s replies after switching chats",
+  async (delayedOperation) => {
+    const waiting = {
+      ...ready,
+      status: "required",
+      activationState: "waiting-for-idle",
+      jobId: "a".repeat(32),
+      interestId: "b".repeat(32),
+      message: "Waiting for another native client.",
+    };
+    const cancellation = deferredSetupReply<typeof waiting>();
+    const observation = deferredSetupReply<typeof waiting>();
+    mocks.get.mockImplementation(async (request) => {
+      if (request.operation === "cancel-interest") return cancellation.promise;
+      if (request.operation === "status") return observation.promise;
+      return request.threadId === "first-chat" ? waiting : ready;
+    });
+    const screen = await render(<SetupHarness showSetup />);
+    await expect
+      .element(screen.getByText("OpenCode setup queued — waiting for idle"))
+      .toBeVisible();
+    const cancel = screen.getByRole("button", { name: "Cancel this setup request" });
+    await cancel.click();
+    await cancel.click();
+    expect(
+      mocks.get.mock.calls.filter(([request]) => request.operation === "cancel-interest"),
+    ).toHaveLength(1);
+    if (delayedOperation === "status") {
+      cancellation.resolve(waiting);
+      await vi.waitFor(() =>
+        expect(mocks.get).toHaveBeenCalledWith({ operation: "status", jobId: waiting.jobId }),
+      );
+    }
+    await screen.rerender(<SetupHarness thread="second-chat" showSetup />);
+    await expect.element(screen.getByText("Runtime verified", { exact: true })).toBeVisible();
+    cancellation.resolve(waiting);
+    observation.resolve({ ...waiting, activationState: "failed", message: "Stale failure" });
+    // Drain the deferred RPC continuations before asserting that old-scope results stayed fenced.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect.element(screen.getByText("Runtime verified", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Stale failure")).not.toBeInTheDocument();
+    expect(mocks.get.mock.calls.map(([request]) => request.operation ?? "setup")).toEqual(
+      delayedOperation === "status"
+        ? ["setup", "cancel-interest", "status", "setup"]
+        : ["setup", "cancel-interest", "setup"],
+    );
+    await screen.unmount();
+  },
+);
+
+it("keeps observing shared queued work after cancelling only this chat's interest", async () => {
+  const jobId = "a".repeat(32),
+    interestId = "b".repeat(32);
+  const waiting = {
+    ...ready,
+    status: "required",
+    activationState: "waiting-for-idle",
+    jobId,
+    message: "Waiting for another native client.",
+  };
+  mocks.get.mockImplementation(async (request) => {
+    if (request.operation === "cancel-interest") return waiting;
+    if (request.operation === "status")
+      return {
+        ...waiting,
+        activationState: "deferred",
+        message: "Setup expired while waiting for idle.",
+      };
+    return { ...waiting, interestId };
+  });
+  const screen = await render(<SetupHarness showSetup />);
+  await expect.element(screen.getByText("OpenCode setup queued — waiting for idle")).toBeVisible();
+  await screen.getByRole("button", { name: "Cancel this setup request" }).click();
+  await expect.element(screen.getByText("OpenCode setup — deferred")).toBeVisible();
+  expect(mocks.get.mock.calls.map(([request]) => request.operation ?? "setup")).toEqual([
+    "setup",
+    "cancel-interest",
+    "status",
+  ]);
+  expect(mocks.get).toHaveBeenCalledWith({ operation: "cancel-interest", jobId, interestId });
+  await screen.unmount();
+});
 
 it("waits for consent, clears automatically on success, and does not repeat on a catalog refresh", async () => {
   const pending = deferredSetupReply<typeof ready>();

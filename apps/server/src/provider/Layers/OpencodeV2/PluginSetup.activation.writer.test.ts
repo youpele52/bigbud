@@ -7,7 +7,7 @@ import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
 import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 import type { makeV2AutomaticPluginSetup } from "./PluginSetup.native.ts";
 
 const hook = vi.hoisted(() => ({
@@ -28,11 +28,11 @@ vi.mock("node:fs/promises", async (original) => {
   return {
     ...fs,
     link: async (...args: Parameters<typeof fs.link>) => {
-      if (String(args[1]).endsWith(V2_MANAGED_PLUGIN_FILENAME)) await hook.wait?.();
+      if (/bigbud-thread-tools-[a-f0-9]{64}\.js$/.test(String(args[1]))) await hook.wait?.();
       return fs.link(...args);
     },
     rename: async (...args: Parameters<typeof fs.rename>) => {
-      if (String(args[1]).endsWith(V2_MANAGED_PLUGIN_FILENAME)) await hook.wait?.();
+      if (/bigbud-thread-tools-[a-f0-9]{64}\.js$/.test(String(args[1]))) await hook.wait?.();
       return fs.rename(...args);
     },
   };
@@ -66,7 +66,7 @@ it.each(["link", "rename"] as const)(
     const held = deferred<void>(),
       entered = deferred<void>(),
       f = await makeV2ActivationTransactionFixture(async () => true);
-    const filename = path.join(f.root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+    const filename = path.join(f.root, "plugins", v2ManagedPluginFilename(f.app.artifact));
     try {
       if (kind === "rename") {
         await publishV2ManagedPlugin(f.app.artifact, f.root, {
@@ -89,7 +89,11 @@ it.each(["link", "rename"] as const)(
       expect(f.close).not.toHaveBeenCalled();
       expect(() => f.gate.assertOpen()).not.toThrow();
       expect(f.gate.knownReady(f.root)).toBeUndefined();
-      const lock = path.join(f.root, "plugins", ".bigbud-thread-tools-managed.lock");
+      const lock = path.join(
+        f.root,
+        "plugins",
+        `.bigbud-thread-tools-${f.app.artifact.issuer}.lock`,
+      );
       const locked = await lstat(lock);
       await expect(
         publishV2ManagedPlugin(f.app.artifact, f.root, {
@@ -105,14 +109,17 @@ it.each(["link", "rename"] as const)(
         f.app.artifact.privateKey,
         f.app.artifact.publicKey,
       );
-      const record = await records.read(JSON.stringify([f.root, V2_MANAGED_PLUGIN_FILENAME]));
+      const record = await records.read(
+        JSON.stringify([f.root, v2ManagedPluginFilename(f.app.artifact)]),
+      );
       expect(record?.value).toMatchObject({ phase: "publishing" });
       held.resolve();
       await expect(f.jobs.wait(handle, f.scope)).resolves.toMatchObject({ state: "uncertain" });
       expect(f.close).toHaveBeenCalledTimes(1);
       expect(await readFile(filename, "utf8")).toContain(f.app.artifact.entryUri);
       expect(
-        (await records.read(JSON.stringify([f.root, V2_MANAGED_PLUGIN_FILENAME])))?.value,
+        (await records.read(JSON.stringify([f.root, v2ManagedPluginFilename(f.app.artifact)])))
+          ?.value,
       ).toMatchObject({ phase: "publishing" });
     } finally {
       hook.wait = undefined;

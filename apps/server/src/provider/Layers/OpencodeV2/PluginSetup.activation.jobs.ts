@@ -25,6 +25,7 @@ export type V2ActivationState =
 export interface V2ActivationJobScope {
   readonly root: string;
   readonly issuer: string;
+  readonly registrationId?: string;
   readonly transport: string;
   readonly generation: string;
   readonly digest: string;
@@ -95,6 +96,7 @@ export class V2ActivationJobs {
     const key = JSON.stringify([
       scope.root,
       scope.issuer,
+      scope.registrationId,
       scope.transport,
       scope.generation,
       scope.consentRevision,
@@ -106,7 +108,8 @@ export class V2ActivationJobs {
         if (
           !existing.settled &&
           existing.scope.root === scope.root &&
-          existing.scope.issuer === scope.issuer
+          existing.scope.issuer === scope.issuer &&
+          existing.scope.registrationId === scope.registrationId
         )
           throw new Error("V2 conflicting activation proposal/physical writer remains owned.");
       if (this.jobs.size >= 32) {
@@ -217,6 +220,7 @@ export class V2ActivationJobs {
       !job ||
       job.scope.root !== scope.root ||
       job.scope.issuer !== scope.issuer ||
+      job.scope.registrationId !== scope.registrationId ||
       job.scope.transport !== scope.transport ||
       job.scope.generation !== scope.generation ||
       job.scope.consentRevision !== scope.consentRevision

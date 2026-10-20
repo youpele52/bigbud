@@ -33,7 +33,7 @@ it("exposes only guarded HTTP status through the real Promise client, not sensit
     client.session.create({ location: { directory: "/fixture" } }, { signal }),
   ).catch((error: unknown) => error);
   expect(v2ExecutionIssue(error)).toBe(
-    "OpenCode v2 request returned HTTP 500; admission may be unconfirmed.",
+    "OpenCode v2 session.create returned HTTP 500; admission may be unconfirmed.",
   );
   expect(v2ExecutionIssue(error)).not.toContain("synthetic-secret");
   expect(error).not.toHaveProperty("cause");

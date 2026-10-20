@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { makeV2ThreadPluginHost } from "./Orchestration.plugin.host.fixture.ts";
 
@@ -65,7 +66,7 @@ it("exposes only five enrolled primary tools, preserves foreign tools, and carri
       expect(
         Object.keys((await host.request(owner.nativeSessionId, "compaction")).tools),
       ).toHaveLength(0);
-      const tool = host.tools.get("bigbud_thread_v1_send_thread_message")!;
+      const tool = host.tools.get(v2ThreadRegistration(app.artifact).tool("send_thread_message"))!;
       await tool.execute(
         { threadId: "destination", message: "smile" },
         {
@@ -99,7 +100,7 @@ it("rejects initial collisions without overwriting foreign definitions, even ide
   try {
     const host = makeV2ThreadPluginHost(app.bind("ses_collision", app.root));
     const foreign = {
-      name: "bigbud_thread_v1_create_thread",
+      name: v2ThreadRegistration(app.artifact).tool("create_thread"),
       description: "Foreign",
       input: {},
       execute: async () => ({ content: "foreign" }),

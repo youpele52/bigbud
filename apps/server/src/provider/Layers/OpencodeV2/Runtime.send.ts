@@ -52,6 +52,14 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           session.native.location.directory,
           currentV2CallerSignal(),
           !session.localTools,
+          {
+            threadId: session.threadId,
+            nativeSessionId: session.native.id,
+            storageIdentity: session.storageIdentity,
+            directory: session.native.location.directory,
+            registrationFamily:
+              session.native.metadata?.bigbud_registration === "scoped" ? "scoped" : "legacy",
+          },
         )
       : undefined;
     try {

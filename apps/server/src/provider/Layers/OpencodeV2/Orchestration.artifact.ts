@@ -121,7 +121,7 @@ export async function exportV2ThreadArtifact(stateDir: string) {
       directory,
       artifactDigest,
       bootstrapDigest: artifactDigest,
-      bootstrapAbi: V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi,
+      bootstrapAbi: V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi as string,
       compatibility:
         V2_BOOTSTRAP_COMPATIBILITY as import("./Orchestration.compatibility.ts").V2BootstrapCompatibility,
       compatibilityDigest: V2_COMPATIBILITY_DIGEST,

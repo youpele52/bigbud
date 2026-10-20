@@ -23,11 +23,13 @@ export async function awaitV2RuntimeReady(
   directory: string,
   signal: AbortSignal | undefined,
   hidden: boolean,
+  identity?: import("./Orchestration.selection.ts").V2SessionRegistrationIdentity,
 ) {
   assertV2CallerCurrent();
   const caller = currentV2CallerSignal();
   if (caller) signal = AbortSignal.any([caller, ...(signal ? [signal] : [])]);
-  if (options.activation) return options.activation.awaitReady(client, directory, signal, hidden);
+  if (options.activation)
+    return options.activation.awaitReady(client, directory, signal, hidden, identity);
   if (!hidden) await options.threadToolsPreflight?.(client, directory, signal);
   assertV2CallerCurrent();
   return undefined;

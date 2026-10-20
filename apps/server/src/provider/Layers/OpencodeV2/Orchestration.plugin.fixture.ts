@@ -15,6 +15,7 @@ import {
   type V2ThreadEnvelope,
 } from "./Orchestration.protocol.ts";
 import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
+import { makeV2LegacyRegistrationFixture } from "./Orchestration.registration.legacy.fixture.ts";
 
 /** App-only challenge/dispatch fixture; never contacts a vendor or real native session. */
 export async function makeV2ThreadPluginFixture(
@@ -23,13 +24,17 @@ export async function makeV2ThreadPluginFixture(
     readonly invoke?: (value: Record<string, unknown>) => Promise<unknown>;
     readonly responseLease?: () => { readonly revision: number; readonly expiry: number };
     readonly implementationVersion?: "v1" | "v2";
+    readonly legacyRegistration?: boolean;
   } = {},
 ) {
   const parent = path.join(os.tmpdir(), "opencode");
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(path.join(parent, "thread-plugin-")));
   await ownV2WindowsFixture(root);
-  const artifact = await exportV2ThreadArtifact(options.stateRoot ?? root);
+  const preferred = await exportV2ThreadArtifact(options.stateRoot ?? root);
+  const artifact = options.legacyRegistration
+    ? await makeV2LegacyRegistrationFixture(preferred)
+    : preferred;
   let owner: V2ThreadOwner | undefined;
   const state = { active: true, invocations: [] as Record<string, unknown>[] };
   const server = createServer(async (request, response) => {

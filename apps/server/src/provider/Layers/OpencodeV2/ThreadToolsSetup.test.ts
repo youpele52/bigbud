@@ -88,3 +88,21 @@ it("classifies isolated and unknown retained histories locally without migration
   ).toBeUndefined();
   expect(v2RetainedHistoryIssue({ hasAdmission: false, directory: "/workspace" })).toBeUndefined();
 });
+
+it("keeps retained shared Chats history read-only when Default chat folder changes, without rebinding", () => {
+  const cursor = {
+    provider: "opencodeV2",
+    nativeSessionId: "original",
+    storageIdentity: "original-storage",
+    directory: "/old-default",
+    connectionMode: "shared",
+  };
+  const original = structuredClone(cursor);
+  expect(
+    v2RetainedHistoryIssue({ cursor, hasAdmission: true, directory: "/new-default" }),
+  ).toContain("another native Location");
+  expect(
+    v2RetainedHistoryIssue({ cursor, hasAdmission: true, directory: "/old-default" }),
+  ).toBeUndefined();
+  expect(cursor).toEqual(original);
+});

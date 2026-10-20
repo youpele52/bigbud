@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { makeV2ActivationTransactionFixture } from "./PluginSetup.activation.transaction.fixture.ts";
 import { deferred } from "./Test.fixtures.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
 import type { V2ExecutionReservation } from "./PluginSetup.activation.gate.ts";
 import { createHash } from "node:crypto";
@@ -107,7 +107,7 @@ it("a non-cooperative physical cleanup outlives both the RPC timeout and the sho
       f.app.artifact.root,
       "activation-locks",
       createHash("sha256").update(f.root).digest("hex"),
-      ".bigbud-thread-tools-managed.lock",
+      `.bigbud-thread-tools-${f.app.artifact.issuer}.lock`,
     );
     expect((await lstat(lock)).isFile()).toBe(true);
     expect(f.jobs.isSettled(handle.jobId)).toBe(false);
@@ -155,7 +155,7 @@ it("the short gate releases at 15 seconds while a non-cooperative final observat
     expect(f.retire).not.toHaveBeenCalled();
     expect(writes.count).toBe(0);
     await expect(
-      lstat(path.join(f.root, "plugins", V2_MANAGED_PLUGIN_FILENAME)),
+      lstat(path.join(f.root, "plugins", v2ManagedPluginFilename(f.app.artifact))),
     ).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     held.resolve(true);
@@ -199,7 +199,10 @@ it.each(["local-reservation", "after-join", "before-publication"] as const)(
       expect(await result).toMatchObject({ state: "ready" });
       expect(writes.count).toBe(1);
       expect(
-        await readFile(path.join(f.root, "plugins", V2_MANAGED_PLUGIN_FILENAME), "utf8"),
+        await readFile(
+          path.join(f.root, "plugins", v2ManagedPluginFilename(f.app.artifact)),
+          "utf8",
+        ),
       ).toContain(f.app.artifact.entryUri);
       expect(f.close).toHaveBeenCalledTimes(1);
     } finally {

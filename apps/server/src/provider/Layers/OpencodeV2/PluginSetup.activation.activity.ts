@@ -8,6 +8,7 @@ import {
   digestV2EnrollmentOwner,
 } from "./Orchestration.enrollment.record.ts";
 import { V2EnrollmentRetirement } from "./Orchestration.enrollment.retirement.ts";
+import { v2OwnerRegistration, v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 /** Known local/foreign physical evidence plus bounded native reads; never a global atomic-idle claim. */
 export async function readV2ActivationIdle(
@@ -42,6 +43,10 @@ export async function readV2ActivationIdle(
     job.assertCurrent();
     if (digestV2EnrollmentOwner(value.owner) !== value.digest)
       throw new Error("V2 invalid signed enrollment activity; no idle inference.");
+    // A new scoped slot does not replace the legacy bootstrap. Its retained owners
+    // must stay untouched, while native foreground/shell activity still fences all slots.
+    if (v2OwnerRegistration(value.owner).id !== v2ThreadRegistration(proposal.artifact).id)
+      continue;
     if (proposal.scope.participants.has(value.digest)) continue;
     try {
       await retirements.assertSettled({

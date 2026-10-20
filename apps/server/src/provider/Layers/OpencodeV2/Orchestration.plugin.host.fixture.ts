@@ -1,4 +1,6 @@
 import type { V2ThreadOwner } from "./Orchestration.protocol.ts";
+import { v2OwnerRegistration } from "./Orchestration.registration.ts";
+import { v2NativeRegistrationMetadata } from "./Runtime.registration.ts";
 
 interface Context {
   sessionID: string;
@@ -70,6 +72,10 @@ export function makeV2ThreadPluginHost(owner: V2ThreadOwner) {
             bigbud_provider: "opencodeV2",
             bigbud_thread: owner.threadId,
             bigbud_storage: owner.storageIdentity,
+            ...v2NativeRegistrationMetadata({
+              registrationFamily: v2OwnerRegistration(owner).family,
+              profileIssuer: owner.issuer,
+            }),
           },
         };
       },

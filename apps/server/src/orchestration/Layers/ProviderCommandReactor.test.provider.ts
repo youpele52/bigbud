@@ -56,6 +56,12 @@ export function makeReactorProvider(
           : "full-access",
       ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
       threadId,
+      ...(typeof providerInput === "object" &&
+      providerInput !== null &&
+      "cwd" in providerInput &&
+      typeof providerInput.cwd === "string"
+        ? { cwd: providerInput.cwd }
+        : {}),
       resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
       createdAt: now,
       updatedAt: now,

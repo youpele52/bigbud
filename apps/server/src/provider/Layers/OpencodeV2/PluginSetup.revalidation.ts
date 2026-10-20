@@ -9,6 +9,7 @@ import { recoveryDigest } from "./RebootRecovery.schema.ts";
 import {
   V2PluginPublication,
   V2_MANAGED_PLUGIN_FILENAME,
+  v2PublicationFilename,
   v2ManagedPluginEntry,
 } from "./PluginSetup.record.ts";
 import { v2NativePluginDirectory } from "./PluginSetup.fs.ts";
@@ -43,7 +44,7 @@ async function observe(
   const rootIdentity = await v2NativePluginDirectory(root);
   if (
     old.root !== root ||
-    key !== JSON.stringify([root, V2_MANAGED_PLUGIN_FILENAME]) ||
+    key !== JSON.stringify([root, v2PublicationFilename(old)]) ||
     old.next.issuer !== issuer ||
     old.phase !== "committed" ||
     !old.nextIdentity
@@ -67,8 +68,9 @@ export async function prepareV2InstallationRevalidation(
   issuer: string,
   backup: { directory: string; databaseDigest: string },
   assertCurrent: () => void,
+  filename = V2_MANAGED_PLUGIN_FILENAME,
 ) {
-  const key = JSON.stringify([root, V2_MANAGED_PLUGIN_FILENAME]);
+  const key = JSON.stringify([root, filename]);
   const signed = await records.read(key);
   if (!signed)
     throw new Error("V2 installation revalidation requires an existing signed installation.");
@@ -80,8 +82,9 @@ export async function prepareV2InstallationRevalidation(
     throw new Error("V2 installation revalidation backup differs from the signed installation.");
   const approval = { ...(await observe(records, key, signed, root, issuer)), backup };
   if (
-    (await readV2ThreadPrivateFile(path.join(backup.directory, V2_MANAGED_PLUGIN_FILENAME))) !==
-    approval.revalidated.next.content
+    (await readV2ThreadPrivateFile(
+      path.join(backup.directory, v2PublicationFilename(approval.revalidated)),
+    )) !== approval.revalidated.next.content
   )
     throw new Error("V2 installation revalidation managed-byte backup changed.");
   const store = await records.sibling("recovery"),

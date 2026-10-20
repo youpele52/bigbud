@@ -96,6 +96,7 @@ export interface V2SessionResources {
 
 /** Explicit harness authorization; never inferred from saved provider enabled settings. */
 export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessConfig> {
+  readonly profileIssuer?: () => Promise<string>;
   readonly activation?: {
     readonly coordinator: import("./PluginSetup.activation.ts").V2ThreadToolsActivation;
     readonly beforeSharedHistory?: (scope: {
@@ -112,6 +113,7 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
       directory: string,
       signal: AbortSignal | undefined,
       hidden: boolean,
+      identity?: import("./Orchestration.selection.ts").V2SessionRegistrationIdentity,
     ) => Promise<{
       gate: import("./PluginSetup.activation.gate.ts").V2ActivationGate;
       stamp: import("./PluginSetup.activation.gate.ts").V2ReadyStamp;

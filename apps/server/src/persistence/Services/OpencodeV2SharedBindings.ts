@@ -10,11 +10,20 @@ export const OpencodeV2SharedBinding = Schema.Struct({
   directory: Bounded,
   runtimeTargetId: Bounded,
   workspaceTargetId: Bounded,
-  identityKind: Schema.Literals(["shared-api-v1", "adopted-legacy-v1"]),
+  identityKind: Schema.Literals(["shared-api-v1", "adopted-legacy-v1", "shared-api-v2"]),
+  profileIssuer: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))),
+  registrationFamily: Schema.optionalKey(Schema.Literals(["legacy", "scoped"])),
   material: Bounded,
   state: Schema.Literals(["reserved", "dispatch-intent", "verified"]),
   revision: Schema.Number,
-});
+}).check(
+  Schema.makeFilter((row) =>
+    row.identityKind === "shared-api-v2"
+      ? row.profileIssuer !== undefined && row.registrationFamily === "scoped"
+      : row.profileIssuer === undefined &&
+        (row.registrationFamily === undefined || row.registrationFamily === "legacy"),
+  ),
+);
 export type OpencodeV2SharedBinding = typeof OpencodeV2SharedBinding.Type;
 export const V2_SHARED_BINDING_CONFLICT_DETAILS = {
   legacy: "Shared binding material/state conflict; history retained, no replay.",

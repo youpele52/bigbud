@@ -1,5 +1,6 @@
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { v2Request } from "./Client.ts";
+import { sameV2NativeRegistration } from "./Runtime.registration.ts";
 
 /** Shared native session metadata must still designate this exact app owner before mutation. */
 export async function assertV2SharedSessionOwner(
@@ -15,6 +16,7 @@ export async function assertV2SharedSessionOwner(
   );
   if (
     native.id !== owner.native.id ||
+    !sameV2NativeRegistration(native, owner.native) ||
     native.location.directory !== owner.native.location.directory ||
     native.metadata?.bigbud_provider !== "opencodeV2" ||
     native.metadata.bigbud_thread !== owner.threadId ||

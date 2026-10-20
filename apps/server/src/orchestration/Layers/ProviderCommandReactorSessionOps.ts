@@ -16,6 +16,7 @@ import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { mapProviderSessionStatusToOrchestrationStatus } from "./ProviderCommandReactorHelpers.ts";
 import { startProviderSession } from "./ProviderCommandReactorSessionOps.start.ts";
+import { assertActiveV2SessionLocation } from "./ProviderCommandReactorSessionOps.activeLocation.ts";
 import {
   ongoingProviderWorkError,
   capturedModelSelectionError,
@@ -84,7 +85,21 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       resolveThreadWorkspaceCwd({
         thread,
         projects: readModel.projects,
-      }) ?? resolveDefaultChatCwd(serverSettings);
+        defaultChatCwd: resolveDefaultChatCwd(serverSettings),
+      }) ??
+      (preferredProvider === "opencodeV2" ? undefined : resolveDefaultChatCwd(serverSettings));
+    if (
+      !effectiveCwd ||
+      (preferredProvider === "opencodeV2" &&
+        !readModel.projects.some(
+          (project) => project.id === thread.projectId && !project.deletedAt,
+        ))
+    ) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: `Thread '${threadId}' has no canonical native Location; no local/private fallback.`,
+      });
+    }
     const resolveActiveSession = (tId: ThreadId) =>
       providerService
         .listSessions()
@@ -130,6 +145,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
+    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd);
     // Per-turn callers always supply their resolved runtime. Preserve existing
     // explicit session-reconfiguration behavior when no turn override is given.
     const ongoingWorkError =

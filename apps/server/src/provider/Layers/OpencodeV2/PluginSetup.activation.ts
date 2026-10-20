@@ -25,6 +25,7 @@ import {
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
 import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 export interface V2ActivationParticipant {
   readonly diagnostics?: () =>
@@ -77,7 +78,13 @@ export class V2ThreadToolsActivation {
     this.unsubscribe = typeof unsubscribe === "function" ? unsubscribe : () => {};
   }
   private key(scope: V2ActivationJobScope) {
-    return JSON.stringify([scope.root, scope.issuer, scope.transport, scope.generation]);
+    return JSON.stringify([
+      scope.root,
+      scope.issuer,
+      scope.transport,
+      scope.generation,
+      scope.registrationId,
+    ]);
   }
   scopeFor(artifact: V2PluginSetupArtifact, descriptor: V2ActivationJobScope["descriptor"]) {
     const context = currentV2RequestContext(),
@@ -97,6 +104,7 @@ export class V2ThreadToolsActivation {
     const scope: V2ActivationJobScope = {
       root: resolveV2PluginConfigRoot(settings.nativePluginConfigRoot),
       issuer: artifact.issuer,
+      registrationId: v2ThreadRegistration(artifact).id,
       transport: descriptor.registrationFile,
       generation: descriptor.generation,
       digest: artifact.artifactDigest,
@@ -212,6 +220,10 @@ export class V2ThreadToolsActivation {
         throw error;
       }
     }
+    if (v2ThreadRegistration(artifact).family === "legacy")
+      throw new Error(
+        "V2 retained legacy bootstrap is unavailable; history remains read-only. Restore its exact original installation; no cross-family migration or replacement was attempted.",
+      );
     const retainedManual = await readV2CompatibleManualBootstrap(
       artifact,
       client,
@@ -301,6 +313,7 @@ export class V2ThreadToolsActivation {
       artifact.issuer,
       descriptor.registrationFile,
       descriptor.generation,
+      v2ThreadRegistration(artifact).id,
     ]);
     const scope = this.scopes.get(key);
     if (!scope) return undefined; // Passive diagnostics never create a scope/job or inspect a foreign owner.
@@ -360,11 +373,19 @@ export class V2ThreadToolsActivation {
     await this.jobs.close();
     this.consent.close();
   }
-  passiveReady(descriptor: V2ActivationJobScope["descriptor"], directory: string) {
+  passiveReady(
+    descriptor: V2ActivationJobScope["descriptor"],
+    directory: string,
+    artifact?: V2PluginSetupArtifact,
+  ) {
     currentV2RequestContext()?.permit.assertCurrent();
     for (const [key, scope] of this.scopes) {
       const fields = JSON.parse(key) as unknown[];
-      if (fields[2] === descriptor.registrationFile && fields[3] === descriptor.generation) {
+      if (
+        fields[2] === descriptor.registrationFile &&
+        fields[3] === descriptor.generation &&
+        (!artifact || fields[4] === v2ThreadRegistration(artifact).id)
+      ) {
         const stamp = scope.gate.knownReady(directory);
         if (stamp) return { gate: scope.gate, stamp };
       }

@@ -3,12 +3,16 @@ import { afterEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { ThreadId } from "@bigbud/contracts";
 import { ProviderThreadToolsSetup } from "./ProviderThreadToolsSetup";
+import { deferredSetupReply } from "../chat/provider/opencodeSetup.test.fixture";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("../../rpc/nativeApi", () => ({
   ensureNativeApi: () => ({ server: { getOpencodeV2ThreadToolsSetup: mocks.get } }),
 }));
-afterEach(() => mocks.get.mockReset());
+afterEach(() => {
+  mocks.get.mockReset();
+  vi.useRealTimers();
+});
 const result = {
   status: "ready",
   directory: "/actual-worktree",
@@ -16,6 +20,101 @@ const result = {
   severity: "success",
   message: "Required setup verified; compatible chats enroll automatically.",
 };
+
+const queued = {
+  ...result,
+  status: "required",
+  activationState: "waiting-for-idle",
+  severity: "info",
+  jobId: "a".repeat(32),
+  interestId: "b".repeat(32),
+  message: "Waiting for active native work.",
+};
+
+it("Show status retains the queued handle and cancellation interest without another setup", async () => {
+  const { interestId: _interest, ...status } = queued;
+  mocks.get.mockResolvedValueOnce(queued).mockResolvedValue(status);
+  const screen = await render(<ProviderThreadToolsSetup enabled consented />);
+  try {
+    await screen.getByRole("button", { name: "Retry setup" }).click();
+    await expect.element(screen.getByText(queued.message)).toBeVisible();
+    await screen.getByRole("button", { name: "Show status" }).click();
+    expect(mocks.get).toHaveBeenLastCalledWith({ operation: "status", jobId: queued.jobId });
+    await expect
+      .element(screen.getByRole("button", { name: "Cancel this setup request" }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Cancel this setup request" }).click();
+    expect(mocks.get).toHaveBeenLastCalledWith({
+      operation: "cancel-interest",
+      jobId: queued.jobId,
+      interestId: queued.interestId,
+    });
+    expect(mocks.get.mock.calls.filter(([input]) => input.refresh === true)).toHaveLength(1);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+it("keeps an expired job result visible during a failed Show status refresh", async () => {
+  const expired = {
+    ...queued,
+    activationState: "deferred",
+    message: "Setup expired waiting for idle.",
+  };
+  const status = deferredSetupReply<unknown>();
+  mocks.get.mockResolvedValueOnce(expired).mockImplementationOnce(async () => {
+    await status.promise;
+    throw new Error("Status unavailable");
+  });
+  const screen = await render(<ProviderThreadToolsSetup enabled consented />);
+  try {
+    await screen.getByRole("button", { name: "Retry setup" }).click();
+    await screen.getByRole("button", { name: "Show status" }).click();
+    expect(mocks.get).toHaveBeenLastCalledWith({ operation: "status", jobId: queued.jobId });
+    await expect.element(screen.getByText(expired.message)).toBeVisible();
+    status.resolve(undefined);
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect.element(screen.getByText(expired.message)).toBeVisible();
+  } finally {
+    await screen.unmount();
+  }
+});
+
+it("times out a stalled status request, retains the last result, and fences late replies", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const stalled = deferredSetupReply<unknown>();
+  mocks.get.mockResolvedValueOnce(queued).mockReturnValueOnce(stalled.promise);
+  const screen = await render(<ProviderThreadToolsSetup enabled consented />);
+  try {
+    await screen.getByRole("button", { name: "Retry setup" }).click();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocks.get).toHaveBeenLastCalledWith({ operation: "status", jobId: queued.jobId });
+    await vi.advanceTimersByTimeAsync(298000);
+    await expect.element(screen.getByRole("alert")).toHaveTextContent("stopped or timed out");
+    await expect.element(screen.getByText(queued.message)).toBeVisible();
+    stalled.resolve({
+      ...result,
+      activationState: "ready",
+      message: "Late success must not replace queued status.",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await expect
+      .element(screen.getByText("Late success must not replace queued status."))
+      .not.toBeInTheDocument();
+    const { interestId: _interest, ...status } = queued;
+    mocks.get.mockResolvedValue(status);
+    await screen.getByRole("button", { name: "Show status" }).click();
+    expect(mocks.get).toHaveBeenLastCalledWith({ operation: "status", jobId: queued.jobId });
+    await screen.getByRole("button", { name: "Cancel this setup request" }).click();
+    expect(mocks.get).toHaveBeenLastCalledWith({
+      operation: "cancel-interest",
+      jobId: queued.jobId,
+      interestId: queued.interestId,
+    });
+  } finally {
+    await screen.unmount();
+  }
+});
 
 it("infers Location without a chat-directory input, exposes config placement only, and opening settings writes nothing", async () => {
   mocks.get.mockResolvedValue(result);
@@ -133,7 +232,7 @@ it("keeps automatic setup progress and errors visible without expanding advanced
     await expect.element(screen.getByRole("status")).toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Retry setup", includeHidden: true }))
-      .not.toBeVisible();
+      .toBeVisible();
     reject!(new Error("Connection unavailable"));
     await expect.element(screen.getByRole("alert")).toBeVisible();
     await expect.element(screen.getByRole("alert")).toHaveTextContent(/history is preserved/);

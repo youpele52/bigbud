@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { ensureV2ThreadPrivateChild } from "./Orchestration.storage.ts";
 import { acquireV2PluginPublicationLock } from "./PluginSetup.lock.ts";
 import { v2NativePluginDirectory } from "./PluginSetup.fs.ts";
@@ -23,6 +24,7 @@ export async function closeV2PublicationBoundary(
     root,
     artifact,
     authority,
+    v2ThreadRegistration(artifact).family,
   );
   let releaseGate: (() => void) | undefined;
   try {

@@ -12,7 +12,7 @@ const ownerKey = (owner: V2LegacyThreadOwner) =>
   JSON.stringify([owner.storageIdentity, owner.nativeSessionId, owner.threadId]);
 
 async function makeFixture() {
-  const app = await makeV2ThreadPluginFixture();
+  const app = await makeV2ThreadPluginFixture({ legacyRegistration: true });
   let host = {
     host: "a".repeat(64),
     bootSession: "11111111-1111-1111-1111-111111111111",

@@ -4,6 +4,7 @@ import {
   projectV2NativeConfigSources,
 } from "./NativeCompatibility.sources.ts";
 import { inspectV2PluginControls } from "./PluginSetup.policy.ts";
+import type { V2ThreadRegistration } from "./Orchestration.registration.ts";
 import {
   V2NativeCompatibilityError,
   type V2NativeRuntimeProof,
@@ -20,6 +21,7 @@ export async function assertV2NativeRuntimePolicy(
   client: OpencodeV2Client,
   proof: PolicyProof,
   signal?: AbortSignal,
+  registration?: V2ThreadRegistration,
 ) {
   const authority = {
     signal: signal ?? new AbortController().signal,
@@ -33,7 +35,7 @@ export async function assertV2NativeRuntimePolicy(
     (abort) => client.config.get({ location: { directory: proof.directory } }, { signal: abort }),
     { signal: authority.signal, timeoutMs: 5000 },
   );
-  await assertV2NativeSourcePolicy(entries, proof, signal);
+  await assertV2NativeSourcePolicy(entries, proof, signal, registration);
 }
 
 /** Validate the exact observed projection before eligibility or publication; no raw machine reads. */
@@ -41,6 +43,7 @@ export async function assertV2NativeSourcePolicy(
   entries: Awaited<ReturnType<OpencodeV2Client["config"]["get"]>>,
   proof: PolicyProof,
   signal?: AbortSignal,
+  registration?: V2ThreadRegistration,
 ) {
   const authority = {
     signal: signal ?? new AbortController().signal,
@@ -57,6 +60,7 @@ export async function assertV2NativeSourcePolicy(
       authority,
       proof.directory,
       machinePaths,
+      registration,
     );
   } catch (error) {
     if (error instanceof V2NativeCompatibilityError) throw error;

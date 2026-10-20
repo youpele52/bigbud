@@ -27,7 +27,7 @@ it("N accepts exact L cleanup only; legacy tombstones cannot revoke the same-non
       cleanup = await plugin.setup(host.context);
     try {
       expect(await host.call("info")).toMatchObject({
-        protocol: "bigbud.thread.v1",
+        protocol: `bigbud.thread.v2.${app.artifact.issuer}`,
         enrollmentProtocol: "bigbud.thread.enrollment.v2",
         bootstrapAbi: app.artifact.bootstrapAbi,
       });

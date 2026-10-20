@@ -111,7 +111,7 @@ it.skipIf(!binary).each(["approval-required", "auto-accept-edits"] as const)(
             )!;
             const id = (session.resumeCursor as { nativeSessionId: string }).nativeSessionId;
             const before = yield* Effect.promise(() => client.session.get({ sessionID: id }));
-            native.state.tool = "bigbud_thread_v1_create_thread";
+            native.state.tool = `bb2_${app.artifact.issuer.slice(0, 32)}_create_thread`;
             native.state.input = {
               title: "Once approved child",
               task: "Synthetic independent canonical task",

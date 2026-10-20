@@ -1,4 +1,5 @@
 import type { ModelRef } from "@opencode/client";
+import { sameV2NativeRegistration } from "./Runtime.registration.ts";
 import type { ProviderSendTurnInput } from "@bigbud/contracts/orchestration/provider.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
@@ -50,6 +51,7 @@ export async function switchV2TurnModel(
     validate?.();
     if (
       native.id !== session.native.id ||
+      !sameV2NativeRegistration(native, session.native) ||
       native.location.directory !== session.native.location.directory ||
       native.metadata?.bigbud_thread !== session.threadId ||
       native.metadata.bigbud_storage !== session.storageIdentity ||
