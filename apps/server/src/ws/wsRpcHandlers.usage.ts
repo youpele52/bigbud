@@ -159,14 +159,14 @@ function buildUsageSummary(
   const providers = sortBreakdownEntries(
     Array.from(providerMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
   const models = sortBreakdownEntries(
     Array.from(modelMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
