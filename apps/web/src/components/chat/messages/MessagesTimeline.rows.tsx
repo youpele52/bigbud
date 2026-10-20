@@ -232,6 +232,8 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   displayedUserMessage.contexts.length > 0) && (
                   <UserMessageBody
                     text={displayedUserMessage.visibleText}
+                    sourceText={row.message.text}
+                    preferredProvider={props.preferredProvider}
                     terminalContexts={displayedUserMessage.contexts}
                     cwd={markdownCwd}
                   />

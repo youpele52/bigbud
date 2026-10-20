@@ -6,6 +6,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { syntheticV2QualificationRecord } from "./NativeCompatibility.qualification.fixture.ts";
+import { opencodeAgentSystemHash } from "../../opencodeAgentSource.ts";
 
 const registry = vi.hoisted(() => ({ passes: [] as unknown[], failures: [] as unknown[] }));
 vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
@@ -30,7 +31,20 @@ it("reports a qualified shared runtime as ready without the unqualified disclosu
       ReturnType<typeof http.client.server.info>
     >);
     vi.spyOn(http.client.provider, "list").mockResolvedValue({ location: { directory }, data: [] });
-    vi.spyOn(http.client.agent, "list").mockResolvedValue({ location: { directory }, data: [] });
+    vi.spyOn(http.client.agent, "list").mockResolvedValue({
+      location: { directory },
+      data: [
+        {
+          id: "babysitter",
+          name: "babysitter",
+          system: "Watch the task.",
+          request: { settings: {}, headers: {}, body: {} },
+          mode: "subagent",
+          hidden: false,
+          permissions: [],
+        },
+      ],
+    });
     vi.spyOn(http.client.skill, "list").mockResolvedValue({ location: { directory }, data: [] });
     vi.spyOn(http.client.integration, "list").mockResolvedValue({
       location: { directory },
@@ -61,6 +75,14 @@ it("reports a qualified shared runtime as ready without the unqualified disclosu
             message: "Connected to your native OpenCode service.",
           });
           expect(snapshot.message).not.toContain(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+          expect(snapshot.nativeAgents).toEqual([
+            {
+              id: "babysitter",
+              name: "babysitter",
+              systemPromptHash: opencodeAgentSystemHash("Watch the task."),
+            },
+          ]);
+          expect(JSON.stringify(snapshot.nativeAgents)).not.toContain("Watch the task.");
           expect(snapshot.models.length).toBeGreaterThan(0);
           expect(snapshot.models.every((model) => model.availability === "available")).toBe(true);
         }).pipe(

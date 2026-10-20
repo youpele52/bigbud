@@ -34,6 +34,8 @@ import {
 } from "./DiscoveryRegistry.parse.ts";
 import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
 import { buildPluginSkillDescriptors, withPluginProvenance } from "./DiscoveryRegistry.plugins.ts";
+import { opencodeMarkdownAgentSystemHash } from "../opencodeAgentSource.ts";
+import { buildNativeDiscoveryEntries } from "./DiscoveryRegistry.native.ts";
 
 const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
   agents: [],
@@ -226,18 +228,26 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
           fs.readFileString(descriptor.path).pipe(
             Effect.map((content) => {
               const parsed = parseDiscoveryFile({ ...descriptor, content });
-              return parsed.kind === "skill"
-                ? {
-                    ...parsed,
-                    entry: withPluginProvenance(
-                      parsed.entry,
-                      descriptor as {
-                        readonly pluginId?: string;
-                        readonly pluginRevision?: string;
-                      },
-                    ),
-                  }
-                : parsed;
+              return {
+                ...parsed,
+                systemPromptHash:
+                  parsed.kind === "agent" &&
+                  descriptor.provider === "opencode" &&
+                  /\.(md|markdown)$/i.test(descriptor.path)
+                    ? opencodeMarkdownAgentSystemHash(content)
+                    : undefined,
+                ...(parsed.kind === "skill"
+                  ? {
+                      entry: withPluginProvenance(
+                        parsed.entry,
+                        descriptor as {
+                          readonly pluginId?: string;
+                          readonly pluginRevision?: string;
+                        },
+                      ),
+                    }
+                  : {}),
+              };
             }),
             Effect.catch(() => Effect.succeed(null)),
           ),
@@ -278,23 +288,9 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         const native = providers.find(
           (provider) => provider.provider === "opencodeV2" && provider.enabled,
         );
-        for (const agent of native?.nativeAgents ?? [])
-          agentEntries.push({
-            id: `opencodeV2:native:${agent.id}`,
-            provider: "opencodeV2",
-            name: agent.name,
-            source: "config",
-            ...(agent.description ? { description: agent.description } : {}),
-          });
-        for (const skill of native?.skills ?? [])
-          skillEntries.push({
-            id: `opencodeV2:native:${skill.path}`,
-            provider: "opencodeV2",
-            name: skill.name,
-            source: "config",
-            sourcePath: skill.path,
-            ...(skill.description ? { description: skill.description } : {}),
-          });
+        const nativeCatalog = buildNativeDiscoveryEntries(native, discoveredFileEntries);
+        agentEntries.push(...nativeCatalog.agents);
+        skillEntries.push(...nativeCatalog.skills);
       }
 
       const catalog = {

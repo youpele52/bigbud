@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./discoveryReference": {
+      "types": "./src/discoveryReference.ts",
+      "import": "./src/discoveryReference.ts"
+    },
     "./providerTurnFailure": {
       "types": "./src/providerTurnFailure.ts",
       "import": "./src/providerTurnFailure.ts"

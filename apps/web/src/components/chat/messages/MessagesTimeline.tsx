@@ -44,6 +44,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   isRevertingCheckpoint,
   onImageExpand,
   markdownCwd,
+  preferredProvider,
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
@@ -330,6 +331,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             isRevertingCheckpoint={isRevertingCheckpoint}
             onImageExpand={onImageExpand}
             markdownCwd={markdownCwd}
+            preferredProvider={preferredProvider}
             resolvedTheme={resolvedTheme}
             nowIso={nowIso}
             timestampFormat={timestampFormat}
@@ -360,6 +362,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         isRevertingCheckpoint={isRevertingCheckpoint}
         onImageExpand={onImageExpand}
         markdownCwd={markdownCwd}
+        preferredProvider={preferredProvider}
         resolvedTheme={resolvedTheme}
         nowIso={nowIso}
         timestampFormat={timestampFormat}

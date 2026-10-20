@@ -250,6 +250,7 @@ export function ChatViewChatBody({
                   isRevertingCheckpoint={base.isRevertingCheckpoint}
                   onImageExpand={base.setExpandedImage}
                   markdownCwd={composer.gitCwd ?? undefined}
+                  preferredProvider={base.activeThread!.modelSelection.provider}
                   resolvedTheme={base.resolvedTheme}
                   timestampFormat={base.timestampFormat}
                   workspaceRoot={workspaceRoot}

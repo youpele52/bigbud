@@ -23,6 +23,7 @@ import { currentV2RequestContext } from "./Client.guard.ts";
 import { resolveV2NativeReleaseQualification } from "./NativeCompatibility.qualification.ts";
 import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
 import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
+import { opencodeAgentSystemHash } from "../../opencodeAgentSource.ts";
 import {
   v2SharedDiscoveryFailure,
   type V2DiscoveryPhase,
@@ -171,10 +172,11 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
               nativeAgents: agents.data
                 .filter(({ hidden }) => !hidden)
                 // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
-                .map(({ id, name, description }) => ({
+                .map(({ id, name, description, system }) => ({
                   id,
                   name,
                   ...(description ? { description } : {}),
+                  ...(system?.trim() ? { systemPromptHash: opencodeAgentSystemHash(system) } : {}),
                 })),
             }
           : {}),

@@ -2,6 +2,7 @@ import {
   type ExecutionTargetId,
   type MessageId,
   type OrchestrationTask,
+  type ProviderKind,
   type TurnId,
 } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
@@ -39,6 +40,7 @@ export interface MessagesTimelineProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   markdownCwd: string | undefined;
+  preferredProvider?: ProviderKind | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
@@ -76,6 +78,7 @@ export interface MessagesTimelineRowContentProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   markdownCwd: string | undefined;
+  preferredProvider?: ProviderKind | undefined;
   resolvedTheme: "light" | "dark";
   nowIso: string;
   timestampFormat: TimestampFormat;
