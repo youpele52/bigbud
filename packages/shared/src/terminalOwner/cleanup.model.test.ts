@@ -7,7 +7,7 @@ import { encodeCanonical } from "./canonical";
 describe("full 512 KiB cleanup reservation model", () => {
   it.each([false, true])(
     "retains 248 ordinary + 1 parent + 112 children under saturation, pending=%s",
-    // Canonical encoding is checked after every transition, including under workspace load.
+    // All child outcomes and reservation invariants are checked after every transition.
     { timeout: 15_000 },
     (pending) => {
       const { model, check, ordinary } = saturatedCleanupModel(pending);

@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 import { OwnerCleanupModel } from "./cleanup.model";
 import { id, hex } from "./test.fixture";
-import { encodeCanonical } from "./canonical";
+import { cleanupOutcomeSizer } from "./cleanup.model.encoding.fixture";
 
 /** Full ordinary pools stay pinned for the entire test; no test-side eviction. */
 export function saturatedCleanupModel(pending: boolean) {
@@ -25,6 +25,7 @@ export function saturatedCleanupModel(pending: boolean) {
   expect(() => model.reserveResource("pty", id(200))).toThrow("CAPACITY");
   expect(() => model.reserveResource("auxiliary", id(201))).toThrow("CAPACITY");
   const ordinary = model.snapshot().ordinary;
+  const outcomeBytes = cleanupOutcomeSizer();
   const check = () => {
     const snapshot = model.snapshot();
     expect(snapshot.ordinary).toEqual(ordinary);
@@ -53,29 +54,20 @@ export function saturatedCleanupModel(pending: boolean) {
       expect(grants.grants + r.ordinaryGrants.snapshot().items).toBeLessThanOrEqual(128);
       expect(grants.capsuleBytes).toBeLessThanOrEqual(16384);
     }
-    // Keep every per-transition encoding check without creating assertions for each child.
+    // Check every child on every transition; identical detached inputs share a pure encoding result.
     const childViolations = [];
     for (const c of snapshot.children) {
-      const state = { reserved: 1, accepted: 2, succeeded: 4, cleanupUnknown: 7 }[c.state];
-      const encoded = encodeCanonical("CleanupOutcome", {
-        child: c.ref,
-        childId: Uint8Array.from(Buffer.from(c.id, "hex")),
-        mutationDigest: c.digest ? Uint8Array.from(Buffer.from(c.digest, "hex")) : id(0),
-        state,
-        dispositionDigest: id(0),
-        resultCapsuleDigest: id(0),
-        authorityRevision: "248",
-      });
+      const bytes = outcomeBytes(c);
       // Fixed model index/state allowance, not measured JS object/native allocator overhead.
       if (
         !(
           c.effects <= 1 &&
           c.id.length === 64 &&
-          encoded.length <= r.childOutcomeBytes &&
-          encoded.length + 256 <= r.childRecordBytes
+          bytes <= r.childOutcomeBytes &&
+          bytes + 256 <= r.childRecordBytes
         )
       )
-        childViolations.push({ id: c.id, effects: c.effects, outcomeBytes: encoded.length });
+        childViolations.push({ id: c.id, effects: c.effects, outcomeBytes: bytes });
     }
     expect(childViolations).toEqual([]);
     return snapshot;
