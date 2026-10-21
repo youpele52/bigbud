@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalEvent } from "@bigbud/contracts/workspace/terminal.ts";
+import type { TerminalSessionStreamItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { publishTerminalOutput } from "./TerminalOutputStream";
 import { TerminalSessionFixture } from "./TerminalViewport.session.fixture";
@@ -25,6 +26,13 @@ const mocks = vi.hoisted(() => ({
   write: vi.fn(async () => undefined),
   resize: vi.fn(async () => undefined),
   onEvent: vi.fn((_listener: (event: TerminalEvent) => void) => () => undefined),
+  subscribeSession: vi.fn(
+    (_input: unknown, listener: (item: TerminalSessionStreamItem) => void) => {
+      queueMicrotask(() => listener({ type: "subscribed", subscriptionId: "fixture" }));
+      return () => undefined;
+    },
+  ),
+  ackOutput: vi.fn(async () => undefined),
   onDomainEvent: vi.fn(() => () => undefined),
   settings: { enableThinkingStreaming: false },
   queryClient: {},
@@ -63,7 +71,7 @@ vi.mock("../../routes/-__root.recovery", () => ({
   createEventRouterRecovery: () => ({ cancel: () => undefined }),
 }));
 
-it("composed root subscription preserves every numbered event in a 1000-event task; fonts and stale work preserve identity", async () => {
+it("scoped stream preserves every numbered event in a 1000-event task while the root keeps its bounded ring; fonts and stale work preserve identity", async () => {
   let terminal: Terminal | null = null;
   const onTerminal = (next: Terminal | null) => {
     terminal = next;
@@ -78,7 +86,13 @@ it("composed root subscription preserves every numbered event in a 1000-event ta
     await expect.poll(() => screen.container.textContent).toContain("ready");
     const original = terminal!;
     const dispose = vi.spyOn(original, "dispose");
-    const receive = mocks.onEvent.mock.calls.at(-1)![0];
+    const rootReceive = mocks.onEvent.mock.calls.at(-1)![0];
+    const viewReceive = mocks.subscribeSession.mock.calls.at(-1)![1];
+    // Enter through both real native-API callbacks: the root feed and the view's scoped stream.
+    const receive = (event: TerminalEvent) => {
+      rootReceive(event);
+      viewReceive(event);
+    };
     const base = {
       threadId: ThreadId.makeUnsafe("terminal-fixture"),
       terminalId: "synthetic",
@@ -86,8 +100,7 @@ it("composed root subscription preserves every numbered event in a 1000-event ta
     };
     receive({ ...base, type: "output", data: "\x1b[?1049l\x1bc" });
     const numbered = Array.from({ length: 1000 }, (_, i) => `N${String(i).padStart(4, "0")}`);
-    // One JS task, above the 200-entry UI ring. Enter through the actual root
-    // native-API callback, not the transient registry's publication helper.
+    // One JS task, above the 200-entry UI ring, not the transient registry's publication helper.
     for (const line of numbered)
       receive({
         ...base,

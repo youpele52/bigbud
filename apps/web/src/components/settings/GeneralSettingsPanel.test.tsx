@@ -37,7 +37,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     mock.updateSettings.mockClear();
   });
 
-  it("places the three terminal settings in their own shared section immediately after Threads", () => {
+  it("places the terminal settings in their own shared section immediately after Threads", () => {
     const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
     const sections = [...markup.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(
       ([section]) => ({
@@ -63,7 +63,14 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections[2]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
+      "Terminal theme (dark appearance)",
+      "Terminal theme (light appearance)",
       "Terminal GPU rendering",
+      "Terminal scroll speed",
+      "Terminal fast scroll speed",
+      "Full-screen app scroll speed",
+      "Terminal ligatures",
+      "Terminal inline images",
     ]);
     const sectionClasses = sections.map(
       ({ markup: section }) => section.match(/^<section class="([^"]+)"/)?.[1],

@@ -361,16 +361,21 @@ textarea::placeholder {
   }
 }
 
-/* Terminal drawer scrollbar parity with chat */
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical {
+/*
+ * Terminal scrollbar parity with the app scrollbar above (6px, rounded). xterm draws its own
+ * overlay scrollbar and inlines a 14px width, hence !important. Its colours come from the
+ * terminal theme (scrollbarSlider* in ThreadTerminalDrawer.logic.ts), which mirror the thumb
+ * colours above. xterm 6.1 prefixes these classes (`.xterm-scrollbar`, `.xterm-slider`).
+ */
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
   width: 6px !important;
 }
 
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar > .slider {
+.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider {
   border-radius: 3px;
 }
 
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
   width: 6px !important;
   left: 0 !important;
 }

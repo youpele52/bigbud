@@ -9,9 +9,12 @@ import type {
 import type { MutableRefObject, RefObject } from "react";
 import type { TerminalContextSelection } from "~/lib/terminalContext";
 import type { TerminalTypographySettings } from "./TerminalFontController";
+import type { TerminalThemePreference } from "./terminalThemes";
+import type { TerminalInteractionSettings } from "./TerminalViewport.addons";
 import type { TerminalGpuAcceleration } from "@bigbud/contracts/core/settings.ts";
 
-export interface UseTerminalViewportSessionInput extends TerminalTypographySettings {
+export interface UseTerminalViewportSessionInput
+  extends TerminalTypographySettings, TerminalThemePreference, TerminalInteractionSettings {
   containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
