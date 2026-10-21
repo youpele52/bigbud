@@ -23,3 +23,18 @@ it("persists cardless Stop authority through SQLite full/mobile/operational quer
     );
   }
 });
+
+it("publishes retained-family Stop authority through the bounded web startup catalogs", async () => {
+  const results = await readRetainedFamilySqlSnapshots();
+  expect(results.map((row) => row.expected)).toEqual([false, true, false, true, false]);
+  for (const row of results) {
+    // The web hydrates from these summaries at startup, not from getSnapshot.
+    for (const summary of [row.sidebarSummary, row.projectSummary]) {
+      expect(summary).toMatchObject({
+        sessionStatus: "ready",
+        activeTurnId: null,
+        retainedFamily: row.expected,
+      });
+    }
+  }
+});

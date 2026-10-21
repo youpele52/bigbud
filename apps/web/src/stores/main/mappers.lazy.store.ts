@@ -42,6 +42,8 @@ function mapSummarySession(summary: ThreadSummary): Thread["session"] {
     status: toLegacySessionStatus(summary.sessionStatus),
     orchestrationStatus: summary.sessionStatus,
     ...(summary.activeTurnId ? { activeTurnId: summary.activeTurnId } : {}),
+    // Keeps the main composer's Stop for descendants that outlive the parent turn after reload.
+    ...(summary.retainedFamily ? { retainedFamily: true } : {}),
     createdAt: summary.updatedAt,
     updatedAt: summary.updatedAt,
   };
