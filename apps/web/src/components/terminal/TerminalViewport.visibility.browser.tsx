@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => ({ terminal: mocks }) }));
 vi.mock("~/config/env", () => ({ isElectron: false }));
 
-it("same-geometry CSS-hidden tab releases its GPU addon but preserves xterm and reacquires on reveal", async () => {
+it("same-geometry CSS-hidden tab parks its GPU context, preserves xterm and resumes it on reveal", async () => {
   let terminal: Terminal | null = null;
   const addonDispose = vi.spyOn(WebglAddon.prototype, "dispose");
   const onTerminal = (value: Terminal | null) => {
@@ -60,14 +60,16 @@ it("same-geometry CSS-hidden tab releases its GPU addon but preserves xterm and 
         onTerminal={onTerminal}
       />,
     );
+    // The visible slot is released; the context itself is retained for a quick return.
     await expect.poll(() => terminalRendererBudget.count).toBe(0);
-    expect(addonDispose).toHaveBeenCalledOnce();
+    expect(terminalRendererBudget.retainedCount).toBe(1);
+    expect(addonDispose).not.toHaveBeenCalled();
+    expect(original.options.cursorBlink).toBe(false);
     expect(getComputedStyle(mount).visibility).toBe("hidden");
     expect([mount.getBoundingClientRect().width, mount.getBoundingClientRect().height]).toEqual([
       before.width,
       before.height,
     ]);
-    expect(screen.container.textContent).toContain("dom");
     expect(terminal).toBe(original);
     expect(original.buffer.active).toBe(buffer);
     expect(dispose).not.toHaveBeenCalled();
@@ -81,13 +83,16 @@ it("same-geometry CSS-hidden tab releases its GPU addon but preserves xterm and 
       />,
     );
     await expect.poll(() => screen.container.textContent).toContain("readywebgl");
-    expect(terminalRendererBudget.count).toBe(1);
-    expect(loadAddon).toHaveBeenCalledOnce(); // New addon, existing emulator.
+    await expect.poll(() => terminalRendererBudget.count).toBe(1);
+    expect(terminalRendererBudget.retainedCount).toBe(0);
+    expect(loadAddon).not.toHaveBeenCalled(); // Same context, no atlas rebuild.
+    expect(original.options.cursorBlink).toBe(true);
     expect(original.buffer.active).toBe(buffer);
   } finally {
     await screen.unmount();
     expect(terminalRendererBudget.count).toBe(0);
-    expect(addonDispose).toHaveBeenCalledTimes(2);
+    expect(terminalRendererBudget.retainedCount).toBe(0);
+    expect(addonDispose).toHaveBeenCalledOnce();
     vi.restoreAllMocks();
   }
 });
