@@ -33,6 +33,8 @@ import type * as Git from "../workspace/git";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
+import type * as TerminalStream from "../workspace/terminal.stream";
+import type * as TerminalSearch from "../workspace/terminal.search";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
 import type { ContextMenuItem } from "./ipc";
@@ -85,7 +87,19 @@ export interface NativeApi {
       input: typeof Terminal.TerminalRestartInput.Encoded,
     ) => Promise<Terminal.TerminalSessionSnapshot>;
     close: (input: typeof Terminal.TerminalCloseInput.Encoded) => Promise<void>;
+    /** Sidebar/agent state; output only for sessions whose agent detection runs in the client. */
     onEvent: (callback: (event: Terminal.TerminalEvent) => void) => () => void;
+    /** One terminal's events for a mounted view, flow-controlled by `ackOutput`. */
+    subscribeSession?: (
+      input: TerminalStream.TerminalSessionStreamInput,
+      callback: (item: TerminalStream.TerminalSessionStreamItem) => void,
+      options?: { onError?: (error: unknown) => void },
+    ) => () => void;
+    ackOutput?: (input: TerminalStream.TerminalOutputAckInput) => Promise<void>;
+    /** Retained output of the server's terminals, newest lines first. */
+    search?: (
+      input: TerminalSearch.TerminalSearchInput,
+    ) => Promise<TerminalSearch.TerminalSearchResult>;
   };
   projects: {
     listDirectory: (

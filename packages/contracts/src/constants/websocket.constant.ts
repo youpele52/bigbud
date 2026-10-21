@@ -72,6 +72,8 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
+  terminalOutputAck: "terminal.outputAck",
+  terminalSearch: "terminal.search",
 
   // Server meta
   serverPing: "server.ping",
@@ -124,6 +126,7 @@ export const WS_METHODS = {
   subscribeOrchestrationDomainEvents: "subscribeOrchestrationDomainEvents",
   subscribeThinkingActivityDeltas: "subscribeThinkingActivityDeltas",
   subscribeTerminalEvents: "subscribeTerminalEvents",
+  subscribeTerminalSession: "subscribeTerminalSession",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeVisibleBrowserCommands: "subscribeVisibleBrowserCommands",

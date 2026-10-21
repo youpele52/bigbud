@@ -10,6 +10,11 @@ import {
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
+import {
+  WsSubscribeTerminalSessionRpc,
+  WsTerminalOutputAckRpc,
+  WsTerminalSearchRpc,
+} from "./rpc.terminalStream";
 import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
   WsKanbanCreateRpc,
@@ -265,6 +270,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalSnapshotRpc,
+  WsTerminalOutputAckRpc,
+  WsTerminalSearchRpc,
+  WsSubscribeTerminalSessionRpc,
   WsTerminalWslDistributionsRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,

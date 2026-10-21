@@ -25,3 +25,13 @@ it("preserves explicit Off, On and Auto without migrating saved preferences", ()
     Schema.decodeUnknownSync(ClientSettingsSchema)({ terminalGpuAcceleration: "always" }),
   ).toThrow();
 });
+
+it("defaults both terminal theme slots to the app-derived bigbud theme", () => {
+  const decoded = Schema.decodeSync(ClientSettingsSchema)({});
+  expect(decoded.terminalThemeDark).toBe("bigbud");
+  expect(decoded.terminalThemeLight).toBe("bigbud");
+  expect(
+    Schema.decodeSync(ClientSettingsSchema)({ terminalThemeDark: "Catppuccin Macchiato" })
+      .terminalThemeDark,
+  ).toBe("Catppuccin Macchiato");
+});

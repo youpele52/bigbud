@@ -28,6 +28,14 @@
       "types": "./src/terminalExecutionTarget.ts",
       "import": "./src/terminalExecutionTarget.ts"
     },
+    "./terminalText": {
+      "types": "./src/terminalText.ts",
+      "import": "./src/terminalText.ts"
+    },
+    "./terminalSynchronizedOutput": {
+      "types": "./src/terminalSynchronizedOutput.ts",
+      "import": "./src/terminalSynchronizedOutput.ts"
+    },
     "./terminalOwner/cleanupGrant.model": {
       "types": "./src/terminalOwner/cleanupGrant.model.ts",
       "import": "./src/terminalOwner/cleanupGrant.model.ts"
