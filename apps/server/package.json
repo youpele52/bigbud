@@ -15,7 +15,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "bun run src/bin.ts",
+    "dev": "node ../../scripts/dev-supervise.ts 'server=bun run src/bin.ts'",
     "build": "bun run thread-tools:manifest:check && bun run thread-tools:native-qualification:check && node scripts/cli.ts build",
     "thread-tools:manifest": "bun scripts/generateThreadToolImplementationManifest.ts",
     "thread-tools:manifest:check": "bun scripts/generateThreadToolImplementationManifest.ts --check",
