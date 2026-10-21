@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import {
   type GitActionProgressEvent,
   type GitManagerServiceError,
-  type TerminalEvent,
   WS_METHODS,
 } from "@bigbud/contracts";
 
@@ -368,17 +367,6 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
       observeRpcEffect(WS_METHODS.terminalClose, context.terminalManager.close(input), {
         "rpc.aggregate": "terminal",
       }),
-    [WS_METHODS.subscribeTerminalEvents]: (_input: unknown) =>
-      observeRpcStream(
-        WS_METHODS.subscribeTerminalEvents,
-        Stream.callback<TerminalEvent>((queue) =>
-          Effect.acquireRelease(
-            context.terminalManager.subscribe((event) => Queue.offer(queue, event)),
-            (unsubscribe) => Effect.sync(unsubscribe),
-          ),
-        ),
-        { "rpc.aggregate": "terminal" },
-      ),
   };
 }
 import { runThreadAwareGitAction } from "./wsGitTextGenerationContext.ts";

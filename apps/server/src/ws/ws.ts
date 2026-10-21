@@ -7,6 +7,7 @@ import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcAutomationHandlers } from "./wsRpcHandlers.automation";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
+import { makeWsRpcTerminalSessionHandlers } from "./wsRpcHandlers.terminalSession";
 import { makeWsRpcWorktreeHandlers } from "./wsRpcHandlers.worktrees.ts";
 import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
@@ -42,6 +43,7 @@ const makeWsRpcLayer = (
         ...makeWsRpcUsageHandlers(context),
         ...makeWsRpcSubagentHandlers(context),
         ...makeWsRpcGitTerminalHandlers(context, worktreeScope),
+        ...makeWsRpcTerminalSessionHandlers(context),
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcPluginHandlers(context),
       });

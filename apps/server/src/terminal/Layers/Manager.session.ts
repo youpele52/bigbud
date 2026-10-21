@@ -15,6 +15,8 @@ import { makeResolveTerminalFolder } from "./Manager.cwd";
 import { TerminalNotRunningError } from "../Services/Manager";
 import { makeTerminalClose } from "./Manager.session.close";
 import { prepareTerminalRestart } from "./Manager.session.restart";
+import { makeTerminalOutputHold } from "./Manager.session.outputHold";
+import { TerminalSearchIndex } from "./Manager.search";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -337,6 +339,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     );
 
   const close = makeTerminalClose(ctx);
+  const searchIndex = new TerminalSearchIndex();
 
   return {
     hasActiveThread: (threadId) =>
@@ -360,7 +363,16 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     clear,
     restart,
     close,
-    subscribe: (listener) =>
-      subscribeToTerminalEvents({ modifyManagerState, terminalEventListeners }, listener),
+    subscribe: (listener, options) =>
+      subscribeToTerminalEvents(
+        { modifyManagerState, terminalEventListeners, getSession },
+        listener,
+        options,
+      ),
+    setOutputHold: makeTerminalOutputHold(getSession),
+    search: (input) =>
+      modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
+        Effect.map((sessions) => searchIndex.search(sessions, input)),
+      ),
   };
 }

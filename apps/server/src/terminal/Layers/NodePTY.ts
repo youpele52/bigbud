@@ -59,6 +59,14 @@ class NodePtyProcess implements PtyProcess {
     this.process.write(data);
   }
 
+  pause = (): void => {
+    this.process.pause();
+  };
+
+  resume = (): void => {
+    this.process.resume();
+  };
+
   resize(cols: number, rows: number): void {
     this.process.resize(cols, rows);
   }

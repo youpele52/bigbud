@@ -30,6 +30,12 @@ export interface PtyProcess {
   readonly detach?: () => void;
   readonly pid: number;
   write(data: string): void;
+  /**
+   * Producer flow control: stop reading output so the child blocks on a full PTY buffer, then
+   * resume. Optional; adapters without it are bounded by delivery overflow instead.
+   */
+  readonly pause?: () => void;
+  readonly resume?: () => void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(callback: (data: string) => void): () => void;

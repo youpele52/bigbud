@@ -13,6 +13,7 @@ import {
   resolveShellCandidates,
 } from "./Manager.shell";
 import { buildRemoteTerminalShellCandidate } from "./Manager.remote.ts";
+import { withInteractiveTerminalIdentity } from "./Manager.shell.identity.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { buildWslTerminalShellCandidate } from "./Manager.wsl.invocation";
@@ -209,9 +210,11 @@ export function startSessionWith(
               : isWslTerminalTargetId(session.executionTargetId)
                 ? [buildWslTerminalShellCandidate(session)]
                 : [buildRemoteTerminalShellCandidate(session)];
-            const terminalEnv = createTerminalSpawnEnv(
-              process.env,
-              isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+            const terminalEnv = withInteractiveTerminalIdentity(
+              createTerminalSpawnEnv(
+                process.env,
+                isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+              ),
             );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
             ptyProcess = spawnResult.process;
