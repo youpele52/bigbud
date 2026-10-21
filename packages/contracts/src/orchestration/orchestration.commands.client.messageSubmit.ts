@@ -41,6 +41,11 @@ export const ThreadMessageSubmitCommand = Schema.Struct({
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   /** Server-trusted provenance. The client command schema intentionally omits this field. */
   originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
+  /**
+   * Server-only: re-queue a user message that is already in the transcript after the provider
+   * refused it as busy. The client command schema intentionally omits this field.
+   */
+  redeliverSentMessage: Schema.optional(Schema.Boolean),
   delivery: Schema.Literals(["auto", "queue"]).pipe(
     Schema.withDecodingDefault(() => "auto" as const),
   ),

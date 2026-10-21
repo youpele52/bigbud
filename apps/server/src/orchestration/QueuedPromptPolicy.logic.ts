@@ -31,6 +31,11 @@ export function canAutoDispatchQueuedPrompts(thread: OrchestrationThread): boole
   );
 }
 
+/** Already-sent redeliveries sit outside the user's visible queue limit. */
+export function countedQueuedPrompts(prompts: ReadonlyArray<OrchestrationQueuedPrompt>): number {
+  return prompts.filter((prompt) => prompt.alreadySent !== true).length;
+}
+
 export function samePromptIds(
   left: ReadonlyArray<MessageId>,
   right: ReadonlyArray<MessageId>,
@@ -62,8 +67,10 @@ export function sameQueuedPromptOptions(left: QueueOptions, right: QueueOptions)
   );
 }
 
+/** Prompts that must start their own turn under their own message ID. */
 export function hasNonCombinableQueuedPromptMetadata(prompt: OrchestrationQueuedPrompt): boolean {
   return Boolean(
+    prompt.alreadySent ||
     prompt.text.trim().length === 0 ||
     prompt.attachments?.length ||
     prompt.replyTo ||

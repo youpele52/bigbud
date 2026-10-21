@@ -17,17 +17,23 @@ import {
   turnId,
 } from "../QueuedPromptPolicy.test.helpers.ts";
 import { makeEvent } from "../projector.test.helpers.ts";
-import { makeProcessTurnSteerRequested } from "./ProviderCommandReactorHandlers.steer.ts";
+import {
+  makeProcessTurnSteerRequested,
+  STEER_NEEDS_NATIVE_DETAIL,
+} from "./ProviderCommandReactorHandlers.steer.ts";
 
-function harness(overrides: Partial<OrchestrationThread> = {}) {
+function harness(overrides: Partial<OrchestrationThread> = {}, options = { nativeSteer: true }) {
   const op = operation();
   const value = thread({ pendingTurnControlOperation: op, ...overrides });
   const dispatch = vi.fn((_command: OrchestrationCommand) => Effect.succeed({}));
   const steerTurn = vi.fn(() => Effect.void);
   const interruptTurn = vi.fn(() => Effect.void);
+  const appendProviderFailureActivity = vi.fn(
+    (_activity: { readonly kind: string; readonly detail: string }) => Effect.void,
+  );
   const process = makeProcessTurnSteerRequested({
     providerService: {
-      getCapabilities: () => Effect.succeed({ turnControl: { nativeSteer: true } }),
+      getCapabilities: () => Effect.succeed({ turnControl: { nativeSteer: options.nativeSteer } }),
       steerTurn,
       interruptTurn,
     } as unknown as ProviderServiceShape,
@@ -36,7 +42,7 @@ function harness(overrides: Partial<OrchestrationThread> = {}) {
       getReadModel: () => Effect.succeed(model(value)),
     } as unknown as OrchestrationEngineShape,
     resolveThread: () => Effect.succeed(model(value)),
-    appendProviderFailureActivity: () => Effect.void,
+    appendProviderFailureActivity,
   });
   const event = makeEvent({
     sequence: 1,
@@ -53,7 +59,23 @@ function harness(overrides: Partial<OrchestrationThread> = {}) {
       createdAt: now,
     },
   }) as Extract<OrchestrationEvent, { type: "thread.turn-steer-requested" }>;
-  return { process, event, dispatch, steerTurn, interruptTurn };
+  return { process, event, dispatch, steerTurn, interruptTurn, appendProviderFailureActivity };
+}
+
+function expectFailedWithoutInterrupt(h: ReturnType<typeof harness>) {
+  expect(h.steerTurn).not.toHaveBeenCalled();
+  expect(h.interruptTurn).not.toHaveBeenCalled();
+  expect(h.dispatch.mock.calls.some(([c]) => c.type === "thread.queued-prompt.flush")).toBe(false);
+  expect(h.dispatch.mock.calls.at(-1)?.[0]).toMatchObject({
+    type: "thread.turn-control.set",
+    operation: { state: "failed", error: STEER_NEEDS_NATIVE_DETAIL },
+  });
+  expect(h.appendProviderFailureActivity).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      kind: "provider.turn.steer.failed",
+      detail: STEER_NEEDS_NATIVE_DETAIL,
+    }),
+  );
 }
 
 describe("metadata-aware queued steering", () => {
@@ -63,25 +85,25 @@ describe("metadata-aware queued steering", () => {
     { interactionMode: "plan" as const },
     { modelSelection: { provider: "codex" as const, model: "different" } },
   ])(
-    "uses settlement, never text-only native delivery, for explicit options %#",
+    "fails without interrupting when explicit options block native steering %#",
     async (settings) => {
       const h = harness({ queuedPrompts: [{ ...prompt("one"), ...settings }, prompt("two")] });
       await Effect.runPromise(h.process(h.event));
-      expect(h.steerTurn).not.toHaveBeenCalled();
-      expect(h.interruptTurn).toHaveBeenCalledExactlyOnceWith({
-        threadId,
-        turnId,
-        sessionEpoch: 1,
-      });
-      expect(h.dispatch.mock.calls.some(([c]) => c.type === "thread.queued-prompt.flush")).toBe(
-        false,
-      );
-      expect(h.dispatch.mock.calls.at(-1)?.[0]).toMatchObject({
-        type: "thread.turn-control.set",
-        operation: { state: "waiting-for-settlement", strategy: "interrupt-continue" },
-      });
+      expectFailedWithoutInterrupt(h);
     },
   );
+
+  it("fails without interrupting when the provider cannot steer natively", async () => {
+    const h = harness({}, { nativeSteer: false });
+    await Effect.runPromise(h.process(h.event));
+    expectFailedWithoutInterrupt(h);
+  });
+
+  it("never natively steers an already-sent redelivery", async () => {
+    const h = harness({ queuedPrompts: [{ ...prompt("one"), alreadySent: true }] });
+    await Effect.runPromise(h.process(h.event));
+    expectFailedWithoutInterrupt(h);
+  });
 
   it("retains legacy native steering and its exact acknowledged prefix", async () => {
     const h = harness();

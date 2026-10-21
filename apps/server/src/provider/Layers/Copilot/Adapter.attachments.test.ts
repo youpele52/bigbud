@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ThreadId } from "@bigbud/contracts";
-import type { CopilotClient, CopilotSession } from "@github/copilot-sdk";
+import type { CopilotClient, CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import { it, expect } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { vi } from "vitest";
@@ -23,9 +23,13 @@ it.effect(
     const root = mkdtempSync(path.join(os.tmpdir(), "copilot-shared-attachments-"));
     const send = vi.fn<CopilotSession["send"]>().mockResolvedValue("message");
     const setModel = vi.fn().mockResolvedValue(undefined);
+    let emit: ((event: SessionEvent) => void) | undefined;
     const session = {
       sessionId: "fixture",
-      on: () => () => {},
+      on: (handler: (event: SessionEvent) => void) => {
+        emit = handler;
+        return () => {};
+      },
       send,
       setModel,
       disconnect: async () => {},
@@ -89,6 +93,14 @@ it.effect(
           displayName: fixture.pdf.name,
         },
       ]);
+      // Settle the first turn so the next send reaches attachment validation, not the busy guard.
+      emit?.({
+        type: "session.idle",
+        data: {},
+        timestamp: new Date().toISOString(),
+      } as SessionEvent);
+      yield* Effect.yieldNow;
+      expect((yield* adapter.listSessions())[0]?.activeTurnId).toBeUndefined();
       const result = yield* adapter
         .sendTurn({
           threadId,

@@ -43,6 +43,7 @@ import {
   makeReadThread,
   makeRollbackThread,
 } from "./Adapter.session.ts";
+import { makeSteerTurn } from "./Adapter.session.steer.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export { resolveCopilotRuntimeInvocation } from "./Adapter.types.ts";
@@ -293,9 +294,17 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     capabilities: {
       sessionModelSwitch: "restart-session",
       subagents: PROVIDER_SUBAGENT_CAPABILITIES.copilot,
+      supportsSteer: true,
+      turnControl: {
+        nativeSteer: true,
+        interruptTarget: "current-session",
+        activeTurnInspection: "unavailable",
+        continuation: true,
+      },
     },
     startSession: makeStartSession(sessionDeps),
     sendTurn: makeSendTurn(sessionDeps),
+    steerTurn: makeSteerTurn(sessionDeps),
     interruptTurn: makeInterruptTurn(sessionDeps),
     inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
     respondToRequest,

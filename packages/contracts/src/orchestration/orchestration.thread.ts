@@ -200,6 +200,11 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
+  /**
+   * The message is already in the transcript; the provider refused it as busy. Flushing
+   * redelivers it under the same message ID instead of adding a second message.
+   */
+  alreadySent: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 

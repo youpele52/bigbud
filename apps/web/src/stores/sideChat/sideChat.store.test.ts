@@ -9,8 +9,7 @@ describe("useSideChatStore", () => {
   beforeEach(() => {
     useSideChatStore.setState({
       closedThreadId: null,
-      closeStartedAt: null,
-      deletionRequested: false,
+      closingThreads: {},
       presentation: "open",
       threadId: null,
     });
@@ -46,36 +45,61 @@ describe("useSideChatStore", () => {
     unsubscribe();
   });
 
-  it("hides a closing Sidecar until deletion completes", () => {
+  it("hides a closing Sidecar immediately and frees the slot", () => {
     useSideChatStore.getState().show(sideChatThreadId);
     useSideChatStore.getState().beginClose(sideChatThreadId, "2026-07-12T20:00:00.000Z");
 
     expect(useSideChatStore.getState()).toMatchObject({
       closedThreadId: null,
-      deletionRequested: false,
-      presentation: "closing",
-      threadId: sideChatThreadId,
+      closingThreads: {
+        [sideChatThreadId]: { deletionRequested: false, startedAt: "2026-07-12T20:00:00.000Z" },
+      },
+      presentation: "open",
+      threadId: null,
     });
 
     useSideChatStore.getState().completeClose(sideChatThreadId);
 
     expect(useSideChatStore.getState()).toMatchObject({
       closedThreadId: sideChatThreadId,
+      closingThreads: {},
       presentation: "open",
       threadId: null,
     });
   });
 
-  it("restores the panel when deletion fails", () => {
+  it("restores the panel when deletion fails and the slot is still free", () => {
     useSideChatStore.getState().show(sideChatThreadId);
     useSideChatStore.getState().beginClose(sideChatThreadId, "2026-07-12T20:00:00.000Z");
     useSideChatStore.getState().failClose(sideChatThreadId);
 
     expect(useSideChatStore.getState()).toMatchObject({
-      deletionRequested: false,
+      closingThreads: {},
       presentation: "open",
       threadId: sideChatThreadId,
     });
+  });
+
+  it("keeps a newer Sidecar visible when an older Close fails", () => {
+    const newerThreadId = ThreadId.makeUnsafe("newer-side-chat-thread");
+    useSideChatStore.getState().show(sideChatThreadId);
+    useSideChatStore.getState().beginClose(sideChatThreadId, "2026-07-12T20:00:00.000Z");
+    useSideChatStore.getState().beginCreate(newerThreadId);
+    useSideChatStore.getState().failClose(sideChatThreadId);
+
+    expect(useSideChatStore.getState()).toMatchObject({
+      closingThreads: {},
+      presentation: "creating",
+      threadId: newerThreadId,
+    });
+  });
+
+  it("does not show a Sidecar whose Close is still pending", () => {
+    useSideChatStore.getState().show(sideChatThreadId);
+    useSideChatStore.getState().beginClose(sideChatThreadId, "2026-07-12T20:00:00.000Z");
+    useSideChatStore.getState().show(sideChatThreadId);
+
+    expect(useSideChatStore.getState().threadId).toBeNull();
   });
 
   it("tracks deletion only after the server has requested it", () => {
@@ -83,10 +107,9 @@ describe("useSideChatStore", () => {
     useSideChatStore.getState().beginClose(sideChatThreadId, "2026-07-12T20:00:00.000Z");
     useSideChatStore.getState().markDeletionRequested(sideChatThreadId);
 
-    expect(useSideChatStore.getState()).toMatchObject({
+    expect(useSideChatStore.getState().closingThreads[sideChatThreadId]).toEqual({
       deletionRequested: true,
-      presentation: "closing",
-      threadId: sideChatThreadId,
+      startedAt: "2026-07-12T20:00:00.000Z",
     });
   });
 
@@ -96,7 +119,6 @@ describe("useSideChatStore", () => {
 
     expect(useSideChatStore.getState()).toMatchObject({
       closedThreadId: null,
-      deletionRequested: false,
       threadId: null,
     });
   });

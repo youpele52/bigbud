@@ -25,8 +25,7 @@ describe("UserThreadReferenceChips", () => {
     });
     useSideChatStore.setState({
       closedThreadId: null,
-      closeStartedAt: null,
-      deletionRequested: false,
+      closingThreads: {},
       presentation: "open",
       threadId: null,
     });

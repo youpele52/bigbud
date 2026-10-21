@@ -45,6 +45,11 @@ function invariant(
   });
 }
 
+/** Server-only redelivery of a user message that is already in the transcript. */
+export function isSentMessageRedelivery(command: QueueablePromptCommand): boolean {
+  return command.type === "thread.message.submit" && command.redeliverSentMessage === true;
+}
+
 export type ResolvedPromptReferences = {
   readonly replyTo?: OrchestrationMessageReply;
   readonly sourceProposedPlan?: NonNullable<QueueablePromptCommand["sourceProposedPlan"]>;
@@ -164,6 +169,7 @@ export function makeQueuedPrompt(input: {
         ? { sourceProposedPlan: references.sourceProposedPlan }
         : {}),
       ...(originSegments !== undefined ? { originSegments } : {}),
+      ...(isSentMessageRedelivery(command) ? { alreadySent: true } : {}),
     };
   });
 }
@@ -220,6 +226,7 @@ export function queuedPromptMatchesCommand(
         ? command.originSegments
         : command.message.originSegments,
     ) &&
+    (prompt.alreadySent === true) === isSentMessageRedelivery(command) &&
     command.bootstrap === undefined
   );
 }

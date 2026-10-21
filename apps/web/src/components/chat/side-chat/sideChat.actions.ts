@@ -10,7 +10,7 @@ import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRe
 import { readNativeApi } from "~/rpc/nativeApi";
 import { type RemovedComposerThreadReferenceFiles, useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
-import { useSideChatStore } from "~/stores/sideChat";
+import { isSideChatClosing, useSideChatStore } from "~/stores/sideChat";
 import { toastManager } from "~/components/ui/toast";
 import { getDeletedThreadIds } from "~/logic/orchestration/thread-deletion.logic";
 
@@ -103,7 +103,7 @@ export function attachSidecarToComposer(input: {
 export async function openSideChat(activeThread: Thread): Promise<void> {
   const sideChat = useSideChatStore.getState();
   if (sideChat.threadId) {
-    if (sideChat.presentation === "creating" || sideChat.presentation === "closing") {
+    if (sideChat.presentation === "creating") {
       return;
     }
     sideChat.restore();
@@ -116,7 +116,8 @@ export async function openSideChat(activeThread: Thread): Promise<void> {
       (thread) =>
         thread.purpose === "side-chat" &&
         thread.deletingAt === null &&
-        thread.id !== sideChat.closedThreadId,
+        thread.id !== sideChat.closedThreadId &&
+        !isSideChatClosing(sideChat, thread.id),
     );
   if (existing) {
     useSideChatStore.getState().show(existing.id);
@@ -161,7 +162,7 @@ export async function toggleSideChat(activeThread: Thread): Promise<void> {
   if (!sideChat.threadId) {
     return openSideChat(activeThread);
   }
-  if (sideChat.presentation === "creating" || sideChat.presentation === "closing") {
+  if (sideChat.presentation === "creating") {
     return;
   }
   if (sideChat.presentation === "open") {
@@ -172,6 +173,9 @@ export async function toggleSideChat(activeThread: Thread): Promise<void> {
 }
 
 export async function closeSideChat(threadId: Thread["id"]): Promise<void> {
+  if (isSideChatClosing(useSideChatStore.getState(), threadId)) {
+    return;
+  }
   const api = readNativeApi();
   useSideChatStore.getState().beginClose(threadId, new Date().toISOString());
   detachSidecarReferences(threadId);
@@ -219,6 +223,9 @@ export function restoreSideChatAfterDeletionFailure(
   threadId: ThreadId,
   description = "The Sidecar deletion did not complete.",
 ): void {
+  if (!isSideChatClosing(useSideChatStore.getState(), threadId)) {
+    return;
+  }
   restoreDetachedSidecarReferences(threadId);
   useSideChatStore.getState().failClose(threadId);
   toastManager.add({
@@ -231,18 +238,9 @@ export function restoreSideChatAfterDeletionFailure(
 export function applySideChatLifecycleEvents(events: ReadonlyArray<OrchestrationEvent>): void {
   for (const event of events) {
     const state = useSideChatStore.getState();
-    const eventThreadId = "threadId" in event.payload ? event.payload.threadId : null;
-    const affectsSideChat =
-      state.threadId !== null &&
-      (event.type === "thread.deleted"
-        ? getDeletedThreadIds(event.payload).includes(state.threadId)
-        : eventThreadId === state.threadId);
-    if (!affectsSideChat) {
-      continue;
-    }
     switch (event.type) {
       case "thread.created":
-        if (event.payload.purpose === "side-chat") {
+        if (event.payload.threadId === state.threadId && event.payload.purpose === "side-chat") {
           state.completeCreate(event.payload.threadId);
         }
         break;
@@ -250,13 +248,13 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
         state.markDeletionRequested(event.payload.threadId);
         break;
       case "thread.deletion-failed":
-        if (state.presentation === "closing") {
-          restoreSideChatAfterDeletionFailure(event.payload.threadId);
-        }
+        restoreSideChatAfterDeletionFailure(event.payload.threadId);
         break;
       case "thread.deleted":
-        if (state.presentation === "closing") {
-          completeSideChatClose(state.threadId!);
+        for (const threadId of getDeletedThreadIds(event.payload)) {
+          if (isSideChatClosing(useSideChatStore.getState(), threadId)) {
+            completeSideChatClose(threadId);
+          }
         }
         break;
       default:
@@ -265,38 +263,48 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
   }
 }
 
+function reconcileClosingSideChat(
+  threadId: ThreadId,
+  thread: Thread | undefined,
+  startedAt: string,
+): void {
+  if (!thread) {
+    completeSideChatClose(threadId);
+    return;
+  }
+  if (thread.deletingAt != null) {
+    useSideChatStore.getState().markDeletionRequested(threadId);
+    return;
+  }
+  const hasCurrentDeletionFailure = thread.activities.some(
+    (activity) => activity.kind === "thread.delete.failed" && activity.createdAt >= startedAt,
+  );
+  const deletionRequested = useSideChatStore.getState().closingThreads[threadId]?.deletionRequested;
+  if (deletionRequested || hasCurrentDeletionFailure) {
+    restoreSideChatAfterDeletionFailure(threadId);
+  }
+}
+
 export function reconcileSideChatSnapshot(threads: ReadonlyArray<Thread>): void {
+  const findThread = (threadId: ThreadId) => threads.find((entry) => entry.id === threadId);
+  for (const [threadId, entry] of Object.entries(useSideChatStore.getState().closingThreads)) {
+    reconcileClosingSideChat(
+      threadId as ThreadId,
+      findThread(threadId as ThreadId),
+      entry.startedAt,
+    );
+  }
+
   const state = useSideChatStore.getState();
   if (!state.threadId) {
     return;
   }
-  const thread = threads.find((entry) => entry.id === state.threadId);
+  const thread = findThread(state.threadId);
   if (state.presentation === "creating") {
     if (thread?.purpose === "side-chat") {
       state.completeCreate(state.threadId);
     } else {
       state.failCreate(state.threadId);
-    }
-    return;
-  }
-  if (state.presentation === "closing") {
-    if (!thread) {
-      completeSideChatClose(state.threadId);
-      return;
-    }
-    if (thread.deletingAt != null) {
-      state.markDeletionRequested(state.threadId);
-      return;
-    }
-    const closeStartedAt = state.closeStartedAt;
-    const hasCurrentDeletionFailure = thread.activities.some(
-      (activity) =>
-        activity.kind === "thread.delete.failed" &&
-        closeStartedAt !== null &&
-        activity.createdAt >= closeStartedAt,
-    );
-    if (state.deletionRequested || hasCurrentDeletionFailure) {
-      restoreSideChatAfterDeletionFailure(state.threadId);
     }
     return;
   }

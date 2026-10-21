@@ -18,10 +18,11 @@ import {
   canAutoDispatchQueuedPrompts,
   compatibleQueuedPrefix,
   consumableQueuedPrefix,
+  countedQueuedPrompts,
   hasActiveQueueReservation,
-  hasNonCombinableQueuedPromptMetadata,
 } from "./QueuedPromptPolicy.logic.ts";
 import {
+  isSentMessageRedelivery,
   MAX_QUEUED_PROMPTS,
   makeQueuedPromptEvent,
   PROMPT_QUEUE_FULL_DETAIL,
@@ -82,10 +83,7 @@ function makeTurnStartCommand(
 type QueuedPrompt = NonNullable<OrchestrationReadModel["threads"][number]["queuedPrompts"]>[number];
 type ThreadTurnStartCommand = Extract<OrchestrationCommand, { type: "thread.turn.start" }>;
 
-function requiresIndividualFlush(prompt: QueuedPrompt) {
-  return hasNonCombinableQueuedPromptMetadata(prompt);
-}
-
+/** One flushed prompt keeps its own ID and text; several become one follow-up message. */
 function buildQueuedFlushTurnStart(input: {
   readonly prompt: QueuedPrompt;
   readonly thread: OrchestrationReadModel["threads"][number];
@@ -99,7 +97,7 @@ function buildQueuedFlushTurnStart(input: {
     thread: input.thread,
     commandId: input.commandId,
     createdAt: input.createdAt,
-    ...(requiresIndividualFlush(input.prompt)
+    ...(input.prompts.length <= 1
       ? {}
       : {
           messageId: input.messageId ?? input.prompt.id,
@@ -176,6 +174,16 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       }
       return [];
     }
+    const sentMessage = thread.messages.find((message) => message.id === command.message.messageId);
+    const redelivery = isSentMessageRedelivery(command);
+    // A message already in the transcript is only re-queued by the server's busy recovery.
+    if (sentMessage && !redelivery) return [];
+    if (redelivery && sentMessage?.role !== "user") {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "Only a user message already in the thread can be redelivered.",
+      });
+    }
     if (command.delivery === "auto" && canAutoDispatch && queuedPrompts.length === 0) {
       return yield* decideThreadTurnStartCommand({
         readModel,
@@ -199,7 +207,7 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       targetThread: thread,
       queuePosition: queuedPrompts.length + 1,
     });
-    if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
+    if (!redelivery && countedQueuedPrompts(queuedPrompts) >= MAX_QUEUED_PROMPTS) {
       return yield* new OrchestrationCommandInvariantError({
         commandType: command.type,
         detail: PROMPT_QUEUE_FULL_DETAIL,

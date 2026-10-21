@@ -247,4 +247,26 @@ describe("makeLifecycleQueuedPromptFlushCommand", () => {
       ).toBeNull();
     }
   });
+
+  it("changes the command ID when a busy-refused prompt is queued again", () => {
+    const one = MessageId.makeUnsafe("one");
+    const requeued = (createdAt: string) =>
+      makeQueuedPromptFlushCommand({
+        threadId,
+        readModel: model({
+          queuedPrompts: [{ id: one, text: "one", createdAt, alreadySent: true }],
+        }),
+        createdAt: trigger.createdAt,
+      });
+    const original = makeQueuedPromptFlushCommand({
+      threadId,
+      readModel: model(),
+      createdAt: trigger.createdAt,
+    });
+    const first = requeued("2026-08-01T00:00:05.000Z");
+    const second = requeued("2026-08-01T00:00:09.000Z");
+    expect(first?.type === "thread.queued-prompt.flush" ? first.messageIds : []).toEqual([one]);
+    expect(new Set([original?.commandId, first?.commandId, second?.commandId]).size).toBe(3);
+    expect(requeued("2026-08-01T00:00:05.000Z")?.commandId).toBe(first?.commandId);
+  });
 });

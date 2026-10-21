@@ -272,7 +272,8 @@ export function restoreShellComposerDraftAfterFailure(input: {
 
 export function restoreMessageComposerDraftAfterFailure(input: {
   readonly currentDraftEmpty: boolean;
-  readonly messageIdForSend: string;
+  /** The optimistic bubble to drop; `null` when the send showed none (a queued prompt). */
+  readonly messageIdForSend: string | null;
   readonly promptText: string;
   readonly promptRef: { current: string };
   readonly replyTarget: ChatMessage["replyTo"] | null;
@@ -295,14 +296,16 @@ export function restoreMessageComposerDraftAfterFailure(input: {
     return;
   }
 
-  input.setOptimisticUserMessages((existing) => {
-    const removed = existing.filter((message) => message.id === input.messageIdForSend);
-    for (const message of removed) {
-      input.revokeUserMessagePreviewUrls(message);
-    }
-    const next = existing.filter((message) => message.id !== input.messageIdForSend);
-    return next.length === existing.length ? existing : next;
-  });
+  if (input.messageIdForSend !== null) {
+    input.setOptimisticUserMessages((existing) => {
+      const removed = existing.filter((message) => message.id === input.messageIdForSend);
+      for (const message of removed) {
+        input.revokeUserMessagePreviewUrls(message);
+      }
+      const next = existing.filter((message) => message.id !== input.messageIdForSend);
+      return next.length === existing.length ? existing : next;
+    });
+  }
   input.promptRef.current = input.promptText;
   input.setPrompt(input.promptText);
   input.setComposerCursor(

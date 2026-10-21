@@ -87,8 +87,7 @@ describe("attachSidecarToComposer", () => {
     });
     useSideChatStore.setState({
       closedThreadId: null,
-      closeStartedAt: null,
-      deletionRequested: false,
+      closingThreads: {},
       presentation: "open",
       threadId: null,
     });
@@ -197,7 +196,8 @@ describe("attachSidecarToComposer", () => {
     const closePromise = closeSideChat(sidecarThreadId);
 
     expect(useComposerDraftStore.getState().draftsByThreadId[mainThreadId]).toBeUndefined();
-    expect(useSideChatStore.getState().presentation).toBe("closing");
+    expect(useSideChatStore.getState()).toMatchObject({ threadId: null });
+    expect(useSideChatStore.getState().closingThreads[sidecarThreadId]).toBeDefined();
     resolveDelete?.();
     await closePromise;
 
@@ -269,18 +269,61 @@ describe("attachSidecarToComposer", () => {
     expect(dispatchCommandMock).not.toHaveBeenCalled();
   });
 
-  it("does not toggle while Sidecar creation or closing is in progress", async () => {
+  it("does not toggle while Sidecar creation is in progress", async () => {
     const mainThread = useStore.getState().threads.find((thread) => thread.id === mainThreadId)!;
     useSideChatStore.getState().beginCreate(sidecarThreadId);
 
     await toggleSideChat(mainThread);
     expect(useSideChatStore.getState().presentation).toBe("creating");
-
-    useSideChatStore.getState().completeCreate(sidecarThreadId);
-    useSideChatStore.getState().beginClose(sidecarThreadId, "2026-07-12T20:00:00.000Z");
-    await toggleSideChat(mainThread);
-    expect(useSideChatStore.getState().presentation).toBe("closing");
     expect(dispatchCommandMock).not.toHaveBeenCalled();
+  });
+
+  it("opens a fresh Sidecar while the previous Close is still deleting", async () => {
+    let resolveDelete: (() => void) | undefined;
+    dispatchCommandMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    const mainThread = useStore.getState().threads.find((thread) => thread.id === mainThreadId)!;
+    useSideChatStore.getState().show(sidecarThreadId);
+
+    const closePromise = closeSideChat(sidecarThreadId);
+    await toggleSideChat(mainThread);
+
+    expect(dispatchCommandMock).toHaveBeenCalledTimes(2);
+    expect(dispatchCommandMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "thread.create", purpose: "side-chat" }),
+    );
+    const state = useSideChatStore.getState();
+    expect(state.presentation).toBe("creating");
+    expect(state.threadId).not.toBe(sidecarThreadId);
+    expect(state.closingThreads[sidecarThreadId]).toBeDefined();
+
+    resolveDelete?.();
+    await closePromise;
+    applySideChatLifecycleEvents([
+      lifecycleEvent("thread.deleted", {
+        threadId: sidecarThreadId,
+        deletedAt: "2026-07-12T20:00:01.000Z",
+      }),
+    ]);
+
+    expect(useSideChatStore.getState()).toMatchObject({
+      closedThreadId: sidecarThreadId,
+      closingThreads: {},
+      threadId: state.threadId,
+    });
+  });
+
+  it("sends one deletion when Close is clicked twice", async () => {
+    useSideChatStore.getState().show(sidecarThreadId);
+
+    await closeSideChat(sidecarThreadId);
+    await closeSideChat(sidecarThreadId);
+
+    expect(dispatchCommandMock).toHaveBeenCalledOnce();
   });
 
   it("restores a failed Close from an authoritative snapshot", async () => {
@@ -288,7 +331,7 @@ describe("attachSidecarToComposer", () => {
     useSideChatStore.getState().show(sidecarThreadId);
 
     await closeSideChat(sidecarThreadId);
-    const closeStartedAt = useSideChatStore.getState().closeStartedAt!;
+    const closeStartedAt = useSideChatStore.getState().closingThreads[sidecarThreadId]!.startedAt;
     const sidecar = useStore.getState().threads.find((thread) => thread.id === sidecarThreadId)!;
     const failedSidecar = {
       ...sidecar,

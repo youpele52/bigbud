@@ -10,9 +10,9 @@ interface ComposerPromptQueueProps {
   canSendNow: boolean;
   onRemovePrompt: (id: string) => void;
   onInterruptAndFlush: () => void;
+  /** True only where the provider steers natively; Steer never interrupts the turn. */
   canSteer: boolean;
   onSteer: () => void;
-  nativeSteer: boolean;
   controlOperation: OrchestrationTurnControlOperation | null;
 }
 
@@ -23,7 +23,6 @@ export function ComposerPromptQueue({
   onInterruptAndFlush,
   canSteer,
   onSteer,
-  nativeSteer,
   controlOperation,
 }: ComposerPromptQueueProps) {
   if (queuedPrompts.length === 0) {
@@ -54,11 +53,6 @@ export function ComposerPromptQueue({
               className="h-7 rounded-full px-2.5 text-xs"
               onClick={onSteer}
               disabled={controlPending}
-              title={
-                nativeSteer
-                  ? undefined
-                  : "This provider stops the current response before applying queued instructions."
-              }
             >
               Steer
             </Button>

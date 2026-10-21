@@ -16,6 +16,7 @@ export function SideChatHost({
   const threadId = useSideChatStore((state) => state.threadId);
   const presentation = useSideChatStore((state) => state.presentation);
   const closedThreadId = useSideChatStore((state) => state.closedThreadId);
+  const closingThreads = useSideChatStore((state) => state.closingThreads);
   const show = useSideChatStore((state) => state.show);
   const clearMissing = useSideChatStore((state) => state.clearMissing);
   const completeCreate = useSideChatStore((state) => state.completeCreate);
@@ -26,7 +27,10 @@ export function SideChatHost({
     (state) =>
       state.threads.find(
         (entry) =>
-          entry.purpose === "side-chat" && entry.deletingAt === null && entry.id !== closedThreadId,
+          entry.purpose === "side-chat" &&
+          entry.deletingAt === null &&
+          entry.id !== closedThreadId &&
+          !(entry.id in closingThreads),
       )?.id,
   );
   const project = useStore((state) =>
@@ -44,7 +48,7 @@ export function SideChatHost({
       return;
     }
     if (!thread) {
-      if (presentation !== "creating" && presentation !== "closing") {
+      if (presentation !== "creating") {
         clearMissing(threadId);
       }
       return;

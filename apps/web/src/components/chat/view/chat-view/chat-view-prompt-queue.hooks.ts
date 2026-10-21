@@ -5,7 +5,11 @@ import { isSessionHealthUnconfirmed } from "~/logic/session";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
 import type { usePlanHandlers } from "../ChatView.planHandlers.logic";
-import { usePromptQueue, type QueuePromptResult } from "../ChatView.promptQueue.logic";
+import {
+  usePromptQueue,
+  type QueuedPromptSubmission,
+  type QueuePromptResult,
+} from "../ChatView.promptQueue.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -60,7 +64,9 @@ export function useChatViewPromptQueue({
   planHandlers,
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
-  const queueComposerPromptRef = useRef<(prompt: string) => QueuePromptResult>(() => "full");
+  const submitQueuedPromptRef = useRef<
+    (submission: QueuedPromptSubmission) => Promise<QueuePromptResult>
+  >(async () => "full");
   const activeTurnInProgress = isPromptQueueTurnInProgress({
     activeSessionTurnRunning: thread.activeSessionTurnRunning,
     isSendBusy: thread.isSendBusy,
@@ -68,6 +74,7 @@ export function useChatViewPromptQueue({
     latestTurnSettled: thread.latestTurnSettled,
     sessionHealthUnconfirmed: isSessionHealthUnconfirmed(base.activeThread?.session ?? null),
   });
+  const nativeSteer = composer.activeProviderStatus?.turnControl?.nativeSteer === true;
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
     isWorking: activeTurnInProgress,
     forceSendQueuedPrompt: false,
@@ -135,7 +142,7 @@ export function useChatViewPromptQueue({
     onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
     onOptimisticUserMessage,
     onThreadMaterialized,
-    queueComposerPrompt: (prompt) => queueComposerPromptRef.current(prompt),
+    submitQueuedComposerPrompt: (submission) => submitQueuedPromptRef.current(submission),
     transformPromptForSend,
   });
 
@@ -146,8 +153,10 @@ export function useChatViewPromptQueue({
     activeTurnId: base.activeThread?.session?.activeTurnId,
     sessionEpoch: base.activeThread?.session?.sessionEpoch,
     controlOperation: base.activeThread?.pendingTurnControlOperation,
-    canSteer: true,
-    nativeSteer: composer.activeProviderStatus?.turnControl?.nativeSteer === true,
+    // Steer never interrupts, so it exists only where the provider steers natively. An
+    // already-sent redelivery at the head is never steered; Send now still covers it.
+    canSteer: nativeSteer && base.activeThread?.queuedPrompts?.[0]?.alreadySent !== true,
+    nativeSteer,
     onInterrupt: runtime.turnActions.onInterrupt,
     onError: (message) => runtime.setThreadError(base.threadId, message),
     newId: base.randomUUID,
@@ -164,7 +173,7 @@ export function useChatViewPromptQueue({
       : undefined,
   });
 
-  queueComposerPromptRef.current = promptQueue.queuePrompt;
+  submitQueuedPromptRef.current = promptQueue.submitQueuedPrompt;
 
   return {
     onSend,
