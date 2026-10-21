@@ -103,6 +103,8 @@ export function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
   };
 }
 
+const PENDING_USER_INPUT_AT = new Date(Date.parse(NOW_ISO) + 1_000_000).toISOString();
+
 export function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-pending-input-target" as MessageId,
@@ -155,10 +157,11 @@ export function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
                 },
                 turnId: null,
                 sequence: 1,
-                createdAt: NOW_ISO,
+                // A pending question is the newest timeline entry (after the filler messages).
+                createdAt: PENDING_USER_INPUT_AT,
               },
             ],
-            updatedAt: NOW_ISO,
+            updatedAt: PENDING_USER_INPUT_AT,
           })
         : thread,
     ),

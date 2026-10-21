@@ -136,12 +136,14 @@ export async function expectComposerActionsContained(): Promise<void> {
         (button) => button.getBoundingClientRect(),
       );
       expect(buttonRects.length).toBeGreaterThanOrEqual(1);
-      const firstTop = buttonRects[0]?.top ?? 0;
+      // One row: buttons of different heights (e.g. 28px attachment, 32px send) share a center line.
+      const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
+      const firstCenter = buttonRects[0] ? centerY(buttonRects[0]) : 0;
 
       for (const rect of buttonRects) {
         expect(rect.right).toBeLessThanOrEqual(footerRect.right + 0.5);
         expect(rect.bottom).toBeLessThanOrEqual(footerRect.bottom + 0.5);
-        expect(Math.abs(rect.top - firstTop)).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(centerY(rect) - firstCenter)).toBeLessThanOrEqual(1.5);
       }
     },
     { timeout: 8_000, interval: 16 },

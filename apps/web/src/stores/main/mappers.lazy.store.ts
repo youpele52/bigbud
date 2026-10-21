@@ -55,7 +55,9 @@ function mapSummaryLatestTurn(summary: ThreadSummary): Thread["latestTurn"] {
     turnId: summary.activeTurnId,
     state: summary.latestTurnState,
     requestedAt: summary.updatedAt,
-    startedAt: summary.latestTurnState === "running" ? summary.updatedAt : null,
+    // Every summarized turn has started (the summary has no exact start time). A null start would
+    // make a completed turn look unsettled after a reload and hide e.g. the plan follow-up actions.
+    startedAt: summary.updatedAt,
     completedAt: summary.latestTurnState === "running" ? null : summary.updatedAt,
     assistantMessageId: null,
   };
