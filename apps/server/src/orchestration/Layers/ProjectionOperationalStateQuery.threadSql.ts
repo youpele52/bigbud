@@ -189,6 +189,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         provider_session_id AS "providerSessionId", provider_thread_id AS "providerThreadId",
         runtime_mode AS "runtimeMode", active_turn_id AS "activeTurnId",
         session_epoch AS "sessionEpoch", reason,
+        retained_family AS "retainedFamily",
         last_error AS "lastError", updated_at AS "updatedAt"
       FROM projection_thread_sessions
       WHERE thread_id = ${threadId}

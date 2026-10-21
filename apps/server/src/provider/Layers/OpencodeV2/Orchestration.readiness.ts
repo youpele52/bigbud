@@ -15,6 +15,7 @@ import {
 import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
 import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
+import { V2ReadinessError, type V2ReadinessOperation } from "./Orchestration.readiness.failure.ts";
 
 const Info = Schema.Struct({
   protocol: Schema.String,
@@ -40,12 +41,17 @@ export async function verifyV2ThreadTools(
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   root: string = resolveV2PluginConfigRoot(),
 ) {
-  signal?.throwIfAborted();
-  assertV2ImplementationCompatible(implementation, artifact.compatibility);
-  await artifact.verify();
-  const proof = await eligibility(artifact, client, directory, root, signal);
-  await assertV2NativeRuntimePolicy(client, proof, signal, v2ThreadRegistration(artifact));
+  let operation: V2ReadinessOperation = "implementation";
   try {
+    signal?.throwIfAborted();
+    assertV2ImplementationCompatible(implementation, artifact.compatibility);
+    operation = "artifact";
+    await artifact.verify();
+    operation = "native-eligibility";
+    const proof = await eligibility(artifact, client, directory, root, signal);
+    operation = "native-policy";
+    await assertV2NativeRuntimePolicy(client, proof, signal, v2ThreadRegistration(artifact));
+    operation = "rpc-info";
     const registration = v2ThreadRegistration(artifact);
     const value = await callV2ThreadRpc(
       client,
@@ -59,6 +65,7 @@ export async function verifyV2ThreadTools(
     );
     signal?.throwIfAborted();
     proof.assertCurrent();
+    operation = "contract";
     const info = Schema.decodeUnknownSync(Info)(value, { onExcessProperty: "error" });
     if (
       info.issuer !== artifact.issuer ||
@@ -76,15 +83,15 @@ export async function verifyV2ThreadTools(
         "selected Location bootstrap contract/native version does not match verified eligibility.",
         proof.nativeVersion,
       );
+    operation = "source";
     await assertV2NativeThreadSource(artifact, client, directory);
     signal?.throwIfAborted();
     proof.assertCurrent();
     return { ...info, nativeProof: proof };
   } catch (error) {
+    signal?.throwIfAborted();
     if (error instanceof V2NativeCompatibilityError) throw error;
-    // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
-    throw new Error(
-      `V2 required bigbud thread-tools setup is incomplete for ${directory}. Review the selected-Location setup in Providers settings; no native history was created or replayed.`,
-    );
+    // Native SDK causes may retain credentials or request contents; keep only the stage.
+    throw new V2ReadinessError(operation);
   }
 }

@@ -7,6 +7,7 @@ import { V2ResponseSizeError } from "./Client.response.ts";
 import { authoritativeAssistantRepair, isV2AssistantSettled } from "./Projection.ts";
 import { createHash } from "node:crypto";
 import { V2_MEDIA_RESPONSE_BYTES } from "./Media.limits.ts";
+import { projectV2TurnInterval } from "./Runtime.background.projection.ts";
 
 /** Sequence order comes from native message projection, never wall-clock sorting. */
 export async function readV2Messages(
@@ -72,8 +73,8 @@ export function runtimeEventBase(session: V2RuntimeSession, id: string, created 
   };
 }
 
-/** Require exact admitted input, a single input interval, and a projected idle marker. */
-export function correlatedProjection(
+/** Explain ambiguous input ownership without exposing native message contents. */
+export function v2ProjectionConflict(
   session: V2RuntimeSession,
   messages: readonly SessionMessageInfo[],
 ) {
@@ -86,13 +87,30 @@ export function correlatedProjection(
       message.metadata?.bigbud_fingerprint === row.fingerprint,
   );
   if (index < 0) return undefined;
-  const assistants: SessionMessageAssistant[] = [];
   for (const message of messages.slice(index + 1)) {
-    if (["user", "synthetic", "shell", "skill"].includes(message.type)) return undefined;
-    if (message.type === "assistant") assistants.push(message);
-    if (message.type === "idle") return { assistants, idle: message };
+    if (message.type === "idle") return undefined;
+    if (["user", "synthetic", "shell", "skill"].includes(message.type))
+      return `Native ${message.type} input intervened before the admitted turn's idle marker; output ownership is ambiguous. Existing history and admission retained; no automatic resend. Inspect the existing native session before recovery.`;
   }
-  return { assistants, idle: undefined };
+  return undefined;
+}
+
+/** Require exact admitted input and bounded, attributable native continuations. */
+export function correlatedProjection(
+  session: V2RuntimeSession,
+  messages: readonly SessionMessageInfo[],
+  nativeCompletions?: ReadonlySet<string>,
+) {
+  const row = session.row;
+  if (!row) return undefined;
+  const index = messages.findIndex(
+    (message) =>
+      message.id === row.nativeAdmissionId &&
+      message.type === "user" &&
+      message.metadata?.bigbud_fingerprint === row.fingerprint,
+  );
+  if (index < 0) return undefined;
+  return projectV2TurnInterval(messages.slice(index + 1), nativeCompletions);
 }
 
 export function usageEvent(

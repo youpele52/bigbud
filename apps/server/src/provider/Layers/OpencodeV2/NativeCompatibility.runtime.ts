@@ -201,6 +201,9 @@ export async function verifyV2NativeReleaseEligibility(
     nativeContractDigest: V2_NATIVE_CONTRACT_DIGEST,
     semanticProfile,
     ...(qualified ? { qualificationRecordId: qualified.id } : {}),
+    ...(qualified?.record.nativeFamilySourceDigest
+      ? { nativeFamilySourceDigest: qualified.record.nativeFamilySourceDigest }
+      : {}),
     consumedApiDigest,
     directory,
     root,

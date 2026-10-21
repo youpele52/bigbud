@@ -108,7 +108,11 @@ export function registerV2BridgeActivation(
 ) {
   if (!session.activation || !runtime.options.activation) return undefined;
   const busyCount = () =>
-    active.busyCount() + runtime.mutations.busyCount() + (admissionBusy(session) ? 1 : 0);
+    active.busyCount() +
+    runtime.mutations.busyCount() +
+    (admissionBusy(session) ? 1 : 0) +
+    (session.family?.live ? 1 : 0) +
+    (session.familyControl?.busyCount?.() ?? 0);
   return runtime.options.activation.coordinator.registerOwner(
     session.activation.gate,
     enrollment.digest,

@@ -20,6 +20,7 @@ import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
+import { hasOwnedV2DescendantWork } from "../ChatView.subagents.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -59,8 +60,12 @@ export function ChatViewComposer({
   const { keyVerified } = useSttStore();
   const attachmentPolicy = providerAttachmentPolicy(composer.selectedProvider);
   const promptHasText = base.prompt.trim().length > 0;
+  const hasBackgroundWork = hasOwnedV2DescendantWork(base.activeThread);
   const isDefaultComposerState =
-    !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
+    !hasBackgroundWork &&
+    !interactions.pendingAction &&
+    thread.phase !== "running" &&
+    !thread.showPlanFollowUpPrompt;
   const micReplacesSend =
     keyVerified === true && !base.composerSendState.hasSendableContent && isDefaultComposerState;
 
@@ -360,6 +365,7 @@ export function ChatViewComposer({
                     compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                     pendingAction={interactions.pendingAction}
                     isRunning={thread.activeSessionTurnRunning}
+                    hasBackgroundWork={hasBackgroundWork}
                     showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
                     promptHasText={promptHasText}
                     isSendBusy={thread.isSendBusy}

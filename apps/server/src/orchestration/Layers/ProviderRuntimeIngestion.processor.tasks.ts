@@ -82,6 +82,7 @@ export function makeRuntimeTaskProcessor(input: {
   }) {
     const identity = resolveRuntimeTaskIdentity({
       threadId: deps.threadId,
+      provider: deps.event.provider,
       ...(deps.event.sessionEpoch !== undefined ? { sessionEpoch: deps.event.sessionEpoch } : {}),
       incomingTaskId: deps.event.payload.taskId,
       ...(deps.event.type === "task.updated" && deps.event.payload.kind !== undefined

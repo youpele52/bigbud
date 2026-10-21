@@ -18,6 +18,7 @@ type Pending = {
   reason?: V2SettlementHoldReason | undefined;
 };
 const pending = new WeakMap<V2RuntimeSession, Pending>();
+const familyPoll = new WeakMap<V2RuntimeSession, number>();
 
 /** Terminal delivery is not physical settlement; keep its exact token observable until proved drained. */
 export function hasV2RetainedReservation(owner: V2RuntimeSession) {
@@ -42,6 +43,23 @@ function observation(owner: V2RuntimeSession, now: number) {
 export function shouldPollV2Runtime(owner: V2RuntimeSession, now = Date.now()) {
   if (owner.admissionInFlight || owner.repairQueued) return false;
   if (owner.stopped) return needsV2FinalRepair(owner);
+  if (
+    owner.family?.live ||
+    owner.family?.persistenceUncertain ||
+    owner.familyControl?.busyCount?.() ||
+    owner.session.retainedFamily
+  )
+    return true;
+  // Completed foreground children remain enrolled and can receive a qualified newer
+  // revision. Bounded repair must not depend on the live-child hint index retaining them.
+  if (
+    owner.family?.children.length &&
+    !owner.family.isFenced &&
+    now >= (familyPoll.get(owner) ?? 0)
+  ) {
+    familyPoll.set(owner, now + 30000);
+    return true;
+  }
   if (
     needsV2FinalRepair(owner) ||
     (owner.row &&

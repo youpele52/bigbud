@@ -17,6 +17,11 @@ const pattern = (expression: string, value: string) =>
       .join(".*")}$`,
   ).test(value);
 
+export function assertV2PluginRegistrationEnabled(configured: readonly string[], id: string) {
+  if (configured.some((entry) => entry.startsWith("-") && pattern(entry.slice(1), id)))
+    throw new Error("V2 required native family plugin is explicitly disabled; no setup override.");
+}
+
 /** Parse only to validate/control installation; no JSONC serialization, credential copying or config writes. */
 export async function inspectV2PluginControls(
   entries: Awaited<ReturnType<OpencodeV2Client["config"]["get"]>>,

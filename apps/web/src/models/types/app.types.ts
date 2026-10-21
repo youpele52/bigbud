@@ -271,6 +271,7 @@ export interface SidebarThreadSummary {
 export type ThreadSessionProvider = ProviderKind | "unknown";
 
 export interface ThreadSession {
+  retainedFamily?: boolean | undefined;
   provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;

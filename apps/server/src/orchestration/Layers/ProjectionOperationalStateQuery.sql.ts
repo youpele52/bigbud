@@ -24,7 +24,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
   const operationalThreadPredicate = sql`
     EXISTS (
       SELECT 1 FROM projection_thread_sessions s
-      WHERE s.thread_id = t.thread_id AND s.status IN ('starting', 'running')
+      WHERE s.thread_id = t.thread_id AND (s.status IN ('starting', 'running') OR s.retained_family = 1)
     )
     OR EXISTS (
       SELECT 1 FROM projection_pending_approvals p
@@ -167,6 +167,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         s.runtime_mode AS "runtimeMode",
         s.active_turn_id AS "activeTurnId",
         s.session_epoch AS "sessionEpoch",
+        s.retained_family AS "retainedFamily",
         s.reason,
         s.last_error AS "lastError",
         s.updated_at AS "updatedAt"

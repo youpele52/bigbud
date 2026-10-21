@@ -78,6 +78,7 @@ export function mapSession(session: OrchestrationSession): NonNullable<Thread["s
     provider: toLegacyProvider(session.providerName),
     status: toLegacySessionStatus(session.status),
     orchestrationStatus: session.status,
+    retainedFamily: session.retainedFamily,
     activeTurnId: session.activeTurnId ?? undefined,
     sessionEpoch: session.sessionEpoch,
     createdAt: session.updatedAt,

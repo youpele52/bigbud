@@ -10,21 +10,17 @@ import {
 import { V2ActivationGate, type V2ReadyStamp } from "./PluginSetup.activation.gate.ts";
 import { readV2ActivationIdle } from "./PluginSetup.activation.activity.ts";
 import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
-import { verifyV2ThreadTools } from "./Orchestration.readiness.ts";
 import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { runV2ActivationTransaction } from "./PluginSetup.activation.transaction.ts";
 import { hasOpencodeV2ManagedPluginTrust } from "@bigbud/shared/opencodeNativeTrust";
-import { readV2CompatibleManualBootstrap } from "./Orchestration.readiness.manual.ts";
-import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
-import { currentV2CallerSignal } from "./Runtime.caller.ts";
-import { V2ActivationDeferred } from "./PluginSetup.activation.errors.ts";
+import { awaitV2ThreadToolsReady } from "./PluginSetup.activation.ready.ts";
+import type { V2ReadinessFailure } from "./Orchestration.readiness.failure.ts";
 import {
   verifyV2NativeEligibility,
   verifyV2NativeReadOnlyEligibility,
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
-import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 export interface V2ActivationParticipant {
@@ -156,6 +152,7 @@ export class V2ThreadToolsActivation {
     descriptor: V2ActivationJobScope["descriptor"],
     directory: string,
     signal?: AbortSignal,
+    readinessFailure?: V2ReadinessFailure,
   ) {
     const owned = this.scopeFor(artifact, descriptor),
       key = this.key(owned.scope);
@@ -170,7 +167,10 @@ export class V2ThreadToolsActivation {
       };
     if (!proposal.directories.has(directory) && proposal.directories.size >= 64)
       throw new Error("V2 activation Location capacity reached.");
-    const handle = this.jobs.request(owned.scope, signal);
+    const handle = this.jobs.request(
+      { ...owned.scope, ...(readinessFailure ? { readinessFailure } : {}) },
+      signal,
+    );
     this.proposals.set(key, proposal);
     proposal.directories.add(directory);
     if (!this.issued.has(handle.jobId) && this.issued.size >= 32)
@@ -189,106 +189,7 @@ export class V2ThreadToolsActivation {
     directory: string,
     signal?: AbortSignal,
   ): Promise<{ gate: V2ActivationGate; stamp: V2ReadyStamp }> {
-    const owned = this.scopeFor(artifact, descriptor);
-    try {
-      const info = await verifyV2ThreadTools(
-        artifact,
-        client,
-        directory,
-        signal,
-        undefined,
-        this.eligibility,
-        owned.scope.root,
-      );
-      return {
-        gate: owned.gate,
-        stamp: owned.gate.verify(
-          directory,
-          info.bootstrapDigest,
-          info.setupInstanceId,
-          info.nativeProof,
-        ),
-      };
-    } catch (error) {
-      signal?.throwIfAborted();
-      currentV2RequestContext()?.permit.assertCurrent();
-      if (
-        error instanceof V2NativeCompatibilityError &&
-        error.reasonCode !== "bootstrap-contract-incompatible"
-      ) {
-        owned.gate.invalidate();
-        throw error;
-      }
-    }
-    if (v2ThreadRegistration(artifact).family === "legacy")
-      throw new Error(
-        "V2 retained legacy bootstrap is unavailable; history remains read-only. Restore its exact original installation; no cross-family migration or replacement was attempted.",
-      );
-    const retainedManual = await readV2CompatibleManualBootstrap(
-      artifact,
-      client,
-      directory,
-      signal,
-      this.eligibility,
-      owned.scope.root,
-    );
-    if (retainedManual) {
-      owned.gate.adoptRetained(retainedManual.artifactDigest);
-      const info = await verifyV2ThreadTools(
-        retainedManual,
-        client,
-        directory,
-        signal,
-        undefined,
-        this.eligibility,
-        owned.scope.root,
-      );
-      return {
-        gate: owned.gate,
-        stamp: owned.gate.verify(
-          directory,
-          info.bootstrapDigest,
-          info.setupInstanceId,
-          info.nativeProof,
-        ),
-      };
-    }
-    const requested = this.requestSetup(
-        artifact,
-        descriptor,
-        directory,
-        currentV2CallerSignal() ?? signal,
-      ),
-      status = await this.jobs.wait(requested.handle, requested.scope, signal);
-    if (status.state !== "ready")
-      if (["waiting-for-idle", "deferred"].includes(status.state))
-        throw new V2ActivationDeferred(status, requested.handle);
-      else
-        throw new Error(
-          `V2 required thread-tools setup ${status.state}; no prompt/binding was admitted. ${status.reason ?? "Wait for known native work, then retry the normal foreground action."}`,
-        );
-    const installed = await readV2RetainedArtifact(
-      artifact,
-      status.installedBootstrapDigest ?? artifact.artifactDigest,
-    );
-    const info = await verifyV2ThreadTools(
-      installed,
-      client,
-      directory,
-      signal,
-      undefined,
-      this.eligibility,
-      owned.scope.root,
-    );
-    return {
-      gate: owned.gate,
-      stamp: owned.gate.verify(
-        directory,
-        info.bootstrapDigest,
-        info.setupInstanceId,
-        info.nativeProof,
-      ),
-    };
+    return awaitV2ThreadToolsReady(this, artifact, descriptor, client, directory, signal);
   }
   status(handle: V2ActivationHandle, scope: V2ActivationJobScope) {
     return this.jobs.status(handle.jobId, scope);

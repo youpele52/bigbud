@@ -1,4 +1,5 @@
 import type { ModelRef, SessionInfo } from "@opencode/client";
+import path from "node:path";
 import { Effect } from "effect";
 import { v2Request } from "./Client.ts";
 import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
@@ -9,6 +10,7 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
+import { v2SharedProtectedResources } from "./Runtime.policy.shared.paths.ts";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
 import { decodeV2NativeSession } from "./Runtime.session.decode.ts";
 import { assertV2ThreadPolicy } from "./Orchestration.admission.ts";
@@ -103,12 +105,12 @@ export async function createRuntimeSession(
       throw new Error("V2 resume ownership mismatch; no fresh-session fallback.");
     }
   }
-  const model: ModelRef = {
+  // Attach retained history before applying a new turn selection through the idle switch guard.
+  const model: ModelRef = cursor?.model ?? {
     providerID: selection.subProviderID,
     id: selection.model,
     ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
   };
-  if (cursor?.model) assertV2Model(cursor.model, model);
   const localTools = options.enableLocalTools === true && !disableTools;
   let permissions = options.config.sharedService
     ? v2SharedToolPolicy(
@@ -127,6 +129,18 @@ export async function createRuntimeSession(
       });
   cancellation?.throwIfAborted();
   await options.authorizeExecution?.();
+  if (options.nativeSubagents)
+    permissions.push(
+      ...v2SharedProtectedResources([
+        path.join(options.nativeSubagents.stateDirectory, "opencode-v2-native-families"),
+      ]).flatMap((resource) =>
+        ["read", "edit", "external_directory"].map((action) => ({
+          action,
+          resource,
+          effect: "deny" as const,
+        })),
+      ),
+    );
   cancellation?.throwIfAborted();
   let shared: Awaited<ReturnType<typeof prepareSharedCreation>> | undefined;
   let activation: V2RuntimeSession["activation"];
@@ -334,7 +348,7 @@ export async function createRuntimeSession(
             providerRuntimeExecutionTargetId: runtimeTarget,
             workspaceExecutionTargetId: workspaceTarget,
             cwd: directory,
-            model: selection.model,
+            model: model.id,
             createdAt: now,
             updatedAt: now,
             sessionEpoch: input.sessionEpoch ?? 0,

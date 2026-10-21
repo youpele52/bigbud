@@ -250,6 +250,8 @@ export async function dispatchV2Turn(
         Effect.tryPromise({
           try: async () => {
             session.row = row;
+            session.familyPhysicalDrain?.invalidate();
+            await session.familyControl?.authorizeInput(row);
             await syncV2Instructions(session, mutations, entries, beforeDispatch);
             const validate = await beforeDispatch();
             if (!isCurrent()) throw failure();
@@ -264,6 +266,12 @@ export async function dispatchV2Turn(
                     files: media.files,
                     metadata: {
                       bigbud_fingerprint: fingerprint,
+                      ...(session.familyControl
+                        ? {
+                            bigbud_family_generation: session.family!.generation,
+                            bigbud_family_root: session.native.id,
+                          }
+                        : {}),
                       ...(instructionRevision
                         ? { bigbud_instruction_revision: instructionRevision }
                         : {}),

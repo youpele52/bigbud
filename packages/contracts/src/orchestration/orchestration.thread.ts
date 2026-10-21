@@ -106,6 +106,7 @@ export const OrchestrationSessionStatus = Schema.Literals([
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
 export const OrchestrationSession = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
   providerName: Schema.NullOr(TrimmedNonEmptyString),

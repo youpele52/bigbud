@@ -9,6 +9,7 @@ import { newCommandId } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import type { SessionPhase, Thread } from "../../../models/types";
 import { buildSendNowInterruptCommand } from "./ChatView.promptQueue.logic";
+import { getThreadInterruptTurnId } from "./ChatView.subagents.logic";
 
 export interface UseTurnActionsInput {
   activeThread: Thread | undefined;
@@ -63,7 +64,7 @@ export function useTurnActions({
       const activeTurnId =
         options?.queuedPromptIdsAfterSettlement !== undefined
           ? activeThread.session?.activeTurnId
-          : (activeThread.session?.activeTurnId ?? activeThread.latestTurn?.turnId);
+          : getThreadInterruptTurnId(activeThread);
       const createdAt = new Date().toISOString();
       await api.orchestration.dispatchCommand(
         options?.queuedPromptIdsAfterSettlement !== undefined

@@ -36,6 +36,7 @@ import { validV2Publication } from "./Runtime.publication.ts";
 import { warnV2SharedRollback } from "./Application.rollback.ts";
 import { invalidatedV2Snapshot } from "./Application.snapshot.ts";
 import { makeV2ApplicationInvoke } from "./Application.invoke.ts";
+import { makeV2NativeFamilyPreparation } from "./Subagents.application.ts";
 
 /** Settings-driven local preview. Harness authorization never leaks into application routing. */
 export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistration")(
@@ -134,6 +135,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           config.process.sharedService,
           backend,
         );
+        const nativeFamilies = makeV2NativeFamilyPreparation(serverConfig.value.stateDir);
+        yield* Effect.addFinalizer(() => Effect.promise(() => nativeFamilies.close())).pipe(
+          Scope.provide(scope),
+        );
         yield* Effect.addFinalizer(() => Effect.promise(() => orchestration.close())).pipe(
           Scope.provide(scope),
         );
@@ -162,6 +167,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           profileIssuer: orchestration.issuer,
           allowLocalWorkspace: true,
           enableLocalTools: true,
+          nativeSubagents: {
+            stateDirectory: serverConfig.value.stateDir,
+            prepare: nativeFamilies.prepare,
+          },
           ...(Option.isSome(serverConfig)
             ? {
                 attachmentsDir: serverConfig.value.attachmentsDir,

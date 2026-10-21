@@ -25,6 +25,7 @@ import {
 import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { v2NativeRuntimePlatform } from "./NativeCompatibility.platform.ts";
 import { atV2SetupStage } from "./PluginSetup.diagnostics.ts";
+import { setupV2NativeFamily } from "./Subagents.setup.ts";
 
 /** Only explicit expanded acknowledgement + an execution context can administer this one managed entry. */
 export function makeV2AutomaticPluginSetup(
@@ -115,6 +116,15 @@ export function makeV2AutomaticPluginSetup(
       );
       if (retainedManual) {
         authority.assertCurrent();
+        await setupV2NativeFamily(
+          retainedManual,
+          client,
+          directory,
+          root,
+          authority,
+          configured,
+          eligibility,
+        );
         return retainedManual;
       }
       signal?.throwIfAborted();
@@ -136,6 +146,15 @@ export function makeV2AutomaticPluginSetup(
           eligibility,
           root,
         );
+        await setupV2NativeFamily(
+          artifact,
+          client,
+          directory,
+          root,
+          authority,
+          configured,
+          eligibility,
+        );
         return artifact;
       }
       v2NativeRuntimePlatform();
@@ -144,6 +163,15 @@ export function makeV2AutomaticPluginSetup(
       );
       authority.assertCurrent();
       await atV2SetupStage("publication", () => publishV2ManagedPlugin(artifact, root, authority));
+      await setupV2NativeFamily(
+        artifact,
+        client,
+        directory,
+        root,
+        authority,
+        configured,
+        eligibility,
+      );
       signal?.throwIfAborted();
       await atV2SetupStage("readiness", () =>
         settleV2PluginReadiness(

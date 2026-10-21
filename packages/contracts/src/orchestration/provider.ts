@@ -33,6 +33,7 @@ const ProviderSessionStatus = Schema.Literals([
 ]);
 
 export const ProviderSession = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   provider: ProviderKind,
   status: ProviderSessionStatus,
   runtimeMode: RuntimeMode,

@@ -90,7 +90,9 @@ function assertV2RequestContextOnce(transport: string, url: URL, method: string)
   if (context.intent === "cleanup") {
     const root = `/api/session/${encodeURIComponent(context.nativeSessionId ?? "")}`;
     const route = url.pathname;
-    const read = method === "GET" && (route === root || route === `${root}/inbox`);
+    const read =
+      method === "GET" &&
+      [root, `${root}/inbox`, `${root}/form`, `${root}/permission`].includes(route);
     // Dead-backend retirement must prove the old owner's native turn is idle; the official
     // running-session map is read-only and carries no session content.
     const running = method === "GET" && route === "/api/session/active";

@@ -9,6 +9,7 @@ import {
   queueV2FinalEvents,
 } from "./Runtime.finalization.ts";
 import { v2ShutdownSignal } from "./Runtime.shutdown.ts";
+import { hasV2UnconfirmedFamily } from "./Runtime.family.loss.ts";
 
 interface Teardown {
   readonly owner: V2RuntimeSession;
@@ -51,6 +52,7 @@ export class V2RuntimeTeardown {
   private release(record: Teardown): void {
     if (
       !record.finished ||
+      hasV2UnconfirmedFamily(record.owner) ||
       needsV2FinalRepair(record.owner) ||
       ((record.pending || record.unconfirmed) && !record.owner.lease.process.hasExited?.())
     )

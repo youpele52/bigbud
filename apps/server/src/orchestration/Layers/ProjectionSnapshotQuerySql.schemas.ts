@@ -80,7 +80,9 @@ export const ProjectionThreadTaskDbRowSchema = ProjectionThreadTask.mapFields(
   }),
 );
 
-export const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession;
+export const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession.mapFields(
+  Struct.assign({ retainedFamily: Schema.Number }),
+);
 
 export const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
   Struct.assign({

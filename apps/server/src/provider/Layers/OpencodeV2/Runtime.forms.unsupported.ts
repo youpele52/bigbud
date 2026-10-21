@@ -12,9 +12,10 @@ const LIMITATION =
 export function installV2UnsupportedFormCanceller(
   runtime: OpencodeV2Runtime,
   owner: V2RuntimeSession,
+  root: V2RuntimeSession = owner,
 ) {
   owner.cancelUnsupportedForm = async (form: FormInfo) => {
-    const guard = v2ReplyGuard(runtime.options, runtime.sessions, owner);
+    const guard = v2ReplyGuard(runtime.options, runtime.sessions, root);
     const client = owner.lease.process.client;
     await runtime.mutations.run(
       owner,
@@ -39,7 +40,7 @@ export function installV2UnsupportedFormCanceller(
         )
           throw new Error("V2 unsupported form changed before cancellation.");
         // Publish before mutation so a failed sink cannot silently lose the limitation.
-        await runtime.emit(owner, {
+        await runtime.emit(root, {
           ...runtimeEventBase(owner, `unsupported-form:${form.id}`),
           type: "runtime.warning",
           payload: { message: LIMITATION.replace("Cancelled", "Cancelling") },

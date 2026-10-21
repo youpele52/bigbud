@@ -69,7 +69,8 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           runtime.options.journal.find(runtimeAdmissionIdentity(input)),
         );
         assertV2CallerCurrent();
-        if (!current && ready) {
+        if (!current) {
+          session.backgroundClosure?.assertCurrent();
           session.consentPermit?.assertCurrent();
           const hold = session.activation?.token
             ? await settleV2RuntimeReservation(runtime, session)
@@ -80,6 +81,8 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
               `V2 prior physical admission remains owned${hold ? ` (hold: ${hold})` : ""}; no new turn.`,
             );
           }
+        }
+        if (!current && ready) {
           const token = ready.gate.tryReserve(
             ready.stamp,
             JSON.stringify([

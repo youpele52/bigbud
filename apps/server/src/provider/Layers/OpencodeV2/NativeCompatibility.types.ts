@@ -20,6 +20,7 @@ export type V2NativeSemanticProfile = typeof V2NativeSemanticProfile.Type;
 const Hex = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200));
 export const V2NativeQualificationRecord = Schema.Struct({
+  nativeFamilySourceDigest: Schema.optionalKey(Hex),
   format: Schema.Literal("bigbud.thread.native-qualification.v1"),
   nativeVersion: Text,
   platform: V2NativePlatform,
@@ -85,6 +86,8 @@ export class V2NativeCompatibilityError extends Error {
 }
 
 export interface V2NativeRuntimeProof {
+  /** Release-reviewed custom runtime source identity; absent for stock native builds. */
+  readonly nativeFamilySourceDigest?: string;
   readonly evidenceKind: "qualified" | "candidate" | "runtime-checked";
   readonly assertCurrent: () => void;
   readonly assertConfigRead: () => void;

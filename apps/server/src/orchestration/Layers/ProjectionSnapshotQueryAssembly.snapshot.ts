@@ -352,6 +352,7 @@ export function assembleSnapshotRows(rows: {
       providerName: row.providerName,
       runtimeMode: row.runtimeMode,
       activeTurnId: row.activeTurnId,
+      retainedFamily: row.retainedFamily === 1,
       reason: row.reason,
       lastError: row.lastError,
       updatedAt: row.updatedAt,

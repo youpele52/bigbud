@@ -43,6 +43,7 @@ function hasSameCanonicalSessionState(
     current.providerName === next.providerName &&
     current.runtimeMode === next.runtimeMode &&
     current.activeTurnId === next.activeTurnId &&
+    Boolean(current.retainedFamily) === Boolean(next.retainedFamily) &&
     (current.sessionEpoch ?? 0) === (next.sessionEpoch ?? 0) &&
     (current.reason ?? null) === (next.reason ?? null) &&
     current.lastError === next.lastError

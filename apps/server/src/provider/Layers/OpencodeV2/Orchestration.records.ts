@@ -38,6 +38,7 @@ export class V2ThreadRecords {
       | "installations"
       | "retirements"
       | "implementations"
+      | "native-family-publications"
       | "recovery"
       | "instances",
     privateKey: string,
@@ -73,9 +74,29 @@ export class V2ThreadRecords {
 
   /** Include the durable filename so maintenance evidence cannot be transplanted to another key. */
   async inventory(): Promise<ReadonlyArray<{ name: string; signed: SignedRecord }>> {
+    return this.scanInventory(0);
+  }
+
+  private async scanInventory(
+    attempt: number,
+  ): Promise<ReadonlyArray<{ name: string; signed: SignedRecord }>> {
     await v2ThreadPrivateDirectory(this.directory);
     const names = await listV2ThreadPrivateDirectory(this.directory);
     if (names.length > 4096) throw new Error("V2 thread-tools signed inventory exceeds its bound.");
+    const partial = names.filter((name) => !/^[a-f0-9]{64}$/.test(name));
+    if (partial.length && attempt < 3) {
+      const writers = partial.map((name) =>
+        /^[a-f0-9]{64}\.[a-f0-9]{32}$/.test(name)
+          ? V2ThreadRecords.locks.get(path.join(this.directory, name.slice(0, 64)))
+          : undefined,
+      );
+      // Join only known live writers, then re-read every entry. Never skip staging evidence:
+      // abandoned, foreign-process, or forged files still fail the strict scan below.
+      if (writers.every((writer) => writer !== undefined)) {
+        await Promise.all(writers);
+        return this.scanInventory(attempt + 1);
+      }
+    }
     const records: { name: string; signed: SignedRecord }[] = [];
     for (const name of names) {
       if (!/^[a-f0-9]{64}$/.test(name))

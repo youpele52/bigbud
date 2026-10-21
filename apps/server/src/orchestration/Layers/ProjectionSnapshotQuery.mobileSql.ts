@@ -194,6 +194,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           session_epoch AS "sessionEpoch",
+          retained_family AS "retainedFamily",
           reason,
           last_error AS "lastError",
           updated_at AS "updatedAt"

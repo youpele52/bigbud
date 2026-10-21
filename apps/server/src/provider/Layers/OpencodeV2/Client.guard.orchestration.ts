@@ -11,7 +11,7 @@ import type { V2ThreadRegistration } from "./Orchestration.registration.ts";
 
 export interface V2RpcAuthority {
   readonly rpcID: string;
-  readonly method: "info" | V2ThreadEnvelope["operation"];
+  readonly method: "info" | "authorize" | "fence" | "receipt" | V2ThreadEnvelope["operation"];
   readonly directory: string;
   readonly bodyDigest: string;
   readonly ownerDigest?: string;
@@ -38,7 +38,7 @@ export async function assertV2OrchestrationRpc(
   if (
     context.intent === "health" ||
     (context.intent === "cleanup" &&
-      (!["inspect", "detach"].includes(authority.method) ||
+      (!["inspect", "detach", "fence"].includes(authority.method) ||
         authority.nativeSessionId !== context.nativeSessionId ||
         !authority.ownerDigest ||
         !authority.enrollmentNonce))
