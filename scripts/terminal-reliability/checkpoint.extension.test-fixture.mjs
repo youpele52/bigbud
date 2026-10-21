@@ -9,8 +9,9 @@ import { combinedCheckpointFailure } from "../lib/checkpoint-node-tests.errors.t
 import { inputs, hash, verifyArtifacts } from "./checkpoint.extension.artifacts.mjs";
 import { compilerCommand } from "./checkpoint.extension.toolchain.mjs";
 
+// Both reviewed inputs come from this package's own pinned 6.0.0 devDependencies, so the app's
+// xterm version (now a 6.1 beta) can move without invalidating the checkpoint harness pairing.
 const requireScripts = createRequire(new URL("../package.json", import.meta.url));
-const requireWeb = createRequire(new URL("../../apps/web/package.json", import.meta.url));
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 /** Resolve only standard installed packages; no cache fallback, downloads or auto-install. */
@@ -43,7 +44,7 @@ export async function createCheckpointTestFixture(options = {}) {
     );
     await writeFile(
       join(directory, "browser.cjs"),
-      await vendorBytes(requireWeb, "@xterm/xterm", "browser"),
+      await vendorBytes(requireScripts, "@xterm/xterm", "browser"),
     );
     await executeOwnedNode(
       [
