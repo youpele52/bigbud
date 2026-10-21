@@ -12,8 +12,8 @@ import { toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
 import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
+import { handleDeliveryApplicationFailure } from "./-__root.delivery-failure";
 import {
-  containDeliveryApplicationFailure,
   recoverAndAcknowledgeDeliveryBaseline,
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
@@ -312,14 +312,13 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
               acknowledge: api.orchestration.acknowledgeDelivery,
             });
           })
-          .catch((error: unknown) => {
-            console.error("[orchestration-recovery] Event application failed.", { error });
-            return containDeliveryApplicationFailure({
+          .catch((error: unknown) =>
+            handleDeliveryApplicationFailure({
               itemType: item.type,
               error,
               fallbackToBoundedRecovery,
-            });
-          }),
+            }),
+          ),
       {
         onResubscribe: () => undefined,
       },

@@ -34,6 +34,7 @@ export const desktopIpcChannels = {
   requestFileAccess: "desktop:request-file-access",
   backendStartupState: "desktop:backend-startup-state",
   backendStartupGetState: "desktop:backend-startup-get-state",
+  connectivitySignal: "desktop:connectivity-signal",
   getWindowRole: "desktop:get-window-role",
   getTerminalRenderingPolicy: "desktop:get-terminal-rendering-policy",
   openMainWindow: "desktop:open-main-window",

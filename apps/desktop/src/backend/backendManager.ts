@@ -312,6 +312,14 @@ export async function startBackend(): Promise<void> {
     scheduleRestart: scheduleBackendRestart,
   });
 }
+/** Restarts a backend that stopped serving; an unexpected exit reuses the restart path. */
+export function restartUnresponsiveBackend(reason: string): void {
+  if (!_deps || _deps.getIsQuitting()) return;
+  const child = backendProcess;
+  logBackendLifecycle("restart_unresponsive", `pid=${child?.pid ?? "none"} reason=${reason}`);
+  if (child) killBackendProcess(child);
+  else scheduleBackendRestart(reason);
+}
 export function stopBackend(): void {
   revokeSystemMonitorAgentToken();
   if (restartTimer) {

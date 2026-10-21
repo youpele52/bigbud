@@ -57,6 +57,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   },
   dispose: vi.fn(),
   reconnect: vi.fn(),
+  reconnectNow: vi.fn(() => false),
   terminal: {
     wslDistributions: vi.fn(),
     snapshot: vi.fn(),
@@ -179,6 +180,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     triggerAutomation: vi.fn(),
     listAutomationRuns: vi.fn(),
     getUsageSummary: vi.fn(),
+    getWsConnectionDiagnostics: vi.fn(),
     stopSubagent: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),

@@ -5,6 +5,7 @@ import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
+  type WsConnectionControls,
   type WsProtocolLifecycleHandlers,
   type WsRpcProtocolClient,
 } from "./protocol";
@@ -20,8 +21,9 @@ export interface TransportSession {
 export function createWsTransportSession(
   url: string | undefined,
   lifecycle: WsProtocolLifecycleHandlers,
+  controls?: WsConnectionControls,
 ): TransportSession {
-  const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(url, lifecycle));
+  const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(url, lifecycle, controls));
   const clientScope = Effect.runSync(Scope.make());
   const readinessController = new AbortController();
   const clientPromise = waitForDesktopBackendReady(

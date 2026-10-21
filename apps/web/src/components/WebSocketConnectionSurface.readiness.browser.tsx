@@ -22,7 +22,9 @@ import { recordWsProtocolRecovery } from "../rpc/wsConnectionState";
 const mocks = vi.hoisted(() => ({
   reconnect: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 }));
-vi.mock("../rpc/wsRpcClient", () => ({ getWsRpcClient: () => ({ reconnect: mocks.reconnect }) }));
+vi.mock("../rpc/wsRpcClient", () => ({
+  getWsRpcClient: () => ({ reconnect: mocks.reconnect, reconnectNow: () => false }),
+}));
 
 // Only the native startup IPC boundary is mocked. The surface, readiness and config atoms are real.
 vi.mock("./DesktopBackendStartupCoordinator", () => ({
@@ -118,7 +120,7 @@ describe("real config readiness surface", () => {
 
   it("keeps recovery styling and ConnectIcon when reconnect changes to configuration retry", async () => {
     recordWsConnectionAttempt("ws://localhost:3020/ws");
-    recordWsProtocolRecovery(true);
+    recordWsProtocolRecovery();
     const generation = beginServerConfigReadiness(false);
     updateServerConfigReadiness(generation, { stream: "exhausted", failure: "protocol_failed" });
     const retry = vi.fn();
@@ -165,7 +167,7 @@ describe("real config readiness surface", () => {
   it("offers physical reconnect without reload and re-establishes a stopped config owner", async () => {
     recordWsConnectionAttempt("ws://localhost:3020/ws");
     recordWsConnectionOpened();
-    recordWsProtocolRecovery(true);
+    recordWsProtocolRecovery();
     const generation = beginServerConfigReadiness(false);
     updateServerConfigReadiness(generation, { stream: "exhausted", failure: "protocol_failed" });
     const retry = vi.fn();

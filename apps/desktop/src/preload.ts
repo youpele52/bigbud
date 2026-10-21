@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge } from "@bigbud/contracts";
 import type { DesktopCertificateChallengeEvent } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 import { isBackendStartupState } from "./backend/backendStartupDiagnostics.validation";
+import { isDesktopConnectivitySignal } from "./connectivity/connectivitySignals.validation";
 import {
   CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
@@ -137,6 +138,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     };
     ipcRenderer.on(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
     return () => ipcRenderer.removeListener(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
+  },
+  onConnectivitySignal: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, signal: unknown) => {
+      if (isDesktopConnectivitySignal(signal)) listener(signal);
+    };
+    ipcRenderer.on(desktopIpcChannels.connectivitySignal, wrappedListener);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.connectivitySignal, wrappedListener);
   },
   getComputerUseRuntimeStatus: () => ipcRenderer.invoke(GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL),
   getComputerUsePermissionsStatus: () =>

@@ -34,6 +34,12 @@ function emit(): void {
   }
 }
 
+/** Re-sends the unchanged state, e.g. a confirmed `ready` after the machine wakes. */
+export function republishBackendStartupState(): void {
+  if (state.generation === 0) return;
+  emit();
+}
+
 function setStatus(
   generation: number,
   status: DesktopBackendStartupState["status"],

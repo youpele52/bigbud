@@ -128,6 +128,8 @@ export interface WsRpcClient {
   readonly worktrees: NonNullable<NativeApi["worktrees"]>;
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;
+  /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */
+  readonly reconnectNow: () => boolean;
   readonly terminal: {
     readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
     readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;
@@ -328,6 +330,9 @@ export interface WsRpcClient {
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
     readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
+    readonly getWsConnectionDiagnostics: RpcUnaryMethod<
+      typeof WS_METHODS.serverGetWsConnectionDiagnostics
+    >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };

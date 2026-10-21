@@ -1,5 +1,6 @@
 import type { ServerConfig, ServerConfigStreamEvent } from "@bigbud/contracts/server/server";
 import type { ServerLifecycleWelcomePayload } from "@bigbud/contracts/server/server.lifecycle.ts";
+import type { ServerStalledPayload } from "@bigbud/contracts/server/connectionDiagnostics.ts";
 import { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import { Cause, Duration, Schema } from "effect";
 
@@ -15,10 +16,9 @@ import {
 import {
   isWsSubscriptionListenerFailure,
   WsSubscriptionCompletedError,
-  WsProtocolRecoveryExhaustedError,
-} from "./wsTransport";
+} from "./wsTransport.errors";
 import { cappedExponentialRetryDelay } from "./wsTransport.retry";
-import { WS_RECONNECT_INITIAL_DELAY_MS } from "./wsConnectionState";
+import { WS_RECONNECT_INITIAL_DELAY_MS } from "./wsReconnectPolicy";
 import { CONFIG_FALLBACK_DEADLINE_MS } from "./wsRpcClient.config";
 
 type ServerStateClient = Pick<
@@ -31,6 +31,7 @@ interface ServerStateCallbacks {
   readonly setSnapshot: (config: ServerConfig) => void;
   readonly applyEvent: (event: ServerConfigStreamEvent) => void;
   readonly emitWelcome: (payload: ServerLifecycleWelcomePayload) => void;
+  readonly emitStalled?: (payload: ServerStalledPayload) => void;
 }
 
 const STABLE_STREAM_MS = 30_000;
@@ -123,11 +124,6 @@ export function startServerConfigSync(
           }),
         onError: (error) => {
           if (!isCurrentAttempt()) return;
-          if (error instanceof WsProtocolRecoveryExhaustedError) {
-            subscriptionStopped = false;
-            recordFailure("protocol_failed", true);
-            return;
-          }
           subscriptionStopped = true;
           // Unknown methods bypass shouldRetry, including after earlier retryable failures.
           if (getServerConfigReadiness().stream !== "exhausted") {
@@ -145,7 +141,9 @@ export function startServerConfigSync(
   };
   let stopConfig = subscribeConfig();
   const stopLifecycle = client.subscribeLifecycle((event) => {
-    if (isActive() && event.type === "welcome") callbacks.emitWelcome(event.payload);
+    if (!isActive()) return;
+    if (event.type === "welcome") callbacks.emitWelcome(event.payload);
+    else if (event.type === "stalled") callbacks.emitStalled?.(event.payload);
   });
 
   const fetchFallback = () => {

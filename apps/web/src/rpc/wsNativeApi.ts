@@ -11,26 +11,18 @@ import {
 } from "./orchestrationDeliveryState";
 import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
-import { isWsSubscriptionListenerFailure } from "./wsTransport";
+import {
+  isWsSubscriptionListenerFailure,
+  isWsTransportDisconnectedError,
+  wsSubscriptionErrorCause,
+} from "./wsTransport.errors";
 import { cappedExponentialRetryDelay } from "./wsTransport.retry";
+import { resolveDeliveryConsumerId } from "./orchestrationDeliveryCursor";
 
 let instance: { api: NativeApi } | null = null;
-const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
 const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
 const ORCHESTRATION_RETRY_BASE_DELAY_MS = 250;
 const ORCHESTRATION_RETRY_MAX_DELAY_MS = 8_000;
-
-function resolveDeliveryConsumerId(): string {
-  try {
-    const existing = window.sessionStorage.getItem(DELIVERY_CONSUMER_STORAGE_KEY)?.trim();
-    if (existing) return existing;
-    const consumerId = crypto.randomUUID();
-    window.sessionStorage.setItem(DELIVERY_CONSUMER_STORAGE_KEY, consumerId);
-    return consumerId;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
 
 export function __resetWsNativeApiForTests() {
   instance = null;
@@ -69,6 +61,11 @@ export function createWsNativeApi(): NativeApi {
   const markDeliveryProgress = () => {
     orchestrationApplicationFailures = 0;
   };
+  // An acknowledgement refused mid-batch because the socket dropped is not an application
+  // failure; the resubscription replays from `deliveryAppliedSequence` and admission dedupes.
+  const isApplicationFailure = (error: unknown) =>
+    isWsSubscriptionListenerFailure(error) &&
+    !isWsTransportDisconnectedError(wsSubscriptionErrorCause(error));
 
   const isActiveBaselineRecovery = (input: {
     readonly recoveryId: string;
@@ -108,7 +105,7 @@ export function createWsNativeApi(): NativeApi {
       },
       {
         retryDelay: ({ error }) =>
-          isWsSubscriptionListenerFailure(error)
+          isApplicationFailure(error)
             ? cappedExponentialRetryDelay({
                 attempt: orchestrationApplicationFailures,
                 baseMs: ORCHESTRATION_RETRY_BASE_DELAY_MS,
@@ -120,7 +117,7 @@ export function createWsNativeApi(): NativeApi {
           for (const callback of domainResubscribeCallbacks) callback();
         },
         shouldRetry: (error) => {
-          if (!isWsSubscriptionListenerFailure(error)) return true;
+          if (!isApplicationFailure(error)) return true;
           orchestrationApplicationFailures += 1;
           const identity = latestDeliveryIdentity;
           if (
@@ -293,6 +290,7 @@ export function createWsNativeApi(): NativeApi {
       triggerAutomation: rpcClient.server.triggerAutomation,
       listAutomationRuns: rpcClient.server.listAutomationRuns,
       getUsageSummary: rpcClient.server.getUsageSummary,
+      getWsConnectionDiagnostics: rpcClient.server.getWsConnectionDiagnostics,
       stopSubagent: rpcClient.server.stopSubagent,
     },
     orchestration: {

@@ -60,6 +60,7 @@ import { sweepWindowsCuaDriverProcesses } from "./backend/cuaDriver.windowsSweep
 import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceability";
 import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
 import { registerTerminalRenderingIpc } from "./main.terminalRendering";
+import { startDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
 
 interface BootstrapDesktopOptions {
   readonly baseDir: string;
@@ -243,6 +244,11 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   });
   registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");
+  startDesktopConnectivitySignals({
+    channel: channels.connectivitySignal,
+    getIsQuitting,
+    logHeader,
+  });
   setMainWindow(makeWindow());
   logHeader("bootstrap main window created");
   if (desktopPreferences.get().floatingAssistantEnabled && desktopPreferences.get().mascotVisible) {

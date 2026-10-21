@@ -97,6 +97,9 @@ vi.mock("./updater/autoUpdater", () => ({
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
 vi.mock("./system-monitor/ipc", () => ({ registerSystemMonitorIpc: vi.fn() }));
 vi.mock("./main.terminalRendering", () => ({ registerTerminalRenderingIpc: vi.fn() }));
+vi.mock("./connectivity/connectivitySignals.main", () => ({
+  startDesktopConnectivitySignals: vi.fn(),
+}));
 vi.mock("./window/browserSession", () => ({
   initializeBrowserSession: mocks.initializeBrowserSession,
 }));

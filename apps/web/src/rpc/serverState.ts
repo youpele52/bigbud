@@ -20,6 +20,7 @@ import { useCallback, useRef } from "react";
 import type { WsRpcClient } from "./wsRpcClient";
 import { appAtomRegistry, resetAppAtomRegistryForTests } from "./atomRegistry";
 import { startServerConfigSync } from "./serverState.configSync";
+import { recordServerStall } from "./serverStallState";
 
 export type ServerConfigUpdateSource = ServerConfigStreamEvent["type"];
 
@@ -206,6 +207,7 @@ export function startServerStateSync(client: ServerStateClient): () => void {
     setSnapshot: setServerConfigSnapshot,
     applyEvent: applyServerConfigEvent,
     emitWelcome,
+    emitStalled: recordServerStall,
   });
 }
 

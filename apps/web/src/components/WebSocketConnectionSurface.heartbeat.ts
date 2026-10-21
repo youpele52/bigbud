@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { getWsConnectionStatus } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
 import { getWsInboundActivitySequence, hasWsInboundActivitySince } from "../rpc/wsActivity";
+import { queueWsConnectionDiagnosticsReport } from "../rpc/wsConnectionDiagnosticsReporter";
 import {
   runWsHeartbeatProbe,
   shouldReconnectAfterHeartbeatFailure,
@@ -10,18 +11,35 @@ import {
   WS_HEARTBEAT_INTERVAL_MS,
 } from "../rpc/wsHeartbeat";
 
-export function useWebSocketHeartbeat(connected: boolean, reconnect: () => void): () => void {
+export interface WebSocketHeartbeatControls {
+  /** Drops in-flight probes and the failure count, e.g. on suspend or a forced reconnect. */
+  readonly invalidate: () => void;
+  /** Starts a probe now instead of waiting for the next interval, e.g. after a wake. */
+  readonly probeNow: () => void;
+}
+
+export function useWebSocketHeartbeat(
+  connected: boolean,
+  reconnect: () => void,
+): WebSocketHeartbeatControls {
   const inFlightRef = useRef(false);
   const failureCountRef = useRef(0);
+  // Bumped by `invalidate`: results of probes started under an older epoch never count.
+  const probeEpochRef = useRef(0);
   const generationRef = useRef(0);
+  const probeRef = useRef<(() => void) | null>(null);
   const reconnectRef = useRef(reconnect);
   reconnectRef.current = reconnect;
 
   const invalidate = () => {
-    generationRef.current += 1;
+    probeEpochRef.current += 1;
     failureCountRef.current = 0;
     inFlightRef.current = false;
   };
+  const controlsRef = useRef<WebSocketHeartbeatControls>({
+    invalidate,
+    probeNow: () => probeRef.current?.(),
+  });
 
   useEffect(() => {
     if (!connected) {
@@ -30,15 +48,19 @@ export function useWebSocketHeartbeat(connected: boolean, reconnect: () => void)
     }
     const generation = generationRef.current + 1;
     generationRef.current = generation;
-    failureCountRef.current = 0;
-    inFlightRef.current = false;
-    const intervalId = window.setInterval(() => {
+    invalidate();
+    const probe = () => {
+      if (generationRef.current !== generation) return;
       if (inFlightRef.current || getWsConnectionStatus().phase !== "connected") return;
       inFlightRef.current = true;
+      const epoch = probeEpochRef.current;
+      const isCurrent = () =>
+        generationRef.current === generation && probeEpochRef.current === epoch;
       const inboundActivitySequence = getWsInboundActivitySequence();
+      let probeAgain = false;
       void runWsHeartbeatProbe(() => getWsRpcClient().server.ping())
         .then((healthy) => {
-          if (generationRef.current !== generation) return;
+          if (!isCurrent()) return;
           if (healthy) {
             failureCountRef.current = 0;
             return;
@@ -58,19 +80,34 @@ export function useWebSocketHeartbeat(connected: boolean, reconnect: () => void)
             failureThreshold: WS_HEARTBEAT_FAILURE_THRESHOLD,
           });
           if (shouldReconnectAfterHeartbeatFailure(failureCountRef.current)) {
+            queueWsConnectionDiagnosticsReport({
+              trigger: "heartbeat-failure",
+              detail: `consecutiveFailures=${failureCountRef.current}`,
+            });
             invalidate();
             reconnectRef.current();
+            return;
           }
+          // Confirm a suspected dead socket immediately rather than on the next tick.
+          probeAgain = true;
         })
         .finally(() => {
-          if (generationRef.current === generation) inFlightRef.current = false;
+          if (!isCurrent()) return;
+          inFlightRef.current = false;
+          if (probeAgain) probe();
         });
-    }, WS_HEARTBEAT_INTERVAL_MS);
+    };
+    probeRef.current = probe;
+    const intervalId = window.setInterval(probe, WS_HEARTBEAT_INTERVAL_MS);
     return () => {
       window.clearInterval(intervalId);
-      if (generationRef.current === generation) invalidate();
+      if (probeRef.current === probe) probeRef.current = null;
+      if (generationRef.current === generation) {
+        generationRef.current += 1;
+        invalidate();
+      }
     };
   }, [connected]);
 
-  return invalidate;
+  return controlsRef.current;
 }

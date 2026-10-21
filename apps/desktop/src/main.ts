@@ -52,6 +52,7 @@ import { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
 import { bootstrapDesktop } from "./main.bootstrap";
 import { registerFloatingAssistantIpc } from "./main.floatingAssistant";
 import { registerDesktopShutdownSignals } from "./main.shutdownSignals";
+import { stopDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
 
 const channels = desktopIpcChannels;
 
@@ -273,14 +274,14 @@ function openMainWindow(threadId?: string): BrowserWindow {
 
 /**
  * Shared teardown path called from both `before-quit` and `before-quit-for-update`.
- * Stops the backend process, clears update poll timers, and restores stdio capture.
- * Idempotent — safe to call multiple times.
+ * Stops the backend process, clears update poll timers, and restores stdio capture. Idempotent.
  */
 function prepareForAppQuit(reason: string): void {
   if (quitTeardownComplete) return;
   quitTeardownComplete = true;
   isQuitting = true;
   systemMonitor.stop();
+  stopDesktopConnectivitySignals();
   stopSystemMonitorAgentBridge();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
