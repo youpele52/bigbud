@@ -47,6 +47,14 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         context.providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverRefreshUsageLimits]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverRefreshUsageLimits,
+        context.providerRegistry.refreshUsageLimits.pipe(
+          Effect.map((providers) => ({ providers })),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverActivateCliProxy,

@@ -50,7 +50,7 @@ import {
   WsServerTriggerAutomationRpc,
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
-import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
+import { WsServerGetUsageSummaryRpc, WsServerRefreshUsageLimitsRpc } from "./rpc.usage";
 import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
   WsPluginsGitAvailabilityRpc,
@@ -225,6 +225,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerTriggerAutomationRpc,
   WsServerListAutomationRunsRpc,
   WsServerGetUsageSummaryRpc,
+  WsServerRefreshUsageLimitsRpc,
   WsProviderStopSubagentRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,

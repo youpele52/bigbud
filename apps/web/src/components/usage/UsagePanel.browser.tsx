@@ -16,8 +16,8 @@ const { getUsageSummary, state } = vi.hoisted(() => ({
   state: { providers: [] as ServerProvider[] },
 }));
 vi.mock("~/rpc/nativeApi", () => {
-  const api = { server: { getUsageSummary } };
-  return { readNativeApi: () => api };
+  const api = { server: { getUsageSummary, refreshUsageLimits: vi.fn() } };
+  return { readNativeApi: () => api, ensureNativeApi: () => api };
 });
 vi.mock("~/rpc/serverState", () => ({ useServerProviders: () => state.providers }));
 

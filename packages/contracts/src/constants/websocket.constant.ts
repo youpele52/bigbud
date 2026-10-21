@@ -79,6 +79,7 @@ export const WS_METHODS = {
   serverPing: "server.ping",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverRefreshUsageLimits: "server.refreshUsageLimits",
   serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
   serverInstallRemoteAgent: "server.installRemoteAgent",

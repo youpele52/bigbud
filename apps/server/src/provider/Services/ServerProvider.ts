@@ -11,6 +11,8 @@ export interface ServerProviderRecoveryOptions {
 export interface ServerProviderShape {
   readonly getSnapshot: Effect.Effect<ServerProvider>;
   readonly refresh: Effect.Effect<ServerProvider>;
+  /** Optional read-only quota probe, without provider recovery or model discovery. */
+  readonly refreshUsageLimits?: Effect.Effect<ServerProvider>;
   readonly refreshWithRecovery: (
     options: ServerProviderRecoveryOptions,
   ) => Effect.Effect<ServerProvider>;

@@ -32,6 +32,7 @@ import type { ProviderRegistration } from "../ProviderRegistration.ts";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
 import { isProviderRetryable, needsProviderRefresh } from "../providerRecovery";
 import { providerAdvertisesRemoteWorkspaceSupport } from "../providerRemoteWorkspaceConformance.ts";
+import { refreshSubscriptionProviders, singleFlightUsageRefresh } from "../providerUsageRefresh.ts";
 import {
   currentProviderSnapshot,
   currentProviderSnapshots,
@@ -245,7 +246,18 @@ const makeProviderRegistryLayer = (
         return yield* syncProviders();
       });
 
+      const refreshUsageLimits = singleFlightUsageRefresh(
+        Effect.gen(function* () {
+          yield* refreshSubscriptionProviders(
+            registrations,
+            currentProviderSnapshots(currentProviders),
+          );
+          return yield* syncProviders();
+        }),
+      );
+
       return {
+        refreshUsageLimits,
         getProviders: Effect.sync(() => currentProviderSnapshots(currentProviders)).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => []),

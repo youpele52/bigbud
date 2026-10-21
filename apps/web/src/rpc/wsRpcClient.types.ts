@@ -242,6 +242,7 @@ export interface WsRpcClient {
     readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
+    readonly refreshUsageLimits: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshUsageLimits>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;

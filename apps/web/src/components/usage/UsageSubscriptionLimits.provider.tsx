@@ -1,6 +1,5 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
-import { formatHumanReadableDate } from "~/utils/timestamp";
 import { StatusBanner } from "../common/StatusBanner";
 import { CenteredStatus } from "../common/CenteredStatus";
 import {
@@ -9,6 +8,8 @@ import {
   SUBSCRIPTION_PROVIDER_LABELS,
 } from "./UsageSubscriptionLimits.logic";
 import { UsageSubscriptionLimitProgress } from "./UsageSubscriptionLimits.progress";
+import { UsageSubscriptionManualResets } from "./UsageSubscriptionLimits.resets";
+import { formatSubscriptionTimestamp } from "./UsageSubscriptionLimits.timestamp";
 
 export function UsageSubscriptionProviderLimits({
   limits,
@@ -46,7 +47,7 @@ export function UsageSubscriptionProviderLimits({
             <>
               Showing the last successful values
               {limits.lastSuccessfulAt
-                ? ` from ${formatHumanReadableDate(limits.lastSuccessfulAt, "date-time")}`
+                ? ` from ${formatSubscriptionTimestamp(limits.lastSuccessfulAt)}`
                 : ""}
               .
             </>
@@ -96,6 +97,9 @@ export function UsageSubscriptionProviderLimits({
             )
           ) : null}
         </div>
+      ) : null}
+      {hasRetainedLimits && limits.manualResets ? (
+        <UsageSubscriptionManualResets resets={limits.manualResets} />
       ) : null}
     </section>
   );

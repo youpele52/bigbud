@@ -1,4 +1,3 @@
-import { formatHumanReadableDate } from "~/utils/timestamp";
 import {
   Progress,
   ProgressIndicator,
@@ -13,6 +12,7 @@ import {
   remainingAllowanceColor,
   remainingAllowancePercent,
 } from "./UsageSubscriptionLimits.logic";
+import { formatSubscriptionTimestamp } from "./UsageSubscriptionLimits.timestamp";
 
 /** Displays the same remaining-allowance semantics for quota windows and extra spending caps. */
 export function UsageSubscriptionLimitProgress({
@@ -52,7 +52,7 @@ export function UsageSubscriptionLimitProgress({
         </ProgressTrack>
         {resetAt ? (
           <div className="text-xs text-muted-foreground">
-            Resets {formatHumanReadableDate(resetAt, "date-time")}
+            Resets {formatSubscriptionTimestamp(resetAt)}
           </div>
         ) : null}
         {description ? <div className="text-xs text-muted-foreground">{description}</div> : null}

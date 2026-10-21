@@ -1,4 +1,5 @@
 import type { ServerProviderUsageLimitWindow } from "@bigbud/contracts/server/usageLimits.ts";
+import { normalizeCodexManualResets } from "./Provider.manualResets.ts";
 import {
   availableUsageLimits,
   usageNumber,
@@ -39,12 +40,11 @@ export function normalizeCodexUsageLimits(value: unknown, checkedAt: string) {
       });
     }
   }
-  return availableUsageLimits(
-    "codex-app-server",
-    checkedAt,
-    windows,
-    subscriptionType ? { subscriptionType } : {},
-  );
+  const manualResets = normalizeCodexManualResets(response.rateLimitResetCredits);
+  return availableUsageLimits("codex-app-server", checkedAt, windows, {
+    ...(subscriptionType ? { subscriptionType } : {}),
+    ...(manualResets ? { manualResets } : {}),
+  });
 }
 
 function windowLabel(minutes: number | undefined, fallback: string): string {

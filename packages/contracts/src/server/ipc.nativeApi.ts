@@ -190,6 +190,7 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<Server.ServerConfig>;
     refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
+    refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
     activateCliProxy: () => Promise<Server.ServerProviderUpdatedPayload>;
     verifyExecutionTarget: (
       input: Server.ServerVerifyExecutionTargetInput,

@@ -21,6 +21,9 @@ export interface ProviderRegistryShape {
    */
   readonly refresh: (provider?: ProviderKind) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
+  /** Fetch fresh subscription quota for every enabled supported provider, without recovery. */
+  readonly refreshUsageLimits: Effect.Effect<ReadonlyArray<ServerProvider>>;
+
   /**
    * Stream of provider snapshot updates.
    */

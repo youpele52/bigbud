@@ -41,6 +41,7 @@ import {
 import { makeClaudeInitialSnapshot } from "./Provider.initialSnapshot";
 import { makeClaudeUsageLimitsUnavailable } from "./Provider.usageLimits";
 import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
+import { readClaudeSubscriptionUsage } from "./Provider.usageLimits.read.ts";
 
 const PROVIDER = "claudeAgent" as const;
 export { getClaudeModelCapabilities } from "./Provider.capabilities";
@@ -375,6 +376,7 @@ export const ClaudeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      readUsageLimits: (settings) => readClaudeSubscriptionUsage(settings.binaryPath),
       recoverModelDiscovery: true,
       decorateSnapshot,
       initialSnapshot: makeClaudeInitialSnapshot,
