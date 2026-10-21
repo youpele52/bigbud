@@ -70,6 +70,38 @@ describe("subagent presentation", () => {
     ).toBe("All good");
     expect(subagentActivityLine(agent("a"))).toBeUndefined();
   });
+  it("shows the assignment before progress arrives, across providers", () => {
+    expect(subagentActivityLine(agent("explore", { description: "Find the session owner" }))).toBe(
+      "Find the session owner",
+    );
+    expect(subagentActivityLine(agent("Review changes", { subagentType: "reviewer" }))).toBe(
+      "Review changes",
+    );
+    expect(
+      subagentActivityLine(agent("explore", { description: "Find owner", lastToolName: "Grep" })),
+    ).toBe("Running Grep");
+  });
+
+  it("shows the final result or failure instead of obsolete progress", () => {
+    expect(
+      subagentActivityLine(
+        agent("done", {
+          status: "completed",
+          progressSummary: "Still looking",
+          resultSummary: "Found it",
+        }),
+      ),
+    ).toBe("Found it");
+    expect(
+      subagentActivityLine(
+        agent("failed", {
+          status: "failed",
+          progressSummary: "Still looking",
+          terminalReason: "Permission denied",
+        }),
+      ),
+    ).toBe("Permission denied");
+  });
   it("formats only owned tool identifiers without changing progress summaries or stored names", () => {
     const raw = "bigbud_thread_v1_rename_thread";
     const running = agent("rename", { lastToolName: raw });

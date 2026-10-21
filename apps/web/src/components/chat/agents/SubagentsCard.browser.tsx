@@ -100,4 +100,24 @@ describe("SubagentsCard", () => {
     expect(child?.getAttribute("aria-label")).toContain("child of Subject root");
     expect(child?.style.paddingLeft).toBe("18px");
   });
+
+  it("shows the assignment and background mode before any progress, without expanding", async () => {
+    await page.viewport(375, 800);
+    await render(
+      <SubagentsCard
+        agents={[
+          agent("review", {
+            subagentType: "systematic-debugging-assistant",
+            description: "Diagnose restart and coexistence failures",
+            background: true,
+          }),
+        ]}
+      />,
+    );
+    await expect.element(page.getByText("Background", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("Diagnose restart and coexistence failures", { exact: true }))
+      .toBeVisible();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(375);
+  });
 });

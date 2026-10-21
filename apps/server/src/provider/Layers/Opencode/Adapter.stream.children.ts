@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, type ProviderKind, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import {
+  EventId,
+  type ProviderKind,
+  type ProviderRuntimeEvent,
+  type TurnId,
+} from "@bigbud/contracts";
 import type { Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
 
 import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSubagents.ts";
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase } from "./Adapter.stream.utils.ts";
+import { opencodeEventSessionId } from "./Adapter.stream.identity.ts";
 import {
   childMetrics,
   recordChildAssistant,
@@ -38,6 +44,8 @@ export function makeChildSessionTracker(
   const children = new Map<string, Session>();
   const statuses = new Map<string, ChildStatus>();
   const activity = new Map<string, ChildActivity>();
+  const turns = new Map<string, TurnId | undefined>();
+  const ended = new Map<string, string>();
   let observedOrdinal = 0;
 
   function update(child: Session, status: ChildStatus): ProviderRuntimeEvent {
@@ -46,6 +54,9 @@ export function makeChildSessionTracker(
     const progressSummary = childActivity?.progressSummary?.trim();
     const metrics = childActivity ? childMetrics(childActivity) : undefined;
     const terminal = status === "completed" || status === "failed" || status === "stopped";
+    const turnId = turns.get(child.id);
+    if (terminal && !ended.has(child.id)) ended.set(child.id, observedAt);
+    if (!terminal) ended.delete(child.id);
     return providerSubagentEvent(
       eventBase({
         eventId: EventId.makeUnsafe(randomUUID()),
@@ -53,7 +64,7 @@ export function makeChildSessionTracker(
         threadId: session.threadId,
         sessionEpoch: session.sessionEpoch,
         provider,
-        ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+        ...(turnId ? { turnId } : {}),
         raw: {
           source: "opencode.sdk.session-event",
           method: "child-session",
@@ -65,6 +76,8 @@ export function makeChildSessionTracker(
         nativeId: child.id,
         status,
         subject: child.agent || child.title,
+        subagentType: child.agent,
+        agentId: child.id,
         description: child.title,
         parentAgentId: child.parentID,
         progressSummary,
@@ -73,7 +86,7 @@ export function makeChildSessionTracker(
         model: childActivity?.model,
         ...(metrics ? { metrics } : {}),
         ...(childActivity?.steps ? { recentSteps: childActivity.steps } : {}),
-        ...(terminal ? { endedAt: observedAt } : {}),
+        ...(terminal ? { endedAt: ended.get(child.id) } : {}),
         source: "lifecycle",
         freshness: {
           sessionEpoch: String(session.sessionEpoch),
@@ -82,7 +95,7 @@ export function makeChildSessionTracker(
           observedOrdinal: ++observedOrdinal,
         },
         createdAt: taskCreatedAt(child, observedAt),
-        ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+        ...(turnId ? { turnId } : {}),
       },
     );
   }
@@ -97,9 +110,12 @@ export function makeChildSessionTracker(
 
   async function refresh(): Promise<ReadonlyArray<ProviderRuntimeEvent>> {
     const output: ProviderRuntimeEvent[] = [];
-    const queue = [session.opencodeSessionId];
+    const queue = [session.opencodeSessionId, ...children.keys()];
+    const visited = new Set<string>();
     while (queue.length && children.size < MAX_CHILDREN) {
       const parent = queue.shift()!;
+      if (visited.has(parent)) continue;
+      visited.add(parent);
       const response = await session.client.session
         .children({ sessionID: parent })
         .catch(() => ({ data: undefined }));
@@ -108,6 +124,7 @@ export function makeChildSessionTracker(
         if (children.size >= MAX_CHILDREN) break;
         if (child.parentID !== parent || children.has(child.id)) continue;
         children.set(child.id, child);
+        turns.set(child.id, session.activeTurnId);
         statuses.set(child.id, "pending");
         activity.set(child.id, {});
         output.push(update(child, "pending"));
@@ -119,6 +136,11 @@ export function makeChildSessionTracker(
       const live = response.data?.[id];
       if (!live) continue;
       const status = live.type === "idle" ? "completed" : "inProgress";
+      if (
+        status === "completed" &&
+        (statuses.get(id) === "failed" || statuses.get(id) === "stopped")
+      )
+        continue;
       if (statuses.get(id) === status) continue;
       statuses.set(id, status);
       output.push(update(child, status));
@@ -138,7 +160,7 @@ export function makeChildSessionTracker(
       delta?: string;
       error?: unknown;
     };
-    const id = properties.sessionID;
+    const id = opencodeEventSessionId(event);
     if (!id || id === session.opencodeSessionId) return [];
     if (!children.has(id)) {
       const info = properties.info as Session | undefined;
@@ -152,10 +174,27 @@ export function makeChildSessionTracker(
       )
         return [];
       children.set(id, info);
+      turns.set(id, session.activeTurnId);
       statuses.set(id, "pending");
       activity.set(id, {});
       return [update(info, "pending")];
     }
+    if (event.type === "session.updated") {
+      const info = properties.info as Session | undefined;
+      if (!info || info.id !== id) return [];
+      children.set(id, info);
+      return [update(info, statuses.get(id) ?? "pending")];
+    }
+    const current = statuses.get(id);
+    // Content arriving after idle/error must not resurrect a finished child. A native
+    // busy/retry status is the only evidence that the child has actually resumed.
+    if (
+      (current === "completed" || current === "failed" || current === "stopped") &&
+      (event.type === "message.updated" ||
+        event.type === "message.part.updated" ||
+        event.type === "message.part.delta")
+    )
+      return [];
     if (event.type === "message.updated") {
       const message = properties.info as Message | undefined;
       const childActivity = activity.get(id);

@@ -64,12 +64,18 @@ export function subagentModelLabel(agent: OrchestrationTask): string | undefined
 }
 
 export function subagentActivityLine(agent: OrchestrationTask): string | undefined {
+  if (!isActive(agent)) {
+    if (agent.status === "failed" && agent.terminalReason) return agent.terminalReason;
+    if (agent.resultSummary) return agent.resultSummary;
+  }
   if (agent.progressSummary) return agent.progressSummary;
   if (agent.lastToolName && isActive(agent))
     return `Running ${formatToolDisplayName(agent.lastToolName)}`;
   return (
     agent.resultSummary ??
-    (agent.lastToolName ? `Ran ${formatToolDisplayName(agent.lastToolName)}` : undefined)
+    (agent.lastToolName ? `Ran ${formatToolDisplayName(agent.lastToolName)}` : undefined) ??
+    agent.description ??
+    (agent.subject !== subagentDisplayName(agent) ? agent.subject : undefined)
   );
 }
 

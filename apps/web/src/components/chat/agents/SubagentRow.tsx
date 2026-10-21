@@ -59,6 +59,11 @@ export function SubagentRow(props: {
                 <span className="truncate text-xs leading-5 text-foreground/80">
                   {subagentDisplayName(agent)}
                 </span>
+                {agent.background ? (
+                  <span className="shrink-0 rounded bg-muted/60 px-1 text-xs leading-4 text-muted-foreground">
+                    Background
+                  </span>
+                ) : null}
                 {model ? (
                   <span
                     className="max-w-[10rem] shrink truncate rounded bg-muted/60 px-1 text-xs leading-4 text-muted-foreground"

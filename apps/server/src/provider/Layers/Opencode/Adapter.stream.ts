@@ -21,6 +21,7 @@ import { toMessage } from "./Adapter.stream.utils.ts";
 import { logNativeEvent, type SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import { makeMapEvent } from "./Adapter.stream.mapEvent.ts";
 import { makeChildSessionTracker, tracksChildSessions } from "./Adapter.stream.children.ts";
+import { opencodeEventSessionId } from "./Adapter.stream.identity.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 
 export * from "./Adapter.stream.utils.ts";
@@ -160,11 +161,7 @@ export function startEventStream(
         for await (const event of stream) {
           if (abortController.signal.aborted || !isOwner()) return;
 
-          // Filter events to only those for this session.
-          // In v2, sessionID is always on event.properties.sessionID.
-          const eventSessionId = (event.properties as Record<string, unknown>).sessionID as
-            | string
-            | undefined;
+          const eventSessionId = opencodeEventSessionId(event);
 
           if (eventSessionId && eventSessionId !== session.opencodeSessionId) {
             if (childTracker && typeof session.client.session?.children === "function") {
