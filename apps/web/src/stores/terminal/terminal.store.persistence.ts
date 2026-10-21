@@ -1,6 +1,7 @@
 import { createJSONStorage } from "zustand/middleware";
 
 import { resolveStorage } from "../../lib/storage";
+import { skipUnchangedPersistWrites } from "../../lib/storage.persistGate";
 import type { TerminalLayoutMode } from "./terminal.store.layout";
 import type { TerminalStateStoreState } from "./terminal.store.types";
 
@@ -24,11 +25,22 @@ function hydrateTerminalLayouts(value: unknown): Record<string, TerminalLayoutMo
   );
 }
 
+type PersistedTerminalState = Pick<
+  TerminalStateStoreState,
+  | "terminalLayoutByThreadId"
+  | "terminalWslDistributionByThreadId"
+  | "terminalStateByThreadId"
+  | "terminalLabelOverridesByThreadId"
+>;
+
 export const terminalPersistenceOptions = {
   name: STORAGE_KEY,
   // Additive optional field: retain v1 data, including legacy-key migration.
   version: 1,
-  storage: createJSONStorage(createTerminalStateStorage),
+  // Output events update only non-persisted slices; do not re-serialize per terminal batch.
+  storage: skipUnchangedPersistWrites(
+    createJSONStorage<PersistedTerminalState>(createTerminalStateStorage),
+  ),
   partialize: (state: TerminalStateStoreState) => ({
     terminalLayoutByThreadId: state.terminalLayoutByThreadId,
     terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,

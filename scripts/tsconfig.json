@@ -12,5 +12,12 @@
       }
     ]
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "../apps/web/src/components/terminal/TerminalWriteBatcher.ts",
+    "../apps/web/src/components/terminal/TerminalWriteBatcher.pacing.ts",
+    "../apps/web/src/components/terminal/TerminalWriteWatchdog.ts",
+    "../apps/web/src/components/terminal/TerminalOutputScheduler.ts",
+    "../apps/web/src/components/terminal/TerminalOutputBudget.ts"
+  ]
 }

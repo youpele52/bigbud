@@ -137,7 +137,17 @@ export interface WsRpcClient {
     readonly clear: RpcUnaryMethod<typeof WS_METHODS.terminalClear>;
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
-    readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>;
+    readonly onEvent: (
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly subscribeSession: (
+      input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalSession>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly ackOutput: RpcUnaryMethod<typeof WS_METHODS.terminalOutputAck>;
+    readonly search: RpcUnaryMethod<typeof WS_METHODS.terminalSearch>;
   };
   readonly browser: {
     readonly completeCommand: (input: VisibleBrowserCommandResult) => Promise<void>;

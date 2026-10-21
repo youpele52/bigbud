@@ -178,6 +178,10 @@ export function createWsNativeApi(): NativeApi {
       restart: (input) => rpcClient.terminal.restart(input as never),
       close: (input) => rpcClient.terminal.close(input as never),
       onEvent: (callback) => rpcClient.terminal.onEvent(callback),
+      subscribeSession: (input, callback, options) =>
+        rpcClient.terminal.subscribeSession(input as never, callback, options),
+      ackOutput: (input) => rpcClient.terminal.ackOutput(input),
+      search: (input) => rpcClient.terminal.search(input),
     },
     projects: {
       listDirectory: rpcClient.projects.listDirectory,

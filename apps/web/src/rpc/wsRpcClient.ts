@@ -9,6 +9,7 @@ import { randomUUID } from "~/lib/utils";
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
 import { requestServerConfig } from "./wsRpcClient.config";
+import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import {
   type GitRunStackedActionOptions,
   type StreamSubscriptionOptions,
@@ -75,25 +76,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       resetWsReconnectBackoff();
       await transport.reconnect();
     },
-    terminal: {
-      wslDistributions: () =>
-        transport.request((client) => client[WS_METHODS.terminalWslDistributions]({})),
-      snapshot: (input) =>
-        transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),
-      open: (input) => transport.request((client) => client[WS_METHODS.terminalOpen](input)),
-      write: (input) => transport.request((client) => client[WS_METHODS.terminalWrite](input)),
-      resize: (input) => transport.request((client) => client[WS_METHODS.terminalResize](input)),
-      clear: (input) => transport.request((client) => client[WS_METHODS.terminalClear](input)),
-      restart: (input) => transport.request((client) => client[WS_METHODS.terminalRestart](input)),
-      close: (input) => transport.request((client) => client[WS_METHODS.terminalClose](input)),
-      onEvent: (listener, options) =>
-        subscribeEmptyInput(
-          transport,
-          (client) => client[WS_METHODS.subscribeTerminalEvents],
-          listener,
-          options,
-        ),
-    },
+    terminal: createTerminalRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),

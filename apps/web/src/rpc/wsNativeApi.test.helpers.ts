@@ -69,6 +69,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     onEvent: vi.fn((listener: (event: TerminalEvent) => void) =>
       registerListener(terminalEventListeners, listener),
     ),
+    subscribeSession: vi.fn(() => () => undefined),
+    ackOutput: vi.fn(),
+    search: vi.fn(),
   },
   browser: {
     completeCommand: vi.fn(),
