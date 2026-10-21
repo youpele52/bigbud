@@ -71,4 +71,21 @@ describe("search.store", () => {
 
     expect(useSearchStore.getState().activeFileSearchContext).toBeNull();
   });
+
+  it("hands a terminal find request to its view once, with a fresh id each time", () => {
+    const threadId = "thread-1" as never;
+    const request = { threadId, terminalId: "default", query: "error", lineText: "error: x" };
+    useSearchStore.getState().requestTerminalFind(request);
+    const first = useSearchStore.getState().terminalFindRequest!;
+    expect(first).toMatchObject({ ...request, requestId: 1 });
+    expect(first.createdAt).toBeGreaterThan(0);
+    useSearchStore.getState().requestTerminalFind(request);
+    const second = useSearchStore.getState().terminalFindRequest!;
+    expect(second.requestId).toBe(2);
+    // A stale consumer cannot clear a newer request.
+    useSearchStore.getState().clearTerminalFindRequest(first.requestId);
+    expect(useSearchStore.getState().terminalFindRequest).toBe(second);
+    useSearchStore.getState().clearTerminalFindRequest(second.requestId);
+    expect(useSearchStore.getState().terminalFindRequest).toBeNull();
+  });
 });
