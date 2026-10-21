@@ -3,7 +3,12 @@ import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchest
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { DesktopSupervisorDeliveryShape } from "../desktop-supervisor/desktopSupervisorDelivery.types.ts";
+import type { DeliverySessionEndedInput } from "../connection-diagnostics/Services/ConnectionDiagnostics.ts";
 import { makeOrderedOrchestrationDomainEventStream } from "./wsStreams.ts";
+import {
+  classifyHandoffExit,
+  makeDeliveryEndReasonTracker,
+} from "./wsOrchestrationDelivery.endReason.ts";
 
 export const ORCHESTRATION_DELIVERY_LIVE_CAPACITY = 2_000;
 
@@ -13,6 +18,10 @@ export function makeOrchestrationDeliveryStream(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly delivery: DesktopSupervisorDeliveryShape;
   readonly liveCapacity?: number;
+  /** Observes why the session ended; never changes delivery behavior. */
+  readonly onSessionEnded?: (input: DeliverySessionEndedInput) => Effect.Effect<void>;
+  /** Lets a stream closed by server shutdown say so instead of reading as a client close. */
+  readonly isServerShuttingDown?: () => boolean;
 }) {
   return Effect.gen(function* () {
     const services = yield* Effect.services<never>();
@@ -21,6 +30,8 @@ export function makeOrchestrationDeliveryStream(input: {
       orchestrationEngine: input.orchestrationEngine,
       nonBlockingLiveCapacity: input.liveCapacity ?? ORCHESTRATION_DELIVERY_LIVE_CAPACITY,
     });
+    const endReason = makeDeliveryEndReasonTracker(input.isServerShuttingDown);
+    const openedAt = Date.now();
     const subscription = yield* Effect.acquireRelease(
       Effect.tryPromise(() =>
         input.delivery.open({
@@ -30,7 +41,17 @@ export function makeOrchestrationDeliveryStream(input: {
             runPromise(input.orchestrationEngine.readReplay(sequence, limit)),
         }),
       ).pipe(Effect.orDie),
-      (owned) => Effect.sync(() => owned.close()),
+      (owned) =>
+        Effect.sync(() => owned.close()).pipe(
+          Effect.andThen(
+            input.onSessionEnded?.({
+              consumerId: input.consumerId,
+              reason: endReason.resolve(owned),
+              durationMs: Date.now() - openedAt,
+            }) ?? Effect.void,
+          ),
+          Effect.ignoreCause,
+        ),
     );
     const handoffEnded = yield* Deferred.make<void>();
     yield* Stream.runForEach(canonicalStream, (event: OrchestrationEvent) =>
@@ -39,10 +60,20 @@ export function makeOrchestrationDeliveryStream(input: {
         Effect.flatMap((accepted) =>
           accepted
             ? Effect.void
-            : Effect.die(new Error("orchestration delivery live handoff overflowed")),
+            : Effect.sync(() => endReason.mark("overflow")).pipe(
+                Effect.andThen(
+                  Effect.die(new Error("orchestration delivery live handoff overflowed")),
+                ),
+              ),
         ),
       ),
     ).pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          const reason = classifyHandoffExit(exit);
+          if (reason) endReason.mark(reason);
+        }),
+      ),
       Effect.catchCause(() => Effect.void),
       Effect.ensuring(
         Effect.sync(() => subscription.close()).pipe(

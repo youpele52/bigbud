@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldPersistTraceRecord } from "./TracePolicy.ts";
+import { shouldPersistTraceRecord, TRACE_RETAIN_ATTRIBUTE } from "./TracePolicy.ts";
 
 const successRecord = {
   type: "effect-span" as const,
@@ -50,6 +50,16 @@ describe("TracePolicy", () => {
         },
         { mode: "diagnostic", expiresAtMs: Date.now() - 1 },
       ),
+    ).toBe(true);
+  });
+
+  it("retains fast successful spans marked for retention in production", () => {
+    expect(shouldPersistTraceRecord(successRecord)).toBe(false);
+    expect(
+      shouldPersistTraceRecord({
+        ...successRecord,
+        attributes: { [TRACE_RETAIN_ATTRIBUTE]: true },
+      }),
     ).toBe(true);
   });
 });

@@ -37,6 +37,7 @@ import type * as TerminalStream from "../workspace/terminal.stream";
 import type * as TerminalSearch from "../workspace/terminal.search";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
+import type * as ConnectionDiagnostics from "./connectionDiagnostics";
 import type { ContextMenuItem } from "./ipc";
 import type * as Kanban from "./kanban";
 import type * as Mobile from "./mobile";
@@ -297,6 +298,10 @@ export interface NativeApi {
     ) => Promise<Usage.ServerUsageSummaryResult>;
     /** Stop one running provider subagent; Stop-all is unchanged. */
     stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
+    /** Recent connection reports and server stalls; optional until every transport wires it. */
+    getWsConnectionDiagnostics?: (
+      input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
+    ) => Promise<ConnectionDiagnostics.ServerWsConnectionDiagnosticsSnapshot>;
   };
   orchestration: {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;

@@ -99,6 +99,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
       offer: (event) => Promise.resolve(session.input.tryOffer(event)),
       take: () => session.output.take(),
       close: () => session.close(),
+      endReason: () => session.endReason,
     };
   }
 
@@ -275,7 +276,10 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     this.closed = true;
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
-    for (const session of new Set(this.sessions.values())) session.close();
+    for (const session of new Set(this.sessions.values())) {
+      session.markEnded("server-shutdown");
+      session.close();
+    }
     this.sessions.clear();
     this.authoritativeSessions.clear();
     const client = this.client;

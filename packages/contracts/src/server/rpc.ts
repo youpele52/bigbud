@@ -51,6 +51,10 @@ import {
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc, WsServerRefreshUsageLimitsRpc } from "./rpc.usage";
+import {
+  WsServerGetWsConnectionDiagnosticsRpc,
+  WsServerReportWsConnectionDiagnosticsRpc,
+} from "./rpc.connectionDiagnostics";
 import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
   WsPluginsGitAvailabilityRpc,
@@ -186,6 +190,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsPluginsUninstallRpc,
   WsServerGetConfigRpc,
   WsServerPingRpc,
+  WsServerReportWsConnectionDiagnosticsRpc,
+  WsServerGetWsConnectionDiagnosticsRpc,
   WsServerRefreshProvidersRpc,
   WsServerActivateCliProxyRpc,
   WsServerVerifyExecutionTargetRpc,

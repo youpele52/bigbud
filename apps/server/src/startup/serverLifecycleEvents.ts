@@ -3,7 +3,19 @@ import { Effect, Layer, PubSub, Ref, ServiceMap, Stream } from "effect";
 
 type LifecycleEventInput =
   | Omit<Extract<ServerLifecycleStreamEvent, { type: "welcome" }>, "sequence">
-  | Omit<Extract<ServerLifecycleStreamEvent, { type: "ready" }>, "sequence">;
+  | Omit<Extract<ServerLifecycleStreamEvent, { type: "ready" }>, "sequence">
+  | Omit<Extract<ServerLifecycleStreamEvent, { type: "stalled" }>, "sequence">;
+
+/**
+ * A stall is reported when it ends, often just as the old socket dies. The
+ * latest stall stays in the snapshot this long so a reconnecting renderer can
+ * still attribute its drop; older stalls are left to the diagnostics read RPC.
+ */
+export const LIFECYCLE_STALL_SNAPSHOT_TTL_MS = 120_000;
+
+const isRecentStall = (event: ServerLifecycleStreamEvent, nowMs: number): boolean =>
+  event.type !== "stalled" ||
+  nowMs - Date.parse(event.payload.endedAt) <= LIFECYCLE_STALL_SNAPSHOT_TTL_MS;
 
 interface SnapshotState {
   readonly sequence: number;
@@ -38,13 +50,22 @@ export const ServerLifecycleEventsLive = Layer.effect(
             ...event,
             sequence: nextSequence,
           } satisfies ServerLifecycleStreamEvent;
-          const nextEvents =
-            nextEvent.type === "welcome"
-              ? [nextEvent, ...current.events.filter((entry) => entry.type !== "welcome")]
-              : [nextEvent, ...current.events.filter((entry) => entry.type !== "ready")];
+          // Each type keeps only its latest event, so a stall never evicts welcome or ready.
+          const nextEvents = [
+            nextEvent,
+            ...current.events.filter((entry) => entry.type !== nextEvent.type),
+          ];
           return [nextEvent, { sequence: nextSequence, events: nextEvents }] as const;
         }).pipe(Effect.tap((event) => PubSub.publish(pubsub, event))),
-      snapshot: Ref.get(state),
+      snapshot: Ref.get(state).pipe(
+        Effect.map((current) => {
+          const nowMs = Date.now();
+          return {
+            sequence: current.sequence,
+            events: current.events.filter((event) => isRecentStall(event, nowMs)),
+          };
+        }),
+      ),
       get stream() {
         return Stream.fromPubSub(pubsub);
       },

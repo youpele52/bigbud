@@ -23,6 +23,7 @@ import { DiscoveryRegistry } from "./provider/Services/DiscoveryRegistry.ts";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "./provider/Services/ProviderService.ts";
 import { DesktopSupervisorDeliveryTestLive } from "./desktop-supervisor/desktopSupervisorDelivery.testLayer.ts";
+import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
 import { makeRoutesLayer } from "./server.ts";
 import { ThreadShellRunner } from "./shell/Services/ThreadShellRunner.ts";
 import { ServerConfig } from "./startup/config.ts";
@@ -150,6 +151,7 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             },
           ),
           DesktopSupervisorDeliveryTestLive,
+          ConnectionDiagnosticsLive,
           BootstrapCommandLockLive,
         ),
       ),

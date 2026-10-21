@@ -82,6 +82,19 @@ function renderAiSettingsPanel() {
   );
 }
 
+function renderAboutSettingsPanel() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AppAtomRegistryProvider>
+        <AboutSettingsPanel />
+      </AppAtomRegistryProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe("AboutSettingsPanel observability", () => {
   beforeEach(() => {
     resetServerStateForTests();
@@ -98,11 +111,7 @@ describe("AboutSettingsPanel observability", () => {
   it("shows diagnostics inside About with a single logs-folder action", async () => {
     setServerConfigSnapshot(createBaseServerConfig());
 
-    await render(
-      <AppAtomRegistryProvider>
-        <AboutSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    await renderAboutSettingsPanel();
 
     await expect.element(page.getByRole("heading", { name: "Application" })).toBeInTheDocument();
     await expect.element(page.getByRole("img", { name: "bigbud" })).toBeInTheDocument();
@@ -129,11 +138,7 @@ describe("AboutSettingsPanel observability", () => {
     window.desktopBridge = { restartApplication } as unknown as DesktopBridge;
     setServerConfigSnapshot(createBaseServerConfig());
 
-    await render(
-      <AppAtomRegistryProvider>
-        <AboutSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    await renderAboutSettingsPanel();
 
     const restartButton = page.getByRole("button", { name: "Restart bigbud" });
     await expect.element(restartButton).toBeInTheDocument();
@@ -151,11 +156,7 @@ describe("AboutSettingsPanel observability", () => {
 
     setServerConfigSnapshot(createBaseServerConfig());
 
-    await render(
-      <AppAtomRegistryProvider>
-        <AboutSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    await renderAboutSettingsPanel();
 
     const openLogsButton = page.getByText("Open logs folder");
     await openLogsButton.click();

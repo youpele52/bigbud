@@ -77,6 +77,8 @@ export const WS_METHODS = {
 
   // Server meta
   serverPing: "server.ping",
+  serverReportWsConnectionDiagnostics: "server.reportWsConnectionDiagnostics",
+  serverGetWsConnectionDiagnostics: "server.getWsConnectionDiagnostics",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverRefreshUsageLimits: "server.refreshUsageLimits",

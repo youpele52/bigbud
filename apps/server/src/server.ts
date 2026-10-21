@@ -92,6 +92,9 @@ import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
 import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
+import { EventLoopLagMonitorLive } from "./connection-diagnostics/Layers/EventLoopLagMonitor.ts";
+import { withServerShutdownSignal } from "./connection-diagnostics/Layers/ServerShutdownSignal.ts";
 import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
@@ -324,12 +327,13 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
-  Layer.provideMerge(OpenLive),
+  Layer.provideMerge(Layer.mergeAll(OpenLive, EventLoopLagMonitorLive)),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(
     Layer.mergeAll(
       MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive)),
       DesktopSupervisorDeliveryLive,
+      ConnectionDiagnosticsLive,
     ),
   ),
 );
@@ -362,7 +366,8 @@ export const makeServerLayer = Layer.unwrap(
       ThreadToolModelSourcesLive,
     );
 
-    return serverApplicationLayer.pipe(
+    // The shutdown signal finalizes first, before routes close their WebSocket streams.
+    return withServerShutdownSignal(serverApplicationLayer).pipe(
       Layer.provideMerge(RuntimeServicesLive),
       Layer.provideMerge(HttpServerLive),
       // One backend per state directory: acquired before the port binds and persistence opens,
