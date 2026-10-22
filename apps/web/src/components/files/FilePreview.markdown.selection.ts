@@ -33,6 +33,17 @@ export function resolveMarkdownPreviewTextSelection(
   selection: Selection | null,
   contentRoot: HTMLElement | null,
 ): FilePreviewTextSelection | null {
+  const result = resolveMarkdownPreviewAnnotationSelection(selection, contentRoot);
+  if (!result) return null;
+  const { renderedRange: _renderedRange, ...sourceSelection } = result;
+  return sourceSelection;
+}
+
+/** Capture text endpoints before a context menu or composer changes the browser selection. */
+export function resolveMarkdownPreviewAnnotationSelection(
+  selection: Selection | null,
+  contentRoot: HTMLElement | null,
+): (FilePreviewTextSelection & { renderedRange: Range }) | null {
   if (!selection || selection.isCollapsed || selection.rangeCount !== 1 || !contentRoot)
     return null;
   const range = selection.getRangeAt(0);
@@ -45,6 +56,7 @@ export function resolveMarkdownPreviewTextSelection(
   const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT);
   let startLine: number | null = null;
   let endLine: number | null = null;
+  const renderedRange = document.createRange();
   let node: Node | null;
   while ((node = walker.nextNode())) {
     if (!range.intersectsNode(node)) continue;
@@ -57,8 +69,16 @@ export function resolveMarkdownPreviewTextSelection(
     const last = start + value.trimEnd().length - 1;
     const firstLine = textSourceLine(text, first, contentRoot);
     const lastLine = textSourceLine(text, last, contentRoot);
-    if (firstLine !== null) startLine ??= firstLine;
-    if (lastLine !== null) endLine = lastLine;
+    if (firstLine !== null && startLine === null) {
+      startLine = firstLine;
+      renderedRange.setStart(text, first);
+    }
+    if (lastLine !== null) {
+      endLine = lastLine;
+      renderedRange.setEnd(text, last + 1);
+    }
   }
-  return startLine !== null && endLine !== null ? { startLine, endLine, selectedText } : null;
+  return startLine !== null && endLine !== null
+    ? { startLine, endLine, selectedText, renderedRange }
+    : null;
 }

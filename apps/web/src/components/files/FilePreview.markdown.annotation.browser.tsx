@@ -35,10 +35,10 @@ const CONTENTS = [
   "- A [linked item](https://example.com)",
 ].join("\n");
 
-function mountPreview(relativePath = "docs/example.md") {
+function mountPreview(relativePath = "docs/example.md", width = 600, height = 600) {
   return render(
     <TooltipProvider>
-      <div style={{ width: 600, height: 600 }}>
+      <div style={{ width, height }}>
         <FilePreview
           cwd="/workspace"
           relativePath={relativePath}
@@ -133,6 +133,123 @@ describe("Markdown preview annotation workflow", () => {
         label: "Annotate selection",
       });
       expect(document.querySelector("[data-annotation-composer]")).toBeNull();
+    } finally {
+      await mounted.unmount();
+    }
+  });
+
+  it.each([false, true])(
+    "anchors below the last selected wrapped text line, including backward selections: %s",
+    async (backward) => {
+      const text = "Wrapped words with **formatting** and more text. ".repeat(14);
+      mocks.read.mockResolvedValue({ contents: text, truncated: false });
+      // Native menus may clear the live selection before returning the chosen action.
+      mocks.menu.mockImplementation(async () => {
+        window.getSelection()?.removeAllRanges();
+        return "annotate-selection";
+      });
+      const mounted = await mountPreview("docs/wrapped.md", 360, 800);
+      try {
+        await vi.waitFor(() =>
+          expect(document.querySelector(".file-preview-markdown")).not.toBeNull(),
+        );
+        const root = document.querySelector<HTMLElement>(".file-preview-markdown")!;
+        const start = previewTextPoint(root, "Wrapped words");
+        const end = afterPreviewText(previewTextPoint(root, "more text.", 2), "more text.");
+        const selection = selectPreviewText(start, end, backward);
+        const lastCharacter = selection.getRangeAt(0).cloneRange();
+        lastCharacter.setStart(end.node, end.offset - 1);
+        const selectedBottom = lastCharacter.getBoundingClientRect().bottom;
+        expect(root.querySelector("p")!.getBoundingClientRect().bottom).toBeGreaterThan(
+          selectedBottom + 100,
+        );
+        openSelectionMenu(root);
+        await vi.waitFor(() => {
+          const composer = document.querySelector<HTMLElement>("[data-annotation-composer]")!;
+          expect(composer).not.toBeNull();
+          expect(composer.getBoundingClientRect().top).toBeCloseTo(selectedBottom + 8, 0);
+        });
+        expect(document.querySelector("#annotation-composer-target")?.textContent).toBe("Line 1");
+        const frame = root.closest<HTMLElement>("[data-file-preview-search-focus]")!.parentElement!;
+        frame.style.width = "280px";
+        await vi.waitFor(() => {
+          const composer = document.querySelector<HTMLElement>("[data-annotation-composer]")!;
+          expect(lastCharacter.getBoundingClientRect().bottom).toBeGreaterThan(selectedBottom);
+          expect(composer.getBoundingClientRect().top).toBeCloseTo(
+            lastCharacter.getBoundingClientRect().bottom + 8,
+            0,
+          );
+        });
+      } finally {
+        await mounted.unmount();
+      }
+    },
+  );
+
+  it("flips above a selection near the viewport bottom and follows scrolling", async () => {
+    const contents = Array.from({ length: 60 }, (_, index) => `Paragraph ${index} text.`).join(
+      "\n\n",
+    );
+    mocks.read.mockResolvedValue({ contents, truncated: false });
+    const mounted = await mountPreview();
+    try {
+      await vi.waitFor(() =>
+        expect(document.querySelector(".file-preview-markdown")).not.toBeNull(),
+      );
+      const root = document.querySelector<HTMLElement>(".file-preview-markdown")!;
+      const scroll = root.parentElement!.parentElement!;
+      const start = previewTextPoint(root, "Paragraph 20 text.");
+      const end = afterPreviewText(start, "Paragraph 20 text.");
+      const selection = selectPreviewText(start, end);
+      const range = selection.getRangeAt(0).cloneRange();
+      scroll.scrollTop +=
+        range.getBoundingClientRect().bottom - scroll.getBoundingClientRect().bottom + 24;
+      openSelectionMenu(root);
+      await vi.waitFor(() => {
+        const composer = document.querySelector<HTMLElement>("[data-annotation-composer]")!;
+        expect(composer).not.toBeNull();
+        expect(composer.getBoundingClientRect().bottom).toBeCloseTo(
+          range.getBoundingClientRect().top - 8,
+          0,
+        );
+      });
+      scroll.scrollTop += 330;
+      await vi.waitFor(() => {
+        const composer = document.querySelector<HTMLElement>("[data-annotation-composer]")!;
+        expect(composer.getBoundingClientRect().top).toBeCloseTo(
+          range.getBoundingClientRect().bottom + 8,
+          0,
+        );
+      });
+    } finally {
+      await mounted.unmount();
+    }
+  });
+
+  it("keeps the composer inside a narrow, short preview when neither side fits", async () => {
+    const mounted = await mountPreview("docs/small.md", 280, 240);
+    try {
+      await vi.waitFor(() =>
+        expect(document.querySelector(".file-preview-markdown")).not.toBeNull(),
+      );
+      const root = document.querySelector<HTMLElement>(".file-preview-markdown")!;
+      const scroll = root.parentElement!.parentElement!;
+      const start = previewTextPoint(root, "heading");
+      selectPreviewText(start, afterPreviewText(start, "heading"));
+      openSelectionMenu(root);
+      await vi.waitFor(() => {
+        const composer = document.querySelector<HTMLElement>("[data-annotation-composer]")!;
+        expect(composer).not.toBeNull();
+        const bounds = composer.parentElement!.getBoundingClientRect();
+        const viewport = scroll.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(viewport.left + 7);
+        expect(bounds.right).toBeLessThanOrEqual(viewport.right - 7);
+        expect(bounds.top).toBeGreaterThanOrEqual(viewport.top + 7);
+        expect(bounds.bottom).toBeLessThanOrEqual(viewport.bottom - 7);
+        expect(composer.parentElement!.scrollHeight).toBeGreaterThan(
+          composer.parentElement!.clientHeight,
+        );
+      });
     } finally {
       await mounted.unmount();
     }
