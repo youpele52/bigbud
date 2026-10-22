@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
-import { LoaderIcon, RefreshCwIcon } from "lucide-react";
 import { ensureNativeApi } from "../../rpc/nativeApi";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { RefreshIconButton } from "../ui/RefreshIconButton";
 
 export function UsageSubscriptionLimitsRefresh() {
   const refreshing = useRef(false);
@@ -32,28 +30,11 @@ export function UsageSubscriptionLimitsRefresh() {
           Couldn’t refresh limits. Try again.
         </span>
       ) : null}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-              disabled={isRefreshing}
-              onClick={() => void refresh()}
-              aria-label="Refresh subscription limits"
-              aria-busy={isRefreshing}
-            >
-              {isRefreshing ? (
-                <LoaderIcon className="size-3 animate-spin" />
-              ) : (
-                <RefreshCwIcon className="size-3" />
-              )}
-            </Button>
-          }
-        />
-        <TooltipPopup side="top">Refresh subscription limits</TooltipPopup>
-      </Tooltip>
+      <RefreshIconButton
+        label="Refresh subscription limits"
+        busy={isRefreshing}
+        onClick={() => void refresh()}
+      />
     </div>
   );
 }

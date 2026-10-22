@@ -1,7 +1,7 @@
 import { type ProviderKind } from "@bigbud/contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ComponentProps } from "react";
 import { useIncrementalList } from "~/hooks/useIncrementalList";
-import { Searchbar } from "../../ui/Searchbar";
+import { SearchableMenuList } from "../../ui/SearchableMenuList";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
 import { Button } from "../../ui/button";
@@ -48,7 +48,6 @@ export function ModelList({
   itemLabelClassName?: string | undefined;
 }) {
   const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const listBodyRef = useRef<HTMLDivElement>(null);
   const hasSearchQuery = query.trim().length > 0;
   const setupLabel =
@@ -82,98 +81,59 @@ export function ModelList({
   const hasNamedGroups = grouped.some((group) => group.kind === "named");
   const showLoadingState = loading && options.length === 0;
   const showEmptyState = !showLoadingState && !hasVisibleModels && !showRecentOptions;
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   return (
-    <div className="flex max-h-(--available-height) flex-col">
-      <Searchbar
-        sticky
-        showSearchIcon={false}
-        backAriaLabel="Back to provider selection"
-        canClear={query.length > 0}
-        onClear={() => {
-          setQuery("");
-          inputRef.current?.focus();
-        }}
-        onClick={() => {
-          inputRef.current?.focus();
-        }}
-        {...(searchbarClassName ? { className: searchbarClassName } : {})}
-        {...(onBack ? { onBack } : {})}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
-          placeholder="Search models"
-          className="min-w-0 flex-1 bg-transparent py-0.5 text-[11px] tracking-tight text-foreground placeholder:text-[11px] placeholder:tracking-tight placeholder:text-muted-foreground/50 focus:outline-none"
-        />
-      </Searchbar>
-
-      <div
-        ref={listBodyRef}
-        data-testid="provider-model-list-scroll"
-        className="min-h-0 max-h-[min(14rem,var(--available-height))] flex-1 overflow-y-auto"
-        onScroll={(event) => modelList.onScroll(event.currentTarget)}
-        onWheel={(event) => modelList.onWheel(event.currentTarget, event.deltaY)}
-      >
-        <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
-          {showLoadingState ? (
-            <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground/70">
-              <Spinner className="size-3" />
-              <span>Loading models...</span>
-            </div>
-          ) : null}
-          {showRecentOptions && recentOptions ? (
-            <MenuGroup>
-              <MenuGroupLabel className={groupLabelClassName}>Recently used</MenuGroupLabel>
-              {recentOptions.map((modelOption) => (
-                <MenuRadioItem
-                  className={itemClassName}
-                  key={`recent:${provider}:${modelOptionValue(modelOption)}`}
-                  value={modelOptionValue(modelOption)}
-                >
-                  <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
-                  {modelOption.availability === "requires-setup" ? (
-                    <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
-                  ) : null}
-                </MenuRadioItem>
-              ))}
-            </MenuGroup>
-          ) : null}
-          {showEmptyState ? (
-            <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
-              {hasSearchQuery ? `No models match “${query}”` : "No models available"}
-            </div>
-          ) : hasNamedGroups ? (
-            grouped.map((section) => (
-              <MenuGroup key={section.kind === "named" ? section.group : "__ungrouped"}>
-                {section.kind === "named" ? (
-                  <MenuGroupLabel className={groupLabelClassName}>{section.group}</MenuGroupLabel>
+    <SearchableMenuList
+      query={query}
+      onQueryChange={setQuery}
+      placeholder="Search models"
+      backAriaLabel="Back to provider selection"
+      searchbarClassName={searchbarClassName}
+      onBack={onBack}
+      bodyProps={
+        {
+          ref: listBodyRef,
+          "data-testid": "provider-model-list-scroll",
+          onScroll: (event) => modelList.onScroll(event.currentTarget),
+          onWheel: (event) => modelList.onWheel(event.currentTarget, event.deltaY),
+        } as ComponentProps<"div">
+      }
+    >
+      <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
+        {showLoadingState ? (
+          <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground/70">
+            <Spinner className="size-3" />
+            <span>Loading models...</span>
+          </div>
+        ) : null}
+        {showRecentOptions && recentOptions ? (
+          <MenuGroup>
+            <MenuGroupLabel className={groupLabelClassName}>Recently used</MenuGroupLabel>
+            {recentOptions.map((modelOption) => (
+              <MenuRadioItem
+                className={itemClassName}
+                key={`recent:${provider}:${modelOptionValue(modelOption)}`}
+                value={modelOptionValue(modelOption)}
+              >
+                <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
+                {modelOption.availability === "requires-setup" ? (
+                  <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                 ) : null}
-                {section.models.map((modelOption) => (
-                  <MenuRadioItem
-                    className={itemClassName}
-                    key={`${provider}:${modelOptionValue(modelOption)}`}
-                    value={modelOptionValue(modelOption)}
-                  >
-                    <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
-                    {modelOption.availability === "requires-setup" ? (
-                      <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
-                    ) : null}
-                  </MenuRadioItem>
-                ))}
-              </MenuGroup>
-            ))
-          ) : hasVisibleModels ? (
-            <MenuGroup>
-              {renderedOptions.map((modelOption) => (
+              </MenuRadioItem>
+            ))}
+          </MenuGroup>
+        ) : null}
+        {showEmptyState ? (
+          <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
+            {hasSearchQuery ? `No models match “${query}”` : "No models available"}
+          </div>
+        ) : hasNamedGroups ? (
+          grouped.map((section) => (
+            <MenuGroup key={section.kind === "named" ? section.group : "__ungrouped"}>
+              {section.kind === "named" ? (
+                <MenuGroupLabel className={groupLabelClassName}>{section.group}</MenuGroupLabel>
+              ) : null}
+              {section.models.map((modelOption) => (
                 <MenuRadioItem
                   className={itemClassName}
                   key={`${provider}:${modelOptionValue(modelOption)}`}
@@ -186,24 +146,39 @@ export function ModelList({
                 </MenuRadioItem>
               ))}
             </MenuGroup>
+          ))
+        ) : hasVisibleModels ? (
+          <MenuGroup>
+            {renderedOptions.map((modelOption) => (
+              <MenuRadioItem
+                className={itemClassName}
+                key={`${provider}:${modelOptionValue(modelOption)}`}
+                value={modelOptionValue(modelOption)}
+              >
+                <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
+                {modelOption.availability === "requires-setup" ? (
+                  <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
+                ) : null}
+              </MenuRadioItem>
+            ))}
+          </MenuGroup>
+        ) : null}
+      </MenuRadioGroup>
+      {provider === "opencodeV2" && options.length === 0 && !loading ? (
+        <>
+          {unavailableMessage ? (
+            <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+              {unavailableMessage}
+            </p>
           ) : null}
-        </MenuRadioGroup>
-        {provider === "opencodeV2" && options.length === 0 && !loading ? (
-          <>
-            {unavailableMessage ? (
-              <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
-                {unavailableMessage}
-              </p>
-            ) : null}
-            {allowOpenCodeSetup ? <OpenCodeSetupMenuItem message={unavailableMessage} /> : null}
-          </>
-        ) : null}
-        {modelList.hasMore ? (
-          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={modelList.loadMore}>
-            Show more models
-          </Button>
-        ) : null}
-      </div>
-    </div>
+          {allowOpenCodeSetup ? <OpenCodeSetupMenuItem message={unavailableMessage} /> : null}
+        </>
+      ) : null}
+      {modelList.hasMore ? (
+        <Button variant="ghost" size="sm" className="w-full text-xs" onClick={modelList.loadMore}>
+          Show more models
+        </Button>
+      ) : null}
+    </SearchableMenuList>
   );
 }
