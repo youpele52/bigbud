@@ -154,6 +154,8 @@ These are implementation defaults, not claims that these capabilities exist. Ver
 
 ## Phases
 
+> **21 October 2026:** the sleep-and-wake slice of this plan is scheduled as Phase 6 of the [connection resilience plan](2026-10-21-connection-resilience-plan.md), which revalidates this plan against current `main` first and must reuse, not duplicate, the durable intent and decision policy designed here.
+
 ### Phase 1 — Durable intent, execution identity and startup fencing
 
 **Dependency:** revalidate branch/worktree and provider registry; no automatic continuation enabled in this phase.

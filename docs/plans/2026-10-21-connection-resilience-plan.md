@@ -20,7 +20,7 @@ This plan does five things:
 
 - [Dev process leak and launcher plan](2026-10-21-dev-process-leak-and-launcher-plan.md). Same investigation. Its Phase 3 makes dev Electron quits predictable, which removes one class of apparent disconnects.
 - [Optional Rust-owned background service](2026-10-15-rust-background-service-plan.md), Proposed. Owns backend lifetime. Phase 5 of this plan depends on it for backend liveness that survives a crash.
-- [Thread auto-resume plan](2026-09-10-rust-coordinated-thread-auto-resume-plan.md), Proposed. Its Phase 3 already specifies Electron suspend and resume listeners and durable retry interest. This plan implements the transport part of that phase and must not duplicate its reconciliation coordinator.
+- [Thread auto-resume plan](2026-09-10-rust-coordinated-thread-auto-resume-plan.md), Proposed. Its Phase 3 already specifies Electron suspend and resume listeners and durable retry interest. This plan implements the transport part of that phase, and Phase 6 here delivers its sleep-and-wake slice. Neither may duplicate its reconciliation coordinator.
 - [Desktop delivery supervisor production plan](2026-08-27-desktop-delivery-supervisor-production-plan.md), Implemented locally. Defines the Rust sidecar this plan extends.
 - [Dead-thread recovery plan](2026-10-15-dead-thread-recovery-plan.md), Implemented. Covers provider-session recovery after a backend restart. This plan does not change it.
 - Bigbud note or Kanban card: none identified. The work came from a direct request in a chat thread.
@@ -76,6 +76,7 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 - Each disconnect has an attributed cause in diagnostics, and renderer reloads are not counted as disconnects.
 - No synchronous database or child-process work blocks the server's main thread for more than 50 ms in steady state. Migrations and baseline verification run with progress under the existing `upgrading` startup status.
 - Dev exercises the same delivery route and Rust supervisor as packaged builds.
+- After the laptop sleeps during a running turn and wakes, the app reconnects within seconds and the agent continues the turn without user action whenever that is provably safe. When it is not safe, the thread says exactly what is uncertain instead of silently failing.
 
 ## Non-Goals
 
@@ -120,7 +121,7 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 **Goal.** The transport keeps trying for as long as the app is open.
 
 1. Replace `Schedule.recurs(WS_RECONNECT_MAX_RETRIES)` with an unbounded schedule: exponential from 1 s to a 30 s cap with full jitter. Keep `reconnectMaxAttempts` only for the toast label, which becomes "Attempt k" after the old cap.
-2. Make `exhausted` a UI state, not a transport state. Requests fail fast with a clear transport error while disconnected instead of throwing `WsProtocolRecoveryExhaustedError` forever. Subscriptions keep waiting on the live reconnect operation.
+2. Make `exhausted` a UI state, not a transport state. Requests fail fast with a clear transport error while disconnected instead of throwing `WsProtocolRecoveryExhaustedError` forever. Subscriptions keep waiting on the live reconnect operation. Decision (21 October 2026): a request made while an upgrade is in flight (link `connecting`) is queued instead of failing fast, because that attempt usually opens within moments and failing it would turn every routine reconnect, including the first connect after page load, into spurious user-visible request errors. The wait is not bounded by the transport: the 30 s open timeout bounds each upgrade attempt, not the request, and with `retryTransientErrors` a failed upgrade is a `SocketOpenError` that effect's `RpcClient` retries without failing queued requests. A queued request therefore waits across retries until a later socket opens, or until its own opt-in request deadline (for example the 15 s config read or the 10 s heartbeat probe) expires.
 3. Turn the three-failure protocol budget into a sliding window. Repeated protocol defects within 30 s back off harder but never stop.
 4. Add immediate retry triggers: `visibilitychange` to visible, the desktop power resume and network change signals from Phase 2, and the backend `ready` transition for any previous state, not only `timedOut` and `failed`.
 5. Tighten dead-socket detection: 5 s interval, 10 s timeout, 2 consecutive failures with no inbound activity. Keep the existing rule that inbound activity resets the failure count, so a busy server never trips it.
@@ -181,6 +182,31 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 
 **Exit criteria.** Rust unit tests cover the wired transitions. Server tests cover early `reconnecting` on `Suspect`. Dev logs show the `supervisor` route. All Rust checks pass: `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`.
 
+### Phase 6: Continue running turns after sleep and wake
+
+**Goal.** Closing the laptop during a running turn and reopening it resumes the work automatically when safe. Added on 21 October 2026 at the user's request.
+
+**What happens today.** Sleep freezes the server and every provider process. Nothing is lost locally, but an in-flight request to the provider's cloud model is usually cut during a longer sleep. Some providers retry and continue; others end the turn with an error, which bigbud shows as failed or interrupted until the next user message. Remote SSH work keeps running on the remote host during sleep and needs reattachment, not a restart.
+
+**Relationship to the auto-resume plan.** The [thread auto-resume plan](2026-09-10-rust-coordinated-thread-auto-resume-plan.md) already designs this machinery: durable recovery intent per accepted turn, a `may-have-been-sent` marker persisted before each provider call (its Phase 1 item 3), suspend and resume handling and remote reattachment (its Phase 3), and one shared continuation decision policy per provider (its Phase 5 item 6). This phase delivers the sleep-and-wake slice of that plan under its invariant, **reconcile before continuing; never blindly replay potentially accepted work**. It must not build a second recovery coordinator, a second retry loop, or a second persistence model.
+
+1. **Measure each provider.** For every registered provider, run a turn that is streaming model output and a turn that is running a tool, sleep for 1, 10 and 30 minutes, wake, and record what happens: continues, retries internally, errors, or hangs. Record installed SDK and CLI versions. Do the same for one SSH remote project. Store the results as a conformance table linked from this plan and from the auto-resume plan. Dependency: Phase 2 for the wake signal.
+2. **Revalidate the auto-resume plan** against current `main`. It was written against an older commit and is still Proposed. Update its file references and confirm which of its Phase 1 interfaces are needed for this slice.
+3. **Persist the minimum durable intent for this slice.** Following the auto-resume plan's Phase 1 items 1 to 3: a recovery intent per accepted turn and the delivery progress states up to `may-have-been-sent` and `provider-acknowledged`, written before the external call. App quit and `stopAll` suspend intent rather than revoke it; an explicit user Stop revokes it.
+4. **Classify turn failures caused by suspend.** A turn that failed with a transport or connection error between a `suspend` and a `resume` signal from Phase 2, or within a short window after `resume`, is classified as `interrupted-by-sleep`, not as a provider failure.
+5. **Continue safely.** Apply the auto-resume plan's decision policy to `interrupted-by-sleep` turns:
+   - The provider is still running the turn: attach and observe.
+   - The turn finished during or after sleep: ingest and settle.
+   - The model request was cut and no tool action was in flight: continue automatically, once, as a new linked continuation with the original objective and completed work. Re-asking the model has no side effects.
+   - A tool action such as a shell command or file edit may have been mid-flight: do not continue. Show a precise resolution prompt in the thread naming the uncertain action.
+   - The provider cannot be reached yet, for example no network: keep the intent and retry when the network signal arrives.
+6. **Reattach remote work.** For SSH remote projects, reattach to the original remote process and retrieve its output using the remote agent's retained operation journal, as the auto-resume plan's Phase 3 items 4 and 5 describe. Never start a fresh remote run while the original may still be alive.
+7. **Show it.** While recovering, the thread shows a blue "Resuming after sleep" state; on success it disappears; on an uncertain tool action it shows the resolution prompt. Respect the toast and status colour rules.
+
+**Platform notes.** macOS and Windows deliver `suspend` and `resume`. On Linux they need a logind session; without them, classification falls back to the network-online transition plus a wall-clock gap detected by the Phase 0 drift sampler.
+
+**Exit criteria.** For every provider the table marks as able to continue, a turn interrupted by a 10-minute sleep continues automatically within 10 s of wake with no duplicated tool action. For the rest, the thread shows the accurate uncertain or retrying state. A user Stop before sleep is never resumed. Remote SSH turns reattach rather than restart.
+
 ### Phase 5: Backend liveness that survives a crash (gated on the Rust background-service plan)
 
 **Goal.** A backend crash does not look like a network outage to the renderer.
@@ -197,10 +223,11 @@ Resilience first, smallest risk first, each step shippable on its own:
 1. **Phase 0 and the storm guard from Phase 1b item 6** (web and server, about two days). Gives attributed causes and stops the client from hammering a frozen server. No behavior change for a healthy connection.
 2. **Phase 1 and Phase 2** (web and desktop, about three days). Never give up, OS signals, fail-fast requests. This is what the user feels first.
 3. **Phase 1b items 1 to 3** (server, about one to two weeks). Worker-thread SQLite starting with migrations and baseline verification, chunked migrations with progress, asynchronous SSH with deadlines. This removes the cause of most real drops. Validate with the Phase 0 lag monitor on the 2.86 GB dev database before moving the remaining queries.
-4. **Phase 1b items 4 and 5** (server, a few days). Usage query bound, discovery calmed, Cursor probes lazy.
-5. **Phase 4** (Rust and server, about a week). Link health wired, supervisor route in dev.
-6. **Phase 3** (web and server, about a week). The resume test matrix, run against the new transport.
-7. **Phase 5 and D7** inside the Rust background-service plan, with Phase 0 data as input.
+4. **Phase 6: continue turns after sleep and wake** (server, web and desktop, about two to three weeks). Starts with the provider measurement, which needs only Phase 2, then the durable-intent slice, classification, safe continuation and remote reattachment. Runs after step 3 so continuation is not tested against a server that still freezes.
+5. **Phase 1b items 4 and 5** (server, a few days). Usage query bound, discovery calmed, Cursor probes lazy.
+6. **Phase 4** (Rust and server, about a week). Link health wired, supervisor route in dev.
+7. **Phase 3** (web and server, about a week). The resume test matrix, run against the new transport.
+8. **Phase 5 and D7** inside the Rust background-service plan, with Phase 0 data as input.
 
 Run one implementer thread per step, with the plan as the contract and a review before the next step starts. Steps 1 and 2 run in parallel on 21 October 2026 under this file-ownership split, because both would otherwise edit the web transport:
 
@@ -234,6 +261,8 @@ bun run --cwd apps/server vitest run src/desktop-supervisor src/ws
 cargo test --locked --package bigbud-desktop-supervisor
 ```
 
+**Sleep and wake scenarios (Phase 6):** for each provider, close the lid for 1, 10 and 30 minutes during a streaming turn and during a running tool, then open it. Record continue, retry, error or hang, the time to resume, and whether any tool action ran twice. Repeat once on an SSH remote project.
+
 **Manual scenarios, each ending with the thread view matching the server:**
 
 ```sh
@@ -259,10 +288,12 @@ kill -9 <server pid>
 - Each disconnect in diagnostics has a cause and a trigger, and page reloads are excluded.
 - The server's main thread shows no stall over 50 ms in steady state on a 3 GB database, and a heavy migration shows progress instead of freezing the app.
 - A frozen or slow server produces at most one pending upgrade per renderer, never a storm.
+- A turn interrupted by a 10-minute sleep continues automatically within 10 s of wake for every provider the conformance table marks as able, with no duplicated tool action, and shows an accurate uncertain state for the rest.
 - Dev runs the supervisor route, and the Rust supervisor reports link health that the server surfaces as lifecycle states.
 - All touched files stay at or under 400 lines, and all repository checks pass.
 
 ## Open Questions
 
+- Phase 6: after the provider measurement, which providers should continue automatically first? The default is every provider the measurement marks as able.
 - D7: after Phase 1b and Phase 0 data, is the Rust socket gateway worth building inside the background-service plan?
 - Which step of the recommended order starts first, and does the user want steps 1 and 2 in parallel?
