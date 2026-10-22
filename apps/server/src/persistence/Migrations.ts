@@ -2,6 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Migrator from "effect/unstable/sql/Migrator";
 
+import {
+  type MigrationProgressListener,
+  makeMigrationProgressTracker,
+  readLatestAppliedMigrationId,
+} from "./MigrationProgress.ts";
+
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
 import Migration0002 from "./Migrations/002_OrchestrationCommandReceipts.ts";
 import Migration0003 from "./Migrations/003_CheckpointDiffBlobs.ts";
@@ -275,27 +281,55 @@ export const migrationEntries = [
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
-export const makeMigrationLoader = (throughId?: number) =>
+type MigrationEntry = (typeof migrationEntries)[number];
+type MigrationWrapper = (
+  entry: MigrationEntry,
+) => Effect.Effect<void, Effect.Error<MigrationEntry[2]>, Effect.Services<MigrationEntry[2]>>;
+const selectMigrationEntries = (throughId?: number) =>
+  migrationEntries.filter(([id]) => throughId === undefined || id <= throughId);
+export const makeMigrationLoader = (throughId?: number, wrap?: MigrationWrapper) =>
   Migrator.fromRecord(
     Object.fromEntries(
-      migrationEntries
-        .filter(([id]) => throughId === undefined || id <= throughId)
-        .map(([id, name, migration]) => [`${id}_${name}`, migration]),
+      selectMigrationEntries(throughId).map((entry) => [
+        `${entry[0]}_${entry[1]}`,
+        wrap ? wrap(entry) : entry[2],
+      ]),
     ),
   );
 const run = Migrator.make({});
 export interface RunMigrationsOptions {
   readonly toMigrationInclusive?: number | undefined;
+  /** Receives whole-run progress as an integer percent while pending migrations run. */
+  readonly onProgress?: MigrationProgressListener | undefined;
 }
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
+  onProgress,
 }: RunMigrationsOptions = {}) {
   yield* Effect.log(
     toMigrationInclusive === undefined
       ? "Running all migrations..."
       : `Running migrations 1 through ${toMigrationInclusive}...`,
   );
-  const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
+  let wrap: MigrationWrapper | undefined;
+  if (onProgress) {
+    const latestApplied = yield* readLatestAppliedMigrationId();
+    const pending = selectMigrationEntries(toMigrationInclusive)
+      .filter(([id]) => id > latestApplied)
+      .map(([id]) => id);
+    // A fresh database has nothing to upgrade, so it reports no progress.
+    if (latestApplied > 0 && pending.length > 0) {
+      const tracker = makeMigrationProgressTracker(pending.length, onProgress);
+      tracker.start();
+      wrap = (entry) => {
+        const index = pending.indexOf(entry[0]);
+        return index < 0 ? entry[2] : tracker.wrap(index, entry[2]);
+      };
+    }
+  }
+  const executedMigrations = yield* run({
+    loader: makeMigrationLoader(toMigrationInclusive, wrap),
+  });
   yield* Effect.log("Migrations ran successfully").pipe(
     Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
   );

@@ -24,12 +24,17 @@ function linuxStartToken(pid: number): string | undefined {
   }
 }
 
+/** Bound for the synchronous `ps` probe; it only reads local process state. */
+const PS_START_TOKEN_TIMEOUT_MS = 2_000;
+
 /** Other POSIX: `ps lstart` under a fixed C locale and UTC, so the caller's TZ/LC_* cannot vary it. */
 function psStartToken(pid: number): string | undefined {
   try {
     const value = execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      timeout: PS_START_TOKEN_TIMEOUT_MS,
+      killSignal: "SIGKILL",
       env: { PATH: process.env.PATH ?? "/usr/bin:/bin", LC_ALL: "C", LANG: "C", TZ: "UTC" },
     }).trim();
     return value

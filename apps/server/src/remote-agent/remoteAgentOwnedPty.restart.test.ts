@@ -2,7 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Effect } from "effect";
 import { makeRemoteRestartFixture } from "./remoteAgentOwnedPty.restart.fixture.ts";
 
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReady: () => undefined }));
+vi.mock("../ssh/sshVerification.ts", () => ({
+  assertSshExecutionTargetReady: () => undefined,
+  assertSshExecutionTargetReadyAsync: async () => undefined,
+}));
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
 }));

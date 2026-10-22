@@ -75,15 +75,28 @@ describe("local remote agent process", () => {
   it("closes the Windows process tree before falling back to direct termination", () => {
     const end = vi.fn();
     const kill = vi.fn(() => true);
-    const taskkill = vi.fn(() => ({ status: 0 }));
+    const killer = new EventEmitter() as EventEmitter & { kill: () => boolean };
+    killer.kill = vi.fn(() => true);
+    const spawnTaskkill = vi.fn(() => killer);
     closeRemoteAgentProcess(
       { pid: 42, stdin: { end }, kill },
-      { platform: "win32", taskkill: taskkill as never },
+      { platform: "win32", spawnTaskkill },
     );
     expect(end).toHaveBeenCalledOnce();
-    expect(taskkill).toHaveBeenCalledWith("taskkill", ["/pid", "42", "/T", "/F"], {
-      stdio: "ignore",
-    });
+    expect(spawnTaskkill).toHaveBeenCalledWith("taskkill", ["/pid", "42", "/T", "/F"]);
+    killer.emit("exit", 0);
     expect(kill).not.toHaveBeenCalled();
+  });
+
+  it("falls back to direct termination when taskkill fails", () => {
+    const kill = vi.fn(() => true);
+    const killer = new EventEmitter() as EventEmitter & { kill: () => boolean };
+    killer.kill = vi.fn(() => true);
+    closeRemoteAgentProcess(
+      { pid: 42, stdin: { end: vi.fn() }, kill },
+      { platform: "win32", spawnTaskkill: () => killer },
+    );
+    killer.emit("exit", 1);
+    expect(kill).toHaveBeenCalledWith("SIGTERM");
   });
 });

@@ -1,7 +1,7 @@
 # Connection resilience: never-give-up reconnect and resume from the last applied event
 
 **Date:** 21 October, 2026
-**Status:** Proposed, decisions D3 to D6 taken on 21 October 2026; implementation not started
+**Status:** In progress. Steps 1 and 2 of the recommended order landed in `c9a9ca9d05` and `13b90621ba`. Step 3 (Phase 1b items 1 to 3) is implemented locally and awaiting review, 22 October 2026. Decisions D3 to D6 were taken on 21 October 2026.
 **Owner:** bigbud web, server, desktop and native maintainers
 
 ## Summary
@@ -145,6 +145,45 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 **Why a worker thread and not Rust for storage.** TypeScript owns canonical SQLite by the architecture contract in `docs/CONTEXT.md`, and the Rust plans keep it that way. A worker thread removes the freeze without changing ownership. A Rust storage engine is a separate product decision (D6) and would not land sooner.
 
 **Exit criteria.** The lag monitor shows no main-thread stall over 50 ms during an hour of normal dev use with a 3 GB database. Startup on that database shows progress and never exceeds the desktop deadline. SSH unlock against an unreachable host fails within its deadline while the UI stays responsive.
+
+**Status, 22 October 2026: items 1 to 3 implemented, not yet committed.**
+
+- **Item 1, SQLite worker.** The server's writable state database runs on a `worker_threads` connection under Node: `apps/server/src/persistence/NodeSqliteClient.worker*.ts` and `NodeSqliteWorker.ts`, enabled by `makeSqlitePersistenceLive` in `Layers/Sqlite.ts`. This covers migrations, baseline verification, read-model, snapshot and all runtime queries. Three cases stay on the main thread:
+  - **The Bun runtime.** `bun dev:server` runs `src/bin.ts` under Bun, which loads `@effect/sql-sqlite-bun` instead of `NodeSqliteClient`, so it has no worker.
+  - **The read-only CLI connection** (`makeSqliteReadOnlyPersistenceLive`, used by `cli/cli.ts`).
+  - **In-memory test databases.**
+
+  The desktop and packaged builds run `dist/bin.mjs` under Electron's Node, so the worker applies there. The hour-of-dev-use exit check must therefore run under the desktop app, not `bun dev:server`. `BIGBUD_SQLITE_WORKER=0` forces everything in-process as the fallback, and `BIGBUD_SQLITE_WORKER=all` forces everything into a worker so suites can be run against it. Single-connection, WAL and transaction semantics are unchanged: the Effect SQL client's semaphore and acquirers are byte-identical to before, and the worker handles one statement at a time in arrival order. The bridge contract (`NodeSqliteClient.worker.bridge.ts`) is:
+  - **Failures:** a crash, an exit, a failed open, or an open that has not finished within 30 s surfaces as a `ConnectionError`. Pending and later statements fail at once. There is no automatic restart.
+  - **Close:** close waits for the thread to exit, bounded at 5 s for the close acknowledgement plus 10 s for exit.
+  - **Interruption:** an interrupted caller does not cancel its statement. The statement still finishes in the worker, its result is discarded, and later statements queue behind it, because `node:sqlite` cannot interrupt a running statement from another thread.
+
+- **Item 1, stopping point and evidence.** A first slice kept runtime queries in-process because 4 of 6 tests in `integration/providerRuntimeIngestion.periodic.integration.test.ts` failed with the worker: `WaitForTimeoutError` in "repairs a lost terminal state without user action" and in "leaves state unchanged after one listSessions failure…", a 60 s timeout in "…listing times out", and `expected ['queued-a','queued-b','queued-c'] to deeply equal ['queued-c']` in "flushes only the prompts captured before interruption". Root causes, verified on 22 October:
+  - **Harness clock:** the harness advances a `TestClock` while the repair fiber is still waiting on database I/O, so the fiber's next sleep is registered after the clock moved and never fires. The harness now waits for worker idle (`waitForNodeSqliteWorkersIdle`) before and after each advance.
+  - **Transient queue state:** two tests asserted a state that held only while follow-up delivery was unfinished. With 200 ms of real time after each clock advance, both fail the same way on the in-process driver (`BIGBUD_SQLITE_WORKER=0`), so the worker is not the cause.
+    - **"preserves an interrupt flush intent…" was a test artifact.** It removed the provider session before the interrupt reactor had run. The reactor's own 100 ms recheck (`ProviderCommandReactorHandlers.session.ts`, `processTurnInterruptRequested`) then settled the stale turn and continued with `queued-a` in the first clock advance, so the periodic grace the test names was never reached. It only passed while that recheck was parked on the `TestClock`. The test now waits for the interrupt to reach `waiting-for-settlement` before it removes the session, and it asserts after 200 ms of real time. It runs on the worker.
+    - **"flushes only the prompts captured…" exposes a production race, so it stays pinned in-process** (`TRANSIENT_QUEUE_STATE`) until the queued-prompt owners decide. The interrupt continuation flushes `queued-a` and `queued-b` and requests their turn. Starting a session for that turn writes session `starting`, then `ready`. The `ready` triggers a lifecycle flush (`orchestration/QueuedPromptFlush.logic.ts`, `makeLifecycleQueuedPromptFlushCommand`). The idle check (`orchestration/ThreadDispatchSafety.logic.ts`, `isThreadConfirmedIdleForDispatch`) does not see a turn that is requested but not yet bound, so `queued-c` is flushed and sent too. Its comment already names the missing durable pending-start gate.
+      - Event order in the repro: 12 `turn-start-requested` (a+b), 14 session `starting`, 15 session `ready`, 16 `queued-prompts-flushed ["queued-c"]` with a `queue-flush:` command ID, 18 `turn-start-requested` (c), 19 the a+b turn bound.
+      - Minimal repro: that test with `yield* Effect.sleep("200 millis")` after each `advanceClock`, on either driver. It ends with an empty queue and both inputs sent to the adapter.
+        With these changes the runtime connection moved to the worker. The persistence, orchestration and integration suites pass.
+- **Item 2, chunked migrations.** Migrations 078 and 057 scan `orchestration_events` in 25 000-sequence chunks (`Migrations/EventSequenceChunks.ts`), with results equal to one full scan; there are chunk-boundary tests for both. Progress across all pending migrations reaches the desktop as `{"status":"upgrading","progress":N}`, and the toast shows "Updating local data, N%". A fresh database reports no progress, and projection replay's plain `upgrading` record clears the percent. The fixture `persistence/Migrations.lag.test.ts` uses 150 000 generated events instead of a 3 GB copy. It asserts no main-thread gap over 1 s, at least 4 chunk progress steps, and that the startup layer migrates on the worker. At this size the worker's max gap is about 11 ms against about 199 ms in-process.
+- **Manual 3 GB benchmark.** Copy the database with `sqlite3 <state.sqlite> ".backup /tmp/copy.sqlite"`, then run `BIGBUD_SQLITE_LAG_BENCHMARK_DB=/tmp/copy.sqlite bun run --cwd apps/server vitest run src/persistence/NodeSqliteClient.lag.benchmark.test.ts`. Add `BIGBUD_SQLITE_WORKER=0` for the in-process baseline. Results on the 2.86 GB dev database, as max main-thread stall in-process then on the worker: migration 078 162 ms (3 666 ms with a cold cache) then 21 ms; migration 057 1 074 ms then 22 ms; usage entries 450 ms then 21 ms; `getSnapshot` 133 ms then 111 ms. 21 ms is the sampler's resolution. The remaining `getSnapshot` stall is JavaScript assembly of the read model, not SQL.
+- **Bootstrap replay on the worker.** The benchmark's `bootstrapReplay` step rewinds every projector cursor by 5 000 sequences inside a rolled-back transaction, then runs the startup projection bootstrap. It first drops events of threads purged since then, leaving 2 377 events × 11 projectors. Two runs each on the 2.86 GB copy:
+
+  | Driver     | Duration       | Max main-thread stall |
+  | ---------- | -------------- | --------------------- |
+  | In-process | 42.6 s, 43.1 s | 246 ms, 267 ms        |
+  | Worker     | 46.5 s, 46.7 s | 25 ms, 26 ms          |
+
+  The worker costs about 8 %, not enough to justify batching statements inside it. The replay is slow on both drivers, about 18 ms per event, so that cost is SQLite work in the projectors, not bridge round trips. It is a separate follow-up.
+
+- **Item 3, SSH.** Password unlock, the control-master check, the `ssh-add -l` probe, `ssh-agent -s` and `ssh-add` all run through the async runner `ssh/sshLocalCommand.ts`, with `ConnectTimeout=10` where a connection is opened and one 20 s deadline per unlock. `assertSshExecutionTargetReadyAsync`, with a 10 s deadline, now serves `verifySshExecutionTarget`, `runSshCommand`, terminal cwd resolution, Pi RPC start, OpenCode remote server start (`provider/Layers/Opencode/ServerManager.child.ts:123`), remote-agent connections and update credential checks. Windows `taskkill` is asynchronous everywhere through `utils/killProcessTree.ts`, and `processStartToken` has a 2 s timeout.
+- **Synchronous SSH sites that remain**, each bounded by a 5 s timeout per probe:
+  - The remote Codex version check is still synchronous at its only call site. The async path, with `ConnectTimeout` and a 20 s deadline, exists in `codexAppServerManager.process*.ts`. Wiring it takes two lines in `codex/codexAppServerManager.startSession.ts`, which belongs to another workstream: the import at `:24` and `await startCodexAppServerProcessAsync(...)` at `:136`.
+    - **Wiring it opens a stop-during-start race.** The `await` runs before `ops.sessions.set` (`:168` today). A stop that arrives during the check, which can take up to 20 s, finds no session to stop, and the remote app server then starts anyway. The wiring needs a stop check after the `await`, or a placeholder session registered before it.
+  - The synchronous `-O check` in `buildSshPasswordSessionTransportArgs` is skipped for 10 s after any successful check.
+  - `machineIdentity` (5 s, once per process) and `codexVersionCheck` (4 s, cached per binary) stay synchronous.
+- **Still open from Phase 1b:** items 4 and 5, and the `getSnapshot` main-thread assembly cost.
 
 ### Phase 2: Operating-system signals from Electron main (desktop)
 

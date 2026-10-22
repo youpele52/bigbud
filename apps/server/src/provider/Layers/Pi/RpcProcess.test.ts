@@ -20,7 +20,7 @@ vi.mock("./PiRemoteWorkspaceBridge.ts", () => ({
 }));
 
 vi.mock("../../../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReady: assertSshExecutionTargetReadyMock,
+  assertSshExecutionTargetReadyAsync: assertSshExecutionTargetReadyMock,
 }));
 
 import { createPiRpcProcess } from "./RpcProcess.ts";

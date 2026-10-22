@@ -5,7 +5,7 @@ import readline from "node:readline";
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReady } from "../../../ssh/sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
 import {
   readManagedServerListeningUrl,
@@ -120,7 +120,7 @@ async function startChild(input: {
 }): Promise<RunningManagedServer> {
   const isLocal = input.executionTargetId === LOCAL_EXECUTION_TARGET_ID;
   const localPort = isLocal ? undefined : await allocateLocalPort();
-  if (!isLocal) assertSshExecutionTargetReady(input.executionTargetId);
+  if (!isLocal) await assertSshExecutionTargetReadyAsync(input.executionTargetId);
   const invocation = isLocal
     ? { command: input.binaryPath, args: ["serve", `--hostname=${LOCAL_HOST}`, "--port=0"] }
     : buildSshCommandInvocation({

@@ -2,11 +2,28 @@ import { PassThrough } from "node:stream";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const recordStatus = vi.hoisted(() => vi.fn());
-vi.mock("./backendStartupState", () => ({ recordBackendStartupStatus: recordStatus }));
+const recordProgress = vi.hoisted(() => vi.fn());
+vi.mock("./backendStartupState", () => ({
+  recordBackendStartupProgress: recordProgress,
+  recordBackendStartupStatus: recordStatus,
+}));
 
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
 
-beforeEach(() => recordStatus.mockReset());
+beforeEach(() => {
+  recordStatus.mockReset();
+  recordProgress.mockReset();
+});
+
+it("forwards upgrading progress, including records without a percent", () => {
+  const stream = new PassThrough();
+  listenForBackendStartupStatus(stream, 6);
+  stream.write('{"status":"upgrading","progress":42}\n{"status":"upgrading"}\n');
+  expect(recordProgress).toHaveBeenNthCalledWith(1, 6, 42);
+  expect(recordProgress).toHaveBeenNthCalledWith(2, 6, undefined);
+  stream.write('{"status":"ready","progress":99}\n');
+  expect(recordProgress).toHaveBeenCalledTimes(2);
+});
 
 it("parses split and multiple NDJSON status records", () => {
   const stream = new PassThrough();

@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import readline from "node:readline";
 import type {
   ServerProviderModel,
@@ -10,6 +10,7 @@ import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { normalizeCodexUsageLimits } from "./Layers/Codex/Provider.usageLimits.ts";
 import { usageLimitsStatus } from "./providerUsageLimits.ts";
+import { killProcessTree } from "../utils/killProcessTree.ts";
 
 interface JsonRpcProbeResponse {
   readonly id?: unknown;
@@ -86,16 +87,7 @@ export function buildCodexInitializeParams() {
 }
 
 export function killCodexChildProcess(child: ChildProcessWithoutNullStreams): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    try {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      return;
-    } catch {
-      // Fall through to direct kill when taskkill is unavailable.
-    }
-  }
-
-  child.kill();
+  killProcessTree(child);
 }
 
 export async function probeCodexDiscovery(input: {

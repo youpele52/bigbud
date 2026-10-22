@@ -4,7 +4,7 @@ import {
   type ProcessRunResult,
 } from "../utils/processRunner.ts";
 import { buildSshCommandInvocation } from "./sshCommand.ts";
-import { assertSshExecutionTargetReady } from "./sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "./sshVerification.ts";
 
 export interface RunSshCommandInput {
   readonly executionTargetId: string | null | undefined;
@@ -22,7 +22,7 @@ export interface RunSshCommandInput {
 }
 
 export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessRunResult> {
-  assertSshExecutionTargetReady(input.executionTargetId);
+  await assertSshExecutionTargetReadyAsync(input.executionTargetId);
   const invocation = buildSshCommandInvocation(input);
   return runProcess(invocation.command, invocation.args, {
     ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),

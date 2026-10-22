@@ -53,6 +53,7 @@ function setStatus(
   state = {
     ...state,
     status,
+    progressPercent: undefined,
     ...(status === "ready"
       ? { developmentDiagnostics: undefined, diagnostics: undefined, failureReason: undefined }
       : {}),
@@ -116,6 +117,19 @@ export function recordBackendStartupStatus(
     return accepted;
   }
   return false;
+}
+
+/** Records migration progress for the current `upgrading` state; `undefined` clears it. */
+export function recordBackendStartupProgress(generation: number, value: unknown): boolean {
+  if (state.generation !== generation || state.status !== "upgrading") return false;
+  const progressPercent =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.min(100, Math.floor(value)))
+      : undefined;
+  if (state.progressPercent === progressPercent) return false;
+  state = { ...state, progressPercent };
+  emit();
+  return true;
 }
 
 export function recordBackendStartupFailure(

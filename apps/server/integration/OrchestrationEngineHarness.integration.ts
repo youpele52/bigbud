@@ -14,6 +14,7 @@ import { ProjectionCheckpointRepositoryLive } from "../src/persistence/Layers/Pr
 import { ProjectionPendingApprovalRepositoryLive } from "../src/persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
+import { waitForNodeSqliteWorkersIdle } from "../src/persistence/NodeSqliteClient.worker.bridge.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../src/persistence/Layers/ProjectionThreadWatches.ts";
 import { ProjectionKanbanRepositoryLive } from "../src/persistence/Layers/ProjectionKanban.ts";
 import { ProjectionNoteRepositoryLive } from "../src/persistence/Layers/ProjectionNotes.ts";
@@ -104,7 +105,9 @@ export const makeOrchestrationIntegrationHarness = (
     yield* fileSystem.makeDirectory(stateDir, { recursive: true });
     yield* initializeGitWorkspace(workspaceDir);
 
-    const persistenceLayer = makeSqlitePersistenceLive(dbPath);
+    const persistenceLayer = makeSqlitePersistenceLive(dbPath, {
+      worker: options?.sqliteWorker ?? true,
+    });
     const orchestrationLayer = OrchestrationEngineLive.pipe(
       Layer.provide(OrchestrationProjectionPipelineLive),
       Layer.provide(OrchestrationEventStoreLive),
@@ -342,8 +345,14 @@ export const makeOrchestrationIntegrationHarness = (
       waitForDomainEvent,
       waitForPendingApproval,
       waitForReceipt,
+      // With the SQLite worker, fibers re-arm TestClock sleeps only after their worker
+      // I/O settles, so wait for it before and after moving the clock.
       advanceClock: (duration) =>
-        Effect.promise(() => runtime.runPromise(Effect.scoped(TestClock.adjust(duration)))),
+        Effect.promise(async () => {
+          await waitForNodeSqliteWorkersIdle();
+          await runtime.runPromise(Effect.scoped(TestClock.adjust(duration)));
+          await waitForNodeSqliteWorkersIdle();
+        }),
       dispose,
     } satisfies OrchestrationIntegrationHarness;
   });

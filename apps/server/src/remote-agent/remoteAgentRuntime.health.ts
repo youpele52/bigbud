@@ -24,9 +24,12 @@ export async function verifyRemoteAgentRuntimeHealth(input: {
   readonly target: string;
   readonly runtime: RemoteAgentRuntime;
   readonly expectedEpoch?: string;
-  readonly connect: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+  readonly connect: (
+    target: string,
+    runtime: RemoteAgentRuntime,
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
 }): Promise<string> {
-  const connection = input.connect(input.target, input.runtime);
+  const connection = await input.connect(input.target, input.runtime);
   const timer = setTimeout(() => connection.close(), 30_000);
   try {
     const hello = await connection.handshake().catch((cause: unknown) => {

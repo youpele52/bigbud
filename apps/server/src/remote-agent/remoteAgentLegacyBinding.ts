@@ -17,7 +17,7 @@ export async function observeLegacyRemoteAgentBinding(
   control: RemoteAgentControl,
   connect: (
     runtime: import("./remoteAgentRuntime.ts").RemoteAgentRuntime,
-  ) => RemoteAgentConnection = (runtime) =>
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection> = (runtime) =>
     RemoteAgentConnection.ssh({
       executionTargetId: target,
       runtime,
@@ -66,7 +66,7 @@ sha256sum -- "$binary" | cut -d ' ' -f1
     logPath: `${statePath}/supervisor.log`,
     origin: "legacy-external",
   });
-  const connection = connect(runtime);
+  const connection = await connect(runtime);
   const timer = setTimeout(() => connection.close(), 30_000);
   try {
     const hello = await connection.handshake();

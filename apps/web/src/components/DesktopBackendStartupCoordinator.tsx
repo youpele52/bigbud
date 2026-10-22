@@ -42,6 +42,13 @@ export function useDesktopBackendStartupState(): DesktopBackendStartupState | nu
   return state;
 }
 
+/** Toast text while the backend starts; shows migration progress when the backend reports it. */
+export function describeDesktopStartupProgress(state: DesktopBackendStartupState): string {
+  if (state.status !== "upgrading") return "bigbud is still starting. Please wait.";
+  const percent = state.progressPercent === undefined ? "" : `, ${state.progressPercent}%`;
+  return `Updating local data${percent}. Please wait.`;
+}
+
 export function DesktopBackendStartupCoordinator() {
   const state = useDesktopBackendStartupState();
   const toastRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
@@ -56,10 +63,7 @@ export function DesktopBackendStartupCoordinator() {
     }
     toastGenerationRef.current = state.generation;
     const toast = {
-      description:
-        state.status === "upgrading"
-          ? "Updating local data. Please wait."
-          : "bigbud is still starting. Please wait.",
+      description: describeDesktopStartupProgress(state),
       timeout: 0,
       title: "Starting bigbud",
       type: "info" as const,

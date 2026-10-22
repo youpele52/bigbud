@@ -6,7 +6,10 @@ export async function verifyRemoteAgentRuntimeAdmission(input: {
   readonly target: string;
   readonly runtime: RemoteAgentRuntime;
   readonly expectedEpoch?: string;
-  readonly connect: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+  readonly connect: (
+    target: string,
+    runtime: RemoteAgentRuntime,
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
 }): Promise<string> {
   return verifyRemoteAgentRuntimeHealth(input);
 }

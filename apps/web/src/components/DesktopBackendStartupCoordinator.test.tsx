@@ -9,7 +9,10 @@ import {
   shouldReconnectAfterDesktopStartupTransition,
   shouldShowDesktopStartupBlockingState,
 } from "./WebSocketConnectionSurface.logic";
-import { getInitialDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
+import {
+  describeDesktopStartupProgress,
+  getInitialDesktopBackendStartupState,
+} from "./DesktopBackendStartupCoordinator";
 
 function startup(
   status: DesktopBackendStartupState["status"],
@@ -174,5 +177,19 @@ describe("desktop backend startup UX", () => {
         />,
       ),
     ).not.toContain("development stderr");
+  });
+});
+
+describe("describeDesktopStartupProgress", () => {
+  it("shows the migration percent only while upgrading with known progress", () => {
+    expect(describeDesktopStartupProgress({ ...startup("upgrading"), progressPercent: 42 })).toBe(
+      "Updating local data, 42%. Please wait.",
+    );
+    expect(describeDesktopStartupProgress(startup("upgrading"))).toBe(
+      "Updating local data. Please wait.",
+    );
+    expect(describeDesktopStartupProgress(startup("starting"))).toBe(
+      "bigbud is still starting. Please wait.",
+    );
   });
 });

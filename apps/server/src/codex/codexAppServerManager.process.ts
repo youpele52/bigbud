@@ -2,7 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { assertSupportedCodexCliVersion } from "./codexVersionCheck.ts";
-import { startRemoteCodexAppServerProcess } from "./codexAppServerManager.process.remote.ts";
+import {
+  startRemoteCodexAppServerProcess,
+  startRemoteCodexAppServerProcessAsync,
+} from "./codexAppServerManager.process.remote.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
 function resolveProviderRuntimeExecutionTargetId(input: CodexAppServerStartSessionInput): string {
@@ -35,4 +38,20 @@ export function startCodexAppServerProcess(
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32",
   });
+}
+
+/**
+ * Async variant: the remote SSH readiness and version checks never block the
+ * event loop. `codexAppServerManager.startSession.ts` should switch to
+ * `await startCodexAppServerProcessAsync(input, resolvedCwd)`; until it does,
+ * remote session starts still use the bounded synchronous check above.
+ */
+export async function startCodexAppServerProcessAsync(
+  input: CodexAppServerStartSessionInput,
+  cwd: string,
+): Promise<ChildProcessWithoutNullStreams> {
+  if (!isLocalExecutionTarget(resolveProviderRuntimeExecutionTargetId(input))) {
+    return startRemoteCodexAppServerProcessAsync({ ...input, cwd });
+  }
+  return startCodexAppServerProcess(input, cwd);
 }

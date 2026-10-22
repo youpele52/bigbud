@@ -33,7 +33,10 @@ import * as RemoteDefault from "./remoteAgentDefault.ts";
 import { runRestartFixtureTool } from "./remoteAgentOwners.httpFixture.ts";
 import * as SshProcess from "../ssh/sshProcess.ts";
 
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReady: () => undefined }));
+vi.mock("../ssh/sshVerification.ts", () => ({
+  assertSshExecutionTargetReady: () => undefined,
+  assertSshExecutionTargetReadyAsync: async () => undefined,
+}));
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
 }));

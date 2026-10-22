@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
 import {
@@ -13,7 +13,8 @@ import {
 } from "./PiRemoteWorkspaceBridge.ts";
 import { composeBridgeCleanups } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReady } from "../../../ssh/sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
+import { killProcessTree } from "../../../utils/killProcessTree.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import {
   isLocalWorkspaceTarget,
@@ -63,7 +64,6 @@ function resolvePiRpcProcessInvocation(options: PiRpcProcessOptions): {
   }
 
   const executionTargetId = options.providerRuntimeTarget.executionTargetId;
-  assertSshExecutionTargetReady(executionTargetId);
   return buildSshCommandInvocation({
     executionTargetId,
     command: options.binaryPath,
@@ -133,8 +133,12 @@ function writeJsonLine(
   });
 }
 
-export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcProcess> {
+export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcProcess> {
   const executionTargetId = options.providerRuntimeTarget.executionTargetId;
+  if (!isLocalProviderRuntimeTarget(options.providerRuntimeTarget)) {
+    // Checked before any bridge or process starts, without blocking the event loop.
+    await assertSshExecutionTargetReadyAsync(executionTargetId);
+  }
   return preparePiRpcProcessBridge(options).then((bridge) => {
     const rpcArgs = [
       ...(options.sessionFile ? ["--session", options.sessionFile] : []),
@@ -332,17 +336,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       };
     };
 
-    const killPiChild = (signal: NodeJS.Signals) => {
-      if (process.platform === "win32" && child.pid !== undefined) {
-        try {
-          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-          return;
-        } catch {
-          // Fall through to direct kill when taskkill is unavailable.
-        }
-      }
-      child.kill(signal);
-    };
+    const killPiChild = (signal: NodeJS.Signals) => killProcessTree(child, signal);
 
     const stop = async () => {
       if (exitPromise) {

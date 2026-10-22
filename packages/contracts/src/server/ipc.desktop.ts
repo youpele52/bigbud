@@ -50,6 +50,8 @@ export interface DesktopBackendStartupState {
   readonly generation: number;
   readonly startedAt: number;
   readonly status: DesktopBackendStartupStatus;
+  /** Whole-percent progress of local data migration while `status` is `upgrading`, when known. */
+  readonly progressPercent?: number | undefined;
   readonly failureReason?: DesktopBackendStartupFailureReason | undefined;
   readonly diagnostics?: DesktopBackendStartupDiagnostics | undefined;
   /** Present only in an unpackaged Electron development runtime. */

@@ -62,4 +62,6 @@ export interface MakeOrchestrationIntegrationHarnessOptions {
   readonly provider?: ProviderKind;
   readonly realCodex?: boolean;
   readonly testClock?: boolean;
+  /** Run the harness database on the SQLite worker thread, as production does (default true). */
+  readonly sqliteWorker?: boolean;
 }

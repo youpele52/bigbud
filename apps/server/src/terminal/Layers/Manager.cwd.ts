@@ -7,7 +7,7 @@ import {
 } from "@bigbud/contracts/workspace/terminal.ts";
 import { isLocalExecutionTarget } from "../../executionTargets";
 import { runSshCommand } from "../../ssh/sshProcess";
-import { assertSshExecutionTargetReady } from "../../ssh/sshVerification";
+import { assertSshExecutionTargetReadyAsync } from "../../ssh/sshVerification";
 import type { RuntimePathIdentity } from "./Manager.types";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
@@ -109,8 +109,8 @@ export function makeResolveTerminalFolder(
       return yield* resolveWslTerminalFolder(input);
     const local = isLocalExecutionTarget(input.executionTargetId);
     if (!local) {
-      yield* Effect.try({
-        try: () => assertSshExecutionTargetReady(input.executionTargetId),
+      yield* Effect.tryPromise({
+        try: () => assertSshExecutionTargetReadyAsync(input.executionTargetId),
         catch: () =>
           new TerminalExecutionTargetError({
             ...input,
