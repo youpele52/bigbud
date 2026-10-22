@@ -7,6 +7,12 @@ import {
   type DevSupervisorHost,
   type ShutdownSignal,
 } from "./dev-supervise.lib.ts";
+import {
+  DEV_ELECTRON_CHILD_GRACE_MS,
+  DEV_ELECTRON_FORCE_SETTLE_MS,
+  DEV_ELECTRON_GRACEFUL_STOP_MS,
+  DEV_ELECTRON_MAX_SHUTDOWN_MS,
+} from "./lib/dev-electron-launcher.model.ts";
 
 /** Deterministic host: a fake process table, manual clock and recorded signals. */
 function fakeHost() {
@@ -192,5 +198,16 @@ describe("DevSupervisor", () => {
     f.exit(102, 0);
     f.advance(50);
     expect(f.exitCode).toBe(0);
+  });
+});
+
+describe("dev shutdown budgets", () => {
+  it("gives the Electron launcher time to finish its tree-aware stop before force-killing it", () => {
+    expect(DEV_ELECTRON_MAX_SHUTDOWN_MS).toBe(
+      DEV_ELECTRON_GRACEFUL_STOP_MS + DEV_ELECTRON_FORCE_SETTLE_MS + DEV_ELECTRON_CHILD_GRACE_MS,
+    );
+    expect(DEV_SUPERVISOR_GRACE_MS).toBe(8_000);
+    // Leave at least a second of margin for ps snapshots and process exit.
+    expect(DEV_SUPERVISOR_GRACE_MS - DEV_ELECTRON_MAX_SHUTDOWN_MS).toBeGreaterThanOrEqual(1_000);
   });
 });

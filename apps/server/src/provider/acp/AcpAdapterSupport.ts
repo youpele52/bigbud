@@ -92,3 +92,20 @@ export function acpPermissionOutcome(decision: ProviderApprovalDecision): string
       return "reject-once";
   }
 }
+
+/**
+ * Stopping an ACP session waits for its agent to exit, up to `ACP_CHILD_FORCE_KILL_AFTER` (2 s)
+ * when it ignores SIGTERM. Stopping sessions one at a time made adapter teardown grow with the
+ * session count; this bound keeps 16 sessions within one window while capping simultaneous work.
+ */
+export const ACP_SESSION_STOP_CONCURRENCY = 16;
+
+/** Stop every session concurrently (bounded). Snapshots first: stopping removes map entries. */
+export const stopAcpSessions = <Session, R>(
+  sessions: Iterable<Session>,
+  stopSession: (session: Session) => Effect.Effect<void, never, R>,
+): Effect.Effect<void, never, R> =>
+  Effect.forEach(Array.from(sessions), stopSession, {
+    concurrency: ACP_SESSION_STOP_CONCURRENCY,
+    discard: true,
+  });

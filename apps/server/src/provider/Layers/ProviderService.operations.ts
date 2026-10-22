@@ -37,6 +37,7 @@ import {
 import type { makeResolveRoutableSession } from "./ProviderServiceSessionRouting.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import { readPersistedSessionEpoch } from "./ProviderServiceHelpers.ts";
+import { stopAdaptersWithin } from "./ProviderService.stopAll.ts";
 
 /** Return type of `makeResolveRoutableSession` — the curried session resolver. */
 export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSession>;
@@ -279,7 +280,8 @@ export function makeRollbackConversation(
 
 /**
  * Builds an Effect that stops all active provider sessions and marks bindings
- * as stopped in the directory. Uses `Effect.gen` to avoid the IIFE pattern.
+ * as stopped in the directory. Order: persist live bindings, stop every adapter
+ * concurrently with a per-adapter timeout, then mark directory entries stopped.
  */
 export function makeRunStopAll(
   adapters: ReadonlyArray<Adapter>,
@@ -300,7 +302,7 @@ export function makeRunStopAll(
             lastRuntimeEventAt: new Date().toISOString(),
           }),
     ).pipe(Effect.asVoid);
-    yield* Effect.forEach(adapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
+    yield* stopAdaptersWithin(adapters);
     yield* Effect.forEach(threadIds, (threadId) =>
       directory.getProvider(threadId).pipe(
         Effect.flatMap((provider) =>

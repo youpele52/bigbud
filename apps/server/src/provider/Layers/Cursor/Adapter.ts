@@ -7,8 +7,6 @@ import { EventId } from "@bigbud/contracts";
 import {
   DateTime,
   Effect,
-  Exit,
-  Fiber,
   FileSystem,
   Layer,
   Option,
@@ -29,6 +27,8 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import { stopAcpSessions } from "../../acp/AcpAdapterSupport.ts";
+import { makeAcpSessionStop } from "../../acp/AcpSessionStop.ts";
 import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CursorAdapter, type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
@@ -108,30 +108,17 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       });
     };
 
-    const stopSessionInternal = (ctx: CursorSessionContext) =>
-      Effect.gen(function* () {
-        if (ctx.stopped) return;
-        ctx.stopped = true;
-        yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
-        if (ctx.notificationFiber) {
-          yield* Fiber.interrupt(ctx.notificationFiber);
-        }
-        yield* Effect.tryPromise({
-          try: () => ctx.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
-          catch: () => undefined,
-        }).pipe(Effect.ignore);
-        yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
-        sessions.delete(ctx.threadId);
-        yield* offerRuntimeEvent({
-          type: "session.exited",
-          ...(yield* makeEventStamp()),
-          sessionEpoch: ctx.sessionEpoch,
-          provider: PROVIDER,
-          threadId: ctx.threadId,
-          payload: { exitKind: "graceful" },
-        });
-      });
+    const stopSessionInternal = makeAcpSessionStop<CursorSessionContext>({
+      provider: PROVIDER,
+      sessions,
+      settlePending: (ctx) =>
+        Effect.all([
+          settlePendingApprovalsAsCancelled(ctx.pendingApprovals),
+          settlePendingUserInputsAsCancelled(ctx.pendingUserInputs),
+        ]).pipe(Effect.asVoid),
+      offerRuntimeEvent,
+      makeEventStamp,
+    });
 
     const getCursorSettings = (threadId: ThreadId) =>
       serverSettingsService.getSettings.pipe(
@@ -285,10 +272,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       });
 
     const stopAll: CursorAdapterShape["stopAll"] = () =>
-      Effect.forEach(sessions.values(), stopSessionInternal, { discard: true });
+      stopAcpSessions(sessions.values(), stopSessionInternal);
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach(sessions.values(), stopSessionInternal, { discard: true }).pipe(
+      stopAcpSessions(sessions.values(), stopSessionInternal).pipe(
         Effect.tap(() => PubSub.shutdown(runtimeEventPubSub)),
         Effect.tap(() => managedNativeEventLogger?.close() ?? Effect.void),
       ),

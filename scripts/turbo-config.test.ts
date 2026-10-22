@@ -4,6 +4,7 @@ import { assert, describe, it } from "@effect/vitest";
 
 interface TurboConfig {
   readonly globalEnv?: ReadonlyArray<string>;
+  readonly globalPassThroughEnv?: ReadonlyArray<string>;
 }
 
 const config = JSON.parse(
@@ -23,5 +24,10 @@ describe("turbo runtime environment", () => {
     ]) {
       assert.ok(globalEnv.has(variable), `${variable} must be included in turbo.globalEnv`);
     }
+  });
+
+  it("passes the dev runner PID to tasks without making it part of every cache key", () => {
+    assert.ok(config.globalPassThroughEnv?.includes("BIGBUD_DEV_RUNNER_PID"));
+    assert.ok(!config.globalEnv?.includes("BIGBUD_DEV_RUNNER_PID"));
   });
 });

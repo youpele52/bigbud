@@ -173,6 +173,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       instanceOffset: offset,
       repoRoot,
       ...(webReservation === undefined ? {} : { webReservation }),
+      runnerPid: process.pid,
       t3Home: input.t3Home,
       authToken: input.authToken,
       noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),

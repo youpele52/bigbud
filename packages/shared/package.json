@@ -236,6 +236,10 @@
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"
     },
+    "./DevLauncher": {
+      "types": "./src/DevLauncher.ts",
+      "import": "./src/DevLauncher.ts"
+    },
     "./releaseChannel": {
       "types": "./src/releaseChannel.ts",
       "import": "./src/releaseChannel.ts"

@@ -1,7 +1,7 @@
 # Dev process leak and dev launcher lifecycle
 
 **Date:** 21 October, 2026
-**Status:** Proposed
+**Status:** Phases 1–4 implemented on 22 October 2026 (uncommitted); Phase 5 deferred (D2)
 **Owner:** bigbud desktop, server and dev-tooling maintainers
 
 ## Summary
@@ -96,6 +96,23 @@ See Problem. Key files:
 
 **Exit criteria.** The reproduction shows orphans on unpatched code, and the log says which escalation produced them.
 
+**Results (22 October 2026).**
+
+- The launcher now logs one line per stop: `[dev-electron] stop graceful elapsed=<ms>` or `[dev-electron] stop forced elapsed=<ms> killed=<pids> survivors=<pids>`. On Windows it logs `stop forced (taskkill /T /F)`.
+- Before the live run, a real-process model ran: an Electron stand-in that SIGTERMs its server and quits after 0.5 s, a server whose stderr is a pipe to Electron (as in dev) and that logs during a 3 s provider teardown, and two detached provider stand-ins. The old `stopApp()` orphaned both providers in 3 of 3 runs, because the server died of EPIPE once Electron had exited. The new stop orphaned none in 3 of 3 runs (`stop forced elapsed≈4.2s killed=<both providers> survivors=none`).
+- Live `bun dev:desktop` (22 October, isolated `BIGBUD_HOME` under `/tmp`, clean env). At startup the dev server spawns `kilo serve` and five Cursor `agent --trust acp` processes.
+  - Old launcher: forced stops. The server became a zombie about 1.5 s into the stop, and Electron and the server were SIGKILLed at 4 s.
+  - Double SIGTERM: the old launcher sent SIGTERM to Electron and `pkill -P` to the server, while Electron's `stopBackend()` also sent SIGTERM. Effect's `NodeRuntime.runMain` drops its signal handlers after the first signal, so the second SIGTERM kills the server with no teardown (verified: one signal gives exit 130 with teardown, two give 143 with none). The new stop signals only Electron.
+  - Zombies: `kill(pid, 0)` succeeds on a zombie, which made every stop look forced. The listing now reads `stat` and treats Z as gone.
+  - Dev Electron's main thread can stay blocked (a JS-invoked `usleep`, seen with `sample`) for seconds after a signal-driven quit, even once its backend has exited; an Apple-event quit took between 1 s and 17 s. The pre-change launcher masked this with its 1.5 s SIGKILL. The launcher now gives Electron 500 ms once the backend subtree has drained, then SIGKILLs it. This is a desktop follow-up, not fixed here.
+  - New launcher: 3 rebuild restarts gave 0 orphans. Server, Kilo and Cursor drained gracefully each time; only Electron and its cua-driver helpers were SIGKILLed after the backend drained. Restarts took about 1.9–2.4 s (1.5 s before).
+  - Cmd+Q equivalent (`osascript -e 'tell application id "ai.bigbud.desktop.dev" to quit'`): the launcher logged `app quit; ending the dev session`, `bun dev:desktop` exited 130, and no processes were left with parent pid 1.
+  - Server SIGTERM to exit took 1.4–1.9 s with live Kilo and five Cursor agents, an upper bound for `runStopAll`.
+- That model explains the missing `runStopAll` spans: in dev the server's stderr and fd3/fd4 are pipes into Electron (`backendManager.ts`), so teardown logging after Electron exits can kill the server before `stopAll` finishes. This is a hypothesis for the real server, not yet confirmed against its `bigbud server exit` line. Packaged builds pipe stdout and stderr too, so the same exposure exists there; it belongs to the Rust plan (D2).
+- The old `stopApp()` also had an ordering bug: it SIGKILLed Electron before `pkill -KILL -P <electron>`, so the server was already reparented and escaped the forced kill.
+- Effect `4.0.0-beta.43`'s `forceKillAfter` bounds only delivering the first signal. Scope close then waits for the exit with no limit (measured: 5.7 s for a TERM-ignoring child with `forceKillAfter: 1s`). Phase 4 therefore adds an explicit SIGTERM → 2 s → SIGKILL release.
+- `opencode serve --service`: not reproduced. The native fixtures refuse to launch any binary without an approved isolation record, and `V2_NATIVE_ISOLATION_APPROVALS` is empty. The surviving process (started 21 October 11:48) has `_=/Users/youpele/.opencode/bin/opencode`, `PWD=/Users/youpele/DevWorld` and `TERM_PROGRAM=bigbud`, which points to a hand-started shell command in a bigbud terminal. No fixture fix is filed.
+
 ### Phase 2: Tree-aware stop in the dev launcher (dev only)
 
 **Goal.** No provider grandchild survives a dev restart or launcher shutdown, even when the server is killed.
@@ -167,9 +184,10 @@ See Problem. Key files:
 
 - **D1, quit semantics: decided on 21 October 2026, option A.** A clean, user-initiated quit of the dev app ends the whole `bun dev:desktop` session, including both tsdown watchers, Vite and turbo. Relaunching means running `bun dev:desktop` again. Options B (keep tooling, no auto relaunch) and C (keep today's auto relaunch, add a log line) were rejected because a closed app silently reappearing was the reported surprise, and B needs a new relaunch trigger that turbo's terminal UI makes awkward.
 - **D2, ledger ownership: decided on 21 October 2026.** Crash-proof orphan cleanup belongs to the Rust background-service plan. Phases 1–4 do not depend on it. That plan is still Proposed and gated on its own dependency approval, so crash orphans remain possible until it ships.
-- **PID reuse.** The Phase 2 snapshot can outlive a process, and the pid can be reused within the escalation window. `dev-supervise` already accepts this risk for the same window. The Rust plan's ledger must match start time and executable, never pid alone.
+- **PID reuse.** The Phase 2 snapshot can outlive a process, and the pid can be reused within the escalation window. `dev-supervise` already accepts this risk for the same window. The launcher now records each member's start time (`ps … lstart`) and never signals a pid whose start time changed, which closes this window for the launcher. `dev-supervise` still uses pid alone. The Rust plan's ledger must match start time and executable, never pid alone.
+- **Intended side effect: the app tree is fully reaped.** A rebuild, Cmd+Q, dev Restart, fatal exit or crash SIGKILLs anything still in the dev app's process tree 4 s after the stop begins (sooner once the backend has drained). The tree includes processes started from in-app terminals, so a `nohup` job or a backgrounded `&` command launched there dies with the app, even though it ignores SIGHUP. Only a process that has left the tree before the last 1.5 s snapshot survives, for example one that double-forked away to init. Start long-running jobs from an outside terminal instead.
 - **Concurrent teardown ordering (Phase 4).** Adapters may share resources, for example the OpenCode server manager used by OpenCode and Kilo. Concurrency must not reorder persistence relative to stops. Tests must cover both.
-- **Budget drift.** Every budget lives in a different file. Phase 2 must document the full ordering next to `DEV_SUPERVISOR_GRACE_MS` and add a test asserting supervisor grace exceeds launcher shutdown.
+- **Budget drift.** Every budget lives in a different file. Phase 2 must document the full ordering next to `DEV_SUPERVISOR_GRACE_MS` and add a test asserting supervisor grace exceeds launcher shutdown. The 3 s per-adapter timeout bounds only how long stop-all waits: one ACP session stop can take 3 × 500 ms of capped cleanup, a 2 s SIGTERM window and a 1 s SIGKILL wait (about 4.5 s). The adapter finalizer's 4 s wait bounds it, and each capped cleanup step logs a warning.
 - **No regression for the user's existing workflow.** A rebuild still relaunches the app after an expected stop. Only clean user quits and the dev Restart menu change behavior.
 
 ## Testing And Validation
@@ -195,6 +213,7 @@ bun run --cwd apps/server vitest run src/provider/acp
 bun dev:desktop
 # open a Cursor thread and a Kilo thread, send a turn in each
 touch apps/server/dist/bin.mjs        # repeat ten times, waiting for relaunch
+# each stop prints "[dev-electron] stop graceful|forced ..." in the dev:electron output
 ps -axo pid,ppid,command | awk '$2==1' | grep -E 'cursor-agent/versions/.*--trust acp|\.kilo/bin/kilo serve' | grep -v grep
 ```
 
@@ -211,6 +230,14 @@ ps -axo pid,ppid,command | awk '$2==1' | grep -E 'cursor-agent/versions/.*--trus
 - Packaged Quit and Restart behave exactly as before. Teardown completes within the Phase 4 budget when a provider child ignores SIGTERM.
 - All files touched stay at or under 400 lines, and all repository checks pass.
 
+**Still to verify live (as of 22 October 2026).** The live run covered three rebuild restarts and one Cmd+Q-equivalent quit on macOS. These remain open:
+
+- Ten consecutive rebuild restarts with live Cursor and Kilo sessions that have each run a turn.
+- The dev Restart menu: one supervised instance, relaunched through exit code 75, with the old tree reaped.
+- Exit code 70: a fatal startup error or uncaught exception reaps the tree, leaves the launcher idle, and relaunches on the next rebuild.
+- Exit code 69: a second dev instance blocked by the single-instance lock leaves the launcher idle without reaping.
+- Windows: the `taskkill /T /F` stop, the exit codes, and Cmd+Q-equivalent quit ending the session through `taskkill` on dev-runner. Covered only by fake-host tests so far.
+
 ## Open Questions
 
-- Are the proposed budgets acceptable: 2 s per ACP child, 4 s launcher graceful stop and 8 s supervisor grace?
+- None open. Budgets accepted on 21 October 2026: 2 s per ACP child, 3 s per adapter in stop-all, 4 s launcher graceful stop and 8 s supervisor grace. The full ordering is documented in `scripts/lib/dev-electron-launcher.model.ts`.

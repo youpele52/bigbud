@@ -18,6 +18,7 @@ import {
 export function installDesktopSingleInstanceLock(
   appInstance: Pick<App, "on" | "quit" | "requestSingleInstanceLock">,
   openMainWindow: () => void,
+  quitDuplicateInstance: () => void = () => appInstance.quit(),
 ): void {
   if (appInstance.requestSingleInstanceLock()) {
     appInstance.on("second-instance", () => {
@@ -26,7 +27,7 @@ export function installDesktopSingleInstanceLock(
     return;
   }
 
-  appInstance.quit();
+  quitDuplicateInstance();
 }
 
 export function applyLinuxRuntimeSwitches(

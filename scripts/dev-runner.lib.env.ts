@@ -1,3 +1,4 @@
+import { DEV_RUNNER_PID_ENV } from "@bigbud/shared/DevLauncher";
 import { devPortsForOffset } from "@bigbud/shared/DevPorts";
 import { Effect, Path } from "effect";
 
@@ -24,6 +25,8 @@ export interface CreateDevRunnerEnvInput {
   readonly instanceOffset?: number;
   readonly repoRoot?: string;
   readonly webReservation?: string;
+  /** dev-runner's own PID (dev:desktop only), so quitting the dev app can end the session. */
+  readonly runnerPid?: number;
   readonly t3Home: string | undefined;
   readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
@@ -42,6 +45,7 @@ export function createDevRunnerEnv({
   instanceOffset = 0,
   repoRoot,
   webReservation,
+  runnerPid,
   t3Home,
   authToken,
   noBrowser,
@@ -75,6 +79,9 @@ export function createDevRunnerEnv({
     delete output.BIGBUD_DEV_WEB_PORT;
     delete output.BIGBUD_DEV_REPO_ROOT;
     delete output.BIGBUD_DEV_WEB_RESERVATION;
+    delete output[DEV_RUNNER_PID_ENV];
+    // Only dev:desktop has an Electron launcher that may end the session; no other mode exports it.
+    if (isDesktopMode && runnerPid !== undefined) output[DEV_RUNNER_PID_ENV] = String(runnerPid);
     if (repoRoot !== undefined) output.BIGBUD_DEV_REPO_ROOT = repoRoot;
     if (webReservation !== undefined) output.BIGBUD_DEV_WEB_RESERVATION = webReservation;
     if (mode === "dev" || mode === "dev:desktop" || mode === "dev:web") {

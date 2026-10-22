@@ -5,6 +5,7 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
 
+import { ACP_CHILD_FORCE_KILL_AFTER, addBoundedChildRelease } from "./AcpChildProcessRelease.ts";
 import {
   type AcpParsedSessionEvent,
   type AcpSessionModeState,
@@ -158,6 +159,8 @@ const makeAcpSessionRuntime = (
           ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
           ...(options.spawn.env ? { env: { ...process.env, ...options.spawn.env } } : {}),
           shell: process.platform === "win32",
+          // Keep the spawner's default `detached: true` so group kill reaches Cursor's worker.
+          forceKillAfter: ACP_CHILD_FORCE_KILL_AFTER,
         }),
       )
       .pipe(
@@ -170,6 +173,8 @@ const makeAcpSessionRuntime = (
             }),
         ),
       );
+    // `forceKillAfter` alone does not bound the exit wait in this Effect version.
+    yield* addBoundedChildRelease(runtimeScope, child);
 
     const acpContext = yield* Layer.build(
       EffectAcpClient.layerChildProcess(child, {

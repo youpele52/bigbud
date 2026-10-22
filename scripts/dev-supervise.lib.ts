@@ -19,8 +19,13 @@ export interface DevCommand {
 export type ShutdownSignal = "SIGINT" | "SIGTERM" | "SIGHUP";
 type AnySignal = ShutdownSignal | "SIGKILL";
 
-/** Long enough for dev-electron's own Electron shutdown (1.5 s) plus its child grace (1.2 s). */
-export const DEV_SUPERVISOR_GRACE_MS = 5_000;
+/**
+ * Must exceed the Electron launcher's worst-case shutdown (`DEV_ELECTRON_MAX_SHUTDOWN_MS`, 5.7 s:
+ * 4 s graceful app-tree stop, 0.5 s forced settle, 1.2 s child grace) so the launcher finishes its
+ * own tree-aware stop before this supervisor force-kills it. The full budget ordering is documented
+ * in `scripts/lib/dev-electron-launcher.ts`.
+ */
+export const DEV_SUPERVISOR_GRACE_MS = 8_000;
 export const DEV_SUPERVISOR_ORPHAN_POLL_MS = 250;
 const DRAIN_POLL_MS = 50;
 
