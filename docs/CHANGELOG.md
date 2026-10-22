@@ -8,21 +8,57 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
 - **Set up your sidebar your way:** Choose which items to show and where they go. bigbud remembers your layout between restarts.
 - **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
+- **See your remaining subscription allowance:** Check available limits, reset times, and extra-usage details for supported providers.
 - **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
 
-## v0.3.0 (xx October, 2026)
+## v0.3.1 (22 October, 2026)
 
-### New Desktop System Monitor
+### A More Powerful, Easier-to-Use Terminal
 
-- **See what’s keeping your computer busy:** Check CPU, memory, storage, and network activity without leaving the desktop app. Open the compact System panel for a quick glance, or the full System Monitor for more detail.
-- **Find resource-heavy processes faster:** Search running processes by name or status, sort them by CPU or memory use, and inspect individual process details.
-- **Choose the details that matter to you:** Show or hide monitoring widgets and extra information, including temperature readings where supported. Your preferences are remembered between visits.
-- **Give bigbud more context when your computer feels slow:** In the desktop app, your agent can read current system-resource information to help investigate, without changing anything on your computer. Missing readings are clearly marked as unavailable.
+- **Choose a look that works for you:** Pick from more than 30 built-in terminal color themes, with separate choices for light and dark appearances. The default bigbud theme keeps the familiar look.
+- **Find what you need in terminal output:** Search the open terminal or find recent output across terminals from global search, then jump to the matching line. Search covers recent output held in memory, not a permanent terminal archive.
+- **Make interactive terminal apps feel smoother:** Improved scrolling, output rendering, and recovery help keep fast-moving terminal sessions easier to follow. You can also tune scrolling, use ligatures, and display inline images where enabled.
 
-### Clearer Git Synchronization
+### More Helpful Subscription Limits
 
-- **Keep your repository in sync with clearer guidance:** The Git panel offers Pull, Push, or Fetch based on your branch’s status and checks the latest state before proceeding. Blocked operations explain what needs attention rather than leaving you guessing.
-- **Get help when Git gets complicated:** Prepare a troubleshooting prompt for a blocked operation, review it in your chat, and decide when to send it—without replacing your existing draft.
+- **Refresh limits when you need them:** Check for updated subscription allowances on demand for supported providers, with clearer loading and retry feedback.
+- **See available resets and expiry details:** Where a provider shares this information, the Usage page shows available reset counts and expiration details without suggesting bigbud can redeem or use them for you.
+
+### Annotate More of Your Markdown
+
+- **Comment across several lines in Preview:** Select text across headings, paragraphs, lists, tables, or code blocks, then choose **Annotate selection** without switching to Raw mode.
+- **Point your agent at the right lines:** Preview selections now map back to the original Markdown, including formatted text, repeated phrases, and file metadata, so comments carry the correct source lines.
+- **Keep the comment dialog compact:** File annotations show only the selected line range and a chevron by default. Expand it to review the source text, then collapse it without losing your comment. The same layout works for Markdown previews, raw files, code, and notebooks.
+
+### Open Agent and Skill References Again
+
+- **Inspect the instructions behind a message:** Clicking an agent or skill chip in a sent message opens its source file again, including messages that also contain terminal context.
+- **Open the right definition:** When names overlap, bigbud uses the message’s recorded source first, then follows the same provider selection rules used to run the instruction, rather than disabling the link just because several files share a name.
+- **Follow native OpenCode references safely:** Agents whose native listing omits a file path can now link to a uniquely verified local Markdown definition. bigbud leaves uncertain matches unresolved instead of guessing, and plugin chips continue to open their plugin page.
+
+### Clearer Usage and Sidebar Details
+
+- **Make sense of older usage:** Recovered missing provider and model details where historical records reliably identify them. Usage that cannot be attributed is labeled **Unattributed usage** in charts, summaries, and notes, and remains included in totals.
+- **Recognize the provider at a glance:** Only the provider icon appears before a sidebar thread’s name. Pull request, status, and automation indicators now sit on the right, while pull request links, tooltips, and state colors keep working as before.
+
+### Safer OpenCode Profile Sharing and Recovery
+
+- **Keep separate profiles separate:** Independent bigbud profiles can share an OpenCode V2 service without claiming each other’s chat history or thread tools. Older setup is preserved, and uncertain ownership is left unchanged.
+- **Keep chats tied to the right folder:** Project and worktree locations take precedence over the default chat folder. Changing that default no longer silently redirects an existing native session to a different location.
+- **Understand setup and recovery progress:** Chat and settings now make queued setup, cancellation, and retry controls easier to find, with clearer messages when setup is still settling or a previous request cannot safely be sent again.
+- **Protect retained history during upgrades:** New native sessions use shorter identifiers, and incompatible older identifiers are rejected clearly without rewriting saved bindings or automatically replaying prompts.
+
+### More Dependable Follow-Up Messages
+
+- **Each message is delivered once:** Messages you send while an agent is working, including ones with attachments, replies, or a different model, wait in the queue and reach the agent exactly once. They no longer show as sent and queued at the same time.
+- **Steer only where it really works:** Steer appears for Codex, Pi, and Copilot, which can take new instructions mid-task. Other providers offer Stop & send, so a running task is never stopped without you choosing to.
+- **Reopen Sidecar right away:** After you close Sidecar, you can open a fresh one immediately, without waiting for the old one to finish clearing away.
+
+### OpenCode V2 Improvements in Progress
+
+- Expanded native text-generation and helper-agent capabilities, alongside additional recovery safeguards. These capabilities remain behind qualification gates and are not enabled for general use yet.
+
+## v0.3.0 (20 October, 2026)
 
 ### Follow Supporting Agents
 
@@ -31,7 +67,46 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Follow work across chats:** Open linked child chats and see whether delegated work is running, idle, failed, or unavailable, so you can follow the wider task.
 - **Know where an instruction came from:** Messages from other chats, assignments, handoffs, and automated follow-ups show their source, with links back to verified source conversations.
 
-### OpenCode, Using Your Own Service
+![Subagent activity in a chat](https://assets.bigbud.app/content/subagents.jpeg)
+
+### New Desktop System Monitor
+
+- **See what’s keeping your computer busy:** Check CPU, memory, storage, and network activity without leaving the desktop app. Open the compact System panel for a quick glance, or the full System Monitor for more detail.
+- **Check bigbud’s own resource use:** Switch to the separate **bigbud** tab to see CPU, memory, and I/O used by bigbud’s desktop app, backend, and registered native services.
+
+![System Monitor showing computer resource usage](https://assets.bigbud.app/content/system%20monitor.png)
+
+![System Monitor showing bigbud resource usage](https://assets.bigbud.app/content/system%20monitor%20bigbud.png)
+
+- **Find resource-heavy processes faster:** Search running processes by name or status, sort them by CPU or memory use, and inspect individual process details.
+- **Choose the details that matter to you:** Show or hide monitoring widgets and extra information, including temperature readings where supported. Your preferences are remembered between visits.
+- **Give bigbud more context when your computer feels slow:** In the desktop app, your agent can read current system-resource information to help investigate, without changing anything on your computer. Missing readings are clearly marked as unavailable.
+
+### Subscription Limits Across Supported Providers
+
+- **See how much allowance remains:** The Usage page shows available limits, reset times, and extra-usage details for supported providers, including model-specific windows when reported.
+
+![Subscription limits in the Usage page](https://assets.bigbud.app/content/Subscription%20limits.png)
+
+### Clearer Usage Reporting
+
+- **Keep a more complete usage history:** Usage totals are retained across restarts, and later provider reports can update earlier figures without counting the same usage twice.
+- **Know when a number is an estimate:** When a provider doesn’t report usage for a turn, bigbud can estimate it from the saved conversation text. Estimates and mixed totals are labeled clearly and disclosed as approximate, not billing records.
+
+### Safer Git Sync and Worktree Management
+
+- **Work in separate worktrees:** Find and switch to existing local worktrees or create one from the chat toolbar. bigbud verifies a worktree before switching and only removes a clean, unused worktree, leaving its branch intact.
+- **Sync the right changes safely:** The Git panel offers Pull, Push, or Fetch based on your branch status, then rechecks the latest state before acting. If your branch has diverged or local changes make syncing unsafe, bigbud explains why and won’t merge or rebase automatically.
+- **Ask your agent for help with a blocked sync:** Prepare an editable troubleshooting prompt, review it in chat, and decide whether to send it. Your existing draft stays intact.
+
+### A More Capable, Reliable Terminal
+
+- **Keep several shells handy:** Open, rename, switch between, and split terminals within a chat. Choose a chat-only, terminal-only, or split layout.
+- **Make the terminal feel right:** Choose its font and size, and set GPU rendering to Auto, On, or Off. If WebGL is unavailable or fails, bigbud safely falls back without restarting the running process.
+- **Choose a WSL target for new terminals:** On supported Windows setups, select a WSL distribution for new manual terminals without changing the chat’s project workspace.
+- **Recover terminal work more predictably:** Improved startup, session ownership, and output recovery help keep terminal input and history reliable across reconnects.
+
+### Connect bigbud to Your OpenCode V2 Service
 
 - **Use the OpenCode you already run:** bigbud connects to your running OpenCode 2 service on macOS with Apple silicon, so there’s no second sign-in. bigbud never starts, stops, or reconfigures that service.
 - **Approve once, clearly:** A one-time **Trust native service execution** acknowledgement explains what bigbud may do through your OpenCode service before anything runs.
@@ -41,17 +116,17 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **No more clashing backends:** If a second bigbud backend tries to use the same data folder, it now refuses to start. Its message names the backend already running, so two backends never write to the same history.
 - **Not yet supported:** Native OpenCode execution on Windows or Linux, free-tier models that return HTTP 403, and images larger than 10 MiB.
 
+### More Reliable Replies and Notifications
+
+- **Keep the beginning of your reply:** Fixed an issue that could make the opening text of an assistant’s response disappear while the rest was arriving.
+- **Go straight back to the finished work:** Clicking a task-completion notification now opens its chat in the right app window or browser tab.
+
 ### Easier-to-Read Chat Tables
 
 - **Read wide tables without squeezing the columns:** Scroll tables horizontally within your chat to see the information that would otherwise be cut off.
 - **Give larger tables more room:** Open an expanded view when you want to read a table more comfortably.
 - **Take tables with you:** Copy a table as Markdown to reuse in your notes or documents.
 - **Enjoy steadier scrolling on desktop:** Fixed a flicker that could appear when scrolling expanded chat tables in the desktop app.
-
-### More Reliable Replies and Notifications
-
-- **Keep the beginning of your reply:** Fixed an issue that could make the opening text of an assistant’s response disappear while the rest was arriving.
-- **Go straight back to the finished work:** Clicking a task-completion notification now opens its chat in the right app window or browser tab.
 
 ### Everyday Interface Improvements
 
@@ -307,7 +382,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Claude Usage Limits
 
-- Added native Claude subscription limits to the Usage page, including current five-hour, weekly, model-specific, reset-time, and extra-usage details when Claude exposes them.
+- Added a view of remaining Claude subscription allowance to the Usage page, including five-hour and weekly limits, model-specific limits, reset times, and extra-usage details when Claude exposes them.
 - Kept limit checks on the existing provider refresh cycle and preserved the last successful values when a later check cannot complete, while keeping historical token totals unchanged.
 
 ### Cursor ACP Compatibility
