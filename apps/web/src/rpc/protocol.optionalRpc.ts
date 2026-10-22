@@ -9,12 +9,14 @@ import {
 const UNKNOWN_REQUEST_TAG_PREFIX = "Unknown request tag: ";
 
 /**
- * Diagnostics RPCs an older server may not know. The server answers an unknown tag with a
+ * Diagnostics and discovery RPCs an older server may not know. The server answers an unknown tag with a
  * connection-wide Defect; for these tags it must fail only the request, never the session.
  */
 export const OPTIONAL_WS_RPC_TAGS: ReadonlySet<string> = new Set([
   WS_METHODS.serverReportWsConnectionDiagnostics,
   WS_METHODS.serverGetWsConnectionDiagnostics,
+  WS_METHODS.serverListSshConfigHosts,
+  WS_METHODS.serverListRemoteFolders,
 ]);
 
 const unsupportedTags = new Set<string>();

@@ -11,6 +11,7 @@ import {
 } from "./wsConnectionDiagnosticsReporter";
 import { requestServerConfig } from "./wsRpcClient.config";
 import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
+import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
@@ -197,6 +198,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
+      listSshConfigHosts: (input) => requestSshConfigHosts(transport, input),
+      listRemoteFolders: (input) => requestRemoteFolders(transport, input),
       installRemoteAgent: (input) =>
         transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
       connectRemoteAgent: (input) =>

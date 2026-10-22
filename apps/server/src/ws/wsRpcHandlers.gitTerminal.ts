@@ -32,6 +32,8 @@ import {
   getRemoteAgentRestartStatusEffect,
   restartRemoteAgentEffect,
 } from "./wsRemoteAgentRestart.ts";
+import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
+import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 
 function gitMutationOperationId(operationId: string | undefined, target?: string): string {
   if (!operationId && !isLocalExecutionTarget(target))
@@ -89,6 +91,14 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
         ),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverListSshConfigHosts]: () =>
+      observeRpcEffect(WS_METHODS.serverListSshConfigHosts, listSshConfigHostsEffect(), {
+        "rpc.aggregate": "server",
+      }),
+    [WS_METHODS.serverListRemoteFolders]: (input: Parameters<typeof listRemoteFoldersEffect>[0]) =>
+      observeRpcEffect(WS_METHODS.serverListRemoteFolders, listRemoteFoldersEffect(input), {
+        "rpc.aggregate": "server",
+      }),
     [WS_METHODS.serverInstallRemoteAgent]: (
       input: Parameters<typeof installRemoteAgentEffect>[0],
     ) =>

@@ -247,6 +247,8 @@ export interface WsRpcClient {
     readonly refreshUsageLimits: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshUsageLimits>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
+    readonly listSshConfigHosts: RpcUnaryMethod<typeof WS_METHODS.serverListSshConfigHosts>;
+    readonly listRemoteFolders: RpcUnaryMethod<typeof WS_METHODS.serverListRemoteFolders>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
     readonly restartRemoteAgent: (

@@ -84,6 +84,8 @@ export const WS_METHODS = {
   serverRefreshUsageLimits: "server.refreshUsageLimits",
   serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
+  serverListSshConfigHosts: "server.listSshConfigHosts",
+  serverListRemoteFolders: "server.listRemoteFolders",
   serverInstallRemoteAgent: "server.installRemoteAgent",
   serverConnectRemoteAgent: "server.connectRemoteAgent",
   serverRestartRemoteAgent: "server.restartRemoteAgent",
