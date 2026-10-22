@@ -33,6 +33,14 @@ describe("remote project SSH editing", () => {
       authMode: "ssh-key",
       remoteTransport: "agent",
       providerRuntimeLocation: "local",
+      connectionSource: "manual",
+      inactiveConnection: {
+        host: "devbox",
+        username: "alice",
+        port: "2222",
+        sshKeyPath: "~/.ssh/id_ed25519",
+        authMode: "ssh-key",
+      },
     });
   });
 

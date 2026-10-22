@@ -1,14 +1,13 @@
 import type { Project } from "../../models/types";
-import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
 import type {
-  RemoteProjectAuthMode,
+  RemoteProjectConnectionSource,
   RemoteProjectDraft,
-  RemoteProjectTransport,
+  RequestRemoteProjectUnlock,
+  UpdateRemoteProjectDraft,
 } from "./Sidebar.projects.logic";
 import type {
   CreateProjectInput,
   CreateProjectResult,
-  RemoteProjectField,
   RemoteProjectFieldErrors,
 } from "./Sidebar.projectAddActions.helpers";
 
@@ -42,18 +41,10 @@ export interface SidebarRemoteProjectAddActionsOutput {
   readonly openRemoteProjectDialog: () => void;
   readonly openRemoteProjectEditDialog: (project: Project) => void;
   readonly closeRemoteProjectDialog: () => void;
-  readonly updateRemoteProjectDraft: <
-    K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation",
-  >(
-    field: K,
-    value: K extends "authMode"
-      ? RemoteProjectAuthMode
-      : K extends "remoteTransport"
-        ? RemoteProjectTransport
-        : K extends "providerRuntimeLocation"
-          ? ProviderRuntimeLocation
-          : string,
-  ) => void;
+  readonly updateRemoteProjectDraft: UpdateRemoteProjectDraft;
+  readonly adoptRemoteProjectConnectionSource: (source: RemoteProjectConnectionSource) => void;
+  /** Opens the unlock prompt for an SSH lock error; the continuation runs after unlocking. */
+  readonly requestRemoteProjectUnlock: RequestRemoteProjectUnlock;
   readonly submitRemoteProjectDialog: () => Promise<void>;
   readonly remoteAgentInstallRequest: SidebarRemoteAgentInstallRequest | null;
   readonly declineRemoteAgentInstall: () => void;

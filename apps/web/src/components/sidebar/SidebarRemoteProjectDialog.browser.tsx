@@ -25,7 +25,7 @@ describe("SidebarRemoteProjectDialog", () => {
     await page.getByRole("button", { name: "Open project menu" }).click();
 
     await expect.element(page.getByRole("dialog")).toBeInTheDocument();
-    await expect.element(page.getByText("Edit SSH remote project")).toBeInTheDocument();
+    await expect.element(page.getByText("Edit remote project")).toBeInTheDocument();
     await expect.element(page.getByLabelText("Host or IP")).toHaveValue("old-host");
     await expect.element(page.getByLabelText("Username")).toHaveValue("alice");
     await expect.element(page.getByLabelText("Port")).toHaveValue("2222");
@@ -221,6 +221,10 @@ describe("SidebarRemoteProjectDialog", () => {
     await using _ = await mountHarness(createProject);
 
     await page.getByRole("button", { name: "Open add dialog" }).click();
+    await page
+      .getByRole("group", { name: "Connection source" })
+      .getByRole("button", { name: "Enter manually" })
+      .click();
     await page.getByLabelText("Host or IP").fill("remote.example.com");
     await page.getByLabelText("Remote project path").fill("/srv/project");
     await page.getByRole("button", { name: "Add remote project" }).click();

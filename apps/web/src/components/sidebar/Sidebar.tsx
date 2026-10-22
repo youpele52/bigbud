@@ -150,6 +150,8 @@ export default function Sidebar() {
               }
             }}
             onFieldChange={s.updateRemoteProjectDraft}
+            onAdoptConnectionSource={s.adoptRemoteProjectConnectionSource}
+            onRequestUnlock={s.requestRemoteProjectUnlock}
             onSubmit={() => {
               void s.submitRemoteProjectDialog();
             }}
