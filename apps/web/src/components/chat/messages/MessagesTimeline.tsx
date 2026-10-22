@@ -20,6 +20,7 @@ import {
 } from "./MessagesTimeline.virtualization";
 import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
+import { CHAT_COLUMN_CLASS_NAME } from "../common/chatColumn";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
   emptyChatGreeting,
@@ -311,7 +312,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     <div
       ref={timelineRootRef}
       data-timeline-root="true"
-      className="mx-auto w-full min-w-0 max-w-3xl overflow-x-hidden"
+      className={`${CHAT_COLUMN_CLASS_NAME} overflow-x-hidden`}
     >
       {virtualizedRowCount > 0 && (
         <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>

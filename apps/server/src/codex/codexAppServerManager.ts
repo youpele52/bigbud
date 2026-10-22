@@ -48,6 +48,7 @@ import {
   sendTurn,
   steerTurn,
 } from "./codexAppServerManager.turn";
+import { interruptChildTurns } from "./codexAppServerManager.turn.children";
 
 export { buildCodexInitializeParams } from "../provider/codexAppServer";
 export { readCodexAccountSnapshot, resolveCodexModelForAccount } from "../provider/codexAccount";
@@ -107,6 +108,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   async interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void> {
     const context = this.requireSession(threadId);
     return interruptTurn(context, turnId, this.turnOps());
+  }
+
+  /** Thread Stop: interrupt the running turn of each listed child agent thread. */
+  async interruptChildTurns(threadId: ThreadId, childThreadIds: ReadonlyArray<string>) {
+    return interruptChildTurns(this.requireSession(threadId), childThreadIds, this.turnOps());
   }
 
   async steerTurn(input: CodexAppServerSteerTurnInput): Promise<void> {

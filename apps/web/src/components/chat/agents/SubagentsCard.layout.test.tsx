@@ -7,6 +7,7 @@ import {
   type MessagesTimelineRow,
 } from "../messages/MessagesTimeline.logic";
 import { MessagesTimelineWorkGroup } from "../messages/MessagesTimeline.workGroup";
+import { CHAT_COLUMN_CLASS_NAME } from "../common/chatColumn";
 import { ChatAgentActivityFeed } from "./ChatAgentActivityFeed";
 import { SubagentsCard } from "./SubagentsCard";
 
@@ -82,8 +83,14 @@ describe("compact Subagents presentation", () => {
     expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(subagents).toContain("text-[9px]");
     expect(subagents).toContain("sm:text-[9px]");
+    expect(subagents).toContain("bg-blue-500");
     expect(subagents).toContain("text-blue-600 dark:text-blue-400");
-    expect(subagents).toContain(">Working<");
+    expect(subagents).toContain(">working<");
+  });
+
+  it("keeps the live card in the shared conversation column used by timeline rows", () => {
+    const markup = renderToStaticMarkup(<ChatAgentActivityFeed agents={[agent("live")]} />);
+    expect(markup).toContain(`class="${CHAT_COLUMN_CLASS_NAME} mt-2 mb-8"`);
   });
 
   it("anchors completion to its turn before later user and assistant messages", () => {

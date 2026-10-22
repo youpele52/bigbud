@@ -14,6 +14,7 @@ import {
 } from "./Adapter.session.helpers.ts";
 import { makePiSessionControlMethods } from "./Adapter.session.control.ts";
 import { makeRespondToUserInput } from "./Adapter.methods.respondToUserInput.ts";
+import { makePiStopThreadSubagents } from "./Adapter.methods.threadSubagentStop.ts";
 import { requirePiSession } from "./Adapter.methods.session.ts";
 import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";
@@ -207,6 +208,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopThreadSubagents: makePiStopThreadSubagents({ requireSession }),
     respondToRequest,
     respondToUserInput,
     ...sessionControlMethods,
@@ -216,6 +218,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     | "sendTurn"
     | "interruptTurn"
     | "steerTurn"
+    | "stopThreadSubagents"
     | "respondToRequest"
     | "respondToUserInput"
     | "stopSession"

@@ -1,7 +1,12 @@
 import { expect, it } from "vitest";
 import { RuntimeTaskId, TurnId, type OrchestrationTask } from "@bigbud/contracts";
 import type { Thread } from "../../../models/types";
-import { hasOwnedV2DescendantWork, getThreadInterruptTurnId } from "./ChatView.subagents.logic";
+import {
+  countRunningBackgroundSubagents,
+  describeThreadBackgroundWork,
+  getThreadInterruptTurnId,
+  hasOwnedV2DescendantWork,
+} from "./ChatView.subagents.logic";
 
 const child: OrchestrationTask = {
   id: RuntimeTaskId.makeUnsafe(`bbv2-owned:${"a".repeat(64)}`),
@@ -79,3 +84,68 @@ it.each(["pending spawn", "recovery uncertainty"])(
     ).toBe(false);
   },
 );
+
+it.each(["claudeAgent", "codex", "copilot", "pi", "opencode"] as const)(
+  "counts running background subagents on %s and keeps idle Stop off the completed turn",
+  (provider) => {
+    const background = { ...child, id: RuntimeTaskId.makeUnsafe(`${provider}:bg`) };
+    const idle = {
+      ...thread,
+      session: { ...thread.session!, provider },
+      providerAgents: [
+        background,
+        { ...background, id: RuntimeTaskId.makeUnsafe(`${provider}:pending`), status: "pending" },
+        { ...background, id: RuntimeTaskId.makeUnsafe(`${provider}:fg`), background: false },
+        { ...background, id: RuntimeTaskId.makeUnsafe(`${provider}:done`), status: "completed" },
+        { ...background, id: RuntimeTaskId.makeUnsafe(`${provider}:task`), kind: "task" },
+      ] satisfies OrchestrationTask[],
+    };
+    expect(countRunningBackgroundSubagents(idle)).toBe(2);
+    expect(describeThreadBackgroundWork(idle)).toEqual({
+      backgroundSubagentCount: 2,
+      hasBackgroundWork: true,
+    });
+    expect(
+      getThreadInterruptTurnId({
+        ...idle,
+        latestTurn: { turnId: TurnId.makeUnsafe("old-completed-turn") },
+      }),
+    ).toBeUndefined();
+
+    const finished = { ...idle, providerAgents: [{ ...background, status: "stopped" as const }] };
+    expect(describeThreadBackgroundWork(finished)).toEqual({
+      backgroundSubagentCount: 0,
+      hasBackgroundWork: false,
+    });
+    expect(
+      getThreadInterruptTurnId({
+        ...finished,
+        latestTurn: { turnId: TurnId.makeUnsafe("old-completed-turn") },
+      }),
+    ).toBe("old-completed-turn");
+  },
+);
+
+it("counts a foreground subagent still running fresh only while the root turn is idle", () => {
+  const foreground = {
+    ...child,
+    id: RuntimeTaskId.makeUnsafe("codex:child"),
+    background: false,
+    activityFresh: true,
+  };
+  const idle = {
+    ...thread,
+    session: { ...thread.session!, provider: "codex" as const },
+    providerAgents: [
+      foreground,
+      { ...foreground, id: RuntimeTaskId.makeUnsafe("codex:stale"), activityFresh: false },
+    ],
+  };
+  expect(countRunningBackgroundSubagents(idle)).toBe(1);
+  expect(
+    countRunningBackgroundSubagents({
+      ...idle,
+      session: { ...idle.session, activeTurnId: TurnId.makeUnsafe("root") },
+    }),
+  ).toBe(0);
+});

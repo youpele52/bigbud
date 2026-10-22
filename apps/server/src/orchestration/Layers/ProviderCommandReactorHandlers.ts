@@ -27,6 +27,10 @@ import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.d
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
 import { makeProcessSessionHandlers } from "./ProviderCommandReactorHandlers.session.ts";
+import {
+  makeSweepSubagentsAfterInterrupt,
+  withSubagentSweepAfterInterrupt,
+} from "./ProviderCommandReactorHandlers.subagentSweep.ts";
 import { makeProcessTurnSteerRequested } from "./ProviderCommandReactorHandlers.steer.ts";
 import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.failures.ts";
 import { makeProviderCommandProjectResolvers } from "./ProviderCommandReactorHandlers.projects.ts";
@@ -311,9 +315,17 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const {
     processApprovalResponseRequested,
     processSessionStopRequested,
-    processTurnInterruptRequested,
     processUserInputResponseRequested,
   } = processSessionHandlers;
+  const processTurnInterruptRequested = withSubagentSweepAfterInterrupt({
+    resolveThread,
+    sweep: makeSweepSubagentsAfterInterrupt({
+      orchestrationEngine,
+      providerService,
+      resolveThread,
+    }),
+    processTurnInterruptRequested: processSessionHandlers.processTurnInterruptRequested,
+  });
 
   const processExecutionTargetReconfigure =
     makeExecutionTargetReconfigureHandler(sessionOpServices);

@@ -15,6 +15,7 @@ import {
   readString,
   rememberCollabReceiverTurns,
   shouldSuppressChildConversationNotification,
+  trackCollabChildTurn,
 } from "./codexAppServerManager.protocol.ts";
 import { normalizeProviderThreadId, toTurnId } from "./codexAppServerManager.utils.ts";
 
@@ -37,7 +38,18 @@ export function handleServerNotification(
     readChildParentTurnId(context, notification.params) ??
     (providerThreadId ? context.collabReceiverTurns.get(providerThreadId) : undefined);
   const isChildConversation = childParentTurnId !== undefined;
-  if (isChildConversation && shouldSuppressChildConversationNotification(notification.method)) {
+  // A known child keeps its lifecycle out of the parent session even after the parent turn
+  // ended, while its running turn is remembered for thread Stop.
+  const isKnownChildThread = trackCollabChildTurn(
+    context,
+    notification.method,
+    providerThreadId,
+    notification.params,
+  );
+  if (
+    (isChildConversation || isKnownChildThread) &&
+    shouldSuppressChildConversationNotification(notification.method)
+  ) {
     return;
   }
   const textDelta =

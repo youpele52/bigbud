@@ -149,6 +149,7 @@ export async function startSession(
       pendingApprovals: new Map(),
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
+      collabChildTurns: new Map(),
       activeModelCatalog: undefined,
       effectiveModelSelection: undefined,
       nextRequestId: 1,

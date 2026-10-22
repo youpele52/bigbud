@@ -98,6 +98,12 @@ export interface ProviderThreadSnapshot {
   readonly turns: ReadonlyArray<ProviderThreadTurnSnapshot>;
 }
 
+/** A running subagent named by thread Stop; `background` children may outlive the turn. */
+export interface ProviderThreadSubagentRef {
+  readonly nativeId: string;
+  readonly background: boolean;
+}
+
 export interface ProviderAdapterShape<TError> {
   /**
    * Provider kind implemented by this adapter.
@@ -142,6 +148,15 @@ export interface ProviderAdapterShape<TError> {
    * `capabilities.subagents.stop` is declared; Stop-all is `interruptTurn`.
    */
   readonly stopSubagent?: (threadId: ThreadId, nativeTaskId: string) => Effect.Effect<void, TError>;
+
+  /**
+   * Thread Stop: stop listed running subagents that `interruptTurn` does not end, such as
+   * detached background runs. Omit it when the interrupt already ends every child.
+   */
+  readonly stopThreadSubagents?: (
+    threadId: ThreadId,
+    subagents: ReadonlyArray<ProviderThreadSubagentRef>,
+  ) => Effect.Effect<void, TError>;
 
   /** Authoritative provider-native inspection, or `unavailable` when unsupported. */
   readonly inspectActiveTurn: (
