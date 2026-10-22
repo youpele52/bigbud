@@ -1,5 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Cause, Effect, Layer, Option, Scope, Stream } from "effect";
+import { Cause, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
 import {
@@ -13,6 +13,9 @@ import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/Di
 import { makeTextGenerationRequestRecovery } from "./ProviderCommandReactor.textGenerationRecovery.ts";
 import { makeTitleStageRecovery } from "./ProviderCommandReactor.titleRecovery.ts";
 import { makeTerminalThreadTitleStart } from "./TerminalThreadTitleReactor.ts";
+import { failUnhandledTurnStart } from "./ProviderCommandReactor.turnStartBackstop.ts";
+import { recoverUnhandledTurnStarts } from "./ProviderCommandReactor.turnStartRecovery.ts";
+import { makeTurnStartWatchdogPass } from "./ProviderCommandReactor.turnStartWatchdog.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -53,10 +56,22 @@ const make = Effect.gen(function* () {
         if (Cause.hasInterruptsOnly(cause)) {
           return Effect.failCause(cause);
         }
-        return Effect.logWarning("provider command reactor failed to process event", {
+        const logged = Effect.logWarning("provider command reactor failed to process event", {
           eventType: event.type,
           cause: Cause.pretty(cause),
         });
+        if (event.type !== "thread.turn-start-requested") return logged;
+        return logged.pipe(
+          Effect.andThen(failUnhandledTurnStart({ orchestrationEngine, event, cause })),
+          Effect.catchCause((failureCause) =>
+            Cause.hasInterruptsOnly(failureCause)
+              ? Effect.failCause(failureCause)
+              : Effect.logWarning("could not record an unhandled turn start failure", {
+                  threadId: event.payload.threadId,
+                  cause: Cause.pretty(failureCause),
+                }),
+          ),
+        );
       }),
     );
 
@@ -120,6 +135,25 @@ const make = Effect.gen(function* () {
     yield* recoverTextGenerationRequests(handlers.processTextGenerationActivity);
     yield* recoverTitleStages(handlers.processTextGenerationActivity).pipe(
       Effect.catch((cause) => Effect.logWarning("could not recover staged title jobs", { cause })),
+    );
+    yield* recoverUnhandledTurnStarts({
+      orchestrationEngine,
+      process: (event) => processEvent(event).pipe(Effect.asVoid),
+    }).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("could not recover unhandled turn starts", { cause }),
+      ),
+    );
+    const turnStartWatchdogPass = makeTurnStartWatchdogPass(orchestrationEngine);
+    yield* Effect.forkScoped(
+      turnStartWatchdogPass().pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("turn start watchdog pass failed", { cause: Cause.pretty(cause) }),
+        ),
+        Effect.repeat(Schedule.spaced("30 seconds")),
+      ),
     );
 
     let cursorAt = "";

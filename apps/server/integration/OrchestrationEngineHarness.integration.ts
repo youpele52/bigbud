@@ -34,6 +34,7 @@ import { CheckpointReactorLive } from "../src/orchestration/Layers/CheckpointRea
 import { OrchestrationEngineLive } from "../src/orchestration/Layers/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "../src/orchestration/Layers/ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "../src/orchestration/Layers/ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQueryLive } from "../src/orchestration/Layers/ProjectionOperationalStateQuery.ts";
 import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceiptBus.ts";
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
@@ -94,9 +95,12 @@ export const makeOrchestrationIntegrationHarness = (
           listProviders: () => Effect.succeed([adapterHarness.provider]),
         } as typeof ProviderAdapterRegistry.Service)
       : null;
-    const rootDir = yield* fileSystem.makeTempDirectoryScoped({
-      prefix: "t3-orchestration-integration-",
-    });
+    for (const response of options?.nextSessionTurnResponses ?? []) {
+      yield* adapterHarness!.queueTurnResponseForNextSession(response);
+    }
+    const rootDir =
+      options?.rootDir ??
+      (yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-orchestration-integration-" }));
     const workspaceDir = path.join(rootDir, "workspace");
     const { stateDir, dbPath } = yield* deriveServerPaths(rootDir, undefined).pipe(
       Effect.provideService(Path.Path, path),
@@ -108,7 +112,11 @@ export const makeOrchestrationIntegrationHarness = (
     const persistenceLayer = makeSqlitePersistenceLive(dbPath, {
       worker: options?.sqliteWorker ?? true,
     });
-    const orchestrationLayer = OrchestrationEngineLive.pipe(
+    // A restarted harness loads persisted operational state at startup, as production does.
+    const engineLayer = options?.rootDir
+      ? OrchestrationEngineLive.pipe(Layer.provide(ProjectionOperationalStateQueryLive))
+      : OrchestrationEngineLive;
+    const orchestrationLayer = engineLayer.pipe(
       Layer.provide(OrchestrationProjectionPipelineLive),
       Layer.provide(OrchestrationEventStoreLive),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
@@ -308,6 +316,7 @@ export const makeOrchestrationIntegrationHarness = (
       runtime.runPromise(Effect.service(RuntimeReceiptBus)),
     ).pipe(Effect.orDie);
 
+    if (options?.beforeReactorStart) yield* options.beforeReactorStart(engine);
     const scope = yield* Scope.make("sequential");
     yield* tryRuntimePromise("start OrchestrationReactor", () =>
       runtime.runPromise(reactor.start().pipe(Scope.provide(scope))),

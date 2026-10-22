@@ -1,3 +1,4 @@
+import { insertQueuedPrompt } from "@bigbud/shared/queuedPromptOrder";
 import { type OrchestrationEvent } from "@bigbud/contracts";
 
 import { updateThreadState } from "./helpers.store";
@@ -17,7 +18,11 @@ export function applyThreadQueueEvent(
         }
         return {
           ...thread,
-          queuedPrompts: [...queuedPrompts, event.payload.prompt],
+          queuedPrompts: insertQueuedPrompt(
+            queuedPrompts,
+            event.payload.prompt,
+            event.payload.queuePosition,
+          ),
           // A busy turn start is re-queued as a prompt: it is no longer a pending start.
           turnStartRequest: clearPendingTurnStartRequest(
             thread.turnStartRequest,

@@ -140,6 +140,11 @@ function toReconciledSession(input: {
   if (!currentSession) {
     return null;
   }
+  // A requested turn is still starting: its provider session is expected to be missing until
+  // the reactor binds or fails it, so `stopped` here would reopen the queue too early.
+  if (thread.pendingTurnStart != null) {
+    return null;
+  }
 
   const nextSession: OrchestrationSession = {
     threadId: thread.id,

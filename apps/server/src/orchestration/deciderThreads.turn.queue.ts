@@ -9,7 +9,7 @@ import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.t
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
-import { withEventBase } from "./deciderHelpers.ts";
+import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import {
   decideThreadTurnStartCommand,
   requireThreadReadyForMutation,
@@ -20,6 +20,8 @@ import {
   consumableQueuedPrefix,
   countedQueuedPrompts,
   hasActiveQueueReservation,
+  redeliveryQueuePosition,
+  userReleasesStalePendingTurnStart,
 } from "./QueuedPromptPolicy.logic.ts";
 import {
   isSentMessageRedelivery,
@@ -205,7 +207,7 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       command,
       readModel,
       targetThread: thread,
-      queuePosition: queuedPrompts.length + 1,
+      queuePosition: redelivery ? redeliveryQueuePosition(thread) : queuedPrompts.length + 1,
     });
     if (!redelivery && countedQueuedPrompts(queuedPrompts) >= MAX_QUEUED_PROMPTS) {
       return yield* new OrchestrationCommandInvariantError({
@@ -240,7 +242,9 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     return [queuedEvent, flushedEvent, ...startEvents];
   }
 
-  const prefix = consumableQueuedPrefix({ thread, ...command });
+  // The pending start's `requestedAt` is server time, so the user's release is judged by it too.
+  const releasedAt = nowIso();
+  const prefix = consumableQueuedPrefix({ thread, ...command, releasedAt });
   if (prefix.length === 0) return [];
   const flushedEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
@@ -254,7 +258,15 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   };
   if (command.consumeOnly) return flushedEvent;
   const startEvents = yield* decideThreadTurnStartCommand({
-    readModel,
+    // "Send now" past a stale pending start replaces that start with this one.
+    readModel: userReleasesStalePendingTurnStart({ thread, ...command, releasedAt })
+      ? {
+          ...readModel,
+          threads: readModel.threads.map((entry) =>
+            entry.id === thread.id ? { ...entry, pendingTurnStart: null } : entry,
+          ),
+        }
+      : readModel,
     command: buildQueuedFlushTurnStart({
       prompt: prefix[0]!,
       thread,

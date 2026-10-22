@@ -44,12 +44,22 @@ import { projectThreadTaskEvent } from "./projectorTasks.ts";
 import { projectThreadMessageSent } from "./projectorThreadMessages.ts";
 import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.ts";
 import { projectThreadTurnControlEvent } from "./projectorThreadTurnControl.ts";
+import { projectThreadPendingTurnStart } from "./projectorThreadPendingTurnStart.ts";
 import { retainThreadTitleOwnership } from "../orchestration-tools/TerminalThreadTitle.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
 
 export function projectEvent(
+  model: OrchestrationReadModel,
+  event: OrchestrationEvent,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return Effect.map(projectEventState(model, event), (next) =>
+    projectThreadPendingTurnStart(next, event),
+  );
+}
+
+function projectEventState(
   model: OrchestrationReadModel,
   event: OrchestrationEvent,
 ): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {

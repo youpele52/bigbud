@@ -70,6 +70,7 @@ describe("orchestration projector — thread lifecycle", () => {
         queuedPrompts: [],
         pendingInterruptFlushIntent: null,
         pendingTurnControlOperation: null,
+        pendingTurnStart: null,
         queueHold: false,
         tasks: [],
         activities: [],

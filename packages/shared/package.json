@@ -108,6 +108,10 @@
       "types": "./src/delegatedModelChoice.ts",
       "import": "./src/delegatedModelChoice.ts"
     },
+    "./queuedPromptOrder": {
+      "types": "./src/queuedPromptOrder.ts",
+      "import": "./src/queuedPromptOrder.ts"
+    },
     "./providerAttachments": {
       "types": "./src/providerAttachments.ts",
       "import": "./src/providerAttachments.ts"

@@ -41,6 +41,7 @@ import { ThreadDeletion, ThreadDeletionLive } from "../../deletion/Services/Thre
 import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
 import { makeQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
+import { makeOrphanedPendingTurnStartCommand } from "../PendingTurnStart.logic.ts";
 import {
   type CommandEnvelope,
   makeCommandProcessor,
@@ -132,7 +133,25 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     ? yield* operationalQueryOption.value.getStartupOperationalState()
     : readModel;
   rehydrateThreadTitleLocks([]);
+  const startupSequence = readModel.snapshotSequence;
   for (const thread of readModel.threads) {
+    // A previous process's turn start is never resumed and may already have reached the
+    // provider, so its gate is settled, not resent; the queue then flushes behind it.
+    const orphanedStart = makeOrphanedPendingTurnStartCommand({
+      thread,
+      createdAt: new Date().toISOString(),
+    });
+    if (orphanedStart) {
+      yield* commandAdmission.offer(
+        {
+          command: orphanedStart,
+          payloadDigest: calculateCommandPayloadDigest(orphanedStart),
+          result: yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>(),
+          startedAtMs: Date.now(),
+        },
+        "internal",
+      );
+    }
     const recoveryCommand = makeQueuedPromptFlushCommand({
       threadId: thread.id,
       readModel,
@@ -284,6 +303,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const engine: OrchestrationEngineShape = {
     withWorkspaceBarrier: (effect) => commandSemaphore.withPermits(1)(effect),
     serverEpoch,
+    startupSequence,
     threadDeletion,
     getCommandOutcome,
     getReadModel,

@@ -196,6 +196,8 @@ export const ThreadTurnStartFailedPayload = Schema.Struct({
   detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
   /** Absent on events written before classification existed. */
   failureClass: Schema.optional(TurnStartFailureClass),
+  /** The user message whose start failed. Absent on events written before it was recorded. */
+  messageId: Schema.optional(MessageId),
   createdAt: IsoDateTime,
 });
 

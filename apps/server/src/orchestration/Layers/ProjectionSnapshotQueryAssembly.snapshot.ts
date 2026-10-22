@@ -179,6 +179,7 @@ function mapThreadRow(
     pendingInterruptFlushIntent: row.pendingInterruptFlushIntent ?? null,
     pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
     queueHold: row.queueHold === 1,
+    pendingTurnStart: row.pendingTurnStart ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,

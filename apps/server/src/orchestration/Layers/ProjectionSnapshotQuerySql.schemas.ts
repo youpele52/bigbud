@@ -18,6 +18,7 @@ import {
 } from "@bigbud/contracts";
 import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
+import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -62,6 +63,7 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
       Schema.fromJsonString(OrchestrationTurnControlOperation),
     ),
     queueHold: Schema.Number,
+    pendingTurnStart: Schema.NullOr(Schema.fromJsonString(OrchestrationPendingTurnStart)),
   }),
 );
 

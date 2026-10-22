@@ -72,6 +72,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
       context: input.context,
       detail: normalizeTurnStartFailureDetail(input.detail),
       failureClass: input.failureClass,
+      ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
       createdAt: input.createdAt,
     });
 

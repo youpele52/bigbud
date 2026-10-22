@@ -51,6 +51,8 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     )
     OR t.pinned_at IS NOT NULL
     OR json_array_length(t.queued_prompts_json) > 0
+    -- Startup settles an orphaned pending turn start, so the thread must be loaded.
+    OR t.pending_turn_start_json IS NOT NULL
   `;
 
   const listOperationalThreadRows = SqlSchema.findAll({
@@ -77,6 +79,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         t.pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         t.pending_turn_control_operation_json AS "pendingTurnControlOperation",
         t.queue_hold AS "queueHold",
+        t.pending_turn_start_json AS "pendingTurnStart",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t

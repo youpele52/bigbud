@@ -90,6 +90,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     makeProviderFailureHandlers(orchestrationEngine);
   const handleTurnStartFailure = makeHandleTurnStartFailure({
     orchestrationEngine,
+    providerService,
     recordTurnStartFailure,
     requestAutomaticFork: makeRequestAutomaticFork({ orchestrationEngine, providerService }),
   });

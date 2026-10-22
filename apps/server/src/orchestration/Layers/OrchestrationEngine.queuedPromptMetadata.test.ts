@@ -125,6 +125,8 @@ describe("queued prompt metadata persistence", () => {
           events.find((event) => event.type === "thread.prompt-queued")?.payload,
         ).toMatchObject({ prompt: settings });
 
+        // The first queued turn binds before it settles; until then its pending start holds the queue.
+        await second.runPromise(engine.dispatch(session("first-bound", true)));
         await second.runPromise(engine.dispatch(session("next-settled", false)));
         await vi.waitFor(async () => {
           expect(

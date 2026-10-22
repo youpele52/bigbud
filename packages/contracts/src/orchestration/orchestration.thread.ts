@@ -263,6 +263,15 @@ export const OrchestrationPendingInterruptFlushIntent = Schema.Struct({
 export type OrchestrationPendingInterruptFlushIntent =
   typeof OrchestrationPendingInterruptFlushIntent.Type;
 
+/** A requested turn the provider has not bound yet; queued prompts wait behind it. */
+export const OrchestrationPendingTurnStart = Schema.Struct({
+  messageId: MessageId,
+  requestedAt: IsoDateTime,
+  /** Sequence of the `thread.turn-start-requested` event that opened the gate. */
+  requestedSequence: Schema.optional(NonNegativeInt),
+});
+export type OrchestrationPendingTurnStart = typeof OrchestrationPendingTurnStart.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -291,6 +300,9 @@ export const OrchestrationThread = Schema.Struct({
     Schema.NullOr(OrchestrationTurnControlOperation),
   ).pipe(Schema.withDecodingDefault(() => null)),
   queueHold: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
+  pendingTurnStart: Schema.optional(Schema.NullOr(OrchestrationPendingTurnStart)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

@@ -9,25 +9,12 @@ import { seedProjectAndThread, THREAD_ID } from "./orchestrationEngine.integrati
 
 const withPeriodicHarness = <A, E>(
   use: (harness: OrchestrationIntegrationHarness) => Effect.Effect<A, E>,
-  options: { readonly sqliteWorker?: boolean } = {},
 ) =>
   Effect.acquireUseRelease(
-    makeOrchestrationIntegrationHarness({ testClock: true, ...options }),
+    makeOrchestrationIntegrationHarness({ testClock: true }),
     use,
     (harness) => harness.dispose,
   ).pipe(Effect.provide(NodeServices.layer));
-
-/**
- * Pinned to the in-process driver because it asserts a transient state that
- * hides a production race. Given real time, on either driver, `queued-c` is
- * also sent: the session `ready` written while starting a session for the
- * a+b continuation turn triggers a lifecycle flush
- * (`QueuedPromptFlush.logic.ts` `makeLifecycleQueuedPromptFlushCommand`),
- * and the idle check (`ThreadDispatchSafety.logic.ts`) does not see the
- * requested but not yet bound turn. Remove the pin once that pending-start
- * gate exists (connection resilience plan, Phase 1b status).
- */
-const TRANSIENT_QUEUE_STATE = { sqliteWorker: false } as const;
 
 const nowIso = () => new Date().toISOString();
 
@@ -236,43 +223,119 @@ it.live("leaves state unchanged when provider session listing times out", () =>
 );
 
 it.live("flushes only the prompts captured before interruption after periodic repair", () =>
-  withPeriodicHarness(
-    (harness) =>
-      Effect.gen(function* () {
-        const turnId = TurnId.makeUnsafe("flush-captured");
-        yield* seedRunningThread(harness, turnId);
-        yield* queuePrompt(harness, "queued-a", "A");
-        yield* queuePrompt(harness, "queued-b", "B");
-        yield* harness.engine.dispatch({
-          type: "thread.turn.interrupt",
-          commandId: CommandId.makeUnsafe("interrupt-ab"),
-          threadId: THREAD_ID,
-          turnId,
-          queuedPromptIdsAfterSettlement: [
-            MessageId.makeUnsafe("queued-a"),
-            MessageId.makeUnsafe("queued-b"),
-          ],
-          createdAt: nowIso(),
-        });
-        yield* queuePrompt(harness, "queued-c", "C");
-        yield* harness.adapterHarness!.removeSession(THREAD_ID);
-        yield* harness.adapterHarness!.queueTurnResponseForNextSession({
-          events: [],
-          deferCompletion: true,
-        });
+  withPeriodicHarness((harness) =>
+    Effect.gen(function* () {
+      const turnId = TurnId.makeUnsafe("flush-captured");
+      yield* seedRunningThread(harness, turnId);
+      yield* queuePrompt(harness, "queued-a", "A");
+      yield* queuePrompt(harness, "queued-b", "B");
+      yield* harness.engine.dispatch({
+        type: "thread.turn.interrupt",
+        commandId: CommandId.makeUnsafe("interrupt-ab"),
+        threadId: THREAD_ID,
+        turnId,
+        queuedPromptIdsAfterSettlement: [
+          MessageId.makeUnsafe("queued-a"),
+          MessageId.makeUnsafe("queued-b"),
+        ],
+        createdAt: nowIso(),
+      });
+      yield* queuePrompt(harness, "queued-c", "C");
+      yield* harness.adapterHarness!.removeSession(THREAD_ID);
+      yield* harness.adapterHarness!.queueTurnResponseForNextSession({
+        events: [],
+        deferCompletion: true,
+      });
 
+      // Real time after each advance lets the continuation turn start fully: the new
+      // session reports `ready` before the a+b turn binds, which used to flush queued-c.
+      for (let pass = 0; pass < 3; pass += 1) {
         yield* harness.advanceClock("5 seconds");
+        yield* Effect.sleep("200 millis");
+      }
+      const thread = yield* harness.waitForThread(
+        THREAD_ID,
+        (entry) => entry.session?.status === "running" && entry.session.activeTurnId !== null,
+      );
+      assert.deepEqual(
+        (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+        ["queued-c"],
+      );
+      assert.equal(thread.pendingTurnStart, null);
+      assert.equal(harness.adapterHarness!.getSentTurnInputs().length, 1);
+      // Never flushed early: not in the transcript, and not re-queued after a busy refusal.
+      assert.isFalse(thread.messages.some((message) => message.id === "queued-c"));
+      assert.notEqual(thread.queuedPrompts?.[0]?.alreadySent, true);
+
+      // Steady state: queued-c waits for the a+b turn, which never completes here.
+      yield* harness.advanceClock("5 seconds");
+      yield* Effect.sleep("200 millis");
+      const steady = (yield* harness.engine.getReadModel()).threads.find(
+        (entry) => entry.id === THREAD_ID,
+      )!;
+      assert.deepEqual(
+        (steady.queuedPrompts ?? []).map((prompt) => prompt.id),
+        ["queued-c"],
+      );
+      assert.isFalse(steady.messages.some((message) => message.id === "queued-c"));
+      assert.equal(harness.adapterHarness!.getSentTurnInputs().length, 1);
+    }),
+  ),
+);
+
+it.live("keeps queued-c held while the continuation session start outlasts a periodic pass", () =>
+  withPeriodicHarness((harness) =>
+    Effect.gen(function* () {
+      const turnId = TurnId.makeUnsafe("held-start");
+      yield* seedRunningThread(harness, turnId);
+      yield* queuePrompt(harness, "queued-a", "A");
+      yield* queuePrompt(harness, "queued-b", "B");
+      yield* harness.engine.dispatch({
+        type: "thread.turn.interrupt",
+        commandId: CommandId.makeUnsafe("interrupt-held"),
+        threadId: THREAD_ID,
+        turnId,
+        queuedPromptIdsAfterSettlement: [
+          MessageId.makeUnsafe("queued-a"),
+          MessageId.makeUnsafe("queued-b"),
+        ],
+        createdAt: nowIso(),
+      });
+      yield* queuePrompt(harness, "queued-c", "C");
+      yield* harness.adapterHarness!.removeSession(THREAD_ID);
+      yield* harness.adapterHarness!.queueTurnResponseForNextSession({
+        events: [],
+        deferCompletion: true,
+      });
+      const releaseStart = yield* harness.adapterHarness!.holdNextStartSession();
+
+      // The a+b start is held before its provider session exists. Periodic reconciliation keeps
+      // seeing the session missing past its grace, but must not write `stopped` over the start.
+      for (let pass = 0; pass < 5; pass += 1) {
         yield* harness.advanceClock("5 seconds");
-        yield* harness.advanceClock("5 seconds");
-        yield* Effect.sleep("20 millis");
-        const thread = (yield* harness.engine.getReadModel()).threads.find(
-          (entry) => entry.id === THREAD_ID,
-        )!;
-        assert.deepEqual(
-          (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
-          ["queued-c"],
-        );
-      }),
-    TRANSIENT_QUEUE_STATE,
+        yield* Effect.sleep("200 millis");
+      }
+      const held = (yield* harness.engine.getReadModel()).threads.find(
+        (entry) => entry.id === THREAD_ID,
+      )!;
+      assert.equal(held.pendingTurnStart?.messageId, "continued:interrupt-held");
+      assert.equal(held.session?.status, "starting");
+      assert.deepEqual(
+        (held.queuedPrompts ?? []).map((prompt) => prompt.id),
+        ["queued-c"],
+      );
+
+      yield* releaseStart;
+      const bound = yield* harness.waitForThread(
+        THREAD_ID,
+        (entry) => entry.session?.status === "running" && entry.session.activeTurnId !== null,
+      );
+      assert.deepEqual(
+        (bound.queuedPrompts ?? []).map((prompt) => prompt.id),
+        ["queued-c"],
+      );
+      assert.isFalse(bound.messages.some((message) => message.id === "queued-c"));
+      assert.equal(harness.adapterHarness!.getSentTurnInputs().length, 1);
+    }),
   ),
 );

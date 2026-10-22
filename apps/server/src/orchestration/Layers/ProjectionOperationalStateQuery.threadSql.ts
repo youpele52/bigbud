@@ -63,6 +63,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         pending_turn_control_operation_json AS "pendingTurnControlOperation",
         queue_hold AS "queueHold",
+        pending_turn_start_json AS "pendingTurnStart",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads
