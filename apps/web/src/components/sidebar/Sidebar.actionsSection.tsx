@@ -1,5 +1,4 @@
 import {
-  BarChart3Icon,
   ClockIcon,
   Gamepad2,
   PlugIcon,
@@ -27,6 +26,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
 import { useUiStateStore } from "../../stores/ui/ui.store";
+import { UsageIcon } from "../usage/UsageIcon";
 import { Kbd } from "../ui/kbd";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -61,7 +61,7 @@ const ICONS = {
   plugins: PlugIcon,
   scheduled: ClockIcon,
   games: Gamepad2,
-  usage: BarChart3Icon,
+  usage: UsageIcon,
   "resource-monitor": ActivityIcon,
 };
 const ROW_CLASS =

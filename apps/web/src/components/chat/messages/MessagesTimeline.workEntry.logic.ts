@@ -1,5 +1,6 @@
+import type { ComponentType } from "react";
+import { AiIcon } from "../../AiIcon";
 import {
-  BotIcon,
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
@@ -21,7 +22,7 @@ export type TimelineWorkEntry = Extract<
 >["groupedEntries"][number];
 
 export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
+  icon: LucideIcon | typeof AiIcon;
   className: string;
 } {
   if (tone === "error") {
@@ -32,7 +33,7 @@ export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
   }
   if (tone === "thinking") {
     return {
-      icon: BotIcon,
+      icon: AiIcon,
       className: "text-foreground/92",
     };
   }
@@ -78,7 +79,9 @@ export function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+export function workEntryIcon(
+  workEntry: TimelineWorkEntry,
+): LucideIcon | ComponentType<{ className?: string }> {
   if (workEntry.requestKind === "browser") return GlobeIcon;
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;

@@ -1,5 +1,4 @@
-import { RoboticIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { AiIcon } from "../AiIcon";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -11,15 +10,7 @@ describe("SettingsAiIcon", () => {
     "renders Robotic artwork with the existing styling: %s",
     (className) => {
       expect(renderToStaticMarkup(<SettingsAiIcon className={className} />)).toBe(
-        renderToStaticMarkup(
-          <HugeiconsIcon
-            aria-hidden="true"
-            className={className}
-            icon={RoboticIcon}
-            size={14}
-            strokeWidth={2}
-          />,
-        ),
+        renderToStaticMarkup(<AiIcon className={className} />),
       );
     },
   );

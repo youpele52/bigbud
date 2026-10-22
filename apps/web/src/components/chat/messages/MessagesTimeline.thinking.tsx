@@ -1,4 +1,4 @@
-import { BotIcon } from "lucide-react";
+import { AiIcon } from "../../AiIcon";
 import { useMemo, useState } from "react";
 
 import ChatMarkdown from "../common/ChatMarkdown";
@@ -43,7 +43,7 @@ export function ThinkingMessageBody({
       <div className="rounded-xl border border-border/40 bg-card/12 px-3 py-2">
         <div className="mb-2 flex items-center gap-2">
           <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/55">
-            <BotIcon className="size-3" />
+            <AiIcon className="size-3" />
           </span>
           <div className="min-w-0">
             <p className="truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground/52">

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRightIcon, BotIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
+import { ArrowRightIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
+import { AiIcon } from "../AiIcon";
 
 import { useServerProviders } from "~/rpc/serverState";
 import { cn } from "~/lib/utils";
@@ -60,7 +61,7 @@ export function UsagePanel({ visible }: { visible: boolean }) {
                 />
                 <UsageStatCard
                   compact
-                  icon={BotIcon}
+                  icon={AiIcon}
                   label="Top model"
                   value={displaySummary.favoriteModel?.label ?? "None"}
                 />

@@ -6,11 +6,11 @@ import {
   NotebookTextIcon,
   TerminalIcon,
   ActivityIcon,
-  ChartNoAxesCombinedIcon,
 } from "lucide-react";
 
 import { RightPanelFilesIcon } from "./RightPanel.filesIcon";
 import { LauncherCard } from "./RightPanelLauncher.card";
+import { UsageIcon } from "../usage/UsageIcon";
 
 export type LauncherToolKind =
   | "browser"
@@ -131,7 +131,7 @@ export function RightPanelLauncher({
         />
         <LauncherCard
           description="See token usage and limits"
-          icon={ChartNoAxesCombinedIcon}
+          icon={UsageIcon}
           kind="usage"
           label="Usage"
           onSelect={onToggleUsage}

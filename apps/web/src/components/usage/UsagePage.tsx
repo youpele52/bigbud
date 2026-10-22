@@ -1,4 +1,6 @@
-import { BarChart3Icon, BotIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
+import { CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
+import { UsageIcon } from "./UsageIcon";
+import { AiIcon } from "../AiIcon";
 import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
@@ -147,7 +149,7 @@ export function UsagePage() {
                   value={displaySummary.favoriteProvider?.label ?? "None"}
                 />
                 <UsageStatCard
-                  icon={BotIcon}
+                  icon={AiIcon}
                   label="Top model"
                   value={displaySummary.favoriteModel?.label ?? "None"}
                 />
@@ -220,7 +222,7 @@ export function UsagePage() {
                   <CardContent className="p-0">
                     <Empty className="min-h-72">
                       <EmptyMedia variant="icon">
-                        <BarChart3Icon className="size-4" />
+                        <UsageIcon className="size-4" />
                       </EmptyMedia>
                       <EmptyHeader>
                         <EmptyTitle>No usage yet.</EmptyTitle>

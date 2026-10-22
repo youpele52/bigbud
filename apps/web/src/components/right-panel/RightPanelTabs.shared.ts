@@ -1,6 +1,5 @@
 import {
   ActivityIcon,
-  ChartNoAxesCombinedIcon,
   Columns3Icon,
   DiffIcon,
   GitBranchIcon,
@@ -12,6 +11,7 @@ import type { ComponentType } from "react";
 
 import type { RightPanelTabKind } from "~/stores/rightPanel/rightPanelTabs.store";
 import { RightPanelFilesIcon } from "./RightPanel.filesIcon";
+import { UsageIcon } from "../usage/UsageIcon";
 
 export const TAB_LABELS: Record<RightPanelTabKind, string> = {
   browser: "Browser",
@@ -32,7 +32,7 @@ export const TAB_ICONS: Record<RightPanelTabKind, ComponentType<{ className?: st
   git: GitBranchIcon,
   kanban: Columns3Icon,
   notes: NotebookTextIcon,
-  usage: ChartNoAxesCombinedIcon,
+  usage: UsageIcon,
   system: ActivityIcon,
   terminal: TerminalIcon,
 };

@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { UsageIcon } from "../usage/UsageIcon";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { TAB_ICONS, TAB_LABELS } from "./RightPanelTabs.shared";
 
@@ -42,8 +43,15 @@ describe("RightPanelLauncher", () => {
     expect(markup).toContain(filesIcon);
     expect(markup).not.toContain("lucide-folders");
     expect(markup).toContain("Usage");
+    expect(markup).toContain(
+      renderToStaticMarkup(<UsageIcon className="size-7 text-foreground" />),
+    );
     expect(markup.indexOf(">Diff</span>")).toBeLessThan(markup.indexOf(">Usage</span>"));
     expect(markup.indexOf(">Usage</span>")).toBeLessThan(markup.indexOf(">System</span>"));
+  });
+
+  it("uses the shared Usage icon for tabs and the + menu", () => {
+    expect(TAB_ICONS.usage).toBe(UsageIcon);
   });
 
   it("lists Usage before System in both shared tab catalogs", () => {
