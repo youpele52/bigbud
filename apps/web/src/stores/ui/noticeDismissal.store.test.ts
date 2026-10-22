@@ -1,86 +1,82 @@
-import { afterEach, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { useContextWindowDismissalStore } from "./contextWindowDismissal.store";
-import { MAX_NOTICE_DISMISSALS } from "./noticeDismissal.retention";
-import { useThreadNoticeDismissalStore } from "./threadNoticeDismissal.store";
+import { createMemoryStorage } from "../../lib/storage";
+import { createBannerDismissalStore } from "./bannerDismissal.store";
 
-afterEach(() => {
-  useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
-  useContextWindowDismissalStore.setState({ rearmTokensByThread: new Map() });
-});
+const key = JSON.stringify(["subscription-limits", "claude-agent-sdk", "stale"]);
 
-it.each(["revisions", "threads"] as const)(
-  "bounds notice dismissal %s and evicts oldest first",
-  (kind) => {
-    const { dismiss } = useThreadNoticeDismissalStore.getState();
-    const key = (index: number) =>
-      kind === "revisions"
-        ? JSON.stringify(["one-thread", "setup", `fingerprint-${index}`])
-        : JSON.stringify([`thread-${index}`, "setup", "one-fingerprint"]);
-    const count = MAX_NOTICE_DISMISSALS * 4;
-    for (let index = 0; index < count; index++) dismiss(key(index));
-    const retained = useThreadNoticeDismissalStore.getState().dismissed;
-    expect(retained.size).toBe(MAX_NOTICE_DISMISSALS);
-    expect([...retained]).toEqual(
-      Array.from({ length: MAX_NOTICE_DISMISSALS }, (_, index) =>
-        key(count - MAX_NOTICE_DISMISSALS + index),
-      ),
-    );
-  },
-);
+describe("app-run banner dismissal", () => {
+  it("survives renderer reload in the same run, but resets for a new run", () => {
+    const storage = createMemoryStorage();
+    const first = createBannerDismissalStore(storage);
+    first.getState().observeRun("app-one");
+    first.getState().dismiss(key, "app-one");
+    const reloaded = createBannerDismissalStore(storage);
+    reloaded.getState().observeRun("app-one");
+    expect(reloaded.getState().dismissed.has(key)).toBe(true);
+    reloaded.getState().observeRun("app-two");
+    expect(reloaded.getState().dismissed.size).toBe(0);
+    const restarted = createBannerDismissalStore(storage);
+    restarted.getState().observeRun("app-two");
+    expect(restarted.getState().dismissed.size).toBe(0);
+  });
 
-it("refreshes an explicitly re-dismissed notice without mutating prior snapshots", () => {
-  const { dismiss } = useThreadNoticeDismissalStore.getState();
-  for (let index = 0; index < MAX_NOTICE_DISMISSALS; index++) dismiss(`key-${index}`);
-  const previous = useThreadNoticeDismissalStore.getState().dismissed;
-  dismiss("key-0");
-  dismiss("new-key");
-  const retained = useThreadNoticeDismissalStore.getState().dismissed;
-  expect(retained.size).toBe(MAX_NOTICE_DISMISSALS);
-  expect(retained.has("key-0")).toBe(true);
-  expect(retained.has("key-1")).toBe(false);
-  expect([...retained].slice(-2)).toEqual(["key-0", "new-key"]);
-  expect(previous.has("key-1")).toBe(true);
-  expect(previous.has("new-key")).toBe(false);
-});
+  it("does not reset on absent welcome during reconnect", () => {
+    const store = createBannerDismissalStore(createMemoryStorage());
+    store.getState().observeRun("app-one");
+    store.getState().dismiss(key);
+    const before = store.getState();
+    store.getState().observeRun(undefined);
+    store.getState().observeRun(null);
+    store.getState().observeRun("app-one");
+    expect(store.getState()).toBe(before);
+    expect(store.getState().dismissed.has(key)).toBe(true);
+  });
 
-it("bounds context dismissals even when old threads never mount to rearm", () => {
-  const { setRearmTokens } = useContextWindowDismissalStore.getState();
-  const count = MAX_NOTICE_DISMISSALS * 4;
-  for (let index = 0; index < count; index++) setRearmTokens(String(index), index);
-  const retained = useContextWindowDismissalStore.getState().rearmTokensByThread;
-  expect(retained.size).toBe(MAX_NOTICE_DISMISSALS);
-  expect([...retained]).toEqual(
-    Array.from({ length: MAX_NOTICE_DISMISSALS }, (_, index) => {
-      const value = count - MAX_NOTICE_DISMISSALS + index;
-      return [String(value), value];
-    }),
-  );
-});
+  it("adopts dismissal before first welcome and persists it after the run becomes known", () => {
+    const storage = createMemoryStorage();
+    const store = createBannerDismissalStore(storage);
+    store.getState().dismiss(key);
+    store.getState().observeRun(undefined);
+    store.getState().observeRun("app-one");
+    expect(store.getState().dismissed.has(key)).toBe(true);
+    const reloaded = createBannerDismissalStore(storage);
+    expect(reloaded.getState().serverRunId).toBe("app-one");
+    expect(reloaded.getState().dismissed.has(key)).toBe(true);
+  });
 
-it("refreshes context dismissal order and preserves explicit rearming and prior snapshots", () => {
-  const { setRearmTokens } = useContextWindowDismissalStore.getState();
-  for (let index = 0; index < MAX_NOTICE_DISMISSALS; index++) setRearmTokens(String(index), index);
-  const previous = useContextWindowDismissalStore.getState().rearmTokensByThread;
-  setRearmTokens("0", 190_000);
-  setRearmTokens("new-thread", 200_000);
-  let retained = useContextWindowDismissalStore.getState().rearmTokensByThread;
-  expect(retained.size).toBe(MAX_NOTICE_DISMISSALS);
-  expect(retained.get("0")).toBe(190_000);
-  expect(retained.has("1")).toBe(false);
-  expect(previous.get("0")).toBe(0);
-  expect(previous.has("1")).toBe(true);
-  setRearmTokens("0", undefined);
-  retained = useContextWindowDismissalStore.getState().rearmTokensByThread;
-  expect(retained.has("0")).toBe(false);
-  expect(retained.get("new-thread")).toBe(200_000);
-});
+  it("dismisses correctly even before the new run observation effect executes", () => {
+    const store = createBannerDismissalStore(createMemoryStorage());
+    store.getState().observeRun("old-run");
+    store.getState().dismiss("old-key");
+    store.getState().dismiss("new-key", "new-run");
+    expect(store.getState().serverRunId).toBe("new-run");
+    expect([...store.getState().dismissed]).toEqual(["new-key"]);
+  });
 
-it("keeps context thresholds independent from eviction of notice revisions", () => {
-  useContextWindowDismissalStore.getState().setRearmTokens("thread-one", 190_000);
-  const { dismiss } = useThreadNoticeDismissalStore.getState();
-  for (let index = 0; index < MAX_NOTICE_DISMISSALS * 2; index++) dismiss(`revision-${index}`);
-  expect(useContextWindowDismissalStore.getState().rearmTokensByThread.get("thread-one")).toBe(
-    190_000,
-  );
+  it("does not evict earlier dismissals, and preserves immutable snapshots", () => {
+    const store = createBannerDismissalStore(createMemoryStorage());
+    store.getState().observeRun("run");
+    store.getState().dismiss(key);
+    const previous = store.getState().dismissed;
+    for (let index = 0; index < 2100; index++) store.getState().dismiss(`independent-${index}`);
+    expect(store.getState().dismissed.has(key)).toBe(true);
+    expect(store.getState().dismissed.size).toBe(2101);
+    expect(previous.size).toBe(1);
+  });
+
+  it.each([
+    "not json",
+    JSON.stringify({ state: null, version: 0 }),
+    JSON.stringify({ state: { serverRunId: 12, dismissed: [key] }, version: 0 }),
+    JSON.stringify({ state: { serverRunId: "run", dismissed: [null] }, version: 0 }),
+    JSON.stringify({ state: { serverRunId: "run", dismissed: "not an array" }, version: 0 }),
+  ])("ignores malformed persistence: %s", (raw) => {
+    const storage = createMemoryStorage();
+    storage.setItem("bigbud:session-banner-dismissals", raw);
+    const store = createBannerDismissalStore(storage);
+    expect(store.getState().dismissed.size).toBe(0);
+    expect(() => store.getState().dismiss(key, "run")).not.toThrow();
+    expect(store.getState().dismissed.has(key)).toBe(true);
+  });
 });

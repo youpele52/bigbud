@@ -1,6 +1,7 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { useCallback } from "react";
 
+import { StatusBanner } from "../common/StatusBanner";
 import BranchToolbarProjectMenu from "./BranchToolbarProjectMenu";
 
 import { newCommandId } from "../../lib/utils";
@@ -250,16 +251,40 @@ export default function BranchToolbar({
           onSubmit={worktrees.submit}
         />
       )}
-      {worktrees.inventory.data?.issues?.map((issue) => (
-        <p key={issue} role="alert" className="col-span-3 text-xs text-amber-600">
-          {issue}
-        </p>
-      ))}
+      {worktrees.inventory.data?.issues?.length ? (
+        <StatusBanner
+          dismissalKey={["worktree", threadId, workspaceTargetId, branchCwd, "inventory-issues"]}
+          variant="warning"
+          className="col-span-3"
+          dismissLabel="Dismiss workspace inventory warnings"
+          description={
+            <ul>
+              {worktrees.inventory.data.issues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          }
+        />
+      ) : null}
       {activeWorktreePath && worktrees.inventory.error && (
-        <p role="alert" className="col-span-3 text-xs text-destructive">
-          Could not inspect the saved workspace. Its path may be missing or unsupported; history was
-          not changed. {String(worktrees.inventory.error)}
-        </p>
+        <StatusBanner
+          dismissalKey={[
+            "worktree",
+            threadId,
+            workspaceTargetId,
+            activeWorktreePath,
+            "inspection-error",
+          ]}
+          variant="error"
+          className="col-span-3"
+          dismissLabel="Dismiss workspace inspection error"
+          description={
+            <>
+              Could not inspect the saved workspace. Its path may be missing or unsupported; history
+              was not changed. {String(worktrees.inventory.error)}
+            </>
+          }
+        />
       )}
       {worktrees.showOperations && (
         <WorktreeOperationsDialog

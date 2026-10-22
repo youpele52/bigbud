@@ -303,7 +303,6 @@ export function ChatViewComposer({
                 onTogglePlanCard={runtime.togglePlanCard}
                 onRuntimeModeChange={runtime.handleRuntimeModeChange}
               />
-
               <div
                 data-chat-composer-actions="right"
                 data-chat-composer-primary-actions-compact={
@@ -318,6 +317,7 @@ export function ChatViewComposer({
                   <>
                     {thread.activeContextWindow ? (
                       <ContextWindowMeter
+                        threadId={base.threadId}
                         usage={thread.activeContextWindow}
                         handoffAvailable={handoffAvailable}
                         onUseHandoff={onUseHandoffFromMeter}

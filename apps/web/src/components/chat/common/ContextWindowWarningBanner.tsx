@@ -1,14 +1,10 @@
 import { useSettings } from "~/hooks/useSettings";
 import { TriangleAlertIcon } from "lucide-react";
-import { memo, useEffect } from "react";
-import { useContextWindowDismissalStore } from "../../../stores/ui/contextWindowDismissal.store";
+import { memo } from "react";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { ChatBanner } from "./ChatBanner";
 import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
-import {
-  type ContextWindowSnapshot,
-  formatContextWindowTokens,
-  getContextWindowWarningRearmTokens,
-} from "~/lib/contextWindow";
+import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 
 export const ContextWindowWarningBanner = memo(function ContextWindowWarningBanner({
   threadId,
@@ -23,27 +19,8 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
 }) {
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
-  const dismissUntilTokens = useContextWindowDismissalStore((state) =>
-    state.rearmTokensByThread.get(threadId),
-  );
-  const setRearmTokens = useContextWindowDismissalStore((state) => state.setRearmTokens);
-
-  const isOverThreshold = (usage?.usedTokens ?? 0) >= warningThreshold;
-  const isDismissed =
-    dismissUntilTokens !== undefined && usage !== null && usage.usedTokens < dismissUntilTokens;
-
-  useEffect(() => {
-    if (dismissUntilTokens === undefined) {
-      return;
-    }
-    if (!isOverThreshold || (usage?.usedTokens ?? 0) >= dismissUntilTokens) {
-      setRearmTokens(threadId, undefined);
-    }
-  }, [dismissUntilTokens, isOverThreshold, threadId, usage?.usedTokens, setRearmTokens]);
-
-  if (!usage || !isOverThreshold || isDismissed) {
-    return null;
-  }
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "context-window");
+  if (!usage || usage.usedTokens < warningThreshold || dismissed) return null;
 
   return (
     <ChatBanner
@@ -60,12 +37,7 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
           />
         </>
       }
-      onDismiss={() =>
-        setRearmTokens(
-          threadId,
-          getContextWindowWarningRearmTokens(usage.usedTokens, warningThreshold),
-        )
-      }
+      onDismiss={dismiss}
     />
   );
 });

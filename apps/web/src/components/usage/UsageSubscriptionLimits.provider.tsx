@@ -39,6 +39,8 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "stale" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "stale"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} stale subscription limits warning`}
           centered
           variant="warning"
           icon={<TriangleAlertIcon />}
@@ -56,6 +58,8 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "error" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "error"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits error`}
           centered
           variant="error"
           icon={<CircleAlertIcon />}

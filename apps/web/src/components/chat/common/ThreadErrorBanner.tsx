@@ -7,17 +7,14 @@ import { useProviderFailureNotice } from "./ThreadErrorBanner.failure";
 export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   error,
   threadId,
-  conditionIdentity,
+  provider,
 }: {
   error: string | null;
   threadId: string;
-  conditionIdentity?: unknown;
+  provider?: string;
 }) {
   const failure = useProviderFailureNotice(threadId);
-  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "error", [
-    error,
-    conditionIdentity,
-  ]);
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "error", [provider]);
   const visibleError =
     failure.message ?? (error !== failure.originalMessage && !dismissed ? error : null);
   if (!visibleError) return null;

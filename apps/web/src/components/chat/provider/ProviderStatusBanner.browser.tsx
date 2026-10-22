@@ -44,10 +44,10 @@ describe("ProviderStatusBanner", () => {
     await reopened.rerender(
       <ProviderStatusBanner threadId="thread-one" status={{ ...status, version: "new-version" }} />,
     );
-    await expect.element(page.getByRole("alert")).toBeVisible();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("re-shows after dismissal when the provider status key changes", async () => {
+  it("keeps copy changes closed but allows independently scoped providers", async () => {
     const screen = await render(
       <ProviderStatusBanner status={provider({ message: "The first status message" })} />,
     );
@@ -59,9 +59,12 @@ describe("ProviderStatusBanner", () => {
     await screen.rerender(
       <ProviderStatusBanner status={provider({ message: "The second status message" })} />,
     );
-    await expect.element(page.getByRole("alert")).toHaveTextContent("The second status message");
-    await expect
-      .element(page.getByText("The second status message"))
-      .toHaveAttribute("title", "The second status message");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await screen.rerender(
+      <ProviderStatusBanner
+        status={provider({ provider: "codex", message: "Independent provider" })}
+      />,
+    );
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Independent provider");
   });
 });

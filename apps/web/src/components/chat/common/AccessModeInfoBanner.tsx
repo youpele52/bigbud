@@ -6,6 +6,7 @@ import type { OpencodeV2DevelopmentSettings } from "@bigbud/contracts/core/setti
 import { InfoIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { ChatBanner } from "./ChatBanner";
 
 const ACCESS_LABELS: Record<RuntimeMode, string> = {
@@ -53,6 +54,11 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
   accessModeChangeId: number;
   connectionMode?: OpencodeV2DevelopmentSettings["connectionMode"];
 }) {
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "access-mode", [
+    provider,
+    runtimeMode,
+    connectionMode,
+  ]);
   const [notice, setNotice] = useState<AccessModeInfoNotice | null>(null);
   const lastChangeId = useRef(accessModeChangeId);
 
@@ -74,7 +80,7 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
     notice.runtimeMode === runtimeMode &&
     notice.accessModeChangeId === accessModeChangeId &&
     notice.connectionMode === connectionMode;
-  if (!isVisible) return null;
+  if (!isVisible || dismissed) return null;
 
   const shared = connectionMode === "shared";
   const description = getAccessModeInfoDescription(runtimeMode, connectionMode);
@@ -92,7 +98,7 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
         </span>
       }
       dismissLabel="Dismiss access information"
-      onDismiss={() => setNotice(null)}
+      onDismiss={dismiss}
     />
   );
 });

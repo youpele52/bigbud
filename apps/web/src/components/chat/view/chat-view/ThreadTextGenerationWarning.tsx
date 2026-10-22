@@ -21,11 +21,7 @@ export function ThreadTextGenerationWarning({
     (state) => state.owners.size < MAX_NOTICE_DISMISSALS,
   );
   const claim = useTextGenerationWarnings((state) => state.claim);
-  const { dismissed, dismiss } = useThreadNoticeDismissal(
-    threadId,
-    `text-generation-${operation}`,
-    "once-per-session",
-  );
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, `text-generation-${operation}`);
   const visible = !dismissed && (owner === identity || (owner === undefined && hasCapacity));
   useEffect(() => {
     if (visible) claim(key, identity);

@@ -13,7 +13,7 @@ vi.mock("~/hooks/useSettings", () => ({
 }));
 
 import { ContextWindowWarningBanner } from "./ContextWindowWarningBanner";
-import { useContextWindowDismissalStore } from "../../../stores/ui/contextWindowDismissal.store";
+import { useThreadNoticeDismissalStore } from "../../../stores/ui/threadNoticeDismissal.store";
 
 const BASE_USAGE = {
   usedTokens: 160_000,
@@ -50,10 +50,10 @@ function makeBanner(usage: ContextWindowSnapshot) {
 
 describe("ContextWindowWarningBanner", () => {
   afterEach(() => {
-    useContextWindowDismissalStore.setState({ rearmTokensByThread: new Map() });
+    useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
     document.body.innerHTML = "";
   });
-  it("keeps dismissal across navigation, scopes it to the thread and rearms after context drops", async () => {
+  it("keeps dismissal across navigation, scopes it to the thread even after context drops", async () => {
     const first = await render(makeBanner(BASE_USAGE));
     await page.getByLabelText("Dismiss").click();
     await first.unmount();
@@ -70,10 +70,10 @@ describe("ContextWindowWarningBanner", () => {
     await expect.element(page.getByText("Context window warning")).toBeVisible();
     await reopened.rerender(makeBanner({ ...BASE_USAGE, usedTokens: 100_000 }));
     await reopened.rerender(makeBanner(BASE_USAGE));
-    await expect.element(page.getByText("Context window warning")).toBeVisible();
+    await expect.element(page.getByText("Context window warning")).not.toBeInTheDocument();
   });
 
-  it("dismisses above the original fixed rearm point until usage increases further", async () => {
+  it("stays dismissed when usage increases beyond the old rearm point", async () => {
     const screen = await render(makeBanner(BASE_USAGE));
 
     await page.getByLabelText("Dismiss").click();
@@ -83,6 +83,6 @@ describe("ContextWindowWarningBanner", () => {
     await expect.element(page.getByText("Context window warning")).not.toBeInTheDocument();
 
     await screen.rerender(makeBanner({ ...BASE_USAGE, usedTokens: 190_000 }));
-    await expect.element(page.getByText("Context window warning")).toBeInTheDocument();
+    await expect.element(page.getByText("Context window warning")).not.toBeInTheDocument();
   });
 });

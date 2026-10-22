@@ -67,7 +67,7 @@ describe("OpenCode retained-history advisory dismissal", () => {
     localStorage.removeItem(RETAINED_HISTORY_DISMISSAL_KEY);
   });
 
-  it("dismisses for this thread in memory without persisting or generating a startup toast", async () => {
+  it("dismisses for this thread without changing the legacy advisory preference or generating a toast", async () => {
     await render(<ProviderRecoveryToastCoordinator />);
     const firstChat = await render(
       <ProviderStatusBanner threadId="first-thread" status={nativeStatus()} />,
@@ -153,7 +153,7 @@ describe("OpenCode retained-history advisory dismissal", () => {
         status={nativeStatus({ provider: "opencode", message: "New legacy provider warning." })}
       />,
     );
-    await expect.element(page.getByRole("alert")).toHaveTextContent("New legacy provider warning.");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
 
   it("does not match a partial advisory or an advisory quoted inside a longer primary message", async () => {

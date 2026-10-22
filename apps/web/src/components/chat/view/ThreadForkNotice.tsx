@@ -48,7 +48,9 @@ export function ThreadForkNotice({
     () => deriveSourceForkNotice({ messages, activities }, isForkPresent),
     [messages, activities, isForkPresent],
   );
-  const { dismissed, dismiss } = useThreadNoticeDismissal(thread.id, "fork", origin ?? sourceFork);
+  const { dismissed, dismiss } = useThreadNoticeDismissal(thread.id, "fork", [
+    origin?.sourceThreadId ?? sourceFork?.forkThreadId,
+  ]);
   if ((!origin && !sourceFork) || dismissed) return null;
   const carry = sourceFork?.carry ?? null;
   return (

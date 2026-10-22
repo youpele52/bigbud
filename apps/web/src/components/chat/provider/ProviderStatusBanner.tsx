@@ -16,22 +16,9 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   runtimeVerified?: boolean;
   threadId?: string;
 }) {
-  const { dismissed, dismiss } = useThreadNoticeDismissal(
-    threadId,
-    "provider-status",
-    status
-      ? [
-          status.provider,
-          status.status,
-          status.message,
-          status.version,
-          status.enabled,
-          status.installed,
-          status.auth,
-          status.failure,
-        ]
-      : null,
-  );
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "provider-status", [
+    status?.provider,
+  ]);
   const advisoryDismissed = useRetainedHistoryAdvisory();
   const visibleStatus = withoutDismissedRetainedHistoryAdvisory(
     withoutVerifiedRuntimeNotice(status, runtimeVerified),

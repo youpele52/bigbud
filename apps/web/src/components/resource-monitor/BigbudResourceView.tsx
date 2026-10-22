@@ -1,5 +1,5 @@
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
-import { Button } from "../ui/button";
+import { ResourceConnectionStatus } from "./ResourceConnectionStatus";
 import { ResourceCollectionStatus } from "./ResourceCollectionStatus";
 import { BigbudResourceMetricCard } from "./BigbudResourceMetricCard";
 import { BigbudResourceBreakdown } from "./BigbudResourceBreakdown";
@@ -8,6 +8,7 @@ import { formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 import { BigbudInclusiveResourceCard } from "./BigbudInclusiveResourceCard";
 import { BigbudIoResourceCard } from "./BigbudIoResourceCard";
 import { useResourceMonitor } from "./useResourceMonitor";
+import { StatusBanner } from "../common/StatusBanner";
 import { CenteredStatus } from "../common/CenteredStatus";
 
 export function BigbudResourceView({
@@ -54,26 +55,11 @@ export function BigbudResourceView({
         </p>
       </div>
       {connection !== "connected" || appReason ? (
-        <CenteredStatus
-          loading={connection === "connecting" && !appReason}
-          className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground"
-        >
-          <p>
-            {connection === "connecting" && !appReason
-              ? "Connecting to bigbud’s resource monitor"
-              : `bigbud monitoring unavailable${appReason || reason ? `: ${appReason || reason}` : ""}`}
-          </p>
-          {connection === "unavailable" || appReason ? (
-            <Button
-              size="xs"
-              variant="outline"
-              className="mt-2"
-              onClick={() => void retryResourceMonitor()}
-            >
-              Retry
-            </Button>
-          ) : null}
-        </CenteredStatus>
+        <ResourceConnectionStatus
+          scope="app"
+          connecting={connection === "connecting" && !appReason}
+          reason={appReason || reason}
+        />
       ) : (
         <ResourceCollectionStatus
           status={collectionStatus}
@@ -84,10 +70,12 @@ export function BigbudResourceView({
         <CenteredStatus loading={pending}>Waiting for a fresh bigbud sample</CenteredStatus>
       ) : null}
       {app?.incomplete ? (
-        <CenteredStatus className="text-warning">
-          Some owned processes could not be measured. Totals are unavailable rather than
-          understated.
-        </CenteredStatus>
+        <StatusBanner
+          dismissalKey={["resource-monitor", "app", "incomplete"]}
+          variant="warning"
+          dismissLabel="Dismiss incomplete resource measurement warning"
+          description="Some owned processes could not be measured. Totals are unavailable rather than understated."
+        />
       ) : null}
       <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
         <BigbudResourceMetricCard

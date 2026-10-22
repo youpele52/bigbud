@@ -1,22 +1,29 @@
 import type { ServerOpencodeV2ThreadToolsSetupResult } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
+import { StatusBanner } from "../../common/StatusBanner";
 import { Button } from "../../ui/button";
 import { isPendingOpenCodeSetup } from "./opencodeSetup.observer";
 
 /** Show actual activation work separately from passive native qualification warnings. */
 export function OpenCodeSetupStatus({
   result,
+  threadId = "opencode-setup",
   error,
   onRetry,
   onCancel,
   disabled = false,
 }: {
+  threadId?: string;
   result: ServerOpencodeV2ThreadToolsSetupResult | null | undefined;
   error?: string | null | undefined;
   onRetry: () => void;
   onCancel: () => void;
   disabled?: boolean;
 }) {
-  if (!result && !error) return null;
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "opencode-setup-job", [
+    result?.jobId,
+  ]);
+  if (dismissed || (!result && !error)) return null;
   const pending = !!result && isPendingOpenCodeSetup(result);
   const state = result?.activationState;
   const title = pending
@@ -41,10 +48,14 @@ export function OpenCodeSetupStatus({
       aria-label="OpenCode setup status"
       className={`space-y-2 border-b border-current/20 bg-current/5 px-4 py-3 text-sm ${tone}`}
     >
-      <div role="status" aria-live="polite" className={tone}>
-        <p className="font-medium">{title}</p>
-        <p>{result?.message}</p>
-      </div>
+      <StatusBanner
+        role="status"
+        variant="default"
+        title={title}
+        description={result?.message}
+        dismissLabel="Dismiss OpenCode setup status"
+        onDismiss={dismiss}
+      />
       {error ? <p role="alert">{error}</p> : null}
       {pending ? (
         <p className="text-xs text-muted-foreground">

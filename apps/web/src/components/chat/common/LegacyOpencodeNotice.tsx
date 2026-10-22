@@ -12,7 +12,6 @@ export function LegacyOpencodeNotice({
     <ThreadNoticeBanner
       threadId={threadId}
       kind="legacy-opencode"
-      condition={LEGACY_OPENCODE_READ_ONLY_MESSAGE}
       variant="warning"
       role="status"
       icon={<TriangleAlertIcon />}

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
-import { Button } from "../ui/button";
+import { ResourceConnectionStatus } from "./ResourceConnectionStatus";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { ProcessTable, type DisplayProcess } from "./ProcessTable";
 import { ResourceMetricCard } from "./ResourceMetricCard";
@@ -92,26 +92,7 @@ export function SystemMonitorHostView() {
         <ResourceDetailPreferences />
       </div>
       {connection !== "connected" ? (
-        <CenteredStatus
-          loading={connection === "connecting"}
-          className="rounded-md border bg-muted/30 p-4 text-sm"
-        >
-          <p>
-            {connection === "connecting"
-              ? "Connecting to this computer’s System Monitor"
-              : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
-          </p>
-          {connection === "unavailable" ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => void retryResourceMonitor()}
-            >
-              Retry
-            </Button>
-          ) : null}
-        </CenteredStatus>
+        <ResourceConnectionStatus connecting={connection === "connecting"} reason={reason} />
       ) : null}
       {connection === "connected" ? (
         <ResourceCollectionStatus

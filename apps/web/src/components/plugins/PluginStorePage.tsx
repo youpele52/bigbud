@@ -6,6 +6,7 @@ import { runRpc } from "~/rpc/client";
 import { ContentPanelHeaderBar } from "../layout/ContentPanelHeaderBar";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { StandalonePageContent } from "../standalone/StandalonePageContent";
+import { StatusBanner } from "../common/StatusBanner";
 import { Button } from "../ui/button";
 import { PluginCatalogRow } from "./PluginCatalogRow";
 import { PluginSearch } from "./PluginSearch";
@@ -103,7 +104,15 @@ export function PluginStorePage() {
     >
       <StandalonePageContent>
         <main>
-          {notice ? <p className="mb-6 text-xs text-muted-foreground">{notice}</p> : null}
+          {notice ? (
+            <StatusBanner
+              dismissalKey={["plugins", "catalog"]}
+              variant="warning"
+              className="mb-6"
+              description={notice}
+              dismissLabel="Dismiss plugin catalog warning"
+            />
+          ) : null}
           {categories.length > 0 ? (
             <div className="space-y-10">
               {categories.map(([category, categoryItems]) => (

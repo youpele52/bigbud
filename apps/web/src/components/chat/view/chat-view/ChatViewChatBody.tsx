@@ -112,6 +112,7 @@ export function ChatViewChatBody({
       ) : null}
       {openCodeSetup.result?.jobId ? (
         <OpenCodeSetupStatus
+          threadId={base.threadId}
           result={openCodeSetup.result}
           error={openCodeSetup.error}
           onRetry={openCodeSetup.retry}
@@ -121,14 +122,6 @@ export function ChatViewChatBody({
         <ThreadNoticeBanner
           threadId={base.threadId}
           kind="opencode-setup"
-          condition={[
-            openCodeSetup.error,
-            openCodeSetup.severity,
-            openCodeSetup.noticeIdentity,
-            base.settings.providers.opencodeV2,
-            composer.gitCwd ?? workspaceRoot,
-            composer.activeProviderStatus?.version,
-          ]}
           variant={openCodeSetup.severity}
           title="OpenCode setup"
           description={openCodeSetup.error}
@@ -152,10 +145,7 @@ export function ChatViewChatBody({
       <ThreadErrorBanner
         error={base.activeThread!.error}
         threadId={base.activeThread!.id}
-        conditionIdentity={[
-          base.activeThread!.turnStartRequest,
-          base.activeThread!.activities.findLast((activity) => activity.tone === "error")?.id,
-        ]}
+        provider={base.activeThread!.modelSelection.provider}
       />
       {base.isServerThread && base.activeThread ? (
         <ThreadRecoveryNotices thread={base.activeThread} />

@@ -116,7 +116,7 @@ describe("ThreadRecoveryNotice", () => {
     await expect.element(page.getByText("Continued in a fresh session")).toBeVisible();
   });
 
-  it("remembers closing a failure across navigation, scopes it to the thread, and re-arms on a new failure", async () => {
+  it("remembers closing a failure across navigation, scopes it to the thread, and ignores new failure revisions", async () => {
     const thread = {
       id: "dismiss-recovery" as ThreadId,
       messages: [
@@ -159,6 +159,6 @@ describe("ThreadRecoveryNotice", () => {
         }}
       />,
     );
-    await expect.element(page.getByText("Could not reconnect")).toBeVisible();
+    await expect.element(page.getByText("Could not reconnect")).not.toBeInTheDocument();
   });
 });

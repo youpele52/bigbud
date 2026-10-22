@@ -12,7 +12,6 @@ export function OpencodeV2RetainedHistoryNotice({
     <ThreadNoticeBanner
       threadId={threadId}
       kind="retained-history"
-      condition={message}
       variant="warning"
       role="status"
       description={message}

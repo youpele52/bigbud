@@ -21,6 +21,7 @@ import type { WsRpcClient } from "./wsRpcClient";
 import { appAtomRegistry, resetAppAtomRegistryForTests } from "./atomRegistry";
 import { startServerConfigSync } from "./serverState.configSync";
 import { recordServerStall } from "./serverStallState";
+import { useBannerDismissalStore } from "../stores/ui/bannerDismissal.store";
 
 export type ServerConfigUpdateSource = ServerConfigStreamEvent["type"];
 
@@ -180,6 +181,8 @@ export function applyDiscoveryUpdated(discovery: ServerDiscoveryCatalog): void {
 }
 
 export function emitWelcome(payload: ServerLifecycleWelcomePayload): void {
+  // Reconnects retain the same run; only a new backend/app process resets UI dismissal.
+  useBannerDismissalStore.getState().observeRun(payload.serverRunId);
   appAtomRegistry.set(welcomeAtom, payload);
 }
 
