@@ -38,6 +38,7 @@ import {
   readResumeThreadId,
 } from "./codexAppServerManager.utils";
 import { type StartSessionOps, startSession } from "./codexAppServerManager.startSession";
+import { CodexPendingStarts } from "./codexAppServerManager.pendingStarts";
 import {
   type TurnOps,
   interruptTurn,
@@ -76,6 +77,7 @@ export type { CodexThreadTurnSnapshot } from "./codexAppServerManager.types";
 
 export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEvents> {
   private readonly sessions = new Map<ThreadId, CodexSessionContext>();
+  private readonly pendingStarts = new CodexPendingStarts();
 
   private runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
   constructor(services?: ServiceMap.ServiceMap<never>) {
@@ -87,6 +89,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     const ops: StartSessionOps = {
       runPromise: this.runPromise,
       sessions: this.sessions,
+      pendingStarts: this.pendingStarts,
       sendRequest: (ctx, method, params, timeoutMs) =>
         this.sendRequest(ctx, method, params, timeoutMs),
       writeMessage: (ctx, msg) => this.writeMessage(ctx, msg),
@@ -149,6 +152,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   stopSession(threadId: ThreadId): void {
+    this.pendingStarts.cancel(threadId);
     const context = this.sessions.get(threadId);
     if (!context) {
       return;
@@ -194,6 +198,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   stopAll(): void {
+    this.pendingStarts.cancelAll();
     for (const threadId of this.sessions.keys()) {
       this.stopSession(threadId);
     }

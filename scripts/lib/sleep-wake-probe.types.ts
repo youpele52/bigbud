@@ -128,7 +128,9 @@ export interface SleepWindow {
  * - `errored`: the turn or session ended in error or interruption after wake.
  * - `hung`: still running at the end with no progress for the hang threshold.
  * - `still-running`: still making progress; finish the probe later.
- * - `no-sleep`: the probe saw no sleep, so the turn says nothing about wake.
+ * - `no-sleep`: the probe saw no sleep, so the turn says nothing about wake. Takes
+ *   precedence over `no-turn`.
+ * - `no-turn`: the machine slept, but no turn started after the probe did.
  */
 export type TurnOutcome =
   | "no-turn"

@@ -15,6 +15,7 @@ import {
   assertSshExecutionTargetReady,
   assertSshExecutionTargetReadyAsync,
 } from "../ssh/sshVerification.ts";
+import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
 const remoteVersionCheckCache = new Set<string>();
@@ -92,8 +93,8 @@ function acceptRemoteVersionCheck(cacheKey: string, result: VersionCheckOutcome)
 }
 
 /**
- * Synchronous check, kept only until `startSession` awaits
- * `startCodexAppServerProcessAsync`; it can block the event loop for up to
+ * Synchronous check, no longer on the session start path (`startSession` awaits
+ * `startCodexAppServerProcessAsync`); it can block the event loop for up to
  * `SSH_VERSION_CHECK_TIMEOUT_MS` plus the readiness probes.
  */
 export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartSessionInput): void {
@@ -155,17 +156,22 @@ function spawnRemoteCodexAppServer(
     "app-server",
     ...(input.configArgs ?? []),
   ]);
-  return spawn(invocation.command, invocation.args, {
-    env: process.env,
-    stdio: ["pipe", "pipe", "pipe"],
-    shell: process.platform === "win32",
-  });
+  return recordEarlySpawnError(
+    spawn(invocation.command, invocation.args, {
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: process.platform === "win32",
+    }),
+  );
 }
 
+/** An abort during the version check means the app-server is never spawned. */
 export async function startRemoteCodexAppServerProcessAsync(
   input: CodexAppServerStartSessionInput,
+  signal?: AbortSignal,
 ): Promise<ChildProcessWithoutNullStreams> {
   await assertSupportedRemoteCodexCliVersionAsync(input);
+  signal?.throwIfAborted();
   return spawnRemoteCodexAppServer(input);
 }
 

@@ -14,7 +14,7 @@ This folder records what each provider does when the laptop sleeps in the middle
 | Desktop `suspend`, `resume`, `online` and `offline` signals | `desktop-main.log` and its rotations under Electron `userData/logs`: `~/Library/Application Support/bigbud` on macOS, `%APPDATA%\bigbud` on Windows, `$XDG_CONFIG_HOME/bigbud` (default `~/.config/bigbud`) on Linux. Prerelease channels use `bigbud-<channel>`. Stable uses the legacy `T3 Code (Alpha)` folder if it exists. | **Packaged app only**, and only builds that include `13b90621ba`. Dev does not write this log, so these columns read `–` in dev. The row gets a note when the log has no connectivity lines inside the run. |
 | Socket drop and reconnect timing                            | Retained spans in `server.trace.ndjson`: `ws.connection.diagnostics` reports, `http.server GET /ws`, `server.stalled`, `server.suspected_system_sleep`                                                                                                                                                                          | Reconnect time comes from the renderer's `reconnect-success` report. If the socket never dropped, there is no reconnect time.                                                                               |
 | What the turn did after wake                                | `orchestration_events` in `state.sqlite`, opened read-only from the sequence the probe started at                                                                                                                                                                                                                               | One of `continued`, `retried-internally`, `errored`, `hung`, `still-running`, `finished-during-sleep` or `finished-before-sleep`.                                                                           |
-| Retry evidence                                              | Activities after wake, plus the per-thread provider log `logs/provider/<threadId>.log`                                                                                                                                                                                                                                          | Matches retry, reconnect, resume and network-error wording.                                                                                                                                                 |
+| Retry evidence                                              | Activities after wake, plus the per-thread provider log `logs/provider/<threadId>.log`                                                                                                                                                                                                                                          | Matches retry, reconnect, resume and network-error wording. bigbud writes the provider log in dev builds only, so packaged runs use activities alone.                                                       |
 | Whether a tool ran twice                                    | The marker file the test command appends to                                                                                                                                                                                                                                                                                     | Every `start` line is one run of the command.                                                                                                                                                               |
 | Provider and its CLI/SDK version                            | `<cli> --version`, the SDK `package.json` in `apps/server/node_modules`, or `sdkVersion` in the provider log                                                                                                                                                                                                                    | Remote runtimes: record by hand.                                                                                                                                                                            |
 
@@ -24,16 +24,17 @@ Server span timestamps are the server's start time plus `process.hrtime`. On mac
 
 ### Outcome values
 
-| Outcome                 | Meaning                                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------------------- |
-| `continued`             | The turn made progress after wake and finished cleanly, with no retry evidence.                 |
-| `retried-internally`    | It finished cleanly after wake, and the provider or bigbud logged a retry, reconnect or resume. |
-| `errored`               | The session went to `error` or `interrupted`, or the turn start failed, after wake.             |
-| `hung`                  | Still running at the end, with no progress for 2 minutes after wake.                            |
-| `still-running`         | Still making progress. Press Enter later, or run `analyze` again.                               |
-| `finished-during-sleep` | The turn ended while the laptop slept. Expected only for remote work.                           |
-| `finished-before-sleep` | The lid closed too late. The run does not count; repeat it.                                     |
-| `no-sleep`              | The probe saw no gap of 15 seconds or more. The laptop did not sleep.                           |
+| Outcome                 | Meaning                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `continued`             | The turn made progress after wake and finished cleanly, with no retry evidence.                        |
+| `retried-internally`    | It finished cleanly after wake, and the provider or bigbud logged a retry, reconnect or resume.        |
+| `errored`               | The session went to `error` or `interrupted`, or the turn start failed, after wake.                    |
+| `hung`                  | Still running at the end, with no progress for 2 minutes after wake.                                   |
+| `still-running`         | Still making progress. Press Enter later, or run `analyze` again.                                      |
+| `finished-during-sleep` | The turn ended while the laptop slept. Expected only for remote work.                                  |
+| `finished-before-sleep` | The lid closed too late. The run does not count; repeat it.                                            |
+| `no-sleep`              | The probe saw no gap of 15 seconds or more. The laptop did not sleep. Takes precedence over `no-turn`. |
+| `no-turn`               | The laptop slept, but no turn started after the probe did. Start the probe first, or pass `--thread`.  |
 
 ## Prerequisites
 
@@ -70,6 +71,47 @@ Server span timestamps are the server's start time plus `process.hrtime`. On mac
 6. The probe prints a summary, the JSON row and a table row. It also appends the JSON row to `results.ndjson`.
 
 The tool prompt does not tell the agent whether to rerun the command after an error. A rerun, whether the provider or the model chose it, shows up as two `start` lines and `Tool ran twice: yes`. When that happens, read the thread to see which one it was, and write it in Notes.
+
+## First runs
+
+Three short runs on the installed app check the kit end to end before the full matrix. You do not need `bun dev:desktop` for these.
+
+Before the first run:
+
+- Make the scratch project and add it to bigbud, as in [Prerequisites](#prerequisites). Sign in to Claude and Codex, and send one ordinary message to each.
+- Let every other thread finish, including agent threads. The probe follows the first turn that starts after it starts.
+- Unplug external displays. If you are on battery, change `AC` to `battery` in each `--label`.
+
+Run each command in a second terminal at the repository root, before you send the prompt. Then follow steps 2 to 6 of [One run, step by step](#one-run-step-by-step), using a new thread in the scratch project with the provider named.
+
+1. Claude, streaming, 1-minute sleep:
+
+   ```sh
+   node scripts/sleep-wake-probe.ts start --packaged --provider claudeAgent --scenario streaming --planned-sleep 1 --label "first run, AC"
+   ```
+
+2. Claude, tool, 1-minute sleep:
+
+   ```sh
+   rm -f ~/bigbud-sleep-wake-scratch/marker.log
+   node scripts/sleep-wake-probe.ts start --packaged --provider claudeAgent --scenario tool --planned-sleep 1 --marker ~/bigbud-sleep-wake-scratch/marker.log --label "first run, AC"
+   ```
+
+3. Codex, streaming, 10-minute sleep:
+
+   ```sh
+   node scripts/sleep-wake-probe.ts start --packaged --provider codex --scenario streaming --planned-sleep 10 --label "first run, AC"
+   ```
+
+What to expect from bigbud 0.3.0, the installed build on 22 October 2026:
+
+- **Resume signal (s)** reads `–`, and the row has a note about connectivity signal lines. Version 0.3.0 predates `13b90621ba`, so its desktop log has no suspend or resume lines. The sleep is still measured from the probe's clocks and `pmset -g log`.
+- **Reconnect (s)** reads `–`. Version 0.3.0 predates the renderer's `ws.connection.diagnostics` reports. **Socket dropped** still works, from the `/ws` span.
+- Retry evidence comes from activities alone, because packaged builds write no per-thread provider log.
+- **Version** shows the CLI set in Settings, else the one on your `PATH`, and, for Claude, the SDK in this checkout. Check them against About.
+- Node prints an `ExperimentalWarning` about SQLite. It is harmless.
+
+If the probe followed the wrong thread, right-click the right thread in the sidebar and choose **Copy Thread ID**. Paste it as `"threadId"` in the run's `meta.json`, then run `node scripts/sleep-wake-probe.ts analyze <run dir>`.
 
 ## Provider procedures
 

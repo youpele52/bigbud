@@ -231,6 +231,23 @@ describe("analyzeProbeRun", () => {
     expect(remote.notes.join(" ")).toContain("fresh file");
   });
 
+  it("reports no-sleep before no-turn, and no-turn only after a sleep", () => {
+    const steady = Array.from({ length: 30 }, (_, index) => ({
+      wallMs: START + index * 1000,
+      monoMs: index * 1000,
+    }));
+    const dryRun = analyzeProbeRun(makeInputs({ events: [], clock: steady }));
+    expect(dryRun.sleep.detected).toBe(false);
+    expect(dryRun.turn.outcome).toBe("no-sleep");
+
+    const slept = analyzeProbeRun(makeInputs({ events: [] }));
+    expect(slept.turn.outcome).toBe("no-turn");
+    expect(slept.notes.join(" ")).toContain("or pass --thread");
+    const pinned = makeInputs({ events: [] });
+    const wrongThread = analyzeProbeRun({ ...pinned, meta: { ...pinned.meta, threadId: "t-x" } });
+    expect(wrongThread.notes.join(" ")).toContain("in thread t-x");
+  });
+
   it("formats a table row with one cell per header column", () => {
     const row = analyzeProbeRun(makeInputs({ events: running }));
     const cells = formatTableRow(row).slice(2, -2).split(" | ");

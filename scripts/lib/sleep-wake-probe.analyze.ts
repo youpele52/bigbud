@@ -203,6 +203,13 @@ export function analyzeProbeRun(inputs: ProbeInputs): SleepWakeRunRow {
   if (turn.turn.outcome === "finished-before-sleep") {
     notes.push("the turn finished before the lid closed; this run does not count");
   }
+  if (turn.turn.outcome === "no-turn") {
+    notes.push(
+      meta.threadId === null
+        ? "no turn started after the probe did; start the probe first, or pass --thread"
+        : `no turn started in thread ${meta.threadId} after the probe did; check the --thread ID`,
+    );
+  }
   if (turn.turn.outcome === "still-running") {
     notes.push("the turn was still progressing; finish the probe later or re-run analyze");
   }

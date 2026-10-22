@@ -166,8 +166,10 @@ export function analyzeTurn(input: TurnAnalysisInput): TurnAnalysis {
     ranTwice: null,
   };
   if (input.threadId === null || threadEvents.length === 0) {
+    // Without a sleep the run is invalid whatever the turn did, so `no-sleep` wins.
+    const outcome: TurnOutcome = input.window === null ? "no-sleep" : "no-turn";
     const turn = {
-      outcome: "no-turn" as const,
+      outcome,
       startedAt: null,
       endedAt: null,
       firstProgressAfterWakeMs: null,

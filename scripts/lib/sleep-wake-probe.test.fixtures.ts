@@ -97,6 +97,7 @@ export function makeInputs(overrides: {
   readonly providerLog?: ReadonlyArray<ProviderLogLine>;
   readonly finishedAtMs?: number;
   readonly topology?: ProbeTopology;
+  readonly clock?: ReadonlyArray<ClockSample>;
 }): ProbeInputs {
   return {
     meta: {
@@ -116,7 +117,7 @@ export function makeInputs(overrides: {
       osRelease: "25.0.0",
     },
     finishedAtMs: overrides.finishedAtMs ?? WOKE_AT + 60_000,
-    clock: clockAcrossSleep({ countsSleep: false }),
+    clock: overrides.clock ?? clockAcrossSleep({ countsSleep: false }),
     traceOffsets: [{ wallMs: START + 5_000, traceMs: toTrace(START + 5_000) }],
     spans: SPANS,
     signals: [

@@ -99,7 +99,7 @@ export async function collectProbeInputs(
     );
     if (inRun.length === 0) {
       unavailable.push(
-        `no connectivity signal lines inside the run in ${meta.desktopLogPath}; check --desktop-log or --channel`,
+        `no connectivity signal lines inside the run in ${meta.desktopLogPath}; the installed build may predate 13b90621ba, else check --desktop-log or --channel`,
       );
     }
   } else {
@@ -117,7 +117,13 @@ export async function collectProbeInputs(
   const threadId = selection.threadId;
   const providerLog =
     threadId === null ? null : await readProviderLog(meta.stateDir, threadId, meta.startedAtMs);
-  if (threadId !== null && providerLog === null) unavailable.push("no per-thread provider log");
+  if (threadId !== null && providerLog === null) {
+    unavailable.push(
+      meta.build === "packaged"
+        ? "no per-thread provider log (bigbud writes it in dev builds only)"
+        : "no per-thread provider log",
+    );
+  }
 
   const marker = meta.markerPath === null ? null : readMarker(meta.markerPath);
   if (meta.markerPath !== null && marker === null) {
