@@ -180,6 +180,7 @@ function mapThreadRow(
     pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
     queueHold: row.queueHold === 1,
     pendingTurnStart: row.pendingTurnStart ?? null,
+    recovery: row.recovery ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,

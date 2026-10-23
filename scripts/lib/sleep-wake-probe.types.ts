@@ -18,9 +18,10 @@ export interface ClockSample {
 
 /**
  * Maps trace time to wall time. Server span timestamps are process start time plus
- * `process.hrtime`, which stops during sleep on macOS and Linux, so after a sleep the
- * trace runs behind the wall clock. The probe pairs the trace file's mtime (wall) with
- * the newest span end it contains (trace time) to recover the offset.
+ * `process.hrtime`. On Linux hrtime stops during sleep, so after a sleep the trace runs
+ * behind the wall clock; on macOS (libuv uses `mach_continuous_time`) and Windows it counts
+ * sleep, so the drift is near zero. The probe pairs the trace file's mtime (wall) with the
+ * newest span end it contains (trace time) to recover the offset.
  */
 export interface TraceOffsetSample {
   readonly wallMs: number;

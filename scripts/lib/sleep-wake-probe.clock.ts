@@ -31,9 +31,10 @@ function gapEndIndexes(samples: ReadonlyArray<ClockSample>): number[] {
 
 /**
  * Finds the longest sleep in the probe's clock samples, merging gaps split by brief dark
- * wakes. On macOS and Linux the monotonic clock stops during sleep, so
- * `wallGapMs - monotonicGapMs` is the time slept. On Windows both advance, so the wall
- * gap alone marks the sleep.
+ * wakes. The wall gap alone marks the sleep. On Linux the monotonic clock stops during
+ * sleep, so `wallGapMs - monotonicGapMs` is the time slept. On macOS (`mach_continuous_time`)
+ * and Windows the monotonic clock keeps counting through sleep, so that difference stays near
+ * zero there.
  */
 export function detectSleepWindow(samples: ReadonlyArray<ClockSample>): SleepWindow | null {
   const gaps = gapEndIndexes(samples);
@@ -85,7 +86,8 @@ export interface TraceClock {
 /**
  * Server span timestamps are process start time plus `process.hrtime`. Across a sleep
  * the server's hrtime advances exactly as much as the probe's monotonic clock, so a span
- * that started after the sleep is behind wall time by an extra `sleepDriftMs`.
+ * that started after the sleep is behind wall time by an extra `sleepDriftMs`. That drift is
+ * the slept time on Linux and near zero on macOS and Windows, where hrtime counts sleep.
  * The pre-sleep offset comes from trace-file samples (file mtime against newest span end).
  */
 export function makeTraceClock(

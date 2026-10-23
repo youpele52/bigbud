@@ -15,6 +15,7 @@ import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeli
 import { advancesThreadActivityAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
 import { projectThreadQueueControlEvent } from "./ProjectionPipeline.projector.threadQueueControl.ts";
 import { projectThreadPendingTurnStartEvent } from "./ProjectionPipeline.projector.threadPendingTurnStart.ts";
+import { projectThreadRecoveryEvent } from "./ProjectionPipeline.projector.threadRecovery.ts";
 
 function resolveSyncedElevatorSummary(input: {
   readonly currentTitle: string;
@@ -66,6 +67,7 @@ export function makeThreadsProjector(
     }
     // Before queue control: that projector returns early for events that also move this gate.
     yield* projectThreadPendingTurnStartEvent({ event, repository: projectionThreadRepository });
+    yield* projectThreadRecoveryEvent({ event, repository: projectionThreadRepository });
     if (yield* projectThreadQueueControlEvent({ event, repository: projectionThreadRepository }))
       return;
     switch (event.type) {

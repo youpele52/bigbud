@@ -106,7 +106,7 @@ export const makeConnectionDiagnostics = (
           "event_loop.gap_started_at": event.startedAt,
           "event_loop.gap_ended_at": event.endedAt,
         };
-        // Warning, not info: on Windows a long low-CPU blocking call looks the same.
+        // Warning, not info: on macOS and Windows a long low-CPU blocking call looks the same.
         return Effect.logWarning("server event loop paused; suspected system sleep").pipe(
           Effect.annotateLogs(attributes),
           traced(SUSPECTED_SYSTEM_SLEEP_SPAN, attributes, true),

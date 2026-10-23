@@ -18,7 +18,10 @@ import {
 } from "./ThreadPromptAdmission.logic.ts";
 import { countedQueuedPrompts } from "./QueuedPromptPolicy.logic.ts";
 import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
-import { verifiedOrchestraAssignmentSegments } from "./ThreadMessageOrigin.logic.ts";
+import {
+  hasSleepRecoveryOrigin,
+  verifiedOrchestraAssignmentSegments,
+} from "./ThreadMessageOrigin.logic.ts";
 import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.ts";
 
 export function requireThreadReadyForMutation(input: {
@@ -68,6 +71,14 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
   yield* requireThreadAttachmentsSupported(targetThread, command);
   if (isThreadTurnDispatchBlocked(targetThread)) {
+    // The thread got busy after the coordinator's idle check: user activity wins.
+    if (hasSleepRecoveryOrigin(command.message)) {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "A sleep recovery continuation is sent only to an idle thread; it is not queued.",
+        code: "prompt_not_queueable",
+      });
+    }
     const existing = targetThread.queuedPrompts?.find(
       (prompt) => prompt.id === command.message.messageId,
     );

@@ -1,3 +1,4 @@
+import * as OS from "node:os";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
 import { Cause, Effect, Layer, Option } from "effect";
@@ -12,10 +13,12 @@ import {
   EVENT_LOOP_SAMPLE_INTERVAL_MS,
   EVENT_LOOP_WINDOW_MS,
   type LoopClockReading,
+  loopSleepClockForPlatform,
   shouldRetainEventLoopWindow,
   summarizeEventLoopWindow,
 } from "../EventLoopLagMonitor.logic.ts";
 import { ConnectionDiagnostics } from "../Services/ConnectionDiagnostics.ts";
+import { SystemSleepEpochs } from "../../system-sleep/Services/SystemSleepEpochs.ts";
 import { SERVER_STALL_MAX_SPANS } from "@bigbud/contracts/constants/connectionDiagnostics.constant.ts";
 
 export const EVENT_LOOP_WINDOW_SPAN = "server.event_loop.window";
@@ -24,11 +27,15 @@ export interface EventLoopLagMonitorOptions {
   readonly sampleIntervalMs?: number;
   readonly windowMs?: number;
   readonly thresholdMs?: number;
-  /** Whether the monotonic clock counts system sleep; defaults to true on Windows. */
+  /** Whether the monotonic clock counts system sleep; defaults to true on macOS and Windows. */
   readonly monotonicIncludesSleep?: boolean;
+  /** Whether `boottimeMs` counts sleep the monotonic clock misses; defaults to true on Linux. */
+  readonly boottimeCountsSleep?: boolean;
   /** Clock source, injectable for tests. */
   readonly readClock?: () => LoopClockReading;
 }
+
+const platformSleepClock = loopSleepClockForPlatform(process.platform);
 
 const readLoopClock = (): LoopClockReading => {
   const cpu = process.cpuUsage();
@@ -36,6 +43,7 @@ const readLoopClock = (): LoopClockReading => {
     monotonicMs: performance.now(),
     wallMs: Date.now(),
     cpuMs: (cpu.user + cpu.system) / 1_000,
+    ...(platformSleepClock.boottimeCountsSleep ? { boottimeMs: OS.uptime() * 1_000 } : {}),
   };
 };
 
@@ -52,18 +60,22 @@ export const makeEventLoopLagMonitor = Effect.fn("makeEventLoopLagMonitor")(func
   const sampleIntervalMs = options.sampleIntervalMs ?? EVENT_LOOP_SAMPLE_INTERVAL_MS;
   const windowMs = options.windowMs ?? EVENT_LOOP_WINDOW_MS;
   const readClock = options.readClock ?? readLoopClock;
-  const monotonicIncludesSleep = options.monotonicIncludesSleep ?? process.platform === "win32";
+  const monotonicIncludesSleep =
+    options.monotonicIncludesSleep ?? platformSleepClock.monotonicIncludesSleep;
+  const boottimeCountsSleep = options.boottimeCountsSleep ?? platformSleepClock.boottimeCountsSleep;
   const classifyGap = (previous: LoopClockReading, now: LoopClockReading, intervalMs: number) =>
     classifyLoopGap({
       previous,
       now,
       intervalMs,
       monotonicIncludesSleep,
+      boottimeCountsSleep,
       ...(options.thresholdMs === undefined ? {} : { thresholdMs: options.thresholdMs }),
     });
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const diagnostics = yield* ConnectionDiagnostics;
   const spanActivity = yield* Effect.serviceOption(ServerSpanActivity);
+  const sleepEpochs = yield* Effect.serviceOption(SystemSleepEpochs);
   const histogram = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const created = monitorEventLoopDelay({ resolution: EVENT_LOOP_HISTOGRAM_RESOLUTION_MS });
@@ -102,6 +114,13 @@ export const makeEventLoopLagMonitor = Effect.fn("makeEventLoopLagMonitor")(func
         endedAtMs: now.wallMs,
         durationMs: gap.durationMs,
       });
+      if (Option.isSome(sleepEpochs)) {
+        yield* sleepEpochs.value.recordEvidence({
+          source: "server-gap",
+          startedAtMs: now.wallMs - gap.durationMs,
+          endedAtMs: now.wallMs,
+        });
+      }
     }
   });
 

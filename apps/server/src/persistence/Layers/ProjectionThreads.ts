@@ -19,6 +19,7 @@ import { toPersistenceSqlError } from "../Errors.ts";
 import { resolveProjectionWorktreeIdentity } from "./ProjectionThreads.identity.ts";
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
+import { makeSetThreadRecovery } from "./ProjectionThreads.recovery.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
@@ -389,6 +390,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     deleteById,
     touchActivity,
     listRecentModelSelections: makeListRecentModelSelections(sql),
+    setRecovery: makeSetThreadRecovery(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

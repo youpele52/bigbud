@@ -34,6 +34,32 @@ export interface LoopClockReading {
   readonly wallMs: number;
   /** Process user plus system CPU time. */
   readonly cpuMs: number;
+  /**
+   * Linux only: time since boot including suspend (`os.uptime()`, CLOCK_BOOTTIME), in ms.
+   * Unlike the wall clock it never steps, so it separates a suspend from a clock change.
+   */
+  readonly boottimeMs?: number;
+}
+
+/** How a platform's clocks behave across system sleep. */
+export interface LoopSleepClock {
+  /** The monotonic clock (`performance.now()`) keeps counting through sleep. */
+  readonly monotonicIncludesSleep: boolean;
+  /** The monotonic clock stops during sleep and `boottimeMs` counts it. */
+  readonly boottimeCountsSleep: boolean;
+}
+
+/**
+ * Node's `performance.now()` uses libuv's `uv_hrtime`. On macOS that is
+ * `mach_continuous_time`, which counts sleep; on Windows `QueryPerformanceCounter` also counts
+ * it. On Linux it is CLOCK_MONOTONIC, which stops during suspend, while `os.uptime()`
+ * (CLOCK_BOOTTIME) keeps counting.
+ */
+export function loopSleepClockForPlatform(platform: NodeJS.Platform): LoopSleepClock {
+  return {
+    monotonicIncludesSleep: platform === "darwin" || platform === "win32",
+    boottimeCountsSleep: platform === "linux",
+  };
 }
 
 export type LoopGap =
@@ -49,25 +75,41 @@ export type LoopGap =
  * The sampler sleeps `intervalMs` between ticks. Any extra monotonic time is
  * time the event loop could not run it.
  *
- * On macOS and Linux the monotonic clock stops during system sleep, so a sleep
- * there never looks like a stall: the wall clock runs ahead of the monotonic
- * one and the monotonic drift is the real busy time. On Windows the monotonic
- * clock keeps counting through sleep, so both clocks advance together. There a
- * long gap during which the process used almost no CPU is classified as
- * system sleep instead of a stall. A synchronous wait that burns no CPU, such
- * as a long `spawnSync`, can also match this on Windows.
+ * On macOS and Windows the monotonic clock keeps counting through system sleep,
+ * so the wall and monotonic clocks advance together across a sleep. There a
+ * long gap during which the process used almost no CPU is classified as system
+ * sleep instead of a stall. A synchronous wait that burns no CPU, such as a
+ * long `spawnSync`, can also match this.
+ *
+ * On Linux the monotonic clock stops during suspend, so a sleep never looks
+ * like a stall. Boot time (`boottimeMs`) keeps counting, so boot time running
+ * ahead of monotonic time by at least `SYSTEM_SLEEP_MIN_GAP_MS` is the
+ * suspended time. A wall-clock step changes neither clock, so it never looks
+ * like a sleep.
  */
 export function classifyLoopGap(input: {
   readonly previous: LoopClockReading;
   readonly now: LoopClockReading;
   readonly intervalMs?: number;
   readonly thresholdMs?: number;
-  /** True where the monotonic clock counts system sleep (Windows). */
+  /** True where the monotonic clock counts system sleep (macOS and Windows). */
   readonly monotonicIncludesSleep?: boolean;
+  /** True where the monotonic clock stops during sleep and `boottimeMs` counts it (Linux). */
+  readonly boottimeCountsSleep?: boolean;
 }): LoopGap | null {
   const intervalMs = input.intervalMs ?? EVENT_LOOP_SAMPLE_INTERVAL_MS;
   const thresholdMs = input.thresholdMs ?? SERVER_STALL_THRESHOLD_MS;
   const monotonicGapMs = input.now.monotonicMs - input.previous.monotonicMs;
+  if (
+    input.boottimeCountsSleep === true &&
+    input.now.boottimeMs !== undefined &&
+    input.previous.boottimeMs !== undefined
+  ) {
+    const suspendedMs = input.now.boottimeMs - input.previous.boottimeMs - monotonicGapMs;
+    if (Number.isFinite(suspendedMs) && suspendedMs >= SYSTEM_SLEEP_MIN_GAP_MS) {
+      return { kind: "system-sleep", durationMs: suspendedMs };
+    }
+  }
   const expectedTickMs = input.previous.monotonicMs + intervalMs;
   const durationMs = monotonicGapMs - intervalMs;
   if (!Number.isFinite(durationMs) || durationMs < thresholdMs) return null;

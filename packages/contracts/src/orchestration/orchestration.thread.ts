@@ -25,6 +25,7 @@ import { OrchestrationProject } from "./orchestration.project";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import { ThreadForkOrigin } from "./orchestration.fork";
 import { OrchestrationTask } from "./orchestration.thread.tasks";
+import { ThreadRecovery } from "./orchestration.recovery";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -301,6 +302,10 @@ export const OrchestrationThread = Schema.Struct({
   ).pipe(Schema.withDecodingDefault(() => null)),
   queueHold: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
   pendingTurnStart: Schema.optional(Schema.NullOr(OrchestrationPendingTurnStart)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  /** Sleep and wake recovery notice. Absent on snapshots written before recovery existed. */
+  recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
   createdAt: IsoDateTime,

@@ -8,6 +8,7 @@ import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
 import { LearningReactor } from "../Services/LearningReactor.ts";
+import { ProviderTurnSupervisor } from "../Services/ProviderTurnSupervisor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
 describe("OrchestrationReactor", () => {
@@ -20,7 +21,7 @@ describe("OrchestrationReactor", () => {
     runtime = null;
   });
 
-  it("starts provider ingestion, provider command, and checkpoint reactors", async () => {
+  it("starts provider ingestion, the turn supervisor, provider command, and checkpoint reactors", async () => {
     const started: string[] = [];
 
     runtime = ManagedRuntime.make(
@@ -77,6 +78,15 @@ describe("OrchestrationReactor", () => {
             },
           }),
         ),
+        Layer.provideMerge(
+          Layer.succeed(ProviderTurnSupervisor, {
+            start: () => {
+              started.push("provider-turn-supervisor");
+              return Effect.void;
+            },
+            runPass: Effect.void,
+          }),
+        ),
       ),
     );
 
@@ -86,6 +96,7 @@ describe("OrchestrationReactor", () => {
 
     expect(started).toEqual([
       "provider-runtime-ingestion",
+      "provider-turn-supervisor",
       "provider-command-reactor",
       "checkpoint-reactor",
       "scheduler-reactor",

@@ -18,7 +18,7 @@ import {
   registerProviderRuntimeIngestionTestCleanup,
   waitForThread,
 } from "./ProviderRuntimeIngestion.test.helpers.ts";
-import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
+import { superviseProviderTurns } from "./ProviderTurnSupervisor.health.ts";
 
 const runSupervisor = (
   orchestrationEngine: OrchestrationEngineShape,

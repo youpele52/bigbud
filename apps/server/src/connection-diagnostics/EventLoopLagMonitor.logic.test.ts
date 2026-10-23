@@ -4,6 +4,7 @@ import {
   buildStalledPayload,
   classifyLoopGap,
   type LoopClockReading,
+  loopSleepClockForPlatform,
   shouldRetainEventLoopWindow,
   summarizeEventLoopWindow,
 } from "./EventLoopLagMonitor.logic.ts";
@@ -81,6 +82,43 @@ describe("classifyLoopGap", () => {
     expect(classifyLoopGap({ previous: at(0), now: at(600_250), intervalMs: 250 })?.kind).toBe(
       "stall",
     );
+  });
+
+  it("classifies a macOS lid close as sleep, not a stall", () => {
+    // mach_continuous_time counts sleep: both clocks jump together and no CPU is spent.
+    const darwin = loopSleepClockForPlatform("darwin");
+    expect(darwin).toEqual({ monotonicIncludesSleep: true, boottimeCountsSleep: false });
+    expect(
+      classifyLoopGap({ previous: at(0), now: at(600_250), intervalMs: 250, ...darwin }),
+    ).toEqual({ kind: "system-sleep", durationMs: 600_000 });
+  });
+
+  it("classifies a Linux suspend from boot time running ahead of monotonic time", () => {
+    const linux = loopSleepClockForPlatform("linux");
+    // CLOCK_MONOTONIC stops during suspend; CLOCK_BOOTTIME and the wall clock keep counting.
+    const previous = { monotonicMs: 0, wallMs: 1_700_000_000_000, cpuMs: 0, boottimeMs: 5_000 };
+    const now = {
+      monotonicMs: 250,
+      wallMs: 1_700_000_000_000 + 600_250,
+      cpuMs: 1,
+      boottimeMs: 5_000 + 600_250,
+    };
+    expect(classifyLoopGap({ previous, now, intervalMs: 250, ...linux })).toEqual({
+      kind: "system-sleep",
+      durationMs: 600_000,
+    });
+  });
+
+  it("never treats a Linux wall-clock step without a suspend as sleep", () => {
+    const linux = loopSleepClockForPlatform("linux");
+    const previous = { monotonicMs: 0, wallMs: 1_700_000_000_000, cpuMs: 0, boottimeMs: 5_000 };
+    const now = {
+      monotonicMs: 250,
+      wallMs: 1_700_000_000_000 + 3_600_000,
+      cpuMs: 1,
+      boottimeMs: 5_250,
+    };
+    expect(classifyLoopGap({ previous, now, intervalMs: 250, ...linux })).toBeNull();
   });
 });
 

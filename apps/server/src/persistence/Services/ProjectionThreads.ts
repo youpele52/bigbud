@@ -25,6 +25,7 @@ import {
 } from "@bigbud/contracts";
 import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import type { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
 import type * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -143,6 +144,11 @@ export interface ProjectionThreadRepositoryShape {
   readonly listRecentModelSelections: (
     input: ListRecentModelSelectionsInput,
   ) => Effect.Effect<ReadonlyArray<RecentProjectionModelSelection>, ProjectionRepositoryError>;
+  /** Sets the thread's sleep and wake recovery notice (`recovery_json`). */
+  readonly setRecovery: (input: {
+    readonly threadId: ThreadId;
+    readonly recovery: ThreadRecovery | null;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 
 /**

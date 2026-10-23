@@ -8,6 +8,8 @@
  */
 import { Effect, FileSystem, Layer, LogLevel, Path, Schema, ServiceMap } from "effect";
 
+import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
+
 import type { TraceMode } from "../observability/TracePolicy.ts";
 
 export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
@@ -65,6 +67,10 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly authToken: string | undefined;
   readonly autoBootstrapProjectFromCwd: boolean;
   readonly logWebSocketEvents: boolean;
+  /** Why Electron main started this backend; absent on ordinary starts. */
+  readonly desktopStartReason?: DesktopBackendStartReason;
+  /** Child fd of Electron main's lifecycle hint pipe, when a desktop bootstrap envelope came. */
+  readonly desktopLifecycleHintFd?: number;
 }
 
 export const deriveServerPaths = Effect.fn(function* (

@@ -325,6 +325,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pendingInterruptFlushIntent: null,
           pendingTurnControlOperation: null,
           pendingTurnStart: null,
+          recovery: null,
           queueHold: false,
           tasks: [
             {

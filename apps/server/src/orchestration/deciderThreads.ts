@@ -19,6 +19,7 @@ import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThread
 import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
 import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
 import { decideDelegationModelChoiceCommand } from "./deciderThreads.delegationModelChoice.ts";
+import { decideThreadRecoveryCommand } from "./deciderThreads.recovery.ts";
 import {
   canNameThreadFromTerminal,
   TERMINAL_TITLE_COMMAND_PREFIX,
@@ -102,6 +103,9 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
   }
   if (command.type === "thread.task.upsert" || command.type === "thread.task.remove") {
     return yield* decideThreadTaskCommand({ command, readModel });
+  }
+  if (command.type === "thread.recovery.set" || command.type === "thread.recovery.resolve") {
+    return yield* decideThreadRecoveryCommand({ command, readModel });
   }
   return yield* decideThreadTurnCommand({
     command: command as ThreadTurnCommand,

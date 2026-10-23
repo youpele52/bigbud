@@ -32,6 +32,8 @@ export function toolingRuntimeEventToActivities(
           summary: event.payload.title ?? "Tool updated",
           payload: {
             itemType: event.payload.itemType,
+            // Pairs tool.started with tool.completed, so recovery can tell a tool was in flight.
+            ...(event.itemId ? { itemId: event.itemId } : {}),
             ...(event.payload.status ? { status: event.payload.status } : {}),
             ...(event.payload.detail
               ? { detail: helpers.truncateDetail(event.payload.detail) }
@@ -55,6 +57,8 @@ export function toolingRuntimeEventToActivities(
           summary: event.payload.title ?? "Tool",
           payload: {
             itemType: event.payload.itemType,
+            // Pairs tool.started with tool.completed, so recovery can tell a tool was in flight.
+            ...(event.itemId ? { itemId: event.itemId } : {}),
             ...(event.payload.detail
               ? { detail: helpers.truncateDetail(event.payload.detail) }
               : {}),
@@ -74,6 +78,8 @@ export function toolingRuntimeEventToActivities(
           summary: `${event.payload.title ?? "Tool"} started`,
           payload: {
             itemType: event.payload.itemType,
+            // Pairs tool.started with tool.completed, so recovery can tell a tool was in flight.
+            ...(event.itemId ? { itemId: event.itemId } : {}),
             ...(event.payload.detail
               ? { detail: helpers.truncateDetail(event.payload.detail) }
               : {}),

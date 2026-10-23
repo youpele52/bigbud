@@ -283,13 +283,24 @@ export function makeRollbackConversation(
  * as stopped in the directory. Order: persist live bindings, stop every adapter
  * concurrently with a per-adapter timeout, then mark directory entries stopped.
  */
+/**
+ * Why every provider is being stopped. Every reason here is the app or backend going away,
+ * never a user's Stop, so recovery intents are suspended, never revoked.
+ */
+export type ProviderStopAllReason = "app-exit";
+
 export function makeRunStopAll(
   adapters: ReadonlyArray<Adapter>,
   directory: ProviderSessionDirectoryShape,
   upsertSessionBinding: UpsertSessionBinding,
   analytics: AnalyticsServiceShape,
+  options?: {
+    readonly reason?: ProviderStopAllReason;
+    readonly suspendRecoveryIntents?: (reason: ProviderStopAllReason) => Effect.Effect<void>;
+  },
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
+    yield* options?.suspendRecoveryIntents?.(options.reason ?? "app-exit") ?? Effect.void;
     const threadIds = yield* directory.listThreadIds();
     const activeSessions = yield* Effect.forEach(adapters, (adapter) =>
       adapter.listSessions(),

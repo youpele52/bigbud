@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { TurnStartFailureClass } from "./orchestration.turnFailure";
+import { ThreadRecoverySetCommand } from "./orchestration.recovery";
 import {
   CheckpointRef,
   CommandId,
@@ -228,5 +229,6 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadRevertCompleteCommand,
   ThreadDelegationModelChoiceHoldCommand,
   ThreadDelegationModelChoiceExpireCommand,
+  ThreadRecoverySetCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

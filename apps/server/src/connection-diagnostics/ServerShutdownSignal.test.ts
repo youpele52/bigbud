@@ -4,7 +4,7 @@ import { Effect, Layer, PubSub, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
-import { DesktopSupervisorDeliveryLive } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryLive } from "../desktop-supervisor/desktopSupervisorDelivery.layer.ts";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import { makeOrchestrationDeliveryStream } from "../ws/wsOrchestrationDelivery.ts";

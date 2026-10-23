@@ -46,6 +46,7 @@ function repository() {
     touchActivity: ({ occurredAt }: { readonly occurredAt: string }) =>
       Effect.sync(() => void (current = { ...current, lastActivityAt: occurredAt })),
     listRecentModelSelections: () => Effect.succeed([]),
+    setRecovery: () => Effect.void,
     get: () => current,
   };
 }

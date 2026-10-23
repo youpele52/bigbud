@@ -96,6 +96,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
            pending_turn_control_operation_json AS "pendingTurnControlOperation",
            queue_hold AS "queueHold",
            pending_turn_start_json AS "pendingTurnStart",
+           recovery_json AS "recovery",
           CASE
              WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
              ELSE json_object(

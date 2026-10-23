@@ -143,6 +143,8 @@ import Migration0133 from "./Migrations/133_UsageAccountingV2.ts";
 import Migration0134 from "./Migrations/134_UsageCodexRetirementGuards.ts";
 import Migration0135 from "./Migrations/135_ProjectionSessionRetainedFamily.ts";
 import Migration0136 from "./Migrations/136_ProjectionThreadPendingTurnStart.ts";
+import Migration0137 from "./Migrations/137_ThreadRecoveryIntents.ts";
+import Migration0138 from "./Migrations/138_ProjectionThreadRecovery.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -280,6 +282,8 @@ export const migrationEntries = [
   [134, "UsageCodexRetirementGuards", Migration0134],
   [135, "ProjectionSessionRetainedFamily", Migration0135],
   [136, "ProjectionThreadPendingTurnStart", Migration0136],
+  [137, "ThreadRecoveryIntents", Migration0137],
+  [138, "ProjectionThreadRecovery", Migration0138],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

@@ -26,6 +26,12 @@ export function isThreadTurnDispatchBlocked(thread: OrchestrationThread): boolea
   );
 }
 
+/** The thread's turn waits for the user: a pending approval or user-input request. */
+export function isThreadWaitingForUser(thread: OrchestrationThread): boolean {
+  const workflow = resolveThreadWorkflowStatus(thread);
+  return workflow.hasPendingApprovals || workflow.hasPendingUserInput;
+}
+
 /** Every queued-prompt flush and direct turn start passes this check in the decider. */
 export function isThreadConfirmedIdleForDispatch(thread: OrchestrationThread): boolean {
   return !isThreadTurnDispatchBlocked(thread);

@@ -1,6 +1,10 @@
 import { NetService } from "@bigbud/shared/Net";
 import { parsePersistedServerObservabilitySettings } from "@bigbud/shared/serverSettings";
 import { APP_SERVER_SLUG } from "@bigbud/contracts";
+import {
+  DesktopBackendStartReason,
+  DesktopLifecycleHintFd,
+} from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 import { Config, Effect, FileSystem, LogLevel, Option, Path, Schema } from "effect";
 
 import {
@@ -37,6 +41,8 @@ const BootstrapEnvelopeSchema = Schema.Struct({
       token: Schema.String,
     }),
   ),
+  startReason: Schema.optional(DesktopBackendStartReason),
+  lifecycleHintFd: Schema.optional(DesktopLifecycleHintFd),
 });
 
 const aliasedConfig = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
@@ -180,6 +186,24 @@ const loadPersistedObservabilitySettings = Effect.fn(function* (settingsPath: st
   const raw = yield* fs.readFileString(settingsPath).pipe(Effect.orElseSucceed(() => ""));
   return parsePersistedServerObservabilitySettings(raw);
 });
+
+/**
+ * Only Electron main sends a desktop envelope. The hint pipe is read only when the envelope
+ * announces it: a desktop launch without it (an older desktop, an artifact check) may leave
+ * that fd number to one of Node's own descriptors.
+ */
+const desktopLifecycleFields = (
+  envelope: typeof BootstrapEnvelopeSchema.Type | undefined,
+  mode: RuntimeMode,
+): Pick<ServerConfigShape, "desktopStartReason" | "desktopLifecycleHintFd"> =>
+  envelope === undefined || mode !== "desktop"
+    ? {}
+    : {
+        ...(envelope.lifecycleHintFd !== undefined
+          ? { desktopLifecycleHintFd: envelope.lifecycleHintFd }
+          : {}),
+        ...(envelope.startReason ? { desktopStartReason: envelope.startReason } : {}),
+      };
 
 export const resolveServerConfig = (
   flags: CliServerFlags,
@@ -345,5 +369,6 @@ export const resolveServerConfig = (
       authToken,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
+      ...desktopLifecycleFields(Option.getOrUndefined(bootstrapEnvelope), mode),
     } satisfies ServerConfigShape;
   });

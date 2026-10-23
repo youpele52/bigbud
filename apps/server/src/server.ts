@@ -91,13 +91,14 @@ import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
-import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.layer.ts";
 import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
 import { EventLoopLagMonitorLive } from "./connection-diagnostics/Layers/EventLoopLagMonitor.ts";
 import { withServerShutdownSignal } from "./connection-diagnostics/Layers/ServerShutdownSignal.ts";
 import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
+import * as Recovery from "./server.recoveryLayers.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -113,6 +114,7 @@ const PtyAdapterLive = Layer.unwrap(
 const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(OrchestrationReactorLive.pipe(Layer.provide(LearningReactorLive))),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
+  Layer.provideMerge(Recovery.ProviderTurnSupervisorLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SchedulerReactorLive),
@@ -142,6 +144,7 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionPipelineLayerLive,
   ThreadRetentionRepositoryLive,
   PurgeJobRepositoryLive,
+  Recovery.RecoveryPersistenceLayerLive,
 );
 
 const ComputerUseLayerLive = ComputerUseLive.pipe(
@@ -241,6 +244,7 @@ const makeProviderLayerLive = (
         Layer.provide(adapterRegistryLayer),
         Layer.provide(providerSessionDirectoryLayer),
         Layer.provide(ProviderTurnLivenessRepositoryLive),
+        Layer.provide(Recovery.RecoveryPersistenceLayerLive),
       );
     }),
   );
@@ -327,7 +331,9 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
-  Layer.provideMerge(Layer.mergeAll(OpenLive, EventLoopLagMonitorLive)),
+  Layer.provideMerge(
+    Layer.mergeAll(OpenLive, EventLoopLagMonitorLive, Recovery.SleepEvidenceLayerLive),
+  ),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(
     Layer.mergeAll(
@@ -336,7 +342,8 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
       ConnectionDiagnosticsLive,
     ),
   ),
-);
+  // One sleep epoch view shared by every evidence source and the recovery coordinator.
+).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive));
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),

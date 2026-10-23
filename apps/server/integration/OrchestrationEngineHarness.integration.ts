@@ -39,6 +39,7 @@ import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceip
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionLive } from "../src/orchestration/Layers/ProviderRuntimeIngestion.ts";
+import { ProviderTurnSupervisorLive } from "../src/orchestration/Layers/ProviderTurnSupervisor.ts";
 import { ComputerUseDisabledTestLayer } from "../src/orchestration/Layers/OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineService } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
@@ -273,6 +274,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(schedulerReactorLayer),
       Layer.provideMerge(threadWatchReactorLayer),
       Layer.provideMerge(learningReactorLayer),
+      Layer.provideMerge(ProviderTurnSupervisorLive.pipe(Layer.provide(runtimeServicesLayer))),
     );
     const clockLayer = options?.testClock ? TestClock.layer() : Layer.empty;
     const layer = Layer.empty.pipe(

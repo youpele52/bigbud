@@ -53,6 +53,12 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     OR json_array_length(t.queued_prompts_json) > 0
     -- Startup settles an orphaned pending turn start, so the thread must be loaded.
     OR t.pending_turn_start_json IS NOT NULL
+    -- Sleep and wake recovery acts on these threads after a restart.
+    OR t.recovery_json IS NOT NULL
+    OR EXISTS (
+      SELECT 1 FROM thread_recovery_intents r
+      WHERE r.thread_id = t.thread_id AND r.disposition = 'active' AND r.recovery_status != 'none'
+    )
   `;
 
   const listOperationalThreadRows = SqlSchema.findAll({
@@ -80,6 +86,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         t.pending_turn_control_operation_json AS "pendingTurnControlOperation",
         t.queue_hold AS "queueHold",
         t.pending_turn_start_json AS "pendingTurnStart",
+        t.recovery_json AS "recovery",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t

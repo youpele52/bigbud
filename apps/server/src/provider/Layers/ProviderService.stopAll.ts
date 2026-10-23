@@ -11,6 +11,7 @@
  */
 import { Duration, Effect, Exit, Fiber, Option } from "effect";
 
+import type { ThreadRecoveryIntentRepositoryShape } from "../../persistence/Services/ThreadRecoveryIntents.ts";
 import type { ProviderAdapterError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 
@@ -51,3 +52,23 @@ export const stopAdaptersWithin = Effect.fn("stopAdaptersWithin")(function* (
     discard: true,
   });
 });
+
+/**
+ * App exit suspends every active recovery intent; it never revokes. Nothing resumes a
+ * suspended intent in the sleep-and-wake slice. A failed write is logged, never fatal.
+ */
+export const suspendRecoveryIntentsForStopAll = Effect.fn("suspendRecoveryIntentsForStopAll")(
+  function* (repository: Option.Option<ThreadRecoveryIntentRepositoryShape>, reason: string) {
+    if (Option.isNone(repository)) return;
+    yield* repository.value.suspendActiveForExit({ at: new Date().toISOString() }).pipe(
+      Effect.tap((count) =>
+        count > 0
+          ? Effect.logInfo("suspended recovery intents for exit", { reason, count })
+          : Effect.void,
+      ),
+      Effect.catch((error) =>
+        Effect.logWarning("failed to suspend recovery intents for exit", { reason, error }),
+      ),
+    );
+  },
+);
