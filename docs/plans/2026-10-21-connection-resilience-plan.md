@@ -1,7 +1,7 @@
 # Connection resilience: never-give-up reconnect and resume from the last applied event
 
 **Date:** 21 October, 2026
-**Status:** In progress. Steps 1 and 2 of the recommended order landed in `c9a9ca9d05` and `13b90621ba`. Step 3 (Phase 1b items 1 to 3) is implemented locally and awaiting review, 22 October 2026. Decisions D3 to D6 were taken on 21 October 2026.
+**Status:** In progress. Steps 1 and 2 of the recommended order landed in `c9a9ca9d05` and `13b90621ba`. Step 3 (Phase 1b items 1 to 3) is implemented locally and awaiting review, 22 October 2026. Decisions D3 to D6 were taken on 21 October 2026. Phase 6 items 3 to 7 are implemented locally too; see [Phase 6](#phase-6-continue-running-turns-after-sleep-and-wake) and the [sleep and wake turn continuation plan](2026-10-22-sleep-wake-turn-continuation-plan.md).
 **Owner:** bigbud web, server, desktop and native maintainers
 
 ## Summary
@@ -230,6 +230,8 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 
 **Goal.** Closing the laptop during a running turn and reopening it resumes the work automatically when safe. Added on 21 October 2026 at the user's request.
 
+**Status, 22 October 2026: items 3 to 7 implemented locally, not committed,** by the [sleep and wake turn continuation plan](2026-10-22-sleep-wake-turn-continuation-plan.md). See its [Implementation notes](2026-10-22-sleep-wake-turn-continuation-plan.md#implementation-notes). Item 1's probe runs are still to do. They gate the exit criteria and keeping automatic continuation on by default. Item 2 was done on 22 October 2026.
+
 **What happens today.** Sleep freezes the server and every provider process. Nothing is lost locally, but an in-flight request to the provider's cloud model is usually cut during a longer sleep. Some providers retry and continue; others end the turn with an error, which bigbud shows as failed or interrupted until the next user message. Remote SSH work keeps running on the remote host during sleep and needs reattachment, not a restart.
 
 **Relationship to the auto-resume plan.** The [thread auto-resume plan](2026-09-10-rust-coordinated-thread-auto-resume-plan.md) already designs this machinery: durable recovery intent per accepted turn, a `may-have-been-sent` marker persisted before each provider call (its Phase 1 item 3), suspend and resume handling and remote reattachment (its Phase 3), and one shared continuation decision policy per provider (its Phase 5 item 6). This phase delivers the sleep-and-wake slice of that plan under its invariant, **reconcile before continuing; never blindly replay potentially accepted work**. It must not build a second recovery coordinator, a second retry loop, or a second persistence model.
@@ -246,6 +248,18 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
    - The provider cannot be reached yet, for example no network: keep the intent and retry when the network signal arrives.
 6. **Reattach remote work.** For SSH remote projects, reattach to the original remote process and retrieve its output using the remote agent's retained operation journal, as the auto-resume plan's Phase 3 items 4 and 5 describe. Never start a fresh remote run while the original may still be alive.
 7. **Show it.** While recovering, the thread shows a blue "Resuming after sleep" state; on success it disappears; on an uncertain tool action it shows the resolution prompt. Respect the toast and status colour rules.
+
+**Decisions, 22 October 2026.** Recorded in full under the auto-resume plan's [Open Questions](2026-09-10-rust-coordinated-thread-auto-resume-plan.md#raised-by-the-22-october-2026-revalidation) and [research proposals](2026-09-10-rust-coordinated-thread-auto-resume-plan.md#proposals-from-the-durable-connections-research-for-decision). In short:
+
+- `ProviderTurnSupervisor` grows into the single recovery coordinator.
+- Electron main sends suspend and resume to the server directly; the server's clock-gap detection backs it up.
+- `interrupted-by-sleep` is a recovery status on the intent.
+- Dead-thread turn-start recovery stays a separate path for this phase; the coordinator absorbs it later in the full auto-resume work.
+- A backend restart after wake is treated as uncertain and shows the resolution prompt.
+- A provider that continues a turn on its own, such as OpenCode V2, is allowed to; bigbud observes it, does not continue it again, and the thread shows that the provider continued on its own.
+- Every in-flight tool asks; no rerun allowlist yet.
+- Recovery parks after 3 failed attempts, with a Retry button.
+- Automatic continuation covers every provider the measurement marks as able.
 
 **Platform notes.** macOS and Windows deliver `suspend` and `resume`. On Linux they need a logind session; without them, classification falls back to the network-online transition plus a wall-clock gap detected by the Phase 0 drift sampler.
 
@@ -338,6 +352,6 @@ kill -9 <server pid>
 
 ## Open Questions
 
-- Phase 6: after the provider measurement, which providers should continue automatically first? The default is every provider the measurement marks as able.
+- Phase 6: after the provider measurement, which providers should continue automatically first? **Decided, 22 October 2026:** every provider the measurement marks as able.
 - D7: after Phase 1b and Phase 0 data, is the Rust socket gateway worth building inside the background-service plan?
 - Which step of the recommended order starts first, and does the user want steps 1 and 2 in parallel?
