@@ -44,6 +44,17 @@ import {
 } from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
 import { attachBackendChildLifecycle } from "./backendManager.child";
+import {
+  buildBackendBootstrapEnvelope,
+  consumeBackendStartReason,
+  markNextBackendStartReason,
+} from "./backendBootstrapEnvelope";
+import {
+  asLifecycleHintStream,
+  attachBackendLifecycleHintPipe,
+  BACKEND_LIFECYCLE_HINT_STDIO_INDEX,
+  detachBackendLifecycleHintPipe,
+} from "./backendLifecycleHintPipe";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
@@ -182,9 +193,11 @@ export async function startBackend(): Promise<void> {
         isPackaged: app.isPackaged,
         backendMaxOldSpaceMb: _deps.backendMaxOldSpaceMb,
       }),
+      // fd 3 bootstrap (main to server, once), fd 4 startup status (server to
+      // main), fd 5 lifecycle hints (main to server, for the backend's lifetime).
       stdio: captureBackendLogs
-        ? ["ignore", "pipe", "pipe", "pipe", "pipe"]
-        : ["ignore", "inherit", "pipe", "pipe", "pipe"],
+        ? ["ignore", "pipe", "pipe", "pipe", "pipe", "pipe"]
+        : ["ignore", "inherit", "pipe", "pipe", "pipe", "pipe"],
     });
   } catch (error) {
     revokeSystemMonitorAgentToken();
@@ -244,6 +257,9 @@ export async function startBackend(): Promise<void> {
       }
     });
   }
+  const hintStream = asLifecycleHintStream(
+    (child.stdio as ReadonlyArray<unknown>)[BACKEND_LIFECYCLE_HINT_STDIO_INDEX],
+  );
   const bootstrapStream = child.stdio[3];
   if (bootstrapStream && "write" in bootstrapStream) {
     bootstrapStream.on("error", (error) => {
@@ -254,21 +270,18 @@ export async function startBackend(): Promise<void> {
       swallowPipeError();
     });
     bootstrapStream.write(
-      `${JSON.stringify({
-        mode: "desktop",
-        noBrowser: true,
+      buildBackendBootstrapEnvelope({
         port: backendPort,
         host: backendHost,
         t3Home: _deps.baseDir,
         authToken: backendAuthToken,
-        ...(monitorAgentAccess ? { systemMonitorAgentAccess: monitorAgentAccess } : {}),
-        ...(backendObservabilitySettings.otlpTracesUrl
-          ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
-          : {}),
-        ...(backendObservabilitySettings.otlpMetricsUrl
-          ? { otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl }
-          : {}),
-      })}\n`,
+        systemMonitorAgentAccess: monitorAgentAccess,
+        otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl,
+        otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl,
+        startReason: consumeBackendStartReason(),
+        // The server reads fd 5 only when the envelope announces it.
+        lifecycleHintFd: hintStream ? BACKEND_LIFECYCLE_HINT_STDIO_INDEX : null,
+      }),
     );
     bootstrapStream.end();
   } else {
@@ -284,6 +297,13 @@ export async function startBackend(): Promise<void> {
     return;
   }
   backendProcess = child;
+  const hintPipe = hintStream
+    ? attachBackendLifecycleHintPipe(hintStream, {
+        platform: process.platform,
+        log: (event, details) =>
+          logBackendLifecycle(event, `generation=${startupGeneration} ${details}`),
+      })
+    : undefined;
   let backendSessionClosed = false;
   const closeBackendSession = (details: string) => {
     if (backendSessionClosed) return;
@@ -302,6 +322,7 @@ export async function startBackend(): Promise<void> {
     getStderrTail: () => stderrTail,
     isExpectedExit: () => expectedBackendExitChildren.has(child),
     onDisconnected: () => {
+      if (hintPipe) detachBackendLifecycleHintPipe(hintPipe);
       if (backendProcess === child) {
         revokeSystemMonitorAgentToken();
         backendProcess = null;
@@ -317,6 +338,8 @@ export function restartUnresponsiveBackend(reason: string): void {
   if (!_deps || _deps.getIsQuitting()) return;
   const child = backendProcess;
   logBackendLifecycle("restart_unresponsive", `pid=${child?.pid ?? "none"} reason=${reason}`);
+  // The replacement backend must treat unsettled turns as outcome unknown.
+  markNextBackendStartReason("resume-probe-restart");
   if (child) killBackendProcess(child);
   else scheduleBackendRestart(reason);
 }

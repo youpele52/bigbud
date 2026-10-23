@@ -20,7 +20,16 @@ vi.mock("../backend/backendManager", () => ({
   backendWsUrl: "",
   restartUnresponsiveBackend: vi.fn(),
 }));
-vi.mock("../backend/backendResumeProbe", () => ({ probeBackendAfterResume: vi.fn() }));
+vi.mock("../backend/backendResumeProbe", () => ({
+  probeBackendAfterResume: vi.fn(async () => undefined),
+}));
+const writeHint = vi.hoisted(() =>
+  vi.fn<(hint: { readonly kind: string; readonly online: boolean | null }) => boolean>(() => true),
+);
+vi.mock("../backend/backendLifecycleHintPipe", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../backend/backendLifecycleHintPipe")>()),
+  writeBackendLifecycleHint: writeHint,
+}));
 vi.mock("../backend/backendStartupState", () => ({
   getBackendStartupState: vi.fn(),
   republishBackendStartupState: vi.fn(),
@@ -69,5 +78,42 @@ describe("desktop connectivity signals teardown", () => {
     const attached = powerListenerCount();
     startDesktopConnectivitySignals(options);
     expect(powerListenerCount()).toBe(attached);
+  });
+});
+
+describe("desktop connectivity hints to the server", () => {
+  it("forwards suspend, resume and network changes over the hint pipe, not lock events", () => {
+    writeHint.mockClear();
+    startDesktopConnectivitySignals(options);
+    const monitor = mocks.powerMonitor!;
+
+    monitor.emit("lock-screen");
+    monitor.emit("suspend");
+    expect(writeHint).toHaveBeenCalledTimes(1);
+    expect(writeHint).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "suspend", online: true }),
+    );
+
+    mocks.isOnline.mockReturnValue(false);
+    monitor.emit("resume");
+    expect(writeHint.mock.calls.map((call) => call[0].kind)).toEqual([
+      "suspend",
+      "offline",
+      "resume",
+    ]);
+    mocks.isOnline.mockReturnValue(true);
+  });
+
+  it("writes the hint inside the power event handler, before it returns", () => {
+    writeHint.mockClear();
+    startDesktopConnectivitySignals(options);
+    let handlerReturned = false;
+    writeHint.mockImplementationOnce(() => {
+      expect(handlerReturned).toBe(false);
+      return true;
+    });
+    mocks.powerMonitor!.emit("suspend");
+    handlerReturned = true;
+    expect(writeHint).toHaveBeenCalledTimes(1);
   });
 });

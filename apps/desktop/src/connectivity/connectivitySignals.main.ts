@@ -1,6 +1,10 @@
 import { BrowserWindow, net, powerMonitor } from "electron";
 import type { DesktopConnectivitySignal } from "@bigbud/contracts/server/ipc.desktop.ts";
 
+import {
+  isDesktopLifecycleHintKind,
+  writeBackendLifecycleHint,
+} from "../backend/backendLifecycleHintPipe";
 import { backendWsUrl, restartUnresponsiveBackend } from "../backend/backendManager";
 import { probeBackendAfterResume } from "../backend/backendResumeProbe";
 import {
@@ -23,6 +27,20 @@ function broadcast(channel: string, signal: DesktopConnectivitySignal): void {
   }
 }
 
+/**
+ * Sends power and network hints to the server over the fd 5 pipe, so the server
+ * hears about sleep even with no renderer window. Runs synchronously inside the
+ * power event handler; the pipe writes a Linux `suspend` line synchronously.
+ */
+function forwardToBackend(signal: DesktopConnectivitySignal): void {
+  if (!isDesktopLifecycleHintKind(signal.kind)) return;
+  writeBackendLifecycleHint({
+    kind: signal.kind,
+    occurredAt: signal.occurredAt,
+    online: signal.online,
+  });
+}
+
 /** Publishes power and network hints next to backend startup state, and probes on wake. */
 export function startDesktopConnectivitySignals(
   options: StartDesktopConnectivitySignalsOptions,
@@ -33,7 +51,10 @@ export function startDesktopConnectivitySignals(
     isOnline: () => net.isOnline(),
     platform: process.platform,
     log: options.logHeader,
-    publish: (signal) => broadcast(options.channel, signal),
+    publish: (signal) => {
+      forwardToBackend(signal);
+      broadcast(options.channel, signal);
+    },
     onResume: () => {
       void probeBackendAfterResume({
         getWsUrl: () => backendWsUrl,
