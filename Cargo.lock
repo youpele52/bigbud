@@ -22,11 +22,13 @@ name = "bigbud-desktop-supervisor"
 version = "0.1.0"
 dependencies = [
  "bigbud-system",
+ "libc",
  "prost",
  "prost-build",
  "protoc-bin-vendored",
  "sha2",
  "thiserror",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

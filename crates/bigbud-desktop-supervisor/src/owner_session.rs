@@ -1,5 +1,6 @@
 use crate::{
-    Limits, PROTOCOL_MAJOR, PROTOCOL_MINOR, RecoveryAction, Supervisor, SupervisorError, v1,
+    Limits, PROTOCOL_MAJOR, PROTOCOL_MINOR, RecoveryAction, Supervisor, SupervisorError,
+    SuspendedTime, v1,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,14 +21,24 @@ pub struct OwnerSession {
     state: HandshakeState,
     limits: Limits,
     supervisor_instance_id: String,
+    suspended_time: SuspendedTime,
 }
 
 impl OwnerSession {
     pub fn new(limits: Limits, supervisor_instance_id: String) -> Self {
+        Self::with_suspended_time(limits, supervisor_instance_id, SuspendedTime::system())
+    }
+
+    pub fn with_suspended_time(
+        limits: Limits,
+        supervisor_instance_id: String,
+        suspended_time: SuspendedTime,
+    ) -> Self {
         Self {
             state: HandshakeState::AwaitingHello,
             limits,
             supervisor_instance_id,
+            suspended_time,
         }
     }
 
@@ -132,7 +143,10 @@ impl OwnerSession {
                     }]
                 }
                 Some(v1::frame::Payload::Heartbeat(heartbeat)) => vec![v1::Frame {
-                    payload: Some(v1::frame::Payload::Heartbeat(heartbeat)),
+                    payload: Some(v1::frame::Payload::Heartbeat(v1::Heartbeat {
+                        monotonic_millis: heartbeat.monotonic_millis,
+                        suspended_millis: self.suspended_time.read_millis(),
+                    })),
                 }],
                 Some(v1::frame::Payload::MetricsSnapshot(_)) => vec![v1::Frame {
                     payload: Some(v1::frame::Payload::MetricsSnapshot(

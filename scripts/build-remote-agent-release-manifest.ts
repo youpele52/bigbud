@@ -25,7 +25,7 @@ export interface RemoteAgentReleaseManifest {
     readonly version: string;
     readonly buildDigest: string;
     readonly protocolMajor: 1;
-    readonly protocolMinor: 2;
+    readonly protocolMinor: 3;
     readonly targetTriple: RemoteAgentReleaseTarget;
     readonly sizeBytes: number;
     readonly sha256: string;
@@ -115,7 +115,7 @@ export function buildRemoteAgentReleaseManifest(
       version: input.version,
       buildDigest: input.buildDigest,
       protocolMajor: 1 as const,
-      protocolMinor: 2 as const,
+      protocolMinor: 3 as const,
       targetTriple,
       sizeBytes: bytes.byteLength,
       sha256: createHash("sha256").update(bytes).digest("hex"),

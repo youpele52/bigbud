@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use super::AgentSession;
 
 impl AgentSession {
@@ -41,7 +39,7 @@ impl AgentSession {
     }
 
     fn restart_work_idle_inner(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations(Instant::now());
+        let process_idle = !self.process_operations.has_live_operations();
         let pty_idle = self
             .pty_sessions
             .values()
@@ -56,7 +54,7 @@ impl AgentSession {
     }
 
     pub fn is_idle_for_retirement(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations(Instant::now());
+        let process_idle = !self.process_operations.has_live_operations();
         let pty_idle = self
             .pty_sessions
             .values()

@@ -1,10 +1,11 @@
 use super::*;
 
 impl OperationRegistry {
-    pub fn has_live_operations(&self, now: Instant) -> bool {
+    /// Non-terminal work never expires, so any of it keeps the agent busy.
+    pub fn has_live_operations(&self) -> bool {
         self.operations
             .values()
-            .any(|record| !record.state.is_terminal() && record.expires_at > now)
+            .any(|record| !record.state.is_terminal())
     }
 
     pub fn new(max_operations: usize, max_output_bytes: usize, retention: Duration) -> Self {
@@ -12,8 +13,17 @@ impl OperationRegistry {
             max_operations,
             max_output_bytes,
             retention,
+            max_terminal_output_bytes: max_output_bytes.saturating_mul(max_operations),
             operations: HashMap::new(),
         }
+    }
+
+    /// Bounds the output bytes kept for terminal operations in total. Beyond
+    /// it, the oldest terminal results lose their output but keep their state
+    /// and exit code, so an attach reports a replay gap instead of nothing.
+    pub fn with_terminal_output_budget(mut self, bytes: usize) -> Self {
+        self.max_terminal_output_bytes = bytes;
+        self
     }
 
     pub fn accept(
@@ -32,7 +42,7 @@ impl OperationRegistry {
                 self.make_snapshot(&operation_id, record),
             ));
         }
-        if self.operations.len() >= self.max_operations {
+        if self.operations.len() >= self.max_operations && !self.evict_oldest_terminal() {
             return Err(OperationError::OperationLimit);
         }
         self.operations.insert(
@@ -153,6 +163,7 @@ impl OperationRegistry {
             error_code,
         });
         record.expires_at = now + retention;
+        self.enforce_terminal_output_budget();
         Ok(())
     }
 
@@ -165,7 +176,7 @@ impl OperationRegistry {
             .operations
             .get(operation_id)
             .ok_or(OperationError::UnknownOperation)?;
-        if record.expires_at <= now {
+        if record.is_expired(now) {
             return Err(OperationError::UnknownOperation);
         }
         Ok(self.make_snapshot(operation_id, record))
@@ -181,7 +192,7 @@ impl OperationRegistry {
             .operations
             .get(operation_id)
             .ok_or(OperationError::UnknownOperation)?;
-        if record.expires_at <= now {
+        if record.is_expired(now) {
             return Err(OperationError::UnknownOperation);
         }
         if after_sequence + 1 < record.first_retained_sequence {
@@ -197,155 +208,7 @@ impl OperationRegistry {
             .collect())
     }
 
-    pub fn prune(&mut self, now: Instant) {
-        self.operations.retain(|_, record| record.expires_at > now);
-    }
-
-    pub fn forget_accepted(&mut self, operation_id: &str) {
-        if self
-            .operations
-            .get(operation_id)
-            .is_some_and(|record| record.state == OperationState::Accepted)
-        {
-            self.operations.remove(operation_id);
-        }
-    }
-
-    pub fn restore_journal_record(
-        &mut self,
-        record: JournalRecord,
-        now: Instant,
-    ) -> Result<(), OperationError> {
-        match record {
-            JournalRecord::Accepted {
-                operation_id,
-                request_digest,
-            } => match self.accept(operation_id, request_digest, now)? {
-                AcceptResult::Accepted | AcceptResult::Duplicate(_) => Ok(()),
-            },
-            JournalRecord::Started { operation_id } => self.start(&operation_id, now),
-            JournalRecord::Output {
-                operation_id,
-                sequence,
-                stream,
-                bytes,
-            } => {
-                let max_output_bytes = self.max_output_bytes;
-                let record = self.record_mut(&operation_id, now)?;
-                if record.next_sequence != sequence {
-                    return Err(OperationError::JournalCorrupt);
-                }
-                if bytes.len() > max_output_bytes || record.state.is_terminal() {
-                    return Err(OperationError::JournalCorrupt);
-                }
-                record.next_sequence += 1;
-                record.retained_bytes += bytes.len();
-                record.output.push_back(OutputChunk {
-                    sequence,
-                    stream,
-                    bytes,
-                });
-                while record.retained_bytes > max_output_bytes {
-                    let Some(oldest) = record.output.pop_front() else {
-                        break;
-                    };
-                    record.retained_bytes -= oldest.bytes.len();
-                    record.first_retained_sequence = oldest.sequence + 1;
-                }
-                Ok(())
-            }
-            JournalRecord::Acknowledged {
-                operation_id,
-                acknowledged_sequence,
-            } => self.acknowledge(&operation_id, acknowledged_sequence, now),
-            JournalRecord::OutputWatermark {
-                operation_id,
-                next_sequence,
-                first_retained_sequence,
-            } => self.restore_output_watermark(
-                &operation_id,
-                next_sequence,
-                first_retained_sequence,
-                now,
-            ),
-            JournalRecord::Retention {
-                operation_id,
-                expires_at_unix_ms,
-            } => self.restore_retention(&operation_id, expires_at_unix_ms, now),
-            JournalRecord::Completed {
-                operation_id,
-                state,
-                exit_code,
-                error_code,
-            } => self.complete(&operation_id, state, exit_code, error_code, now),
-        }
-    }
-
-    pub fn expire_non_terminal(&mut self, now: Instant) {
-        let operation_ids = self
-            .operations
-            .iter()
-            .filter_map(|(operation_id, record)| {
-                (!record.state.is_terminal()).then_some(operation_id.clone())
-            })
-            .collect::<Vec<_>>();
-        for operation_id in operation_ids {
-            let _ = self.complete(
-                &operation_id,
-                OperationState::Expired,
-                None,
-                Some("AGENT_RESTARTED".to_owned()),
-                now,
-            );
-        }
-    }
-
-    fn restore_output_watermark(
-        &mut self,
-        operation_id: &str,
-        next_sequence: u64,
-        first_retained_sequence: u64,
-        now: Instant,
-    ) -> Result<(), OperationError> {
-        if next_sequence == 0
-            || first_retained_sequence == 0
-            || first_retained_sequence > next_sequence
-        {
-            return Err(OperationError::JournalCorrupt);
-        }
-        let record = self.record_mut(operation_id, now)?;
-        if !record.output.is_empty() || record.next_sequence > 1 {
-            return Err(OperationError::JournalCorrupt);
-        }
-        record.next_sequence = next_sequence;
-        record.first_retained_sequence = first_retained_sequence;
-        Ok(())
-    }
-
-    fn restore_retention(
-        &mut self,
-        operation_id: &str,
-        expires_at_unix_ms: u64,
-        now: Instant,
-    ) -> Result<(), OperationError> {
-        let current_unix_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| OperationError::JournalCorrupt)?
-            .as_millis() as u64;
-        if expires_at_unix_ms <= current_unix_ms {
-            self.operations.remove(operation_id);
-            return Ok(());
-        }
-        let remaining = Duration::from_millis(expires_at_unix_ms - current_unix_ms);
-        let record = self
-            .operations
-            .get_mut(operation_id)
-            .ok_or(OperationError::UnknownOperation)?;
-        record.expires_at = now + remaining;
-        Ok(())
-    }
-
-    fn record_mut(
+    pub(super) fn record_mut(
         &mut self,
         operation_id: &str,
         now: Instant,

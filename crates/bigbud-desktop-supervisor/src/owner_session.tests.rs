@@ -335,3 +335,42 @@ fn rejects_unverified_cursor_on_higher_generation_reattach() {
         Err(SupervisorError::AttachStateConflict)
     );
 }
+
+#[test]
+fn heartbeat_echo_reports_suspended_time_and_protocol_1_4() {
+    fn after_a_long_sleep() -> Option<u64> {
+        Some(1_800_000)
+    }
+    let limits = Limits::default();
+    let mut session = OwnerSession::with_suspended_time(
+        limits,
+        "supervisor-1".to_owned(),
+        SuspendedTime::from_source(after_a_long_sleep),
+    );
+    let mut supervisor = Supervisor::new(limits);
+    let greeting = session
+        .handle_frame(&mut supervisor, hello(PROTOCOL_MAJOR), 0)
+        .unwrap();
+    assert!(matches!(
+        greeting.responses.first().and_then(|frame| frame.payload.as_ref()),
+        Some(v1::frame::Payload::SupervisorHello(hello))
+            if hello.protocol_major == 1 && hello.protocol_minor == 4
+    ));
+
+    let heartbeat = v1::Frame {
+        payload: Some(v1::frame::Payload::Heartbeat(v1::Heartbeat {
+            monotonic_millis: 42,
+            suspended_millis: 0,
+        })),
+    };
+    let echoed = session.handle_frame(&mut supervisor, heartbeat, 1).unwrap();
+    assert_eq!(
+        echoed.responses,
+        vec![v1::Frame {
+            payload: Some(v1::frame::Payload::Heartbeat(v1::Heartbeat {
+                monotonic_millis: 42,
+                suspended_millis: 1_800_000,
+            })),
+        }]
+    );
+}

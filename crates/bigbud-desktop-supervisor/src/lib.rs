@@ -3,6 +3,7 @@ mod frame;
 mod generated;
 mod owner_session;
 mod supervisor;
+mod suspended_time;
 pub mod system_monitor;
 
 pub use connection::{ConnectionAction, ConnectionState, TransportHealth};
@@ -14,7 +15,8 @@ pub use supervisor::{
     ConsumerState, Delivery, Limits, RecoveryAction, Supervisor, SupervisorError,
     canonical_batch_id,
 };
+pub use suspended_time::{SuspendedTime, SuspendedTimeSource, read_system_suspended_millis};
 
 pub const PROTOCOL_MAJOR: u32 = 1;
-pub const PROTOCOL_MINOR: u32 = 3;
+pub const PROTOCOL_MINOR: u32 = 4;
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 1024 * 1024;
