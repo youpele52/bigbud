@@ -197,6 +197,13 @@ export function applyThreadMetaEvent(
       }));
     }
 
+    case "thread.recovery-updated": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        recovery: event.payload.recovery,
+      }));
+    }
+
     case "thread.turn-interrupt-requested": {
       return updateThreadState(state, event.payload.threadId, (current) => {
         // An interrupt abandons a turn start that has not begun yet.

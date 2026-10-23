@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
@@ -33,6 +33,14 @@ async function readRetainedFamilySqlRows(): Promise<ReadonlyArray<RetainedFamily
   return fixture.readRetainedFamilySqlSnapshots();
 }
 
+let results: ReadonlyArray<RetainedFamilySqlRow>;
+
+// Loading the fixture transforms the server import graph and migrates a real SQLite database,
+// which can exceed the default 5 s test timeout under parallel load. Load it once, up front.
+beforeAll(async () => {
+  results = await readRetainedFamilySqlRows();
+}, 60_000);
+
 function renderPrimaryActions(hasBackgroundWork: boolean): string {
   return renderToStaticMarkup(
     createElement(ComposerPrimaryActions, {
@@ -53,8 +61,7 @@ function renderPrimaryActions(hasBackgroundWork: boolean): string {
   );
 }
 
-it("hydrates main composer Stop from actual SQLite projection snapshots without published child cards", async () => {
-  const results = await readRetainedFamilySqlRows();
+it("hydrates main composer Stop from actual SQLite projection snapshots without published child cards", () => {
   expect(results.map((row) => row.expected)).toEqual([false, true, false, true, false]);
   for (const row of results) {
     for (const snapshot of [row.snapshot, row.mobile]) {
@@ -71,9 +78,8 @@ it("hydrates main composer Stop from actual SQLite projection snapshots without 
   }
 });
 
-it("hydrates main composer Stop from the bounded web startup catalogs after a reload", async () => {
+it("hydrates main composer Stop from the bounded web startup catalogs after a reload", () => {
   // The web starts from getSidebarThreadCatalog / getProjectThreadSummaries, not getSnapshot.
-  const results = await readRetainedFamilySqlRows();
   expect(results.map((row) => row.expected)).toEqual([false, true, false, true, false]);
   for (const row of results) {
     for (const summary of [row.sidebarSummary, row.projectSummary]) {

@@ -7,8 +7,9 @@ import { deriveSourceForkNotice } from "./ThreadForkNotice.logic";
 import { useForkPresence } from "./ThreadForkNotice.presence";
 import { ThreadModelChoiceNotice } from "./ThreadModelChoiceNotice";
 import { ThreadRecoveryNotice } from "./ThreadRecoveryNotice";
+import { ThreadSleepRecoveryNotice } from "./ThreadSleepRecoveryNotice";
 
-/** Recovery status plus fork lineage for a server thread (plan D15-D17, D20-D21). */
+/** Recovery status, sleep and wake recovery, and fork lineage for a server thread. */
 export function ThreadRecoveryNotices({ thread }: { readonly thread: Thread }) {
   const { continueInNewThread, carryToContinuedThread, pending } = useContinueInNewThread(thread);
   const { messages, activities } = thread;
@@ -33,6 +34,7 @@ export function ThreadRecoveryNotices({ thread }: { readonly thread: Thread }) {
         onContinueInNewThread={alreadyForked ? undefined : () => void continueInNewThread()}
         continuePending={pending}
       />
+      <ThreadSleepRecoveryNotice thread={thread} />
       <ThreadModelChoiceNotice thread={thread} />
     </>
   );

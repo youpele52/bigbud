@@ -52,7 +52,10 @@ type ThreadStatusInput = Pick<
   | "latestTurn"
   | "providerAgents"
   | "session"
-> & { lastVisitedAt?: string | undefined };
+> & {
+  lastVisitedAt?: string | undefined;
+  recoveryStatus?: SidebarThreadSummary["recoveryStatus"];
+};
 
 export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
@@ -66,6 +69,10 @@ export function resolveThreadStatusPill(input: {
   }
   if (isSessionStalled(thread.session)) {
     return status("Provider Unavailable", "text-destructive", "bg-destructive");
+  }
+  // bigbud is resuming a turn cut by sleep: the cut's session error is not the outcome.
+  if (thread.recoveryStatus === "continuing") {
+    return status("Working", "text-info-foreground", "bg-info-foreground", true);
   }
   if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
     return status("Failed", "text-destructive", "bg-destructive");
