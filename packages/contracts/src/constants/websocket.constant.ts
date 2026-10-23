@@ -93,6 +93,7 @@ export const WS_METHODS = {
   serverGetRemoteAgentUpdateStatus: "server.getRemoteAgentUpdateStatus",
   serverUnlockSshKey: "server.unlockSshKey",
   serverUnlockSshPassword: "server.unlockSshPassword",
+  serverTrustSshHost: "server.trustSshHost",
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",

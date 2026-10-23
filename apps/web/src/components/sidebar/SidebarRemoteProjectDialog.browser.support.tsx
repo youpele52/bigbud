@@ -124,7 +124,13 @@ function RemoteProjectEditHarness({
       <SidebarUnlockSshKeyDialog
         open={remote.isRemoteProjectUnlockDialogOpen}
         keyPath={remote.remoteProjectUnlockKeyPath}
-        title="Unlock SSH key"
+        title={
+          remote.remoteProjectUnlockMode === "password" ? "Enter SSH password" : "Unlock SSH key"
+        }
+        fieldLabel={
+          remote.remoteProjectUnlockMode === "password" ? "SSH password" : "Key passphrase"
+        }
+        submitLabel={remote.remoteProjectUnlockMode === "password" ? "Continue" : "Unlock SSH key"}
         description={`Unlock ${remote.remoteProjectUnlockKeyPath}`}
         secret={remote.remoteProjectUnlockPassphrase}
         error={remote.remoteProjectUnlockError}
@@ -165,6 +171,8 @@ export function setApi(input: {
   readonly listSshConfigHosts?: ReturnType<typeof vi.fn>;
   readonly listRemoteFolders?: ReturnType<typeof vi.fn>;
   readonly unlockSshKey?: ReturnType<typeof vi.fn>;
+  readonly unlockSshPassword?: ReturnType<typeof vi.fn>;
+  readonly trustSshHost?: ReturnType<typeof vi.fn>;
   readonly getSnapshot: ReturnType<typeof vi.fn>;
   readonly dispatchCommand: ReturnType<typeof vi.fn>;
   readonly show: ReturnType<typeof vi.fn>;
@@ -178,6 +186,8 @@ export function setApi(input: {
       ...(input.listSshConfigHosts ? { listSshConfigHosts: input.listSshConfigHosts } : {}),
       ...(input.listRemoteFolders ? { listRemoteFolders: input.listRemoteFolders } : {}),
       ...(input.unlockSshKey ? { unlockSshKey: input.unlockSshKey } : {}),
+      ...(input.unlockSshPassword ? { unlockSshPassword: input.unlockSshPassword } : {}),
+      ...(input.trustSshHost ? { trustSshHost: input.trustSshHost } : {}),
     },
     orchestration: { getSnapshot: input.getSnapshot, dispatchCommand: input.dispatchCommand },
   } as never;

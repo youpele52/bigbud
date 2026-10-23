@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { inspectSshHostTrust } from "./sshHostTrust.ts";
 import {
   createSshDeadline,
   describeSshLocalCommandFailure,
@@ -38,7 +39,11 @@ const passwordSessionByExecutionTargetId = new Map<
 
 function writePasswordAskpassScript(directoryPath: string): string {
   const scriptPath = path.join(directoryPath, "askpass.sh");
-  fs.writeFileSync(scriptPath, '#!/bin/sh\nprintf "%s\\n" "$BIGBUD_SSH_PASSWORD"\n', "utf8");
+  fs.writeFileSync(
+    scriptPath,
+    '#!/bin/sh\ncase "$1" in\n  *authenticity*|*fingerprint*) exit 1 ;;\n  *[Pp]assword*|*[Pp]asscode*) printf "%s\\n" "$BIGBUD_SSH_PASSWORD" ;;\n  *) exit 1 ;;\nesac\n',
+    "utf8",
+  );
   fs.chmodSync(scriptPath, 0o700);
   return scriptPath;
 }
@@ -252,6 +257,7 @@ export async function unlockSshExecutionTargetPassword(input: {
     };
   }
 
+  await inspectSshHostTrust(target.executionTargetId);
   const session = getPasswordSessionRecord(target);
   fs.rmSync(session.controlPath, { force: true });
   const askpassDirectory = fs.mkdtempSync(path.join(os.tmpdir(), SSH_PASSWORD_ASKPASS_DIR_PREFIX));
@@ -264,6 +270,8 @@ export async function unlockSshExecutionTargetPassword(input: {
         "-N",
         "-o",
         "BatchMode=no",
+        "-o",
+        "StrictHostKeyChecking=yes",
         "-o",
         `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`,
         "-o",

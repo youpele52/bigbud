@@ -214,6 +214,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
       unlockSshPassword: (input) =>
         transport.request((client) => client[WS_METHODS.serverUnlockSshPassword](input)),
+      trustSshHost: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTrustSshHost](input)),
       upsertKeybinding: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),

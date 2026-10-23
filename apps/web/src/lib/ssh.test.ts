@@ -4,6 +4,8 @@ import {
   getPassphraseProtectedSshKeyPath,
   getPasswordProtectedSshTargetLabel,
   getSshAuthFailureToastTitle,
+  getSshAuthPrompt,
+  getSshHostTrustChallenge,
 } from "./ssh";
 
 describe("ssh error parsing", () => {
@@ -32,5 +34,21 @@ describe("ssh error parsing", () => {
   it("returns auth-specific toast titles", () => {
     expect(getSshAuthFailureToastTitle("password")).toBe("SSH login failed");
     expect(getSshAuthFailureToastTitle("ssh-key-passphrase")).toBe("SSH key unlock failed");
+    expect(getSshAuthFailureToastTitle("host-trust")).toBe("SSH server verification failed");
+  });
+
+  it("recognizes validated host-trust challenges without interpreting them as passwords", () => {
+    const challenge = {
+      challengeId: "approval-1",
+      host: "box:2222",
+      keyType: "ED25519",
+      fingerprint: "SHA256:abc123",
+    };
+    const message = `SSH host trust is required: ${JSON.stringify(challenge)}`;
+    expect(getSshHostTrustChallenge(message)).toEqual(challenge);
+    expect(getSshAuthPrompt(message)).toEqual({ mode: "host-trust", label: message });
+    expect(getPasswordProtectedSshTargetLabel(message)).toBeNull();
+    expect(getSshHostTrustChallenge("SSH host trust is required: invalid")).toBeNull();
+    expect(getSshHostTrustChallenge('SSH host trust is required: {"challengeId":"a"}')).toBeNull();
   });
 });

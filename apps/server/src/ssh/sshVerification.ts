@@ -30,6 +30,7 @@ import {
   SSH_UNLOCK_DEADLINE_MS,
 } from "./sshLocalCommand.ts";
 import { runProcess } from "../utils/processRunner.ts";
+import { inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 
 const SSH_VERIFY_TIMEOUT_MS = 8_000;
 const SSH_UNLOCK_ASKPASS_DIR_PREFIX = "bigbud-ssh-askpass-";
@@ -99,22 +100,26 @@ export function assertSshExecutionTargetReady(executionTargetId: string | null |
   }
 }
 
-/** Readiness check that never blocks the event loop; all probes share one deadline. */
+/** Bounded async local readiness probes; missing credentials first trigger host-identity discovery. */
 export async function assertSshExecutionTargetReadyAsync(
   executionTargetId: string | null | undefined,
   deadline: SshDeadline = createSshDeadline(SSH_READINESS_DEADLINE_MS),
 ): Promise<void> {
-  await assertSshPasswordExecutionTargetReadyAsync(executionTargetId, deadline);
-  const key = resolveKeyTarget(executionTargetId);
-  if (!key) return;
-  const keyProbe = await runSshLocalCommand("ssh-keygen", keyProbeArgs(key), {
-    timeoutMs: deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS),
-  });
-  if (
-    keyNeedsAgent(key, keyProbe) &&
-    !(await isPassphraseProtectedKeyLoadedAsync(key.expandedKeyPath, deadline))
-  ) {
-    throw new Error(formatSshKeyLoadMessage(key.keyPath));
+  try {
+    await assertSshPasswordExecutionTargetReadyAsync(executionTargetId, deadline);
+    const key = resolveKeyTarget(executionTargetId);
+    if (!key) return;
+    const keyProbe = await runSshLocalCommand("ssh-keygen", keyProbeArgs(key), {
+      timeoutMs: deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS),
+    });
+    if (
+      keyNeedsAgent(key, keyProbe) &&
+      !(await isPassphraseProtectedKeyLoadedAsync(key.expandedKeyPath, deadline))
+    ) {
+      throw new Error(formatSshKeyLoadMessage(key.keyPath));
+    }
+  } catch (error) {
+    return inspectSshHostTrustOnFailure(executionTargetId ?? "local", error);
   }
 }
 
@@ -219,7 +224,7 @@ export async function verifySshExecutionTarget(input: {
     timeoutMs: SSH_VERIFY_TIMEOUT_MS,
     maxBufferBytes: 64 * 1024,
     outputMode: "truncate",
-  });
+  }).catch((error: unknown) => inspectSshHostTrustOnFailure(input.executionTargetId, error));
 
   const verifiedCwd = result.stdout
     .split(/\r?\n/)

@@ -1,4 +1,5 @@
 import type { ServerSettings, ServerSettingsPatch } from "../core/settings";
+import type { ServerTrustSshHostInput, ServerTrustSshHostResult } from "./server.sshHostTrust";
 import type {
   ClientOrchestrationCommand,
   GetCommandOutcomeInput,
@@ -225,6 +226,7 @@ export interface NativeApi {
     unlockSshPassword: (
       input: Server.ServerUnlockSshPasswordInput,
     ) => Promise<Server.ServerUnlockSshPasswordResult>;
+    trustSshHost: (input: ServerTrustSshHostInput) => Promise<ServerTrustSshHostResult>;
     upsertKeybinding: (
       input: Server.ServerUpsertKeybindingInput,
     ) => Promise<Server.ServerUpsertKeybindingResult>;

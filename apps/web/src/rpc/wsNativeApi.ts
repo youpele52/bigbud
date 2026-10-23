@@ -261,6 +261,7 @@ export function createWsNativeApi(): NativeApi {
       getRemoteAgentUpdateStatus: rpcClient.server.getRemoteAgentUpdateStatus,
       unlockSshKey: rpcClient.server.unlockSshKey,
       unlockSshPassword: rpcClient.server.unlockSshPassword,
+      trustSshHost: rpcClient.server.trustSshHost,
       upsertKeybinding: rpcClient.server.upsertKeybinding,
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,

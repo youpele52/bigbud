@@ -1,21 +1,17 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { toastManager } from "../ui/toast";
-import { readNativeApi } from "../../rpc/nativeApi";
-import {
-  getPassphraseProtectedSshKeyPath,
-  getPasswordProtectedSshTargetLabel,
-  getSshAuthFailureToastTitle,
-} from "../../lib/ssh";
+import { submitSshAuthentication } from "../../lib/ssh.auth";
+import { getSshAuthPrompt, getSshAuthFailureToastTitle, type SshAuthMode } from "../../lib/ssh";
 import {
   createRemoteProjectExecutionTargetId,
   type RemoteProjectDraft,
 } from "./Sidebar.projects.logic";
 
-export type RemoteProjectUnlockMode = "ssh-key-passphrase" | "password";
+export type RemoteProjectUnlockMode = SshAuthMode;
 
 /**
- * SSH key-passphrase / password prompt for the remote project dialog. A request may carry a
+ * Host-trust / key-passphrase / password prompt for the remote project dialog. A request may carry a
  * continuation (e.g. retry folder browsing) that runs after unlocking instead of the default.
  */
 export function useRemoteProjectUnlock({
@@ -51,13 +47,12 @@ export function useRemoteProjectUnlock({
   /** Opens the prompt when `errorMessage` is an SSH lock error; returns whether it did. */
   const request = useCallback(
     (errorMessage: string, continuation?: () => void) => {
-      const lockedKeyPath = getPassphraseProtectedSshKeyPath(errorMessage);
-      const label = lockedKeyPath ?? getPasswordProtectedSshTargetLabel(errorMessage);
-      if (!label) return false;
+      const prompt = getSshAuthPrompt(errorMessage);
+      if (!prompt) return false;
       continuationRef.current = continuation ?? null;
       setDialogError(null);
-      setMode(lockedKeyPath ? "ssh-key-passphrase" : "password");
-      setKeyPath(label);
+      setMode(prompt.mode);
+      setKeyPath(prompt.label);
       setPassphrase("");
       setError(null);
       setIsOpen(true);
@@ -74,14 +69,13 @@ export function useRemoteProjectUnlock({
   const submit = useCallback(
     async (afterUnlock: () => Promise<void>) => {
       const secret = passphrase.trim();
-      if (secret.length === 0) {
+      if (mode !== "host-trust" && secret.length === 0) {
         setError(mode === "password" ? "Enter the SSH password." : "Enter the SSH key passphrase.");
         return;
       }
 
-      const api = readNativeApi();
-      if (!api) {
-        setError("Native API not found.");
+      if (!mode) {
+        setError("SSH authentication context was lost. Retry the connection.");
         return;
       }
 
@@ -89,11 +83,7 @@ export function useRemoteProjectUnlock({
       setError(null);
       try {
         const executionTargetId = createRemoteProjectExecutionTargetId(draft);
-        if (mode === "password") {
-          await api.server.unlockSshPassword({ executionTargetId, password: secret });
-        } else {
-          await api.server.unlockSshKey({ executionTargetId, passphrase: secret });
-        }
+        await submitSshAuthentication({ executionTargetId, mode, promptLabel: keyPath, secret });
         const continuation = continuationRef.current;
         setIsOpen(false);
         setMode(null);
@@ -113,6 +103,13 @@ export function useRemoteProjectUnlock({
             : mode === "password"
               ? "Failed to unlock the SSH password session."
               : "Failed to unlock the SSH key.";
+        const nextPrompt = getSshAuthPrompt(errorMessage);
+        if (
+          nextPrompt &&
+          (nextPrompt.mode !== mode || nextPrompt.label !== keyPath) &&
+          request(errorMessage, continuationRef.current ?? undefined)
+        )
+          return;
         setError(errorMessage);
         if (mode) {
           toastManager.add({
@@ -125,7 +122,7 @@ export function useRemoteProjectUnlock({
         setIsUnlocking(false);
       }
     },
-    [draft, mode, passphrase],
+    [draft, keyPath, mode, passphrase, request],
   );
 
   return {

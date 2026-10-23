@@ -2,10 +2,13 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { SSH_UNLOCK_DEADLINE_MS } from "./sshLocalCommand.ts";
 import { unlockSshExecutionTargetPassword } from "./sshSession.ts";
+
+// Host identity is tested separately; this fixture exercises the authentication deadline.
+vi.mock("./sshHostTrust.ts", () => ({ inspectSshHostTrust: vi.fn().mockResolvedValue(undefined) }));
 
 // A fake `ssh` that refuses control checks and hangs on connect, like a black-holed host.
 const binDirectory = mkdtempSync(join(tmpdir(), "bigbud-fake-ssh-"));

@@ -23,4 +23,14 @@ describe("wsNativeApi — SSH config hosts", () => {
       unknownOptionalRpcTag(`Unknown request tag: ${WS_METHODS.serverListSshConfigHosts}`),
     ).toBe(WS_METHODS.serverListSshConfigHosts);
   });
+
+  it("forwards host approval with its exact challenge identity", async () => {
+    const input = { executionTargetId: "ssh:box", challengeId: "approval-1" };
+    rpcClientMock.server.trustSshHost.mockResolvedValue({ message: "Trusted" });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    await expect(createWsNativeApi().server.trustSshHost(input)).resolves.toEqual({
+      message: "Trusted",
+    });
+    expect(rpcClientMock.server.trustSshHost).toHaveBeenCalledWith(input);
+  });
 });

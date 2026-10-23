@@ -34,6 +34,7 @@ import {
 } from "./wsRemoteAgentRestart.ts";
 import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
+import { trustSshHostEffect } from "./wsSshHostTrust.ts";
 
 function gitMutationOperationId(operationId: string | undefined, target?: string): string {
   if (!operationId && !isLocalExecutionTarget(target))
@@ -57,6 +58,10 @@ function withGitMutationOperationId<
 
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
+    [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
+      observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {
+        "rpc.aggregate": "server",
+      }),
     [WS_METHODS.terminalWslDistributions]: () =>
       observeRpcEffect(
         WS_METHODS.terminalWslDistributions,

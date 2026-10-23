@@ -193,7 +193,7 @@ export interface SidebarState {
   declineRemoteAgentInstall: () => void;
   completeRemoteAgentInstall: (message: string) => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;
-  remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
+  remoteProjectUnlockMode: import("../../lib/ssh").SshAuthMode | null;
   remoteProjectUnlockKeyPath: string;
   remoteProjectUnlockPassphrase: string;
   remoteProjectUnlockError: string | null;

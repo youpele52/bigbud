@@ -130,6 +130,7 @@ import {
 } from "./rpc.remoteAgent";
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
 import { WsServerListRemoteFoldersRpc } from "./rpc.remoteFolders";
+import { WsServerTrustSshHostRpc } from "./rpc.sshHostTrust";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
   WsOrchestrationAcknowledgeDeliveryBaselineRpc,
@@ -206,6 +207,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetRemoteAgentRestartStatusRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,
+  WsServerTrustSshHostRpc,
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
