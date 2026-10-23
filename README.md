@@ -102,7 +102,7 @@ bigbud supports multiple AI coding agents. Configure at least one in **Settings 
 
 Provider status is checked in real-time and displayed in Settings. Each provider can be toggled on or off independently.
 
-For Claude's SDK integration, authentication boundaries and recovery behavior, see [Claude in bigbud](docs/providers-claude.md).
+For Claude's SDK integration, authentication boundaries and recovery behavior, see [Claude in bigbud](docs/development/providers-claude.md).
 
 ## Remote Projects
 
@@ -194,16 +194,20 @@ The feature uses your own OpenAI API key — you must have one configured to use
 
 ## Documentation
 
-- [AGENTS.md](./AGENTS.md) — Development guide
+- [AGENTS.md](./AGENTS.md) — Agent instructions and package overview
+- [Development documentation](./docs/development/README.md) — Architecture, runtime modes, scripts, glossary, and contribution guidance
 - [docs/CHANGELOG.md](./docs/CHANGELOG.md) — Recent project changes and grouped release history
-- [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guidelines
-- [docs/release.md](./docs/release.md) — Release workflow & signing
-- [docs/observability.md](./docs/observability.md) — Observability setup
+- [Contributing](./docs/development/CONTRIBUTING.md) — Contribution guidelines
+- [docs/KEYBINDINGS.md](./docs/KEYBINDINGS.md) — Keyboard defaults and configuration
+- [docs/REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md) — Mobile pairing and remote server access
+- [docs/THREAD_RETENTION.md](./docs/THREAD_RETENTION.md) — Cleanup, protections, and recovery
+- [Release guide](./docs/development/release.md) — Release workflow & signing
+- [Observability](./docs/development/observability.md) — Diagnostic setup and workflows
 
 ## Development
 
 ```bash
-# Full dev stack (server + web)
+# Full dev stack (contracts + server + web + mobile web)
 bun dev
 
 # Individual apps
@@ -231,4 +235,4 @@ bun dist:desktop:win         # Windows NSIS installer
 
 bigbud is actively used and maintained. See the [changelog](https://bigbud.app/changelog/) for recent updates.
 
-We're not accepting contributions yet. See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+We're not accepting contributions yet. See [the contribution guide](./docs/development/CONTRIBUTING.md) for details.

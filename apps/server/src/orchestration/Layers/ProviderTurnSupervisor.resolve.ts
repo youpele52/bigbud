@@ -11,6 +11,7 @@ import type { MessageId, ThreadId } from "@bigbud/contracts";
 import type { ThreadRecoveryResolveAction } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
 import { Effect, Option } from "effect";
 
+import { isRecoveryActionApplicable } from "../deciderThreads.recovery.ts";
 import { evaluateIntent } from "./ProviderTurnSupervisor.evaluate.ts";
 import {
   resyncRecoveryNotice,
@@ -72,6 +73,11 @@ export const resolveRecovery = Effect.fn("resolveRecovery")(function* (
     return yield* resyncRecoveryNotice(ctx, key);
   }
   const intent = found.value;
+  // The decider saw the projection, which may lag the intent: a Continue on an intent that is
+  // already continuing must not replace the continuation it is waiting to bind.
+  if (!isRecoveryActionApplicable(input.action, intent.recoveryStatus)) {
+    return yield* resyncRecoveryNotice(ctx, key);
+  }
   yield* Effect.logInfo("sleep recovery resolved by user", {
     threadId: input.threadId,
     messageId: input.messageId,

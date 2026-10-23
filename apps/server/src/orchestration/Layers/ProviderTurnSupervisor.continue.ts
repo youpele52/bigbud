@@ -27,7 +27,13 @@ import {
   sameThreadRecovery,
   toThreadRecovery,
 } from "./ProviderTurnSupervisor.policy.logic.ts";
-import type { RecoveryContext } from "./ProviderTurnSupervisor.state.ts";
+import {
+  intentKeyString,
+  MAX_TRACKED_THREADS,
+  setBounded,
+  type RecoveryContext,
+  type RecoveryNoticeKey,
+} from "./ProviderTurnSupervisor.state.ts";
 
 export const SLEEP_CONTINUATION_TEXT =
   "Your previous response was interrupted when the computer went to sleep. Continue the task from where it stopped. Do not repeat actions that already completed, and check the current state before relying on anything that may not have finished.";
@@ -80,6 +86,40 @@ export const transitionIntent = Effect.fn("transitionIntent")(function* (
   return yield* ctx.intents.get(key);
 });
 
+/** Dispatches a notice change; a failure is kept, so the next recovery pass publishes again. */
+const dispatchNotice = (
+  ctx: RecoveryContext,
+  key: RecoveryNoticeKey,
+  recovery: ReturnType<typeof toThreadRecovery>,
+  kind: "set" | "clear",
+) => {
+  const noticeKey = intentKeyString(key.threadId, key.messageId);
+  return ctx.engine
+    .dispatch({
+      type: "thread.recovery.set",
+      commandId: recoveryCommandId(kind),
+      threadId: key.threadId,
+      recovery,
+      messageId: key.messageId,
+      createdAt: isoAt(ctx),
+    })
+    .pipe(
+      Effect.tap(() => Effect.sync(() => ctx.memory.unpublishedNotices.delete(noticeKey))),
+      Effect.catchCause((cause) =>
+        Effect.sync(() =>
+          setBounded(ctx.memory.unpublishedNotices, noticeKey, key, MAX_TRACKED_THREADS),
+        ).pipe(
+          Effect.andThen(
+            Effect.logWarning(`failed to ${kind} thread recovery state`, {
+              threadId: key.threadId,
+              cause,
+            }),
+          ),
+        ),
+      ),
+    );
+};
+
 /**
  * Publishes the intent's visible state on its thread. A null state only clears a notice that
  * belongs to this intent, so an older intent can never wipe a newer prompt.
@@ -92,25 +132,14 @@ export const publishRecovery = Effect.fn("publishRecovery")(function* (
   if (!thread || thread.deletedAt != null) return;
   const next = toThreadRecovery(intent, isoAt(ctx));
   const current = thread.recovery ?? null;
-  if (next === null && current?.messageId !== intent.messageId) return;
-  if (sameThreadRecovery(current, next)) return;
-  yield* ctx.engine
-    .dispatch({
-      type: "thread.recovery.set",
-      commandId: recoveryCommandId("set"),
-      threadId: intent.threadId,
-      recovery: next,
-      messageId: intent.messageId,
-      createdAt: isoAt(ctx),
-    })
-    .pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("failed to publish thread recovery state", {
-          threadId: intent.threadId,
-          cause,
-        }),
-      ),
-    );
+  if (
+    (next === null && current?.messageId !== intent.messageId) ||
+    sameThreadRecovery(current, next)
+  ) {
+    ctx.memory.unpublishedNotices.delete(intentKeyString(intent.threadId, intent.messageId));
+    return;
+  }
+  yield* dispatchNotice(ctx, intent, next, "set");
 });
 
 /** Clears the thread's notice, but only while it still belongs to `messageId`. */
@@ -120,24 +149,11 @@ export const clearNoticeFor = Effect.fn("clearRecoveryNoticeFor")(function* (
 ) {
   const thread = yield* findThread(ctx, key.threadId);
   if (!thread || thread.deletedAt != null) return;
-  if (thread.recovery?.messageId !== key.messageId) return;
-  yield* ctx.engine
-    .dispatch({
-      type: "thread.recovery.set",
-      commandId: recoveryCommandId("clear"),
-      threadId: key.threadId,
-      recovery: null,
-      messageId: key.messageId,
-      createdAt: isoAt(ctx),
-    })
-    .pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("failed to clear thread recovery state", {
-          threadId: key.threadId,
-          cause,
-        }),
-      ),
-    );
+  if (thread.recovery?.messageId !== key.messageId) {
+    ctx.memory.unpublishedNotices.delete(intentKeyString(key.threadId, key.messageId));
+    return;
+  }
+  yield* dispatchNotice(ctx, key, null, "clear");
 });
 
 /** Notices that wait for the user's choice. */

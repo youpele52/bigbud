@@ -237,3 +237,18 @@ fn terminal_output_beyond_its_budget_drops_bytes_but_keeps_the_exit_code() {
     ));
     assert_eq!(registry.replay_from("newer", 0, now).unwrap().len(), 1);
 }
+
+#[test]
+fn a_cursor_at_u64_max_replays_nothing_instead_of_overflowing() {
+    let now = Instant::now();
+    let mut registry = registry();
+    registry.accept("operation-1", vec![], now).unwrap();
+    registry.start("operation-1", now).unwrap();
+    registry
+        .append_output("operation-1", OutputStream::Stdout, b"aa".to_vec(), now)
+        .unwrap();
+    assert_eq!(
+        registry.replay_from("operation-1", u64::MAX, now),
+        Ok(vec![])
+    );
+}

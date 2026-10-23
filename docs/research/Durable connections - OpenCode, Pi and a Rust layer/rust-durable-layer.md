@@ -26,7 +26,7 @@ It would not keep a Pi turn alive. `pi --mode rpc` aborts when its stdin ends, a
 - An extra hop on every RPC, including the ones that are already local.
 - The Effect RPC streams upstream have to be built again after every TypeScript restart. The renderer's socket staying open does not keep those streams.
 - A protocol boundary to version between Rust and the TypeScript server.
-- A second cursor store. Canonical sequence state is SQLite owned by TypeScript (`docs/RUST_SYSTEMS_CORE.md`). Pi Durable's own rule is one owner per storage. A Rust cursor beside that SQLite is a second owner.
+- A second cursor store. Canonical sequence state is SQLite owned by TypeScript (`docs/plans/2026-08-25-rust-systems-core-plan.md`). Pi Durable's own rule is one owner per storage. A Rust cursor beside that SQLite is a second owner.
 - It does not checkpoint a model call or a tool call. That is the work that makes an agent durable, and it has to happen where the provider call is made.
 
 ## How this relates to D7 and the background-service plan

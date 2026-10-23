@@ -22,8 +22,8 @@ implemented by deleting the platform guard or using a guessed database path.
 
 ## Related Work
 
-- [Existing shared-service plan](2026-10-09-opencode-v2-shared-service-plan.md).
-- [Default-provider plan](2026-10-10-opencode-default-plan.md).
+- [Consolidated shared-service contract](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions).
+- [Consolidated provider-adoption decision](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions).
 - [Provider implementation](2026-09-29-opencode-v2-provider-implementation-plan.md).
 - None identified: no note/card/issue identifier supplied for this request.
 - Baseline: clean `plan/terminal-rust-gpu-reliability` at

@@ -4,6 +4,8 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { ServerSpanActivity } from "../observability/Services/ServerSpanActivity.ts";
+import { SystemSleepEpochsLive } from "../system-sleep/Layers/SystemSleepEpochs.ts";
+import { SystemSleepEpochs } from "../system-sleep/Services/SystemSleepEpochs.ts";
 import { SpanActivityTracker } from "../observability/SpanActivity.ts";
 import {
   ServerLifecycleEvents,
@@ -128,5 +130,42 @@ describe("makeEventLoopLagMonitor", () => {
     const [sleep] = recorded.serverEvents;
     if (sleep?.type !== "suspected-system-sleep") throw new Error("expected a suspected sleep");
     expect(sleep.durationMs).toBeGreaterThanOrEqual(119_000);
+  });
+
+  it("publishes a detected sleep to SystemSleepEpochs as server-gap evidence", async () => {
+    const layer = Layer.mergeAll(
+      ServerLifecycleEventsLive,
+      Layer.succeed(ConnectionDiagnostics, makeConnectionDiagnostics()),
+      SystemSleepEpochsLive,
+    );
+    let sleptMs = 0;
+    const readClock = () => ({
+      monotonicMs: performance.now() + sleptMs,
+      wallMs: Date.now() + sleptMs,
+      cpuMs: 0,
+    });
+
+    const epochs = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const sleepEpochs = yield* SystemSleepEpochs;
+          yield* makeEventLoopLagMonitor({
+            sampleIntervalMs: 25,
+            windowMs: 10_000,
+            thresholdMs: 300,
+            monotonicIncludesSleep: true,
+            readClock,
+          });
+          yield* Effect.sleep(60);
+          sleptMs = 120_000;
+          yield* Effect.sleep(120);
+          return yield* sleepEpochs.epochs;
+        }).pipe(Effect.provide(layer)),
+      ),
+    );
+
+    expect(epochs).toHaveLength(1);
+    expect(epochs[0]?.sources).toEqual(["server-gap"]);
+    expect(epochs[0]?.durationMs).toBeGreaterThanOrEqual(119_000);
   });
 });

@@ -36,6 +36,8 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
       signal.removeEventListener("abort", abort);
       resolve();
     }, ms);
+    // A waiting reattach never keeps the server process alive on its own.
+    timer.unref?.();
     const abort = () => {
       clearTimeout(timer);
       resolve();
@@ -142,9 +144,11 @@ export class RemoteAgentReattachRecovery {
   /**
    * Resolves when the next attempt may start: at once for the first three,
    * then on a wake signal or after the jittered backoff, whichever is first.
-   * Returns "expired" once the retained result would have expired.
+   * Returns "expired" once the retained result would have expired, and
+   * "cancelled" as soon as `signal` aborts (the owner or turn was stopped).
    */
-  async beforeAttempt(): Promise<"attempt" | "expired"> {
+  async beforeAttempt(signal?: AbortSignal): Promise<"attempt" | "expired" | "cancelled"> {
+    if (signal?.aborted) return "cancelled";
     if (this.attemptCount < REMOTE_AGENT_IMMEDIATE_REATTACH_ATTEMPTS) {
       this.attemptCount += 1;
       this.totalAttempts += 1;
@@ -154,11 +158,19 @@ export class RemoteAgentReattachRecovery {
     if (remaining <= 0) return "expired";
     const backoff = remoteAgentReattachBackoffMs(this.delayedAttempts, this.environment.random());
     const controller = new AbortController();
-    const woke = await Promise.race([
-      this.environment.waitForWake(controller.signal).then(() => true),
-      this.environment.delay(Math.min(backoff, remaining), controller.signal).then(() => false),
-    ]);
-    controller.abort();
+    const cancel = () => controller.abort();
+    signal?.addEventListener("abort", cancel, { once: true });
+    let woke: boolean;
+    try {
+      woke = await Promise.race([
+        this.environment.waitForWake(controller.signal).then(() => true),
+        this.environment.delay(Math.min(backoff, remaining), controller.signal).then(() => false),
+      ]);
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      controller.abort();
+    }
+    if (signal?.aborted) return "cancelled";
     // A wake means the network is likely back: retry promptly from then on.
     this.delayedAttempts = woke ? 0 : this.delayedAttempts + 1;
     if (this.environment.now() >= this.deadline) return "expired";

@@ -142,7 +142,7 @@ A larger option was considered on 21 October 2026: a Rust-owned socket gateway, 
 5. **Calm provider discovery.** Walk discovery roots on watcher events and on explicit refresh only, with the 5-minute fallback rescan kept for platforms without a watcher. Exclude obviously irrelevant subtrees before the recursive read instead of after it. Make the Cursor capability probes lazy, so they run when Cursor is first used rather than on every start.
 6. **Fix the reconnect storm.** The renderer must keep a single in-flight upgrade per transport session and must not open a new socket while the previous one has neither opened nor closed, so a frozen server sees one pending upgrade rather than 14.
 
-**Why a worker thread and not Rust for storage.** TypeScript owns canonical SQLite by the architecture contract in `docs/CONTEXT.md`, and the Rust plans keep it that way. A worker thread removes the freeze without changing ownership. A Rust storage engine is a separate product decision (D6) and would not land sooner.
+**Why a worker thread and not Rust for storage.** TypeScript owns canonical SQLite by the architecture contract in `docs/development/architecture.md#desktop-event-delivery`, and the Rust plans keep it that way. A worker thread removes the freeze without changing ownership. A Rust storage engine is a separate product decision (D6) and would not land sooner.
 
 **Exit criteria.** The lag monitor shows no main-thread stall over 50 ms during an hour of normal dev use with a 3 GB database. Startup on that database shows progress and never exceeds the desktop deadline. SSH unlock against an unreachable host fails within its deadline while the UI stays responsive.
 

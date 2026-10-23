@@ -13,8 +13,9 @@ becomes the first and preselected connection method for new projects. Stored pro
 their current format; config mode stores `host=<alias>`, which existing code already passes straight
 to `ssh`.
 
-Visual explainer agreed with the user:
-`docs/research/2026-10-22-ssh-config-remote-project-flow.html`.
+A visual HTML explainer of both modes and the flow was reviewed with the user during planning.
+It has since been removed from the repository; later references to "the explainer" mean that
+review.
 
 ## Related Work
 

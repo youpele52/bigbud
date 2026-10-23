@@ -117,21 +117,22 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
       lastRuntimeEventAt: observedAt,
     },
   });
-  if (input.acknowledge !== undefined && Option.isSome(input.liveness)) {
-    const acknowledged = yield* input
-      .acknowledge(
-        input.liveness.value.startTurn(livenessInput).pipe(Effect.andThen(upsertBinding)),
-      )
-      .pipe(
-        Effect.as(true),
-        Effect.catch((error) =>
-          Effect.logWarning("failed to record provider acknowledgement with turn liveness", {
-            threadId: input.threadId,
-            turnId: input.turnId,
-            error,
-          }).pipe(Effect.as(false)),
-        ),
-      );
+  if (input.acknowledge !== undefined) {
+    // Without a liveness repository the binding alone rides with the acknowledgement, so the
+    // attempt never stays `may-have-been-sent` for a turn the provider accepted.
+    const writes = Option.isSome(input.liveness)
+      ? input.liveness.value.startTurn(livenessInput).pipe(Effect.andThen(upsertBinding))
+      : upsertBinding;
+    const acknowledged = yield* input.acknowledge(writes).pipe(
+      Effect.as(true),
+      Effect.catch((error) =>
+        Effect.logWarning("failed to record provider acknowledgement with turn liveness", {
+          threadId: input.threadId,
+          turnId: input.turnId,
+          error,
+        }).pipe(Effect.as(false)),
+      ),
+    );
     if (acknowledged) return;
   }
   // Without the acknowledgement (or after it failed and rolled back), turn liveness is still

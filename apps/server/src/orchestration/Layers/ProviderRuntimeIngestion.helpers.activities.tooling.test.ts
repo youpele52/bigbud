@@ -78,6 +78,15 @@ describe("toolingRuntimeEventToActivities", () => {
       helpers,
       {},
     );
+    const updated = toolingRuntimeEventToActivities(
+      {
+        ...base,
+        type: "item.updated",
+        payload: { itemType: "command_execution", title: "Run tests", status: "inProgress" },
+      } as Extract<ProviderRuntimeEvent, { type: "item.updated" }>,
+      helpers,
+      {},
+    );
     const completed = toolingRuntimeEventToActivities(
       {
         ...base,
@@ -88,6 +97,12 @@ describe("toolingRuntimeEventToActivities", () => {
       {},
     );
     expect(started[0]?.payload).toEqual({ itemType: "command_execution", itemId: "item-7" });
+    expect(updated[0]?.kind).toBe("tool.updated");
+    expect(updated[0]?.payload).toEqual({
+      itemType: "command_execution",
+      itemId: "item-7",
+      status: "inProgress",
+    });
     expect(completed[0]?.payload).toEqual({ itemType: "command_execution", itemId: "item-7" });
   });
 

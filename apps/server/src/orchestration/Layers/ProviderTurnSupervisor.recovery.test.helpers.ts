@@ -84,6 +84,8 @@ export const makeRecoveryHarness = Effect.fn("makeRecoveryHarness")(function* (
   const commands: OrchestrationCommand[] = [];
   /** Runs inside a `thread.turn.start` dispatch; returning false makes the engine refuse it. */
   let turnStartInterceptor: (() => Effect.Effect<boolean>) | null = null;
+  /** How many of the next `thread.recovery.set` dispatches fail. */
+  let failingRecoverySets = 0;
   const intents = yield* ThreadRecoveryIntentRepository;
   const attempts = yield* ProviderDispatchAttemptRepository;
   const sleep = yield* SystemSleepEpochs;
@@ -106,6 +108,10 @@ export const makeRecoveryHarness = Effect.fn("makeRecoveryHarness")(function* (
       : {}),
     dispatch: (command: OrchestrationCommand) =>
       Effect.suspend(() => {
+        if (command.type === "thread.recovery.set" && failingRecoverySets > 0) {
+          failingRecoverySets -= 1;
+          return Effect.fail(new Error("recovery set failed"));
+        }
         commands.push(command);
         if (command.type === "thread.recovery.set") {
           thread = { ...thread, recovery: command.recovery };
@@ -198,6 +204,9 @@ export const makeRecoveryHarness = Effect.fn("makeRecoveryHarness")(function* (
     },
     setTurnStartInterceptor: (interceptor: () => Effect.Effect<boolean>) => {
       turnStartInterceptor = interceptor;
+    },
+    failNextRecoverySets: (count: number) => {
+      failingRecoverySets = count;
     },
     /** The thread is idle: its session is ready with no turn. */
     idleThread: () => {

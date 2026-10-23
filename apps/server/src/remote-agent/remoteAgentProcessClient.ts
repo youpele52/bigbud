@@ -20,6 +20,7 @@ import {
   errorFromCompleted,
   isUnknownOperationError,
   outcomeUnknownAfterRetention,
+  reattachCancelled,
   type RemoteAgentProcessResult,
   type RemoteAgentProcessRunInput,
 } from "./remoteAgentProcessClient.types.ts";
@@ -135,6 +136,7 @@ export class RemoteAgentProcessClient {
           afterSequence: 0,
           stdout: [],
           stderr: [],
+          signal: input.signal,
         });
       } catch (attachCause) {
         if (!isUnknownOperationError(attachCause)) throw attachCause;
@@ -153,7 +155,14 @@ export class RemoteAgentProcessClient {
     }
     return this.trackResult(
       input.operationId,
-      this.collectResult(accepted.value.duplicate, input.operationId, requestId, 0),
+      this.collectResult(
+        accepted.value.duplicate,
+        input.operationId,
+        requestId,
+        0,
+        undefined,
+        input.signal,
+      ),
     );
   }
 
@@ -161,6 +170,7 @@ export class RemoteAgentProcessClient {
     readonly operationId: string;
     readonly afterSequence?: number;
     readonly requestId?: string;
+    readonly signal?: AbortSignal;
   }): Promise<RemoteAgentProcessResult> {
     const requestId = input.requestId ?? randomUUID();
     await this.connection.send({
@@ -173,7 +183,14 @@ export class RemoteAgentProcessClient {
     });
     return this.trackResult(
       input.operationId,
-      this.collectResult(false, input.operationId, requestId, input.afterSequence ?? 0),
+      this.collectResult(
+        false,
+        input.operationId,
+        requestId,
+        input.afterSequence ?? 0,
+        undefined,
+        input.signal,
+      ),
     );
   }
 
@@ -199,6 +216,7 @@ export class RemoteAgentProcessClient {
     requestId: string,
     afterSequence: number,
     recovery?: RemoteAgentReattachRecovery,
+    signal?: AbortSignal,
   ): Promise<RemoteAgentProcessResult> {
     const stdout: Uint8Array[] = [];
     const stderr: Uint8Array[] = [];
@@ -227,6 +245,7 @@ export class RemoteAgentProcessClient {
           recovery,
           stdout,
           stderr,
+          signal,
         });
       }
       if (frame.type === "protocolError") {
@@ -275,6 +294,7 @@ export class RemoteAgentProcessClient {
             recovery,
             stdout,
             stderr,
+            signal,
           });
         }
         continue;
@@ -318,7 +338,7 @@ export class RemoteAgentProcessClient {
    * on each network-online or sleep wake signal, or a 1-30 s jittered backoff,
    * until the agent's retained result would have expired. Only then is the
    * outcome unknown. Reattach never spawns; definitive failures, such as an
-   * agent restart, are not retried.
+   * agent restart, are not retried. An aborted `signal` ends it as cancelled.
    */
   private async resumeAfterTransport(input: {
     readonly cause: unknown;
@@ -329,6 +349,7 @@ export class RemoteAgentProcessClient {
     readonly recovery?: RemoteAgentReattachRecovery | undefined;
     readonly stdout: ReadonlyArray<Uint8Array>;
     readonly stderr: ReadonlyArray<Uint8Array>;
+    readonly signal?: AbortSignal | undefined;
   }): Promise<RemoteAgentProcessResult> {
     if (!this.reconnect || isDefinitiveReattachFailure(input.cause)) throw input.cause;
     const recovery =
@@ -338,9 +359,9 @@ export class RemoteAgentProcessClient {
       );
     let lastCause = input.cause;
     while (true) {
-      if ((await recovery.beforeAttempt()) === "expired") {
-        throw outcomeUnknownAfterRetention(lastCause);
-      }
+      const next = await recovery.beforeAttempt(input.signal);
+      if (next === "cancelled") throw reattachCancelled();
+      if (next === "expired") throw outcomeUnknownAfterRetention(lastCause);
       let replacement: RemoteAgentProcessClient;
       try {
         replacement = await this.reconnect();
@@ -357,12 +378,15 @@ export class RemoteAgentProcessClient {
         lastCause = cause;
         continue;
       }
+      // Stopped while connecting: the attach request is harmless, but nothing waits for it.
+      if (input.signal?.aborted) throw reattachCancelled();
       const resumed = await replacement.collectResult(
         input.duplicate,
         input.operationId,
         input.requestId,
         input.afterSequence,
         recovery,
+        input.signal,
       );
       return {
         ...resumed,

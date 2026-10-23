@@ -146,7 +146,7 @@ it("known native roots and children cannot escape guard authority by removing ow
 
 it("implicit native foreground backgrounding retains an exact executor continuation obligation despite model idle", async () => {
   await withV2NativeGuardProduction(
-    async ({ runtime, owner, http, send, launch }) => {
+    async ({ runtime, owner, http, send, launch, expectRetainedClose }) => {
       await send("implicit-background");
       const id = await launch(false);
       const child = owner.family!.child(id)!;
@@ -163,6 +163,8 @@ it("implicit native foreground backgrounding retains an exact executor continuat
       await expect(runtime.interrupt(owner.threadId)).rejects.toThrow("unconfirmed");
       expect(owner.family!.live).toBe(true);
       await expect(send("unsafe-rearm")).rejects.toThrow();
+      // Stock evidence cannot settle the obligation, so shutdown keeps reporting it.
+      expectRetainedClose("V2 descendant Stop remains unconfirmed");
     },
     "full-access",
     "running",

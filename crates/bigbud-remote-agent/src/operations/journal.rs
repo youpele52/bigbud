@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{OperationState, OutputStream};
@@ -75,6 +77,11 @@ pub enum OperationJournalError {
 pub struct OperationJournal {
     path: PathBuf,
     maximum_bytes: usize,
+    /// Operations this process accepted and has not completed. Compaction never
+    /// expires them: running operations never expire. One left behind by an
+    /// earlier agent process was expired at restore (`AGENT_RESTARTED`) without
+    /// a completion record, so its acceptance-time retention still applies.
+    running: Mutex<HashSet<String>>,
 }
 
 impl OperationJournal {
@@ -122,6 +129,7 @@ impl OperationJournal {
         let journal = Self {
             path,
             maximum_bytes,
+            running: Mutex::new(HashSet::new()),
         };
         journal.records()?;
         Ok(journal)
@@ -181,7 +189,28 @@ impl OperationJournal {
             .map_err(OperationJournalError::Io)?;
         file.write_all(&encoded)
             .map_err(OperationJournalError::Io)?;
-        file.sync_all().map_err(OperationJournalError::Io)
+        file.sync_all().map_err(OperationJournalError::Io)?;
+        self.track_running(record);
+        Ok(())
+    }
+
+    fn track_running(&self, record: &JournalRecord) {
+        let mut running = self.running_operations();
+        match record {
+            JournalRecord::Accepted { operation_id, .. } => {
+                running.insert(operation_id.clone());
+            }
+            JournalRecord::Completed { operation_id, .. } => {
+                running.remove(operation_id);
+            }
+            _ => {}
+        }
+    }
+
+    fn running_operations(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        // The set only widens what compaction keeps; a panic while it was held
+        // cannot leave it in a state that would drop retained work.
+        self.running.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

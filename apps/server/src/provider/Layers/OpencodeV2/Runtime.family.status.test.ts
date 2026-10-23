@@ -1,9 +1,10 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { withV2OwnedFamily } from "./Runtime.family.fixture.ts";
 import { shouldPollV2Runtime } from "./Runtime.settlement.ts";
+import { hasV2UnconfirmedFamily } from "./Runtime.family.loss.ts";
 
 it("publishes authoritative cardless spawn/recovery ownership without inventing root execution", async () => {
-  await withV2OwnedFamily(async ({ runtime, owner, events, http }) => {
+  await withV2OwnedFamily(async ({ runtime, owner, events, http, expectRetainedClose }) => {
     await owner.family!.reserveSpawn("native-create-unconfirmed");
     expect(owner.family!.children).toHaveLength(0);
     expect(shouldPollV2Runtime(owner)).toBe(true);
@@ -23,11 +24,17 @@ it("publishes authoritative cardless spawn/recovery ownership without inventing 
     await runtime.reconcile(owner);
     expect(owner.session.retainedFamily).toBe(true);
     expect(owner.family!.pendingSpawnCount).toBe(1);
-    // Explicit scripted physical drain proof retires the fixture's obligation;
-    // server death alone must never clear it.
+    // A cached-zero journal drain is not the exact stopped/settled native barrier, so
+    // host loss still retains ownership with no cards and a previously false flag.
     await owner.family!.confirmNativeDrain();
     owner.session = { ...owner.session, retainedFamily: false };
     http.die();
     await runtime.reconcile(owner);
+    expect(owner.familyPhysicalDrain?.confirmed() ?? false).toBe(false);
+    expect(hasV2UnconfirmedFamily(owner)).toBe(true);
+    await vi.waitFor(() =>
+      expect(owner.session).toMatchObject({ status: "error", retainedFamily: true }),
+    );
+    expectRetainedClose("server exit is not retained family shell termination");
   });
 });

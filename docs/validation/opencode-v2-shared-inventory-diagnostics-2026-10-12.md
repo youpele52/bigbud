@@ -2,7 +2,7 @@
 
 **Date:** 12 October 2026  
 **Status:** Local diagnostic corrections accepted after independent code/security review. Required shared-service thread tooling and isolated-mode retirement remain separate unfinished work.
-**Baseline:** `plan/terminal-rust-gpu-reliability`, HEAD `91154fa9c086e1d47a3bbddfea4a8d56a35be44d`; preserved the eight earlier [consent/setup UX files](opencode-v2-consent-setup-2026-10-12.md). No staging, commit or push.
+**Baseline:** `plan/terminal-rust-gpu-reliability`, HEAD `91154fa9c086e1d47a3bbddfea4a8d56a35be44d`; preserved the eight earlier [consent/setup UX evidence](#consolidated-catalog-and-consent-evidence). No staging, commit or push.
 
 ## Authoritative clarification and outcome
 
@@ -82,3 +82,25 @@ The user subsequently supplied a screenshot of current OpenCode V2 responses and
 With models now available, the next user check is a **genuinely new OpenCode chat**, local chat/project Location and an exact currently **available** native provider/model, followed by a new harmless test prompt of the user's choice. Agents did not send a user prompt. Do not use an old failed thread's retry as that fresh test, silently switch providers, or reuse a retained request to test another mode/profile.
 
 If a new failure occurs, capture the current backend/port/build/time, fresh thread identity, discovery phase/Location/status and exact model identity, with no prompt/auth bodies. Compare that same live snapshot and scope before changing code or accounts. Missing old legacy history remains fenced and requires original-history investigation, not deletion/recreation. Inventory recovery alone does not prove the original chat is recoverable or that actual new execution succeeds.
+
+## Consolidated catalog and consent evidence
+
+Consolidated on 22 October, 2026 from the completed full-catalog and consent/setup records. Earlier references to dedicated private V2 profiles, exact-runtime-only policy and unfinished canonical tooling are historical; use the [current provider report](../reports/providers-opencode-v2.md) for supported topology and the [gap-closure ledger](opencode-v2-gap-closure-final-2026-10-15.md) for release gates.
+
+### Full-catalog slice — 9 October
+
+- User-selected full-catalog browsing was implemented with native available inventory taking precedence over schema-decoded public metadata from `https://models.opencode.ai/api.json`. Public-only entries remained setup-only, never authenticated or executable merely because they were listed. Exact subprovider IDs, variants, custom identities, grouping/search/recent selection and truthful loading were retained across web/mobile.
+- Native tag v2.0.26, commit `9b4ec5714d481559990db0a816d5dec19541a814`, exposed available-only model/provider APIs; disabling public model fetch did not remove the bundled native snapshot or create a full-inventory API. Public feed SHA-256 for the recorded observation: `7f362fea07f00c3273d4fe945122eefe5f48b6c2a9d18d80f485b1feae6572de`.
+- Historical no-account observation: raw feed 225 providers / 8,466 records / 5,374,726 bytes; normalized 223 subproviders / 7,950 entries; merged snapshot 7,951 entries / 1,411,118 bytes. Native inventory settled from zero to 11 OpenCode/free entries, auth stayed unknown, and no model prompt was sent. Public/merged examples were OpenAI 79/79, Anthropic 20/20, Google 30/30, OpenCode 84/85, OpenCode Go 31/31 and Azure 85/85. These are dated observations, not constants or current account claims. Native executable SHA-256: `1b6418a3bd4211344d8a2b75d7d4367b24283ae548bd6b896cf717f6f8858f26`.
+- Implemented bounds were a single-flight public cache, one-hour TTL, 30-second failed-refresh retry, last-good metadata, five-second fetch deadline, 8 MiB feed, 1,000 providers and 10,000 model entries; no credentials/redirect trust or executable feed data. Native availability used bounded reads under the existing request deadline. Source/tests, not historical timing numbers, govern current behavior.
+- A parent finding moved native availability preflight before fresh session creation and model switching, not merely before prompt admission. Unavailable selections cause no history/switch/instruction/prompt/journal mutation or namespace quarantine. Final authorization/cancellation/process guards remain; existing-history rebind and immutable accepted-request replay retain their exemption from new availability reads. New race/rebind regressions proved these boundaries.
+- Historical final parent checks passed six server files / 27 tests and three web files / 25 tests; the catalog slice was scoped-reviewed. Disposable exact-2.0.26 synthetic/native checks and metadata reads did not qualify paid generation, deletion, other platforms or the complete release. Current account setup must use the current shared-service report, not the retired private-profile instructions.
+
+### Consent/setup correction — 12 October
+
+- Missing trust was intentional enforcement, not proof of missing SDK/login. Enablement alone never acknowledged host-user execution. Discovery before acknowledgement remained health-only, without acquiring the manager/SSE; `Service.ensure` was not used because it can replace/stop a daemon.
+- Local unavailable/locked provider rows gained a setup route and full status text. Setup navigation only opened the existing Providers settings and did not select a model, write settings or grant trust. Mobile without that route showed guidance; both locked and unlocked remote-workspace cases retained unsupported status without a local setup action.
+- Explicit persisted consent/revocation and existing execution/settings fences remained authoritative. Later expanded managed-plugin acknowledgement is separate; an old acknowledgement must never silently authorize new writes.
+- Parent functional acceptance followed the locked-remote correction: six browser files / 20 tests, earlier three server files / 16 tests, and final formatting/lint/nine-task typecheck/full-root checks passed on that historical snapshot (8,489 tests passed / 103 skipped). Skipped native/platform tests and model inventory were not paid-provider execution proof. No credentials, user-native lifecycle, trust auto-grant or profile mutation was used for verification.
+
+The original inventory incident's cause remains unproven. A corrected picker, healthy catalog and independently accepted diagnostics do not retroactively explain the user's earlier failures or recover missing legacy history.

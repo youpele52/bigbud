@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
-import { v2FamilyInteractionCount } from "./Runtime.family.interactions.ts";
+import { v2FamilyInteractionCount } from "./Runtime.family.interactions.state.ts";
 
 /** Why a retained execution reservation was not settled. Observability only: never authority. */
 export type V2SettlementHoldReason =

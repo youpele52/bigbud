@@ -16,6 +16,38 @@ const run = <A, E>(effect: Effect.Effect<A, E, SystemSleepEpochs | Scope.Scope>)
   Effect.runPromise(Effect.scoped(effect.pipe(Effect.provide(SystemSleepEpochsLive))));
 
 describe("SystemSleepEpochs", () => {
+  it("never stretches a later sleep back to an aborted suspend", async () => {
+    // Within the pending suspend's age limit, so only the measured evidence can rule it out.
+    const later = T0 + 2 * 60_000;
+    const latest = await run(
+      Effect.gen(function* () {
+        const epochs = yield* SystemSleepEpochs;
+        // logind aborted this suspend; no resume followed.
+        yield* epochs.recordDesktopHint({
+          kind: "suspend",
+          sequence: 1,
+          occurredAt: T0,
+          online: true,
+        });
+        // Minutes later a real sleep: the gap detector measures it; its suspend hint was missed.
+        yield* epochs.recordEvidence({
+          source: "server-gap",
+          startedAtMs: later,
+          endedAtMs: later + 300_000,
+        });
+        yield* epochs.recordDesktopHint({
+          kind: "resume",
+          sequence: 2,
+          occurredAt: later + 300_500,
+          online: true,
+        });
+        return Option.getOrThrow(yield* epochs.latest);
+      }),
+    );
+    expect(latest.startedAtMs).toBe(later);
+    expect(latest.sources).toEqual(["server-gap", "desktop-hint"]);
+  });
+
   it("publishes epoch-ended once per sleep and network-online from hints", async () => {
     const events = await run(
       Effect.gen(function* () {

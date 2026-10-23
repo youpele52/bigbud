@@ -195,7 +195,8 @@ impl OperationRegistry {
         if record.is_expired(now) {
             return Err(OperationError::UnknownOperation);
         }
-        if after_sequence + 1 < record.first_retained_sequence {
+        // `after_sequence` comes from the client; `u64::MAX` must not overflow.
+        if after_sequence.saturating_add(1) < record.first_retained_sequence {
             return Err(OperationError::ReplayGap {
                 first_retained_sequence: record.first_retained_sequence,
             });

@@ -43,6 +43,7 @@
     "effect": "catalog:",
     "lexical": "^0.41.0",
     "lucide-react": "^0.564.0",
+    "material-icon-theme": "5.39.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

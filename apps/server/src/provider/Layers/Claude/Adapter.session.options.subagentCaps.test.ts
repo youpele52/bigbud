@@ -44,3 +44,17 @@ describe("Claude subagent caps (6.6)", () => {
     expect(result).toEqual({ [DEPTH]: "5", [CONCURRENT]: "3" });
   });
 });
+
+describe("Claude interrupted-turn resume stays bigbud's decision", () => {
+  const RESUME = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
+
+  it("drops a user's own CLAUDE_CODE_RESUME_INTERRUPTED_TURN from the CLI environment", () => {
+    const result = env(
+      { maxSpawnDepth: 2, maxConcurrent: null },
+      { PATH: "/usr/bin", [RESUME]: "1" },
+    );
+    expect(result).not.toHaveProperty(RESUME);
+    expect(result).toMatchObject({ PATH: "/usr/bin", [DEPTH]: "2" });
+    expect(env(undefined, { [RESUME]: "true" })).toEqual({});
+  });
+});

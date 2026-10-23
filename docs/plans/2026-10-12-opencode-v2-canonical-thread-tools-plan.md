@@ -7,7 +7,7 @@
 
 **Design acceptance (13 October, 2026):** plan reviewer `ses_ecdfd3459ffe51eYzP7aSPz6ZF` accepted all 16 requirements; security reviewer `ses_ecdeca5a3ffeiDflL131Pabhkh` accepted the corrected identity/renewal and private-storage contracts. This is design GREEN only, not source implementation acceptance. Implement and qualify the portable native artifact first; a concrete native contract mismatch requires renewed design review before broader refactoring.
 
-**Partial source checkpoint:** [Artifact/native qualification](../validation/opencode-v2-thread-tools-artifact-2026-10-13.md) records the implemented `Orchestration.*` foundation and successful actual 2.0.26/2.0.27 disposable tests. Application composition, production callback/admission/approval/receipt wiring, required setup UI and isolated retirement remain unfinished. Practical qualification was intentionally performed before the broad topology refactor. A proven native packaging mismatch corrected the setup target from an individual module URI to an immutable **directory** URI; review that precise correction, not a new product/authorization question.
+**Partial source checkpoint:** [Consolidated artifact/native qualification](../validation/opencode-v2-thread-tools-production-2026-10-13.md#consolidated-artifact-foundation-evidence) records the implemented `Orchestration.*` foundation and successful actual 2.0.26/2.0.27 disposable tests. Application composition, production callback/admission/approval/receipt wiring, required setup UI and isolated retirement remain unfinished. Practical qualification was intentionally performed before the broad topology refactor. A proven native packaging mismatch corrected the setup target from an individual module URI to an immutable **directory** URI; review that precise correction, not a new product/authorization question.
 
 ## Authoritative implementation deltas (13 October, 2026)
 
@@ -30,7 +30,7 @@ Restore outbound canonical bigbud thread messaging/creation for shared OpenCode 
 
 ## Related Work
 
-- [Shared-service ownership plan](2026-10-09-opencode-v2-shared-service-plan.md): its no-plugin-injection boundary is retained; a user-approved opt-in would add a new integration route, not remove the boundary.
+- [Consolidated shared-service ownership](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions): its no-plugin-injection boundary is retained; a user-approved opt-in would add a new integration route, not remove the boundary.
 - [Preview completion](2026-10-08-opencode-v2-preview-completion-plan.md).
 - [Provider report](../reports/providers-opencode-v2.md).
 - Official V2 topology verified by parent: [Web CLI](https://opencode.ai/v2/docs/cli/web/) describes the same server powering TUI/web; desktop source at immutable commit [`a22754f761f868a80231859c4b8be8887f81187c`](https://github.com/anomalyco/opencode/blob/a22754f761f868a80231859c4b8be8887f81187c/packages/desktop/src/main/service/background-service.ts) uses `@opencode/client/service`, adopts the shared service, and restricts its isolated override to unpackaged development with `OPENCODE_DESKTOP_ISOLATED_SERVER === "1"`. Desktop's `Service.ensure` can administer/replace a daemon; bigbud retains safe borrowing only. This establishes topology, not a claim that all native clients only ever connect to local shared services.
@@ -328,7 +328,7 @@ No product/packaging/history decision remains delegated to the user as a blocker
 
 The remaining validation for this plan moved into the [gap-closure plan](./2026-10-15-opencode-v2-gap-closure-plan.md). The retired private, SSH and coding-transport modules were deleted in its Phase 4.1. Native qualification and the live turn are pending.
 
-- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Consolidated Phase 0 evidence](../validation/opencode-v2-gap-closure-final-2026-10-15.md#consolidated-setup-and-stabilization-checkpoints): stabilized and committed snapshot, root run triage.
 - [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
 - [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
 - [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.

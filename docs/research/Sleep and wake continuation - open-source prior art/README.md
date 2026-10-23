@@ -65,7 +65,7 @@ Phase numbers refer to the connection resilience plan. D-numbers refer to the de
 - **Remote agent changes** (lesson 9): process attach that returns a snapshot plus terminal result on a replay gap, longer retention for terminal results, no idle exit while an operation is open, and distinct "instance restarted" versus "operation unknown" answers. This is bigbud's existing `crates/bigbud-remote-agent`, which already has ET-style sequence numbers, acks and a replay-gap error.
 - **A consume-once recovery snapshot**, written atomically and deleted before serving, as Codex's daemon does ([codex.md](codex.md)). Useful if the Rust background-service plan ever owns provider restarts.
 - **Note on Rust `Instant`:** it stops during sleep on macOS and Linux but counts sleep on Windows. The supervisor's `Instant`-based acknowledgement timeouts (`crates/bigbud-desktop-supervisor/src/main.rs`) will therefore expire at wake on Windows only.
-- Decisions about intents, classification, continuation and prompts stay in TypeScript, matching `docs/RUST_SYSTEMS_CORE.md`.
+- Decisions about intents, classification, continuation and prompts stay in TypeScript, matching `docs/plans/2026-08-25-rust-systems-core-plan.md`.
 
 ## Projects dropped or found irrelevant
 

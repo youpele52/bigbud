@@ -14,7 +14,7 @@ import { retireV2FailedStart } from "./Runtime.start.failure.ts";
 it.each(["windows", "ENOSPC"])(
   "empty-family %s persistence failure still reaches root cancellation and teardown, retaining uncertainty",
   async (failure) => {
-    await withV2RuntimeFixture(async ({ runtime, http, directory }) => {
+    await withV2RuntimeFixture(async ({ runtime, http, directory, expectRetainedClose }) => {
       const root = await realpath(runtime.options.config.profileRoot);
       Object.assign(runtime.options, { nativeSubagents: { stateDirectory: root } });
       const threadId = ThreadId.makeUnsafe(`empty-family-${failure}`);
@@ -43,7 +43,9 @@ it.each(["windows", "ENOSPC"])(
         expect(owner.family!.isFenced).toBe(true);
         expect(owner.family!.persistenceUncertain).toBe(true);
         expect(owner.stopped).toBe(true);
-        expect(runtime.sessions.has(threadId)).toBe(false);
+        // Uncertain cleanup keeps the exact owner and binding quarantine; only proof releases them.
+        expect(runtime.sessions.get(threadId)).toBe(owner);
+        expect(runtime.teardown.has(threadId)).toBe(true);
         expect(owner.executionBlocked).toContain("unconfirmed");
         expect(
           http.calls.some((call) => call.pathname === `/api/session/${owner.native.id}/interrupt`),
@@ -51,6 +53,8 @@ it.each(["windows", "ENOSPC"])(
         await expect(owner.family!.authorizeAdmission("new", "fingerprint")).rejects.toThrow(
           "persistence",
         );
+        // Journal uncertainty cannot be cleared in-process, so shutdown must still report it.
+        expectRetainedClose("persistence remains unconfirmed");
       } finally {
         Object.defineProperty(process, "platform", platform);
         write?.mockRestore();
@@ -60,7 +64,7 @@ it.each(["windows", "ENOSPC"])(
 );
 
 it("journal exhaustion cannot prevent cancellation of exact owned descendants or root", async () => {
-  await withV2OwnedFamily(async ({ runtime, http, owner, launch, finish }) => {
+  await withV2OwnedFamily(async ({ runtime, http, owner, launch, finish, expectRetainedClose }) => {
     await launch("ses_journal_child");
     http.sessions.set("ses_unrelated", { ...owner.native, id: "ses_unrelated" });
     const fetch = http.fetch.bind(http);
@@ -83,6 +87,8 @@ it("journal exhaustion cannot prevent cancellation of exact owned descendants or
       expect(cancelled).not.toContain("/api/session/ses_unrelated/interrupt");
       expect(owner.family!.persistenceUncertain).toBe(true);
       expect(owner.family!.live).toBe(true);
+      // Exhausted journal ownership stays retained through shutdown rather than being released.
+      expectRetainedClose("V2 descendant Stop remains unconfirmed");
     } finally {
       write.mockRestore();
       native.mockRestore();
@@ -160,7 +166,7 @@ it.each([false, true])(
 );
 
 it("uncertain cleanup retains guard and quarantine rather than disposing failclosed authority", async () => {
-  await withV2OwnedFamily(async ({ runtime, owner, http }) => {
+  await withV2OwnedFamily(async ({ runtime, owner, http, expectRetainedClose }) => {
     const dispose = vi.fn(async () => {});
     owner.detachSubagentGuard = dispose;
     http.failInterrupt = true;
@@ -169,6 +175,8 @@ it("uncertain cleanup retains guard and quarantine rather than disposing failclo
     expect(owner.detachSubagentGuard).toBe(dispose);
     expect(owner.stopped).toBe(true);
     http.failInterrupt = false;
+    // Teardown never repeats native cleanup: shutdown reports the retained failure, guard intact.
+    expectRetainedClose("session.interrupt failed");
   });
 });
 

@@ -225,6 +225,49 @@ describe("ThreadSleepRecoveryNotice", () => {
     await expect.element(page.getByText("Couldn't resume after sleep.")).toBeVisible();
   });
 
+  it("dismisses the post-wake restart prompt on the server with Dismiss", async () => {
+    await renderNotice(recovery({ reason: "backend-restarted-after-wake", toolSummary: null }));
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await vi.waitFor(() =>
+      expect(dispatched()).toEqual([
+        expect.objectContaining({
+          type: "thread.recovery.resolve",
+          action: "dismiss",
+          messageId: "message-1",
+        }),
+      ]),
+    );
+  });
+
+  it("sends Continue from a failed continuation", async () => {
+    await renderNotice(recovery({ reason: "continuation-failed", toolSummary: null }));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await vi.waitFor(() =>
+      expect(dispatched()).toEqual([
+        expect.objectContaining({ action: "continue", messageId: "message-1" }),
+      ]),
+    );
+  });
+
+  it("removes the banner when the thread's recovery becomes null", async () => {
+    const id = nextThreadId();
+    const screen = await renderNotice(recovery({}), id);
+    await expect.element(page.getByRole("alert")).toBeVisible();
+    await screen.rerender(<ThreadSleepRecoveryNotice thread={{ id, recovery: null }} />);
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-sleep-recovery-notice]")).toBeNull();
+  });
+
+  it("closes the notice with the keyboard, without a server action", async () => {
+    await renderNotice(recovery({}));
+    const close = page.getByRole("button", { name: "Dismiss sleep recovery notice" });
+    (close.element() as HTMLButtonElement).focus();
+    await expect.element(close).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
   it("renders nothing without a recovery state", async () => {
     await renderNotice(null);
     await renderNotice(recovery({ status: "continued" }));

@@ -366,7 +366,7 @@ old adapters only after inventory and fault tests prove parity.
 
 ## Global exit criteria
 
-All six completion gates in `RUST_SYSTEMS_CORE.md` pass as composed tests: ACK
+All six completion gates in `docs/plans/2026-08-25-rust-systems-core-plan.md` pass as composed tests: ACK
 through the highest contiguous applied/reconciled sequence; fully paged replay
 without live bridging; persisted deterministic Git identities; operational
 failures never cached as rejection and durable rejection confirmation; bounds

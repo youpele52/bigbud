@@ -28,7 +28,7 @@ Retain mobile's existing transport, recovery, routes, draft storage, and interac
 
 - User-provided screenshots: current mobile navigation, mobile-left/floating-right comparison, desktop sidebar icon reference, and annotated floating header. The later clarification explicitly requires broad visual parity, especially the composer.
 - [Earlier mobile adaptation plan](2026-09-06-mobile-floaty-chat-adaptation-plan.md): historical layout and reliability context. This plan supersedes its `[Chats | title | New]` visual direction for the new presentation work; it does not invalidate its reliability requirements or erase its history.
-- [Mobile recovery correctness plan](2026-09-09-mobile-recovery-correctness-plan.md) and [validation evidence](../validation/2026-09-10-mobile-recovery-correctness-evidence.md): preserve existing recovery work rather than reopening it as part of styling.
+- [Implemented mobile recovery contract](../validation/2026-09-10-mobile-recovery-correctness-evidence.md#retired-recovery-specification--22-october-2026) and [validation evidence](../validation/2026-09-10-mobile-recovery-correctness-evidence.md): preserve existing recovery work rather than reopening it as part of styling.
 - Stable note, Kanban, issue, or PR reference: none identified in the supplied task context. Do not invent one.
 
 ## Problem

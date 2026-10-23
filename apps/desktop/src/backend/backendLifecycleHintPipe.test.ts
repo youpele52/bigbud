@@ -63,7 +63,7 @@ describe("backend lifecycle hint pipe", () => {
   it("writes a Linux suspend synchronously to the native fd", () => {
     const stream = fakePipeSocket();
     const queued = capture(stream);
-    const writeSync = vi.fn();
+    const writeSync = vi.fn((_fd: number, bytes: Uint8Array) => bytes.length);
     const pipe = new BackendLifecycleHintPipe(stream, {
       platform: "linux",
       log: vi.fn(),
@@ -71,7 +71,8 @@ describe("backend lifecycle hint pipe", () => {
     });
 
     pipe.write({ kind: "suspend", occurredAt: 5, online: true });
-    expect(writeSync).toHaveBeenCalledWith(42, expect.stringContaining('"kind":"suspend"'));
+    expect(writeSync).toHaveBeenCalledWith(42, expect.any(Uint8Array));
+    expect(Buffer.from(writeSync.mock.calls[0]![1]).toString()).toContain('"kind":"suspend"');
     expect(queued).toEqual([]);
 
     pipe.write({ kind: "resume", occurredAt: 6, online: true });
@@ -82,7 +83,7 @@ describe("backend lifecycle hint pipe", () => {
   it("queues the Linux suspend when output is pending or the sync write fails", () => {
     const pending = fakePipeSocket(10);
     const pendingLines = capture(pending);
-    const writeSync = vi.fn();
+    const writeSync = vi.fn((_fd: number, bytes: Uint8Array) => bytes.length);
     new BackendLifecycleHintPipe(pending, { platform: "linux", log: vi.fn(), writeSync }).write({
       kind: "suspend",
       occurredAt: 1,
@@ -103,6 +104,50 @@ describe("backend lifecycle hint pipe", () => {
     }).write({ kind: "suspend", occurredAt: 1, online: null });
     expect(fullLines).toHaveLength(1);
     expect(log).toHaveBeenCalledWith("hint_fd5_sync_write_failed", expect.any(String));
+  });
+
+  it("writes the rest of a short synchronous write through the stream, keeping the line whole", () => {
+    const stream = fakePipeSocket();
+    const queued: Buffer[] = [];
+    stream.on("data", (chunk: Buffer) => queued.push(chunk));
+    const log = vi.fn();
+    let synced = Buffer.alloc(0);
+    const pipe = new BackendLifecycleHintPipe(stream, {
+      platform: "linux",
+      log,
+      // The kernel took only the first 10 bytes.
+      writeSync: (_fd, bytes) => {
+        synced = Buffer.from(bytes.subarray(0, 10));
+        return 10;
+      },
+    });
+
+    expect(pipe.write({ kind: "suspend", occurredAt: 5, online: true })).toBe(true);
+    const line = Buffer.concat([synced, ...queued]).toString();
+    expect(line.endsWith("\n")).toBe(true);
+    expect(decodeHint(JSON.parse(line))).toMatchObject({ kind: "suspend", sequence: 1 });
+    expect(log).toHaveBeenCalledWith("hint_fd5_sync_write_partial", expect.any(String));
+  });
+
+  it("survives a broken pipe: a throwing or failing write closes it quietly", () => {
+    const log = vi.fn();
+    const throwing = {
+      write: () => {
+        throw Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      },
+      on: () => undefined,
+    } satisfies LifecycleHintStream;
+    const pipe = new BackendLifecycleHintPipe(throwing, { platform: "darwin", log });
+    expect(pipe.write({ kind: "resume", occurredAt: 1, online: true })).toBe(false);
+    expect(log).toHaveBeenCalledWith("hint_fd5_write_failed", expect.stringContaining("EPIPE"));
+    expect(pipe.write({ kind: "online", occurredAt: 2, online: true })).toBe(false);
+
+    // An asynchronous EPIPE arrives as an "error" event; later hints are dropped, not thrown.
+    const stream = new PassThrough();
+    const failing = new BackendLifecycleHintPipe(stream, { platform: "darwin", log });
+    stream.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+    expect(log).toHaveBeenCalledWith("hint_fd5_error", "error=write EPIPE");
+    expect(failing.write({ kind: "resume", occurredAt: 3, online: true })).toBe(false);
   });
 
   it("stops writing once the backend's pipe closed", () => {

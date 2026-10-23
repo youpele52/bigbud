@@ -64,7 +64,7 @@ The post's definition: a harness is storage plus the machinery that runs convers
 
 The post is explicit that this harness does not replace the coding agent, and that the implementation stays in TypeScript for now. A Rust port is described as possible later, not as the design. [V: post, "Why TypeScript again?"]
 
-Embedding the package in bigbud would add a second agent runtime with an API the README marks as changing without notice, and a second store beside canonical SQLite. It would leave Codex, Claude, Copilot and OpenCode on their own durability. [I, from the package boundary and `docs/RUST_SYSTEMS_CORE.md`]
+Embedding the package in bigbud would add a second agent runtime with an API the README marks as changing without notice, and a second store beside canonical SQLite. It would leave Codex, Claude, Copilot and OpenCode on their own durability. [I, from the package boundary and `docs/plans/2026-08-25-rust-systems-core-plan.md`]
 
 ## How bigbud uses Pi today
 

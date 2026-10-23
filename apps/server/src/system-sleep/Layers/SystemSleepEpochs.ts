@@ -10,6 +10,7 @@ import {
 } from "../SystemSleepEpochs.logic.ts";
 import {
   applyDesktopHint,
+  consumePendingSuspend,
   initialDesktopHintState,
   observeSupervisorSuspendedMillis,
   type DesktopHintState,
@@ -46,6 +47,12 @@ export const makeSystemSleepEpochs = Effect.fn("makeSystemSleepEpochs")(function
     return { next: { ...current, epochs: result.state }, events, epoch: result.epoch };
   };
 
+  /** Gap detector and supervisor clock evidence; it uses up a pending desktop suspend. */
+  const addMeasuredEvidence = (current: State, evidence: SleepEvidence) => {
+    const consumed = consumePendingSuspend(current.desktop, evidence);
+    return addEvidence({ ...current, desktop: consumed.state }, consumed.evidence);
+  };
+
   const logEpoch = (evidence: SleepEvidence, events: ReadonlyArray<SystemSleepEvent>) =>
     events.some((event) => event.type === "epoch-ended")
       ? Effect.logInfo("system sleep epoch opened", {
@@ -57,7 +64,7 @@ export const makeSystemSleepEpochs = Effect.fn("makeSystemSleepEpochs")(function
 
   const recordEvidence: SystemSleepEpochsShape["recordEvidence"] = (evidence) =>
     Ref.modify(state, (current) => {
-      const { next, events } = addEvidence(current, evidence);
+      const { next, events } = addMeasuredEvidence(current, evidence);
       return [events, next] as const;
     }).pipe(
       Effect.tap((events) => logEpoch(evidence, events)),
@@ -90,7 +97,7 @@ export const makeSystemSleepEpochs = Effect.fn("makeSystemSleepEpochs")(function
         );
         const withClock: State = { ...current, supervisor: observed.state };
         if (!observed.evidence) return [[] as SystemSleepEvent[], withClock] as const;
-        const added = addEvidence(withClock, observed.evidence);
+        const added = addMeasuredEvidence(withClock, observed.evidence);
         return [added.events, added.next] as const;
       }).pipe(Effect.flatMap(publish));
 

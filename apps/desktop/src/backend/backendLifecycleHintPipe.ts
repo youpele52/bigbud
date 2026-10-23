@@ -24,7 +24,7 @@ export function isDesktopLifecycleHintKind(kind: string): kind is DesktopLifecyc
 
 /** The parent's end of the child's fd 5 pipe, as `child.stdio[5]` exposes it. */
 export interface LifecycleHintStream {
-  write(chunk: string): boolean;
+  write(chunk: string | Uint8Array): boolean;
   on(event: "error" | "close", listener: (...args: unknown[]) => void): unknown;
   readonly writableLength?: number;
   readonly destroyed?: boolean;
@@ -40,7 +40,8 @@ export function asLifecycleHintStream(stream: unknown): LifecycleHintStream | nu
 export interface LifecycleHintPipeDeps {
   readonly platform: NodeJS.Platform;
   readonly log: (event: string, details: string) => void;
-  readonly writeSync?: (fd: number, line: string) => void;
+  /** Returns the number of bytes written, as `fs.writeSync` does. */
+  readonly writeSync?: (fd: number, bytes: Uint8Array) => number;
 }
 
 /** Native fd behind a Node pipe socket, when the platform exposes one. */
@@ -80,8 +81,13 @@ export class BackendLifecycleHintPipe {
     if (hint.kind === "suspend" && this.deps.platform === "linux" && this.writeNow(line)) {
       return true;
     }
+    return this.queue(line);
+  }
+
+  /** The stream write; a closed or broken pipe (EPIPE) ends this pipe, never the caller. */
+  private queue(chunk: string | Uint8Array): boolean {
     try {
-      this.stream.write(line);
+      this.stream.write(chunk);
       return true;
     } catch (error) {
       this.closed = true;
@@ -95,14 +101,25 @@ export class BackendLifecycleHintPipe {
     if ((this.stream.writableLength ?? 0) > 0) return false;
     const fd = nativeFd(this.stream);
     if (fd === null) return false;
+    const bytes = Buffer.from(line, "utf8");
+    let written: number;
     try {
-      (this.deps.writeSync ?? ((target, text) => FS.writeSync(target, text)))(fd, line);
-      return true;
+      written = (this.deps.writeSync ?? ((target, chunk) => FS.writeSync(target, chunk)))(
+        fd,
+        bytes,
+      );
     } catch (error) {
       // A full or non-blocking pipe falls back to the queued write.
       this.deps.log("hint_fd5_sync_write_failed", `error=${String(error)}`);
       return false;
     }
+    if (written <= 0) return false;
+    if (written < bytes.length) {
+      // A short write: the rest follows through the stream, so the line stays whole.
+      this.deps.log("hint_fd5_sync_write_partial", `written=${written} total=${bytes.length}`);
+      return this.queue(bytes.subarray(written));
+    }
+    return true;
   }
 }
 

@@ -20,6 +20,8 @@ import {
   type ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
+import { ToolActivityPayload } from "@bigbud/contracts/orchestration/orchestration.toolActivity.ts";
+import { Option, Schema } from "effect";
 
 /** A tool that started and has not completed. */
 export interface ToolInFlight {
@@ -149,11 +151,14 @@ function trackedTools(tracking: TurnToolTracking): ReadonlyArray<ToolInFlight> {
   ];
 }
 
+const decodeToolActivityPayload = Schema.decodeUnknownOption(ToolActivityPayload);
+
+/** The tool activity's item ID. Only `tool.*` rows are decoded, so the cost stays per tool row. */
 function activityItemId(activity: OrchestrationThreadActivity): string | null {
-  const payload = activity.payload;
-  if (payload === null || typeof payload !== "object" || !("itemId" in payload)) return null;
-  const itemId = (payload as { readonly itemId?: unknown }).itemId;
-  return typeof itemId === "string" && itemId.length > 0 ? itemId : null;
+  return Option.match(decodeToolActivityPayload(activity.payload), {
+    onNone: () => null,
+    onSome: (payload) => payload.itemId ?? null,
+  });
 }
 
 function isSuppressedToolRow(activity: OrchestrationThreadActivity): boolean {

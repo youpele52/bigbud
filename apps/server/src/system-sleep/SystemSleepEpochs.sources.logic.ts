@@ -5,7 +5,7 @@
  */
 import type { DesktopLifecycleHint } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
-import type { SleepEvidence } from "./SystemSleepEpochs.logic.ts";
+import { SLEEP_EPOCH_MERGE_WINDOW_MS, type SleepEvidence } from "./SystemSleepEpochs.logic.ts";
 
 // ── Desktop hints (fd 5) ─────────────────────────────────────────────
 
@@ -21,6 +21,13 @@ export const initialDesktopHintState: DesktopHintState = {
   pendingSuspendAtMs: null,
   online: null,
 };
+
+/**
+ * A pending suspend older than this at resume is dropped. A suspend that logind aborted, or
+ * whose resume was missed, must not stretch a sleep days later back to it. A longer real sleep
+ * loses nothing: the gap detector and the supervisor clock measure its start.
+ */
+export const DESKTOP_PENDING_SUSPEND_MAX_AGE_MS = 10 * 60_000;
 
 export interface DesktopHintResult {
   readonly state: DesktopHintState;
@@ -50,21 +57,46 @@ export function applyDesktopHint(
         evidence: null,
         networkOnline: false,
       };
-    case "resume":
+    case "resume": {
+      const suspendAtMs = state.pendingSuspendAtMs;
+      const fresh =
+        suspendAtMs !== null && hint.occurredAt - suspendAtMs <= DESKTOP_PENDING_SUSPEND_MAX_AGE_MS;
       return {
         state: { ...base, pendingSuspendAtMs: null, online },
         evidence: {
           source: "desktop-hint",
-          startedAtMs: state.pendingSuspendAtMs ?? hint.occurredAt,
+          startedAtMs: fresh ? suspendAtMs : hint.occurredAt,
           endedAtMs: hint.occurredAt,
         },
         networkOnline: hint.online === true,
       };
+    }
     case "online":
       return { state: { ...base, online: true }, evidence: null, networkOnline: true };
     case "offline":
       return { state: { ...base, online: false }, evidence: null, networkOnline: false };
   }
+}
+
+/**
+ * Measured evidence (gap detector, supervisor clock) uses up a pending suspend that came
+ * before the sleep ended. A suspend just before the measured start announced this sleep and
+ * widens the evidence to it. An older one was aborted or its resume was missed: the server
+ * ran after it, so it starts nothing.
+ */
+export function consumePendingSuspend(
+  state: DesktopHintState,
+  evidence: SleepEvidence,
+): { readonly state: DesktopHintState; readonly evidence: SleepEvidence } {
+  const suspendAtMs = state.pendingSuspendAtMs;
+  if (suspendAtMs === null || suspendAtMs > evidence.endedAtMs) return { state, evidence };
+  const announced =
+    suspendAtMs < evidence.startedAtMs &&
+    evidence.startedAtMs - suspendAtMs <= SLEEP_EPOCH_MERGE_WINDOW_MS;
+  return {
+    state: { ...state, pendingSuspendAtMs: null },
+    evidence: announced ? { ...evidence, startedAtMs: suspendAtMs } : evidence,
+  };
 }
 
 // ── Supervisor suspended-time clock ──────────────────────────────────

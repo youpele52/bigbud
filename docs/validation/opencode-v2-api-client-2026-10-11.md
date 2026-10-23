@@ -173,7 +173,7 @@ This parent-added documentation record follows the frozen evidence. It changes o
 
 ## Local root-check acceptance — 12 October 2026
 
-The user authorized minimal baseline formatting/test repairs after the source-v3 approvals. Those four test/fixture repairs received independent **Scoped GREEN** review; no production code changed. The parent verified the resulting evidence and unchanged API149/WSL5 source hashes. See the [root-check acceptance ledger](local-root-checks-2026-10-12.md).
+The user authorized minimal baseline formatting/test repairs after the source-v3 approvals. Those four test/fixture repairs received independent **Scoped GREEN** review; no production code changed. The parent verified the resulting evidence and unchanged API149/WSL5 source hashes. See the [retired root-check summary](README.md#retired-records).
 
 **The previous root-check blockers are closed:** `bun fmt`, `bun fmt:check`, `bun lint`, all nine typecheck tasks and the full default `bun run test` pass. The root test run completed with **8,290 passed / 103 skipped**, nine successful tasks, and no test-result cache hits. Earlier timeout failures remain historical evidence, not the current result.
 

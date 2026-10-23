@@ -63,14 +63,21 @@ export function StatusBanner({
   return (
     <Alert
       {...alertProps}
-      className={cn(className, centered && "pt-10")}
+      className={cn(className, centered && "pt-4")}
       variant={variant}
       role={role}
     >
       {centered ? (
         <div className="col-span-full flex min-w-0 flex-col items-center gap-2 text-center">
-          {icon ? <span className="[&>svg]:size-4">{icon}</span> : null}
-          {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
+          {icon || (title !== undefined && title !== null) ? (
+            <div
+              data-slot="alert-heading"
+              className="flex min-w-0 items-center justify-center gap-3"
+            >
+              {icon ? <span className="shrink-0 [&>svg]:size-4">{icon}</span> : null}
+              {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
+            </div>
+          ) : null}
           <AlertDescription {...descriptionProps}>{description}</AlertDescription>
         </div>
       ) : (

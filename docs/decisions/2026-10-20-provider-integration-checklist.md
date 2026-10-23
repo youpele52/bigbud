@@ -6,7 +6,7 @@ Date: 2026-10-20
 
 Use this checklist when **adding a provider**, **upgrading its CLI/SDK/protocol**, or **changing an existing provider's behavior**. **This file must be updated whenever a new feature or service is added that changes how a provider behaves.** A provider that can answer a chat is not necessarily integrated with bigbud. Registration, discovery, execution, capabilities, internal generation, durable ownership, UI, and packaging have independent integration points.
 
-This is a reusable engineering checklist, not an ADR choosing a new architecture or a promise that every provider supports every feature. Future “Meta” provider requirements must be specified separately; do not infer a vendor, aggregator, model API, harness, authentication method, or transport from that name. The [existing Muse Code plan](../plan/2026-10-13-meta-muse-code-provider-plan.md) is separate historical/product context, not a default for this document.
+This is a reusable engineering checklist, not an ADR choosing a new architecture or a promise that every provider supports every feature. Future “Meta” provider requirements must be specified separately; do not infer a vendor, aggregator, model API, harness, authentication method, or transport from that name. The [existing Muse Code plan](../plans/2026-10-13-meta-muse-code-provider-plan.md) is separate historical/product context, not a default for this document.
 
 **A checked feature means one of two things:**
 

@@ -19,6 +19,10 @@ it.each(["startup", "accepted", "idle"] as const)(
           expect(await permission(owner.native.id, "shell", ["permitted-root-command"])).toBe(
             "allow",
           );
+        // A poll can publish while the callbacks above are still in flight (busyCount 1), and
+        // only the next tick republishes. Join the owner's serialized repair queue so the
+        // canonical projection reflects the settled state before asserting the preconditions.
+        await runtime.withSession(owner.threadId, () => runtime.reconcile(owner));
         expect(owner.family!.children).toHaveLength(0);
         expect(owner.familyControl!.busyCount!()).toBe(0);
         expect(owner.session.retainedFamily).toBeFalsy();

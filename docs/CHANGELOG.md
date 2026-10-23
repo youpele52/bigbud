@@ -11,7 +11,31 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **See your remaining subscription allowance:** Check available limits, reset times, and extra-usage details for supported providers.
 - **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
 
-## v0.3.1 (22 October, 2026)
+## v0.3.1 (23 October, 2026)
+
+### Easier Remote Project Setup
+
+- **Connect using your saved SSH hosts:** Choose a host from the SSH configuration on the computer running bigbud's backend instead of entering its connection details again.
+- **Find your project folder visually:** Browse remote folders, filter the list, and spot Git repositories without typing the full path.
+- **Keep connection choices clear:** Choose Direct SSH or the bigbud remote agent independently from where your AI provider runs.
+
+### More Reliable Connections and Startup
+
+- **Keep reconnecting without starting over:** bigbud keeps trying when its connection drops, with faster retry triggers when your computer wakes or its network comes back.
+- **Stay responsive during local data updates:** Database upgrades and SSH checks no longer block the server's main work. Local data upgrades show progress so you can see that startup is moving forward.
+- **Keep other chats responsive during remote Codex setup:** Connecting Codex to a slow or unreachable SSH host no longer freezes the server.
+- **Cancel a pending Codex start:** Stopping a session during its connection checks prevents that pending start from launching afterward.
+
+### Better Control Over Supporting Agents
+
+- **Stop background helpers deliberately:** Thread Stop now includes background helpers on supported providers, with confirmation when their unfinished work would be interrupted.
+- **Keep Stop available while helpers work:** You can stop background helpers even after the main agent has finished replying.
+- **Read helper details more comfortably:** Clearer sections organize assignments, results, prompts, and recent steps, with expandable long prompts and easier-to-find Stop controls.
+
+### Notices That Stay Dismissed
+
+- **Clear notices without repeated interruptions:** Dismissed status banners stay hidden through navigation, page reloads, and reconnects until bigbud's backend restarts.
+- **Dismiss context warnings for the current run:** A dismissed context-window warning no longer reappears simply because the conversation grows.
 
 ### A More Powerful, Easier-to-Use Terminal
 
@@ -53,6 +77,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - **Each message is delivered once:** Messages you send while an agent is working, including ones with attachments, replies, or a different model, wait in the queue and reach the agent exactly once. They no longer show as sent and queued at the same time.
 - **Steer only where it really works:** Steer appears for Codex, Pi, and Copilot, which can take new instructions mid-task. Other providers offer Stop & send, so a running task is never stopped without you choosing to.
 - **Reopen Sidecar right away:** After you close Sidecar, you can open a fresh one immediately, without waiting for the old one to finish clearing away.
+
+### Sleep and Wake Recovery in Progress
+
+- **Recover interrupted work more safely:** Work is underway to recognize responses interrupted by sleep, continue eligible responses, and ask before continuing when a tool's outcome is uncertain.
+- **Recover remote results more clearly:** Remote-agent improvements retain completed results longer and distinguish missing output from an unknown outcome. After a successful reconnect, a later connection drop gets a fresh set of immediate retry attempts.
+- **Keep approvals waiting for you:** Recovery recognizes when an agent is waiting for your permission or an answer, rather than treating that pause as a stalled response after wake.
+- **See when recovery needs your help:** Interrupted older chats can show recovery prompts even when they were not loaded at startup. If a provider appears to continue but then goes quiet without finishing, recovery offers a choice instead of leaving it unresolved indefinitely; a later failed retry can show a fresh notice even if you dismissed the previous one.
+- **Protect your next message:** Late results from an earlier turn no longer make recovery treat a newer prompt as finished. Recovery rechecks whether it is still needed after a slow provider call, and older waiting prompts no longer crowd newer interrupted work out of its checks.
+- These changes are implemented locally, but manual provider sleep-and-wake checks are still outstanding. They are not yet presented as fully validated release capabilities.
 
 ### OpenCode V2 Improvements in Progress
 

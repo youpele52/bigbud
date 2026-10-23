@@ -34,6 +34,17 @@ const RESOLVABLE_STATUSES: Record<ThreadRecoveryResolveAction, ReadonlySet<strin
   "stop-and-continue": new Set(["awaiting-user"]),
 };
 
+/**
+ * Whether a user's action applies to a recovery status. The decider checks the projection; the
+ * coordinator checks the intent again, because the projection may be stale.
+ */
+export function isRecoveryActionApplicable(
+  action: ThreadRecoveryResolveAction,
+  status: string,
+): boolean {
+  return RESOLVABLE_STATUSES[action].has(status);
+}
+
 /** The visible state right after a user's action, before the coordinator acts on it. */
 export function recoveryAfterResolve(
   current: ThreadRecovery,
@@ -88,7 +99,7 @@ export const decideThreadRecoveryCommand = Effect.fn("decideThreadRecoveryComman
   // A stale or repeated click is a no-op, never an error: the prompt may have moved on.
   if (current === null) return [];
   if (command.messageId !== undefined && command.messageId !== current.messageId) return [];
-  if (!RESOLVABLE_STATUSES[command.action].has(current.status)) return [];
+  if (!isRecoveryActionApplicable(command.action, current.status)) return [];
   return [
     {
       ...base,

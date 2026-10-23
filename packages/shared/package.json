@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./usageTokenMix": {
+      "types": "./src/usageTokenMix.ts",
+      "import": "./src/usageTokenMix.ts"
+    },
     "./discoveryReference": {
       "types": "./src/discoveryReference.ts",
       "import": "./src/discoveryReference.ts"

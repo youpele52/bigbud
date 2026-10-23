@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-26, Africa/Johannesburg
 **Last modified:** 2026-09-27, 00:46 SAST
-**Status:** Phase 0 dependency approved; Rust resource core implemented, desktop integration pending
+**Status:** Rust core, desktop integration and read-only agent tool implemented; packaged platform/performance qualification remains partial. See the review update below.
 **Project root:** /Users/youpele/DevWorld/bigbud
 **Inspected branch and commit:** dev at 6de834d9da1cdeffca1c297797f56915aea7ef60
 **Initial worktree:** this plan was already modified from prior planning; unrelated untracked docs/plans/2026-09-26-project-main-and-child-threads-plan.md must be preserved.
@@ -150,8 +150,16 @@ Run repository-required implementation checks: bun fmt, bun lint, bun typecheck,
 - The runtime kill switch and missing-child unavailable state are the rollback path without disabling chat or deleting data. No database migration or telemetry persistence is planned. Remove the new UI route/channels/mode in rollback; existing delivery path continues independently.
 - This plan is based on dev at 6de834d9da1cdeffca1c297797f56915aea7ef60 and the worktree noted above. Revalidate if branch/commit, Electron trust roles, supervisor packaging/protocol, right-panel routing, sysinfo release/version, or Rust target toolchain changes. Preserve the unrelated untracked plan and all existing work.
 
+## Review update — 22 October, 2026
+
+The desktop bridge and both monitor views now exist; the initial desktop-integration-pending header was stale. Keep the [review remediation and measured limits](2026-09-27-resource-monitor-review-remediation-plan.md) and [app-scope monitoring record](2026-10-08-bigbud-resource-monitor.md): their Windows/Linux packaged, suspend/wake, load and post-restart UI checks are not closed by source inspection.
+
+The completed `2026-09-27-agent-system-resources-tool-plan.md` is consolidated here. `apps/server/src/orchestration-tools/ThreadSystemResourcesTool.ts`, the authenticated thread-tool routes, capability Track and `apps/desktop/src/system-monitor/agentBridge.*` implement the read-only tool. Rust remains the sole observer on the desktop host. Return bounded CPU/memory/network/disk summaries with host identity, freshness and explicit unavailable/unsupported/denied/stale states; do not add process rows, paths, independent server sampling or proactive alerts to routine tool results.
+
+Preserve the private loopback bearer endpoint, backend-memory-only FD3 bootstrap credentials, token rotation/revocation on backend restart/exit, bounded concurrency/deadline/response size and one-shot subscription cleanup. Neither renderer IPC nor ordinary public WebSocket RPC exposes the private endpoint/token; existing authenticated per-thread tools remain the provider-facing boundary. Missing desktop/monitor reports unavailable, never cached data as current. Capability discovery and generic reminders advertise availability without injecting metric samples. Focused endpoint/provider/real-child tests existed in the retired record; its historical aggregate failure in unrelated UI tests is not a current defect or a fresh full-suite pass. This cleanup does not initiate a monitor/native qualification run.
+
 ## Handoff status and later phases
 
 **Phase 0/1 design is actionable, and dependency approval is recorded above.** The implementing agent can follow the ordered steps without deciding host scope, UI location, Rust/TypeScript ownership, transport, default fields, privacy exclusions, cadence, or budgets. Cross-platform validation and dependency lockfile inspection remain implementation checks with explicit outcomes. Do not reopen the desktop-host, two-view, up-to-five-widget, one-sampler, or GPU-deferral decisions without new evidence.
 
-Phase 2, separately planned after the read-only contract stabilizes, introduces typed Rust resource-control commands with PID/start-time revalidation, capability checks, explicit results, and no shell fallback. Phase 3 may expose bounded read-only observations to agents; mutations additionally require Phase 2 and the existing approval/policy path. Phase 4 may reuse the `bigbud-system` observation library in the remote agent and investigate deeper native/GPU sources. None of those later phases is authorized by this Phase 1 implementation handoff.
+Phase 2, separately planned after the read-only contract stabilizes, introduces typed Rust resource-control commands with PID/start-time revalidation, capability checks, explicit results, and no shell fallback. The bounded read-only portion originally described as Phase 3 is now implemented as recorded above; agent mutations remain outside scope and additionally require Phase 2 and the existing approval/policy path. Phase 4 may reuse the `bigbud-system` observation library in the remote agent and investigate deeper native/GPU sources. None of those later phases is authorized by this Phase 1 implementation handoff.

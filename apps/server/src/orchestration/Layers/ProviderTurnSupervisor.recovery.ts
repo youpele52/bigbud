@@ -20,7 +20,14 @@ import {
   type TurnFailureObservation,
   type TurnRunningEvidence,
 } from "./ProviderTurnSupervisor.classify.logic.ts";
-import { findThread, moveIntent, settleIntent } from "./ProviderTurnSupervisor.continue.ts";
+import {
+  clearNoticeFor,
+  findThread,
+  moveIntent,
+  publishRecovery,
+  settleIntent,
+  USER_PROMPT_STATUSES,
+} from "./ProviderTurnSupervisor.continue.ts";
 import { isThreadWaitingForUser } from "../ThreadDispatchSafety.logic.ts";
 import { evaluateIntent } from "./ProviderTurnSupervisor.evaluate.ts";
 import { forEachActiveIntent } from "./ProviderTurnSupervisor.intents.ts";
@@ -31,6 +38,7 @@ import {
   setBounded,
   type PendingTurnFailure,
   type RecoveryContext,
+  type RecoveryNoticeKey,
 } from "./ProviderTurnSupervisor.state.ts";
 import { trackingForTurn } from "./ProviderTurnSupervisor.tools.logic.ts";
 
@@ -241,8 +249,40 @@ export const observeTurnsAcrossSleep = Effect.fn("observeTurnsAcrossSleep")(func
   );
 });
 
+/** Publishes what the intent shows now: its state while it may still be acted on, else nothing. */
+const republishNotice = Effect.fn("republishRecoveryNotice")(function* (
+  ctx: RecoveryContext,
+  key: RecoveryNoticeKey,
+) {
+  const found = yield* ctx.intents.get(key);
+  if (Option.isNone(found)) return yield* clearNoticeFor(ctx, key);
+  const intent = found.value;
+  const visible =
+    intent.disposition === "active" ||
+    (intent.disposition === "suspended-for-exit" &&
+      USER_PROMPT_STATUSES.has(intent.recoveryStatus));
+  yield* publishRecovery(ctx, visible ? intent : { ...intent, recoveryStatus: "none" });
+});
+
+/**
+ * Retries notices whose publish failed. Prompts that wait for the user are not re-read by the
+ * pass, so without this a failed publish would leave a prompt hidden for good. A notice that
+ * already matches its intent is not dispatched again (`sameThreadRecovery`).
+ */
+const republishFailedNotices = Effect.fn("republishFailedRecoveryNotices")(function* (
+  ctx: RecoveryContext,
+) {
+  const failed = Array.from(ctx.memory.unpublishedNotices);
+  for (const [noticeKey, key] of failed) {
+    // A new failure records it again.
+    ctx.memory.unpublishedNotices.delete(noticeKey);
+    yield* republishNotice(ctx, key);
+  }
+});
+
 /** One bounded pass over the intents in recovery. */
 export const runRecoveryPass = Effect.fn("runRecoveryPass")(function* (ctx: RecoveryContext) {
+  yield* republishFailedNotices(ctx);
   yield* classifyPendingFailures(ctx);
   const actionable = yield* ctx.intents.listActive({ statuses: ACTIONABLE_RECOVERY_STATUSES });
   const prompts = yield* ctx.intents.listAwaitingProviderActivity({

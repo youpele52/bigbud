@@ -26,6 +26,7 @@
     "prepack": "node scripts/verifyWorkspaceAgentPackage.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:groups": "bun scripts/updateServerTestGroups.ts",
     "benchmark:startup-catalog": "BIGBUD_STARTUP_CATALOG_BENCHMARK=1 vitest run src/orchestration/Layers/ProjectionCatalogQuery.scale.test.ts",
     "benchmark:mobile-recovery-memory": "bun scripts/mobileRecoveryMemoryBenchmark.ts"
   },

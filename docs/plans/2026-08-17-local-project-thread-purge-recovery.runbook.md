@@ -2,7 +2,7 @@
 
 **Date:** 17 August, 2026
 **Status:** Completed one-time operation
-**Related record:** [Local project thread purge recovery](2026-08-17-local-project-thread-purge-recovery.md)
+**Related history:** the completed summary record was retired on 22 October, 2026; this runbook retains the operation, no-backup/irreversibility warning, verification and bounded maintenance procedure.
 
 ## Purpose
 

@@ -4,7 +4,7 @@ import type { MessageId, ProviderKind, ThreadId, TurnId } from "@bigbud/contract
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { toPersistenceSqlError } from "../Errors.ts";
+import { PersistenceSqlError, toPersistenceSqlError } from "../Errors.ts";
 import {
   ProviderDispatchAttemptRepository,
   type ProviderDispatchAttempt,
@@ -110,10 +110,20 @@ const make = Effect.gen(function* () {
       .withTransaction(
         Effect.gen(function* () {
           yield* alongside;
-          yield* sql`UPDATE provider_dispatch_attempts
+          const acknowledged = yield* sql<{ attemptId: string }>`UPDATE provider_dispatch_attempts
             SET state = 'provider-acknowledged', acknowledged_at = ${input.at},
               turn_id = ${input.turnId}, provider = ${input.provider}, updated_at = ${input.at}
-            WHERE attempt_id = ${input.attemptId}`.pipe(fail("acknowledgeWith"));
+            WHERE attempt_id = ${input.attemptId} AND thread_id = ${input.threadId}
+              AND message_id = ${input.messageId} AND state = 'may-have-been-sent'
+            RETURNING attempt_id AS "attemptId"`.pipe(fail("acknowledgeWith"));
+          // A missing (pruned) or already acknowledged attempt is not acknowledged now; the
+          // failure rolls back the writes alongside, and the caller writes them without it.
+          if (acknowledged.length !== 1) {
+            return yield* new PersistenceSqlError({
+              operation: "ProviderDispatchAttempts.acknowledgeWith",
+              detail: "The dispatch attempt is missing or is not awaiting acknowledgement.",
+            });
+          }
           yield* sql`UPDATE thread_recovery_intents
             SET turn_id = ${input.turnId}, provider = ${input.provider},
               revision = revision + 1, updated_at = ${input.at}

@@ -33,12 +33,13 @@ function makeHarness() {
   } as unknown as ProviderTurnLivenessRepositoryShape;
   const record = (
     acknowledge: NonNullable<Parameters<typeof recordAcceptedSendTurn>[0]["acknowledge"]>,
+    options: { readonly withoutLiveness?: boolean } = {},
   ) =>
     Effect.runPromise(
       recordAcceptedSendTurn({
         adapter: { provider: "codex", listSessions: () => Effect.succeed([]) },
         directory,
-        liveness: Option.some(liveness),
+        liveness: options.withoutLiveness ? Option.none() : Option.some(liveness),
         threadId,
         turnId,
         sessionEpoch: 1,
@@ -55,6 +56,15 @@ describe("recordAcceptedSendTurn", () => {
       writes.pipe(Effect.tap(() => Effect.sync(() => h.calls.push("ack")))),
     );
     expect(h.calls).toEqual(["liveness", "binding", "ack"]);
+  });
+
+  it("acknowledges with the binding even without a turn liveness repository", async () => {
+    const h = makeHarness();
+    await h.record(
+      (writes) => writes.pipe(Effect.tap(() => Effect.sync(() => h.calls.push("ack")))),
+      { withoutLiveness: true },
+    );
+    expect(h.calls).toEqual(["binding", "ack"]);
   });
 
   it("still starts turn liveness before the binding when the acknowledgement fails", async () => {

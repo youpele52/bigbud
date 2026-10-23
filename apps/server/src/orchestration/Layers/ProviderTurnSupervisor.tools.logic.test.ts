@@ -126,3 +126,18 @@ describe("tool activity scope", () => {
     expect(after?.open.size).toBe(0);
   });
 });
+
+describe("tool rows are read through the tool activity schema", () => {
+  it("pairs rows by the decoded item ID and counts a malformed one as unmatched", () => {
+    const started = toolActivity({ kind: "tool.started", title: "Build", itemId: "a", turnId });
+    const completed = toolActivity({ kind: "tool.completed", title: "Build", itemId: "a", turnId });
+    expect(findToolItemsInFlight([started, completed], turnId)).toEqual([]);
+    const malformed = {
+      ...toolActivity({ kind: "tool.started", title: "Deploy", turnId }),
+      payload: { itemType: "command_execution", itemId: 42 },
+    };
+    expect(findToolItemsInFlight([malformed, completed], turnId)).toEqual([
+      { itemId: null, name: "Deploy" },
+    ]);
+  });
+});

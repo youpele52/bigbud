@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { ProviderKind } from "../orchestration/orchestration.provider";
@@ -25,8 +25,22 @@ export const UsageSourceMetadata = Schema.Struct({
 });
 export type UsageSourceMetadata = typeof UsageSourceMetadata.Type;
 
+/** Derived disjoint display buckets, not authoritative provider counters. */
+export const UsageTokenMix = Schema.Struct({
+  inputTokens: NonNegativeInt,
+  cacheReadTokens: NonNegativeInt,
+  cacheWriteTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  unclassifiedTokens: NonNegativeInt,
+});
+export type UsageTokenMix = typeof UsageTokenMix.Type;
+
 export const ServerUsageTotals = Schema.Struct({
   accounting: Schema.optional(UsageSourceMetadata),
+  // Additive display detail must not make authoritative usage unavailable on decode.
+  tokenMix: Schema.optional(UsageTokenMix).pipe(
+    Schema.catchDecoding(() => Effect.succeed(Option.none())),
+  ),
   usedTokens: NonNegativeInt,
   inputTokens: NonNegativeInt,
   cachedInputTokens: NonNegativeInt,

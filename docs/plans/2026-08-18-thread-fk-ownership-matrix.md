@@ -3,6 +3,12 @@
 **Date:** 18 August, 2026  
 **Scope:** Incremental projection-only ownership migration.
 
+## Review update — 22 October, 2026
+
+This matrix preserves historical ownership reasoning; its candidate/not-ready labels are not a current migration inventory. The retired next-group checklist is superseded by implemented migrations 082–085 and their tests: tasks (082), proposed plans/pending approvals/pending inputs/usage (083), attachment references (084), and turns (085). `ProjectionThreadProposedPlanRepository.upsert` asserts its projection parent.
+
+Preserve the checklist's safety boundaries: nullable implementation/source-plan provenance is not permission for a blanket cross-thread FK; attachment bytes remain shared and outside reference-row cascades; unresolved attachment sentinels, `WITHOUT ROWID`, indexes and source-table triggers must survive rebuilding. Historical migration 046/070 orphan-input tests must stay historical rather than be rewritten to hide orphans. Current migration definitions/tests, not this older readiness table, govern exact artifact and parent-write behavior. Further canonical/self-reference changes and release/restart validation remain with the [remaining deletion work](2026-08-18-thread-deletion-remaining-work-plan.md).
+
 ## Evidence and boundary
 
 The authoritative deletion inventory is `apps/server/src/deletion/Layers/EntityPurge.sql.ts`:

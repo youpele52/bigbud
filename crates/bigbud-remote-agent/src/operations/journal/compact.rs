@@ -16,11 +16,17 @@ impl OperationJournal {
     pub(super) fn compact(&self) -> Result<(), OperationJournalError> {
         let operations = fold_records(self.records()?);
         let current_unix_ms = unix_now_ms()?;
+        let running = self.running_operations().clone();
         let mut encoded = Vec::new();
         for (operation_id, operation) in operations {
-            if operation
-                .expires_at_unix_ms
-                .is_some_and(|expires_at| expires_at <= current_unix_ms)
+            // A running operation never expires; only its acceptance-time
+            // retention record would say otherwise.
+            let still_running =
+                operation.completed.is_none() && running.contains(operation_id.as_str());
+            if !still_running
+                && operation
+                    .expires_at_unix_ms
+                    .is_some_and(|expires_at| expires_at <= current_unix_ms)
             {
                 continue;
             }

@@ -4,7 +4,7 @@
 
 **Overall acceptance: NO. Native qualification: BLOCKED.** This is a new ledger, not a replacement for the immutable v4/v4a artifacts or historical native ledgers. It describes the isolated dirty worktree at detached HEAD `91154fa9c086e1d47a3bbddfea4a8d56a35be44d`, not clean HEAD, a published release or the installed user's tools.
 
-Authoritative contracts are the [base stable-bootstrap plan](../plan/2026-10-13-opencode-v2-stable-bootstrap-maintenance-plan.md), amended by the independently accepted [qualification-first compatibility plan](../plan/2026-10-14-opencode-v2-contract-compatibility-plan.md). The latter supersedes the exact-version allowlist, embedded qualification list and original-root validation dependency. All other base contracts remain in scope.
+Authoritative contracts are the [base stable-bootstrap plan](../plans/2026-10-13-opencode-v2-stable-bootstrap-maintenance-plan.md), amended by the independently accepted [qualification-first compatibility plan](../plans/2026-10-14-opencode-v2-contract-compatibility-plan.md). The latter supersedes the exact-version allowlist, embedded qualification list and original-root validation dependency. All other base contracts remain in scope.
 
 Work is confined to `/Users/youpele/.local/share/opencode/worktree/3cd1dc/opencode-stable-bootstrap`. No original checkout operations, staging, commit, push, host-native daemon/config/account operations, paid prompts or retail executable launch (including `--version`) occurred during this amendment implementation. No SDK/dependency upgrade or Rust migration was introduced.
 

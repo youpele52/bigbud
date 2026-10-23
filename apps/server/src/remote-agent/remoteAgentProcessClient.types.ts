@@ -27,6 +27,11 @@ export interface RemoteAgentProcessRunInput {
   readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
   readonly stdin?: Uint8Array;
   readonly requestId?: string;
+  /**
+   * Stops a reattach that waits for the link to come back, for example when the turn or the
+   * owner was stopped. It never cancels the remote operation itself.
+   */
+  readonly signal?: AbortSignal;
 }
 
 export class RemoteAgentProcessError extends Error {
@@ -35,7 +40,8 @@ export class RemoteAgentProcessError extends Error {
   constructor(
     readonly code: string,
     message: string,
-    readonly outcome: "unknown" | "terminal" | "rejected" = "unknown",
+    /** `cancelled`: this client stopped waiting; the remote operation's outcome is not known. */
+    readonly outcome: "unknown" | "terminal" | "rejected" | "cancelled" = "unknown",
   ) {
     super(message);
     this.name = "RemoteAgentProcessError";
@@ -78,5 +84,14 @@ export function outcomeUnknownAfterRetention(lastCause: unknown): RemoteAgentPro
   return new RemoteAgentProcessError(
     "PROCESS_OUTCOME_UNKNOWN",
     `Remote process could not be reattached before its retained result would have expired; the operation was not replayed.${detail}`,
+  );
+}
+
+/** The caller stopped a reattach: not "outcome unknown", and nothing is respawned. */
+export function reattachCancelled(): RemoteAgentProcessError {
+  return new RemoteAgentProcessError(
+    "PROCESS_REATTACH_CANCELLED",
+    "Reattaching to the remote process was cancelled; the operation was not replayed.",
+    "cancelled",
   );
 }

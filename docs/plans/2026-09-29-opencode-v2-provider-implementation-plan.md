@@ -10,8 +10,8 @@
 - **Project root:** `/Users/youpele/DevWorld/bigbud`.
 - **Inspected branch:** `dev`.
 - **Inspected commit:** `7142d10c6a9d3ccfb13c9dcb844b3916f33d8e5c`.
-- **Primary evidence:** [OpenCode 2 bigbud fit assessment](./2026-09-29-opencode-v2-bigbud-fit-assessment.md).
-- **Earlier research:** [OpenCode V2 SDK reassessment](./OPENCODE-V2-SDK-WAIT.md).
+- **Primary evidence:** [consolidated fit/adoption decisions](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions).
+- **Earlier research:** [consolidated SDK decision](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions).
 - **Related upstream issues:** [event scoping/bounds #36441](https://github.com/anomalyco/opencode/issues/36441), [interaction persistence #36347](https://github.com/anomalyco/opencode/issues/36347), [forms after restart #36585](https://github.com/anomalyco/opencode/issues/36585), [prompt settlement #34853](https://github.com/anomalyco/opencode/issues/34853), [Kilo migration #12887](https://github.com/Kilo-Org/kilocode/issues/12887).
 - **Related bigbud issue:** None identified in the supplied documents.
 
@@ -1193,11 +1193,11 @@ Final validation: **13 focused server files / 26 tests PASS**, then final affect
 
 This amendment is appended; earlier text is unchanged. Source: [gap-closure plan](./2026-10-15-opencode-v2-gap-closure-plan.md).
 
-- **AC2 (V1/V2 coexistence): superseded.** The [10-10 OpenCode default plan](./2026-10-10-opencode-default-plan.md) made V2 the shared-only OpenCode provider. Legacy V1 history stays read-only. No V1 and V2 simultaneous-execution configuration is supported or tested.
-- **AC3 (owned authenticated process): superseded.** Production borrows the user's running native OpenCode service, with logical bindings persisted in migration 127 (`OpencodeV2SharedBindings`); see the [10-09 shared-service plan](./2026-10-09-opencode-v2-shared-service-plan.md). bigbud never launches, signals or stops that daemon. The private owned-process launcher survives only as test infrastructure, where it is refused without an approved clean environment.
+- **AC2 (V1/V2 coexistence): superseded.** The [consolidated OpenCode adoption decision](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions) made V2 the shared-only OpenCode provider. Legacy V1 history stays read-only. No V1 and V2 simultaneous-execution configuration is supported or tested.
+- **AC3 (owned authenticated process): superseded.** Production borrows the user's running native OpenCode service, with logical bindings persisted in migration 127 (`OpencodeV2SharedBindings`); see the [consolidated shared-service contract](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions). bigbud never launches, signals or stops that daemon. The private owned-process launcher survives only as test infrastructure, where it is refused without an approved clean environment.
 - **D8 (full macOS/Windows/Linux/SSH scope): narrowed.** The release scope is macOS ARM64 shared-service mode. Windows and Linux native execution are deferred to the [Windows/Linux native qualification plan](./2026-10-15-opencode-v2-windows-linux-native-qualification-plan.md) (D1/D2). SSH provider runtime and remote workspaces are retired; their modules were deleted in gap-closure Phase 4.1.
 
-- [Phase 0 ledger](../validation/opencode-v2-gap-closure-phase0-2026-10-15.md): stabilized and committed snapshot, root run triage.
+- [Consolidated Phase 0 evidence](../validation/opencode-v2-gap-closure-final-2026-10-15.md#consolidated-setup-and-stabilization-checkpoints): stabilized and committed snapshot, root run triage.
 - [Phase 2 ledger](../validation/opencode-v2-live-send-diagnosis-2026-10-15.md): backend instance lock and the settlement-hold fix.
 - [Phase 1 preparation ledger](../validation/opencode-v2-native-qualification-2.0.29-2026-10-15.md): 2.0.29 native qualification prepared, not executed.
 - [Phase 3 runbook](../validation/opencode-v2-live-turn-runbook-2026-10-15.md): user-operated live turn, not executed.

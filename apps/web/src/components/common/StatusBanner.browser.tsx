@@ -150,7 +150,7 @@ describe("StatusBanner", () => {
           dismissalKey={["status-test"]}
           centered
           variant="warning"
-          icon={<TriangleAlertIcon />}
+          icon={<TriangleAlertIcon data-testid="centered-status-icon" />}
           title="Unavailable"
           description="Usage unavailable for this provider."
           onDismiss={dismiss}
@@ -160,12 +160,16 @@ describe("StatusBanner", () => {
     const alert = page.getByRole("alert").element();
     const bounds = alert.getBoundingClientRect();
     const title = page.getByText("Unavailable", { exact: true }).element();
-    expect(getComputedStyle(title).textAlign).toBe("center");
     const titleBounds = title.getBoundingClientRect();
-    expect((titleBounds.left + titleBounds.right) / 2).toBeCloseTo(
+    const heading = alert.querySelector<HTMLElement>('[data-slot="alert-heading"]')!;
+    const headingBounds = heading.getBoundingClientRect();
+    expect(headingBounds.top - bounds.top).toBeLessThan(28);
+    expect((headingBounds.left + headingBounds.right) / 2).toBeCloseTo(
       (bounds.left + bounds.right) / 2,
       0,
     );
+    const icon = page.getByTestId("centered-status-icon").element().getBoundingClientRect();
+    expect((icon.top + icon.bottom) / 2).toBeCloseTo((titleBounds.top + titleBounds.bottom) / 2, 0);
     expect(alert.scrollWidth).toBeLessThanOrEqual(alert.clientWidth);
     await page.getByRole("button", { name: "Dismiss" }).click();
     expect(dismiss).toHaveBeenCalledOnce();

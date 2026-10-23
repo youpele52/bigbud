@@ -19,7 +19,7 @@ events from both paths.
 ## Related Work
 
 - `docs/decisions/2026-08-27-desktop-delivery-supervisor-authority.md` records the accepted authority and failure boundary.
-- `docs/RUST_SYSTEMS_CORE.md` defines the wider TypeScript/Rust ownership model.
+- `docs/plans/2026-08-25-rust-systems-core-plan.md` defines the wider TypeScript/Rust ownership model.
 - `protocol/desktop-supervisor/v1.proto` defines the existing supervisor wire protocol.
 - No verified note, Kanban card, issue, or pull request is linked to this plan.
 

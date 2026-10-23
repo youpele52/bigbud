@@ -289,14 +289,36 @@ export class V2RuntimeHttpFixture {
   }
 }
 
+/** Fail-closed tests declare the retained cleanup failure that shutdown must still surface. */
+async function closeV2RuntimeFixture(
+  runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>,
+  retained: string | undefined,
+) {
+  if (retained === undefined) return runtime.close();
+  const failure = await runtime.close().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  if (!(failure instanceof Error) || !failure.message.includes(retained))
+    throw new Error(`Expected runtime close to surface retained cleanup: ${retained}`, {
+      cause: failure,
+    });
+}
+
 export async function withV2RuntimeFixture(
   run: (fixture: {
     runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>;
     http: V2RuntimeHttpFixture;
     directory: string;
     events: ProviderRuntimeEvent[];
+    /** Shutdown must report this still-unconfirmed cleanup instead of releasing it. */
+    expectRetainedClose: (message: string) => void;
   }) => Promise<void>,
 ) {
+  let retainedClose: string | undefined;
+  const expectRetainedClose = (message: string) => {
+    retainedClose = message;
+  };
   const root = await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-executing-fixture-"));
   const directory = path.join(root, "workspace");
   await mkdir(directory);
@@ -349,9 +371,11 @@ export async function withV2RuntimeFixture(
             allowLocalWorkspace: true,
           });
           try {
-            yield* Effect.promise(() => run({ runtime, http, directory, events }));
+            yield* Effect.promise(() =>
+              run({ runtime, http, directory, events, expectRetainedClose }),
+            );
           } finally {
-            yield* Effect.promise(() => runtime.close());
+            yield* Effect.promise(() => closeV2RuntimeFixture(runtime, retainedClose));
           }
         }).pipe(Effect.provide(layer)),
       ),

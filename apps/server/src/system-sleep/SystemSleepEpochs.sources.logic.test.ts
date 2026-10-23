@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyDesktopHint,
+  consumePendingSuspend,
+  DESKTOP_PENDING_SUSPEND_MAX_AGE_MS,
   initialDesktopHintState,
   observeSupervisorSuspendedMillis,
   SUPERVISOR_SUSPENDED_JUMP_MS,
@@ -44,6 +46,29 @@ describe("applyDesktopHint", () => {
     expect(resumed.networkOnline).toBe(true);
   });
 
+  it("drops a pending suspend too old to belong to the resume", () => {
+    // logind aborted this suspend, or its resume was missed; the next resume is days later.
+    const aborted = applyDesktopHint(initialDesktopHintState, {
+      kind: "suspend",
+      sequence: 1,
+      occurredAt: T0,
+      online: true,
+    });
+    const resumeAt = T0 + DESKTOP_PENDING_SUSPEND_MAX_AGE_MS + 2 * 24 * 3_600_000;
+    const resumed = applyDesktopHint(aborted.state, {
+      kind: "resume",
+      sequence: 2,
+      occurredAt: resumeAt,
+      online: true,
+    });
+    expect(resumed.evidence).toEqual({
+      source: "desktop-hint",
+      startedAtMs: resumeAt,
+      endedAtMs: resumeAt,
+    });
+    expect(resumed.state.pendingSuspendAtMs).toBeNull();
+  });
+
   it("drops duplicate and out-of-order lines", () => {
     const first = applyDesktopHint(initialDesktopHintState, {
       kind: "resume",
@@ -77,6 +102,35 @@ describe("applyDesktopHint", () => {
     });
     expect(online.networkOnline).toBe(true);
     expect(online.state.online).toBe(true);
+  });
+});
+
+const measured = (startedAtMs: number, endedAtMs: number) => ({
+  source: "server-gap" as const,
+  startedAtMs,
+  endedAtMs,
+});
+
+describe("consumePendingSuspend", () => {
+  const pending = { ...initialDesktopHintState, pendingSuspendAtMs: T0 };
+
+  it("widens measured evidence to the suspend that announced it", () => {
+    const result = consumePendingSuspend(pending, measured(T0 + 2_000, T0 + 600_000));
+    expect(result.evidence.startedAtMs).toBe(T0);
+    expect(result.state.pendingSuspendAtMs).toBeNull();
+  });
+
+  it("uses up an aborted suspend without widening the next sleep", () => {
+    const later = T0 + 3 * 24 * 3_600_000;
+    const result = consumePendingSuspend(pending, measured(later, later + 600_000));
+    expect(result.evidence.startedAtMs).toBe(later);
+    expect(result.state.pendingSuspendAtMs).toBeNull();
+  });
+
+  it("keeps a suspend that came after the measured sleep ended", () => {
+    const result = consumePendingSuspend(pending, measured(T0 - 600_000, T0 - 1_000));
+    expect(result.state).toBe(pending);
+    expect(result.evidence.startedAtMs).toBe(T0 - 600_000);
   });
 });
 

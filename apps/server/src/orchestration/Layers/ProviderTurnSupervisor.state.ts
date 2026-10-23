@@ -64,6 +64,13 @@ export interface RecoveryMemory {
   >;
   /** Each thread's current turn and its open tool items, from the provider runtime stream. */
   readonly turnTools: Map<ThreadId, TurnToolTracking>;
+  /** Notices whose `thread.recovery.set` failed; each recovery pass publishes them again. */
+  readonly unpublishedNotices: Map<string, RecoveryNoticeKey>;
+}
+
+export interface RecoveryNoticeKey {
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
 }
 
 export function makeRecoveryMemory(): RecoveryMemory {
@@ -73,6 +80,7 @@ export function makeRecoveryMemory(): RecoveryMemory {
     lastCompletedAtMs: new Map(),
     inspections: new Map(),
     turnTools: new Map(),
+    unpublishedNotices: new Map(),
   };
 }
 
@@ -89,6 +97,28 @@ export function setBounded<K, V>(map: Map<K, V>, key: K, value: V, limit: number
 
 export function intentKeyString(threadId: ThreadId, messageId: MessageId): string {
   return `${threadId}\u0000${messageId}`;
+}
+
+/**
+ * Drops a thread's short-lived evidence. Failed notices are kept unless `withNotices`: a
+ * notice that could not be cleared must still be retried after its turn ended.
+ */
+export function forgetThreadMemory(
+  memory: RecoveryMemory,
+  threadId: ThreadId,
+  options: { readonly withNotices?: boolean } = {},
+): void {
+  memory.pendingFailures.delete(threadId);
+  memory.lastProgressAtMs.delete(threadId);
+  memory.lastCompletedAtMs.delete(threadId);
+  memory.turnTools.delete(threadId);
+  const prefix = `${threadId}\u0000`;
+  const keyed: Array<Map<string, unknown>> = options.withNotices
+    ? [memory.inspections, memory.unpublishedNotices]
+    : [memory.inspections];
+  for (const map of keyed) {
+    for (const key of map.keys()) if (key.startsWith(prefix)) map.delete(key);
+  }
 }
 
 export interface RecoveryContext {

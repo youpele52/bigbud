@@ -36,6 +36,7 @@ import {
 } from "./ProviderTurnSupervisor.recovery.ts";
 import { resolveRecovery } from "./ProviderTurnSupervisor.resolve.ts";
 import {
+  forgetThreadMemory,
   MAX_TRACKED_THREADS,
   setBounded,
   type RecoveryContext,
@@ -77,6 +78,29 @@ const settleEndedTurn = Effect.fn("settleEndedTurn")(function* (
 });
 
 /**
+ * A turn ended and nothing still needs the thread's evidence: no tool of that turn is open and
+ * no intent is open. Its memory goes now instead of waiting for the bounds. An open intent
+ * keeps it, because classification and the tool-in-flight check still read it.
+ */
+const forgetEndedTurn = Effect.fn("forgetEndedRecoveryTurn")(function* (
+  ctx: RecoveryContext,
+  threadId: ThreadId,
+) {
+  const tracking = ctx.memory.turnTools.get(threadId);
+  if (
+    tracking !== undefined &&
+    (!tracking.ended ||
+      tracking.overflowed ||
+      tracking.open.size > 0 ||
+      tracking.anonymous.length > 0)
+  ) {
+    return;
+  }
+  if (Option.isSome(yield* ctx.intents.latestOpenForThread(threadId))) return;
+  forgetThreadMemory(ctx.memory, threadId);
+});
+
+/**
  * When the provider produced the event. Progress and completion keep the event's own time: an
  * event buffered at wake may wait behind the coordinator for seconds, and its processing time
  * would make it look like progress after wake.
@@ -102,9 +126,13 @@ export const observeRuntimeEvent = Effect.fn("observeRecoveryRuntimeEvent")(func
   }
   if (isCompletedTurnEvent(event)) {
     recordLatest(ctx.memory.lastCompletedAtMs, event.threadId, eventAtMs(event, nowMs));
-    return yield* settleEndedTurn(ctx, event, true);
+    yield* settleEndedTurn(ctx, event, true);
+    return yield* forgetEndedTurn(ctx, event.threadId);
   }
-  if (isTurnEndedWithoutCompletion(event)) return yield* settleEndedTurn(ctx, event, false);
+  if (isTurnEndedWithoutCompletion(event)) {
+    yield* settleEndedTurn(ctx, event, false);
+    return yield* forgetEndedTurn(ctx, event.threadId);
+  }
   const failure = failureFromRuntimeEvent(event, nowMs);
   if (failure) yield* recordTurnFailure(ctx, failure);
 });
@@ -153,6 +181,15 @@ export const observeDomainEvent = Effect.fn("observeRecoveryDomainEvent")(functi
       if (resolvedAction === undefined || messageId === undefined) return;
       return yield* resolveRecovery(ctx, { threadId, messageId, action: resolvedAction });
     }
+    case "thread.deleted":
+      // Deletion revoked the thread's intents in the command transaction.
+      for (const threadId of new Set([
+        event.payload.threadId,
+        ...(event.payload.threadIds ?? []),
+      ])) {
+        forgetThreadMemory(ctx.memory, threadId, { withNotices: true });
+      }
+      return;
     case "thread.turn-start-requested":
     case "thread.prompt-queued":
     case "thread.turn-interrupt-requested":

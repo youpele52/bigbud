@@ -231,3 +231,46 @@ fn a_restored_result_whose_output_was_compacted_away_still_reports_its_exit_code
     assert_eq!((completed.has_exit_code, completed.exit_code), (true, 0));
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn a_running_operation_older_than_600_seconds_is_attachable_through_a_session_attach() {
+    let mut session = ready_session();
+    // Accepted and started 601 s ago: past the old 600 s retention, and still running.
+    let Some(started_at) = Instant::now().checked_sub(Duration::from_secs(601)) else {
+        // A monotonic clock this young cannot express the age; nothing to check.
+        return;
+    };
+    let operations = &mut session.process_operations;
+    operations
+        .accept("operation-1", vec![1], started_at)
+        .unwrap();
+    operations.start("operation-1", started_at).unwrap();
+    operations
+        .append_output(
+            "operation-1",
+            OutputStream::Stdout,
+            b"still going".to_vec(),
+            started_at,
+        )
+        .unwrap();
+
+    let frames = attach(&mut session, 0);
+
+    let response = attach_response(&frames);
+    assert_eq!(response.state, "running");
+    assert!(!response.replay_gap);
+    assert_eq!(output_sequences(&frames), vec![1]);
+    assert!(completed(&frames).is_none());
+}
+
+#[test]
+fn a_session_attach_with_a_cursor_at_u64_max_does_not_overflow() {
+    let mut session = ready_session();
+    overflowed_operation(&mut session, 1, Some(0));
+
+    let frames = attach(&mut session, u64::MAX);
+
+    assert!(!attach_response(&frames).replay_gap);
+    assert!(output_sequences(&frames).is_empty());
+    assert_eq!(completed(&frames).unwrap().state, "completed");
+}

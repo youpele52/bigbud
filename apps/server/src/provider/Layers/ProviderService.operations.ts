@@ -279,16 +279,16 @@ export function makeRollbackConversation(
 }
 
 /**
- * Builds an Effect that stops all active provider sessions and marks bindings
- * as stopped in the directory. Order: persist live bindings, stop every adapter
- * concurrently with a per-adapter timeout, then mark directory entries stopped.
- */
-/**
  * Why every provider is being stopped. Every reason here is the app or backend going away,
  * never a user's Stop, so recovery intents are suspended, never revoked.
  */
 export type ProviderStopAllReason = "app-exit";
 
+/**
+ * Builds an Effect that stops all active provider sessions and marks bindings
+ * as stopped in the directory. Order: persist live bindings, stop every adapter
+ * concurrently with a per-adapter timeout, then mark directory entries stopped.
+ */
 export function makeRunStopAll(
   adapters: ReadonlyArray<Adapter>,
   directory: ProviderSessionDirectoryShape,

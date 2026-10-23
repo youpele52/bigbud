@@ -32,7 +32,7 @@ These are confirmations. They are not new work.
 
 ## Leave alone
 
-1. **Do not embed `@earendil-works/pi-durable`.** The README marks the API experimental. The coding agent does not use it, and the post says the coding agent is not being replaced. bigbud would gain a second transcript store and a runtime that covers none of Codex, Claude, Copilot or OpenCode. Canonical state stays in TypeScript SQLite (`docs/RUST_SYSTEMS_CORE.md`).
+1. **Do not embed `@earendil-works/pi-durable`.** The README marks the API experimental. The coding agent does not use it, and the post says the coding agent is not being replaced. bigbud would gain a second transcript store and a runtime that covers none of Codex, Claude, Copilot or OpenCode. Canonical state stays in TypeScript SQLite (`docs/plans/2026-08-25-rust-systems-core-plan.md`).
 
 2. **Do not adopt OpenCode's synthetic continue as the default after a tool has started.** It is how OpenCode gets unattended resume, and it is also how a shell command runs twice. Phase 6 already limits automatic continue to a cut model request with no tool in flight. That split matches Pi Durable more closely than it matches OpenCode, and it should stay.
 

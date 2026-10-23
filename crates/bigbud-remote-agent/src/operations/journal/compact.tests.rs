@@ -131,6 +131,7 @@ fn a_full_journal_relieves_pressure_instead_of_refusing_new_work() {
     let journal = OperationJournal {
         path: path.clone(),
         maximum_bytes: fs::metadata(&path).unwrap().len() as usize + 8,
+        running: Default::default(),
     };
 
     journal
@@ -145,5 +146,47 @@ fn a_full_journal_relieves_pressure_instead_of_refusing_new_work() {
         record,
         JournalRecord::Accepted { operation_id, .. } if operation_id == "next"
     )));
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn compaction_keeps_a_running_operation_past_its_acceptance_retention() {
+    let path = temp_path();
+    let journal = OperationJournal::open(&path, 4_096).unwrap();
+    let id = "long-running".to_owned();
+    journal
+        .append(&JournalRecord::Accepted {
+            operation_id: id.clone(),
+            request_digest: vec![1],
+        })
+        .unwrap();
+    // The acceptance-time retention has passed, but the operation is still running here.
+    journal
+        .append(&JournalRecord::Retention {
+            operation_id: id.clone(),
+            expires_at_unix_ms: unix_now_ms().unwrap() - 1_000,
+        })
+        .unwrap();
+    journal
+        .append(&JournalRecord::Started {
+            operation_id: id.clone(),
+        })
+        .unwrap();
+    journal
+        .append(&JournalRecord::Output {
+            operation_id: id.clone(),
+            sequence: 1,
+            stream: OutputStream::Stdout,
+            bytes: b"still going".to_vec(),
+        })
+        .unwrap();
+
+    journal.compact().unwrap();
+    assert!(has_output(&journal.records().unwrap(), &id));
+
+    // A later agent process never ran it: restore expired it, so its retention applies.
+    let restarted = OperationJournal::open(&path, 4_096).unwrap();
+    restarted.compact().unwrap();
+    assert!(restarted.records().unwrap().is_empty());
     let _ = fs::remove_file(path);
 }

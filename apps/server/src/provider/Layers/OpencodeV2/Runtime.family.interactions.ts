@@ -14,35 +14,12 @@ import { installV2UnsupportedFormCanceller } from "./Runtime.forms.unsupported.t
 import { v2Request } from "./Client.ts";
 import { v2PermissionFingerprint } from "./Runtime.approvalIntent.ts";
 import { formQuestions } from "./Runtime.forms.ts";
+import {
+  v2FamilyInteractionState,
+  type V2FamilyInteractionTarget,
+} from "./Runtime.family.interactions.state.ts";
 
-interface Target {
-  readonly opened: ProviderRuntimeEvent;
-  readonly view: V2RuntimeSession;
-  readonly rawId: string;
-  readonly kind: "permission" | "form";
-  readonly fingerprint: string;
-  readonly taskId: string;
-  readonly generation: number;
-}
-interface State {
-  readonly views: Map<string, V2RuntimeSession>;
-  readonly targets: Map<string, Target>;
-}
-const states = new WeakMap<V2RuntimeSession, State>();
-/** Retained child reply obligations also hold physical activation exclusion. */
-export function v2FamilyInteractionCount(owner: V2RuntimeSession) {
-  return states.get(owner)?.targets.size ?? 0;
-}
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-function state(owner: V2RuntimeSession) {
-  let value = states.get(owner);
-  if (!value) {
-    value = { views: new Map(), targets: new Map() };
-    states.set(owner, value);
-  }
-  return value;
-}
-
 /** Child reads/replies reuse native interaction, consent and mutation quarantine code with the exact child target. */
 export async function pendingV2FamilyInteractions(
   runtime: OpencodeV2Runtime,
@@ -53,7 +30,7 @@ export async function pendingV2FamilyInteractions(
   const qualification = owner.familyQualification ?? runtime.options.nativeSubagents?.qualification;
   if (!qualification) return;
   qualification.assertCurrent();
-  const retained = state(owner);
+  const retained = v2FamilyInteractionState(owner);
   for (const child of owner.family.children) {
     if ((child.generation ?? 0) !== owner.family.generation || child.state === "uncertain")
       continue;
@@ -199,7 +176,7 @@ export async function closeV2FamilyInteractions(
   runtime: OpencodeV2Runtime,
   owner: V2RuntimeSession,
 ) {
-  for (const [id, target] of state(owner).targets) {
+  for (const [id, target] of v2FamilyInteractionState(owner).targets) {
     const event: ProviderRuntimeEvent = {
       provider: "opencodeV2",
       threadId: owner.threadId,
@@ -221,7 +198,7 @@ export async function closeV2FamilyInteractions(
         : { type: "user-input.resolved", payload: { answers: {} } }),
     };
     await runtime.emit(owner, event);
-    state(owner).targets.delete(id);
+    v2FamilyInteractionState(owner).targets.delete(id);
   }
 }
 
@@ -270,9 +247,9 @@ export async function replyV2FamilyInteraction(
   owner: V2RuntimeSession,
   id: string,
   reply: ProviderApprovalDecision | ProviderUserInputAnswers,
-  expectedKind: Target["kind"],
+  expectedKind: V2FamilyInteractionTarget["kind"],
 ) {
-  const target = state(owner).targets.get(id);
+  const target = v2FamilyInteractionState(owner).targets.get(id);
   if (!target || target.kind !== expectedKind || !owner.family || owner.family.isFenced)
     throw new Error("V2 stale/unknown child request.");
   const child = owner.family.child(target.view.native.id);
@@ -316,7 +293,8 @@ export async function replyV2FamilyInteraction(
       qualification.assertCurrent();
       validate();
       owner.family!.assertSpawn(generation);
-      if (state(owner).targets.get(id) !== target) throw new Error("V2 child request replaced.");
+      if (v2FamilyInteractionState(owner).targets.get(id) !== target)
+        throw new Error("V2 child request replaced.");
     };
     current();
     return current;
@@ -342,7 +320,7 @@ export async function replyV2FamilyInteraction(
     owner,
     attributeV2ChildInteraction(event, id, child.agent, child.description, child.id, child.taskId),
   );
-  state(owner).targets.delete(id);
+  v2FamilyInteractionState(owner).targets.delete(id);
   target.view.pendingInteractions?.delete(
     `${target.kind === "permission" ? "request.opened" : "user-input.requested"}:${target.rawId}`,
   );

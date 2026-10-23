@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { ServerUsageSummaryResult } from "@bigbud/contracts/server/usage.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectionUsageEntry } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 
@@ -125,4 +126,77 @@ describe("wsRpcHandlers.usage", () => {
       ]),
     );
   });
+});
+
+it("publishes additive token mix on totals from the effective rows without changing canonical nulls", async () => {
+  const [row] = makeEntries(["2026-10-11T12:00:00Z"]);
+  if (!row) throw new Error("Expected usage entry");
+  const canonical = {
+    version: 2,
+    source: "provider-reported",
+    basis: "claude-result-main-loop",
+    completeness: "complete",
+    inputTokens: 1079707,
+    outputTokens: 9456,
+    cacheReadTokens: 1068867,
+    cacheWriteTokens: 10832,
+    reasoningTokens: null,
+    reportedTotal: 1089163,
+    subtotal: 1089163,
+  };
+  const handlers = makeWsRpcUsageHandlers(
+    makeContext([
+      {
+        ...row,
+        provider: "claudeAgent",
+        usedTokens: 1089163,
+        accountingJson: JSON.stringify(canonical),
+      },
+      {
+        ...row,
+        contributionId: "estimate",
+        source: "estimated",
+        usedTokens: 5,
+        accountingJson: JSON.stringify({
+          ...canonical,
+          source: "estimated",
+          basis: "observable-text-v1",
+          inputTokens: 3,
+          outputTokens: 2,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          reportedTotal: null,
+          subtotal: 5,
+        }),
+      },
+      { ...row, contributionId: "legacy", usedTokens: 10 },
+    ]),
+  );
+  const result = await Effect.runPromise(handlers["server.getUsageSummary"]({ range: "all" }));
+  const summary = Schema.decodeUnknownSync(ServerUsageSummaryResult)(
+    JSON.parse(JSON.stringify(result)),
+  );
+  expect(summary.totals.usedTokens).toBe(1089178);
+  expect(summary.totals.tokenMix).toEqual({
+    inputTokens: 11,
+    cacheReadTokens: 1068867,
+    cacheWriteTokens: 10832,
+    outputTokens: 9458,
+    unclassifiedTokens: 10,
+  });
+  expect(summary.totals.accounting).toMatchObject({
+    source: "mixed",
+    partial: true,
+    legacy: true,
+    reasoningTokens: null,
+    cacheReadTokens: null,
+    inputTokens: null,
+    reportedTokens: 1089173,
+    estimatedTokens: 5,
+  });
+  expect(summary.buckets[0]?.usedTokens).toBe(summary.totals.usedTokens);
+  expect(summary.providers.reduce((sum, provider) => sum + provider.usedTokens, 0)).toBe(
+    summary.totals.usedTokens,
+  );
+  expect(summary.buckets[0]).not.toHaveProperty("tokenMix");
 });
