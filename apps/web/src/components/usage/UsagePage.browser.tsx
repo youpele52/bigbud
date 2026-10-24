@@ -14,7 +14,7 @@ const { getUsageSummary, state } = vi.hoisted(() => ({
 
 vi.mock("~/rpc/nativeApi", () => {
   const api = { server: { getUsageSummary } };
-  return { readNativeApi: () => api };
+  return { readNativeApi: () => api, ensureNativeApi: () => api };
 });
 vi.mock("~/rpc/serverState", () => ({ useServerProviders: () => state.providers }));
 vi.mock("../standalone/StandaloneChatPageShell", () => ({
@@ -35,7 +35,6 @@ vi.mock("../standalone/StandaloneChatPageHeader", () => ({
 }));
 
 import { UsagePage } from "./UsagePage";
-import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const totals = {
   usedTokens: 100,
@@ -97,11 +96,101 @@ describe("Usage page heading hierarchy", () => {
     document.body.innerHTML = "";
   });
 
-  it("uses the compact centered breathing logo while loading the full page", async () => {
-    getUsageSummary.mockReturnValue(new Promise(() => {}));
+  it("uses the startup loader only until the first usable section arrives", async () => {
+    const providers = state.providers;
+    state.providers = [];
+    let finish!: (value: ServerUsageSummaryResult) => void;
+    getUsageSummary.mockReturnValue(
+      new Promise<ServerUsageSummaryResult>((resolve) => {
+        finish = resolve;
+      }),
+    );
     mounted = await render(<UsagePage />);
-    await expect.element(page.getByText("Loading usage", { exact: true })).toBeVisible();
-    expectCenteredStatuses(document.body);
+    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(1);
+    await expect.element(page.getByRole("button", { name: "30d", exact: true })).toBeVisible();
+    state.providers = providers;
+    await mounted.rerender(<UsagePage />);
+    await expect
+      .element(page.getByRole("region", { name: "Codex subscription limits", exact: true }))
+      .toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    finish(summary);
+    await expect
+      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+    const limits = page.getByRole("region", { name: "Subscription limits", exact: true }).element();
+    const overview = page.getByRole("region", { name: "Overview", exact: true }).element();
+    expect(
+      overview.compareDocumentPosition(limits) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows a resolved empty summary without waiting for subscription limits", async () => {
+    state.providers = [];
+    let finish!: (value: ServerUsageSummaryResult) => void;
+    getUsageSummary.mockReturnValue(
+      new Promise<ServerUsageSummaryResult>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mounted = await render(<UsagePage />);
+    expect(document.querySelector(".animate-pulse-slow")).not.toBeNull();
+    finish({ ...summary, buckets: [], totals: { ...totals, usedTokens: 0 } });
+    await expect.element(page.getByText("No usage yet.")).toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+  });
+
+  it("retains summary data through pending refresh and a failed refresh", async () => {
+    mounted = await render(<UsagePage />);
+    await expect
+      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+    let fail!: (error: Error) => void;
+    getUsageSummary.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
+    await page.getByRole("button", { name: "30d", exact: true }).click();
+    await expect
+      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    fail(new Error("usage offline"));
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Showing last successful data.");
+    await expect
+      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+  });
+
+  it("ends the initial loader on failure and retries with another range", async () => {
+    state.providers = [];
+    getUsageSummary.mockRejectedValueOnce(new Error("usage offline"));
+    mounted = await render(<UsagePage />);
+    await expect.element(page.getByRole("alert")).toHaveTextContent("usage offline");
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    getUsageSummary.mockResolvedValueOnce(summary);
+    await page.getByRole("button", { name: "30d", exact: true }).click();
+    await expect
+      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+  });
+
+  it("ignores a late summary from an obsolete range", async () => {
+    let finishOld!: (value: ServerUsageSummaryResult) => void;
+    getUsageSummary.mockReturnValueOnce(
+      new Promise<ServerUsageSummaryResult>((resolve) => {
+        finishOld = resolve;
+      }),
+    );
+    getUsageSummary.mockResolvedValueOnce({ ...summary, totals: { ...totals, usedTokens: 9876 } });
+    mounted = await render(<UsagePage />);
+    await page.getByRole("button", { name: "30d", exact: true }).click();
+    await expect.element(page.getByText("9,876", { exact: true }).first()).toBeVisible();
+    finishOld(summary);
+    await expect.element(page.getByText("9,876", { exact: true }).first()).toBeVisible();
   });
 
   it("categorizes usage with consistently spaced H2s outside cards and H3s inside", async () => {
@@ -158,7 +247,7 @@ describe("Usage page heading hierarchy", () => {
       .toBeInTheDocument();
   });
 
-  it("retains the same main hierarchy for empty usage and hides unsupported limits", async () => {
+  it("retains empty usage hierarchy and the unavailable subscription limits notice", async () => {
     getUsageSummary.mockResolvedValue({
       ...summary,
       totals: { ...totals, usedTokens: 0 },
@@ -179,7 +268,11 @@ describe("Usage page heading hierarchy", () => {
       "Overview",
       "Token usage",
       "Breakdown",
+      "Subscription limits",
     ]);
+    await expect
+      .element(page.getByText("Subscription limits unavailable for enabled providers."))
+      .toBeVisible();
     await expect.element(page.getByText("No usage yet.").first()).toBeInTheDocument();
     await expect
       .element(page.getByRole("heading", { level: 3, name: "Providers", exact: true }))

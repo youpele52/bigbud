@@ -6,6 +6,7 @@ import { runRpc } from "~/rpc/client";
 import { ContentPanelHeaderBar } from "../layout/ContentPanelHeaderBar";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { StandalonePageContent } from "../standalone/StandalonePageContent";
+import { StandalonePageLoading } from "../standalone/StandalonePageLoading";
 import { StatusBanner } from "../common/StatusBanner";
 import { Button } from "../ui/button";
 import { PluginCatalogRow } from "./PluginCatalogRow";
@@ -25,20 +26,32 @@ export function PluginStorePage() {
   const [catalog, setCatalog] = useState<PluginCatalog>();
   const [query, setQuery] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>();
+  const catalogRequest = useRef(0);
   const [installingIds, setInstallingIds] = useState<ReadonlySet<string>>(new Set());
   const installingIdsRef = useRef<ReadonlySet<string>>(new Set());
   const refresh = async () => {
+    const request = ++catalogRequest.current;
     setIsRefreshing(true);
+    setLoading(true);
+    setLoadError(undefined);
     try {
-      setCatalog(await runRpc((client) => client("plugins.refreshCatalog", undefined)));
+      const next = await runRpc((client) => client("plugins.refreshCatalog", undefined));
+      if (request === catalogRequest.current) setCatalog(next);
     } catch (error) {
+      if (request !== catalogRequest.current) return;
+      setLoadError(String(error));
       toastManager.add({
         type: "error",
         title: "Could not refresh plugins",
         description: String(error),
       });
     } finally {
-      setIsRefreshing(false);
+      if (request === catalogRequest.current) {
+        setIsRefreshing(false);
+        setLoading(false);
+      }
     }
   };
   const install = async (item: PluginCatalogItem) => {
@@ -70,15 +83,26 @@ export function PluginStorePage() {
     }
   };
   useEffect(() => {
+    const request = ++catalogRequest.current;
     void runRpc((client) => client("plugins.listCatalog", undefined))
-      .then(setCatalog)
-      .catch((error: unknown) =>
+      .then((next) => {
+        if (request === catalogRequest.current) setCatalog(next);
+      })
+      .catch((error: unknown) => {
+        if (request !== catalogRequest.current) return;
+        setLoadError(String(error));
         toastManager.add({
           type: "error",
           title: "Could not load plugins",
           description: String(error),
-        }),
-      );
+        });
+      })
+      .finally(() => {
+        if (request === catalogRequest.current) setLoading(false);
+      });
+    return () => {
+      catalogRequest.current += 1;
+    };
   }, []);
   const items = (catalog?.items ?? []).filter((item) => matchesPlugin(item, query));
   const categories = groupPluginsByCategory(items);
@@ -102,45 +126,52 @@ export function PluginStorePage() {
         />
       }
     >
-      <StandalonePageContent>
-        <main>
-          {notice ? (
-            <StatusBanner
-              dismissalKey={["plugins", "catalog"]}
-              variant="warning"
-              className="mb-6"
-              description={notice}
-              dismissLabel="Dismiss plugin catalog warning"
-            />
-          ) : null}
-          {categories.length > 0 ? (
-            <div className="space-y-10">
-              {categories.map(([category, categoryItems]) => (
-                <section key={category} aria-label={`${category} plugins`}>
-                  <h2 className="border-b border-border/70 pb-2 text-sm font-medium text-foreground">
-                    {category}
-                  </h2>
-                  <div className={PLUGIN_CATEGORY_GRID_CLASS}>
-                    {categoryItems.map((item) => (
-                      <PluginCatalogRow
-                        key={item.id}
-                        item={item}
-                        installation={catalog?.installed.find(
-                          (entry) => entry.pluginId === item.id,
-                        )}
-                        isInstalling={installingIds.has(item.id)}
-                        onInstall={(candidate) => void install(candidate)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          ) : catalog ? (
-            <p className="py-6 text-sm text-muted-foreground">No plugins found.</p>
-          ) : null}
-        </main>
-      </StandalonePageContent>
+      <StandalonePageLoading loading={loading && !catalog} label="Loading plugins">
+        <StandalonePageContent>
+          <main>
+            {loadError && !catalog ? (
+              <p role="alert" className="text-sm text-muted-foreground">
+                Could not load plugins: {loadError}. Use Refresh to retry.
+              </p>
+            ) : null}
+            {notice ? (
+              <StatusBanner
+                dismissalKey={["plugins", "catalog"]}
+                variant="warning"
+                className="mb-6"
+                description={notice}
+                dismissLabel="Dismiss plugin catalog warning"
+              />
+            ) : null}
+            {categories.length > 0 ? (
+              <div className="space-y-10">
+                {categories.map(([category, categoryItems]) => (
+                  <section key={category} aria-label={`${category} plugins`}>
+                    <h2 className="border-b border-border/70 pb-2 text-sm font-medium text-foreground">
+                      {category}
+                    </h2>
+                    <div className={PLUGIN_CATEGORY_GRID_CLASS}>
+                      {categoryItems.map((item) => (
+                        <PluginCatalogRow
+                          key={item.id}
+                          item={item}
+                          installation={catalog?.installed.find(
+                            (entry) => entry.pluginId === item.id,
+                          )}
+                          isInstalling={installingIds.has(item.id)}
+                          onInstall={(candidate) => void install(candidate)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : catalog ? (
+              <p className="py-6 text-sm text-muted-foreground">No plugins found.</p>
+            ) : null}
+          </main>
+        </StandalonePageContent>
+      </StandalonePageLoading>
     </StandaloneChatPageShell>
   );
 }
