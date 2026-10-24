@@ -9,10 +9,12 @@
  */
 import * as fs from "node:fs/promises";
 
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Option, ServiceMap } from "effect";
 
 import { ServerConfig } from "./config.ts";
 import { writeStartupStatus } from "./startupStatus.ts";
+import { OwnershipShutdown } from "./ownershipShutdown";
+import { createOwnershipHandoff } from "./ownershipHandoff";
 import {
   acquireStateDirLock,
   classifyStateDirLockOwner,
@@ -94,9 +96,28 @@ export const StateDirLockLive = Layer.effect(
   BackendInstance,
   Effect.gen(function* () {
     const config = yield* ServerConfig;
+    const shutdown = Option.getOrUndefined(yield* Effect.serviceOption(OwnershipShutdown));
+    const handoff =
+      config.desktopOwnershipHandoff && shutdown
+        ? yield* Effect.acquireRelease(
+            Effect.tryPromise(() => createOwnershipHandoff(config.stateDir, shutdown.request)).pipe(
+              Effect.catch(() =>
+                Effect.logWarning("Backend ownership recovery unavailable").pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            ),
+            (control) => (control ? Effect.promise(() => control.close()) : Effect.void),
+          )
+        : undefined;
     const handle = yield* Effect.acquireRelease(
       Effect.tryPromise({
-        try: () => acquireStateDirLock({ stateDir: config.stateDir, port: config.port }),
+        try: () =>
+          acquireStateDirLock({
+            stateDir: config.stateDir,
+            port: config.port,
+            ...(handoff ? { control: handoff.control } : {}),
+          }),
         catch: (cause) =>
           cause instanceof StateDirLockError
             ? cause
@@ -114,6 +135,7 @@ export const StateDirLockLive = Layer.effect(
       ),
       (handle) => Effect.promise(() => handle.release().catch(() => {})),
     );
+    if (handoff) yield* Effect.promise(() => handoff.attach(handle));
     return makeBackendInstance(handle, config.stateDir);
   }),
 );

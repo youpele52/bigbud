@@ -7,6 +7,7 @@
  * @module ServerConfig
  */
 import { Effect, FileSystem, Layer, LogLevel, Path, Schema, ServiceMap } from "effect";
+import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 
 import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
@@ -71,6 +72,7 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly desktopStartReason?: DesktopBackendStartReason;
   /** Child fd of Electron main's lifecycle hint pipe, when a desktop bootstrap envelope came. */
   readonly desktopLifecycleHintFd?: number;
+  readonly desktopOwnershipHandoff?: boolean;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -78,7 +80,7 @@ export const deriveServerPaths = Effect.fn(function* (
   devUrl: ServerConfigShape["devUrl"],
 ): Effect.fn.Return<ServerDerivedPaths, never, Path.Path> {
   const { join } = yield* Path.Path;
-  const stateDir = join(baseDir, devUrl !== undefined ? "dev" : "userdata");
+  const stateDir = ownershipStateDir(baseDir, devUrl !== undefined);
   const dbPath = join(stateDir, "state.sqlite");
   const attachmentsDir = join(stateDir, "attachments");
   const logsDir = join(stateDir, "logs");

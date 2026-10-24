@@ -43,6 +43,7 @@ const BootstrapEnvelopeSchema = Schema.Struct({
   ),
   startReason: Schema.optional(DesktopBackendStartReason),
   lifecycleHintFd: Schema.optional(DesktopLifecycleHintFd),
+  ownershipHandoff: Schema.optional(Schema.Boolean),
 });
 
 const aliasedConfig = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
@@ -195,10 +196,14 @@ const loadPersistedObservabilitySettings = Effect.fn(function* (settingsPath: st
 const desktopLifecycleFields = (
   envelope: typeof BootstrapEnvelopeSchema.Type | undefined,
   mode: RuntimeMode,
-): Pick<ServerConfigShape, "desktopStartReason" | "desktopLifecycleHintFd"> =>
+): Pick<
+  ServerConfigShape,
+  "desktopStartReason" | "desktopLifecycleHintFd" | "desktopOwnershipHandoff"
+> =>
   envelope === undefined || mode !== "desktop"
     ? {}
     : {
+        ...(envelope.ownershipHandoff === true ? { desktopOwnershipHandoff: true } : {}),
         ...(envelope.lifecycleHintFd !== undefined
           ? { desktopLifecycleHintFd: envelope.lifecycleHintFd }
           : {}),
