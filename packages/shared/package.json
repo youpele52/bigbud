@@ -216,6 +216,10 @@
       "types": "./src/String.ts",
       "import": "./src/String.ts"
     },
+    "./historySwipe": {
+      "types": "./src/historySwipe.ts",
+      "import": "./src/historySwipe.ts"
+    },
     "./projectScripts": {
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"

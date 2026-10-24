@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createHistorySwipeRecognizer } from "./browserHistoryGestures.logic";
+import { createHistorySwipeRecognizer } from "./historySwipe";
 
 function swipe(deltas: number[], vertical = 0) {
   const recognizer = createHistorySwipeRecognizer();

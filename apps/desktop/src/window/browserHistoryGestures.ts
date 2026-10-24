@@ -1,5 +1,8 @@
 import type { BrowserWindow, WebContents } from "electron";
-import { createHistorySwipeRecognizer } from "./browserHistoryGestures.logic";
+import {
+  createHistorySwipeRecognizer,
+  historySwipeWheelRejection,
+} from "@bigbud/shared/historySwipe";
 import { installBrowserHistoryGestures } from "./browserHistoryGestures.page";
 import { createBrowserGestureDiagnostics } from "./browserHistoryGestures.diagnostics";
 
@@ -20,7 +23,8 @@ export function bindBrowserHistoryGestures(
     contents,
     bindBrowserHistoryGestures.toString() +
       installBrowserHistoryGestures.toString() +
-      createHistorySwipeRecognizer.toString(),
+      createHistorySwipeRecognizer.toString() +
+      historySwipeWheelRejection.toString(),
   );
   let ready = false;
   let touching = false;
@@ -66,7 +70,7 @@ export function bindBrowserHistoryGestures(
     eligible = false;
     diagnostic?.("install-start", { generation: current });
     void execute(
-      `(${installBrowserHistoryGestures.toString()})(${createHistorySwipeRecognizer.toString()}, ${current}, ${Boolean(diagnostic)});void 0`,
+      `(${installBrowserHistoryGestures.toString()})(${createHistorySwipeRecognizer.toString()}, ${historySwipeWheelRejection.toString()}, ${current}, ${Boolean(diagnostic)});void 0`,
     )
       .then(() => {
         if (generation === current && !contents.isDestroyed()) ready = true;

@@ -1,6 +1,9 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
-import { createHistorySwipeRecognizer } from "./browserHistoryGestures.logic";
+import {
+  createHistorySwipeRecognizer,
+  historySwipeWheelRejection,
+} from "@bigbud/shared/historySwipe";
 import { installBrowserHistoryGestures } from "./browserHistoryGestures.page";
 
 function setup(diagnostics = true) {
@@ -39,7 +42,7 @@ function setup(diagnostics = true) {
   };
   // Verify the actual serialization boundary, not a direct call with module closures available.
   const controller = runInNewContext(
-    `(${installBrowserHistoryGestures.toString()})(${createHistorySwipeRecognizer.toString()}, 1, ${diagnostics}); globalThis.__bigbudHistoryGestures`,
+    `(${installBrowserHistoryGestures.toString()})(${createHistorySwipeRecognizer.toString()}, ${historySwipeWheelRejection.toString()}, 1, ${diagnostics}); globalThis.__bigbudHistoryGestures`,
     context,
   ) as {
     begin(): void;

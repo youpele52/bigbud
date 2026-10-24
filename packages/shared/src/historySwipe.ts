@@ -84,3 +84,51 @@ export function createHistorySwipeRecognizer() {
     },
   };
 }
+
+/**
+ * Returns why a wheel event belongs to the content instead of history navigation, or null.
+ * Mirrors native overscroll navigation: a scroller that can still move in the swipe
+ * direction owns the gesture, one already at that edge lets it through. Closed shadow
+ * roots are invisible here; their content must preventDefault. Self-contained, since it
+ * is also serialized into browser pages: only DOM globals, no module references.
+ */
+export function historySwipeWheelRejection(
+  event: WheelEvent,
+  path: readonly EventTarget[],
+  boundary: Element | null = null,
+): string | null {
+  if (
+    event.defaultPrevented ||
+    event.deltaMode !== 0 ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.shiftKey ||
+    event.buttons !== 0
+  )
+    return "event-flags-or-prevented";
+  for (const target of path) {
+    if (!(target instanceof Element)) continue;
+    if (
+      target.matches(
+        "input, textarea, select, [contenteditable]:not([contenteditable='false']), canvas, iframe, embed, object",
+      )
+    )
+      return "interactive-surface";
+    const style = getComputedStyle(target);
+    const viewport = target === document.scrollingElement;
+    const range = target.scrollWidth - target.clientWidth;
+    const scroller = range > 1 && (viewport || /^(auto|scroll|overlay)$/.test(style.overflowX));
+    if (
+      (viewport || target === document.body || scroller) &&
+      ["contain", "none"].includes(style.overscrollBehaviorX)
+    )
+      return "overscroll-policy";
+    if (scroller && event.deltaX !== 0) {
+      const position = style.direction === "rtl" ? target.scrollLeft + range : target.scrollLeft;
+      if (event.deltaX < 0 ? position > 1 : position < range - 1) return "horizontal-scroller";
+    }
+    if (target === boundary) break;
+  }
+  return null;
+}

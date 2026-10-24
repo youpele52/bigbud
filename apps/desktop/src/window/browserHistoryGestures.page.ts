@@ -2,11 +2,13 @@ import type {
   createHistorySwipeRecognizer,
   HistorySwipeDirection,
   HistorySwipeSample,
-} from "./browserHistoryGestures.logic";
+  historySwipeWheelRejection,
+} from "@bigbud/shared/historySwipe";
 
 /** Runs only in a private isolated world; no Node, preload, or page-visible bridge. */
 export function installBrowserHistoryGestures(
   createRecognizer: typeof createHistorySwipeRecognizer,
+  wheelRejection: typeof historySwipeWheelRejection,
   generation: number,
   diagnostics = false,
 ) {
@@ -46,31 +48,6 @@ export function installBrowserHistoryGestures(
     if (direction === "back") history.back();
     else history.forward();
   };
-  // Mirrors native overscroll navigation: a scroller that can still move in the
-  // swipe direction owns the gesture, one already at that edge lets it through.
-  // Closed shadow roots are invisible here; their sites must preventDefault.
-  // Kept inside: this whole function is serialized into the isolated world.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const surfaceRejection = (target: Element, deltaX: number): string | null => {
-    if (
-      target.matches(
-        "input, textarea, select, [contenteditable]:not([contenteditable='false']), canvas, iframe, embed, object",
-      )
-    )
-      return "interactive-surface";
-    const style = getComputedStyle(target);
-    const viewport = target === document.scrollingElement;
-    const range = target.scrollWidth - target.clientWidth;
-    const scroller = range > 1 && (viewport || /^(auto|scroll|overlay)$/.test(style.overflowX));
-    if (
-      (viewport || target === document.body || scroller) &&
-      ["contain", "none"].includes(style.overscrollBehaviorX)
-    )
-      return "overscroll-policy";
-    if (!scroller || deltaX === 0) return null;
-    const position = style.direction === "rtl" ? target.scrollLeft + range : target.scrollLeft;
-    return (deltaX < 0 ? position > 1 : position < range - 1) ? "horizontal-scroller" : null;
-  };
   const onWheel = (event: WheelEvent) => {
     if (diagnostics)
       record("wheel", {
@@ -91,20 +68,7 @@ export function installBrowserHistoryGestures(
     // Inspect after propagation so a site's preventDefault wins, without cancelling scrolling.
     queueMicrotask(() => {
       if (token !== epoch) return;
-      let reason =
-        event.defaultPrevented ||
-        event.deltaMode !== 0 ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        event.shiftKey ||
-        event.buttons !== 0
-          ? "event-flags-or-prevented"
-          : null;
-      for (const target of path) {
-        if (reason) break;
-        if (target instanceof Element) reason = surfaceRejection(target, event.deltaX);
-      }
+      const reason = wheelRejection(event, path);
       const sample = {
         deltaX: event.deltaX,
         deltaY: event.deltaY,
