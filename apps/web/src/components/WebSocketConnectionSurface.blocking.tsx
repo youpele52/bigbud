@@ -5,6 +5,7 @@ import { AlertTriangle, CloudOff, LoaderCircle, RotateCw } from "lucide-react";
 import { APP_DISPLAY_NAME, APP_SERVER_NAME } from "../config/branding";
 import { type WsConnectionStatus, type WsConnectionUiState } from "../rpc/wsConnectionState";
 import { Button } from "./ui/button";
+import { OwnershipRecovery } from "./WebSocketConnectionSurface.ownershipRecovery";
 import type { ServerConfigReadiness } from "../rpc/serverConfigReadiness";
 import { retryServerConfigSync } from "../rpc/serverConfigReadiness";
 import { socketDiagnosticUrl } from "../rpc/wsConnectionDiagnostics";
@@ -134,8 +135,7 @@ const startupFailureCopy = {
   projection_database_initialization_failed: "Local data could not be initialized.",
   server_entry_missing: "The local backend installation is incomplete.",
   server_runtime_startup_failed: "The local backend could not finish starting.",
-  state_directory_in_use:
-    "Another bigbud backend owns your local data. Stop that backend, then quit and reopen bigbud.",
+  state_directory_in_use: "Another bigbud backend owns your local data.",
   state_directory_owner_unverified:
     "The owner of your local data lock could not be verified. Confirm all backends using that data are stopped before recovering the lock, then quit and reopen bigbud.",
   startup_timed_out: "The local backend is taking longer than expected to start.",
@@ -209,9 +209,10 @@ export function WebSocketBlockingState({
 }) {
   const technicalDetails = desktopStartup ? buildStartupTechnicalDetails(desktopStartup) : null;
   const ownershipFailure =
-    desktopStartup?.status === "failed" &&
-    (desktopStartup.failureReason === "state_directory_in_use" ||
-      desktopStartup.failureReason === "state_directory_owner_unverified");
+    desktopStartup?.ownershipRecovery?.phase === "yielded" ||
+    (desktopStartup?.status === "failed" &&
+      (desktopStartup.failureReason === "state_directory_in_use" ||
+        desktopStartup.failureReason === "state_directory_owner_unverified"));
   const shouldRetryConfiguration =
     status.phase === "connected" &&
     (configReadiness?.stream === "exhausted" || configReadiness?.fallback === "failed");
@@ -311,6 +312,9 @@ export function WebSocketBlockingState({
           </div>
         </div>
 
+        {ownershipFailure && desktopStartup ? (
+          <OwnershipRecovery key={desktopStartup.generation} startup={desktopStartup} />
+        ) : null}
         {!ownershipFailure ? (
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {shouldRetryConfiguration || status.phase !== "connected" ? (

@@ -21,7 +21,11 @@ describe("blocking backend ownership failures", () => {
         />,
       );
       await expect.element(screen.getByText("Local backend startup blocked")).toBeVisible();
-      await expect.element(screen.getByText(/quit and reopen bigbud/)).toBeVisible();
+      await expect
+        .element(
+          screen.getByText("Close the other bigbud app or backend, then quit and reopen this app."),
+        )
+        .toBeVisible();
       await expect
         .element(screen.getByRole("button", { name: "Reconnect", exact: true }))
         .not.toBeInTheDocument();

@@ -2,6 +2,7 @@ import "../index.css";
 import { ConnectIcon } from "@hugeicons/core-free-icons";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 import { resetServerStateForTests, setServerConfigSnapshot } from "../rpc/serverState";
 import { serverConfigFixture } from "../rpc/serverConfig.test.fixture";
@@ -20,6 +21,7 @@ import { registerServerConfigRetry } from "../rpc/serverConfigReadiness";
 import { recordWsProtocolRecovery } from "../rpc/wsConnectionState";
 
 const mocks = vi.hoisted(() => ({
+  startup: null as DesktopBackendStartupState | null,
   reconnect: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 }));
 vi.mock("../rpc/wsRpcClient", () => ({
@@ -28,10 +30,11 @@ vi.mock("../rpc/wsRpcClient", () => ({
 
 // Only the native startup IPC boundary is mocked. The surface, readiness and config atoms are real.
 vi.mock("./DesktopBackendStartupCoordinator", () => ({
-  useDesktopBackendStartupState: () => null,
+  useDesktopBackendStartupState: () => mocks.startup,
 }));
 
 beforeEach(() => {
+  mocks.startup = null;
   resetServerStateForTests();
   resetWsConnectionStateForTests();
 });
@@ -42,6 +45,24 @@ afterEach(() => {
 });
 
 describe("real config readiness surface", () => {
+  it("shows an intentional handoff even when configuration was previously loaded", async () => {
+    setServerConfigSnapshot(serverConfigFixture);
+    mocks.startup = {
+      generation: 1,
+      startedAt: 1,
+      status: "failed",
+      ownershipRecovery: { phase: "yielded" },
+    };
+    const screen = await render(
+      <AppAtomRegistryProvider>
+        <WebSocketConnectionSurface>
+          <main>Normal shell</main>
+        </WebSocketConnectionSurface>
+      </AppAtomRegistryProvider>,
+    );
+    await expect.element(screen.getByText(/another bigbud window could use/)).toBeVisible();
+    await expect.element(screen.getByText("Normal shell")).not.toBeInTheDocument();
+  });
   it("renders the normal shell during the initial config grace period", async () => {
     const screen = await render(
       <AppAtomRegistryProvider>
