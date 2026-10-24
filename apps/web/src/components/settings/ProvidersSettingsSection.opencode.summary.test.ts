@@ -1,6 +1,9 @@
 import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
-import { OPENCODE_RETAINED_HISTORY_ADVISORY } from "@bigbud/shared/opencodeAdvisory";
+import {
+  OPENCODE_RETAINED_HISTORY_ADVISORY,
+  opencodeUpdateAdvice,
+} from "@bigbud/shared/opencodeAdvisory";
 import { expect, it } from "vitest";
 import { buildProviderCards } from "./ProvidersSettingsSection.logic";
 
@@ -94,4 +97,21 @@ it("does not strip advisory substrings or change other providers", () => {
   }).find((c) => c.provider === "pi")!;
   expect(result.summary.headline).toBe("Authenticated · Anthropic, OpenAI");
   expect(result.statusStyle.dot).toBe("bg-warning");
+});
+
+it("labels an outdated native service with the update advice instead of a setup problem", () => {
+  const connected = "Connected to your native OpenCode service.";
+  const advice = opencodeUpdateAdvice("2.1.3", "2.1.4");
+  const value = card({
+    version: "2.1.3",
+    message: `${connected} ${advice}`,
+    runtimeUpdateRecommended: "2.1.4",
+  });
+  expect(value.summary.headline).toBe("Authenticated");
+  expect(value.nativeStatus?.attention).toEqual({
+    label: "Update recommended",
+    tone: "warning",
+    message: `${connected} ${advice}`,
+  });
+  expect(advice).toContain("opencode upgrade");
 });

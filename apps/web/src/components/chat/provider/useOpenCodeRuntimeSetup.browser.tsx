@@ -3,7 +3,7 @@ import { render } from "vitest-browser-react";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
-import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
+import { opencodeUpdateAdvice } from "@bigbud/shared/opencodeAdvisory";
 import { useOpenCodeRuntimeSetup } from "./useOpenCodeRuntimeSetup";
 import { ProviderStatusBanner } from "./ProviderStatusBanner";
 import { deferredSetupReply } from "./opencodeSetup.test.fixture";
@@ -34,8 +34,10 @@ const provider: ServerProvider = {
   models: [],
   slashCommands: [],
   skills: [],
-  message: `Connected to your native OpenCode service. ${OPENCODE_UNQUALIFIED_RUNTIME_WARNING}`,
+  message: `Connected to your native OpenCode service. ${opencodeUpdateAdvice("2.0.28", "2.1.4")}`,
+  runtimeUpdateRecommended: "2.1.4",
 };
+const updateAdvice = opencodeUpdateAdvice("2.0.28", "2.1.4");
 const ready = {
   status: "ready",
   activationState: "ready",
@@ -71,7 +73,7 @@ function SetupHarness({
   return (
     <>
       <p role="status">{setup.verified ? "Runtime verified" : "Not verified"}</p>
-      <ProviderStatusBanner status={status} runtimeVerified={setup.verified} />
+      <ProviderStatusBanner status={status} />
       {setup.error ? <p role="alert">{setup.error}</p> : null}
       {showSetup ? (
         <OpenCodeSetupStatus
@@ -179,13 +181,11 @@ it("keeps observing shared queued work after cancelling only this chat's interes
   await screen.unmount();
 });
 
-it("waits for consent, clears automatically on success, and does not repeat on a catalog refresh", async () => {
+it("waits for consent, verifies without hiding the update advice, and does not repeat on a catalog refresh", async () => {
   const pending = deferredSetupReply<typeof ready>();
   mocks.get.mockReturnValue(pending.promise);
   const screen = await render(<SetupHarness consented={false} />);
-  await expect
-    .element(screen.getByRole("alert"))
-    .toHaveTextContent(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+  await expect.element(screen.getByRole("alert")).toHaveTextContent(updateAdvice);
   expect(mocks.get).not.toHaveBeenCalled();
   await screen.rerender(<SetupHarness />);
   await vi.waitFor(() =>
@@ -198,7 +198,8 @@ it("waits for consent, clears automatically on success, and does not repeat on a
   await expect.element(screen.getByRole("status")).toHaveTextContent("Not verified");
   pending.resolve(ready);
   await expect.element(screen.getByRole("status")).toHaveTextContent("Runtime verified");
-  await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+  // The advice is about the service version, so runtime verification never hides it.
+  await expect.element(screen.getByRole("alert")).toHaveTextContent(updateAdvice);
   await screen.rerender(
     <SetupHarness status={{ ...provider, checkedAt: "2026-10-14T12:01:00Z" }} />,
   );
@@ -219,9 +220,7 @@ it("fences late results after switching chats or revoking trust", async () => {
   await screen.rerender(<SetupHarness thread="second-chat" consented={false} />);
   second.resolve(ready);
   await expect.element(screen.getByRole("status")).toHaveTextContent("Not verified");
-  await expect
-    .element(screen.getByRole("alert"))
-    .toHaveTextContent(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+  await expect.element(screen.getByRole("alert")).toHaveTextContent(updateAdvice);
   await screen.unmount();
 });
 
@@ -249,13 +248,11 @@ it.each([
   { nativeVersion: "2.0.27" },
   { qualificationState: "incompatible" },
   { artifactDigest: "" },
-])("never clears the notice for mismatched/incomplete evidence: %j", async (override) => {
+])("never verifies mismatched/incomplete evidence: %j", async (override) => {
   mocks.get.mockResolvedValue({ ...ready, ...override });
   const screen = await render(<SetupHarness />);
   await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledOnce());
-  await expect
-    .element(screen.getByRole("alert"))
-    .toHaveTextContent(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Not verified");
   await screen.unmount();
 });
 

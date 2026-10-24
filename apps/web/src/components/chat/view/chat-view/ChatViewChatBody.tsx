@@ -128,11 +128,7 @@ export function ChatViewChatBody({
           dismissLabel="Dismiss OpenCode setup notice"
         />
       ) : null}
-      <ProviderStatusBanner
-        status={composer.activeProviderStatus}
-        runtimeVerified={openCodeSetup.verified}
-        threadId={base.threadId}
-      />
+      <ProviderStatusBanner status={composer.activeProviderStatus} threadId={base.threadId} />
       {retainedHistory ? (
         <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
       ) : null}

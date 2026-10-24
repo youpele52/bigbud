@@ -17,6 +17,10 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
+import {
+  isV2SharedUpdateRecommended,
+  V2_RECOMMENDED_RUNTIME_VERSION,
+} from "./SharedService.compatibility.ts";
 import { resolveV2SharedConnection } from "./SharedService.descriptor.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { readV2NativeCatalog } from "./Catalog.native.ts";
@@ -148,14 +152,16 @@ it.skipIf(!binary || !version)(
                 Effect.forkScoped,
               );
               const snapshot = yield* registration.providerService.refresh;
+              // skipIf above guarantees the version.
+              const outdated = isV2SharedUpdateRecommended(version!);
               expect(snapshot).toMatchObject({
                 installed: true,
-                status: "ready",
+                status: outdated ? "warning" : "ready",
                 version,
                 auth: { status: "unknown" },
               });
               expect(snapshot.runtimeUpdateRecommended).toBe(
-                version === "2.0.24" ? "2.0.26" : undefined,
+                outdated ? V2_RECOMMENDED_RUNTIME_VERSION : undefined,
               );
               expect(snapshot.models[0]?.subProviderID).toBe(model.providerID);
               expect(

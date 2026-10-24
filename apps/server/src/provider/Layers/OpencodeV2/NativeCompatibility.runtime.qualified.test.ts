@@ -34,7 +34,7 @@ it("retains completed-evidence identity and success severity only for the qualif
       qualificationState: "qualified",
       qualificationRecordId: proof.qualificationRecordId,
     });
-    expect(v2NativeReadyNotice("qualified", "Verified")).toEqual({
+    expect(v2NativeReadyNotice("Verified")).toEqual({
       severity: "success",
       message: "Verified",
     });

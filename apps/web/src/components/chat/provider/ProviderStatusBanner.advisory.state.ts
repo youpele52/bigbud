@@ -2,7 +2,7 @@ import { OPENCODE_RETAINED_HISTORY_ADVISORY_ID } from "@bigbud/shared/opencodeAd
 
 export const RETAINED_HISTORY_DISMISSAL_KEY = `bigbud:provider-advisory:${OPENCODE_RETAINED_HISTORY_ADVISORY_ID}:dismissed`;
 
-/** One store per JS app runtime, like useOpencodeV2UpdateToast; reload/new tabs start a new runtime. */
+/** One store per JS app runtime; reload/new tabs start a new runtime. */
 export function createRetainedHistoryAdvisoryState(
   getStorage: () => Pick<Storage, "getItem" | "setItem"> | undefined = () =>
     globalThis.window?.localStorage,

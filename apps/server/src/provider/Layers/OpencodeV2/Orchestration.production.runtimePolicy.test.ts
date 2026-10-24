@@ -56,9 +56,10 @@ it.each(["2.0.28", "2.0.29", "2.9.123"])(
         expect(proof.evidenceKind).toBe("runtime-checked");
         expect(proof).not.toHaveProperty("qualificationRecordId");
         expect(v2NativeProofMetadata(proof).qualificationState).toBe("unqualified");
-        expect(v2NativeReadyNotice("unqualified", "Verified")).toMatchObject({
-          severity: "warning",
-          message: expect.stringContaining("semantic qualification is incomplete"),
+        // Missing release evidence is not a user action: runtime-checked readiness is success.
+        expect(v2NativeReadyNotice("Verified")).toEqual({
+          severity: "success",
+          message: "Verified",
         });
         const created = (await f.invoke(
           "create_thread",

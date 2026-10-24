@@ -56,7 +56,6 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
             input.operation === "cancel-interest" ? input.interestId : undefined,
           );
           const readyNotice = v2NativeReadyNotice(
-            state.qualificationState,
             "Required bootstrap verified. A later normal foreground action may proceed; no prompt was resumed in the background.",
           );
           return {
@@ -276,7 +275,6 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
                   activationState: "ready",
                   ...v2NativeProofMetadata(nativeProof),
                   ...v2NativeReadyNotice(
-                    v2NativeProofMetadata(nativeProof).qualificationState,
                     "Exact retained legacy bootstrap verified. Its global entry and native history are unchanged; new chats use the independent profile-scoped registration.",
                   ),
                 } as ServerOpencodeV2ThreadToolsSetupResult;
@@ -375,7 +373,6 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
                   }
                 : {}),
               ...v2NativeReadyNotice(
-                nativeProof ? v2NativeProofMetadata(nativeProof).qualificationState : undefined,
                 "Required plugin ABI, issuer, artifact and detected Location verified. Compatible foreground chats enroll automatically. Only the proven required global entry is managed; account/model/permission settings are never changed.",
               ),
             };

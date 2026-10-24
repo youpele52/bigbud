@@ -99,16 +99,12 @@ it.each(["qualified", "runtime-checked"] as const)(
         nativeContractDigest: proof.nativeContractDigest,
         semanticProfile: proof.semanticProfile,
         qualificationState: evidenceKind === "qualified" ? "qualified" : "unqualified",
-        severity: evidenceKind === "qualified" ? "success" : "warning",
+        severity: "success",
       });
       expect(result.qualificationRecordId).toBe(
         evidenceKind === "qualified" ? proof.qualificationRecordId : undefined,
       );
-      expect(result.message).toContain(
-        evidenceKind === "qualified"
-          ? "Exact retained legacy bootstrap verified"
-          : "Native semantic qualification is incomplete",
-      );
+      expect(result.message).toContain("Exact retained legacy bootstrap verified");
       expect(native.verify).toHaveBeenCalledExactlyOnceWith(
         app.artifact,
         client,
