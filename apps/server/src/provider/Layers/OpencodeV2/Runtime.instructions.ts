@@ -12,6 +12,15 @@ const OWNED_KEYS = [
   "bigbud.preview.v1.browser",
 ];
 
+export type V2InstructionStage =
+  | "namespace acquisition"
+  | "inventory read"
+  | "inventory bound"
+  | "execution authorization"
+  | "owner validation"
+  | "entry mutation"
+  | "read-back verification";
+
 /** Shared orchestration/learning content is already assembled into input; only provider-owned context goes here. */
 export function v2InstructionEntries(session: V2RuntimeSession): InstructionEntryInfo[] {
   if (!session.localTools) return [];
@@ -57,22 +66,29 @@ export async function syncV2Instructions(
   mutations: V2RuntimeMutations,
   entries: InstructionEntryInfo[],
   beforeDispatch: () => Promise<() => void>,
+  reportStage: (stage: V2InstructionStage) => void = () => {},
 ) {
   const client = session.lease.process.client;
   const read = () =>
     v2Request("instructions.entry.list", (signal) =>
       client.session.instructions.entry.list({ sessionID: session.native.id }, { signal }),
     );
+  reportStage("namespace acquisition");
   await mutations.withNamespace(async () => {
+    reportStage("inventory read");
     const current = await read();
+    reportStage("inventory bound");
     if (current.length > 128) throw new Error("V2 instruction inventory exceeds bound.");
     for (const key of OWNED_KEYS) {
       const wanted = entries.find((entry) => entry.key === key);
       const existing = current.find((entry) => entry.key === key);
       if (JSON.stringify(wanted?.value) === JSON.stringify(existing?.value)) continue;
+      reportStage("execution authorization");
       const validate = await beforeDispatch();
+      reportStage("owner validation");
       if (session.stopped || !session.lease.process.isRunning())
         throw new Error("V2 instruction owner lost.");
+      reportStage("entry mutation");
       await mutations.runOwned(
         session.lease.process,
         "instructions.entry.sync",
@@ -87,6 +103,7 @@ export async function syncV2Instructions(
                 { signal },
               ),
         async () => {
+          reportStage("read-back verification");
           validate();
           const verified = await read();
           validate();

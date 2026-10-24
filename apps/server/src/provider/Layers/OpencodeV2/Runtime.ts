@@ -219,7 +219,10 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       // Startup repair participates in the same queue as hub/poll/user operations.
       await this.exclusive(owner, () => recoverV2Session(this, owner));
       await this.options.threadBridge?.attach(owner, this);
-      if (owner.activation?.token && owner.row?.state !== "terminal" && owner.row) {
+      if (
+        owner.activation?.token &&
+        (owner.row?.state === "dispatch-intent" || owner.row?.state === "accepted")
+      ) {
         owner.activation.gate.nativeRunning(owner.activation.token);
         attempt.phase = "native-running";
       }

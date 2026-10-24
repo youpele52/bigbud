@@ -276,9 +276,9 @@ export class V2NativeFamilyBridge {
               if (
                 row.binding.nativeSessionId !== owner.native.id ||
                 row.binding.storageIdentity !== owner.storageIdentity ||
-                row.state !== "dispatch-intent"
+                row.state !== "reserved"
               )
-                throw new Error("V2 rearming requires this root's immutable dispatch intent.");
+                throw new Error("V2 rearming requires this root's immutable reservation.");
               await assertV2SharedSessionOwner(owner);
               if (owner.family!.isFenced) {
                 const active = await v2Request("family rearm native drain", (signal) =>

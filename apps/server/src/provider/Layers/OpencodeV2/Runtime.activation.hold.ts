@@ -27,9 +27,10 @@ export type V2SettlementHoldReason =
 export function v2SettlementBusyReason(
   runtime: OpencodeV2Runtime,
   owner: V2RuntimeSession,
+  includeAdmission = true,
 ): V2SettlementHoldReason | undefined {
   if (runtime.mutations.busyCount()) return "mutations-busy";
-  if (owner.admissionInFlight) return "admission-in-flight";
+  if (includeAdmission && owner.admissionInFlight) return "admission-in-flight";
   if (owner.coding?.busyCount?.()) return "coding-busy";
   if (owner.publicationUnconfirmed) return "publication-unconfirmed";
   if (owner.finalEvents?.length) return "final-events";

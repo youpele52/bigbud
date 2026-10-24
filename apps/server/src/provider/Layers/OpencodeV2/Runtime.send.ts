@@ -22,6 +22,7 @@ import {
   settleV2RuntimeReservation,
 } from "./Runtime.activation.ts";
 import { logV2SettlementHold } from "./Runtime.settlement.ts";
+import { supersedeV2ReservedAdmission } from "./Runtime.admission.supersede.ts";
 
 /** Serialize admission against the exact owner; native dispatch rechecks authorization after awaited reads. */
 export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSendTurnInput) {
@@ -45,23 +46,24 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
   );
   // Installer waiting never owns the session queue needed by terminal/control settlement.
   for (let retry = 0; retry < 3; retry++) {
-    const ready = !initial
-      ? await awaitV2RuntimeReady(
-          runtime.options,
-          session.lease.process.client,
-          session.native.location.directory,
-          currentV2CallerSignal(),
-          !session.localTools,
-          {
-            threadId: session.threadId,
-            nativeSessionId: session.native.id,
-            storageIdentity: session.storageIdentity,
-            directory: session.native.location.directory,
-            registrationFamily:
-              session.native.metadata?.bigbud_registration === "scoped" ? "scoped" : "legacy",
-          },
-        )
-      : undefined;
+    const ready =
+      !initial || initial.state === "reserved"
+        ? await awaitV2RuntimeReady(
+            runtime.options,
+            session.lease.process.client,
+            session.native.location.directory,
+            currentV2CallerSignal(),
+            !session.localTools,
+            {
+              threadId: session.threadId,
+              nativeSessionId: session.native.id,
+              storageIdentity: session.storageIdentity,
+              directory: session.native.location.directory,
+              registrationFamily:
+                session.native.metadata?.bigbud_registration === "scoped" ? "scoped" : "legacy",
+            },
+          )
+        : undefined;
     try {
       const result = await runtime.withSession(input.threadId, async () => {
         assertV2CallerCurrent();
@@ -69,7 +71,7 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           runtime.options.journal.find(runtimeAdmissionIdentity(input)),
         );
         assertV2CallerCurrent();
-        if (!current) {
+        if (!current || current.state === "reserved") {
           session.backgroundClosure?.assertCurrent();
           session.consentPermit?.assertCurrent();
           const hold = session.activation?.token
@@ -82,7 +84,7 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
             );
           }
         }
-        if (!current && ready) {
+        if ((!current || current.state === "reserved") && ready) {
           const token = ready.gate.tryReserve(
             ready.stamp,
             JSON.stringify([
@@ -107,21 +109,27 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           const identity = runtimeAdmissionIdentity(input);
           const existing = await Effect.runPromise(runtime.options.journal.find(identity));
           validate();
-          if (
-            session.row &&
-            !session.terminalDelivered &&
-            session.row.requestMessageId !== identity.requestMessageId
-          )
-            throw new Error(
-              "V2 previous admission is unresolved; new work may duplicate execution.",
-            );
           const active = await v2Request("session.active", (signal) =>
             session.lease.process.client.session.active({ signal }),
           );
           validate();
-          if (!existing && active[session.native.id])
+          const preparing = !existing || existing.state === "reserved";
+          if (preparing && active[session.native.id])
             throw new Error("V2 native execution is already active; no queued duplicate work.");
-          if (!existing) await runtime.options.threadBridge?.ensure(session);
+          if (
+            session.row &&
+            !session.terminalDelivered &&
+            session.row.requestMessageId !== identity.requestMessageId &&
+            !(
+              !existing &&
+              identity.namespace === "foreground" &&
+              (await supersedeV2ReservedAdmission(runtime, session, validate))
+            )
+          )
+            throw new Error(
+              "V2 previous admission is unresolved; new work may duplicate execution.",
+            );
+          if (preparing) await runtime.options.threadBridge?.ensure(session);
           validate();
           const prepared = await prepareV2TurnAttachments(
             runtime.options,
@@ -132,7 +140,7 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           validate();
           if (!existing) await switchV2TurnModel(runtime, session, input);
           validate();
-          if (!existing) {
+          if (preparing) {
             session.messages.clear();
             session.terminalDelivered = false;
           }
@@ -159,7 +167,9 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
                 runtime,
                 session,
                 "error",
-                "Admission unconfirmed. No automatic resend; new work may duplicate execution.",
+                session.row.state === "reserved"
+                  ? "Preparation failed before prompt dispatch. Retry the same request after resolving preparation."
+                  : "Admission unconfirmed. No automatic resend; new work may duplicate execution.",
               );
             throw error;
           }

@@ -21,6 +21,7 @@ import { readV2FamilyProjectionInputs } from "./Runtime.family.projection.ts";
 import { recoverV2FamilyStop } from "./Runtime.family.stop.ts";
 import { verifyV2BackgroundProjection, V2BackgroundContractError } from "./Runtime.background.ts";
 import { retainV2FamilyOnProcessLoss } from "./Runtime.family.loss.ts";
+import { isV2CancelledReservation } from "./Admission.cancelled.ts";
 
 /** Invalidate pending interaction and output ownership immediately on owned process exit. */
 export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
@@ -112,6 +113,11 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
     await observeV2OwnedFamily(runtime, session, validate);
     let row = session.row;
     if (!row || row.state === "reserved") return;
+    if (isV2CancelledReservation(row)) {
+      session.terminalDelivered = true;
+      await v2RuntimeStatus(runtime, session, "ready", undefined, validate);
+      return;
+    }
     phase = "canonical publication";
     if (session.publicationUnconfirmed) throw new Error("V2 canonical publication unconfirmed.");
     phase = "admission";

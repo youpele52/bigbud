@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { isDeepStrictEqual } from "node:util";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { v2Request } from "./Client.ts";
@@ -146,7 +147,8 @@ async function settleV2RuntimeReservationOnce(
   await refreshV2FamilyDrain(owner, validate);
   const held = busy();
   if (held) return held;
-  if (owner.row && (owner.row.state !== "terminal" || !owner.terminalDelivered))
+  const reserved = row?.state === "reserved";
+  if (row && !reserved && (row.state !== "terminal" || !owner.terminalDelivered))
     return "row-not-terminal";
   const unresolved = await Effect.runPromise(
     runtime.options.journal.listBoundPage({
@@ -156,7 +158,12 @@ async function settleV2RuntimeReservationOnce(
     }),
   );
   validate();
-  if (unresolved.length) return "unresolved-journal";
+  // A reservation proves no prompt dispatch intent exists. Keep it intact for exact retry;
+  // discharge only its physical setup token, never an unknown or different admission.
+  if (
+    reserved ? unresolved.length !== 1 || !isDeepStrictEqual(unresolved[0], row) : unresolved.length
+  )
+    return "unresolved-journal";
   const binding = runtime.options.sharedBindings
     ? await Effect.runPromise(runtime.options.sharedBindings.find(owner.threadId))
     : undefined;
@@ -177,7 +184,7 @@ async function settleV2RuntimeReservationOnce(
   );
   validate();
   if (active[owner.native.id]) return "native-active";
-  if (owner.familyControl?.nativeReceipt) {
+  if (reserved || owner.familyControl?.nativeReceipt) {
     const inbox = await v2Request("family activation input drain", (signal) =>
       owner.lease.process.client.session.inbox.list({ sessionID: owner.native.id }, { signal }),
     );
@@ -185,6 +192,17 @@ async function settleV2RuntimeReservationOnce(
     if (inbox.length) return "native-active";
   }
   await refreshV2FamilyDrain(owner, validate);
+  if (reserved) {
+    const latest = await Effect.runPromise(
+      runtime.options.journal.listBoundPage({
+        threadId: owner.threadId,
+        limit: 2,
+        unresolvedOnly: true,
+      }),
+    );
+    validate();
+    if (latest.length !== 1 || !isDeepStrictEqual(latest[0], row)) return "unresolved-journal";
+  }
   if (owner.activation !== activation || activation.token !== token) return "callbacks";
   const late = busy();
   if (late) return late;

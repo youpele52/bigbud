@@ -8,6 +8,7 @@ import { V2ActivationBusy } from "./PluginSetup.activation.errors.ts";
 import { v2Request } from "./Client.ts";
 import { v2OrchestrationInvocationId } from "./Execution.orchestration.ts";
 import { isThreadToolInvocationInFlight } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
+import { v2ReservedRetirementDrained } from "./Orchestration.bridge.reserved.ts";
 
 /** H1 repair: a dispatched callback that failed is released only with exact native-drain proof plus
  * durable receipt evidence or a later interrupt acknowledgement. Unreadable evidence keeps it owned.
@@ -56,7 +57,7 @@ export async function reconcileV2BridgeExecutions(
   return released;
 }
 
-const admissionBusy = (session: V2RuntimeSession) =>
+const admissionBusy = (session: V2RuntimeSession, reservedDrained = false) =>
   Boolean(
     (session.admissionInFlight &&
       !(
@@ -65,7 +66,9 @@ const admissionBusy = (session: V2RuntimeSession) =>
       )) ||
     session.publicationUnconfirmed ||
     session.executionBlocked ||
-    (session.row && session.row.state !== "terminal"),
+    (session.row &&
+      session.row.state !== "terminal" &&
+      !(reservedDrained && session.row.state === "reserved")),
   );
 
 /** No lease/timeout/registry observation substitutes for tracked physical and durable outcomes. */
@@ -73,7 +76,7 @@ export async function v2BridgeRetirementProof(
   runtime: OpencodeV2Runtime,
   session: V2RuntimeSession,
   active: V2ActiveExecutions,
-  receipts: V2ThreadReceipts,
+  receipts: Pick<V2ThreadReceipts, "retirementEvidence">,
   controlsSettled: boolean,
   signal?: AbortSignal,
 ) {
@@ -84,6 +87,7 @@ export async function v2BridgeRetirementProof(
   signal?.throwIfAborted();
   const receiptEvidence = await receipts.retirementEvidence();
   signal?.throwIfAborted();
+  const reservedDrained = await v2ReservedRetirementDrained(runtime, session, signal);
   return {
     physicalSettled: runtime.mutations.busyCount() === 0,
     controlsSettled,
@@ -93,7 +97,7 @@ export async function v2BridgeRetirementProof(
         binding.nativeSessionId === session.native.id &&
         binding.storageIdentity === session.storageIdentity
       : !runtime.hasPendingStart(session.threadId),
-    admissionsSettled: !admissionBusy(session),
+    admissionsSettled: !admissionBusy(session, reservedDrained),
     ...receiptEvidence,
   };
 }
