@@ -25,7 +25,8 @@ export const DEV_ELECTRON_GRACEFUL_STOP_MS = 4_000;
 export const DEV_ELECTRON_APP_QUIT_GRACE_MS = 500;
 export const DEV_ELECTRON_FORCE_SETTLE_MS = 500;
 export const DEV_ELECTRON_CHILD_GRACE_MS = 1_200;
-export const DEV_ELECTRON_RESTART_DEBOUNCE_MS = 120;
+/** Longer than two build-output polls (300 ms each), so one rebuild yields one restart. */
+export const DEV_ELECTRON_RESTART_DEBOUNCE_MS = 750;
 /** Each poll lists processes once (`ps`), so zombies and reused PIDs count as gone. */
 export const DEV_ELECTRON_STOP_POLL_MS = 200;
 /** How often the app tree is re-snapshotted while the app runs (one `ps` call). */

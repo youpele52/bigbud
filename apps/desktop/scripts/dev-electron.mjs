@@ -1,7 +1,7 @@
 // Dev-only Electron launcher. The stop/restart state machine lives in
 // scripts/lib/dev-electron-launcher.ts; this file only wires the real host.
 import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { existsSync, unwatchFile, watchFile } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { DEV_RUNNER_PID_ENV } from "@bigbud/shared/DevLauncher";
@@ -23,10 +23,9 @@ const requiredFiles = [
   "dist-electron/preload.js",
   "../server/dist/bin.mjs",
 ];
-const watchedDirectories = [
-  { directory: "dist-electron", files: new Set(["main.js", "preload.js"]) },
-  { directory: "../server/dist", files: new Set(["bin.mjs"]) },
-];
+// Bun's directory fs.watch drops per-file events during multi-file rebuilds (tsdown writes the
+// bundle and ~20 chunks at once), so restarts were missed. Poll the outputs' stats instead.
+const BUILD_OUTPUT_POLL_MS = 300;
 const windows = process.platform === "win32";
 // The bigbud server's entry point, as it appears on its command line.
 const backendEntry = "server/dist/bin.mjs";
@@ -106,28 +105,29 @@ const launcher = new DevElectronLauncher({
   clearTimer: (timer) => clearTimeout(timer),
   log: (message) => process.stderr.write(`${message}\n`),
   closeWatchers() {
-    for (const watcher of watchers) {
-      watcher.close();
+    for (const file of watchers) {
+      unwatchFile(file);
     }
   },
   exit: (code) => process.exit(code),
 });
 
 function startWatchers() {
-  for (const { directory, files } of watchedDirectories) {
-    const watcher = watch(
-      join(desktopDir, directory),
-      { persistent: true },
-      (_eventType, filename) => {
-        if (typeof filename !== "string" || !files.has(filename)) {
-          return;
-        }
+  for (const relativePath of requiredFiles) {
+    const file = join(desktopDir, relativePath);
+    watchFile(file, { persistent: true, interval: BUILD_OUTPUT_POLL_MS }, (current, previous) => {
+      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) {
+        return;
+      }
+      // A clean rebuild deletes outputs first; the recreating write triggers the restart.
+      if (!requiredFiles.every((path) => existsSync(join(desktopDir, path)))) {
+        return;
+      }
 
-        launcher.onBuildOutputChanged();
-      },
-    );
+      launcher.onBuildOutputChanged();
+    });
 
-    watchers.push(watcher);
+    watchers.push(file);
   }
 }
 
