@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 export const V2NativePlatform = Schema.Literals(["darwin", "linux", "win32"]);
 export const V2NativeArch = Schema.Literals(["arm64", "x64"]);
 
@@ -25,7 +26,7 @@ export const V2NativeQualificationRecord = Schema.Struct({
   nativeVersion: Text,
   platform: V2NativePlatform,
   arch: V2NativeArch,
-  clientVersion: Schema.Literal("2.0.26"),
+  clientVersion: Schema.Literal(OPENCODE_V2_CLIENT_VERSION),
   nativeContractDigest: Hex,
   bootstrapContractDigests: Schema.Array(Hex).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   bootstrapGeneratorSourceDigest: Hex,

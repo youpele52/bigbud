@@ -17,8 +17,8 @@ describe("pinned OpenCode v2 Promise boundary", () => {
     expect(() => validateOwnedEndpoint(url)).toThrow(),
   );
   it("rejects unknown CLI versions", () => {
-    expect(() => assertDevelopmentVersion("2.0.26")).not.toThrow();
-    for (const version of ["1.17.13", "2.0.19", "2.0.27", "2.0.26-preview", "opencode v2.0.26"])
+    expect(() => assertDevelopmentVersion("2.1.4")).not.toThrow();
+    for (const version of ["1.17.13", "2.0.26", "2.1.3", "2.1.4-preview", "opencode v2.1.4"])
       expect(() => assertDevelopmentVersion(version)).toThrow();
   });
   it("authenticates only the owned endpoint and disables redirects", async () => {

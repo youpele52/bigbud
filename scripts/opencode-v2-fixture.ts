@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 const args = process.argv.slice(2);
 const qualification = args.includes("--qualification");
 const [version, directory] = args.filter((arg) => arg !== "--qualification");
-const VERSIONS = ["2.0.24", "2.0.26", "2.0.29"];
+const VERSIONS = ["2.0.24", "2.0.26", "2.0.29", "2.1.4"];
 // Registry metadata pinned at preparation time for the qualification target; any drift refuses.
 const PINNED: Record<string, { integrity: string; tarball: string }> = {
   "2.0.29 darwin-arm64": {

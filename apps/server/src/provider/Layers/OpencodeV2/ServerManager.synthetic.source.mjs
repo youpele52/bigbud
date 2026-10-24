@@ -40,7 +40,7 @@ export async function verifyV2SyntheticSource(binary, profile) {
       info.ctimeMs !== after.ctimeMs ||
       info.size !== source.length ||
       createHash("sha256").update(source).digest("hex") !==
-        "53fcd07e0973c2dd8341842e0217fdd4eae7e06eaf24194e9e1bb6278a1bcb1c"
+        "c8dc8a497b4f0fc76d0974d2eacde6be7df6a65a70a4ee0be734c6dbbdc5954e"
     )
       throw new Error("V2 synthetic fixture source changed; retail execution is not authorized.");
     return { executable: process.execPath, prefix: [binary] };
