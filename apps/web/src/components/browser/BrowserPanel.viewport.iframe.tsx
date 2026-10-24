@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import type { BrowserViewportProps, BrowserViewportRef } from "./BrowserPanel.viewport.types";
 import { BrowserPanelErrorPage } from "./BrowserPanel.errorPage";
 import { iframeNavigationError } from "./BrowserPanel.navigationError";
+import { BrowserExternalLink } from "./BrowserPanel.externalLink";
 
 export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function BrowserIframeViewport(
@@ -105,21 +106,32 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
     };
 
     return (
-      <>
+      <div className="absolute inset-0 flex flex-col">
         <iframe
           key={url}
           ref={iframeRef}
           src={url}
-          className="absolute inset-0 h-full w-full border-0"
+          className="min-h-0 w-full flex-1 border-0"
           title="Browser"
           sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
           onLoad={handleLoad}
           onError={handleError}
         />
         {errorUrl === url && (
-          <BrowserPanelErrorPage content={iframeNavigationError} onReload={reloadIframe} />
+          <BrowserPanelErrorPage
+            content={iframeNavigationError}
+            onReload={reloadIframe}
+            externalUrl={url}
+          />
         )}
-      </>
+        <div
+          className="z-10 shrink-0 border-t border-border bg-background p-2 text-xs text-muted-foreground"
+          role="note"
+        >
+          Some sites block embedded pages or sign-in, even when loading appears complete. No sign-in
+          state is transferred. <BrowserExternalLink url={url} />
+        </div>
+      </div>
     );
   },
 );
