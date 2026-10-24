@@ -48,17 +48,16 @@ it("starts collapsed and expands with every question, option description and ans
   await expect.element(screen.getByText("Keep the current setup")).toBeVisible();
   await screen.getByText("Keep the current setup").hover();
   const questionLabel = screen.getByText("1. Mode", { exact: true }).element();
-  const summary = screen.getByText("Question", { exact: true }).element().closest("summary")!;
   const answerLabels = Array.from(questionLabel.closest("details")!.querySelectorAll("p")).filter(
     (element) => element.textContent === "Your answer",
   );
   expect(answerLabels).toHaveLength(2);
   for (const answerLabel of answerLabels) {
     const answerStyle = getComputedStyle(answerLabel);
-    const summaryStyle = getComputedStyle(summary);
-    expect(answerStyle.fontSize).toBe(summaryStyle.fontSize);
-    expect(answerStyle.fontWeight).toBe(summaryStyle.fontWeight);
-    expect(answerStyle.color).toBe(summaryStyle.color);
+    expect(answerStyle.fontSize).toBe("14px");
+    expect(answerStyle.fontWeight).toBe("400");
+    expect(answerStyle.textTransform).toBe("none");
+    expect(answerLabel.classList).toContain("text-muted-foreground");
     expect(answerLabel.parentElement?.classList).toContain("mt-4");
     expect(answerLabel.getBoundingClientRect().left).toBe(
       questionLabel.getBoundingClientRect().left,
