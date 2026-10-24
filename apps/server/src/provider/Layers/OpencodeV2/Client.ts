@@ -13,6 +13,7 @@ import { validateOwnedEndpoint } from "./Compatibility.ts";
 import { boundV2Response, isV2ResponseSizeError, V2ResponseSizeError } from "./Client.response.ts";
 import { V2_MEDIA_RESPONSE_BYTES } from "./Media.limits.ts";
 import { V2HttpStatusError, v2HttpFailureStatus } from "./Client.errors.ts";
+import { logV2RequestFailure, V2RequestFailedError } from "./Client.diagnostics.ts";
 
 export type OpencodeV2Client = OpenCodeClient;
 
@@ -139,7 +140,13 @@ export async function v2Request<T>(
     if (isV2ResponseSizeError(error)) throw new V2ResponseSizeError();
     const status = v2HttpFailureStatus(error);
     if (status !== undefined) throw new V2HttpStatusError(status, operation);
+    const context = currentV2RequestContext();
+    logV2RequestFailure(operation, error, {
+      consentAborted: context?.permit.signal.aborted ?? false,
+      operationAborted: context?.operationSignal?.aborted ?? false,
+      callerAborted: options.signal?.aborted ?? false,
+    });
     // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
-    throw new Error(`OpenCode v2 ${operation} failed or timed out; admission may be unconfirmed.`);
+    throw new V2RequestFailedError(operation, error);
   }
 }
