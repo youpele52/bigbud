@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { StrictMode, useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DirectoryState } from "./FilesPanel.shared";
 import { render } from "vitest-browser-react";
@@ -124,6 +124,35 @@ describe("FilesPanelRefreshCoordinator integration", () => {
     mocks.subscribe.mockClear();
     mocks.toast.mockClear();
     document.body.innerHTML = "";
+  });
+
+  it("refreshes after Strict Mode effect replay and ignores events after unmount", async () => {
+    const refresh = vi.fn(async () => {});
+    const loadDirectory = vi.fn(async () => {});
+    const screen = await render(
+      <StrictMode>{coordinatorView({ refresh, loadDirectory })}</StrictMode>,
+    );
+    await vi.waitFor(() => expect(mocks.callbacks.has("docs")).toBe(true));
+    const onChange = mocks.callbacks.get("docs")!;
+    onChange({
+      version: 2,
+      type: "directoryChanged",
+      relativePath: "docs",
+      changedPaths: ["docs/readme.md"],
+      generation: 1,
+      sequence: 1,
+      backend: "native",
+    });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect(loadDirectory).toHaveBeenCalledWith("docs", { force: true });
+
+    onChange(rescan());
+    await screen.unmount();
+    onChange(rescan());
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(loadDirectory).toHaveBeenCalledOnce();
+    expect(mocks.callbacks.size).toBe(0);
   });
 
   it("watches and refreshes a preview whose parent is not loaded in the tree", async () => {
