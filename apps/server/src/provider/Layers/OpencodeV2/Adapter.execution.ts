@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { makeV2RuntimeAdapter } from "./Adapter.runtime.ts";
+import { v2TryPromise } from "./Client.guard.async.ts";
 import { V2IsolatedMcp } from "./Runtime.mcp.ts";
 import type { V2IsolatedRuntimeOptions } from "./Runtime.types.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
@@ -13,7 +14,7 @@ export const makeIsolatedOpencodeV2Adapter = Effect.fn("makeIsolatedOpencodeV2Ad
   if (!options.enableIsolatedMcp) return result;
   const mcp = new V2IsolatedMcp(result.runtime);
   const call = <T>(operation: string, run: () => Promise<T>) =>
-    Effect.tryPromise({
+    v2TryPromise({
       try: () => result.runtime.authorized(run),
       catch: (error) => {
         const issue = v2ExecutionIssue(error);

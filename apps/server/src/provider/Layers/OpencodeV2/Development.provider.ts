@@ -20,6 +20,7 @@ import {
 } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
+import { v2CallerContextEntry, v2Promise } from "./Client.guard.async.ts";
 import { resolveV2NativeReleaseQualification } from "./NativeCompatibility.qualification.ts";
 import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
 import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
@@ -265,8 +266,9 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   );
   const refresh = Effect.gen(function* () {
     const enabled = yield* isEnabled;
+    const enterCaller = yield* v2CallerContextEntry;
     let snapshot: ServerProvider = enabled
-      ? yield* Effect.promise(() => {
+      ? yield* v2Promise(() => {
           pending ??= runtime
             .authorized(() => probe(enabled))
             .finally(() => {
@@ -276,7 +278,10 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         })
       : disabledSnapshot();
     if (!(yield* isEnabled)) snapshot = disabledSnapshot();
-    yield* snapshots.publish(snapshot, currentV2RequestContext()?.permit.assertCurrent);
+    yield* snapshots.publish(
+      snapshot,
+      enterCaller(() => currentV2RequestContext()?.permit.assertCurrent),
+    );
     return snapshot;
   });
   yield* Effect.addFinalizer(() =>

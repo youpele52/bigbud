@@ -8,6 +8,7 @@ import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTu
 import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import { ThreadToolsActivation } from "../../Services/OpencodeV2/ThreadToolsActivation.ts";
 import { runAuthorizedV2, currentV2RequestContext } from "./Client.guard.ts";
+import { v2CallerContextEntry, withV2CallerAsyncContext } from "./Client.guard.async.ts";
 import { readV2HealthSnapshot } from "./Application.discovery.ts";
 import { v2SharedRegistrationFile } from "./SharedService.registration.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
@@ -305,9 +306,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
           current.enabled,
           "V2 settings changed during discovery. Refresh provider status; restart bigbud after native connection changes.",
         );
-      const context = currentV2RequestContext();
+      const enterCaller = yield* v2CallerContextEntry;
+      const assertCurrent = enterCaller(() => currentV2RequestContext()?.permit.assertCurrent);
       snapshot = yield* warnV2SharedRollback(bindings, snapshot);
-      yield* snapshots.publish(snapshot, context?.permit.assertCurrent);
+      yield* snapshots.publish(snapshot, assertCurrent);
       return snapshot;
     }).pipe(Effect.catch(() => Effect.succeed(unavailable(false, "V2 settings are unavailable."))));
     const refresh = Effect.suspend(() => {
@@ -321,7 +323,7 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       return Effect.tryPromise({
         try: (signal) =>
           runAuthorizedV2(consent, config.serviceFile?.trim() || v2SharedRegistrationFile(), () =>
-            Effect.runPromise(refreshBody, { signal }),
+            Effect.runPromise(withV2CallerAsyncContext(refreshBody), { signal }),
           ),
         catch: () =>
           failure("V2 consent/configuration changed during discovery; late publication rejected."),
