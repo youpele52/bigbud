@@ -17,6 +17,7 @@ import { ATTACHMENT_PREVIEW_HANDOFF_TTL_MS } from "./shared";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { useChatGreeting } from "../../common/ChatGreeting.hooks";
+import { deriveAnsweredUserInputs } from "~/logic/session/session.userInputHistory.logic";
 
 interface ChatViewTimelineStateInput {
   base: ChatViewBaseState;
@@ -217,6 +218,10 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
   ]);
 
   const { pendingUserInputs } = thread;
+  const answeredUserInputs = useMemo(
+    () => deriveAnsweredUserInputs(activeThread?.activities ?? []),
+    [activeThread?.activities],
+  );
 
   const timelineEntries = useMemo(
     () =>
@@ -225,8 +230,15 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
         activeThread?.proposedPlans ?? [],
         workLogEntries,
         pendingUserInputs,
+        answeredUserInputs,
       ),
-    [activeThread?.proposedPlans, pendingUserInputs, timelineMessages, workLogEntries],
+    [
+      activeThread?.proposedPlans,
+      pendingUserInputs,
+      answeredUserInputs,
+      timelineMessages,
+      workLogEntries,
+    ],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);

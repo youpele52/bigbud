@@ -78,7 +78,7 @@ export function resolveThreadStatusPill(input: {
     return status("Failed", "text-destructive", "bg-destructive");
   }
   if (thread.hasPendingApprovals) return status("Pending Approval");
-  if (thread.hasPendingUserInput) return status("Awaiting Input");
+  if (thread.hasPendingUserInput) return status("Awaiting Input", "text-warning", "bg-warning");
   if (thread.session?.orchestrationStatus === "running" || hasActiveProviderProgress(thread)) {
     return isSessionCompacting(thread.session)
       ? status("Compacting", "text-warning", "bg-warning", true)

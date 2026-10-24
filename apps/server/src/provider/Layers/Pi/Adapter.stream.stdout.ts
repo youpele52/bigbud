@@ -25,6 +25,8 @@ import {
   handleTurnEnd,
 } from "./Adapter.stream.handlers.ts";
 import { settlePiAgentEnd } from "./Adapter.stream.agentLifecycle.ts";
+import { settlePiRun } from "./Adapter.stream.settled.ts";
+import { trackPiPromptQueue } from "./Adapter.stream.promptQueue.ts";
 import { recoverMissingPiAgentEnd } from "./Adapter.stream.missingAgentEnd.ts";
 import { handleRuntimeStatusEvent } from "./Adapter.stream.stdout.runtimeEvents.ts";
 import { piUsageEvent } from "./Adapter.usage.ts";
@@ -38,6 +40,7 @@ export function makeHandleStdoutEvent(deps: {
   readonly writeNativeEvent: PiWriteNativeEvent;
 }): PiStdoutEventHandler {
   return Effect.fn("handleStdoutEvent")(function* (session, message: PiRpcStdoutMessage) {
+    trackPiPromptQueue(session, message);
     yield* deps.writeNativeEvent(session.threadId, message);
 
     if (
@@ -340,12 +343,15 @@ export function makeHandleStdoutEvent(deps: {
               .pipe(Effect.flatMap((event) => deps.emit([event]))),
         });
       case "agent_end": {
+        if (session.process.supportsAgentSettled) return;
         return yield* settlePiAgentEnd({
           emit: deps.emit,
           makeSyntheticEvent: deps.makeSyntheticEvent,
           session,
         });
       }
+      case "agent_settled":
+        return yield* settlePiRun({ ...deps, session, aborted: message.aborted === true });
       case "queue_update":
       case "compaction_start":
       case "compaction_end":

@@ -16,7 +16,6 @@ import {
   type GetSelectedThreadDetailInput,
   type ThreadDetailMessage,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
-import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { compareTaskOrder } from "@bigbud/shared/providerRuntime";
 import { Effect, Option, Schema } from "effect";
 import { clamp } from "effect/Number";
@@ -37,7 +36,6 @@ import {
   normalizeRecentAgents,
 } from "./ProjectionCatalogQuery.detail.tasks.ts";
 import {
-  ThreadDetailActivityDbRow,
   ThreadDetailCheckpointDbRow,
   ThreadDetailIdentityDbRow,
   ThreadDetailMessageDbRow,
@@ -45,6 +43,10 @@ import {
   ThreadDetailPendingUserInputDbRow,
   ThreadDetailPlanDbRow,
 } from "./ProjectionCatalogQuery.schemas.ts";
+import {
+  makeThreadDetailActivityReaders,
+  normalizeDetailActivity,
+} from "./ProjectionCatalogQuery.detail.activities.ts";
 
 const ThreadIdentityRequest = Schema.Struct({ threadId: Schema.String });
 const ThreadPageRequest = Schema.Struct({
@@ -76,19 +78,6 @@ function normalizeMessage(row: ThreadDetailMessageDbRow): ThreadDetailMessage {
     streaming: row.isStreaming === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-  };
-}
-
-function normalizeActivity(row: ThreadDetailActivityDbRow): OrchestrationThreadActivity {
-  return {
-    id: row.activityId,
-    tone: row.tone,
-    kind: row.kind,
-    summary: row.summary,
-    payload: row.payload,
-    turnId: row.turnId,
-    ...(row.sequence !== null ? { sequence: row.sequence } : {}),
-    createdAt: row.createdAt,
   };
 }
 
@@ -146,26 +135,7 @@ export function makeGetSelectedThreadDetail(
     `,
   });
 
-  const readActivities = SqlSchema.findAll({
-    Request: ThreadTurnPageRequest,
-    Result: ThreadDetailActivityDbRow,
-    execute: ({ threadId, turnId, limit }) => sql`
-      SELECT
-        activity_id AS "activityId",
-        thread_id AS "threadId",
-        turn_id AS "turnId",
-        tone,
-        kind,
-        summary,
-        payload_json AS "payload",
-        sequence,
-        created_at AS "createdAt"
-      FROM projection_thread_activities
-      WHERE thread_id = ${threadId} AND turn_id = ${turnId}
-      ORDER BY sequence DESC, created_at DESC, activity_id ASC
-      LIMIT ${limit}
-    `,
-  });
+  const { readActivities, readUserInputHistory } = makeThreadDetailActivityReaders(sql);
 
   const readPendingApprovals = SqlSchema.findAll({
     Request: ThreadPageRequest,
@@ -325,6 +295,13 @@ export function makeGetSelectedThreadDetail(
           const oldestMessage = messages.at(-1);
           const hasOlder = rows.messages.length > messageLimit;
           const activePlan = rows.activePlan[0];
+          const userInputHistory = yield* readUserInputHistory({
+            threadId: input.threadId,
+            oldestCreatedAt: hasOlder ? (oldestMessage?.createdAt ?? null) : null,
+            beforeCreatedAt: input.messageCursor?.createdAt ?? null,
+          });
+          const activities = rows.activities.slice(0, activityLimit).map(normalizeDetailActivity);
+          const activityIds = new Set(activities.map((activity) => activity.id));
 
           return {
             projectionSequence,
@@ -347,7 +324,10 @@ export function makeGetSelectedThreadDetail(
                   : null,
               hasOlder,
             },
-            activities: rows.activities.slice(0, activityLimit).map(normalizeActivity),
+            activities: [
+              ...activities,
+              ...userInputHistory.filter((activity) => !activityIds.has(activity.id)),
+            ],
             activitiesTruncated: rows.activities.length > activityLimit,
             pendingApprovals: rows.pendingApprovals.slice(0, approvalLimit),
             pendingApprovalsTruncated: rows.pendingApprovals.length > approvalLimit,

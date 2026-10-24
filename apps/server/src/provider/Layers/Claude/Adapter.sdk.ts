@@ -1,6 +1,6 @@
 import type { Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const CLAUDE_AGENT_SDK_VERSION = "0.3.301";
+export const CLAUDE_AGENT_SDK_VERSION = "0.3.310";
 
 export type ClaudeQueryControlSurface = Pick<
   Query,

@@ -17,7 +17,8 @@ export function recoverMissingPiAgentEnd(input: {
   }) => Effect.Effect<void>;
 }) {
   const boundary = input.session.completedTurnBoundary;
-  if (!boundary || !input.session.agentRunning) return Effect.void;
+  if (!boundary || !input.session.agentRunning || input.session.process.supportsAgentSettled)
+    return Effect.void;
   const reportExhausted = input.reportExhausted ?? (() => Effect.void);
   const token = Symbol("pi-missing-agent-end");
   input.session.missingAgentEndRecoveryToken = token;

@@ -54,6 +54,8 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       pendingUserInput: PendingUserInput;
+      answers?: Readonly<Record<string, unknown>>;
+      answeredAt?: string;
     }
   | { kind: "working"; id: string; createdAt: string | null };
 
@@ -164,6 +166,8 @@ export function deriveMessagesTimelineRows(input: {
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         pendingUserInput: timelineEntry.pendingUserInput,
+        ...(timelineEntry.answers ? { answers: timelineEntry.answers } : {}),
+        ...(timelineEntry.answeredAt ? { answeredAt: timelineEntry.answeredAt } : {}),
       });
       continue;
     }
@@ -261,7 +265,7 @@ export function estimateMessagesTimelineRowHeight(
     case "subagents-history":
       return 52 + Math.min(row.agents.length, 4) * 32;
     case "user-input-question":
-      return estimateUserInputQuestionRowHeight(row.pendingUserInput);
+      return row.answers ? 88 : estimateUserInputQuestionRowHeight(row.pendingUserInput);
     case "working":
       return 40;
     case "message": {

@@ -1,4 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
+import { retainUserInputHistoryActivities } from "./userInputHistory.store";
 
 import { mapMessage, mapProposedPlan, mapSession, mapTurnDiffSummary } from "./mappers.store";
 import { type AppState } from "./main.store";
@@ -347,12 +348,13 @@ export function applyThreadRuntimeEvent(
 
     case "thread.activity-appended": {
       return updateThreadState(state, event.payload.threadId, (thread) => {
-        const activities = [
-          ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
-          { ...event.payload.activity },
-        ]
-          .toSorted(compareActivities)
-          .slice(-MAX_THREAD_ACTIVITIES);
+        const activities = retainUserInputHistoryActivities(
+          [
+            ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+            { ...event.payload.activity },
+          ].toSorted(compareActivities),
+          MAX_THREAD_ACTIVITIES,
+        );
         const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
         return applyDelegationLinkedActivity(
           {
