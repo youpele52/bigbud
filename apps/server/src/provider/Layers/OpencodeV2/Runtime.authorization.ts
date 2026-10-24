@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { v2ReplyGuard } from "./Runtime.replies.ts";
-import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
+import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { assertV2CallerCurrent } from "./Runtime.caller.ts";
 
@@ -16,7 +16,11 @@ export function v2ExecutionGuard(
   return async () => {
     assertV2CallerCurrent();
     if (session.localTools)
-      await assertV2NoSavedGrants(session.lease.process.client, session.native);
+      await assertV2SavedGrantsCompatible(
+        session.lease.process.client,
+        session.native,
+        session.toolPolicy,
+      );
     await Effect.runPromise(runtime.options.journal.assertOwnerAvailable(canonicalOwnerThreadId));
     assertV2CallerCurrent();
     const validate = await guard();

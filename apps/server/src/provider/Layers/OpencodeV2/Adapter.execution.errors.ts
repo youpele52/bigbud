@@ -9,9 +9,11 @@ import {
 import { V2AdmissionUnconfirmed } from "./Admission.ts";
 import { V2HttpStatusError, v2HttpFailureStatus } from "./Client.errors.ts";
 import { V2ResponseSizeError } from "./Client.response.ts";
+import { V2SavedPermissionConflict } from "./Runtime.permissions.saved.ts";
 
 /** Only local classifications escape the adapter; native SDK causes may contain credentials. */
 export function v2ExecutionIssue(error: unknown): string {
+  if (error instanceof V2SavedPermissionConflict) return error.message;
   if (Schema.is(V2AdmissionUnconfirmed)(error) || Schema.is(ProviderTurnAdmissionConflict)(error))
     return error.detail;
   if (
@@ -36,6 +38,7 @@ export function v2ExecutionIssue(error: unknown): string {
  * provable auth, request or busy failure is `unsafe-to-replay` (user action, no auto-recovery).
  */
 export function v2ExecutionFailureClass(error: unknown, issue: string): TurnStartFailureClass {
+  if (error instanceof V2SavedPermissionConflict) return "invalid-request";
   const status = v2HttpFailureStatus(error);
   if (status === 401 || status === 402 || status === 403 || status === 429) return "auth-or-quota";
   if (issue === providerAttachmentPolicy("opencodeV2").unavailableReason) return "invalid-request";

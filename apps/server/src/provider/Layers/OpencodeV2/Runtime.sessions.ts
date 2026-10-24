@@ -2,7 +2,7 @@ import type { ModelRef, SessionInfo } from "@opencode/client";
 import path from "node:path";
 import { Effect } from "effect";
 import { v2Request } from "./Client.ts";
-import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
+import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession, V2StartInput } from "./Runtime.types.ts";
 import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
@@ -316,7 +316,8 @@ export async function createRuntimeSession(
         if (options.threadBridge && localTools)
           assertV2ThreadPolicy({ toolPolicy: permissions, native });
         if (shared && sharedRow) await shared.verify(sharedRow);
-        if (localTools) await assertV2NoSavedGrants(lease.process.client, native);
+        if (localTools)
+          await assertV2SavedGrantsCompatible(lease.process.client, native, permissions);
         // Reset only this owned session's permissions. Never trust persisted broad approvals.
         mutations?.assertSafe();
         cancellation?.throwIfAborted();

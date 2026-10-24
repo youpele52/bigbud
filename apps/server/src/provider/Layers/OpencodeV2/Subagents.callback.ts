@@ -5,7 +5,7 @@ import type { V2RuntimeSession } from "./Runtime.types.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2ChildLaunch } from "./Runtime.family.ts";
 import { readV2OwnedChild } from "./Runtime.family.ts";
-import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
+import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import { v2ChildPermissionCeiling } from "./Subagents.ceiling.ts";
 import { nativeFamilyHash } from "./Subagents.protocol.ts";
 
@@ -130,7 +130,7 @@ export async function handleV2NativeFamilyCallback(
       : await v2Request("family permission root", (signal) =>
           owner.lease.process.client.session.get({ sessionID: owner.native.id }, { signal }),
         );
-    await assertV2NoSavedGrants(owner.lease.process.client, native);
+    await assertV2SavedGrantsCompatible(owner.lease.process.client, native, owner.toolPolicy);
     const agentID = permission.agent ?? native.agent;
     if (!agentID) throw new Error("V2 native permission agent is unknown.");
     const agent = await v2Request("family permission agent", (signal) =>

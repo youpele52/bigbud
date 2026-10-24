@@ -3,7 +3,7 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { V2OwnedFamily, type V2OwnedChild } from "./Subagents.ownership.ts";
 import { v2Request } from "./Client.ts";
-import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
+import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import { v2ReplyGuard } from "./Runtime.replies.ts";
 import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 
@@ -18,7 +18,7 @@ export interface V2ChildLaunch {
   readonly background: boolean;
 }
 export interface V2SubagentQualification {
-  /** Must attest pinned executor ordering, exclusive/final policy hook, no saved grants and exact artifact bytes. */
+  /** Must attest pinned executor ordering, exclusive/final policy hook and exact artifact bytes. */
   readonly assertCurrent: () => void;
   readonly attach: (
     owner: V2RuntimeSession,
@@ -160,7 +160,7 @@ export async function beforeV2ChildPrompt(
   );
   if (active[native.id])
     throw new Error("V2 child continuation must be idle before policy enrollment.");
-  await assertV2NoSavedGrants(owner.lease.process.client, native);
+  await assertV2SavedGrantsCompatible(owner.lease.process.client, native, owner.toolPolicy);
   guard();
   qualification.assertCurrent();
   family.assertSpawn();

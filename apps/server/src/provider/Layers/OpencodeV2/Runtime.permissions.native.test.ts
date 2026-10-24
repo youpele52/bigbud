@@ -149,6 +149,41 @@ it.skipIf(!binary)(
                 const grants = await client.permission.saved.list({
                   projectID: owner.native.projectID,
                 });
+                // A saved shell allow is redundant under Full access, not a reason to reject the project.
+                const full = {
+                  ...start,
+                  threadId: ThreadId.makeUnsafe("native-full-saved"),
+                  runtimeMode: "full-access" as const,
+                };
+                await runtime.start(full);
+                const fullOwner = runtime.get(full.threadId);
+                expect(
+                  (
+                    await client.permission.create({
+                      sessionID: fullOwner.native.id,
+                      action: "shell",
+                      resources: ["printf full"],
+                    })
+                  ).effect,
+                ).toBe("allow");
+                // Documented native invariant: saved allows never defeat configured denies.
+                await client.session.update({
+                  sessionID: fullOwner.native.id,
+                  permissions: [{ action: "shell", resource: "*", effect: "deny" }],
+                });
+                expect(
+                  (
+                    await client.permission.create({
+                      sessionID: fullOwner.native.id,
+                      action: "shell",
+                      resources: ["printf denied"],
+                    })
+                  ).effect,
+                ).toBe("deny");
+                await runtime.stop(full.threadId);
+                expect(
+                  await client.permission.saved.list({ projectID: owner.native.projectID }),
+                ).toEqual(grants);
                 // Native rules alone still broaden ask -> allow; prove the provider gate, not a claimed upstream fix.
                 expect(
                   (
