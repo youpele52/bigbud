@@ -201,3 +201,50 @@ export async function initHomeHero(): Promise<void> {
     btn.href = "/download";
   }
 }
+
+/** Returns a random value in the half-open interval from min to max. */
+function randomInRange(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
+
+/** Initializes the homepage's scroll-triggered visuals and provider logo positions. */
+export function initHomeHeroVisuals(): void {
+  const visuals = document.querySelectorAll("[data-animate='dissolve']");
+  if (visuals.length && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          entry.target.classList.toggle("is-visible", entry.isIntersecting);
+        }
+      },
+      { threshold: 0.3 },
+    );
+    for (const visual of visuals) {
+      observer.observe(visual);
+    }
+  }
+
+  const advancedWorkflow = document.querySelector("[data-animate='advanced']");
+  if (advancedWorkflow && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        entry.target.classList.toggle("is-visible", entry.isIntersecting);
+      },
+      { threshold: 0.55 },
+    );
+    observer.observe(advancedWorkflow);
+  } else {
+    advancedWorkflow?.classList.add("is-visible");
+  }
+
+  const dropLogos = document.querySelectorAll(".provider-drop-logo");
+  for (const logo of dropLogos) {
+    if (!(logo instanceof HTMLElement)) continue;
+    logo.style.setProperty("--drop-left", `${randomInRange(5, 90)}%`);
+    logo.style.setProperty("--drop-delay", `${-randomInRange(0, 8)}s`);
+    logo.style.setProperty("--drop-duration", `${randomInRange(8, 16)}s`);
+    logo.style.setProperty("--drop-rotate", `${randomInRange(-28, 28)}deg`);
+    logo.style.setProperty("--drop-end-rotate", `${randomInRange(-8, 8)}deg`);
+    logo.style.setProperty("--drop-scale", `${randomInRange(0.85, 1.15)}`);
+  }
+}

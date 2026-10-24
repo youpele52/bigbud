@@ -1,10 +1,8 @@
 ---
 import {
     APP_NAME,
-    EXTERNAL_LINK_INDICATOR,
     GETTING_STARTED_PATH,
     MARKETING_ASSETS,
-    X_POST_URL,
 } from "../../../constants/app";
 import { HOME_METADATA } from "../../../constants/seo";
 import Button from "../../shared/Button.astro";
@@ -373,79 +371,10 @@ const providerDrops = [
             </svg>
         </div>
     </section>
-
-    <section class="hero-community" aria-labelledby="community-heading">
-        <div class="hero-community-inner">
-            <p class="hero-community-eyebrow">build with us</p>
-            <h2 id="community-heading" class="hero-community-heading">
-                bigbud is ours.
-            </h2>
-            <p class="hero-community-copy">
-                Have a feature request, bug report, or idea?<br />
-                We&apos;re building it together.<br />
-                Help shape it around your workflow by <a
-                    href={X_POST_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Post to X with a message to @bigbudapp"
-                >writing us <span aria-hidden="true">{EXTERNAL_LINK_INDICATOR}</span></a>.
-            </p>
-        </div>
-    </section>
 </div>
 
 <script>
-    import { initHomeHero } from "./HomeHero.client";
-
+    import { initHomeHero, initHomeHeroVisuals } from "./HomeHero.client";
     initHomeHero();
-
-    const visuals = document.querySelectorAll("[data-animate='dissolve']");
-    if (visuals.length && "IntersectionObserver" in window) {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                for (const entry of entries) {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add("is-visible");
-                    } else {
-                        entry.target.classList.remove("is-visible");
-                    }
-                }
-            },
-            { threshold: 0.3 },
-        );
-        for (const el of visuals) {
-            observer.observe(el);
-        }
-    }
-
-    const advancedWorkflow = document.querySelector("[data-animate='advanced']");
-    if (advancedWorkflow && "IntersectionObserver" in window) {
-        const advancedWorkflowObserver = new IntersectionObserver(
-            ([entry]) => {
-                entry.target.classList.toggle("is-visible", entry.isIntersecting);
-            },
-            { threshold: 0.55 },
-        );
-        advancedWorkflowObserver.observe(advancedWorkflow);
-    } else {
-        advancedWorkflow?.classList.add("is-visible");
-    }
-</script>
-
-<script>
-    const dropLogos = document.querySelectorAll(".provider-drop-logo");
-    const randomInRange = (min: number, max: number) =>
-        Math.random() * (max - min) + min;
-    for (const logo of dropLogos) {
-        if (!(logo instanceof HTMLElement)) continue;
-        logo.style.setProperty("--drop-left", `${randomInRange(5, 90)}%`);
-        logo.style.setProperty("--drop-delay", `${-randomInRange(0, 8)}s`);
-        logo.style.setProperty("--drop-duration", `${randomInRange(8, 16)}s`);
-        logo.style.setProperty("--drop-rotate", `${randomInRange(-28, 28)}deg`);
-        logo.style.setProperty(
-            "--drop-end-rotate",
-            `${randomInRange(-8, 8)}deg`,
-        );
-        logo.style.setProperty("--drop-scale", `${randomInRange(0.85, 1.15)}`);
-    }
+    initHomeHeroVisuals();
 </script>
