@@ -239,7 +239,7 @@ async function publishExclusive(
           )))
     )
       throw new Error(
-        "V2 required-plugin filename is not this app's exact signed prior entry; collision preserved.",
+        `V2 required-plugin filename is not this app's exact signed prior entry (${record ? "content or file identity changed" : "installation record missing for this profile"}); collision preserved. Native configuration was not overwritten.`,
       );
     if (record && !existing && record.phase !== "reserved")
       throw new Error(
