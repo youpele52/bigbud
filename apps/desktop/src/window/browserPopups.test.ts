@@ -97,7 +97,7 @@ describe("browser popup boundary", () => {
     const { owner, root, open } = setup();
     const popup = window();
     root.emit("did-create-window", popup);
-    expect(mocks.register).toHaveBeenCalledWith(owner, popup.webContents);
+    expect(mocks.register).toHaveBeenCalledWith(owner, popup.webContents, root);
     expect(popup.setMenu).toHaveBeenCalledWith(null);
     const nested = popup.webContents.setWindowOpenHandler.mock.calls[0]![0];
     expect(nested({ url: "file:///secret" })).toEqual({ action: "deny" });
@@ -142,6 +142,7 @@ describe("browser popup boundary", () => {
       owner,
       expect.stringContaining("ERR_NAME_NOT_RESOLVED"),
       "https://login.example/",
+      root,
     );
     popup.webContents.emit("context-menu");
     const item = mocks.menu.mock.calls[0]![0][0];
@@ -151,7 +152,7 @@ describe("browser popup boundary", () => {
       owner,
       expect.any(String),
       "https://site.example/",
-      true,
+      "user",
     );
   });
 
@@ -180,6 +181,7 @@ describe("browser popup boundary", () => {
       owner,
       expect.stringContaining("ERR_CERT_AUTHORITY_INVALID"),
       "https://login.example/",
+      root,
     );
   });
 });

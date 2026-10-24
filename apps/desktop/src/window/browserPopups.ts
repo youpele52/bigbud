@@ -10,11 +10,11 @@ import { bindBrowserHistoryGestures } from "./browserHistoryGestures";
 export function bindBrowserPopups(owner: BrowserWindow, root: WebContents): void {
   const children = new Set<BrowserWindow>();
   const feedback = (message: string, url = root.isDestroyed() ? "" : root.getURL()): void => {
-    void showBrowserFeedback(owner, message, url);
+    void showBrowserFeedback(owner, message, url, root);
   };
   const bind = (contents: WebContents, gestureOwner = owner): void => {
     bindBrowserHistoryGestures(gestureOwner, contents);
-    registerBrowserPermissionOwner(owner, contents);
+    registerBrowserPermissionOwner(owner, contents, root);
     bindBrowserNavigationPolicy(contents, () =>
       feedback(
         "This navigation was blocked. Only HTTP and HTTPS pages are supported.",
@@ -65,7 +65,7 @@ export function bindBrowserPopups(owner: BrowserWindow, root: WebContents): void
                 owner,
                 "Open this popup in your default browser?",
                 guest.getURL(),
-                true,
+                "user",
               );
             },
           },

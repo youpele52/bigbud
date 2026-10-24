@@ -38,8 +38,8 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("browser site consent", () => {
-  it("prompts with the real origin, denies by default, then scopes consent by tab, origin and capability", async () => {
-    const { contents, request, check, callback, details, session } = setup();
+  it("prompts with the real origin, denies by default, then scopes consent by site and feature for the app session", async () => {
+    const { contents, owner, request, check, callback, details, session } = setup();
     mocks.prompt.mockResolvedValue({ response: 1 });
     expect(
       check(contents, "media", "https://site.example", { isMainFrame: true, mediaType: "audio" }),
@@ -47,7 +47,8 @@ describe("browser site consent", () => {
     request(contents, "media", callback, details);
     await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(true));
     expect(mocks.prompt.mock.calls[0]![1]).toMatchObject({
-      message: "Allow https://site.example to access microphone?",
+      message: "Allow https://site.example to use your microphone?",
+      buttons: ["Deny", "Allow"],
       defaultId: 0,
       cancelId: 0,
     });
@@ -61,8 +62,26 @@ describe("browser site consent", () => {
       check(contents, "media", "https://site.example", { ...checkDetails, isMainFrame: false }),
     ).toBe(false);
     expect(check(null, "media", "https://site.example", checkDetails)).toBe(false);
-    const secondTab = { ...contents, session, isDestroyed: () => false, getURL: contents.getURL };
-    expect(check(secondTab, "media", "https://site.example", checkDetails)).toBe(false);
+    const unregistered = {
+      ...contents,
+      session,
+      isDestroyed: () => false,
+      getURL: contents.getURL,
+    };
+    expect(check(unregistered, "media", "https://site.example", checkDetails)).toBe(false);
+    const secondTab = Object.assign(new EventEmitter(), {
+      session,
+      isDestroyed: () => false,
+      getURL: () => "https://site.example/other-page",
+    });
+    registerBrowserPermissionOwner(
+      owner as unknown as BrowserWindow,
+      secondTab as unknown as WebContents,
+    );
+    expect(check(secondTab, "media", "https://site.example", checkDetails)).toBe(true);
+    const fromSecondTab = vi.fn();
+    request(secondTab, "media", fromSecondTab, details);
+    expect(fromSecondTab).toHaveBeenCalledWith(true);
     request(contents, "media", callback, details);
     expect(mocks.prompt).toHaveBeenCalledOnce();
     contents.getURL.mockReturnValue("https://other.example/");
@@ -70,18 +89,48 @@ describe("browser site consent", () => {
   });
 
   it.each([
-    ["media", { mediaTypes: ["audio", "video"] }, "microphone and camera"],
-    ["geolocation", {}, "location"],
-    ["notifications", {}, "notifications"],
-  ])("asks explicitly for %s", async (permission, extra, label) => {
+    ["media", { mediaTypes: ["video", "audio"] }, ["use your microphone", "use your camera"]],
+    ["geolocation", {}, ["know your location"]],
+    ["notifications", {}, ["show notifications"]],
+  ])("asks separately for each feature of %s", async (permission, extra, labels) => {
     const { contents, request, callback, details } = setup();
     mocks.prompt.mockResolvedValue({ response: 1 });
     request(contents, permission, callback, { ...details, ...extra });
     await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(true));
-    expect(mocks.prompt.mock.calls[0]![1].message).toContain(label);
+    expect(mocks.prompt.mock.calls.map(([, options]) => options.message)).toEqual(
+      labels.map((label) => `Allow https://site.example to ${label}?`),
+    );
   });
 
-  it("remembers denial only for the requested capability in that tab", async () => {
+  it("stops at the first denied feature and keeps each answer separately", async () => {
+    const { contents, request, callback, details } = setup();
+    mocks.prompt.mockResolvedValueOnce({ response: 1 }).mockResolvedValueOnce({ response: 0 });
+    request(contents, "media", callback, { ...details, mediaTypes: ["audio", "video"] });
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(false));
+    expect(mocks.prompt).toHaveBeenCalledTimes(2);
+    const microphone = vi.fn();
+    request(contents, "media", microphone, { ...details, mediaTypes: ["audio"] });
+    expect(microphone).toHaveBeenCalledWith(true);
+    const camera = vi.fn();
+    request(contents, "media", camera, { ...details, mediaTypes: ["video"] });
+    expect(camera).toHaveBeenCalledWith(false);
+    expect(mocks.prompt).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a dismissed or timed-out prompt as deny without remembering it", async () => {
+    const { contents, request, callback, details } = setup();
+    mocks.prompt.mockImplementationOnce(() => new Promise(() => undefined));
+    request(contents, "geolocation", callback, details);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(callback).toHaveBeenCalledExactlyOnceWith(false);
+    mocks.prompt.mockResolvedValueOnce({ response: 1 });
+    const retry = vi.fn();
+    request(contents, "geolocation", retry, details);
+    await vi.waitFor(() => expect(retry).toHaveBeenCalledWith(true));
+    expect(mocks.prompt).toHaveBeenCalledTimes(2);
+  });
+
+  it("remembers denial only for the requested feature", async () => {
     const { contents, request, callback, details } = setup();
     mocks.prompt.mockResolvedValue({ response: 0 });
     request(contents, "media", callback, details);
@@ -95,18 +144,39 @@ describe("browser site consent", () => {
   it.each([
     ["display-capture", {}],
     ["clipboard-read", {}],
+    ["clipboard-sanitized-write", {}],
+    ["fullscreen", {}],
+    ["pointerLock", {}],
+    ["storage-access", {}],
     ["unknown", {}],
     ["media", { mediaTypes: [] }],
     ["media", { mediaTypes: ["unknown"] }],
-    ["media", { requestingUrl: "https://other.example/" }],
-    ["media", { requestingUrl: "file:///private/secret" }],
-    ["media", { isMainFrame: false }],
-  ])("denies unsupported or untrusted requests: %s %j", (permission, extra) => {
+    ["media", { mediaTypes: ["audio", "unknown"], isMainFrame: false }],
+  ])("quietly denies unsupported requests: %s %j", (permission, extra) => {
     const { contents, request, callback, details } = setup();
     request(contents, permission, callback, { ...details, ...extra });
     expect(callback).toHaveBeenCalledWith(false);
     expect(mocks.prompt).not.toHaveBeenCalled();
-    expect(mocks.feedback).toHaveBeenCalledOnce();
+    expect(mocks.feedback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["media", { requestingUrl: "https://other.example/" }],
+    ["media", { requestingUrl: "file:///private/secret" }],
+    ["media", { isMainFrame: false }],
+    ["notifications", { isMainFrame: false }],
+    ["geolocation", { isMainFrame: false }],
+  ])("denies untrusted requests with tab-scoped feedback: %s %j", (permission, extra) => {
+    const { contents, request, callback, details, owner } = setup();
+    request(contents, permission, callback, { ...details, ...extra });
+    expect(callback).toHaveBeenCalledWith(false);
+    expect(mocks.prompt).not.toHaveBeenCalled();
+    expect(mocks.feedback).toHaveBeenCalledExactlyOnceWith(
+      owner,
+      expect.stringContaining("Only the page itself"),
+      "https://site.example/page",
+      contents,
+    );
   });
 
   it.each(["navigation", "destroyed", "closed", "timeout"])(
@@ -141,7 +211,7 @@ describe("browser site consent", () => {
     mocks.prompt.mockRejectedValue(new Error("dialog unavailable"));
     request(contents, "media", callback, details);
     const second = vi.fn();
-    request(contents, "geolocation", second, details);
+    request(contents, "notifications", second, details);
     expect(second).toHaveBeenCalledWith(false);
     await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(false));
     expect(mocks.prompt).toHaveBeenCalledOnce();

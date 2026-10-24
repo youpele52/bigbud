@@ -146,6 +146,10 @@ async function verify(): Promise<void> {
     assert.equal(popup.webContents.getURL(), `${origin}/popup`);
     console.log("Native browser smoke: popup protocol policy verified.");
     // Denial exercises the real Chromium permission request without touching OS devices.
+    assert.equal(await root.executeJavaScript("Notification.requestPermission()", true), "denied");
+    assert.ok(
+      prompts.some((prompt) => prompt.message === `Allow ${origin} to show notifications?`),
+    );
     assert.equal(
       await root.executeJavaScript(
         "new Promise(resolve=>navigator.geolocation.getCurrentPosition(()=>resolve('allowed'),()=>resolve('denied')))",
@@ -154,7 +158,7 @@ async function verify(): Promise<void> {
       "denied",
     );
     assert.ok(
-      prompts.some((prompt) => prompt.message.includes(`Allow ${origin} to access location`)),
+      prompts.some((prompt) => prompt.message === `Allow ${origin} to know your location?`),
     );
     console.log("Native browser smoke: permission denial verified.");
     const closed = once(popup, "closed");

@@ -26,19 +26,25 @@ describe("external browser fallback", () => {
     },
   );
 
-  it("uses the desktop bridge only on an explicit click and reports failure", async () => {
-    const openExternal = vi.fn().mockRejectedValue(new Error("no browser"));
-    window.desktopBridge = { openExternal } as unknown as DesktopBridge;
-    const screen = await render(<BrowserExternalLink url="https://site.example/login" />);
-    try {
-      expect(openExternal).not.toHaveBeenCalled();
-      await screen.getByRole("link", { name: "Open in default browser" }).click();
-      expect(openExternal).toHaveBeenCalledExactlyOnceWith("https://site.example/login");
-      await expect.element(screen.getByRole("alert")).toHaveTextContent("Copy the address");
-    } finally {
-      await screen.unmount();
-    }
-  });
+  it.each([
+    ["rejects", () => vi.fn().mockRejectedValue(new Error("no browser"))],
+    ["resolves false", () => vi.fn().mockResolvedValue(false)],
+  ])(
+    "uses the desktop bridge only on an explicit click and reports failure when it %s",
+    async (_label, makeOpenExternal) => {
+      const openExternal = makeOpenExternal();
+      window.desktopBridge = { openExternal } as unknown as DesktopBridge;
+      const screen = await render(<BrowserExternalLink url="https://site.example/login" />);
+      try {
+        expect(openExternal).not.toHaveBeenCalled();
+        await screen.getByRole("link", { name: "Open in default browser" }).click();
+        expect(openExternal).toHaveBeenCalledExactlyOnceWith("https://site.example/login");
+        await expect.element(screen.getByRole("alert")).toHaveTextContent("Copy the address");
+      } finally {
+        await screen.unmount();
+      }
+    },
+  );
 
   it("provides a noopener web link and exposes the failing URL, not the current tab URL", async () => {
     delete window.desktopBridge;

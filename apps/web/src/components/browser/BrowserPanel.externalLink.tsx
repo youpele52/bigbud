@@ -20,7 +20,11 @@ export function BrowserExternalLink({ url }: { url: string }) {
           if (!bridge) return;
           event.preventDefault();
           setFailed(false);
-          void bridge.openExternal(url).catch(() => setFailed(true));
+          // The desktop bridge reports refusals as `false`, not as rejections.
+          void bridge.openExternal(url).then(
+            (opened) => setFailed(!opened),
+            () => setFailed(true),
+          );
         }}
       >
         Open in default browser

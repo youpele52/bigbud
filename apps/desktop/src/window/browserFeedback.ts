@@ -1,21 +1,51 @@
 import { dialog, shell } from "electron";
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, WebContents } from "electron";
 import { isAllowedBrowserNavigation } from "./browserNavigationPolicy";
 
+const PAGE_FEEDBACK_INTERVAL_MS = 10_000;
+const PAGE_FEEDBACK_PER_TAB = 3;
 const pendingOwners = new WeakSet<BrowserWindow>();
 const lastShown = new WeakMap<BrowserWindow, number>();
+const pageFeedback = new WeakMap<WebContents, Set<string>>();
+
+/** Who caused the feedback: the browser tab whose page triggered it, or the user. */
+export type BrowserFeedbackTrigger = WebContents | "user";
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
+/** Pages must not be able to keep the app window behind repeated modal dialogs. */
+function admitPageFeedback(
+  owner: BrowserWindow,
+  tab: WebContents,
+  message: string,
+  url: string,
+): boolean {
+  if (Date.now() - (lastShown.get(owner) ?? 0) < PAGE_FEEDBACK_INTERVAL_MS) return false;
+  const shown = pageFeedback.get(tab) ?? new Set<string>();
+  const key = `${originOf(url)}\n${message}`;
+  if (shown.has(key) || shown.size >= PAGE_FEEDBACK_PER_TAB) return false;
+  shown.add(key);
+  pageFeedback.set(tab, shown);
+  return true;
+}
 
 /** Shows bounded native feedback; remote pages can never launch an external app directly. */
 export async function showBrowserFeedback(
   owner: BrowserWindow,
   message: string,
   url: string,
-  userInitiated = false,
+  trigger: BrowserFeedbackTrigger,
 ): Promise<void> {
   if (
     owner.isDestroyed() ||
     pendingOwners.has(owner) ||
-    (!userInitiated && Date.now() - (lastShown.get(owner) ?? 0) < 10_000)
+    (trigger !== "user" && !admitPageFeedback(owner, trigger, message, url))
   )
     return;
   lastShown.set(owner, Date.now());

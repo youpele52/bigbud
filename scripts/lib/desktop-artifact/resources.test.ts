@@ -109,6 +109,8 @@ describe("createBuildConfig", () => {
         "bigbud uses your camera only when you allow a browser site to access it.",
       NSMicrophoneUsageDescription:
         "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
+      NSLocationWhenInUseUsageDescription:
+        "bigbud shares your location only with browser sites you explicitly allow.",
     });
   });
 });
