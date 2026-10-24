@@ -87,6 +87,7 @@ export const sendTurnAttempt = (
     const shouldBootstrapFromTranscript =
       !reviving &&
       shouldRebuildProviderContextFromTranscript({
+        provider: input.modelSelection.provider,
         thread,
         bootstrapThread,
         activeSession,
