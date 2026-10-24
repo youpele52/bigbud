@@ -11,12 +11,14 @@ export interface BackendBootstrapEnvelopeInput {
   readonly startReason?: DesktopBackendStartReason | null;
   /** Child fd of the lifecycle hint pipe, when spawn opened it. The server reads only this. */
   readonly lifecycleHintFd?: number | null;
+  readonly ownershipHandoff?: boolean;
 }
 
 /** The fd 3 bootstrap line; optional fields are omitted when absent. */
 export function buildBackendBootstrapEnvelope(input: BackendBootstrapEnvelopeInput): string {
   return `${JSON.stringify({
     mode: "desktop",
+    ...(input.ownershipHandoff ? { ownershipHandoff: true } : {}),
     noBrowser: true,
     port: input.port,
     host: input.host,

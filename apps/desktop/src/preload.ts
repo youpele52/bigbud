@@ -58,6 +58,10 @@ const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" }
 const allowDevelopmentDiagnostics = process.defaultApp === true;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  checkBackendOwnership: (generation) =>
+    ipcRenderer.invoke(desktopIpcChannels.checkBackendOwnership, generation),
+  recoverBackendOwnership: (generation) =>
+    ipcRenderer.invoke(desktopIpcChannels.recoverBackendOwnership, generation),
   getTerminalRenderingPolicy: () =>
     ipcRenderer.invoke(desktopIpcChannels.getTerminalRenderingPolicy),
   systemMonitorSubscribe: (demand) =>

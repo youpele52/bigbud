@@ -1,5 +1,8 @@
 import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
+import { attachOwnershipHandoff, isOwnershipHandedOff } from "./ownershipHandoff";
+import { recordOwnershipLaunch, getOwnershipLaunch } from "./ownershipRecovery.launch";
+import { recordOwnershipRecovery } from "./backendStartupState";
 import { app } from "electron";
 import {
   captureBackendOutput,
@@ -21,21 +24,14 @@ import {
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
 import { killBackendProcess } from "./backendProcess";
 import { stopBackendChild, stopBackendChildAndWait } from "./backendShutdown";
-import {
-  beginBackendStartup,
-  recordBackendStartupDevelopmentDiagnostics,
-  recordBackendStartupFailure,
-} from "./backendStartupState";
+import { beginBackendStartup, recordBackendStartupFailure } from "./backendStartupState";
 import {
   ensureBackendModulesPath,
   reportBackendModulesStartupFailure,
 } from "./backendModulesStartup";
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
 import { buildBackendChildEnvironment } from "./backendEnv";
-import {
-  createBackendStartupDiagnostics,
-  createDevelopmentBackendDiagnostics,
-} from "./backendStartupDiagnostics";
+import { createBackendStartupDiagnostics } from "./backendStartupDiagnostics";
 import { resolveComputerUseRuntimeEnv } from "./backendRuntimeEnv";
 import * as ProcessQuiescence from "./installedProcessQuiescence";
 import {
@@ -44,6 +40,7 @@ import {
 } from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
 import { attachBackendChildLifecycle } from "./backendManager.child";
+import { captureBackendStderr } from "./backendManager.output";
 import {
   buildBackendBootstrapEnvelope,
   consumeBackendStartReason,
@@ -107,7 +104,12 @@ export function setBackendConnectionInfo(opts: {
 }
 export function scheduleBackendRestart(reason: string): void {
   if (!_deps) return;
-  if (_deps.getIsQuitting() || ProcessQuiescence.isInstalledProcessQuiescing() || restartTimer)
+  if (
+    _deps.getIsQuitting() ||
+    isOwnershipHandedOff() ||
+    ProcessQuiescence.isInstalledProcessQuiescing() ||
+    restartTimer
+  )
     return;
   const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
   restartAttempt += 1;
@@ -125,6 +127,7 @@ export async function startBackend(): Promise<void> {
   if (!_deps) return;
   if (
     _deps.getIsQuitting() ||
+    isOwnershipHandedOff() ||
     ProcessQuiescence.isInstalledProcessQuiescing() ||
     backendProcess ||
     backendStartPending
@@ -144,6 +147,7 @@ export async function startBackend(): Promise<void> {
   }
   if (
     !computerUseRuntimeEnv ||
+    isOwnershipHandedOff() ||
     _deps.getIsQuitting() ||
     ProcessQuiescence.isInstalledProcessQuiescing() ||
     backendProcess
@@ -182,22 +186,32 @@ export async function startBackend(): Promise<void> {
   try {
     child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
       cwd: resolveBackendCwd(_deps.rootDir),
-      env: buildBackendChildEnvironment({
-        packagedOpencodeBinDir,
-        packagedBundledSkillsDir,
-        packagedBundledAgentsDir,
-        packagedWorkspaceAgentBinary,
-        packagedDesktopSupervisorBinary,
-        computerUseRuntimeEnv,
-        backendNodeExecutable,
-        isPackaged: app.isPackaged,
-        backendMaxOldSpaceMb: _deps.backendMaxOldSpaceMb,
+      env: recordOwnershipLaunch({
+        generation: startupGeneration,
+        baseDir: _deps.baseDir,
+        cwd: resolveBackendCwd(_deps.rootDir),
+        launcher: backendLauncherPath,
+        entry: backendEntry,
+        inspector:
+          packagedDesktopSupervisorBinary ??
+          (!app.isPackaged ? `${_deps.rootDir}/target/debug/bigbud-desktop-supervisor` : null),
+        env: buildBackendChildEnvironment({
+          packagedOpencodeBinDir,
+          packagedBundledSkillsDir,
+          packagedBundledAgentsDir,
+          packagedWorkspaceAgentBinary,
+          packagedDesktopSupervisorBinary,
+          computerUseRuntimeEnv,
+          backendNodeExecutable,
+          isPackaged: app.isPackaged,
+          backendMaxOldSpaceMb: _deps.backendMaxOldSpaceMb,
+        }),
       }),
       // fd 3 bootstrap (main to server, once), fd 4 startup status (server to
-      // main), fd 5 lifecycle hints (main to server, for the backend's lifetime).
+      // main), fd 5 lifecycle hints; fd 6 handoff requests and fd 7 quiescence acknowledgments.
       stdio: captureBackendLogs
-        ? ["ignore", "pipe", "pipe", "pipe", "pipe", "pipe"]
-        : ["ignore", "inherit", "pipe", "pipe", "pipe", "pipe"],
+        ? ["ignore", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe"]
+        : ["ignore", "inherit", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe"],
     });
   } catch (error) {
     revokeSystemMonitorAgentToken();
@@ -243,20 +257,11 @@ export async function startBackend(): Promise<void> {
       },
     );
   }
-  let stderrTail = "";
-  const MAX_STDERR_TAIL = 8_192;
-  if (child.stderr) {
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderrTail = `${stderrTail}${chunk}`.slice(-MAX_STDERR_TAIL);
-      if (_deps?.isDevelopmentDiagnostics) {
-        recordBackendStartupDevelopmentDiagnostics(
-          startupGeneration,
-          createDevelopmentBackendDiagnostics({ stderrTail }),
-        );
-      }
-    });
-  }
+  const getStderrTail = captureBackendStderr(
+    child.stderr,
+    startupGeneration,
+    _deps.isDevelopmentDiagnostics,
+  );
   const hintStream = asLifecycleHintStream(
     (child.stdio as ReadonlyArray<unknown>)[BACKEND_LIFECYCLE_HINT_STDIO_INDEX],
   );
@@ -281,6 +286,7 @@ export async function startBackend(): Promise<void> {
         startReason: consumeBackendStartReason(),
         // The server reads fd 5 only when the envelope announces it.
         lifecycleHintFd: hintStream ? BACKEND_LIFECYCLE_HINT_STDIO_INDEX : null,
+        ownershipHandoff: process.platform === "darwin" || process.platform === "linux",
       }),
     );
     bootstrapStream.end();
@@ -297,6 +303,20 @@ export async function startBackend(): Promise<void> {
     return;
   }
   backendProcess = child;
+  attachOwnershipHandoff(
+    child,
+    getOwnershipLaunch()!.stateDir,
+    () => {
+      expectedBackendExitChildren.add(child);
+      if (restartTimer) clearTimeout(restartTimer);
+      restartTimer = null;
+      recordOwnershipRecovery(startupGeneration, { phase: "yielded" });
+    },
+    () =>
+      backendProcess === child &&
+      !_deps?.getIsQuitting() &&
+      !ProcessQuiescence.isInstalledProcessQuiescing(),
+  );
   const hintPipe = hintStream
     ? attachBackendLifecycleHintPipe(hintStream, {
         platform: process.platform,
@@ -319,7 +339,7 @@ export async function startBackend(): Promise<void> {
     generation: startupGeneration,
     isDevelopmentDiagnostics: _deps.isDevelopmentDiagnostics,
     getIsQuitting: _deps.getIsQuitting,
-    getStderrTail: () => stderrTail,
+    getStderrTail,
     isExpectedExit: () => expectedBackendExitChildren.has(child),
     onDisconnected: () => {
       if (hintPipe) detachBackendLifecycleHintPipe(hintPipe);
@@ -335,7 +355,7 @@ export async function startBackend(): Promise<void> {
 }
 /** Restarts a backend that stopped serving; an unexpected exit reuses the restart path. */
 export function restartUnresponsiveBackend(reason: string): void {
-  if (!_deps || _deps.getIsQuitting()) return;
+  if (!_deps || _deps.getIsQuitting() || isOwnershipHandedOff()) return;
   const child = backendProcess;
   logBackendLifecycle("restart_unresponsive", `pid=${child?.pid ?? "none"} reason=${reason}`);
   // The replacement backend must treat unsettled turns as outcome unknown.

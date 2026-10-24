@@ -2,6 +2,7 @@ mod connection;
 mod frame;
 mod generated;
 mod owner_session;
+pub mod process_identity;
 mod supervisor;
 mod suspended_time;
 pub mod system_monitor;

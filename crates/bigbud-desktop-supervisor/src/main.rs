@@ -139,6 +139,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "--inspect-process") {
+        let [_, pid] = args.as_slice() else {
+            return Err(io::Error::other("expected one process id").into());
+        };
+        return bigbud_desktop_supervisor::process_identity::run(pid);
+    }
     if std::env::args()
         .skip(1)
         .any(|arg| arg == "--system-monitor")

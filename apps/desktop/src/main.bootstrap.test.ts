@@ -327,3 +327,7 @@ describe("bootstrapDesktop", () => {
     );
   });
 });
+vi.mock("./backend/ownershipRecovery.main", () => ({ makeMainOwnershipRecovery: () => vi.fn() }));
+vi.mock("./window/ipcHandlers.ownershipRecovery", () => ({
+  registerOwnershipRecoveryIpc: vi.fn(),
+}));

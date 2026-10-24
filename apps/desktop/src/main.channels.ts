@@ -1,4 +1,6 @@
 export const desktopIpcChannels = {
+  recoverBackendOwnership: "desktop:recover-backend-ownership",
+  checkBackendOwnership: "desktop:check-backend-ownership",
   systemMonitorSubscribe: "desktop:system-monitor-subscribe",
   systemMonitorUpdate: "desktop:system-monitor-update",
   systemMonitorUnsubscribe: "desktop:system-monitor-unsubscribe",

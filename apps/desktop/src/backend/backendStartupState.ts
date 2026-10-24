@@ -6,12 +6,27 @@ import type {
   DesktopBackendStartupState,
 } from "@bigbud/contracts/server/ipc.desktop.ts";
 import { createBackendStartupDiagnostics } from "./backendStartupDiagnostics";
+import type { OwnershipRecoveryState } from "@bigbud/contracts/server/ipc.ownershipRecovery.ts";
 
 const STARTUP_DEADLINE_MS = 10 * 60 * 1_000;
 let state: DesktopBackendStartupState = { generation: 0, startedAt: 0, status: "idle" };
 let timer: ReturnType<typeof setTimeout> | null = null;
 let channel = "";
 let allowDevelopmentDiagnostics = false;
+
+/** Recovery progress belongs to main and remains available across renderer reloads. */
+export function recordOwnershipRecovery(
+  generation: number,
+  recovery: OwnershipRecoveryState,
+): void {
+  if (state.generation !== generation) return;
+  state = {
+    ...state,
+    ownershipRecovery: recovery,
+    ...(recovery.phase === "yielded" ? { status: "failed" as const } : {}),
+  };
+  emit();
+}
 
 export function configureBackendStartupState(
   stateChannel: string,

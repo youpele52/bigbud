@@ -6,10 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
   kill: vi.fn(),
+  handedOff: false,
+  runtime: vi.fn(async () => ({}) as NodeJS.ProcessEnv),
   lifecycle: [] as Array<{ scheduleRestart: (reason: string) => void; onDisconnected: () => void }>,
 }));
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
+vi.mock("./ownershipHandoff", () => ({
+  attachOwnershipHandoff: vi.fn(),
+  isOwnershipHandedOff: () => mocks.handedOff,
+}));
 vi.mock("node:child_process", () => ({ spawn: mocks.spawn }));
 vi.mock("node:fs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:fs")>()),
@@ -48,7 +54,7 @@ vi.mock("./backendModulesStartup", () => ({
 }));
 vi.mock("./backendStartupStatusPipe", () => ({ listenForBackendStartupStatus: vi.fn() }));
 vi.mock("./backendEnv", () => ({ buildBackendChildEnvironment: () => ({}) }));
-vi.mock("./backendRuntimeEnv", () => ({ resolveComputerUseRuntimeEnv: async () => ({}) }));
+vi.mock("./backendRuntimeEnv", () => ({ resolveComputerUseRuntimeEnv: mocks.runtime }));
 vi.mock("./backendStartGuard", () => ({
   resolveBackendStartWhenAllowed: (resolve: () => Promise<NodeJS.ProcessEnv>) => resolve(),
 }));
@@ -69,7 +75,12 @@ vi.mock("./backendManager.child", () => ({
   },
 }));
 
-import { initBackendManager, restartUnresponsiveBackend, startBackend } from "./backendManager";
+import {
+  initBackendManager,
+  restartUnresponsiveBackend,
+  scheduleBackendRestart,
+  startBackend,
+} from "./backendManager";
 
 /** A spawned backend whose fd 3 bootstrap envelope the test can read. */
 function fakeChild() {
@@ -91,6 +102,8 @@ let children: Array<ReturnType<typeof fakeChild>> = [];
 beforeEach(() => {
   vi.useFakeTimers();
   children = [];
+  mocks.handedOff = false;
+  mocks.runtime.mockResolvedValue({});
   mocks.lifecycle.length = 0;
   mocks.spawn.mockImplementation(() => {
     const spawned = fakeChild();
@@ -117,12 +130,35 @@ afterEach(() => {
 });
 
 describe("backend manager start", () => {
-  it("spawns with six stdio entries and announces the fd 5 hint pipe", async () => {
+  it("blocks startup, scheduled restart and resume after a handoff", async () => {
+    mocks.handedOff = true;
+    await startBackend();
+    restartUnresponsiveBackend("resume");
+    scheduleBackendRestart("unexpected-exit");
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.kill).not.toHaveBeenCalled();
+  });
+  it("does not spawn when pending environment resolution finishes after handoff", async () => {
+    let resolve!: (env: NodeJS.ProcessEnv) => void;
+    mocks.runtime.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const starting = startBackend();
+    mocks.handedOff = true;
+    resolve({});
+    await starting;
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+  it("spawns with eight stdio entries and announces lifecycle and ownership pipes", async () => {
     await startBackend();
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
     const stdio = mocks.spawn.mock.calls[0]![2].stdio as ReadonlyArray<string>;
-    expect(stdio).toHaveLength(6);
-    expect(stdio.slice(3)).toEqual(["pipe", "pipe", "pipe"]);
+    expect(stdio).toHaveLength(8);
+    expect(stdio.slice(3)).toEqual(["pipe", "pipe", "pipe", "pipe", "pipe"]);
     expect(children[0]!.envelope()).toMatchObject({ mode: "desktop", lifecycleHintFd: 5 });
     expect(children[0]!.envelope()).not.toHaveProperty("startReason");
     // Clean up the module's single backend for the next test.

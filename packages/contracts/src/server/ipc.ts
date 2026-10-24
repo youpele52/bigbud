@@ -96,6 +96,8 @@ export interface DesktopBridge
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;
+  recoverBackendOwnership?: (generation: number) => Promise<void>;
+  checkBackendOwnership?: (generation: number) => Promise<void>;
   onBackendStartupState: (listener: (state: DesktopBackendStartupState) => void) => () => void;
   /** Sleep, wake, lock and network hints; absent on bridges that predate them. */
   onConnectivitySignal?: (listener: (signal: DesktopConnectivitySignal) => void) => () => void;

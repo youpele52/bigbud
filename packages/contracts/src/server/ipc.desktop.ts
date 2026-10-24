@@ -1,3 +1,5 @@
+import type { OwnershipRecoveryState } from "./ipc.ownershipRecovery";
+
 export type DesktopBackendStartupStatus =
   | "idle"
   | "starting"
@@ -47,6 +49,7 @@ export interface DesktopBackendDevelopmentDiagnostics {
 }
 
 export interface DesktopBackendStartupState {
+  readonly ownershipRecovery?: OwnershipRecoveryState;
   readonly generation: number;
   readonly startedAt: number;
   readonly status: DesktopBackendStartupStatus;

@@ -1,5 +1,7 @@
 import * as Crypto from "node:crypto";
 import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { makeMainOwnershipRecovery } from "./backend/ownershipRecovery.main";
+import { registerOwnershipRecoveryIpc } from "./window/ipcHandlers.ownershipRecovery";
 import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
@@ -239,6 +241,10 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     const role = windowRegistry.getRole(sender);
     return role === "main" || role === "compact-chat";
   });
+  registerOwnershipRecoveryIpc(() => {
+    const contents = getMainWindow()?.webContents;
+    return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
+  }, makeMainOwnershipRecovery(getIsQuitting));
   await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
     logHeader("system monitor agent bridge unavailable");
   });
