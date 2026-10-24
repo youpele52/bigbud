@@ -4,6 +4,26 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./backendOwnership.paths": {
+      "types": "./src/backendOwnership.paths.ts",
+      "import": "./src/backendOwnership.paths.ts"
+    },
+    "./machineIdentity": {
+      "types": "./src/machineIdentity.ts",
+      "import": "./src/machineIdentity.ts"
+    },
+    "./processStartToken": {
+      "types": "./src/processStartToken.ts",
+      "import": "./src/processStartToken.ts"
+    },
+    "./backendOwnership.record": {
+      "types": "./src/backendOwnership.record.ts",
+      "import": "./src/backendOwnership.record.ts"
+    },
+    "./backendOwnership.control": {
+      "types": "./src/backendOwnership.control.ts",
+      "import": "./src/backendOwnership.control.ts"
+    },
     "./usageTokenMix": {
       "types": "./src/usageTokenMix.ts",
       "import": "./src/usageTokenMix.ts"
