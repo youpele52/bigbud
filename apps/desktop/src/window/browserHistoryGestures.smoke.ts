@@ -31,8 +31,8 @@ async function until(label: string, check: () => Promise<boolean>): Promise<void
 
 async function verify(): Promise<void> {
   await app.whenReady();
-  const fixture = `<style>html,body{margin:0;width:100%;height:100%}.scroller{position:absolute;left:10px;top:100px;width:300px;height:80px;overflow-x:auto}.wide{width:1200px;height:60px;background:lightblue}#handled{position:absolute;top:200px;width:300px;height:60px}#contained{position:absolute;top:280px;width:300px;height:60px;overscroll-behavior-x:contain}textarea{position:absolute;top:360px}</style>
-    <div id="plain">Page</div><div class="scroller" id="scroller"><div class="wide">Horizontal content</div></div><div id="handled">Site-handled gesture</div><div id="contained">No overscroll navigation</div><textarea>Editing</textarea>
+  const fixture = `<style>html,body{margin:0;width:100%;height:100%}.scroller{position:absolute;left:10px;top:100px;width:300px;height:80px;overflow-x:auto}.wide{width:1200px;height:60px;background:lightblue}#handled{position:absolute;top:200px;width:300px;height:60px}#contained{position:absolute;top:280px;width:300px;height:60px;overflow-x:auto;overscroll-behavior-x:contain}textarea{position:absolute;top:360px}</style>
+    <div id="plain">Page</div><div class="scroller" id="scroller"><div class="wide">Horizontal content</div></div><div id="handled">Site-handled gesture</div><div id="contained"><div class="wide">No overscroll navigation</div></div><textarea>Editing</textarea>
     <script>window.wheels=[];addEventListener('wheel',event=>wheels.push({x:event.deltaX,y:event.deltaY,trusted:event.isTrusted,buttons:event.buttons,mode:event.deltaMode,focus:document.hasFocus()}));document.querySelector('#handled').addEventListener('wheel',event=>event.preventDefault(),{passive:false});</script>`;
   const server = createServer((request, response) => {
     response.setHeader("Content-Type", "text/html");
@@ -146,9 +146,15 @@ async function verify(): Promise<void> {
     assert.ok(await guest.executeJavaScript("document.querySelector('#scroller').scrollLeft>0"));
     await guest.executeJavaScript("document.querySelector('#scroller').scrollLeft=0");
     await swipe(-250, 120);
-    await assertStayed("nested scroll boundary must not turn into history navigation");
+    await until(
+      "scroller edge yields like native overscroll",
+      async () => guest.getURL() === `${origin}/b`,
+    );
+    guest.navigationHistory.goForward();
+    await until("restore forward entry", async () => guest.getURL() === `${origin}/c`);
+    await ready();
     await guest.executeJavaScript(
-      "document.querySelector('#scroller').addEventListener('wheel',()=>{document.querySelector('#scroller').style.top='450px'},{once:true})",
+      "const scroller=document.querySelector('#scroller');scroller.scrollLeft=300;scroller.addEventListener('wheel',()=>{scroller.style.top='450px'},{once:true})",
     );
     await swipe(-250, 120);
     await assertStayed("leaving a nested scroller mid-gesture must not navigate");
@@ -164,7 +170,7 @@ async function verify(): Promise<void> {
     await assertStayed("page horizontal scrolling must win");
     assert.ok(await guest.executeJavaScript("document.scrollingElement.scrollLeft<300"));
     await guest.executeJavaScript(
-      "document.body.style.width='100%';document.scrollingElement.scrollLeft=0;const shadowHost=document.createElement('div');shadowHost.style.cssText='position:absolute;left:350px;top:100px;width:300px;height:80px';document.body.append(shadowHost);shadowHost.attachShadow({mode:'open'}).innerHTML='<div style=\"width:300px;overflow-x:auto\"><div style=\"width:1200px;height:60px\">Shadow scroller</div></div>'",
+      "document.body.style.width='100%';document.scrollingElement.scrollLeft=0;const shadowHost=document.createElement('div');shadowHost.style.cssText='position:absolute;left:350px;top:100px;width:300px;height:80px';document.body.append(shadowHost);shadowHost.attachShadow({mode:'open'}).innerHTML='<div style=\"width:300px;overflow-x:auto\"><div style=\"width:1200px;height:60px\">Shadow scroller</div></div>';shadowHost.shadowRoot.firstChild.scrollLeft=300",
     );
     await swipe(-250, 120, 0, 400);
     await assertStayed("open-shadow nested scrolling must win");
@@ -176,13 +182,6 @@ async function verify(): Promise<void> {
     await assertStayed("editing must not navigate");
     await swipe(-250, 10, 150);
     await assertStayed("diagonal scrolling must not navigate");
-    await guest.executeJavaScript("wheels=[]");
-    await swipe(-250, 10, 0, 40, 80);
-    await assertStayed("reversal after the threshold must cancel");
-    assert.ok(
-      await guest.executeJavaScript("wheels.some(e=>e.x<0)&&wheels.some(e=>e.x>0)"),
-      "Chromium must dispatch both legs of the reversal.",
-    );
     await delay(1300);
     await ready();
     await Promise.all([
@@ -212,7 +211,7 @@ async function verify(): Promise<void> {
     );
     host.webContents.debugger.detach();
     console.log(
-      "Native gesture smoke passed: Chromium CDP gestures through unmodified production listeners, toolbar-focused back/forward, one step, immediate-continuation lock, scrollers/boundaries, site handlers, editing, diagonal/reversal rejection and isolation. No physical trackpad was tested.",
+      "Native gesture smoke passed: Chromium CDP gestures through unmodified production listeners, toolbar-focused back/forward, one step, immediate-continuation lock, scrollers and edge yield, site handlers, editing, diagonal rejection and isolation. No physical trackpad was tested.",
     );
   } finally {
     if (!host.isDestroyed()) host.destroy();

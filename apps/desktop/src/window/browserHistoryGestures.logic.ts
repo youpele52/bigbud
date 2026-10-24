@@ -5,7 +5,13 @@ export interface HistorySwipeSample {
   readonly blocked: boolean;
 }
 
-/** Recognizes one deliberate horizontal gesture; momentum cannot rearm it. */
+export type HistorySwipeDirection = "back" | "forward";
+
+/**
+ * Recognizes one deliberate horizontal gesture and commits as soon as it qualifies.
+ * macOS drops the phase-ended event when momentum follows a flick, so the native
+ * scroll end can arrive seconds later; waiting for it would reject real swipes.
+ */
 export function createHistorySwipeRecognizer() {
   let active = false;
   let started = 0;
@@ -43,20 +49,20 @@ export function createHistorySwipeRecognizer() {
         rejection,
       };
     },
-    push(sample: HistorySwipeSample) {
-      if (!active) return;
+    push(sample: HistorySwipeSample): HistorySwipeDirection | null {
+      if (!active) return null;
       const { deltaX, deltaY, time, blocked } = sample;
       if (blocked || ![deltaX, deltaY, time].every(Number.isFinite)) {
         rejection = blocked ? "blocked-surface" : "non-finite-sample";
         active = false;
-        return;
+        return null;
       }
-      if (deltaX === 0 && deltaY === 0) return;
+      if (deltaX === 0 && deltaY === 0) return null;
       if (!samples) started = time;
       if ((samples > 0 && time - last > 160) || time < last || time - started > 900) {
         rejection = "sample-timing";
         active = false;
-        return;
+        return null;
       }
       last = time;
       samples += 1;
@@ -67,18 +73,14 @@ export function createHistorySwipeRecognizer() {
       if (reversal >= 24 || (vertical >= 16 && vertical * 2.5 > Math.abs(horizontal))) {
         rejection = reversal >= 24 ? "reversal" : "vertical-movement";
         active = false;
+        return null;
       }
-    },
-    end(time: number): "back" | "forward" | null {
-      const recognized =
-        active &&
-        samples >= 3 &&
-        horizontal >= 160 &&
-        horizontal >= vertical * 3 &&
-        time - started <= 900 &&
-        time - last <= 160;
+      if (samples < 3 || horizontal < 160 || horizontal < vertical * 3) return null;
       active = false;
-      return recognized ? (direction < 0 ? "back" : "forward") : null;
+      return direction < 0 ? "back" : "forward";
+    },
+    end() {
+      active = false;
     },
   };
 }

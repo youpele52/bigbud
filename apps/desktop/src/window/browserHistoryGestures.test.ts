@@ -183,6 +183,22 @@ describe("native browser history gesture binding", () => {
     expect(scripts().filter((code) => code.includes("?.end()"))).toHaveLength(2);
   });
 
+  it("keeps the cooldown when the page navigated mid-phase and momentum continues", async () => {
+    const { contents, scripts, input, advance } = setup();
+    contents.emit("dom-ready");
+    await Promise.resolve();
+    input("gestureScrollBegin");
+    contents.emit("did-start-navigation", {}, "https://site.example/previous", false, true);
+    contents.emit("dom-ready");
+    await Promise.resolve();
+    advance(300);
+    input("gestureScrollBegin");
+    expect(scripts().filter((code) => code.includes("?.begin()"))).toHaveLength(1);
+    advance(1000);
+    input("gestureScrollBegin");
+    expect(scripts().filter((code) => code.includes("?.begin()"))).toHaveLength(2);
+  });
+
   it("does not impose the history cooldown when the page declined navigation", async () => {
     const { contents, scripts, input, advance } = setup();
     contents.emit("dom-ready");

@@ -128,6 +128,8 @@ export function bindBrowserHistoryGestures(
   });
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
     if (!mainFrame || inPlace) return;
+    // The page commits mid-phase; its momentum continues into the next document.
+    if (touching) cooldownUntil = Math.max(cooldownUntil, clock() + HISTORY_COOLDOWN_MS);
     generation += 1;
     ready = false;
     touching = false;
