@@ -174,6 +174,8 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         webview.setAttribute("nodeintegration", "false");
         webview.setAttribute("plugins", "");
         webview.setAttribute("webpreferences", "contextIsolation=yes");
+        // The main process owns popup admission, isolation, and lifecycle limits.
+        webview.setAttribute("allowpopups", "");
       } catch {
         return;
       }

@@ -63,6 +63,17 @@ function deferred<T>() {
 }
 
 describe("webview lifecycle coordination", () => {
+  it("does not replace native window.open or target-blank behavior", () => {
+    const webview = makeWebview();
+    const { cleanup } = createLifecycle(webview);
+    webview.dispatchEvent(new Event("dom-ready"));
+    const scripts = vi.mocked(webview.executeJavaScript).mock.calls.map(([source]) => source);
+    expect(scripts).not.toEqual([]);
+    expect(
+      scripts.some((source) => /window\.open|location\.assign|patchedWindowOpen/.test(source)),
+    ).toBe(false);
+    cleanup();
+  });
   it("keeps redirected navigation and page metadata synchronized", () => {
     const webview = makeWebview();
     const { callbacks, cleanup } = createLifecycle(webview);

@@ -3,64 +3,6 @@ import { isElectron } from "~/config/env";
 import type { BrowserAnnotationTheme } from "./BrowserPanel.annotation";
 import type { ElectronWebview } from "./BrowserPanel.viewport.types";
 
-export const browserSameTabPopupGuardScript = String.raw`(() => {
-  const navigateCurrentTab = (rawUrl) => {
-    if (typeof rawUrl !== "string" || rawUrl.length === 0) {
-      return false;
-    }
-
-    try {
-      const nextUrl = new URL(rawUrl, window.location.href).toString();
-      window.location.assign(nextUrl);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  document.addEventListener(
-    "click",
-    (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      const anchor = target.closest("a[href]");
-      if (!(anchor instanceof HTMLAnchorElement)) {
-        return;
-      }
-
-      const targetValue = anchor.getAttribute("target");
-      if (targetValue !== "_blank") {
-        return;
-      }
-
-      if (!navigateCurrentTab(anchor.href)) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    true,
-  );
-
-  window.open = function patchedWindowOpen(url, target, features) {
-    if (typeof target === "string" && target.length > 0 && target !== "_self" && target !== "_top") {
-      if (navigateCurrentTab(String(url ?? ""))) {
-        return window;
-      }
-    }
-
-    if (navigateCurrentTab(String(url ?? ""))) {
-      return window;
-    }
-
-    return null;
-  };
-})();`;
-
 function probeColor(cssValue: string, property: "color" | "backgroundColor"): string {
   if (typeof document === "undefined") return cssValue;
   const probe = document.createElement("span");
