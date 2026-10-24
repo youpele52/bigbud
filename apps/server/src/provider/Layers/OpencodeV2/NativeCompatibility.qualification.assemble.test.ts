@@ -103,7 +103,7 @@ it("assembles a packet the promotion validator accepts only with three distinct 
     JSON.parse(JSON.stringify(v2QualificationEvidencePacket({ ...input, reviews }))),
   );
   expect(record).toMatchObject({
-    nativeVersion: "2.0.29",
+    nativeVersion: TARGET.nativeVersion,
     platform: "darwin",
     arch: "arm64",
     suiteRevision: V2_NATIVE_QUALIFICATION_SUITE_REVISION,

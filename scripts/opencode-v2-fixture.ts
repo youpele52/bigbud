@@ -12,10 +12,10 @@ const [version, directory] = args.filter((arg) => arg !== "--qualification");
 const VERSIONS = ["2.0.24", "2.0.26", "2.0.29", "2.1.4"];
 // Registry metadata pinned at preparation time for the qualification target; any drift refuses.
 const PINNED: Record<string, { integrity: string; tarball: string }> = {
-  "2.0.29 darwin-arm64": {
+  "2.1.4 darwin-arm64": {
     integrity:
-      "sha512-2tJOM20RpOjNeWsYcV3VfRFPDTeu1yMMbEqAQm1sEKmHX9087Sx/TxhwBlvtiudOGq6Kr3zyKmW1t7aFF6qCsQ==",
-    tarball: "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.0.29.tgz",
+      "sha512-QwjyvovTdT0gFi5rxUyPVlYePIe3ELduR9olu+KJWe089XVIDOTMhxylBe/ZGIpvoXHYo6bp2NskIiqCFAEXsw==",
+    tarball: "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.1.4.tgz",
   },
 };
 if (!version || !VERSIONS.includes(version) || !directory || !path.isAbsolute(directory))

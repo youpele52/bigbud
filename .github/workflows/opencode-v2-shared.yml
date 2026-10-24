@@ -161,7 +161,7 @@ jobs:
   # Scope file lists come from V2_NATIVE_QUALIFICATION_SUITE (suite v2, shared production path only).
   # The public-network Catalog.native smoke is excluded from qualification by design.
   macos-arm64-qualification:
-    name: Native qualification macOS 15 ARM64 OpenCode 2.0.29
+    name: Native qualification macOS 15 ARM64 OpenCode 2.1.4
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.qualification) || (github.event_name == 'push' && startsWith(github.ref_name, 'task/opencode-v2-qualify-')) }}
     runs-on: macos-15
     timeout-minutes: 120
@@ -186,10 +186,10 @@ jobs:
           mkdir -p "$QUAL_ROOT/tmp" "$QUAL_OUT"
           echo "ImageOS=$ImageOS ImageVersion=$ImageVersion"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Download pinned official 2.0.29 package (npm sha512, chmod 0555, SHA-256)
+      - name: Download pinned official 2.1.4 package (npm sha512, chmod 0555, SHA-256)
         run: |
           set -euo pipefail
-          node scripts/opencode-v2-fixture.ts 2.0.29 "$QUAL_ROOT/fixture" --qualification
+          node scripts/opencode-v2-fixture.ts 2.1.4 "$QUAL_ROOT/fixture" --qualification
           cp "$QUAL_ROOT/fixture/fixture.json" "$QUAL_OUT/fixture.json"
       - name: Export the exact qualification environment
         run: bun apps/server/scripts/assembleThreadToolNativeQualification.ts env >> "$GITHUB_ENV"
