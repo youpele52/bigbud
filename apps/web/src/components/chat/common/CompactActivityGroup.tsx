@@ -1,19 +1,14 @@
 import type { ReactNode } from "react";
 
-import { Button, textButtonTypography } from "../../ui/button";
+import { textButtonTypography } from "../../ui/button";
+import { ActivityOverflowToggle, type ActivityOverflowState } from "./ActivityOverflowToggle";
 
 export function CompactActivityGroup(props: {
   label: string;
   count: number;
   children: ReactNode;
   showHeader?: boolean;
-  overflow?:
-    | {
-        expanded: boolean;
-        hiddenCount: number;
-        onToggle: () => void;
-      }
-    | undefined;
+  overflow?: ActivityOverflowState | undefined;
 }) {
   return (
     <div className="w-full rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
@@ -22,17 +17,7 @@ export function CompactActivityGroup(props: {
           <p className={textButtonTypography}>
             {props.label} ({props.count})
           </p>
-          {props.overflow ? (
-            <Button
-              size="xs"
-              variant="text"
-              type="button"
-              aria-expanded={props.overflow.expanded}
-              onClick={props.overflow.onToggle}
-            >
-              {props.overflow.expanded ? "Show less" : `Show ${props.overflow.hiddenCount} more`}
-            </Button>
-          ) : null}
+          {props.overflow ? <ActivityOverflowToggle {...props.overflow} /> : null}
         </div>
       ) : null}
       {props.children}

@@ -6,6 +6,7 @@ import {
   type TimelineWorkEntry,
   toolWorkEntryHeading,
   workEntryCopyText,
+  workEntryDetailBlocks,
 } from "./MessagesTimeline.workEntry.logic";
 
 describe("SimpleWorkEntryRow", () => {
@@ -207,5 +208,45 @@ describe("SimpleWorkEntryRow", () => {
     );
 
     expect(markup).toContain("Unlock SSH key");
+  });
+
+  it("puts the full raw command in a collapsed Details disclosure instead of a tooltip", () => {
+    const rawCommand = "/bin/zsh -lc bun run --cwd apps/web typecheck";
+    const markup = renderToStaticMarkup(
+      <SimpleWorkEntryRow
+        workEntry={{
+          id: "work-entry-command",
+          createdAt: "2026-05-15T18:00:00.000Z",
+          label: "Command run",
+          tone: "tool",
+          itemType: "command_execution",
+          command: "bun run --cwd apps/web typecheck",
+          rawCommand,
+        }}
+      />,
+    );
+
+    expect(markup).toMatch(/<details data-slot="activity-accordion" data-variant="compact"/);
+    expect(markup).not.toMatch(/<details[^>]*\sopen=""/);
+    expect(markup).toContain(">Details</span>");
+    expect(markup).toContain("max-h-64 overflow-auto whitespace-pre-wrap break-words");
+    expect(markup).toContain(`>${rawCommand}</pre>`);
+    expect(markup).not.toContain('data-slot="tooltip');
+  });
+
+  it("derives detail blocks only when the inline preview hides text", () => {
+    const shortCommand = { command: "git status", detail: "git status" };
+    expect(workEntryDetailBlocks(shortCommand)).toEqual([]);
+    expect(workEntryDetailBlocks({ detail: "Thread renamed" })).toEqual([]);
+    const longDetail = "x".repeat(120);
+    expect(workEntryDetailBlocks({ detail: longDetail })).toEqual([longDetail]);
+    expect(workEntryDetailBlocks({ detail: "line one\nline two" })).toEqual(["line one\nline two"]);
+    expect(workEntryDetailBlocks({ command: "ls", rawCommand: "bash -lc 'ls'" })).toEqual([
+      "bash -lc 'ls'",
+    ]);
+    expect(workEntryDetailBlocks({ command: "ls", detail: "Listed 3 files" })).toEqual([
+      "ls",
+      "Listed 3 files",
+    ]);
   });
 });

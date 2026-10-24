@@ -1,11 +1,7 @@
-import { type MessageId, type OrchestrationTask } from "@bigbud/contracts";
+import { type OrchestrationTask } from "@bigbud/contracts";
 import { type TimelineEntry, type PendingUserInput } from "../../../logic/session";
 import { type WorkLogEntry } from "../../../logic/session";
-import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../../lib/turnDiffTree";
-import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
-import { estimateTimelineMessageHeight } from "../../timelineHeight";
-
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
+import { type ChatMessage, type ProposedPlan } from "../../../models/types";
 
 export interface TimelineDurationMessage {
   id: string;
@@ -82,6 +78,19 @@ export function normalizeCompactToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
+function isLiveTurnEntry(
+  createdAt: string,
+  input: { isWorking: boolean; activeTurnStartedAtMs: number },
+): boolean {
+  const createdAtMs = Date.parse(createdAt);
+  return (
+    input.isWorking &&
+    !Number.isNaN(input.activeTurnStartedAtMs) &&
+    !Number.isNaN(createdAtMs) &&
+    createdAtMs >= input.activeTurnStartedAtMs
+  );
+}
+
 export function deriveMessagesTimelineRows(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
   completionDividerBeforeEntryId: string | null;
@@ -97,6 +106,7 @@ export function deriveMessagesTimelineRows(input: {
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
+  const liveInput = { isWorking: input.isWorking, activeTurnStartedAtMs };
   const finalAssistantMessageIdByTurnId = new Map<string, string>();
 
   for (const timelineEntry of input.timelineEntries) {
@@ -135,17 +145,12 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (timelineEntry.kind === "thinking") {
-      const entryCreatedAtMs = Date.parse(timelineEntry.createdAt);
       nextRows.push({
         kind: "thinking",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         entry: timelineEntry.entry,
-        streaming:
-          input.isWorking &&
-          !Number.isNaN(activeTurnStartedAtMs) &&
-          !Number.isNaN(entryCreatedAtMs) &&
-          entryCreatedAtMs >= activeTurnStartedAtMs,
+        streaming: isLiveTurnEntry(timelineEntry.createdAt, liveInput),
       });
       continue;
     }
@@ -237,93 +242,4 @@ export function insertHistoricalSubagentRows(
     const { turnId: _turnId, ...row } = history;
     rows.splice(index, 0, row);
   }
-}
-
-export function estimateMessagesTimelineRowHeight(
-  row: MessagesTimelineRow,
-  input: {
-    timelineWidthPx: number | null;
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
-    turnDiffSummaryByAssistantMessageId?: ReadonlyMap<MessageId, TurnDiffSummary>;
-  },
-): number {
-  switch (row.kind) {
-    case "work":
-      return estimateWorkRowHeight(row, input);
-    case "thinking":
-      return (
-        estimateTimelineMessageHeight(
-          {
-            role: "assistant",
-            text: row.entry.detail ?? row.entry.label,
-          },
-          { timelineWidthPx: input.timelineWidthPx },
-        ) + 34
-      );
-    case "proposed-plan":
-      return estimateTimelineProposedPlanHeight(row.proposedPlan);
-    case "subagents-history":
-      return 52 + Math.min(row.agents.length, 4) * 32;
-    case "user-input-question":
-      return row.answers ? 88 : estimateUserInputQuestionRowHeight(row.pendingUserInput);
-    case "working":
-      return 40;
-    case "message": {
-      let estimate = estimateTimelineMessageHeight(row.message, {
-        timelineWidthPx: input.timelineWidthPx,
-      });
-      const turnDiffSummary = input.turnDiffSummaryByAssistantMessageId?.get(row.message.id);
-      if (turnDiffSummary && turnDiffSummary.files.length > 0) {
-        estimate += estimateChangedFilesCardHeight(turnDiffSummary);
-      }
-      return estimate;
-    }
-  }
-}
-
-function estimateWorkRowHeight(
-  row: Extract<MessagesTimelineRow, { kind: "work" }>,
-  input: {
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
-  },
-): number {
-  const isExpanded = input.expandedWorkGroups?.[row.id] ?? false;
-  const hasOverflow = row.groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded ? MAX_VISIBLE_WORK_LOG_ENTRIES : row.groupedEntries.length;
-  const onlyToolEntries = row.groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
-
-  // Card chrome, optional header, and one compact work-entry row per visible entry.
-  return 28 + (showHeader ? 26 : 0) + visibleEntries * 32;
-}
-
-function estimateTimelineProposedPlanHeight(proposedPlan: ProposedPlan): number {
-  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
-  return 120 + Math.min(estimatedLines * 22, 880);
-}
-
-function estimateUserInputQuestionRowHeight(pendingUserInput: PendingUserInput): number {
-  // Card chrome + header + question rows with options
-  const optionLineCount = pendingUserInput.questions.reduce((sum, q) => sum + q.options.length, 0);
-  return 80 + pendingUserInput.questions.length * 40 + optionLineCount * 28;
-}
-
-function estimateChangedFilesCardHeight(turnDiffSummary: TurnDiffSummary): number {
-  const treeNodes = buildTurnDiffTree(turnDiffSummary.files);
-  const visibleNodeCount = countTurnDiffTreeNodes(treeNodes);
-
-  // Card chrome: top/bottom padding, header row, and tree spacing.
-  return 60 + visibleNodeCount * 25;
-}
-
-function countTurnDiffTreeNodes(nodes: ReadonlyArray<TurnDiffTreeNode>): number {
-  let count = 0;
-  for (const node of nodes) {
-    count += 1;
-    if (node.kind === "directory") {
-      count += countTurnDiffTreeNodes(node.children);
-    }
-  }
-  return count;
 }

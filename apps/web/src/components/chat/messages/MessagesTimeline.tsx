@@ -5,10 +5,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
 import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
 import { deriveChatScrollRowsFromTimeline } from "../scroller/chatScroll.timelineRows";
-import {
-  deriveMessagesTimelineRows,
-  estimateMessagesTimelineRowHeight,
-} from "./MessagesTimeline.logic";
+import { deriveMessagesTimelineRows } from "./MessagesTimeline.logic";
+import { estimateMessagesTimelineRowHeight } from "./MessagesTimeline.estimate";
 import {
   NonVirtualizedMessagesTimelineRows,
   VirtualizedMessagesTimelineRows,
@@ -37,6 +35,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
+  activityAccordionOpenById,
+  onSetActivityAccordionOpen,
   changedFilesExpandedByTurnId,
   onSetChangedFilesExpanded,
   onOpenTurnDiff,
@@ -137,6 +137,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       if (!row) return 96;
       return estimateMessagesTimelineRowHeight(row, {
         expandedWorkGroups,
+        activityAccordionOpenById,
         timelineWidthPx,
         turnDiffSummaryByAssistantMessageId,
       });
@@ -271,6 +272,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         estimateRowHeight: (row) =>
           estimateMessagesTimelineRowHeight(row, {
             expandedWorkGroups,
+            activityAccordionOpenById,
             timelineWidthPx,
             turnDiffSummaryByAssistantMessageId,
           }),
@@ -291,6 +293,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       scrollContainer.removeEventListener("scroll", publishReaderPosition);
     };
   }, [
+    activityAccordionOpenById,
     expandedWorkGroups,
     onReaderPositionChange,
     rowVirtualizer,
@@ -322,6 +325,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             measureElement={rowVirtualizer.measureElement}
             expandedWorkGroups={expandedWorkGroups}
             onToggleWorkGroup={onToggleWorkGroup}
+            activityAccordionOpenById={activityAccordionOpenById}
+            onSetActivityAccordionOpen={onSetActivityAccordionOpen}
             completionSummary={completionSummary}
             turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
             changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
@@ -353,6 +358,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         rows={nonVirtualizedRows}
         expandedWorkGroups={expandedWorkGroups}
         onToggleWorkGroup={onToggleWorkGroup}
+        activityAccordionOpenById={activityAccordionOpenById}
+        onSetActivityAccordionOpen={onSetActivityAccordionOpen}
         completionSummary={completionSummary}
         turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
         changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}

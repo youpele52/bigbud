@@ -4,13 +4,14 @@ import {
   type TimelineWorkEntry,
   toolWorkEntryHeading,
   workEntryIcon,
+  workEntryDetailBlocks,
   workEntryPreview,
-  workEntryRawCommand,
   workToneClass,
   workToneIcon,
 } from "./MessagesTimeline.workEntry.logic";
 import { WorkEntryActionButtons } from "./MessagesTimeline.workEntry.actions";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { WorkEntryDetails } from "./MessagesTimeline.workEntry.details";
+import type { ActivityAccordionControl } from "../common/ActivityAccordion.state";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { cn } from "~/lib/utils";
 import { formatBigbudToolName } from "~/lib/toolPresentation";
@@ -19,15 +20,17 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
   executionTargetId?: ExecutionTargetId | undefined;
   showActions?: boolean;
+  /** Persisted open state of the full command/detail disclosure. */
+  detailsAccordion?: ActivityAccordionControl | undefined;
 }) {
-  const { workEntry, executionTargetId, showActions = true } = props;
+  const { workEntry, executionTargetId, showActions = true, detailsAccordion } = props;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
   const rawToolName =
     workEntry.toolPresentation?.rawName ?? (workEntry.toolTitle || workEntry.label);
   const preview = workEntryPreview(workEntry);
-  const rawCommand = workEntryRawCommand(workEntry);
+  const detailBlocks = workEntryDetailBlocks(workEntry);
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
@@ -51,7 +54,7 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                 workToneClass(workEntry.tone),
                 preview ? "text-muted-foreground/70" : "",
               )}
-              title={rawCommand ? undefined : displayText}
+              title={displayText}
             >
               <span
                 title={
@@ -67,33 +70,9 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               >
                 {heading}
               </span>
-              {preview &&
-                (rawCommand ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      closeDelay={0}
-                      delay={75}
-                      render={
-                        <span className="max-w-full cursor-default text-muted-foreground/55 transition-colors hover:text-muted-foreground/75 focus-visible:text-muted-foreground/75">
-                          {" "}
-                          - {preview}
-                        </span>
-                      }
-                    />
-                    <TooltipPopup
-                      align="start"
-                      className="max-w-[min(56rem,calc(100vw-2rem))] px-0 py-0"
-                      side="top"
-                    >
-                      <div className="max-w-[min(56rem,calc(100vw-2rem))] overflow-x-auto px-1.5 py-1 font-mono text-[11px] leading-4 whitespace-nowrap">
-                        {rawCommand}
-                      </div>
-                    </TooltipPopup>
-                  </Tooltip>
-                ) : (
-                  <span className="text-muted-foreground/55"> - {preview}</span>
-                ))}
+              {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
             </p>
+            <WorkEntryDetails blocks={detailBlocks} accordion={detailsAccordion} />
           </div>
         </div>
       </div>

@@ -129,3 +129,86 @@ it("passes native details props through for controlled or observed use", async (
   expect(screen.getByText("Result").element().classList).toContain("extra-panel");
   await expect.poll(() => onToggle.mock.calls.at(-1)?.[0]).toBe(true);
 });
+
+it("renders the compact variant as a sentence-case text-xs toggle without a divider", async () => {
+  const screen = await render(
+    <div className="dark bg-background p-6 text-foreground">
+      <ActivityAccordion variant="compact" title="Delegation details" meta="2 files">
+        <ActivityAccordion variant="compact" title="Raw payload">
+          Payload
+        </ActivityAccordion>
+      </ActivityAccordion>
+    </div>,
+  );
+  const title = screen.getByText("Delegation details", { exact: true });
+  const summary = title.element().closest("summary")!;
+  const details = summary.closest("details")!;
+  const summaryStyle = getComputedStyle(summary);
+  expect(details.dataset.variant).toBe("compact");
+  expect(summaryStyle.fontSize).toBe("12px");
+  expect(summaryStyle.textTransform).toBe("none");
+  expect(summaryStyle.letterSpacing).toBe("normal");
+  expect(summaryStyle.paddingTop).toBe("0px");
+  expect(summary.classList).toContain("text-muted-foreground/55");
+  expect(summary.classList).toContain("hover:text-muted-foreground/75");
+  const detailsStyle = getComputedStyle(details);
+  expect(detailsStyle.borderBottomWidth).toBe("0px");
+  expect(detailsStyle.paddingBottom).toBe("0px");
+  expectOpticallyAlignedHeader(summary);
+  for (const zoom of ["0.8", "1.25", "1.5"]) {
+    summary.style.zoom = zoom;
+    expectOpticallyAlignedHeader(summary);
+  }
+  summary.style.zoom = "";
+
+  const chevronOf = (label: string) =>
+    screen.getByText(label, { exact: true }).element().closest("summary")!.querySelector("svg")!;
+  await title.click();
+  await expect.element(screen.getByText("Raw payload", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("Payload", { exact: true })).not.toBeVisible();
+  await expect.poll(() => getComputedStyle(chevronOf("Delegation details")).rotate).toBe("0deg");
+  await expect.poll(() => getComputedStyle(chevronOf("Raw payload")).rotate).toBe("-90deg");
+  await screen.getByText("Raw payload", { exact: true }).click();
+  await expect.element(screen.getByText("Payload", { exact: true })).toBeVisible();
+});
+
+it("pins header actions to the top right, only while open, without toggling the accordion", async () => {
+  const onAction = vi.fn();
+  const screen = await render(
+    <div style={{ width: 480 }}>
+      <ActivityAccordion
+        title="Work log (3)"
+        actions={
+          <button type="button" onClick={onAction}>
+            Show 2 more
+          </button>
+        }
+      >
+        Entries
+      </ActivityAccordion>
+    </div>,
+  );
+  const title = screen.getByText("Work log (3)", { exact: true });
+  const details = title.element().closest("details")!;
+  // Closed details content is outside the accessibility tree, so query the DOM directly.
+  const actionElement = details.querySelector<HTMLButtonElement>(
+    "[data-slot=activity-accordion-actions] button",
+  )!;
+  expect(actionElement.checkVisibility()).toBe(false);
+  await title.click();
+  const action = screen.getByRole("button", { name: "Show 2 more" });
+  await expect.element(action).toBeVisible();
+  const summary = details.querySelector("summary")!.getBoundingClientRect();
+  const slot = details
+    .querySelector<HTMLElement>("[data-slot=activity-accordion-actions]")!
+    .getBoundingClientRect();
+  const button = action.element().getBoundingClientRect();
+  expect(slot.right).toBeCloseTo(details.getBoundingClientRect().right, 1);
+  expect(slot.top).toBeCloseTo(summary.top, 1);
+  expect(
+    Math.abs(button.top + button.height / 2 - (summary.top + summary.height / 2)),
+  ).toBeLessThanOrEqual(1);
+  await action.click();
+  expect(onAction).toHaveBeenCalledTimes(1);
+  expect(details.open).toBe(true);
+});

@@ -115,6 +115,8 @@ export function CompactThreadConversation({
               nowIso={context.thread.nowIso}
               expandedWorkGroups={context.base.expandedWorkGroups}
               onToggleWorkGroup={context.interactions.onToggleWorkGroup}
+              activityAccordionOpenById={context.base.activityAccordionOpenById}
+              onSetActivityAccordionOpen={context.interactions.onSetActivityAccordionOpen}
               changedFilesExpandedByTurnId={context.base.threadChangedFilesExpandedByTurnId}
               onSetChangedFilesExpanded={(turnId, expanded) => {
                 if (!context.base.activeThread) return;

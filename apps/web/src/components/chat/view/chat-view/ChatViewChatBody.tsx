@@ -224,6 +224,8 @@ export function ChatViewChatBody({
                   nowIso={thread.nowIso}
                   expandedWorkGroups={base.expandedWorkGroups}
                   onToggleWorkGroup={interactions.onToggleWorkGroup}
+                  activityAccordionOpenById={base.activityAccordionOpenById}
+                  onSetActivityAccordionOpen={interactions.onSetActivityAccordionOpen}
                   changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
                   onSetChangedFilesExpanded={(turnId, expanded) => {
                     if (base.isServerThread) {

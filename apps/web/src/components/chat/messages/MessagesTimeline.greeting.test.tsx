@@ -18,6 +18,8 @@ const props: MessagesTimelineProps = {
   nowIso: "2026-10-11T09:00:00.000Z",
   expandedWorkGroups: {},
   onToggleWorkGroup: () => {},
+  activityAccordionOpenById: {},
+  onSetActivityAccordionOpen: () => {},
   changedFilesExpandedByTurnId: {},
   onSetChangedFilesExpanded: () => {},
   onOpenTurnDiff: () => {},

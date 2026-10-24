@@ -1,23 +1,17 @@
-import { MessageId, type TurnId } from "@bigbud/contracts";
+import { type TurnId } from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { useCallback, useState, type ComponentProps } from "react";
 import { expect, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { deriveTimelineEntries } from "../../../logic/session";
-import { type WorkLogEntry } from "../../../logic/session";
-import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
 import { MessagesTimeline } from "./MessagesTimeline";
-import {
-  deriveMessagesTimelineRows,
-  estimateMessagesTimelineRowHeight,
-} from "./MessagesTimeline.logic";
+import { estimateMessagesTimelineRowHeight } from "./MessagesTimeline.estimate";
+import { deriveMessagesTimelineRows } from "./MessagesTimeline.logic";
 
 export const DEFAULT_VIEWPORT = {
   width: 960,
   height: 1_100,
 };
-export const MARKDOWN_CWD = "/repo/project";
 
 export interface RowMeasurement {
   actualHeightPx: number;
@@ -53,6 +47,9 @@ export function MessagesTimelineBrowserHarness(
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>(
     () => props.expandedWorkGroups,
   );
+  const [activityAccordionOpenById, setActivityAccordionOpenById] = useState<
+    Record<string, boolean>
+  >(() => props.activityAccordionOpenById);
   const [changedFilesExpandedByTurnId, setChangedFilesExpandedByTurnId] = useState<
     Record<string, boolean>
   >(() => props.changedFilesExpandedByTurnId);
@@ -63,6 +60,13 @@ export function MessagesTimelineBrowserHarness(
         [groupId]: !(current[groupId] ?? false),
       }));
       props.onToggleWorkGroup(groupId);
+    },
+    [props],
+  );
+  const handleSetActivityAccordionOpen = useCallback(
+    (accordionId: string, open: boolean) => {
+      setActivityAccordionOpenById((current) => ({ ...current, [accordionId]: open }));
+      props.onSetActivityAccordionOpen(accordionId, open);
     },
     [props],
   );
@@ -88,149 +92,13 @@ export function MessagesTimelineBrowserHarness(
         scrollContainer={scrollContainer}
         expandedWorkGroups={expandedWorkGroups}
         onToggleWorkGroup={handleToggleWorkGroup}
+        activityAccordionOpenById={activityAccordionOpenById}
+        onSetActivityAccordionOpen={handleSetActivityAccordionOpen}
         changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
         onSetChangedFilesExpanded={handleSetChangedFilesExpanded}
       />
     </div>
   );
-}
-
-export function isoAt(offsetSeconds: number): string {
-  return new Date(Date.UTC(2026, 2, 17, 19, 12, 28) + offsetSeconds * 1_000).toISOString();
-}
-
-export function createMessage(input: {
-  id: string;
-  role: ChatMessage["role"];
-  text: string;
-  offsetSeconds: number;
-  attachments?: ChatMessage["attachments"];
-}): ChatMessage {
-  return {
-    id: MessageId.makeUnsafe(input.id),
-    role: input.role,
-    text: input.text,
-    ...(input.attachments ? { attachments: input.attachments } : {}),
-    createdAt: isoAt(input.offsetSeconds),
-    ...(input.role === "assistant" ? { completedAt: isoAt(input.offsetSeconds + 1) } : {}),
-    streaming: false,
-  };
-}
-
-export function createToolWorkEntry(input: {
-  id: string;
-  offsetSeconds: number;
-  label?: string;
-  detail?: string;
-}): WorkLogEntry {
-  return {
-    id: input.id,
-    createdAt: isoAt(input.offsetSeconds),
-    label: input.label ?? "exec_command completed",
-    ...(input.detail ? { detail: input.detail } : {}),
-    tone: "tool",
-    toolTitle: "exec_command",
-  };
-}
-
-export function createPlan(input: {
-  id: string;
-  offsetSeconds: number;
-  planMarkdown: string;
-}): ProposedPlan {
-  return {
-    id: input.id as ProposedPlan["id"],
-    turnId: null,
-    planMarkdown: input.planMarkdown,
-    implementedAt: null,
-    implementationThreadId: null,
-    createdAt: isoAt(input.offsetSeconds),
-    updatedAt: isoAt(input.offsetSeconds + 1),
-  };
-}
-
-export function createBaseTimelineProps(input: {
-  messages?: ChatMessage[];
-  proposedPlans?: ProposedPlan[];
-  workEntries?: WorkLogEntry[];
-  expandedWorkGroups?: Record<string, boolean>;
-  completionDividerBeforeEntryId?: string | null;
-  turnDiffSummaryByAssistantMessageId?: Map<MessageId, TurnDiffSummary>;
-  onVirtualizerSnapshot?: ComponentProps<typeof MessagesTimeline>["onVirtualizerSnapshot"];
-}): Omit<ComponentProps<typeof MessagesTimeline>, "scrollContainer"> {
-  return {
-    isWorking: false,
-    activeTurnInProgress: false,
-    activeTurnStartedAt: null,
-    timelineEntries: deriveTimelineEntries(
-      input.messages ?? [],
-      input.proposedPlans ?? [],
-      input.workEntries ?? [],
-    ),
-    completionDividerBeforeEntryId: input.completionDividerBeforeEntryId ?? null,
-    completionSummary: null,
-    turnDiffSummaryByAssistantMessageId: input.turnDiffSummaryByAssistantMessageId ?? new Map(),
-    nowIso: isoAt(10_000),
-    expandedWorkGroups: input.expandedWorkGroups ?? {},
-    onToggleWorkGroup: () => {},
-    changedFilesExpandedByTurnId: {},
-    onSetChangedFilesExpanded: () => {},
-    onOpenTurnDiff: () => {},
-    revertTurnCountByUserMessageId: new Map(),
-    onRevertUserMessage: () => {},
-    isRevertingCheckpoint: false,
-    onImageExpand: () => {},
-    markdownCwd: MARKDOWN_CWD,
-    resolvedTheme: "light",
-    timestampFormat: "locale",
-    workspaceRoot: MARKDOWN_CWD,
-    ...(input.onVirtualizerSnapshot ? { onVirtualizerSnapshot: input.onVirtualizerSnapshot } : {}),
-  };
-}
-
-export function createFillerMessages(input: {
-  prefix: string;
-  startOffsetSeconds: number;
-  pairCount: number;
-}): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-  for (let index = 0; index < input.pairCount; index += 1) {
-    const baseOffset = input.startOffsetSeconds + index * 4;
-    messages.push(
-      createMessage({
-        id: `${input.prefix}-user-${index}`,
-        role: "user",
-        text: `filler user message ${index}`,
-        offsetSeconds: baseOffset,
-      }),
-    );
-    messages.push(
-      createMessage({
-        id: `${input.prefix}-assistant-${index}`,
-        role: "assistant",
-        text: `filler assistant message ${index}`,
-        offsetSeconds: baseOffset + 1,
-      }),
-    );
-  }
-  return messages;
-}
-
-export function createChangedFilesSummary(
-  targetMessageId: MessageId,
-  files: TurnDiffSummary["files"],
-): Map<MessageId, TurnDiffSummary> {
-  return new Map([
-    [
-      targetMessageId,
-      {
-        turnId: "turn-changed-files" as TurnId,
-        completedAt: isoAt(10),
-        assistantMessageId: targetMessageId,
-        files,
-      },
-    ],
-  ]);
 }
 
 export async function nextFrame(): Promise<void> {
@@ -333,6 +201,7 @@ export async function measureTimelineRow(input: {
     completionDividerBeforeEntryId: input.props.completionDividerBeforeEntryId,
     isWorking: input.props.isWorking,
     activeTurnStartedAt: input.props.activeTurnStartedAt,
+    ...(input.props.historicalAgents ? { historicalAgents: input.props.historicalAgents } : {}),
   });
   const targetRow = rows.find((row) => row.id === input.targetRowId);
   expect(targetRow, `Unable to derive target row ${input.targetRowId}.`).toBeTruthy();
@@ -341,6 +210,7 @@ export async function measureTimelineRow(input: {
     actualHeightPx,
     estimatedHeightPx: estimateMessagesTimelineRowHeight(targetRow!, {
       expandedWorkGroups: input.props.expandedWorkGroups,
+      activityAccordionOpenById: input.props.activityAccordionOpenById,
       timelineWidthPx,
       turnDiffSummaryByAssistantMessageId: input.props.turnDiffSummaryByAssistantMessageId,
     }),

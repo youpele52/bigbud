@@ -7,10 +7,8 @@ import {
 } from "./session.userInputHistory.logic";
 import { deriveTimelineEntries } from "./session.timeline.logic";
 import { derivePendingUserInputs } from "./session.activity.logic";
-import {
-  deriveMessagesTimelineRows,
-  estimateMessagesTimelineRowHeight,
-} from "~/components/chat/messages/MessagesTimeline.logic";
+import { deriveMessagesTimelineRows } from "~/components/chat/messages/MessagesTimeline.logic";
+import { estimateMessagesTimelineRowHeight } from "~/components/chat/messages/MessagesTimeline.estimate";
 
 const question = {
   id: "mode",
@@ -64,7 +62,8 @@ describe("answered user input history", () => {
       activeTurnStartedAt: null,
     });
     expect(rows[0]).toMatchObject({ kind: "user-input-question", answers: history[0]!.answers });
-    expect(estimateMessagesTimelineRowHeight(rows[0]!, { timelineWidthPx: 800 })).toBe(88);
+    // Collapsed by default: row gap, inset, accordion header and the hover copy row.
+    expect(estimateMessagesTimelineRowHeight(rows[0]!, { timelineWidthPx: 800 })).toBe(84);
   });
 
   it("keeps the same row identity and position when a pending question is answered", () => {

@@ -9,7 +9,7 @@ import {
   createMessage,
   createPlan,
   createToolWorkEntry,
-} from "./MessagesTimeline.virtualization.test.helpers";
+} from "./MessagesTimeline.virtualization.test.fixtures";
 
 export interface VirtualizationScenario {
   name: string;
@@ -159,6 +159,9 @@ export function buildStaticScenarios(): VirtualizationScenario[] {
         ),
         expandedWorkGroups: {
           "target-work-expanded-0": true,
+        },
+        activityAccordionOpenById: {
+          "work:target-work-expanded-0": true,
         },
       }),
       maxEstimateDeltaPx: 72,

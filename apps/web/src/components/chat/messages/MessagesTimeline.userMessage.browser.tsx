@@ -58,6 +58,8 @@ async function renderSentMessage(text: string) {
       nowIso="2026-10-20T12:00:00Z"
       expandedWorkGroups={{}}
       onToggleWorkGroup={() => {}}
+      activityAccordionOpenById={{}}
+      onSetActivityAccordionOpen={() => {}}
       changedFilesExpandedByTurnId={{}}
       onSetChangedFilesExpanded={() => {}}
       onOpenTurnDiff={() => {}}

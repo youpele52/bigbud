@@ -3,11 +3,13 @@ import "../../../index.css";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  DEFAULT_VIEWPORT,
   createBaseTimelineProps,
   createChangedFilesSummary,
   createFillerMessages,
   createMessage,
+} from "./MessagesTimeline.virtualization.test.fixtures";
+import {
+  DEFAULT_VIEWPORT,
   measureTimelineRow,
   mountMessagesTimeline,
   setViewport,

@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildStaticScenarios } from "./MessagesTimeline.virtualization.scenarios";
 import {
-  DEFAULT_VIEWPORT,
   createBaseTimelineProps,
   createChangedFilesSummary,
   createFillerMessages,
   createMessage,
   createToolWorkEntry,
+} from "./MessagesTimeline.virtualization.test.fixtures";
+import {
+  DEFAULT_VIEWPORT,
   measureRenderedRowActualHeight,
   measureTimelineRow,
   mountMessagesTimeline,
@@ -70,6 +72,8 @@ describe("MessagesTimeline virtualization harness", () => {
     const props = createBaseTimelineProps({
       messages: [...beforeMessages, ...afterMessages],
       workEntries,
+      // Finished work logs start collapsed; the overflow toggle lives in the open panel.
+      activityAccordionOpenById: { [`work:${workEntries[0]!.id}`]: true },
     });
     const mounted = await mountMessagesTimeline({ props });
 
