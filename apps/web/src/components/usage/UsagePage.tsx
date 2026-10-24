@@ -250,7 +250,7 @@ export function UsagePage() {
           ) : null}
           <UsageSubscriptionLimits limits={subscriptionLimits} />
           {displaySummary ? (
-            <section className="space-y-4 text-xs text-muted-foreground">
+            <section className="mt-8 space-y-4 text-xs text-muted-foreground">
               <UsageAccountingFooter summary={displaySummary} />
               <p>
                 *Token counts are reported differently by each provider. bigbud normalizes available

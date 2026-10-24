@@ -49,6 +49,7 @@ const summary: ServerUsageSummaryResult = {
 };
 it("discloses only providers actually estimated in the selected data", () => {
   const html = renderToStaticMarkup(<UsageAccountingFooter summary={summary} />);
+  expect(html).toContain("*Estimated usage:");
   expect(html).toContain("Cursor include estimates");
   expect(html).not.toContain("Codex");
   expect(html).toContain("observable-text-v1");

@@ -21,7 +21,7 @@ export function UsageAccountingFooter({ summary }: { readonly summary: ServerUsa
       ) : null}
       {estimatedProviders.length > 0 ? (
         <p>
-          Estimated usage: {estimatedProviders.join(", ")} include estimates calculated by bigbud
+          *Estimated usage: {estimatedProviders.join(", ")} include estimates calculated by bigbud
           using observable-text-v1 (one token per four Unicode code points, rounded up per message).
           Unofficial observable-content estimates may omit internal context, reasoning, and model
           calls. They are not billing-accurate.

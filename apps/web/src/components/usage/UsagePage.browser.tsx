@@ -235,6 +235,7 @@ describe("Usage page heading hierarchy", () => {
       paragraph.textContent?.startsWith("*Token"),
     );
     expect(disclaimer).toBeDefined();
+    expect(getComputedStyle(disclaimer!.closest("section")!).marginTop).toBe("32px");
     expect(
       limits.compareDocumentPosition(disclaimer!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
