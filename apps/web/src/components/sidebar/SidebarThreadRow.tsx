@@ -19,6 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
+import { SidebarThreadTerminalProviderIcon } from "./SidebarThreadTerminalProviderIcon";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
@@ -224,6 +225,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             animationClass={providerIconAnimationClass}
           />
         ) : null}
+        <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input
             ref={props.onRenamingInputMount}

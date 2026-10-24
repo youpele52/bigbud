@@ -2,6 +2,13 @@ import type { NativeApi } from "@bigbud/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_BINDINGS } from "../../models/keybindings/keybindings.models.test.helpers";
 import { attachTerminalViewportInput } from "./TerminalViewport.input";
+import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
+import { selectThreadTerminalProvider } from "../../stores/terminal/terminal.store.recentAgent";
+import {
+  makeTerminalEvent,
+  resetTerminalStore,
+  THREAD_ID,
+} from "../../stores/terminal/terminal.store.test.helpers";
 
 function keyEvent(overrides: Partial<KeyboardEvent>): KeyboardEvent {
   return {
@@ -80,10 +87,35 @@ const sent = (write: ReturnType<typeof vi.fn>) =>
   write.mock.calls.map((call) => (call[0] as { data: string }).data);
 
 afterEach(() => {
+  resetTerminalStore();
   Object.defineProperty(navigator, "platform", { configurable: true, value: "" });
 });
 
 describe("attachTerminalViewportInput", () => {
+  it("promotes the pane receiving input, but not when input is disabled", () => {
+    const store = useTerminalStateStore.getState();
+    store.applyTerminalEvent(
+      makeTerminalEvent("agentIdentity", { terminalId: "terminal-1", provider: "pi" }),
+    );
+    store.applyTerminalEvent(
+      makeTerminalEvent("agentIdentity", {
+        terminalId: "other",
+        provider: "claudeAgent",
+        createdAt: "2026-04-02T20:00:01.000Z",
+      }),
+    );
+    let accepts = false;
+    const f = fixture(() => accepts);
+    f.type("ignored");
+    expect(selectThreadTerminalProvider(useTerminalStateStore.getState(), THREAD_ID)).toBe(
+      "claudeAgent",
+    );
+    accepts = true;
+    f.type("prompt");
+    expect(selectThreadTerminalProvider(useTerminalStateStore.getState(), THREAD_ID)).toBe("pi");
+    f.attached.dispose();
+  });
+
   it("sends typing and shortcut sequences through one ordered, coalescing queue", async () => {
     Object.defineProperty(navigator, "platform", { configurable: true, value: "Linux" });
     const f = fixture();

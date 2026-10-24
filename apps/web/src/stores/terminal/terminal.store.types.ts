@@ -57,6 +57,7 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
     terminalId: string,
     hasRunningSubprocess: boolean,
   ) => void;
+  markTerminalAgentActive: (threadId: string, terminalId: string) => void;
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvents: (events: ReadonlyArray<TerminalEvent>) => void;

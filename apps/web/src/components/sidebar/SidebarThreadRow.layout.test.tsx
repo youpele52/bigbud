@@ -5,10 +5,17 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import type { SidebarThreadRowProps } from "./SidebarThreadRow.types";
+import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
+import type { TerminalStateStoreState } from "../../stores/terminal/terminal.store.types";
+import {
+  makeTerminalEvent,
+  resetTerminalStore,
+} from "../../stores/terminal/terminal.store.test.helpers";
 
 const state = vi.hoisted(() => ({
   connecting: false,
   status: true,
+  chatProvider: "codex" as "codex" | null,
   prClick: null as null | ((event: MouseEvent<HTMLButtonElement>) => void),
 }));
 
@@ -18,7 +25,7 @@ vi.mock("../../stores/main", () => ({
     title: "Thread title",
     createdAt: "2026-10-01T00:00:00.000Z",
     session: {
-      provider: "codex",
+      provider: state.chatProvider,
       orchestrationStatus: state.connecting ? "starting" : "running",
       updatedAt: "2026-10-01T00:00:00.000Z",
     },
@@ -29,6 +36,17 @@ vi.mock("../../stores/terminal", () => ({
   useTerminalStateStore: () => ["terminal"],
   selectThreadTerminalState: vi.fn(),
 }));
+vi.mock("../../stores/terminal/terminal.store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../stores/terminal/terminal.store")>();
+  return {
+    ...actual,
+    useTerminalStateStore: Object.assign(
+      <T,>(selector: (state: TerminalStateStoreState) => T) =>
+        selector(actual.useTerminalStateStore.getState()),
+      actual.useTerminalStateStore,
+    ),
+  };
+});
 vi.mock("./Sidebar.logic", () => ({
   resolveThreadRowClassName: () => "row",
   resolveThreadStatusPill: () =>
@@ -103,10 +121,36 @@ const props: SidebarThreadRowProps = {
 };
 
 beforeEach(() => {
+  resetTerminalStore();
   state.connecting = false;
   state.status = true;
+  state.chatProvider = "codex";
   state.prClick = null;
   vi.clearAllMocks();
+});
+
+it.each(["pi", "codex"] as const)(
+  "keeps both provider icons before the title when the terminal uses %s",
+  (provider) => {
+    useTerminalStateStore
+      .getState()
+      .applyTerminalEvent(makeTerminalEvent("agentIdentity", { threadId, provider }));
+    const html = renderToStaticMarkup(<SidebarThreadRow {...props} />);
+    const terminalIndex = html.indexOf('data-slot="thread-terminal-provider-icon"');
+    expect(terminalIndex).toBeGreaterThan(html.indexOf('data-slot="thread-provider-icon"'));
+    expect(terminalIndex).toBeLessThan(html.indexOf("Thread title</span>"));
+    expect(html.match(/data-slot="thread-provider-icon"/g)).toHaveLength(2);
+  },
+);
+
+it("shows the terminal provider even when the thread has no chat session", () => {
+  state.chatProvider = null;
+  useTerminalStateStore
+    .getState()
+    .applyTerminalEvent(makeTerminalEvent("agentIdentity", { threadId, provider: "pi" }));
+  const html = renderToStaticMarkup(<SidebarThreadRow {...props} />);
+  expect(html).toContain('aria-label="Terminal provider: Pi"');
+  expect(html.match(/data-slot="thread-provider-icon"/g)).toHaveLength(1);
 });
 
 it("keeps only the provider before the title, with PR first in the right-side indicators", () => {

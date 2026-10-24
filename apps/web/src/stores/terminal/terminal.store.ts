@@ -33,6 +33,7 @@ import {
 import { removeTerminalTransientState } from "./terminal.store.cleanup";
 import { closeTerminalPaneInState } from "./terminal.store.close";
 import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.identity";
+import { markTerminalAgentActive } from "./terminal.store.recentAgent";
 import {
   clearTerminalLabelOverrideByThreadId,
   removeOrphanedTerminalLabelOverrides,
@@ -213,6 +214,10 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         updateTerminal(threadId, (state) =>
           setThreadTerminalActivity(state, terminalId, hasRunningSubprocess),
         ),
+      markTerminalAgentActive: (threadId, terminalId) => {
+        const patch = markTerminalAgentActive(get(), threadId, terminalId);
+        if (patch) set(patch);
+      },
       recordTerminalEvent: (event) =>
         set((state) =>
           appendTerminalEventEntry(

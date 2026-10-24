@@ -1,6 +1,7 @@
 import type { Terminal } from "@xterm/xterm";
 import type { MutableRefObject } from "react";
 import type { NativeApi, ResolvedKeybindingsConfig } from "@bigbud/contracts";
+import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
 import { TerminalInputQueue } from "./TerminalInputQueue";
 import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { attachTerminalMouseWheelMultiplier } from "./TerminalViewport.wheel";
@@ -38,6 +39,8 @@ export function attachTerminalViewportInput(options: AttachTerminalViewportInput
   );
   const send = (data: string) => {
     if (!options.acceptsInput()) return;
+    if (data.length > 0)
+      useTerminalStateStore.getState().markTerminalAgentActive(threadId, terminalId);
     options.markInput();
     queue.enqueue(data);
   };
