@@ -1,15 +1,15 @@
 # Changelog
 
-Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
+New possibilities. Fewer rough edges. See what each bigbud release brings to your everyday work.
 
 ## What's new?
 
-- **Show bigbud what you’re looking at:** Share screenshots from anywhere on your screen—even outside the bigbud app—and get help with them.
-- **Make the wait part of the fun:** Explore twelve hand-picked free games, from quick puzzles and familiar classics to creative games, while bigbud works on a longer task.
-- **Set up your sidebar your way:** Choose which items to show and where they go. bigbud remembers your layout between restarts.
-- **You decide when old chats are cleaned up:** Choose based on when a chat was created or last used, and review what’s on the list before cleanup.
-- **See your remaining subscription allowance:** Check available limits, reset times, and extra-usage details for supported providers.
-- **Know what’s running in your terminal and get complete replies:** Terminal tabs identify the active AI harness, and a fix addresses replies from some providers that could arrive incomplete.
+- **[Know what’s slowing your computer down](#new-desktop-system-monitor):** Check CPU, memory, storage, and network activity—and bigbud’s own resource use—from the desktop System Monitor.
+- **[Follow your agents and subagents more easily](#better-control-over-supporting-agents):** See subagents’ progress, inspect their work, and stop background subagents on supported providers.
+- **[A terminal built for real work](#a-more-powerful-easier-to-use-terminal):** Choose from 30+ themes, search terminal output, and enjoy smoother scrolling and rendering.
+- **[A chat history worth coming back to](#a-clearer-chat-history):** Revisit answered questions and expand work logs, thinking, and helper activity without cluttering the conversation.
+- **[Remote projects without the guesswork](#easier-remote-project-setup):** Pick a saved SSH host, browse its folders, and confirm a new server’s identity before connecting.
+- **[Know how much AI allowance you have left](#subscription-limits-across-supported-providers):** Check subscription limits, reset times, and extra-usage details across supported providers, including model-specific limits where available.
 
 ## v0.3.1 (25 October, 2026)
 
