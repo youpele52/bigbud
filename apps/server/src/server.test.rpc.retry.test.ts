@@ -1,9 +1,9 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ORCHESTRATION_WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { buildAppUnderTest } from "./server.test.app.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 import { getWsServerUrl, serverTestLayer, withRetriedWsRpcClient } from "./server.test.rpc.ts";
 
 it.layer(serverTestLayer)("server websocket retry clock", (it) => {
@@ -26,7 +26,7 @@ it.layer(serverTestLayer)("server websocket retry clock", (it) => {
 
         assert.equal(attempts, 2);
         assert.isAtLeast(snapshot.threads.length, 1);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     2000,
   );
 
@@ -57,6 +57,6 @@ it.layer(serverTestLayer)("server websocket retry clock", (it) => {
       assert.equal(attempts, 1);
       assert.equal(failed._tag, "Failure");
       if (failed._tag === "Failure") assert.strictEqual(failed.failure, rpcFailure);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

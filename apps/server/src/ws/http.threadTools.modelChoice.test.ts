@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -7,6 +6,7 @@ import { afterEach, describe, expect, vi } from "vitest";
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { setThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
 
 const callerThreadId = ThreadId.makeUnsafe("thread-http-model-choice-caller");
@@ -86,7 +86,7 @@ describe("thread orchestration model choice routes", () => {
           result: { models: [], hasMore: false },
         });
         expect(listAvailableModels).toHaveBeenCalledWith({ callerThreadId, limit: 7 });
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });

@@ -20,6 +20,7 @@ import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
 
+import { classifyTestFileRun, type TestFileResult } from "./serverTestGroups.classification.ts";
 import { PROBE_OUTPUT_ENV, type ProbeRecord, type Touch } from "./serverTestGroups.guard.types.ts";
 import {
   isParallelCandidate,
@@ -28,7 +29,7 @@ import {
 } from "./serverTestGroups.manifest.ts";
 
 interface JsonReport {
-  readonly testResults: ReadonlyArray<{ readonly name: string; readonly status: string }>;
+  readonly testResults: ReadonlyArray<TestFileResult & { readonly name: string }>;
 }
 
 const serverRoot = Path.resolve(import.meta.dirname, "..");
@@ -46,7 +47,7 @@ if (!Number.isInteger(runs) || runs < 1) throw new Error("--runs must be a posit
 
 interface FileVerdict {
   readonly file: string;
-  /** Vitest file status of every run ("unfinished" when the guard never reported). */
+  /** Per-run classification; incomplete assertions and missing probes never count as passed. */
   readonly statuses: string[];
   readonly touches: Touch[];
 }
@@ -77,10 +78,7 @@ function probeOnce(run: number, verdicts: Map<string, FileVerdict>): void {
     const file = relative(result.name);
     const verdict = verdicts.get(file) ?? { file, statuses: [], touches: [] };
     const probe = probes.get(file);
-    // A passing file without a probe record never reached the guard's afterAll.
-    verdict.statuses.push(
-      result.status === "passed" && probe === undefined ? "unfinished" : result.status,
-    );
+    verdict.statuses.push(classifyTestFileRun(result, probe));
     verdict.touches.push(...(probe?.touches ?? []));
     verdicts.set(file, verdict);
   }

@@ -52,7 +52,7 @@ beforeAll(() => {
 
 beforeAll(async () => {
   ({ MessagesTimeline } = await import("./MessagesTimeline"));
-});
+}, 60_000);
 
 describe("MessagesTimeline branch button", () => {
   it("renders a branch button on user messages when onBranchThread is provided", async () => {

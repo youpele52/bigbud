@@ -1,12 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
 import { buildAppUnderTest, serverTestLayer } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
 const pluginId = "openai-public:asana";
@@ -68,6 +68,6 @@ it.layer(serverTestLayer)("plugin asset route", (it) => {
           assert.equal(traversal.status, 400);
         }),
       ({ directory }) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
-    ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    ).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

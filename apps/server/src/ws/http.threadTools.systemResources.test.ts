@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { afterEach, describe, vi } from "vitest";
@@ -6,6 +5,7 @@ import { afterEach, describe, vi } from "vitest";
 import { setThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
 
 const TOKEN = "thread-system-resources-token";
@@ -55,7 +55,7 @@ describe("thread system resources route", () => {
         assert.equal(getSystemResources.mock.calls.length, 1);
         const body = (yield* Effect.promise(() => response.json())) as { result: unknown };
         assert.deepEqual(body.result, snapshot);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });

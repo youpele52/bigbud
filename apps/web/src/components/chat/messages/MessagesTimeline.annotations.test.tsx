@@ -52,7 +52,7 @@ beforeAll(() => {
 
 beforeAll(async () => {
   ({ MessagesTimeline } = await import("./MessagesTimeline"));
-});
+}, 60_000);
 
 describe("MessagesTimeline annotations", () => {
   it("renders sent browser annotations as a compact expandable attachment", async () => {

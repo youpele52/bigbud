@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Stream } from "effect";
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
@@ -11,6 +10,7 @@ import {
   serverTestLayer,
   withRetriedWsRpcClient,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 import { buildPiModels } from "./provider/Layers/Pi/Provider.utils.ts";
 
 it.layer(serverTestLayer)("server router seam > Pi config wire", (it) => {
@@ -78,6 +78,6 @@ it.layer(serverTestLayer)("server router seam > Pi config wire", (it) => {
         );
       }
       assert.match(result.ping.serverTime, /^\d{4}-\d{2}-\d{2}T/);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

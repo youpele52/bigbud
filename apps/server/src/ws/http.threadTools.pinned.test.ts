@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -7,6 +6,7 @@ import { afterEach, describe, expect, vi } from "vitest";
 import { setThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
 
 const CALLER_THREAD_ID = "thread-pinned-caller";
@@ -103,7 +103,7 @@ describe("thread orchestration pinned tools route", () => {
           threadId: ThreadId.makeUnsafe(TARGET_THREAD_ID),
           pinned: true,
         });
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });

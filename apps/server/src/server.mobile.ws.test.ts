@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 import { MOBILE_RECOVERY_WS_METHODS } from "@bigbud/contracts/server/mobile.recovery";
 import { assert, it } from "@effect/vitest";
@@ -10,6 +9,7 @@ import {
   makeDefaultOrchestrationReadModel,
   serverTestLayer,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 import { withMobileWsRpcClient, withRetriedMobileWsRpcClient } from "./server.test.mobile.ts";
 
 it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => {
@@ -29,7 +29,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
         return;
       }
       assert.include(String(result.failure), "SocketOpenError");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("rejects mobile websocket handshake when the session token is invalid", () =>
@@ -48,7 +48,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
         return;
       }
       assert.include(String(result.failure), "SocketOpenError");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("accepts a valid mobile session token for orchestration snapshot reads", () =>
@@ -79,7 +79,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
       );
 
       assert.isAtLeast(response.threads.length, 1);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("fails mobile baseline availability without falling back to full snapshots", () =>
@@ -124,7 +124,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
       if (result._tag === "Failure") {
         assert.include(String(result.failure), "MobileRecoveryBaselineError");
       }
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("binds mobile recovery to the baseline epoch and emits catch-up", () =>
@@ -209,7 +209,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
       const collected = Array.from(frames);
       assert.isAtLeast(collected.length, 1);
       assert.equal(collected.at(-1)?.type, "caught-up");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("rejects disallowed orchestration commands on the mobile websocket", () =>
@@ -249,7 +249,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
         return;
       }
       assert.include(String(result.failure), "OrchestrationDispatchCommandError");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("streams server config snapshot to the mobile websocket", () =>
@@ -296,6 +296,6 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
         return;
       }
       assert.equal(snapshot.config.providers.length, 0);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

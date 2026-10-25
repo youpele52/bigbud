@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { GitCommandError, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
@@ -10,6 +9,7 @@ import {
   serverTestLayer,
   withRetriedWsRpcClient,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
   it.effect("routes websocket rpc git methods", () =>
@@ -302,7 +302,7 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
           }),
         ),
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc git.pull errors", () =>
@@ -329,6 +329,6 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       );
 
       assertFailure(result, gitError);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

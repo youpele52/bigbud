@@ -1,9 +1,9 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Path } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
 import { buildAppUnderTest, serverTestLayer } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > mobile web static", (it) => {
   it.effect("serves the mobile companion shell from /mobile", () =>
@@ -23,6 +23,6 @@ it.layer(serverTestLayer)("server router seam > mobile web static", (it) => {
       const response = yield* HttpClient.get("/mobile/pair/pairing-1");
       assert.equal(response.status, 200);
       assert.include(yield* response.text, "mobile-shell-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

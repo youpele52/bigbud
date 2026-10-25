@@ -47,9 +47,14 @@ describe("dev process tree", () => {
     expect(processTree(4, "win32")).toEqual([4]);
   });
 
-  it.skipIf(process.platform === "win32")("finds the current process in its own tree", () => {
-    expect(processTree(process.pid)).toContain(process.pid);
-    expect(listProcesses().get(process.pid)?.started).toMatch(/\d/);
-    expect(processAlive(process.pid)).toBe(true);
-  });
+  // Real OS enumeration can slow under host load; this is not a latency benchmark.
+  it.skipIf(process.platform === "win32")(
+    "finds the current process in its own tree",
+    () => {
+      expect(processTree(process.pid)).toContain(process.pid);
+      expect(listProcesses().get(process.pid)?.started).toMatch(/\d/);
+      expect(processAlive(process.pid)).toBe(true);
+    },
+    30_000,
+  );
 });

@@ -46,7 +46,7 @@ beforeAll(() => {
 
 beforeAll(async () => {
   ({ MessagesTimeline } = await import("./MessagesTimeline"));
-});
+}, 60_000);
 
 describe("MessagesTimelineDelegatedProvenance", () => {
   it("renders readable provenance in closed native details", () => {

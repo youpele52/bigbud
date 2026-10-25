@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -6,6 +5,7 @@ import { afterEach, describe, expect, vi } from "vitest";
 
 import { deriveServerPaths } from "../startup/config.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import {
   getThreadOrchestrationToolDispatcher,
   setThreadOrchestrationToolDispatcher,
@@ -109,7 +109,7 @@ describe("thread orchestration tools route", () => {
           action: { action: "capture" },
         });
         expect(getThreadOrchestrationToolDispatcher()?.computerUse).toBe(computerUse);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("rejects thread tool requests when the requested thread differs from the token", () =>
@@ -187,7 +187,7 @@ describe("thread orchestration tools route", () => {
 
         assert.equal(response.status, 401);
         expect(rename).not.toHaveBeenCalled();
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("allows get_status to inspect a different target thread as the caller", () =>
@@ -274,7 +274,7 @@ describe("thread orchestration tools route", () => {
           callerThreadId: ThreadId.makeUnsafe(THREAD_ID),
           threadId: ThreadId.makeUnsafe("thread-other"),
         });
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("requires rename requests to include the current thread ID", () =>
@@ -351,7 +351,7 @@ describe("thread orchestration tools route", () => {
 
         assert.equal(response.status, 400);
         expect(rename).not.toHaveBeenCalled();
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });

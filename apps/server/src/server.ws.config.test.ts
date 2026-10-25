@@ -1,7 +1,7 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { DEFAULT_SERVER_SETTINGS, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
+import { HttpServer } from "effect/unstable/http";
 
 import {
   buildAppUnderTest,
@@ -10,8 +10,25 @@ import {
   withRetriedWsRpcClient,
   withWsRpcClient,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > websocket config streams", (it) => {
+  it.effect("matches the websocket URL to the bound IPv4 loopback address", () =>
+    Effect.gen(function* () {
+      const server = yield* HttpServer.HttpServer;
+      assert.equal(server.address._tag, "TcpAddress");
+      if (server.address._tag === "TcpAddress") {
+        assert.equal(server.address.hostname, "127.0.0.1");
+
+        const wsUrl = new URL(yield* getWsServerUrl("/ws?token=fixture-token"));
+        assert.equal(wsUrl.hostname, server.address.hostname);
+        assert.equal(wsUrl.port, String(server.address.port));
+        assert.equal(wsUrl.pathname, "/ws");
+        assert.equal(wsUrl.search, "?token=fixture-token");
+      }
+    }).pipe(Effect.provide(serverHttpTestLayer)),
+  );
+
   it.effect("routes websocket rpc subscribeServerConfig streams snapshot then update", () =>
     Effect.gen(function* () {
       const providers = [] as const;
@@ -66,7 +83,7 @@ it.layer(serverTestLayer)("server router seam > websocket config streams", (it) 
         type: "keybindingsUpdated",
         payload: { issues: [] },
       });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc subscribeServerConfig emits provider status updates", () =>
@@ -103,7 +120,7 @@ it.layer(serverTestLayer)("server router seam > websocket config streams", (it) 
         type: "providerStatuses",
         payload: { providers },
       });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect(
@@ -152,6 +169,6 @@ it.layer(serverTestLayer)("server router seam > websocket config streams", (it) 
         assert.equal(first?.sequence, 1);
         assert.equal(second?.type, "ready");
         assert.equal(second?.sequence, 2);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

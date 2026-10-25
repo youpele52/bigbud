@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { EditorId, OpenError, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
@@ -11,6 +10,7 @@ import {
   withRetriedWsRpcClient,
   withWsRpcClient,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > websocket projects and shell", (it) => {
   it.effect("routes websocket rpc projects.searchEntries", () =>
@@ -39,7 +39,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
       assert.isAtLeast(response.entries.length, 1);
       assert.isTrue(response.entries.some((entry) => entry.path === "needle-file.ts"));
       assert.equal(response.truncated, false);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.searchFileContents", () =>
@@ -73,7 +73,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         lineText: "export const needle = 1;",
       });
       assert.equal(response.truncated, false);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.searchFileContents errors", () =>
@@ -100,7 +100,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         result.failure.message,
         "Workspace root does not exist: /definitely/not/a/real/workspace/path",
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.searchEntries errors", () =>
@@ -127,7 +127,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         result.failure.message,
         "Workspace root does not exist: /definitely/not/a/real/workspace/path",
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.writeFile", () =>
@@ -152,7 +152,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
       assert.equal(response.relativePath, "nested/created.txt");
       const persisted = yield* fs.readFileString(path.join(workspaceDir, "nested", "created.txt"));
       assert.equal(persisted, "written-by-rpc");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.readFilePreview", () =>
@@ -180,7 +180,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         sizeBytes: 25,
         truncated: false,
       });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc subscribeProjectDirectoryChanges errors", () =>
@@ -209,7 +209,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         result.failure.message,
         "Workspace directory path must stay within the project root.",
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.readFilePreview errors", () =>
@@ -238,7 +238,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         result.failure.message,
         "Workspace file path must stay within the project root.",
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc projects.writeFile errors", () =>
@@ -268,7 +268,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         result.failure.message,
         "Workspace file path must stay within the project root.",
       );
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc shell.openInEditor", () =>
@@ -296,7 +296,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
       );
 
       assert.deepEqual(openedInput, { cwd: "/tmp/project", editor: "cursor" });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("routes websocket rpc shell.openInEditor errors", () =>
@@ -321,6 +321,6 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
       );
 
       assertFailure(result, openError);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

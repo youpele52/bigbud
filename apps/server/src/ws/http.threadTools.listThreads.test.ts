@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -7,6 +6,7 @@ import { afterEach, describe, expect, vi } from "vitest";
 import { setThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
 
 const CALLER_THREAD_ID = "thread-list-caller";
@@ -91,7 +91,7 @@ describe("thread orchestration list_threads route", () => {
           limit: 10,
           includeExcerpt: true,
         });
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("omits absent filters so the caller project and defaults apply", () =>
@@ -116,7 +116,7 @@ describe("thread orchestration list_threads route", () => {
           callerThreadId: ThreadId.makeUnsafe(CALLER_THREAD_ID),
           includeExcerpt: false,
         });
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("rejects an unsupported status filter", () =>
@@ -138,7 +138,7 @@ describe("thread orchestration list_threads route", () => {
 
         assert.equal(response.status, 400);
         expect(listThreads).not.toHaveBeenCalled();
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("reports unavailable when the dispatcher cannot list threads", () =>
@@ -158,7 +158,7 @@ describe("thread orchestration list_threads route", () => {
         );
 
         assert.equal(response.status, 503);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });
